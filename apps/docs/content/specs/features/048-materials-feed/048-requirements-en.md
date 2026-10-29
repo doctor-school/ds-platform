@@ -23,7 +23,7 @@ lang: en
 
 > **EN (this)** · **RU:** [`048-requirements-ru.md`](./048-requirements-ru.md)
 >
-> Product source: [`048-product.md`](./048-product.md) («Delivery slices», item 1). Public UI: the canvases `design-source/unit-feed-card.dc.html` and `design-source/academy-home.dc.html` (rail «Новости, блог и видео», switch `scope` = «срез 1», `data` norm / load / empty / err), vendored by PR #3500 (Stage A pending). The reading-page canvas `academy-material.dc.html` is not drawn yet: its behaviour is specified here, its look is a Stage-A gate of its package ([`048-design.md`](./048-design.md) «UI composition»). Admin UI: approved-non-canvas (the admin-screen default of #3490) except the rich-text editor, which goes to Stage A as one element (PRD Flows step 1). Hence `surface: user-facing`.
+> Product source: [`048-product.md`](./048-product.md) («Delivery slices», item 1). Public UI: the canvases `design-source/unit-feed-card.dc.html` and `design-source/academy-home.dc.html` (rail «Новости, блог и видео», switch `scope` = «срез 1», `data` norm / load / empty / err), vendored by PR #3500 (Stage A pending). The reading-page canvas `design-source/academy-material.dc.html` was drawn by the owner and vendored 2026-10-29 (#3403): its behaviour is specified here, its look is the canvas, gated by the owner's Stage-A review in its package ([`048-design.md`](./048-design.md) «UI composition»). Admin UI: approved-non-canvas (the admin-screen default of #3490) except the rich-text editor, which goes to Stage A as one element (PRD Flows step 1). Hence `surface: user-facing`.
 
 # 048 — Materials feed: own materials, the reading page and the rail on the Academy home (Requirements, slice 1)
 

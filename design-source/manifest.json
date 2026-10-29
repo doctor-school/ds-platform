@@ -54,6 +54,12 @@
       "remotePath": null,
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
+    "academy-material.dc.html": {
+      "sha256": "116c7440d5c7da03eebd22e99b043bb40be03fa3d890d7b196e7dc4964a10ba4",
+      "pulledSha256": "2df4dc255c8ca9729d4b1a81fd96d939b7bb7b6aa01bf00c1640240ac90f52ce",
+      "pulledAt": "2026-10-29T12:25:23.590Z",
+      "remotePath": "academy-material.dc.html"
+    },
     "academy-partner.dc.html": {
       "sha256": "bc2b8a225d2c9a0c9bfdfe4edf183849053b4e63a290d7fa4410bd78cbffcaad",
       "pulledSha256": "575b2f4540ed4ad0d5651ab7432de377a951908ac986ece93fdceea9fbc92099",
@@ -205,9 +211,8 @@
     "document.dc.html": {
       "sha256": "42e15de1293e293a6b8d967b641a5f7a09b9d18f7e14d91d9f051a463ee6250b",
       "pulledSha256": "ece5facfc299c344485e552e35e4c7cedc41256ca9301673add622be96c7b7cc",
-      "pulledAt": "2026-09-06",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+      "pulledAt": "2026-10-29T12:25:27.483Z",
+      "remotePath": "document.dc.html"
     },
     "ds-foundation.dc.html": {
       "sha256": "6e8b7c5109d60b9d6e4bd608c6e31cc1686246d8da748a0410a32218ee92639c",
@@ -219,7 +224,7 @@
     "ds-shell.dc.html": {
       "sha256": "b659e8be997070bcf9e1eeea28bd68e9961640c01deeea39d7595df2cd7ecaee",
       "pulledSha256": "a6bfaff51b665dcc8b3d128f35bae89c355606b426b5b23ca6c5eba75f377077",
-      "pulledAt": "2026-10-29T08:18:04.022Z",
+      "pulledAt": "2026-10-29T12:25:25.429Z",
       "remotePath": "ds-shell.dc.html"
     },
     "event-page.dc.html": {

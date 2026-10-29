@@ -2962,3 +2962,240 @@ Then(
     }
   },
 );
+
+// ── Original archive/feed read-through obligations (#3531) ─────────────────
+
+type DeliveredEvent = PublicDoctorCard & {
+  id: string;
+  startsAt: string;
+  format: string;
+};
+type DeliveredFeed = {
+  today: string;
+  from: string;
+  to: string;
+  remaining: number;
+  days: { day: string; items: DeliveredEvent[] }[];
+};
+const deliveredReads = new WeakMap<
+  StepWorld,
+  { initial: DeliveredEvent[]; filtered?: DeliveredEvent[] }
+>();
+
+async function expectDeliveredFeed(
+  page: Page,
+): Promise<{ body: DeliveredFeed; items: DeliveredEvent[] }> {
+  await settle(page);
+  const query = params(page);
+  if (!query.has("tense")) query.set("tense", "upcoming");
+  for (const key of ["view", "day", "month"]) query.delete(key);
+  const body = await publicDoctorRead<DeliveredFeed>(
+    page,
+    `/v1/storefront/doctor/events?${query}`,
+  );
+  const items = body.days.flatMap((day) => day.items);
+  expect(items.length, "positive delivered set").toBeGreaterThan(0);
+  expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
+  const cards = feedCards(page);
+  await expect(cards).toHaveCount(items.length);
+  expect(
+    await cards
+      .locator("h3 a")
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href"))),
+  ).toEqual(items.map((item) => `/events/${item.slug}`));
+  for (const [index, item] of items.entries()) {
+    await expect(cards.nth(index)).toBeVisible();
+    await expect(cards.nth(index).locator("h3 a")).toHaveText(item.title);
+  }
+  return { body, items };
+}
+
+Given(
+  "the public doctor feed has the Online format selected",
+  async ({ page, host }) => {
+    await page.context().clearCookies();
+    await openFeed(page, `${host.eventsPath}?format=online`);
+    await expect(
+      filterPanel(page)
+        .getByRole("group", { name: "Формат", exact: true })
+        .getByRole("button", { name: "Онлайн", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+  },
+);
+
+Given(
+  "a past event whose recording feature 014 has published",
+  async ({ page, world }) => {
+    const body = await publicDoctorRead<DeliveredFeed>(
+      page,
+      "/v1/storefront/doctor/events?tense=past&format=online",
+    );
+    const recorded = body.days
+      .flatMap((day) => day.items)
+      .find((item) => item.recording?.primaryKind === "edited");
+    expect(
+      recorded,
+      "published recording in the fixed Online past read",
+    ).toBeDefined();
+    const projection = await publicDoctorRead<{
+      state: string;
+      recording: { state: string; primaryKind: string };
+    }>(page, `/v1/storefront/doctor/events/${recorded!.slug}`);
+    expect(projection.state).toBe("ended");
+    expect(projection.recording).toMatchObject({
+      state: "montage",
+      primaryKind: "edited",
+    });
+    feedOf(world).card = {
+      title: recorded!.title,
+      href: `/events/${recorded!.slug}`,
+    };
+  },
+);
+
+function originalRecordedCard(page: Page, world: StepWorld): Locator {
+  const card = feedOf(world).card;
+  if (!card) throw new Error("Published past card was not selected");
+  return feedCards(page).filter({
+    has: page.locator(`h3 a[href="${card.href}"]`),
+  });
+}
+Then(
+  "the same card unit renders in its «прошло — есть запись» state",
+  async ({ page, world }) => {
+    const card = originalRecordedCard(page, world);
+    await expect(card).toBeVisible();
+    await expect(card.locator("[data-event-recording]")).toContainText(
+      "Запись",
+    );
+  },
+);
+Then(
+  "the card offers «Смотреть запись» instead of a sign-up action and lists no materials",
+  async ({ page, world }) => {
+    await expect(
+      originalRecordedCard(page, world).getByRole("link", {
+        name: "Смотреть запись",
+        exact: true,
+      }),
+    ).toHaveAttribute("href", feedOf(world).card!.href);
+    await expect(
+      feedCards(page).getByText(/Участвовать|Записаться|Материалы/u),
+    ).toHaveCount(0);
+  },
+);
+Then("the past events are grouped by month, newest first", async ({ page }) => {
+  expect(params(page).get("tense")).toBe("past");
+  const { items } = await expectDeliveredFeed(page);
+  const ids = await page
+    .getByTestId("events-feed")
+    .locator('section[id^="day-"]')
+    .evaluateAll((nodes) => nodes.map((node) => node.id));
+  expect(ids).toEqual(
+    [
+      ...new Set(
+        items.map(
+          (item) =>
+            `day-${new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Moscow", year: "numeric", month: "2-digit" }).format(new Date(item.startsAt))}`,
+        ),
+      ),
+    ]
+      .sort()
+      .reverse(),
+  );
+  expect(items.map((item) => item.startsAt)).toEqual(
+    items
+      .map((item) => item.startsAt)
+      .sort()
+      .reverse(),
+  );
+});
+Then(
+  /^the screen holds the 10 most recent past events, «Показать ещё 10 \(осталось N\)» adding the next older ones$/u,
+  async ({ page, world }) => {
+    const before = await expectDeliveredFeed(page);
+    expect(before.items).toHaveLength(10);
+    expect(before.items.every((item) => item.format === "online")).toBe(true);
+    const more = page.getByTestId("events-feed-show-more");
+    expect(before.body.remaining).toBeGreaterThanOrEqual(10);
+    await expect(more).toHaveText(
+      `Показать ещё 10 (осталось ${before.body.remaining})`,
+    );
+    await showMore(page, world);
+    const after = await expectDeliveredFeed(page);
+    expect(after.items).toHaveLength(20);
+    expect(
+      after.items.slice(0, before.items.length).map((item) => item.id),
+    ).toEqual(before.items.map((item) => item.id));
+    expect(after.items.map((item) => item.startsAt)).toEqual(
+      after.items
+        .map((item) => item.startsAt)
+        .sort()
+        .reverse(),
+    );
+    expect(after.body.remaining).toBe(before.body.remaining - 10);
+    expect(after.body.from < before.body.from).toBe(true);
+  },
+);
+Then(
+  "no separate archive page, tab or block below the feed is rendered",
+  async ({ page }) => {
+    await expect(page.getByText("Архив записей", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(page.getByRole("tab", { name: /архив/iu })).toHaveCount(0);
+    await expect(page.locator('main a[href^="/archive"]')).toHaveCount(0);
+    await expect(page).toHaveURL((url) => url.pathname === "/events");
+  },
+);
+
+When(
+  "the doctor read contract answers a feed request",
+  async ({ page, host, world }) => {
+    await openFeed(page, host.eventsPath);
+    const { items } = await expectDeliveredFeed(page);
+    expect(
+      items.some((item) => item.format !== "online"),
+      "non-Online facet positive control",
+    ).toBe(true);
+    deliveredReads.set(world, { initial: items });
+  },
+);
+Then(
+  "every event in the response is rendered or excluded only by the applied facets in the URL",
+  async ({ page, world }) => {
+    const state = deliveredReads.get(world);
+    if (!state) throw new Error("Initial Doctor read was not inspected");
+    await filterPanel(page)
+      .getByRole("group", { name: "Формат", exact: true })
+      .getByRole("button", { name: "Онлайн", exact: true })
+      .click();
+    await page.waitForURL((url) =>
+      url.searchParams.getAll("format").includes("online"),
+    );
+    const { items } = await expectDeliveredFeed(page);
+    expect(items.every((item) => item.format === "online")).toBe(true);
+    expect(items.map((item) => item.id)).not.toEqual(
+      state.initial.map((item) => item.id),
+    );
+    state.filtered = items;
+  },
+);
+Then(
+  "no event is delivered to the client and hidden there",
+  async ({ page, world }) => {
+    const before = deliveredReads.get(world)?.filtered;
+    if (!before) throw new Error("Online Doctor read was not inspected");
+    const more = page.getByTestId("events-feed-show-more");
+    await expect(more).toHaveText(/^Показать ещё \d+ \(осталось \d+\)$/u);
+    const step = Number(/\d+/u.exec(await more.innerText())![0]);
+    await showMore(page, world);
+    const { items } = await expectDeliveredFeed(page);
+    expect(items.length).toBe(before.length + step);
+    expect(items.slice(0, before.length).map((item) => item.id)).toEqual(
+      before.map((item) => item.id),
+    );
+    expect(params(page).getAll("format")).toEqual(["online"]);
+    expect(Number(params(page).get("count"))).toBe(items.length);
+  },
+);

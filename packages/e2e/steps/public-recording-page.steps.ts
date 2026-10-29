@@ -204,108 +204,112 @@ When(
   },
 );
 
+async function expectCompleteProjection(
+  page: Page,
+  request: APIRequestContext,
+  host: { eventsPath: string },
+  world: StepWorld,
+) {
+  const event = await readEvent(request, selected(world).slug);
+  const hero = page.getByTestId("event-page-hero");
+  const body = page.getByRole("main");
+  const school = event.links.school?.label ?? event.school;
+  await expect(hero).toContainText(school);
+  await expect(hero).toContainText(`${event.durationMin} минут`);
+  for (const specialty of event.specialties)
+    await expect(hero).toContainText(specialty);
+  await expect(page.getByTestId("event-about")).toContainText(
+    event.description,
+  );
+  await expectSpeakerCards(page, event.speakers);
+  for (const partner of event.partners)
+    await expect(page.getByTestId("event-partners")).toContainText(
+      partner.label,
+    );
+  if (event.partners.length === 0)
+    await expect(page.getByTestId("event-partners")).toHaveCount(0);
+  const instant = new Date(event.startsAt);
+  const zone =
+    event.format === "offline"
+      ? "Europe/Moscow"
+      : await page.evaluate(
+          () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+        );
+  const date = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: zone,
+    day: "numeric",
+    month: "long",
+  }).format(instant);
+  const time = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: zone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(instant);
+  await expect(hero).toContainText(date);
+  await expect(hero).toContainText(time);
+  await expect(page.getByTestId("recording-badge")).toHaveText(
+    "Запись доступна",
+  );
+  await expect(page.getByTestId("recording-meta")).toHaveCount(0);
+  const gate = page.getByTestId("player-card").getByTestId("recording-gate");
+  await expect(gate).toBeVisible();
+  await expect(gate).toContainText("Монтаж");
+  const programme = page.getByTestId("event-programme");
+  await expect(programme).toBeVisible();
+  if (event.programPdfUrl) {
+    const download = programme.getByRole("link");
+    await expect(download).toHaveCount(1);
+    expect(
+      new URL((await download.getAttribute("href"))!, page.url()).pathname,
+    ).toBe(new URL(event.programPdfUrl).pathname);
+  } else {
+    await expect(programme.getByTestId("event-programme-statement")).toHaveText(
+      /\S/u,
+    );
+    await expect(programme.getByRole("link")).toHaveCount(0);
+  }
+  const htmlText = await serverText(
+    page,
+    request,
+    `${host.eventsPath}/${event.slug}`,
+  );
+  const moscowDate = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Moscow",
+    day: "numeric",
+    month: "long",
+  }).format(instant);
+  const moscowTime = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Moscow",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(instant);
+  for (const value of [
+    event.title,
+    school,
+    event.description,
+    ...event.specialties,
+    ...event.speakers.flatMap((speaker) => [speaker.name, speaker.credentials]),
+    ...event.partners.map((partner) => partner.label),
+    moscowDate,
+    moscowTime,
+    "МСК",
+    `${event.durationMin} минут`,
+    "Запись доступна",
+  ]) {
+    expect(
+      htmlText,
+      "field is real server markup, not serialized page data",
+    ).toContain(value.replace(/\s+/gu, " "));
+  }
+  await expect(body.getByText("О чём событие", { exact: true })).toBeVisible();
+}
+
 Then(
   "the complete public event projection and recording signal are server-rendered",
   async ({ page, request, host, world }) => {
-    const event = await readEvent(request, selected(world).slug);
-    const hero = page.getByTestId("event-page-hero");
-    const body = page.getByRole("main");
-    const school = event.links.school?.label ?? event.school;
-    await expect(hero).toContainText(school);
-    await expect(hero).toContainText(`${event.durationMin} минут`);
-    for (const specialty of event.specialties)
-      await expect(hero).toContainText(specialty);
-    await expect(page.getByTestId("event-about")).toContainText(
-      event.description,
-    );
-    await expectSpeakerCards(page, event.speakers);
-    for (const partner of event.partners)
-      await expect(page.getByTestId("event-partners")).toContainText(
-        partner.label,
-      );
-    if (event.partners.length === 0)
-      await expect(page.getByTestId("event-partners")).toHaveCount(0);
-    const instant = new Date(event.startsAt);
-    const zone =
-      event.format === "offline"
-        ? "Europe/Moscow"
-        : await page.evaluate(
-            () => Intl.DateTimeFormat().resolvedOptions().timeZone,
-          );
-    const date = new Intl.DateTimeFormat("ru-RU", {
-      timeZone: zone,
-      day: "numeric",
-      month: "long",
-    }).format(instant);
-    const time = new Intl.DateTimeFormat("ru-RU", {
-      timeZone: zone,
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).format(instant);
-    await expect(hero).toContainText(date);
-    await expect(hero).toContainText(time);
-    await expect(page.getByTestId("recording-badge")).toHaveText(
-      "Запись доступна",
-    );
-    await expect(page.getByTestId("recording-meta")).toHaveCount(0);
-    const gate = page.getByTestId("player-card").getByTestId("recording-gate");
-    await expect(gate).toBeVisible();
-    await expect(gate).toContainText("Монтаж");
-    const programme = page.getByTestId("event-programme");
-    await expect(programme).toBeVisible();
-    if (event.programPdfUrl) {
-      const download = programme.getByRole("link");
-      await expect(download).toHaveCount(1);
-      expect(
-        new URL((await download.getAttribute("href"))!, page.url()).pathname,
-      ).toBe(new URL(event.programPdfUrl).pathname);
-    } else {
-      await expect(
-        programme.getByTestId("event-programme-statement"),
-      ).toHaveText(/\S/u);
-      await expect(programme.getByRole("link")).toHaveCount(0);
-    }
-    const htmlText = await serverText(
-      page,
-      request,
-      `${host.eventsPath}/${event.slug}`,
-    );
-    const moscowDate = new Intl.DateTimeFormat("ru-RU", {
-      timeZone: "Europe/Moscow",
-      day: "numeric",
-      month: "long",
-    }).format(instant);
-    const moscowTime = new Intl.DateTimeFormat("ru-RU", {
-      timeZone: "Europe/Moscow",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).format(instant);
-    for (const value of [
-      event.title,
-      school,
-      event.description,
-      ...event.specialties,
-      ...event.speakers.flatMap((speaker) => [
-        speaker.name,
-        speaker.credentials,
-      ]),
-      ...event.partners.map((partner) => partner.label),
-      moscowDate,
-      moscowTime,
-      "МСК",
-      `${event.durationMin} минут`,
-      "Запись доступна",
-    ]) {
-      expect(
-        htmlText,
-        "field is real server markup, not serialized page data",
-      ).toContain(value.replace(/\s+/gu, " "));
-    }
-    await expect(
-      body.getByText("О чём событие", { exact: true }),
-    ).toBeVisible();
+    await expectCompleteProjection(page, request, host, world);
   },
 );
 
@@ -428,5 +432,76 @@ Then(
   async ({ page, request, world }) => {
     const canonical = await projectedSpeakers(request, selected(world).slug);
     await expectSpeakerCards(page, canonical);
+  },
+);
+
+Given(
+  "a visitor with no account on the «Прошедшие» tab",
+  async ({ page, request, host, world }) => {
+    await page.context().clearCookies();
+    const candidate = (await pastCandidates(request)).find(
+      (entry) => entry.recording.primaryKind === "edited",
+    );
+    expect(
+      candidate,
+      "published archive entry in real public read",
+    ).toBeDefined();
+    const event = await readEvent(request, candidate!.slug);
+    remember(world, event);
+    await page.goto(`${host.eventsPath}?tab=past`, {
+      waitUntil: "networkidle",
+    });
+    await expect(
+      page
+        .getByTestId("events-tense-tabs")
+        .getByRole("tab", { name: "Прошедшие", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+  },
+);
+
+When("the visitor opens an entry", async ({ page, host, world }) => {
+  const event = selected(world);
+  const card = page
+    .getByTestId("events-feed")
+    .locator("[data-webinar-card]")
+    .filter({
+      has: page.locator(`h3 a[href="${host.eventsPath}/${event.slug}"]`),
+    });
+  await expect(card).toBeVisible();
+  await card
+    .getByRole("link", { name: "Смотреть запись", exact: true })
+    .click();
+  await page.waitForURL(
+    (url) => url.pathname === `${host.eventsPath}/${event.slug}`,
+  );
+  await expect(
+    page.getByRole("heading", { level: 1, name: event.title, exact: true }),
+  ).toBeVisible();
+});
+
+Then(
+  "the post-live page renders fully readable",
+  async ({ page, request, host, world }) => {
+    await expectCompleteProjection(page, request, host, world);
+    await expect(page.getByTestId("storefront-header")).toBeVisible();
+    await expect(page.getByTestId("storefront-footer")).toBeVisible();
+  },
+);
+
+Then(
+  "the sign-in invitation is the next step in the player position",
+  async ({ page, host, world }) => {
+    const gate = page.getByTestId("player-card").getByTestId("recording-gate");
+    await expect(gate).toBeVisible();
+    const signin = gate.getByTestId("recording-gate-signin");
+    await expect(signin).toBeVisible();
+    await expect(signin).toHaveAccessibleName(/\S/u);
+    const href = await signin.getAttribute("href");
+    expect(href).toBeTruthy();
+    expect(new URL(href!, page.url()).searchParams.get("returnTo")).toBe(
+      `${host.eventsPath}/${selected(world).slug}`,
+    );
+    await expect(page.locator("iframe, video")).toHaveCount(0);
+    await expect(page.getByTestId("event-signup-cta")).toHaveCount(0);
   },
 );

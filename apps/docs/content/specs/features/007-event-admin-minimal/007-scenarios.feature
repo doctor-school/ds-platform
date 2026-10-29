@@ -248,14 +248,30 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
     And token discipline (no arbitrary Tailwind) holds for any bespoke styling
     And there is no canvas-fidelity check because no admin canvas exists (Stage-A gap)
 
-  # --- Amendment 2026-10-13: hide the registrant count (US-1, US-2) ---
+  # --- Amendment 2026-10-13: hide the registrant count; on by default since 2026-10-29, #3479 (US-1, US-2) ---
 
   @EARS-12 @happy
-  Scenario: An operator hides the registrant count of an event
-    Given an event with registrants and the «Скрыть число записавшихся» option off by default
-    When the operator turns the option on and saves the event
-    Then the event persists hide_sign_up_count true
+  Scenario: A new event hides its registrant count by default
+    Given an operator creating an event without touching the «Скрыть число записавшихся» option
+    When the operator saves the event
+    Then the event persists hide_sign_up_count true, because the option is on by default
     And the editor shows the option as on when the event is reopened
+    And a public read of the event carries signUpCount null
+
+  @EARS-12 @happy
+  Scenario: An operator shows the registrant count of an event
+    Given an event with registrants and the «Скрыть число записавшихся» option on by default
+    When the operator turns the option off and saves the event
+    Then the event persists hide_sign_up_count false
+    And the editor shows the option as off when the event is reopened
+    And a public read of the event carries the registrant count as signUpCount
+
+  @EARS-12 @edge
+  Scenario: An event that existed before the default changed reads hidden
+    Given an event created before 2026-10-29 with the «Скрыть число записавшихся» option off
+    When the 2026-10-29 default change is applied
+    Then the event persists hide_sign_up_count true
+    And the operator sees the option on in the editor
     And a public read of the event carries signUpCount null
 
   @EARS-12 @failure

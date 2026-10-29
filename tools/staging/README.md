@@ -499,7 +499,13 @@ running containers keep their image IDs, so nothing breaks. `down`, `gc`
 and retention preserve other containers' original requested tags (`Config.Image`), even
 when `docker ps` displays an image ID after a tag was moved. Retention also keeps
 the full image bundle for each live commit, including the one-shot migration image
-whose container is removed after use; image timestamps do not evict it. The images
+whose container is removed after use; image timestamps do not evict it. It also keeps
+the tags of every slot release still on the box — the SHA in each `ds-stage-<slot>-<sha12>-*`
+`ds-release` unit — so a slot whose `up` has pulled but not yet run `up -d` (no
+container yet) keeps its images while another slot's converge prunes (#3459). While any
+`pull-*` unit still runs, no registry digest record is removed: that pull's record has no
+`ds-*` tag until its `docker tag`. A box whose units cannot be listed fails the prune
+rather than pruning blind. The images
 carry no environment (#2995): stage's captcha site key and contour flag are runtime
 env, so the same digest serves every slot and, later, production. The BuildKit cache
 cap in the converge's prune stays: `stg-infra`'s `postgres` is still built on the box.

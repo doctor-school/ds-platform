@@ -1108,39 +1108,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/partners": {
+    "/v1/admin/organisation-roles": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["PartnersAdminController_list"];
+        get: operations["OrganisationRolesAdminController_list"];
         put?: never;
-        post: operations["PartnersAdminController_create"];
+        post: operations["OrganisationRolesAdminController_create"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/partners/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["PartnersAdminController_detail"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch: operations["PartnersAdminController_update"];
-        trace?: never;
-    };
-    "/v1/admin/partners/{id}/publish": {
+    "/v1/admin/organisation-roles/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1149,7 +1133,55 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["PartnersAdminController_publish"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["OrganisationRolesAdminController_update"];
+        trace?: never;
+    };
+    "/v1/admin/organisations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["OrganisationsAdminController_list"];
+        put?: never;
+        post: operations["OrganisationsAdminController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/organisations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["OrganisationsAdminController_detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["OrganisationsAdminController_update"];
+        trace?: never;
+    };
+    "/v1/admin/organisations/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["OrganisationsAdminController_publish"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5480,7 +5512,7 @@ export interface operations {
             };
         };
     };
-    PartnersAdminController_list: {
+    OrganisationRolesAdminController_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -5497,7 +5529,7 @@ export interface operations {
             };
         };
     };
-    PartnersAdminController_create: {
+    OrganisationRolesAdminController_create: {
         parameters: {
             query?: never;
             header?: never;
@@ -5514,7 +5546,7 @@ export interface operations {
             };
         };
     };
-    PartnersAdminController_detail: {
+    OrganisationRolesAdminController_update: {
         parameters: {
             query?: never;
             header?: never;
@@ -5533,7 +5565,41 @@ export interface operations {
             };
         };
     };
-    PartnersAdminController_update: {
+    OrganisationsAdminController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    OrganisationsAdminController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    OrganisationsAdminController_detail: {
         parameters: {
             query?: never;
             header?: never;
@@ -5552,7 +5618,26 @@ export interface operations {
             };
         };
     };
-    PartnersAdminController_publish: {
+    OrganisationsAdminController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    OrganisationsAdminController_publish: {
         parameters: {
             query?: never;
             header?: never;

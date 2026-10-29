@@ -39,7 +39,9 @@ describe("032 organisation contract", () => {
   });
 
   it("032 EARS-1: the title is bounded 1–160 and the description 0–1000 after trimming", () => {
-    expect(CreateOrganisationRequestSchema.safeParse({ title: "   " }).success).toBe(false);
+    expect(
+      CreateOrganisationRequestSchema.safeParse({ title: "   " }).success,
+    ).toBe(false);
     expect(
       CreateOrganisationRequestSchema.safeParse({
         title: "x".repeat(ORGANISATION_TITLE_MAX + 1),
@@ -100,7 +102,14 @@ describe("032 organisation contract", () => {
       description: null,
       publicNameVisible: true,
       publicLogoVisible: true,
-      roles: [{ id: ROLE_B, slug: "clinical-base", title: "Клиническая площадка", status: "retired" }],
+      roles: [
+        {
+          id: ROLE_B,
+          slug: "clinical-base",
+          title: "Клиническая площадка",
+          status: "retired",
+        },
+      ],
       status: "draft",
       firstPublishedAt: null,
       version: 1,
@@ -113,10 +122,14 @@ describe("032 organisation contract", () => {
 
 describe("032 organisation-role contract", () => {
   it("032 EARS-3: a role title is trimmed and bounded 1–80; nothing but the title is authored", () => {
-    expect(CreateOrganisationRoleRequestSchema.parse({ title: "  Спонсор КМЕ " })).toEqual({
+    expect(
+      CreateOrganisationRoleRequestSchema.parse({ title: "  Спонсор КМЕ " }),
+    ).toEqual({
       title: "Спонсор КМЕ",
     });
-    expect(CreateOrganisationRoleRequestSchema.safeParse({ title: "" }).success).toBe(false);
+    expect(
+      CreateOrganisationRoleRequestSchema.safeParse({ title: "" }).success,
+    ).toBe(false);
     expect(
       CreateOrganisationRoleRequestSchema.safeParse({
         title: "x".repeat(ORGANISATION_ROLE_TITLE_MAX + 1),
@@ -132,9 +145,14 @@ describe("032 organisation-role contract", () => {
   });
 
   it("032 EARS-3: the list query filters by status only", () => {
-    expect(OrganisationRoleAdminListQuerySchema.parse({ status: "active" })).toEqual({
+    expect(
+      OrganisationRoleAdminListQuerySchema.parse({ status: "active" }),
+    ).toEqual({
       status: "active",
     });
-    expect(OrganisationRoleAdminListQuerySchema.safeParse({ status: "draft" }).success).toBe(false);
+    expect(
+      OrganisationRoleAdminListQuerySchema.safeParse({ status: "draft" })
+        .success,
+    ).toBe(false);
   });
 });

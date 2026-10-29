@@ -48,15 +48,14 @@ export const OrganisationRoleRefSchema = z.object({
 export type OrganisationRoleRef = z.infer<typeof OrganisationRoleRefSchema>;
 
 /** The admin projection of one role, with the number of organisations holding it. */
-export const OrganisationRoleAdminDetailSchema = OrganisationRoleRefSchema.extend(
-  {
+export const OrganisationRoleAdminDetailSchema =
+  OrganisationRoleRefSchema.extend({
     /** Draft and published organisations holding the role (EARS-3 / EARS-4). */
     organisationCount: z.number().int().nonnegative(),
     version: z.number().int().positive(),
     createdAt: z.string(),
     updatedAt: z.string(),
-  },
-);
+  });
 export type OrganisationRoleAdminDetail = z.infer<
   typeof OrganisationRoleAdminDetailSchema
 >;

@@ -886,7 +886,9 @@ export const PublicDirectionSummarySchema = z
     title: z.string(),
   })
   .strict();
-export type PublicDirectionSummary = z.infer<typeof PublicDirectionSummarySchema>;
+export type PublicDirectionSummary = z.infer<
+  typeof PublicDirectionSummarySchema
+>;
 
 /** ADR-0002's exact cursor-page envelope (012-design §5.2). */
 export function publicCursorPageSchema<T extends z.ZodTypeAny>(item: T) {
@@ -1277,7 +1279,9 @@ export const EventDirectionAdminDetailSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
-export type EventDirectionAdminDetail = z.infer<typeof EventDirectionAdminDetailSchema>;
+export type EventDirectionAdminDetail = z.infer<
+  typeof EventDirectionAdminDetailSchema
+>;
 
 /** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
 export const EventDirectionAdminListSchema = z.object({
@@ -1286,7 +1290,9 @@ export const EventDirectionAdminListSchema = z.object({
   page: z.number().int().positive(),
   pageSize: z.number().int().positive(),
 });
-export type EventDirectionAdminList = z.infer<typeof EventDirectionAdminListSchema>;
+export type EventDirectionAdminList = z.infer<
+  typeof EventDirectionAdminListSchema
+>;
 
 /**
  * The filtered join list of §5.1. Either endpoint may scope the list — that is

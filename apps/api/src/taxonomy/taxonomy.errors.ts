@@ -281,11 +281,11 @@ const RELATION_UNIQUE_CONSTRAINTS: ReadonlyMap<string, string> = new Map([
   ],
   ["event_projects_pair_key", "this project is already related to this event"],
   [
-    "project_partners_pair_key",
+    "project_organisations_pair_key",
     "this partner is already listed on this project; restore that relation instead of creating a second one",
   ],
   [
-    "project_partners_project_primary_active_uniq",
+    "project_organisations_project_primary_active_uniq",
     "this project already has a primary partner; clear that flag before setting another",
   ],
 ]);

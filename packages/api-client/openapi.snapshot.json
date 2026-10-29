@@ -7791,31 +7791,31 @@
         "tags": ["LegacyBroadcastsAdmin"]
       }
     },
-    "/v1/admin/partners": {
+    "/v1/admin/organisation-roles": {
       "get": {
-        "operationId": "PartnersAdminController_list",
+        "operationId": "OrganisationRolesAdminController_list",
         "parameters": [],
         "responses": {
           "200": {
             "description": ""
           }
         },
-        "tags": ["PartnersAdmin"]
+        "tags": ["OrganisationRolesAdmin"]
       },
       "post": {
-        "operationId": "PartnersAdminController_create",
+        "operationId": "OrganisationRolesAdminController_create",
         "parameters": [],
         "responses": {
           "201": {
             "description": ""
           }
         },
-        "tags": ["PartnersAdmin"]
+        "tags": ["OrganisationRolesAdmin"]
       }
     },
-    "/v1/admin/partners/{id}": {
-      "get": {
-        "operationId": "PartnersAdminController_detail",
+    "/v1/admin/organisation-roles/{id}": {
+      "patch": {
+        "operationId": "OrganisationRolesAdminController_update",
         "parameters": [
           {
             "in": "path",
@@ -7831,10 +7831,53 @@
             "description": ""
           }
         },
-        "tags": ["PartnersAdmin"]
+        "tags": ["OrganisationRolesAdmin"]
+      }
+    },
+    "/v1/admin/organisations": {
+      "get": {
+        "operationId": "OrganisationsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["OrganisationsAdmin"]
+      },
+      "post": {
+        "operationId": "OrganisationsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["OrganisationsAdmin"]
+      }
+    },
+    "/v1/admin/organisations/{id}": {
+      "get": {
+        "operationId": "OrganisationsAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["OrganisationsAdmin"]
       },
       "patch": {
-        "operationId": "PartnersAdminController_update",
+        "operationId": "OrganisationsAdminController_update",
         "parameters": [
           {
             "in": "path",
@@ -7850,12 +7893,12 @@
             "description": ""
           }
         },
-        "tags": ["PartnersAdmin"]
+        "tags": ["OrganisationsAdmin"]
       }
     },
-    "/v1/admin/partners/{id}/publish": {
+    "/v1/admin/organisations/{id}/publish": {
       "post": {
-        "operationId": "PartnersAdminController_publish",
+        "operationId": "OrganisationsAdminController_publish",
         "parameters": [
           {
             "in": "path",
@@ -7871,7 +7914,7 @@
             "description": ""
           }
         },
-        "tags": ["PartnersAdmin"]
+        "tags": ["OrganisationsAdmin"]
       }
     },
     "/v1/admin/project-experts": {

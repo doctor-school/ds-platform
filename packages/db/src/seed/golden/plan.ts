@@ -455,7 +455,12 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
   );
   check("project_experts", dataset.projectExperts, "projectId", projectIds);
   check("project_experts", dataset.projectExperts, "expertId", expertIds);
-  check("project_organisations", dataset.projectPartners, "projectId", projectIds);
+  check(
+    "project_organisations",
+    dataset.projectPartners,
+    "projectId",
+    projectIds,
+  );
   check(
     "project_organisations",
     dataset.projectPartners,

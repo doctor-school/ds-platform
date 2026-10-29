@@ -134,7 +134,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       } as Record<string, unknown>;
       const cols = Object.keys(row);
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO partners (${cols.map((c) => `"${c}"`).join(", ")})
+        `INSERT INTO organisations (${cols.map((c) => `"${c}"`).join(", ")})
          VALUES (${cols.map((_, i) => `$${i + 1}`).join(", ")}) RETURNING id`,
         cols.map((c) => row[c]),
       );
@@ -189,7 +189,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         status: string;
         version: number;
       }>(
-        "SELECT is_primary, status, version FROM project_partners WHERE id = $1",
+        "SELECT is_primary, status, version FROM project_organisations WHERE id = $1",
         [id],
       );
       return rows[0]!;
@@ -356,9 +356,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await pool.query("DELETE FROM events WHERE id = $1", [id]);
       }
       for (const id of createdProjectIds.splice(0)) {
-        await pool.query("DELETE FROM project_partners WHERE project_id = $1", [
-          id,
-        ]);
+        await pool.query(
+          "DELETE FROM project_organisations WHERE project_id = $1",
+          [id],
+        );
         await pool.query("DELETE FROM project_experts WHERE project_id = $1", [
           id,
         ]);
@@ -368,10 +369,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await pool.query("DELETE FROM projects WHERE id = $1", [id]);
       }
       for (const id of createdPartnerIds.splice(0)) {
-        await pool.query("DELETE FROM project_partners WHERE partner_id = $1", [
-          id,
-        ]);
-        await pool.query("DELETE FROM partners WHERE id = $1", [id]);
+        await pool.query(
+          "DELETE FROM project_organisations WHERE organisation_id = $1",
+          [id],
+        );
+        await pool.query("DELETE FROM organisations WHERE id = $1", [id]);
       }
       for (const id of createdExpertIds.splice(0)) {
         await pool.query("DELETE FROM project_experts WHERE expert_id = $1", [
@@ -483,7 +485,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // ledger row would mean the write partially committed.
       expect(await auditRows(incumbent.detail.id)).toBe(auditBefore);
       const { rows } = await pool.query(
-        "SELECT id FROM project_partners WHERE partner_id = $1",
+        "SELECT id FROM project_organisations WHERE organisation_id = $1",
         [challengerPartner],
       );
       expect(rows).toHaveLength(0);
@@ -580,7 +582,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(body(promoted)).toMatchObject({ isPrimary: true, version: 2 });
 
       const { rows } = await pool.query<{ n: string }>(
-        `SELECT count(*)::text AS n FROM project_partners
+        `SELECT count(*)::text AS n FROM project_organisations
           WHERE project_id = $1 AND is_primary AND status = 'active'`,
         [projectId],
       );
@@ -614,7 +616,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(replay.headers.etag).toBe(first.headers.etag);
       expect(replay.headers.location).toBe(first.headers.location);
       const { rows } = await pool.query(
-        "SELECT id FROM project_partners WHERE project_id = $1",
+        "SELECT id FROM project_organisations WHERE project_id = $1",
         [projectId],
       );
       expect(rows).toHaveLength(1);
@@ -650,7 +652,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
       }
       const { rows } = await pool.query(
-        "SELECT id FROM project_partners WHERE project_id = $1",
+        "SELECT id FROM project_organisations WHERE project_id = $1",
         [projectId],
       );
       expect(rows).toHaveLength(0);
@@ -739,21 +741,21 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         ),
       );
       await pool.query(
-        `INSERT INTO project_partners (project_id, partner_id, is_primary)
-         SELECT $1, partner_id, false
-           FROM unnest($2::uuid[]) AS partner_id`,
+        `INSERT INTO project_organisations (project_id, organisation_id, is_primary)
+         SELECT $1, organisation_id, false
+           FROM unnest($2::uuid[]) AS organisation_id`,
         [projectId, partnerIds.slice(0, 101)],
       );
       await pool.query(
-        `INSERT INTO project_partners
-           (project_id, partner_id, is_primary, status, deleted_at)
-         SELECT $1, partner_id, false, 'retired', now()
-           FROM unnest($2::uuid[]) AS partner_id`,
+        `INSERT INTO project_organisations
+           (project_id, organisation_id, is_primary, status, deleted_at)
+         SELECT $1, organisation_id, false, 'retired', now()
+           FROM unnest($2::uuid[]) AS organisation_id`,
         [projectId, partnerIds.slice(101, 104)],
       );
       await pool.query(
-        `INSERT INTO project_partners
-           (project_id, partner_id, is_primary, status, deleted_at)
+        `INSERT INTO project_organisations
+           (project_id, organisation_id, is_primary, status, deleted_at)
          VALUES ($1, $2, true, 'retired', now())`,
         [projectId, partnerIds[104]],
       );
@@ -962,7 +964,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const projectId = await insertProject();
       await publishProject(projectId);
       const tampered = Buffer.from(
-        JSON.stringify({ title: "", id: "'; DROP TABLE project_partners; --" }),
+        JSON.stringify({
+          title: "",
+          id: "'; DROP TABLE project_organisations; --",
+        }),
         "utf8",
       ).toString("base64url");
 
@@ -1035,7 +1040,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // The refusal lands BEFORE the write: the relation the second call
       // described exists in neither the domain table nor the 010 trail.
       const { rows } = await pool.query(
-        "SELECT id FROM project_partners WHERE project_id = $1 AND partner_id = $2",
+        "SELECT id FROM project_organisations WHERE project_id = $1 AND organisation_id = $2",
         [projectId, secondPartner],
       );
       expect(rows).toHaveLength(0);
@@ -1048,7 +1053,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const afterCreate = await auditTrail(detail.id);
       expect(afterCreate.map((r) => r.event_type)).toEqual([
-        "data.project_partners.insert",
+        "data.project_organisations.insert",
       ]);
       // Attribution is the point of the trail: an unattributed row is a change
       // nobody can be asked about.
@@ -1070,7 +1075,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // neither collapsed into one row nor duplicated.
       expect(
         afterRetire.filter(
-          (r) => r.event_type === "data.project_partners.update",
+          (r) => r.event_type === "data.project_organisations.update",
         ),
       ).toHaveLength(2);
       expect(afterRetire.every((r) => r.subject_id !== null)).toBe(true);
@@ -1134,7 +1139,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }
 
       const { rows } = await pool.query(
-        "SELECT id FROM project_partners WHERE project_id = $1 AND partner_id = $2",
+        "SELECT id FROM project_organisations WHERE project_id = $1 AND organisation_id = $2",
         [projectId, partnerId],
       );
       expect(rows).toHaveLength(1);
@@ -1173,7 +1178,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // Exactly one active primary, and the loser left no row at all — the slot
       // is decided, never shared and never silently demoted.
       const { rows } = await pool.query<{ id: string; is_primary: boolean }>(
-        "SELECT id, is_primary FROM project_partners WHERE project_id = $1 AND status = 'active' AND is_primary = true",
+        "SELECT id, is_primary FROM project_organisations WHERE project_id = $1 AND status = 'active' AND is_primary = true",
         [projectId],
       );
       expect(rows).toHaveLength(1);

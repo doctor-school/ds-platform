@@ -12,7 +12,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@ds/design-system";
-import type { PartnerAdminDetail, TaxonomyStatus } from "@ds/schemas";
+import type { OrganisationAdminDetail, TaxonomyStatus } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { PartnerForm } from "@/components/partner-form";
@@ -40,7 +40,7 @@ export default function PartnerDetailPage() {
   const t = useTranslations();
   const params = useParams<{ id: string }>();
   const id = params?.id ?? "";
-  const { result: detail, query } = useOne<PartnerAdminDetail>({
+  const { result: detail, query } = useOne<OrganisationAdminDetail>({
     resource: "partners",
     id,
   });

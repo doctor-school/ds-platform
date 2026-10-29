@@ -241,16 +241,14 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
 
   it("EARS-22: the project-partner admin query shall strictly filter the primary flag", () => {
     expect(
-      ProjectPartnerAdminListQuerySchema.parse({ isPrimary: "true" })
-        .isPrimary,
+      ProjectPartnerAdminListQuerySchema.parse({ isPrimary: "true" }).isPrimary,
     ).toBe(true);
     expect(
       ProjectPartnerAdminListQuerySchema.parse({ isPrimary: "false" })
         .isPrimary,
     ).toBe(false);
     expect(
-      ProjectPartnerAdminListQuerySchema.safeParse({ isPrimary: "1" })
-        .success,
+      ProjectPartnerAdminListQuerySchema.safeParse({ isPrimary: "1" }).success,
     ).toBe(false);
     expect(
       ProjectPartnerAdminListQuerySchema.safeParse({ isPrimary: "yes" })
@@ -677,9 +675,9 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
   });
 
   it("012 EARS-4: when the title is empty or over the matrix bound, the system shall reject it", () => {
-    expect(CreateOrganisationRequestSchema.safeParse({ title: "   " }).success).toBe(
-      false,
-    );
+    expect(
+      CreateOrganisationRequestSchema.safeParse({ title: "   " }).success,
+    ).toBe(false);
     expect(
       CreateOrganisationRequestSchema.safeParse({
         title: "x".repeat(ORGANISATION_TITLE_MAX + 1),
@@ -710,18 +708,22 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
   });
 
   it("012 EARS-4: when a partner PATCH clears the website, the system shall accept null there but never for the title", () => {
-    expect(UpdateOrganisationRequestSchema.parse({ websiteUrl: null })).toEqual({
-      websiteUrl: null,
-    });
+    expect(UpdateOrganisationRequestSchema.parse({ websiteUrl: null })).toEqual(
+      {
+        websiteUrl: null,
+      },
+    );
     expect(UpdateOrganisationRequestSchema.parse({})).toEqual({});
     expect(
-      UpdateOrganisationRequestSchema.parse({ mediaAction: "clear" }).mediaAction,
+      UpdateOrganisationRequestSchema.parse({ mediaAction: "clear" })
+        .mediaAction,
     ).toBe("clear");
-    expect(UpdateOrganisationRequestSchema.safeParse({ title: null }).success).toBe(
-      false,
-    );
     expect(
-      UpdateOrganisationRequestSchema.safeParse({ mediaAction: "replace" }).success,
+      UpdateOrganisationRequestSchema.safeParse({ title: null }).success,
+    ).toBe(false);
+    expect(
+      UpdateOrganisationRequestSchema.safeParse({ mediaAction: "replace" })
+        .success,
     ).toBe(false);
   });
 
@@ -980,16 +982,22 @@ describe("012 EARS-25 / EARS-28 — event-kind dictionary contract (SSOT)", () =
       ).toBe(false);
     }
     expect(
-      UpdateEventKindRequestSchema.safeParse({ allowedFormats: ["offline", "hybrid"] })
-        .success,
+      UpdateEventKindRequestSchema.safeParse({
+        allowedFormats: ["offline", "hybrid"],
+      }).success,
     ).toBe(true);
   });
 
   it("012 EARS-28: PublicEventKind is exactly { id, slug, title }", () => {
-    const kind = { id: "55555555-5555-4555-8555-555555555555", slug: "efir", title: "Эфир" };
+    const kind = {
+      id: "55555555-5555-4555-8555-555555555555",
+      slug: "efir",
+      title: "Эфир",
+    };
     expect(PublicEventKindSchema.parse(kind)).toEqual(kind);
     expect(
-      PublicEventKindSchema.safeParse({ ...kind, allowedFormats: ["online"] }).success,
+      PublicEventKindSchema.safeParse({ ...kind, allowedFormats: ["online"] })
+        .success,
     ).toBe(false);
     expect(
       PublicEventKindSchema.safeParse({ ...kind, status: "published" }).success,

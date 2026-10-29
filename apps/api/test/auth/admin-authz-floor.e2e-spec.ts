@@ -562,33 +562,53 @@ const FLOOR_ROUTES: {
   // idempotency or the logo upload, so an unfielded request never reaches the
   // handler and an anonymous caller cannot tell an absent partner from a real one.
   {
-    endpoint: "GET /v1/admin/partners",
+    endpoint: "GET /v1/admin/organisations",
     method: "GET",
-    url: "/v1/admin/partners",
+    url: "/v1/admin/organisations",
   },
   {
-    endpoint: "GET /v1/admin/partners/:id",
+    endpoint: "GET /v1/admin/organisations/:id",
     method: "GET",
-    url: `/v1/admin/partners/${ABSENT_ID}`,
+    url: `/v1/admin/organisations/${ABSENT_ID}`,
   },
   {
-    endpoint: "POST /v1/admin/partners",
+    endpoint: "POST /v1/admin/organisations",
     method: "POST",
-    url: "/v1/admin/partners",
+    url: "/v1/admin/organisations",
     payload: {},
   },
   {
-    endpoint: "PATCH /v1/admin/partners/:id",
+    endpoint: "PATCH /v1/admin/organisations/:id",
     method: "PATCH",
-    url: `/v1/admin/partners/${ABSENT_ID}`,
+    url: `/v1/admin/organisations/${ABSENT_ID}`,
     payload: {},
   },
   // 012 EARS-5 (#1287) — the publish completeness gate on the partner entity.
   // Same floor as its project and expert counterparts.
   {
-    endpoint: "POST /v1/admin/partners/:id/publish",
+    endpoint: "POST /v1/admin/organisations/:id/publish",
     method: "POST",
-    url: `/v1/admin/partners/${ABSENT_ID}/publish`,
+    url: `/v1/admin/organisations/${ABSENT_ID}/publish`,
+    payload: {},
+  },
+  // 032 EARS-3/EARS-13 (#3492) — the organisation-role reference book. Same
+  // floor as the organisation entity: refused before validation, idempotency
+  // or If-Match.
+  {
+    endpoint: "GET /v1/admin/organisation-roles",
+    method: "GET",
+    url: "/v1/admin/organisation-roles",
+  },
+  {
+    endpoint: "POST /v1/admin/organisation-roles",
+    method: "POST",
+    url: "/v1/admin/organisation-roles",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/organisation-roles/:id",
+    method: "PATCH",
+    url: `/v1/admin/organisation-roles/${ABSENT_ID}`,
     payload: {},
   },
   // 012 EARS-7/EARS-16 (#1289) — the explicit expert↔event link. A JOIN leaks

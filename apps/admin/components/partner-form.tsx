@@ -18,7 +18,7 @@ import { FormDerivedNote } from "@ds/design-system/blocks";
 import {
   ACCEPTED_IMAGE_MIME_TYPES,
   MAX_IMAGE_BYTES,
-  type PartnerAdminDetail,
+  type OrganisationAdminDetail,
 } from "@ds/schemas";
 import { PartnerFormSchema, type PartnerFormFields } from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
@@ -38,7 +38,7 @@ import { useAcademyPublicUrl } from "@/components/academy-origin-provider";
  *    has them, an organisation does not), so an empty logo slot renders as an
  *    empty slot — the dropzone's own prompt — rather than a made-up monogram.
  * 3. **The website box is an absolute https address.** The client folds the SSOT
- *    `PartnerWebsiteUrlSchema` in, which is the exact twin of the DB CHECK, so
+ *    `OrganisationWebsiteUrlSchema` in, which is the exact twin of the DB CHECK, so
  *    the refusal the operator reads on blur is the rule the column enforces.
  *
  * Slug: the server owns it; the form only exposes the resulting public link for
@@ -56,7 +56,7 @@ export interface PartnerFormValues {
   removeLogo: boolean;
 }
 
-function defaults(detail?: PartnerAdminDetail): PartnerFormFields {
+function defaults(detail?: OrganisationAdminDetail): PartnerFormFields {
   return {
     title: detail?.title ?? "",
     websiteUrl: detail?.websiteUrl ?? "",
@@ -69,7 +69,7 @@ export function PartnerForm({
   onSubmit,
   submitting,
 }: {
-  detail?: PartnerAdminDetail;
+  detail?: OrganisationAdminDetail;
   submitLabel: string;
   onSubmit: (values: PartnerFormValues) => void;
   submitting?: boolean;

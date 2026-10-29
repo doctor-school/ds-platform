@@ -238,7 +238,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await inRewoundTransaction(async (c) => {
         await seedPartners(c);
         await applyMigration(c);
-        const { rows } = await c.query<{ organisation_id: string; slug: string }>(
+        const { rows } = await c.query<{
+          organisation_id: string;
+          slug: string;
+        }>(
           `SELECT a."organisation_id", r."slug"
              FROM "organisation_role_assignments" a
              JOIN "organisation_roles" r ON r."id" = a."role_id"

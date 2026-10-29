@@ -15,13 +15,13 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   AdminTaxonomyListQuerySchema,
   CANONICAL_UUID_REGEX,
-  CreatePartnerRequestSchema,
+  CreateOrganisationRequestSchema,
   IDEMPOTENCY_KEY_HEADER,
   IF_MATCH_HEADER,
   MAX_IMAGE_BYTES,
-  type PartnerAdminList,
+  type OrganisationAdminList,
   parseIfMatchVersion,
-  UpdatePartnerRequestSchema,
+  UpdateOrganisationRequestSchema,
 } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
 import {
@@ -29,7 +29,7 @@ import {
   IdempotencyService,
 } from "./idempotency.service.js";
 import { sha256, type UploadedImage } from "./media/still-image-normalizer.js";
-import { PartnersService } from "./partners.service.js";
+import { OrganisationsService } from "./organisations.service.js";
 import { TaxonomyError } from "./taxonomy.errors.js";
 import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 
@@ -51,14 +51,15 @@ import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 /** The only file part name a partner accepts — `cover`/`photo` belong elsewhere. */
 const LOGO_PART = "logo";
 
-@Controller({ path: "admin/partners", version: "1" })
+@Controller({ path: "admin/organisations", version: "1" })
 @UseFilters(TaxonomyProblemFilter)
-export class PartnersAdminController {
-  // Explicit @Inject tokens — see the note in `partners.service.ts`: the
+export class OrganisationsAdminController {
+  // Explicit @Inject tokens — see the note in `organisations.service.ts`: the
   // root-level authz gate boots this graph under `tsx`, which emits no
   // `design:paramtypes`, so type-inferred injection resolves to `undefined`.
   constructor(
-    @Inject(PartnersService) private readonly partners: PartnersService,
+    @Inject(OrganisationsService)
+    private readonly organisations: OrganisationsService,
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
   ) {}
@@ -76,7 +77,9 @@ export class PartnersAdminController {
     audit: "none",
     tests: ["EARS-4", "EARS-15", "EARS-16"],
   })
-  list(@Query() rawQuery: Record<string, string>): Promise<PartnerAdminList> {
+  list(
+    @Query() rawQuery: Record<string, string>,
+  ): Promise<OrganisationAdminList> {
     const parsed = AdminTaxonomyListQuerySchema.safeParse(rawQuery);
     if (!parsed.success) {
       throw new TaxonomyError(
@@ -88,11 +91,11 @@ export class PartnersAdminController {
         })),
       );
     }
-    return this.partners.list(parsed.data);
+    return this.organisations.list(parsed.data);
   }
 
   /**
-   * EARS-4 — `POST /v1/admin/partners`. Requires a canonical UUID
+   * EARS-4 — `POST /v1/admin/organisations`. Requires a canonical UUID
    * `Idempotency-Key`, no `If-Match` (there is no prior version to assert).
    * Answers 201 with the detail body, the row's `ETag` and a `Location`.
    */
@@ -119,14 +122,16 @@ export class PartnersAdminController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<unknown> {
     // 1. Key shape — before a single file byte is read (§5.1 failure order).
-    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const key = this.idempotency.requireKey(
+      req.headers[IDEMPOTENCY_KEY_HEADER],
+    );
     // 2. Request shape + payload; the file is buffered but nothing is stored yet.
     const { payload, file } = await this.readAuthoringRequest(req, false);
-    const parsed = CreatePartnerRequestSchema.safeParse(payload);
+    const parsed = CreateOrganisationRequestSchema.safeParse(payload);
     if (!parsed.success) {
       throw new TaxonomyError(
         "VALIDATION_FAILED",
-        "invalid partner payload",
+        "invalid organisation payload",
         parsed.error.issues.map((i) => ({
           path: i.path.join("."),
           message: i.message,
@@ -136,13 +141,13 @@ export class PartnersAdminController {
     // 3. Fingerprint binding — before normalization or upload.
     const outcome = await this.idempotency.begin({
       key,
-      scope: "taxonomy.partners",
+      scope: "taxonomy.organisations",
       actorId: actorSub(req),
       method: "POST",
-      route: "/v1/admin/partners",
+      route: "/v1/admin/organisations",
       fingerprint: this.idempotency.fingerprint({
         method: "POST",
-        path: "/v1/admin/partners",
+        path: "/v1/admin/organisations",
         payload: parsed.data,
         fileSha256: file ? sha256(file.body) : null,
         fileBytes: file?.body.length ?? null,
@@ -150,13 +155,13 @@ export class PartnersAdminController {
     });
     if (replayed(outcome, reply)) return outcome.replay.body;
 
-    const { detail, etag } = await this.partners.create({
+    const { detail, etag } = await this.organisations.create({
       payload: parsed.data,
       logo: file,
       lease: outcome.lease,
     });
     void reply.header("etag", etag);
-    void reply.header("location", `/v1/admin/partners/${detail.id}`);
+    void reply.header("location", `/v1/admin/organisations/${detail.id}`);
     return detail;
   }
 
@@ -178,13 +183,13 @@ export class PartnersAdminController {
     if (!CANONICAL_UUID_REGEX.test(id)) {
       throw new TaxonomyError("RESOURCE_NOT_FOUND");
     }
-    const { detail, etag } = await this.partners.detail(id);
+    const { detail, etag } = await this.organisations.detail(id);
     void reply.header("etag", etag);
     return detail;
   }
 
   /**
-   * EARS-4 — `PATCH /v1/admin/partners/:id`. Requires the target `If-Match`
+   * EARS-4 — `PATCH /v1/admin/organisations/:id`. Requires the target `If-Match`
    * (absent is 428 `PRECONDITION_REQUIRED`, stale is 412 `PRECONDITION_FAILED`)
    * plus a canonical UUID `Idempotency-Key`.
    */
@@ -207,7 +212,9 @@ export class PartnersAdminController {
     if (!CANONICAL_UUID_REGEX.test(id)) {
       throw new TaxonomyError("RESOURCE_NOT_FOUND");
     }
-    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const key = this.idempotency.requireKey(
+      req.headers[IDEMPOTENCY_KEY_HEADER],
+    );
     const rawIfMatch = req.headers[IF_MATCH_HEADER] as string | undefined;
     if (!rawIfMatch || rawIfMatch.trim().length === 0) {
       throw new TaxonomyError(
@@ -226,11 +233,11 @@ export class PartnersAdminController {
     }
 
     const { payload, file } = await this.readAuthoringRequest(req, true);
-    const parsed = UpdatePartnerRequestSchema.safeParse(payload ?? {});
+    const parsed = UpdateOrganisationRequestSchema.safeParse(payload ?? {});
     if (!parsed.success) {
       throw new TaxonomyError(
         "VALIDATION_FAILED",
-        "invalid partner payload",
+        "invalid organisation payload",
         parsed.error.issues.map((i) => ({
           path: i.path.join("."),
           message: i.message,
@@ -246,16 +253,16 @@ export class PartnersAdminController {
       );
     }
 
-    const route = "/v1/admin/partners/:id";
+    const route = "/v1/admin/organisations/:id";
     const outcome = await this.idempotency.begin({
       key,
-      scope: "taxonomy.partners",
+      scope: "taxonomy.organisations",
       actorId: actorSub(req),
       method: "PATCH",
       route,
       fingerprint: this.idempotency.fingerprint({
         method: "PATCH",
-        path: `/v1/admin/partners/${id}`,
+        path: `/v1/admin/organisations/${id}`,
         payload: parsed.data,
         ifMatch: rawIfMatch,
         fileSha256: file ? sha256(file.body) : null,
@@ -264,7 +271,7 @@ export class PartnersAdminController {
     });
     if (replayed(outcome, reply)) return outcome.replay.body;
 
-    const { detail, etag } = await this.partners.update({
+    const { detail, etag } = await this.organisations.update({
       id,
       payload: parsed.data,
       logo: file,
@@ -285,7 +292,7 @@ export class PartnersAdminController {
    * half-read.
    */
   /**
-   * EARS-5 / §5.1 — `POST /v1/admin/partners/:id/publish`. `draft → published`,
+   * EARS-5 / §5.1 — `POST /v1/admin/organisations/:id/publish`. `draft → published`,
    * target `If-Match` required, empty body.
    *
    * Deliberately WITHOUT the §3.1 impact envelope the retire/restore routes
@@ -310,29 +317,31 @@ export class PartnersAdminController {
     if (!CANONICAL_UUID_REGEX.test(id)) {
       throw new TaxonomyError("RESOURCE_NOT_FOUND");
     }
-    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const key = this.idempotency.requireKey(
+      req.headers[IDEMPOTENCY_KEY_HEADER],
+    );
     const { raw: rawIfMatch, version: expectedVersion } = requirePublishVersion(
       req,
       "a publish",
     );
 
-    const route = "/v1/admin/partners/:id/publish";
+    const route = "/v1/admin/organisations/:id/publish";
     const outcome = await this.idempotency.begin({
       key,
-      scope: "taxonomy.partners",
+      scope: "taxonomy.organisations",
       actorId: actorSub(req),
       method: "POST",
       route,
       fingerprint: this.idempotency.fingerprint({
         method: "POST",
-        path: `/v1/admin/partners/${id}/publish`,
+        path: `/v1/admin/organisations/${id}/publish`,
         payload: {},
         ifMatch: rawIfMatch,
       }),
     });
     if (replayed(outcome, reply)) return outcome.replay.body;
 
-    const { detail, etag } = await this.partners.publish({
+    const { detail, etag } = await this.organisations.publish({
       id,
       expectedVersion,
       lease: outcome.lease,
@@ -415,9 +424,11 @@ export class PartnersAdminController {
     try {
       return { payload: JSON.parse(payloadRaw), file };
     } catch {
-      throw new TaxonomyError("VALIDATION_FAILED", "payload is not valid JSON", [
-        { path: "payload", message: "must be valid JSON" },
-      ]);
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "payload is not valid JSON",
+        [{ path: "payload", message: "must be valid JSON" }],
+      );
     }
   }
 }

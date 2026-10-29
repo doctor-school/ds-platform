@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Authenticated, useCreate } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { Alert } from "@ds/design-system";
-import type { PartnerAdminDetail } from "@ds/schemas";
+import type { OrganisationAdminDetail } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { PartnerForm } from "@/components/partner-form";
@@ -56,7 +56,8 @@ export default function CreatePartnerPage() {
               { resource: "partners", values: vars },
               {
                 onSuccess: (data) => {
-                  const created = data.data as unknown as PartnerAdminDetail;
+                  const created =
+                    data.data as unknown as OrganisationAdminDetail;
                   router.push(`/partners/${created.id}`);
                 },
                 onError: (error) =>

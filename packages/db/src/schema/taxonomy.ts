@@ -1026,7 +1026,10 @@ export const projectOrganisations = pgTable(
       .defaultNow(),
   },
   (t) => [
-    uniqueIndex("project_organisations_pair_key").on(t.projectId, t.organisationId),
+    uniqueIndex("project_organisations_pair_key").on(
+      t.projectId,
+      t.organisationId,
+    ),
     uniqueIndex("project_organisations_project_primary_active_uniq")
       .on(t.projectId)
       .where(sql`${t.status} = 'active' AND ${t.isPrimary}`),

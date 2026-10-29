@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Authenticated, useList } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import type { DataTableColumn } from "@ds/design-system/blocks";
-import type { PartnerAdminListItem, TaxonomyStatus } from "@ds/schemas";
+import type { OrganisationAdminListItem, TaxonomyStatus } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import {
   ADMIN_DATA_LIST_INITIAL_QUERY,
@@ -29,7 +29,7 @@ export default function PartnersListPage() {
   const [query, setQuery] = useState<AdminDataListQueryState>(
     ADMIN_DATA_LIST_INITIAL_QUERY,
   );
-  const { result, query: request } = useList<PartnerAdminListItem>({
+  const { result, query: request } = useList<OrganisationAdminListItem>({
     resource: "partners",
     pagination: { currentPage: query.page, pageSize: query.pageSize },
     filters: [
@@ -45,7 +45,7 @@ export default function PartnersListPage() {
     retired: t("partners.statuses.retired"),
   };
 
-  const columns: DataTableColumn<PartnerAdminListItem>[] = [
+  const columns: DataTableColumn<OrganisationAdminListItem>[] = [
     {
       key: "websiteUrl",
       header: t("partners.columns.websiteUrl"),
@@ -80,7 +80,7 @@ export default function PartnersListPage() {
   return (
     <Authenticated key="partners-list" redirectOnFail="/login">
       <AppShell>
-        <AdminDataList<PartnerAdminListItem>
+        <AdminDataList<OrganisationAdminListItem>
           title={t("partners.listTitle")}
           description={t("partners.listDescription")}
           createHref="/partners/create"
@@ -100,7 +100,7 @@ export default function PartnersListPage() {
             label: (row) => row.title,
           }}
           columns={columns}
-          rows={(result.data ?? []) as PartnerAdminListItem[]}
+          rows={(result.data ?? []) as OrganisationAdminListItem[]}
           getRowKey={(row) => row.id}
           total={result.total ?? 0}
           isLoading={request.isLoading}

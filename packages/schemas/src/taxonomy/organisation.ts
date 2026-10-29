@@ -14,7 +14,6 @@ import {
 // role set. The PUBLIC partner DTOs (`PublicPartnerSummary` and the relation
 // items) keep their names and shapes in `taxonomy.schema.ts` (EARS-5).
 
-
 export const ORGANISATION_TITLE_MIN = 1;
 export const ORGANISATION_TITLE_MAX = 160;
 export const ORGANISATION_WEBSITE_URL_MAX = 2048;
@@ -105,7 +104,9 @@ export const CreateOrganisationRequestSchema = z
     publicLogoVisible: z.boolean().optional(),
   })
   .strict();
-export type CreateOrganisationRequest = z.infer<typeof CreateOrganisationRequestSchema>;
+export type CreateOrganisationRequest = z.infer<
+  typeof CreateOrganisationRequestSchema
+>;
 
 /**
  * `PATCH /v1/admin/organisations/:id` — edit the same row.
@@ -127,7 +128,9 @@ export const UpdateOrganisationRequestSchema = z
     mediaAction: MediaActionSchema.optional(),
   })
   .strict();
-export type UpdateOrganisationRequest = z.infer<typeof UpdateOrganisationRequestSchema>;
+export type UpdateOrganisationRequest = z.infer<
+  typeof UpdateOrganisationRequestSchema
+>;
 
 /**
  * The admin detail projection. `logoUrl` is a server-issued signed/CDN URL
@@ -152,20 +155,25 @@ export const OrganisationAdminDetailSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
-export type OrganisationAdminDetail = z.infer<typeof OrganisationAdminDetailSchema>;
+export type OrganisationAdminDetail = z.infer<
+  typeof OrganisationAdminDetailSchema
+>;
 
 /** One row of the admin list — the columns the table renders, nothing more. */
-export const OrganisationAdminListItemSchema = OrganisationAdminDetailSchema.pick({
-  id: true,
-  slug: true,
-  title: true,
-  websiteUrl: true,
-  roles: true,
-  status: true,
-  version: true,
-  updatedAt: true,
-});
-export type OrganisationAdminListItem = z.infer<typeof OrganisationAdminListItemSchema>;
+export const OrganisationAdminListItemSchema =
+  OrganisationAdminDetailSchema.pick({
+    id: true,
+    slug: true,
+    title: true,
+    websiteUrl: true,
+    roles: true,
+    status: true,
+    version: true,
+    updatedAt: true,
+  });
+export type OrganisationAdminListItem = z.infer<
+  typeof OrganisationAdminListItemSchema
+>;
 
 /** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
 export const OrganisationAdminListSchema = z.object({

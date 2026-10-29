@@ -1,12 +1,12 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import type { Partner } from "@ds/db";
+import type { Organisation } from "@ds/db";
 import {
   type AdminTaxonomyListQuery,
-  type CreatePartnerRequest,
-  type PartnerAdminDetail,
-  type PartnerAdminList,
+  type CreateOrganisationRequest,
+  type OrganisationAdminDetail,
+  type OrganisationAdminList,
   taxonomyETag,
-  type UpdatePartnerRequest,
+  type UpdateOrganisationRequest,
 } from "@ds/schemas";
 import {
   OBJECT_STORAGE,
@@ -23,7 +23,7 @@ import {
   StillImageNormalizer,
   type UploadedImage,
 } from "./media/still-image-normalizer.js";
-import { PartnersRepository } from "./partners.repository.js";
+import { OrganisationsRepository } from "./organisations.repository.js";
 import { markReplayable, TaxonomyError } from "./taxonomy.errors.js";
 import { allocateTaxonomySlug, taxonomySlugBase } from "./taxonomy-slug.js";
 
@@ -45,42 +45,43 @@ import { allocateTaxonomySlug, taxonomySlugBase } from "./taxonomy-slug.js";
 /** Where partner logos live in the bucket. */
 const LOGO_PREFIX = "taxonomy/partners/logos";
 
-export interface CreatePartnerInput {
-  payload: CreatePartnerRequest;
+export interface CreateOrganisationInput {
+  payload: CreateOrganisationRequest;
   logo?: UploadedImage | undefined;
   lease: IdempotencyLease;
 }
 
-export interface UpdatePartnerInput {
+export interface UpdateOrganisationInput {
   id: string;
-  payload: UpdatePartnerRequest;
+  payload: UpdateOrganisationRequest;
   logo?: UploadedImage | undefined;
   expectedVersion: number;
   lease: IdempotencyLease;
 }
 
-export interface PublishPartnerInput {
+export interface PublishOrganisationInput {
   id: string;
   expectedVersion: number;
   lease: IdempotencyLease;
 }
 
 /** A command result plus the ETag the client must echo on its next write. */
-export interface PartnerCommandResult {
-  detail: PartnerAdminDetail;
+export interface OrganisationCommandResult {
+  detail: OrganisationAdminDetail;
   etag: string;
 }
 
 @Injectable()
-export class PartnersService {
-  private readonly logger = new Logger(PartnersService.name);
+export class OrganisationsService {
+  private readonly logger = new Logger(OrganisationsService.name);
 
   // Explicit @Inject tokens on every dependency, class ones included — the
   // root-level `endpoint-authz` gate boots this module graph under `tsx`, whose
   // esbuild transform emits no `design:paramtypes`, so a type-inferred injection
   // resolves to `undefined` there while working fine under `nest build`.
   constructor(
-    @Inject(PartnersRepository) private readonly repo: PartnersRepository,
+    @Inject(OrganisationsRepository)
+    private readonly repo: OrganisationsRepository,
     @Inject(StillImageNormalizer)
     private readonly normalizer: StillImageNormalizer,
     @Inject(IdempotencyService)
@@ -89,18 +90,18 @@ export class PartnersService {
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
   ) {}
 
-  /** `POST /v1/admin/partners` — create one draft partner. */
-  create(input: CreatePartnerInput): Promise<PartnerCommandResult> {
+  /** `POST /v1/admin/organisations` — create one draft partner. */
+  create(input: CreateOrganisationInput): Promise<OrganisationCommandResult> {
     return this.fenced(input.lease, () => this.createCommand(input));
   }
 
-  /** `PATCH /v1/admin/partners/:id` — edit the SAME row. */
-  update(input: UpdatePartnerInput): Promise<PartnerCommandResult> {
+  /** `PATCH /v1/admin/organisations/:id` — edit the SAME row. */
+  update(input: UpdateOrganisationInput): Promise<OrganisationCommandResult> {
     return this.fenced(input.lease, () => this.updateCommand(input));
   }
 
-  /** `POST /v1/admin/partners/:id/publish` — `draft → published` (EARS-5). */
-  publish(input: PublishPartnerInput): Promise<PartnerCommandResult> {
+  /** `POST /v1/admin/organisations/:id/publish` — `draft → published` (EARS-5). */
+  publish(input: PublishOrganisationInput): Promise<OrganisationCommandResult> {
     return this.fenced(input.lease, () => this.publishCommand(input));
   }
 
@@ -121,9 +122,13 @@ export class PartnersService {
   }
 
   private async createCommand(
-    input: CreatePartnerInput,
-  ): Promise<PartnerCommandResult> {
+    input: CreateOrganisationInput,
+  ): Promise<OrganisationCommandResult> {
     const base = taxonomySlugBase(input.payload.title, "partner");
+    const roleIds = input.payload.roleIds ?? [];
+    // Optimistic pre-check OUTSIDE the transaction: a doomed request never
+    // uploads. The same check repeats under the role locks below.
+    await this.assertAssignableRoles(this.repo.db(), roleIds, []);
 
     const uploaded = input.logo
       ? await this.normalizeAndUpload(input.logo, input.lease)
@@ -139,13 +144,18 @@ export class PartnersService {
         title: input.payload.title,
         websiteUrl: input.payload.websiteUrl ?? null,
         logoRef: uploaded?.key ?? null,
+        description: emptyToNull(input.payload.description),
+        publicNameVisible: input.payload.publicNameVisible ?? true,
+        publicLogoVisible: input.payload.publicLogoVisible ?? true,
       });
-      const detail = await this.toDetail(created);
+      await this.assertAssignableRoles(tx, roleIds, [], true);
+      await this.repo.replaceRoles(tx, created.id, roleIds);
+      const detail = await this.toDetail(created, tx);
       await this.idempotency.complete(tx, input.lease, {
         status: 201,
         body: detail,
         etag: taxonomyETag(created.version),
-        location: `/v1/admin/partners/${created.id}`,
+        location: `/v1/admin/organisations/${created.id}`,
       });
       return created;
     });
@@ -157,14 +167,23 @@ export class PartnersService {
   }
 
   private async updateCommand(
-    input: UpdatePartnerInput,
-  ): Promise<PartnerCommandResult> {
+    input: UpdateOrganisationInput,
+  ): Promise<OrganisationCommandResult> {
     const current = await this.repo.findById(input.id);
     if (!current) throw new TaxonomyError("RESOURCE_NOT_FOUND");
     if (current.version !== input.expectedVersion) {
       throw new TaxonomyError(
         "PRECONDITION_FAILED",
-        "the partner changed since it was read; reload and retry",
+        "the organisation changed since it was read; reload and retry",
+      );
+    }
+
+    const roleIds = input.payload.roleIds;
+    if (roleIds !== undefined) {
+      await this.assertAssignableRoles(
+        this.repo.db(),
+        roleIds,
+        await this.repo.heldRoleIds(this.repo.db(), input.id),
       );
     }
 
@@ -182,7 +201,15 @@ export class PartnersService {
       if (locked.version !== input.expectedVersion) {
         throw new TaxonomyError(
           "PRECONDITION_FAILED",
-          "the partner changed since it was read; reload and retry",
+          "the organisation changed since it was read; reload and retry",
+        );
+      }
+      if (roleIds !== undefined) {
+        await this.assertAssignableRoles(
+          tx,
+          roleIds,
+          await this.repo.heldRoleIds(tx, input.id),
+          true,
         );
       }
       const updated = await this.repo.updateVersioned(
@@ -196,6 +223,15 @@ export class PartnersService {
           ...(input.payload.websiteUrl !== undefined
             ? { websiteUrl: input.payload.websiteUrl ?? null }
             : {}),
+          ...(input.payload.description !== undefined
+            ? { description: emptyToNull(input.payload.description) }
+            : {}),
+          ...(input.payload.publicNameVisible !== undefined
+            ? { publicNameVisible: input.payload.publicNameVisible }
+            : {}),
+          ...(input.payload.publicLogoVisible !== undefined
+            ? { publicLogoVisible: input.payload.publicLogoVisible }
+            : {}),
           ...(uploaded ? { logoRef: uploaded.key } : {}),
           ...(clearing && !uploaded ? { logoRef: null } : {}),
         },
@@ -203,8 +239,13 @@ export class PartnersService {
       if (!updated) {
         throw new TaxonomyError(
           "PRECONDITION_FAILED",
-          "the partner changed since it was read; reload and retry",
+          "the organisation changed since it was read; reload and retry",
         );
+      }
+      // EARS-2: the set is replaced in the SAME versioned transaction, so the
+      // row's version moves with its roles and feature 010 attributes both.
+      if (roleIds !== undefined) {
+        await this.repo.replaceRoles(tx, updated.id, roleIds);
       }
       // The released object's deletion obligation is durable and rides the SAME
       // transaction as the ref change (012-design §5.1).
@@ -217,7 +258,7 @@ export class PartnersService {
           objectKey: releasedRef,
         });
       }
-      const detail = await this.toDetail(updated);
+      const detail = await this.toDetail(updated, tx);
       await this.idempotency.complete(tx, input.lease, {
         status: 200,
         body: detail,
@@ -246,8 +287,8 @@ export class PartnersService {
    * beyond its own row — unlike a project (curator) or an expert (speaker slots).
    */
   private async publishCommand(
-    input: PublishPartnerInput,
-  ): Promise<PartnerCommandResult> {
+    input: PublishOrganisationInput,
+  ): Promise<OrganisationCommandResult> {
     // Optimistic pre-flight OUTSIDE the transaction: a doomed request never
     // opens one. Every check below repeats under the lock.
     const current = await this.repo.findById(input.id);
@@ -259,7 +300,7 @@ export class PartnersService {
       if (locked.version !== input.expectedVersion) {
         throw new TaxonomyError(
           "PRECONDITION_FAILED",
-          "the partner changed since it was read; reload and retry",
+          "the organisation changed since it was read; reload and retry",
         );
       }
       if (locked.status !== "draft") {
@@ -286,10 +327,10 @@ export class PartnersService {
       if (!moved) {
         throw new TaxonomyError(
           "PRECONDITION_FAILED",
-          "the partner changed since it was read; reload and retry",
+          "the organisation changed since it was read; reload and retry",
         );
       }
-      const detail = await this.toDetail(moved);
+      const detail = await this.toDetail(moved, tx);
       await this.idempotency.complete(tx, input.lease, {
         status: 200,
         body: detail,
@@ -304,8 +345,8 @@ export class PartnersService {
     };
   }
 
-  /** `GET /v1/admin/partners/:id` — detail by stable id, retired rows included. */
-  async detail(id: string): Promise<PartnerCommandResult> {
+  /** `GET /v1/admin/organisations/:id` — detail by stable id, retired rows included. */
+  async detail(id: string): Promise<OrganisationCommandResult> {
     const row = await this.repo.findById(id);
     if (!row) throw new TaxonomyError("RESOURCE_NOT_FOUND");
     return {
@@ -314,15 +355,20 @@ export class PartnersService {
     };
   }
 
-  /** `GET /v1/admin/partners` — the shared admin list with LD-6 title search. */
-  async list(query: AdminTaxonomyListQuery): Promise<PartnerAdminList> {
+  /** `GET /v1/admin/organisations` — the shared admin list with LD-6 title search. */
+  async list(query: AdminTaxonomyListQuery): Promise<OrganisationAdminList> {
     const { rows, total } = await this.repo.list(query);
+    const roles = await this.repo.rolesFor(
+      this.repo.db(),
+      rows.map((row) => row.id),
+    );
     return {
       data: rows.map((row) => ({
         id: row.id,
         slug: row.slug,
         title: row.title,
         websiteUrl: row.websiteUrl,
+        roles: roles.get(row.id) ?? [],
         status: row.status,
         version: row.version,
         updatedAt: row.updatedAt.toISOString(),
@@ -378,13 +424,56 @@ export class PartnersService {
     return { key, normalized };
   }
 
-  private async toDetail(row: Partner): Promise<PartnerAdminDetail> {
+  /**
+   * EARS-2 — every requested role must exist and be active, or be one the
+   * organisation already holds (a retired held role stays assignable, so an
+   * unrelated edit never forces its removal). `locked` re-reads FOR SHARE
+   * inside the transaction, so a role validated there cannot be retired under it.
+   */
+  private async assertAssignableRoles(
+    tx: Parameters<OrganisationsRepository["lockRoles"]>[0],
+    roleIds: readonly string[],
+    held: readonly string[],
+    locked = false,
+  ): Promise<void> {
+    if (roleIds.length === 0) return;
+    const found = locked
+      ? await this.repo.lockRoles(tx, roleIds)
+      : await this.repo.readRoles(tx, roleIds);
+    const status = new Map(found.map((r) => [r.id, r.status]));
+    const refused = roleIds.filter(
+      (id) =>
+        !status.has(id) || (status.get(id) !== "active" && !held.includes(id)),
+    );
+    if (refused.length > 0) {
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "a role is unknown or retired",
+        [
+          {
+            path: "roleIds",
+            message: "a role is unknown or retired; choose an active role",
+          },
+        ],
+      );
+    }
+  }
+
+  private async toDetail(
+    row: Organisation,
+    tx?: Parameters<OrganisationsRepository["lockRoles"]>[0],
+  ): Promise<OrganisationAdminDetail> {
+    const roles = await this.repo.rolesFor(tx ?? this.repo.db(), [row.id]);
     return {
       id: row.id,
       slug: row.slug,
       title: row.title,
       logoUrl: row.logoRef ? await this.storage.urlFor(row.logoRef) : null,
       websiteUrl: row.websiteUrl,
+      description: row.description,
+      publicNameVisible: row.publicNameVisible,
+      publicLogoVisible: row.publicLogoVisible,
+      roles: roles.get(row.id) ?? [],
       status: row.status,
       firstPublishedAt: row.firstPublishedAt?.toISOString() ?? null,
       version: row.version,
@@ -392,4 +481,9 @@ export class PartnersService {
       updatedAt: row.updatedAt.toISOString(),
     };
   }
+}
+
+/** EARS-1 — an empty description clears it; absent/null stays null. */
+function emptyToNull(value: string | null | undefined): string | null {
+  return value ? value : null;
 }

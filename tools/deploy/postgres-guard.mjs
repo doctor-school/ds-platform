@@ -103,19 +103,15 @@ export function postgresSourceHash(files) {
 }
 
 /**
- * #3419: box records written before v2. An entry says «a v1 record `v1` is the certified
- * tree of `commit`, whose v2 is `v2`» (both recomputed from git in
+ * #3419: box records written before v2 (no `hashVersion`). An entry says «a v1 record
+ * `v1` is the certified tree of `commit`, whose v2 is `v2`» (both recomputed from git in
  * postgres-hash-migration.test.mjs); such a box migrates without a certificate when the
  * target's v2 is `v2`. Its post-`data-up` checkpoint rewrites the record as v2, so an
- * entry can go once no box holds a v1 record.
+ * entry goes once no box holds a v1 record. Empty: ds-data-prod records hashVersion 2
+ * (#3475); a v1 record now always needs a certificate. The next hash-version change adds
+ * its entries here.
  */
-export const POSTGRES_HASH_MIGRATIONS = Object.freeze([
-  Object.freeze({
-    commit: "09c152b26ae7d67f9715ee5e7cbebc1015430c08", // release-2026.10.27-2
-    v1: "e8656c8b6259847701dfae069a011ab878329bfc5b8adaa7724cd477318c0da4",
-    v2: "537a33d8de0890dcfd724ebd90184d52d3ee69f9588bb824bd71fee9d42dd271",
-  }),
-]);
+export const POSTGRES_HASH_MIGRATIONS = Object.freeze([]);
 
 /**
  * The v1 hash a probe asks with first when the table maps it onto the target's v2

@@ -21,8 +21,8 @@ import { readPostgresTarget } from "./postgres-guard.mjs";
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 
 /**
- * The accepted v2 source hash: the v2 of the tree live on data-prod (09c152b26, whose
- * v1 record POSTGRES_HASH_MIGRATIONS maps onto this value).
+ * The accepted v2 source hash: the v2 of the tree live on data-prod, whose record holds
+ * it with hashVersion 2 (#3475).
  */
 const ACCEPTED_SOURCE_HASH =
   "537a33d8de0890dcfd724ebd90184d52d3ee69f9588bb824bd71fee9d42dd271";

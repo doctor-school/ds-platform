@@ -687,24 +687,22 @@ certify, #3418), and the pin moves only together with a certification. The
 certificate and the image source label carry the v2 hash.
 
 Records written before v2 hold the v1 hash (the raw bytes of the same files) and no
-`hashVersion`. `POSTGRES_HASH_MIGRATIONS` in `postgres-guard.mjs` lists each v1
-record that is the certified tree of a commit, with that tree's v2 (both recomputed
-from git by `postgres-hash-migration.test.mjs`). A v1 record counts as unchanged
-only when it is a table entry whose v2 is the target's v2 and the image IDs are
-unchanged; any other v1 record keeps the certificate requirement. The first release
-after v2 reaches the box's previously installed probe and checkpoint verb (`install`
-runs after `ship`): when an entry's v2 is the target's v2, the guard's first probe
-request carries that entry's v1, so a v1 box answers from its recorded image IDs and
-never inspects the mutable compose tags (`ds-postgres:pg17-partman-pgbackrest`,
-`ds-pgbackrest:local`); a box answering with a v2 record, or a failed first read, is
-read once more with the target's v2, and a failure names each hash asked
-(`postgres-probe asked with … <hash>…: PostgreSQL evidence unavailable: …`). The pre-ship checkpoint rewrites the v1 record
-unchanged (the shape that verb accepts), and the checkpoint after `data-up` — the
-newly installed verb — writes the target's v2 with `hashVersion: 2`. With no prod ssh
-the release journal is where the record is read: preparation prints the probed record
-once (`↳ ds-data-prod: postgres record hashVersion 2, asked with the target v2`, or
-`postgres record v1 (no hashVersion), asked with the table's v1 record`), and the
-checkpoint after `data-up` echoes the box's own answer for the record it wrote
+`hashVersion`. `POSTGRES_HASH_MIGRATIONS` in `postgres-guard.mjs` is the table of v1
+records that are the certified tree of a commit, each with that tree's v2 (both
+recomputed from git by `postgres-hash-migration.test.mjs`). It is empty: ds-data-prod
+records `hashVersion: 2` (release-2026.10.29-1, #3475), so any v1 record keeps the
+certificate requirement and the guard probes once with the target's v2; a failure
+names the hash asked (`postgres-probe asked with the target v2 <hash>…: PostgreSQL
+evidence unavailable: …`). A future hash-version change adds its entries there: a v1
+record then counts as unchanged only when it is an entry whose v2 is the target's v2
+and the image IDs are unchanged, and the guard's first probe asks with that entry's v1,
+so a v1 box answers from its recorded image IDs rather than the mutable compose tags;
+a v2 answer or a failed first read is read once more with the target's v2. The
+checkpoint after `data-up` writes the target's v2 with `hashVersion: 2`. With no prod
+ssh the release journal is where the record is read: preparation prints the probed
+record once (`↳ ds-data-prod: postgres record hashVersion 2, asked with the target v2`,
+or `postgres record v1 (no hashVersion), asked with …`), and the checkpoint after
+`data-up` echoes the box's own answer for the record it wrote
 (`↳ ds-data-prod: record: hashVersion 2` / `record: v1 (no hashVersion)`) beside its
 `log bound` lines. An entry can go once no box holds a v1 record — a release journal
 showing `record: hashVersion 2` is that evidence.

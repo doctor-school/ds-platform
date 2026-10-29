@@ -81,10 +81,10 @@ export function EntryRefusal({
     <div className="flex flex-1 items-center justify-center px-4 py-16 lg:py-24">
       <div className="flex w-full max-w-xl flex-col items-center gap-6 text-center">
         <div className="flex flex-col gap-3">
-          <h1 className="text-balance text-3xl font-extrabold leading-tight tracking-tight">
+          <h1 className="text-balance text-3xl font-extrabold leading-title">
             {title}
           </h1>
-          <p className="text-pretty text-lg text-muted-foreground">{text}</p>
+          <p className="text-pretty text-lg leading-normal text-muted-foreground">{text}</p>
         </div>
         <div
           className={
@@ -124,7 +124,7 @@ function SitesLine({
 }): ReactNode {
   const c = ENTRY_REFUSAL_COPY;
   return (
-    <p className="text-base text-foreground">
+    <p className="text-base leading-normal text-foreground">
       {c.sitesLead}{" "}
       <Link variant="inline" href={academyHref}>
         {c.academySite}

@@ -17,8 +17,11 @@
 //          https://id.doctor.school/oauth/v2/authorize with
 //          redirect_uri=https://academy.doctor.school/auth/callback; the same
 //          GET without the navigation headers → bodyless 204 (003 EARS-61/62/71:
-//          the storefront entries render no form; #3435). Not followed: the
-//          303 mints only a sign-in transaction cookie and an IdP auth request
+//          the storefront entries render no form; #3435). The 303's authorize
+//          URL is fetched ONCE cookie-less and must answer the IdP's redirect
+//          into /ui/v2/login/… (a registered client + redirect_uri; an
+//          unregistered one draws an error, #3438) — never followed into the
+//          sign-in form
 //   admin  GET https://admin.doctor.school/           → < 500 (Next renders; #729)
 //   doctor GET https://new.doctor.school/             → < 500 (the doctor
 //          storefront renders; #1723. TEMPORARY host until the doctor.school
@@ -304,6 +307,51 @@ export function checkStorefrontPrefetch(res) {
   return "204 to a non-navigation GET";
 }
 
+// The storefront door paths the entry probes open (#3438: pinned to the
+// Academy host config's `routes.login` / `routes.verify` and driven through
+// the real storefront gate by tools/lint/guard-tests/smoke-prod-entry-contract.spec.ts).
+export const STOREFRONT_ENTRY_PROBE_PATHS = Object.freeze(["/login", "/verify"]);
+
+// --- IdP authorize answer (#3438; exported for unit tests) ------------------
+//
+// The entry's 303 Location is the authorize URL the API built for this
+// storefront. Fetched ONCE, cookie-less and not followed, it must draw the
+// IdP's redirect into its hosted login (`/ui/v2/login/…`): Zitadel answers so
+// for a registered `redirect_uri` and answers an error for an unregistered one
+// — a 4xx error page, or (for other refusals) a redirect carrying `?error=`.
+// The sign-in form itself is never submitted.
+export function checkAuthorizeAnswer(res, authorizeUrl) {
+  const isRedirect = res.status >= 300 && res.status < 400;
+  if (!isRedirect) {
+    const marker = findColdErrorMarker(res.body ?? "");
+    const snippet = (res.body ?? "").replace(/\s+/g, " ").trim().slice(0, 140);
+    throw new Error(
+      `authorize → ${res.status} (expected a 3xx into the hosted login)` +
+        (marker
+          ? ` — body contains ${JSON.stringify(marker)}`
+          : snippet
+            ? ` — ${JSON.stringify(snippet)}`
+            : ""),
+    );
+  }
+  const location = res.headers?.location;
+  if (!location)
+    throw new Error(`authorize → ${res.status} without a Location header`);
+  const target = new URL(location, authorizeUrl);
+  const error = target.searchParams.get("error");
+  if (error)
+    throw new Error(
+      `authorize → ${res.status} with error=${error}` +
+        `${target.searchParams.get("error_description") ? ` (${target.searchParams.get("error_description")})` : ""}` +
+        ` → ${target.host}${target.pathname}`,
+    );
+  if (!target.pathname.includes("/ui/v2/login/"))
+    throw new Error(
+      `authorize redirected outside the hosted login: ${target.href.slice(0, 140)}`,
+    );
+  return `authorize → ${res.status} → ${target.pathname}`;
+}
+
 // --- #877: hosted self-registration stays CLOSED (exported for unit tests) --
 //
 // Public self-registration is disabled on the default login policy
@@ -429,8 +477,10 @@ async function probePortal() {
 
 // The storefront sign-in entries (#3435): a cookie-less top-level navigation
 // must start the sign-in (303 → authorize, NOT followed), and a prefetch-shaped
-// GET must not (204). Both answers come from the portal route handler itself,
-// so a 5xx, a stray app-shell 200 or a misrouted redirect all fail here.
+// GET must not (204). Both answers come from the portal's storefront gate
+// (`storefrontDoorGate` in its middleware), so a 5xx, a stray app-shell 200 or
+// a misrouted redirect all fail here. The 303's authorize URL then gets one
+// cookie-less GET (#3438): the IdP must accept the client and redirect_uri.
 async function probeStorefrontEntry(path) {
   const url = `https://${PORTAL_HOST}${path}`;
   const nav = await httpsGet(url, TOP_LEVEL_NAVIGATION_HEADERS);
@@ -438,8 +488,12 @@ async function probeStorefrontEntry(path) {
     portalHost: PORTAL_HOST,
     idHost: ID_HOST,
   });
+  // #3438: the authorize URL the entry hands out must be one the IdP accepts
+  // (its client + registered redirect_uri) — one cookie-less GET, not followed.
+  const authorizeUrl = new URL(nav.headers.location, url).href;
+  const idpDetail = checkAuthorizeAnswer(await httpsGet(authorizeUrl), authorizeUrl);
   const prefetchDetail = checkStorefrontPrefetch(await httpsGet(url));
-  return `${navDetail} · ${prefetchDetail}`;
+  return `${navDetail} · ${idpDetail} · ${prefetchDetail}`;
 }
 
 async function probeLoginCold() {
@@ -483,15 +537,8 @@ async function probeLoginColdFlow() {
       code_challenge_method: "S256",
     });
   const first = await httpsGet(authorize);
-  if (first.status < 300 || first.status >= 400)
-    throw new Error(
-      `authorize → ${first.status} (expected a 3xx into the hosted login)`,
-    );
-  const location = new URL(first.headers.location || "", authorize);
-  if (!location.pathname.includes("/ui/v2/login/"))
-    throw new Error(
-      `authorize redirected outside the hosted login: ${location.href.slice(0, 140)}`,
-    );
+  checkAuthorizeAnswer(first, authorize);
+  const location = new URL(first.headers.location, authorize);
   const res = await httpsGetFollow(location.href);
   checkColdPage(res);
   return `authorize → 302 → 200 login screen after ${res.hops} hop(s) (cookie-less flow init OK)`;
@@ -584,8 +631,10 @@ const PROBES = [
   ["api /v1/health", probeApiHealth],
   ["api /v1/ready", probeApiReady],
   ["portal /", probePortal],
-  ["portal /login entry", () => probeStorefrontEntry("/login")],
-  ["portal /verify entry", () => probeStorefrontEntry("/verify")],
+  ...STOREFRONT_ENTRY_PROBE_PATHS.map((path) => [
+    `portal ${path} entry`,
+    () => probeStorefrontEntry(path),
+  ]),
   ["admin /", probeAdmin],
   ["doctor /", probeDoctor],
   ["sign-in host /healthz", probeSignInHost],

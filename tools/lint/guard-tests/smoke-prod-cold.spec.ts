@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   COLD_ERROR_MARKERS,
   checkApiReady,
+  checkAuthorizeAnswer,
   checkColdPage,
   checkRegisterClosed,
   checkStorefrontEntry,
@@ -452,5 +453,91 @@ describe("storefront sign-in entry /login, /verify (003 EARS-61/62/71, #3435)", 
       ),
     ).toThrow("→ 303");
     expect(() => checkStorefrontPrefetch(entry(500))).toThrow("→ 500");
+  });
+});
+
+describe("IdP authorize answer behind the storefront entry (#3438)", () => {
+  // The entry's 303 Location is fetched ONCE, cookie-less, not followed: a
+  // registered redirect_uri draws Zitadel's 302 into the hosted login, an
+  // unregistered one (or any other refused request) an error answer.
+  const authorizeUrl =
+    "https://id.example/oauth/v2/authorize?client_id=1&redirect_uri=https%3A%2F%2Facademy.example%2Fauth%2Fcallback";
+  const answer = (status: number, location?: string, body = "") => ({
+    status,
+    headers: location === undefined ? {} : { location },
+    body,
+  });
+
+  it("PASSES a 302 into the hosted login (/ui/v2/login/…)", () => {
+    expect(
+      checkAuthorizeAnswer(
+        answer(302, "/ui/v2/login/login?authRequest=V2_1"),
+        authorizeUrl,
+      ),
+    ).toContain("/ui/v2/login/login");
+  });
+
+  it("PASSES an absolute 302 into the hosted login on the IdP host", () => {
+    expect(
+      checkAuthorizeAnswer(
+        answer(
+          302,
+          "https://id.example/ui/v2/login/loginname?authRequest=V2_1",
+        ),
+        authorizeUrl,
+      ),
+    ).toContain("/ui/v2/login/loginname");
+  });
+
+  it("REJECTS the IdP's error answer to an unregistered redirect_uri (4xx body)", () => {
+    expect(() =>
+      checkAuthorizeAnswer(
+        answer(
+          400,
+          undefined,
+          "The requested redirect_uri is missing in the client configuration.",
+        ),
+        authorizeUrl,
+      ),
+    ).toThrow("authorize → 400");
+  });
+
+  it("REJECTS an OAuth error redirect back to the storefront (?error=…)", () => {
+    expect(() =>
+      checkAuthorizeAnswer(
+        answer(
+          302,
+          "https://academy.example/auth/callback?error=invalid_scope&error_description=bad",
+        ),
+        authorizeUrl,
+      ),
+    ).toThrow("invalid_scope");
+  });
+
+  it("REJECTS a redirect that leaves the hosted login", () => {
+    expect(() =>
+      checkAuthorizeAnswer(
+        answer(302, "https://id.example/ui/console"),
+        authorizeUrl,
+      ),
+    ).toThrow("outside the hosted login");
+  });
+
+  it("REJECTS a 200 (an error page served in place of the redirect), naming a boundary marker", () => {
+    expect(() =>
+      checkAuthorizeAnswer(
+        answer(200, undefined, ERROR_BOUNDARY_BODY),
+        authorizeUrl,
+      ),
+    ).toThrow("Application error");
+  });
+
+  it("REJECTS a 5xx and a 3xx with no Location", () => {
+    expect(() => checkAuthorizeAnswer(answer(502), authorizeUrl)).toThrow(
+      "authorize → 502",
+    );
+    expect(() => checkAuthorizeAnswer(answer(302), authorizeUrl)).toThrow(
+      "Location",
+    );
   });
 });

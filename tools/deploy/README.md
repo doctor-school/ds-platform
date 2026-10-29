@@ -967,12 +967,26 @@ Probes the public origins end to end over real TLS: `api.doctor.school`
 `/v1/health` (+ optional `--expect-sha` assertion) & `/v1/ready` (every check
 ok — postgres, pgvector, objectStorage; a 503 names each failing check, so a
 storage outage reads apart from a DB outage),
-`academy.doctor.school/`, `admin.doctor.school/`, `new.doctor.school/` (the
+`academy.doctor.school/`, the Academy sign-in entries `/login` and `/verify` (a cold
+top-level navigation answers `303` to `id.doctor.school/oauth/v2/authorize` with the
+storefront's `redirect_uri`, any other GET a bodyless `204`; the authorize URL then gets
+one cookie-less GET, not followed, that must answer the IdP's redirect into
+`/ui/v2/login/…` — an unregistered client or `redirect_uri` draws an error and fails the
+probe), `admin.doctor.school/`, `new.doctor.school/` (the
 doctor storefront, #1723), `id.doctor.school/ui/v2/login/loginname` (the login entry —
 the bare `/ui/v2/login` 404s per Caddy's sub-path routing), and cert
 validity/expiry on all five hosts. Exit non-zero on any failure. Hostnames default to the prod
 vhosts and are env-overridable (`PROD_API_HOST` / `PROD_PORTAL_HOST` /
 `PROD_ADMIN_HOST` / `PROD_DOCTOR_HOST` / `PROD_ID_HOST`) for a staging clone.
+
+The smoke itself runs only inside a release, after the container swap, so its
+expectations are pinned before release instead: the pure classifiers are unit-tested in
+`tools/lint/guard-tests/smoke-prod-cold.spec.ts`, and
+`tools/lint/guard-tests/smoke-prod-entry-contract.spec.ts` drives the real storefront gate
+(`storefrontDoorGate` from `@ds/auth-flow/server`) with the smoke's own entry paths and
+headers and feeds its answers to the smoke's entry checks. A change to the entry contract
+that leaves the smoke behind goes red on its PR (CI `unit` job), not in a prod release
+(#3438).
 
 SSH host aliases resolve from `~/.ssh/config`; overridable via `DS_API_PROD_SSH` /
 `DS_DATA_PROD_SSH`. The break-glass run connects to ds-api-prod as

@@ -99,3 +99,45 @@ export function resolveRoute(
   if (!resolver) return undefined;
   return pattern.replace(/\[(?:\.\.\.)?([^\]]+)\]/g, () => resolver());
 }
+
+/**
+ * PAGES WITH NO ADDRESS OF THEIR OWN — a page route the host only ever renders
+ * as a REWRITE TARGET, so a visitor typing its address is answered a declared
+ * status instead of the page. Keyed per host like {@link routeParams}, for the
+ * same reason: each host's manifest entry must be answered by that host's row.
+ *
+ * This is not a skip. The walk still opens the address and asserts the
+ * declared status, so a page that starts serving a direct visit — or a
+ * declaration whose page answers something else — fails the walk naming the
+ * route. Every row cites the EARS that makes the direct visit a non-page.
+ */
+export type DirectVisitAnswer = {
+  /** The status a direct visit answers. */
+  readonly status: number;
+  /** The spec clause that makes the page address-less. */
+  readonly cite: string;
+};
+
+/**
+ * 003 EARS-72 — the storefront refusal page is reached only by the storefront
+ * gate's rewrite of a refused door; «a direct visit to it is a 404».
+ */
+const REFUSAL_PAGE: DirectVisitAnswer = Object.freeze({
+  status: 404,
+  cite: "003 EARS-72",
+});
+
+export const directVisitAnswers: Readonly<
+  Record<HostId, Readonly<Record<RoutePattern, DirectVisitAnswer>>>
+> = Object.freeze({
+  academy: Object.freeze({ "/auth/refused": REFUSAL_PAGE }),
+  doctor: Object.freeze({ "/auth/refused": REFUSAL_PAGE }),
+});
+
+/** The declared direct-visit answer of a host's page route, if it has one. */
+export function directVisitAnswer(
+  host: HostId,
+  pattern: string,
+): DirectVisitAnswer | undefined {
+  return directVisitAnswers[host][pattern as RoutePattern];
+}

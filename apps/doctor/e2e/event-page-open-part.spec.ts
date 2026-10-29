@@ -3,6 +3,7 @@ import {
   MAIN_LANDMARK_RULES,
   eventPageHonestyFindings,
   offlineSoldOutFindings,
+  withoutPresignNonces,
 } from "@ds/e2e";
 import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
@@ -137,8 +138,7 @@ test.describe("020 EARS-2 — the registration-free decision set", () => {
     // its signing instant and signature differ between ANY two reads, guest or
     // not (#2996 — the stand's speakers carry photos). Those request nonces are
     // blanked; every other byte, the object key included, must still match.
-    const unsigned = (html: string) =>
-      html.replace(/(X-Amz-(?:Date|Signature))=[^&"]*/gu, "$1=");
+    const unsigned = withoutPresignNonces;
     const guest = unsigned(
       await page.getByTestId("event-page-open-part").innerHTML(),
     );

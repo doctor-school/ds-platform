@@ -1,3 +1,4 @@
+import { withoutPresignNonces } from "@ds/e2e";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
@@ -149,7 +150,13 @@ test.describe("020 EARS-1 / EARS-18 — cross-host identity", () => {
     expect(doctor.status()).toBe(200);
 
     // Deep equality, not a field spot-check: a second projection anywhere in the
-    // doctor read path would surface here as a diff.
-    expect(await doctor.json()).toEqual(await academy.json());
+    // doctor read path would surface here as a diff. A speaker photo is a
+    // presigned object-storage URL minted per request, so two reads a second
+    // apart carry a different signing instant and signature (#3521); those
+    // request nonces are blanked, every other byte — the object key included —
+    // must still match.
+    const body = async (res: typeof academy) =>
+      JSON.parse(withoutPresignNonces(await res.text())) as unknown;
+    expect(await body(doctor)).toEqual(await body(academy));
   });
 });

@@ -340,6 +340,31 @@ Our own images are built once per commit in GitHub Actions and pushed to a priva
 Timeweb Cloud container registry (#2981, tech spec
 `apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md` §3–§4).
 
+**Publisher/retention exclusion (#3144).** `runtime-images.yml` and
+`registry-retention.yml` share the constant workflow-level concurrency group
+`registry-images`, with `queue: max` and `cancel-in-progress: false`. The lock covers
+the entire image build/publish/verify/manifest run and the entire retention
+snapshot/plan/delete run. Matrix builds remain parallel inside one run. A digest
+can be reused by a fresh tag, so a snapshot followed by another keep-set read is
+insufficient while a publisher can still add aliases. These are the only workflows
+holding `REGISTRY_PUSH_TOKEN`; any new writer must join the same lock. The retention
+runner must never be run standalone, and out-of-workflow registry writes are outside
+this coordination boundary.
+
+The tradeoff is serialized Runtime images runs, including superseded PR heads:
+they finish instead of being cancelled by the next push. GitHub permits up to 100
+pending runs with `queue: max`; additional arrivals are cancelled when full. Queue
+order follows when a run starts waiting, so dispatch order is not guaranteed. See
+[GitHub's concurrency contract](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
+
+**Activation boundary.** Runs using old workflow revisions (including reruns) retain
+their old concurrency configuration. After this fix merges, observe existing old
+publisher/retention runs draining naturally before starting a fresh dependent head
+based on fixed `main`; do not rerun old image workflows or cancel foreign runs.
+Confirm activation through normal automatic Actions runs and read-only run/group
+observation. YAML tests prove the source contract, not live lock activation;
+post-merge acceptance remains tracked by #3144 until that observation is recorded.
+
 - **A manual one-off, not Terraform.** The registry was created through the Timeweb
   API on 2026-10-16; no Terraform resource models it, so `terraform plan` neither
   shows nor recreates it. Endpoint: `ds-platform.registry.twcstorage.ru`.

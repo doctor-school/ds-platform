@@ -33,9 +33,11 @@ permissions:
   deployments: read
   statuses: read
 
-# One run at a time; a queued run waits rather than cancelling one mid-delete.
+# Shared with runtime-images.yml: hold the lock BEFORE the registry snapshot
+# through the final DELETE. Keep up to 100 pending runs without replacing them.
 concurrency:
-  group: registry-retention
+  group: registry-images
+  queue: max
   cancel-in-progress: false
 
 jobs:

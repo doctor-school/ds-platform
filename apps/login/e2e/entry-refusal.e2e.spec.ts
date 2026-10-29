@@ -26,7 +26,11 @@ test("003 EARS-72: a rate-limited entry is a 429 refusal page counting down the 
   await expect(page.getByRole("link", { name: ENTRY_REFUSAL_COPY.academySite })).toHaveAttribute("href", "http://localhost:3001/");
   await expect(page.getByRole("link", { name: ENTRY_REFUSAL_COPY.doctorSite })).toHaveAttribute("href", "http://localhost:3004/");
   await expect(page.locator("form")).toHaveCount(0);
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  // No error banner (#3379): Next's app router injects its own permanent
+  // `#__next-route-announcer__` live region, which is no page content.
+  await expect(
+    page.locator('[role="alert"]:not(#__next-route-announcer__)'),
+  ).toHaveCount(0);
 });
 
 test("003 EARS-72: a rate-limited entry without Retry-After opens the retry at once, and the retry re-opens the same door URL", async ({

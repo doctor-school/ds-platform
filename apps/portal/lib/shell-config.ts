@@ -69,24 +69,21 @@ export type ShellTranslator = (key: ShellConfigKey) => string;
 export const ROOM_SHELL_PATHS = ["/webinars/*/room"] as const;
 
 /**
- * The routes that carry their OWN chrome: the four auth surfaces mount
- * `AuthShell`, and the webinar room mounts `room-header`. Named once so the
- * header's list and the footer's (which adds `/` — see below) cannot drift.
+ * The routes that carry their OWN chrome: the webinar room mounts
+ * `room-header`. The four door paths keep the chrome: their forms live on the
+ * sign-in host (003 EARS-61), and the one page they render here is the
+ * refusal page, drawn inside the storefront shell (003 EARS-72). Named once
+ * so the header's list and the footer's (which adds `/` — see below)
+ * cannot drift.
  */
-const HIDDEN_ON_PATHS = [
-  "/login",
-  "/register",
-  "/verify",
-  "/reset",
-  ...ROOM_SHELL_PATHS,
-] as const;
+const HIDDEN_ON_PATHS = [...ROOM_SHELL_PATHS] as const;
 
 /**
  * Build the academy host config from the `shell` catalog.
  *
  * `hiddenOnPaths` reproduces exactly what the portal's own header did by hand
- * before this package existed: the four auth surfaces carry their own
- * `AuthShell` chrome, and the webinar room carries its own `room-header`. The
+ * before this package existed for the webinar room, which carries its own
+ * `room-header`. The
  * patterns are matched SEGMENT-wise, so the starred room pattern below hides the
  * room of any webinar while `/webinars` and `/webinars/:slug` keep their chrome
  * — a prefix matcher would swallow the listing with it.

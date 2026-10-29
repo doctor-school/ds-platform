@@ -15,9 +15,10 @@ import {
  * 008 EARS-12 / EARS-14 · 017 EARS-1/EARS-12 — the ROUTE-VISIBILITY MATRIX of the
  * academy storefront's shared chrome (`@ds/storefront-shell`, #2180).
  *
- * `lib/shell-config.ts` declares `hiddenOnPaths` = the four auth surfaces plus
- * the starred room pattern; those routes carry their own chrome (`AuthShell`,
- * `room-header`) and a second header would be a duplicate landmark. Everywhere
+ * `lib/shell-config.ts` declares `hiddenOnPaths` = the starred room pattern,
+ * which carries its own chrome (`room-header`); the four auth routes are
+ * entries into the sign-in host, whose forms carry `AuthShell` (checked here
+ * on the host form the entry reached). Everywhere
  * else — including the discovery listing `/webinars` and an event page
  * `/webinars/:slug`, which the STARRED room pattern must NOT swallow — the
  * storefront header AND footer are both present.
@@ -34,7 +35,7 @@ import {
  * cleanly on a bare CI run.
  */
 
-/** The four auth surfaces the academy config hides its chrome on. */
+/** The four auth entries; each reaches a sign-in host form with its own chrome. */
 const AUTH_ROUTES = ["/login", "/register", "/verify", "/reset"] as const;
 
 /** The seeded live room (the 006↔007 fixture seam), env-overridable exactly as

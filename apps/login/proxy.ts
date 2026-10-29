@@ -6,11 +6,13 @@ import {
   newNonce,
 } from "@/lib/host-headers";
 import {
+  ENTRY_REFUSAL_HEADER,
+  entryRefusalRewrite,
   isTopLevelNavigation,
+  parseRetryAfter,
   SIGN_IN_HOST_ENTRY_HEADER,
-  SIGN_IN_HOST_UNAVAILABLE_HEADER,
   writeSignInHostHandOver,
-  type SignInHostUnavailable,
+  type EntryRefusalReason,
 } from "@ds/auth-flow/server";
 import {
   DOOR_ROUTES,
@@ -31,8 +33,8 @@ import {
  *   rides THIS response).
  * - An entry the API refuses or cannot answer keeps a truthful status — its
  *   429 stays 429 (Retry-After forwarded), anything else is 503 — and the
- *   `/login` mount renders the forms' own banner for it (no form, no
- *   guessed redirect, never an empty page).
+ *   `/login` mount renders the refusal page for it (003 EARS-72: no form,
+ *   no guessed redirect, never an empty page).
  * - `/healthz` (the image liveness probe) passes to its route for any
  *   request: no auth state, no API call, no cookie.
  * - Every other path is EARS-67's direct visit: the API's answer for a
@@ -114,7 +116,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     SIGN_IN_HOST_ENTRY_HEADER,
     writeSignInHostHandOver({ door, render: entry.answer }),
   );
-  forwarded.delete(SIGN_IN_HOST_UNAVAILABLE_HEADER);
+  forwarded.delete(ENTRY_REFUSAL_HEADER);
   forwarded.set("content-security-policy", csp);
   // 003 EARS-71 — a door the entry chose on the `/login` arrival renders on
   // its OWN page (a rewrite, same query), so the tab carries the storefront's
@@ -130,26 +132,30 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 }
 
 /**
- * The unread entry's answer: a rewrite to the `/login` mount (every path,
- * a direct visit included, has the one page that renders the banner) at the
- * truthful status, the reason riding as a request header.
+ * The unread entry's answer (003 EARS-72): a rewrite to the `/login` mount
+ * (every path, a direct visit included, has the one page that renders the
+ * refusal) at the truthful status, Retry-After forwarded to the browser and,
+ * with the reason, to the page.
  */
 function unavailable(
   request: NextRequest,
   csp: string,
-  reason: SignInHostUnavailable,
+  reason: EntryRefusalReason,
   retryAfter: string | null,
 ): NextResponse {
   const forwarded = new Headers(request.headers);
   forwarded.delete(SIGN_IN_HOST_ENTRY_HEADER);
-  forwarded.set(SIGN_IN_HOST_UNAVAILABLE_HEADER, reason);
   forwarded.set("content-security-policy", csp);
-  const res = NextResponse.rewrite(new URL("/login", request.url), {
-    status: reason === "rate-limited" ? 429 : 503,
-    request: { headers: forwarded },
-  });
-  if (retryAfter !== null) res.headers.set("Retry-After", retryAfter);
-  return res;
+  return entryRefusalRewrite(
+    request,
+    "/login",
+    {
+      reason,
+      retryAfterSeconds:
+        reason === "rate-limited" ? parseRetryAfter(retryAfter) : null,
+    },
+    forwarded,
+  );
 }
 
 function withCookies(res: NextResponse, cookies: string[]): NextResponse {

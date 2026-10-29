@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   SIGN_IN_HOST_ENTRY_HEADER as ENTRY_HEADER,
-  SIGN_IN_HOST_UNAVAILABLE_HEADER as UNAVAILABLE_HEADER,
+  ENTRY_REFUSAL_HEADER as UNAVAILABLE_HEADER,
   readSignInHostHandOver as readEntryHeader,
 } from "@ds/auth-flow/server";
 import { proxy } from "./proxy";
@@ -194,13 +194,11 @@ describe("003 EARS-66 / 67: stale requests and direct visits go where the API sa
     const res = await proxy(request("/login?authRequest=V2_1"));
     expect(res.status).toBe(503);
     expect(res.headers.get("location")).toBeNull();
-    // Not an empty page: the door mount renders the unavailable banner.
+    // Not an empty page: the door mount renders the refusal page (003 EARS-72).
     expect(res.headers.get("x-middleware-rewrite")).toBe(
       "http://localhost:3005/login",
     );
-    expect(res.headers.get(`x-middleware-request-${UNAVAILABLE_HEADER}`)).toBe(
-      "unavailable",
-    );
+    expect(res.headers.get(`x-middleware-request-${UNAVAILABLE_HEADER}`)).toBe("reason=unavailable");
     expect(res.headers.get(`x-middleware-request-${ENTRY_HEADER}`)).toBeNull();
     expectHardened(res);
     // Never a silent 503: the cause is logged.
@@ -212,9 +210,9 @@ describe("003 EARS-66 / 67: stale requests and direct visits go where the API sa
   });
 });
 
-describe("the API refuses the entry read: a truthful status and the forms' words", () => {
+describe("the API refuses the entry read: a truthful status and the refusal page", () => {
   it.each(["/login?authRequest=V2_1", "/"])(
-    "a 429 on %s is a 429 rendering the rate-limit banner, Retry-After forwarded",
+    "003 EARS-72: a 429 on %s is a 429 rendering the refusal page, Retry-After forwarded to the browser and the page",
     async (path) => {
       fetchMock.mockResolvedValue(
         new Response(JSON.stringify({ message: "Too Many Requests" }), {
@@ -232,7 +230,7 @@ describe("the API refuses the entry read: a truthful status and the forms' words
       );
       expect(
         res.headers.get(`x-middleware-request-${UNAVAILABLE_HEADER}`),
-      ).toBe("rate-limited");
+      ).toBe("reason=rate-limited&retryAfter=42");
       expect(
         res.headers.get("x-middleware-request-content-security-policy"),
       ).toBe(res.headers.get("content-security-policy"));
@@ -241,15 +239,13 @@ describe("the API refuses the entry read: a truthful status and the forms' words
     },
   );
 
-  it("a 500 is a 503 rendering the unavailable banner, with no Retry-After it never sent", async () => {
+  it("003 EARS-72: a 500 is a 503 rendering the refusal page, with no Retry-After it never sent", async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 500 }));
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await proxy(request("/login?authRequest=V2_1"));
     expect(res.status).toBe(503);
     expect(res.headers.get("retry-after")).toBeNull();
-    expect(res.headers.get(`x-middleware-request-${UNAVAILABLE_HEADER}`)).toBe(
-      "unavailable",
-    );
+    expect(res.headers.get(`x-middleware-request-${UNAVAILABLE_HEADER}`)).toBe("reason=unavailable");
     expect(logged).toHaveBeenCalledWith(
       "[sign-in-host] entry read failed:",
       "sign-in entry answered 500",
@@ -258,7 +254,7 @@ describe("the API refuses the entry read: a truthful status and the forms' words
     logged.mockRestore();
   });
 
-  it("a browser-sent unavailable header never reaches a rendered door", async () => {
+  it("003 EARS-72: a browser-sent refusal header never reaches a rendered door", async () => {
     fetchMock.mockResolvedValue(answer(RENDER_DOCTOR));
     const res = await proxy(
       request("/login?authRequest=V2_1", {

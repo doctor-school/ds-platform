@@ -5,9 +5,20 @@ import { ACADEMY_AUTH_FLOW, DOCTOR_AUTH_FLOW } from "../hosts";
 import {
   OIDC_TX_COOKIE,
   storefrontCallback,
-  storefrontEntry,
+  storefrontEntry as storefrontEntryOutcome,
   type StorefrontOidcHost,
 } from "./storefront-oidc";
+
+/** The entry's answer when the transaction was granted (a refusal fails the test). */
+async function storefrontEntry(
+  ...args: Parameters<typeof storefrontEntryOutcome>
+): Promise<Response> {
+  const outcome = await storefrontEntryOutcome(...args);
+  if (!(outcome instanceof Response)) {
+    throw new Error(`entry refused: ${JSON.stringify(outcome)}`);
+  }
+  return outcome;
+}
 
 /**
  * 003 EARS-61 / 62 / 71 (storefront halves), ADR-0015 §4 req. 1, 3, 5, 6, 9 —
@@ -52,6 +63,8 @@ function fakeApi(
     event?: number;
     /** 003 EARS-63 — the silent-check start's status (200 by default; 429 = limited). */
     silentCheck?: number;
+    /** 003 EARS-72 — the transaction's answer: a status (+ `Retry-After`), `"throw"` = transport failure, `"junk"` = off contract. */
+    transaction?: { status: number; retryAfter?: string } | "throw" | "junk";
     /** 005 EARS-2 — the `RegisterForEvent` answer; `"throw"` = a network failure. */
     registration?: number | "throw";
   } = {},
@@ -78,6 +91,14 @@ function fakeApi(
         : Response.json({ txId: SILENT_TX_ID, authorizeUrl: SILENT_AUTHORIZE });
     }
     if (url === "http://api:3000/v1/internal/oidc/transaction") {
+      const tx = opts.transaction;
+      if (tx === "throw") throw new TypeError("fetch failed");
+      if (tx === "junk") return Response.json({ nope: true });
+      if (tx)
+        return new Response(null, {
+          status: tx.status,
+          headers: tx.retryAfter ? { "retry-after": tx.retryAfter } : {},
+        });
       return Response.json({ txId: TX_ID, authorizeUrl: AUTHORIZE });
     }
     if (url === "http://api:3000/v1/internal/oidc/redeem") {
@@ -159,6 +180,9 @@ describe("storefront entry", () => {
     ["a request without fetch metadata", {}],
     ["a frame", { "sec-fetch-mode": "navigate", "sec-fetch-dest": "iframe" }],
     ["a HEAD", { ...NAVIGATE }, "HEAD"],
+    // 003 EARS-72: the gate answers the door paths for every method now, so
+    // a POST is the same inert 204 (it was a route handler's 405 before).
+    ["a POST", { ...NAVIGATE }, "POST"],
   ];
 
   for (const entry of ENTRIES) {
@@ -520,6 +544,70 @@ describe("storefront entry", () => {
     );
     expect(ownRes.headers.get("location")).toBe("/webinars");
     expect(own.internal("transaction")).toHaveLength(0);
+  });
+
+  it("003 EARS-72: a 429 transaction is a typed rate-limited refusal carrying the Retry-After seconds, never a thrown error", async () => {
+    const api = fakeApi({ transaction: { status: 429, retryAfter: "105" } });
+    const outcome = await storefrontEntryOutcome(get("/login"), ACADEMY, "login", {
+      fetchImpl: api.fetchImpl,
+      env: ENV,
+    });
+    expect(outcome).toEqual({
+      refused: { reason: "rate-limited", retryAfterSeconds: 105 },
+    });
+  });
+
+  it("003 EARS-72: a 429 without a parseable Retry-After carries no wait", async () => {
+    for (const retryAfter of [undefined, "soon", "0", "Wed, 21 Oct 2026 07:28:00 GMT"]) {
+      const api = fakeApi({
+        transaction: { status: 429, ...(retryAfter ? { retryAfter } : {}) },
+      });
+      const outcome = await storefrontEntryOutcome(get("/register"), DOCTOR, "register", {
+        fetchImpl: api.fetchImpl,
+        env: ENV,
+      });
+      expect(outcome).toEqual({
+        refused: { reason: "rate-limited", retryAfterSeconds: null },
+      });
+    }
+  });
+
+  it("003 EARS-72: any other refusal, a transport failure or an off-contract answer is a typed unavailable refusal", async () => {
+    for (const transaction of [
+      { status: 503 },
+      { status: 500 },
+      { status: 403 },
+      "throw" as const,
+      "junk" as const,
+    ]) {
+      const api = fakeApi({ transaction });
+      const outcome = await storefrontEntryOutcome(get("/reset"), ACADEMY, "reset", {
+        fetchImpl: api.fetchImpl,
+        env: ENV,
+      });
+      expect(outcome).toEqual({
+        refused: { reason: "unavailable", retryAfterSeconds: null },
+      });
+    }
+  });
+
+  it("003 EARS-72: a refused entry from an event page names that event (the same event target the transaction would record), a land-only return included", async () => {
+    for (const returnTo of ["/webinars/live-1", "/webinars/live-1?intent=land"]) {
+      const api = fakeApi({ transaction: { status: 503 } });
+      const outcome = await storefrontEntryOutcome(
+        get(`/login?returnTo=${encodeURIComponent(returnTo)}`),
+        ACADEMY,
+        "login",
+        { fetchImpl: api.fetchImpl, env: ENV },
+      );
+      expect(outcome).toEqual({
+        refused: {
+          reason: "unavailable",
+          retryAfterSeconds: null,
+          eventSlug: "live-1",
+        },
+      });
+    }
   });
 
   it("003 EARS-10 (req. 6): after the storefront sign-out the next «Войти» starts a NEW interactive transaction, never a silent finalisation", async () => {

@@ -231,6 +231,9 @@ async function onHost(
   });
   const page = (await SignInHostRoute({
     storefronts: STOREFRONTS,
+    refusalSites: () => {
+      throw new Error("no refusal on a rendered door");
+    },
     searchParams: Promise.resolve(browser),
   })) as AnyElement;
   const mounted = findAll(

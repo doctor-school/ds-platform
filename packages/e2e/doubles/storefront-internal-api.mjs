@@ -22,8 +22,8 @@ const AUTHORIZE =
 
 const transactions = [];
 
-function json(res, status, body) {
-  res.writeHead(status, { "content-type": "application/json" });
+function json(res, status, body, headers = {}) {
+  res.writeHead(status, { "content-type": "application/json", ...headers });
   res.end(JSON.stringify(body));
 }
 
@@ -46,7 +46,26 @@ createServer(async (req, res) => {
     if (req.headers.authorization !== `Bearer ${TOKEN}`) {
       return json(res, 401, { message: "internal bearer refused" });
     }
-    const body = JSON.parse((await readBody(req)) || "{}");
+    const raw = (await readBody(req)) || "{}";
+    // 003 EARS-72 (#3379): a transaction naming `refuse-429`,
+    // `refuse-429-bare` or `refuse-503` (as its return path or event target)
+    // is refused like the API's per-IP limit (429, with or without
+    // `Retry-After`) or an API failure (503).
+    if (raw.includes("refuse-429-bare")) {
+      return json(res, 429, { message: "Too Many Requests" });
+    }
+    if (raw.includes("refuse-429")) {
+      return json(
+        res,
+        429,
+        { message: "Too Many Requests" },
+        { "retry-after": "105" },
+      );
+    }
+    if (raw.includes("refuse-503")) {
+      return json(res, 503, { message: "Service Unavailable" });
+    }
+    const body = JSON.parse(raw);
     transactions.push(body);
     const txId = `tx-${transactions.length}`;
     const authorize = new URL(AUTHORIZE);

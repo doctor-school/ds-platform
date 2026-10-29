@@ -289,3 +289,56 @@ describe("003 EARS-63: the doctor storefront mounts the shared silent check", ()
     }
   });
 });
+
+describe("003 EARS-72: the doctor storefront answers its doors and rewrites a refused entry to the refusal page", () => {
+  const NAV = { "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" };
+  function refusingApi(transaction: Response) {
+    vi.stubEnv("INTERNAL_API_URL", "http://api:3000");
+    vi.stubEnv("INTERNAL_API_TOKEN", "t".repeat(40));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/v1/auth/session")) return new Response(null, { status: 401 });
+        if (url.endsWith("/v1/internal/oidc/transaction")) return transaction;
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+  }
+
+  it.each(["/login", "/register", "/reset", "/verify"])(
+    "003 EARS-72: a 429 on %s is a 429 rewrite to /auth/refused with Retry-After and the reason",
+    async (path) => {
+      refusingApi(new Response(null, { status: 429, headers: { "retry-after": "105" } }));
+      try {
+        const res = await proxy(
+          new NextRequest(`https://doctor.school${path}?returnTo=${encodeURIComponent("/events/live-1")}`, { headers: NAV }),
+        );
+        expect(res.status).toBe(429);
+        expect(res.headers.get("retry-after")).toBe("105");
+        expect(new URL(res.headers.get("x-middleware-rewrite") ?? "").pathname).toBe("/auth/refused");
+        expect(res.headers.get("x-middleware-request-x-ds-entry-refusal")).toBe(
+          "reason=rate-limited&retryAfter=105&event=live-1",
+        );
+      } finally {
+        vi.unstubAllEnvs();
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it("003 EARS-72: any other refusal is a 503 rewrite with no Retry-After", async () => {
+    refusingApi(new Response(null, { status: 500 }));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const res = await proxy(new NextRequest("https://doctor.school/login", { headers: NAV }));
+      expect(res.status).toBe(503);
+      expect(res.headers.get("retry-after")).toBeNull();
+      expect(res.headers.get("x-middleware-request-x-ds-entry-refusal")).toBe("reason=unavailable");
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    }
+  });
+});

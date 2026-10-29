@@ -4,10 +4,9 @@ import {
   SESSION_COOKIE_NAME,
   forwardedHeaders,
   forwardedSessionFrom,
-  parkReturnTarget,
+  storefrontDoorGate,
   storefrontSilentCheck,
 } from "@ds/auth-flow/server";
-import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { DOCTOR_STOREFRONT_OIDC } from "@/lib/auth-flow.host-config";
 import {
   SPECIALTY_CHOICE_COOKIE_NAME,
@@ -59,34 +58,29 @@ export async function consumeGuestSpecialtyBeforeRender(
 }
 
 /**
- * 014 EARS-6 (#2443, #2495) — the auth doors that run the parking rule: the
- * same four routes the Academy middleware matches, read from this host's route
- * table. A door carrying a target parks it; a guest's door without one drops a
- * target an earlier flow parked. The RULE and the cookie are
- * `@ds/auth-flow/server`'s, the same on both storefronts; this host only wires
- * its doors to it.
- */
-const PARKING_ENTRIES: readonly string[] = [
-  DOCTOR_AUTH_ROUTES.login,
-  DOCTOR_AUTH_ROUTES.register,
-  DOCTOR_AUTH_ROUTES.verify,
-  DOCTOR_AUTH_ROUTES.reset,
-];
-
-/**
  * 003 EARS-63 (ADR-0015 §4 step 4) — the silent check runs first, before
  * anything renders and before the page cache answers: a signed-out document
  * navigation is answered with a `303` into a `prompt=none` transaction. The
  * RULE is `@ds/auth-flow/server`'s, the same on both storefronts; a render it
  * lets through carries its cookies (the spent guard, the guest marker).
+ *
+ * 003 EARS-61 / 72, 014 EARS-6 — the four door paths are answered here by the
+ * shared door gate (the parking rule, the entry, a refusal rewritten to the
+ * refusal page at its truthful status); only the specialty cookies a door
+ * relays ride on that answer — a deferred request rewrite does not, as no
+ * door answer renders a page that reads the specialty.
  */
 export async function proxy(request: NextRequest): Promise<Response> {
   const check = await storefrontSilentCheck(request, DOCTOR_STOREFRONT_OIDC);
   if ("response" in check) return check.response;
   const consumed = await consumeGuestSpecialtyBeforeRender(request);
-  const response = PARKING_ENTRIES.includes(request.nextUrl.pathname)
-    ? (parkReturnTarget(request, consumed) ?? consumed)
-    : consumed;
+  const door = await storefrontDoorGate(request, DOCTOR_STOREFRONT_OIDC);
+  if (door) {
+    for (const cookie of consumed.headers.getSetCookie()) {
+      door.headers.append("set-cookie", cookie);
+    }
+  }
+  const response = door ?? consumed;
   for (const cookie of check.setCookies) {
     response.headers.append("set-cookie", cookie);
   }

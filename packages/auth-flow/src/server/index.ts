@@ -27,11 +27,26 @@ export {
 } from "./auth-route-guard";
 export { parkReturnTarget } from "./return-target-parking";
 export {
+  ENTRY_REFUSAL_HEADER,
+  entryRefusalRewrite,
+  entryRefusalStatus,
+  parseRetryAfter,
+  readEntryRefusal,
+  writeEntryRefusal,
+  type EntryRefusal,
+  type EntryRefusalReason,
+} from "./entry-refusal";
+export {
+  STOREFRONT_ENTRY_REFUSAL_ROUTE,
+  storefrontDoorGate,
+} from "./storefront-door-gate";
+export {
   OIDC_TX_COOKIE,
   STOREFRONT_CALLBACK_PATH,
   storefrontCallback,
   storefrontEntry,
   type StorefrontEntry,
+  type StorefrontEntryRefused,
   type StorefrontOidcDeps,
   type StorefrontOidcHost,
 } from "./storefront-oidc";
@@ -80,9 +95,7 @@ export {
 export {
   SIGN_IN_HOST_AUTH_REQUEST_PARAM,
   SIGN_IN_HOST_ENTRY_HEADER,
-  SIGN_IN_HOST_UNAVAILABLE_HEADER,
   readSignInHostHandOver,
-  readSignInHostUnavailable,
   signInHostConfig,
   signInHostSearchParams,
   writeSignInHostHandOver,
@@ -90,5 +103,4 @@ export {
   type SignInHostPageDoor,
   type SignInHostRender,
   type SignInHostStorefronts,
-  type SignInHostUnavailable,
 } from "./sign-in-host";

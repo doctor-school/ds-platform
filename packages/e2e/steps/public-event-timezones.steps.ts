@@ -8,6 +8,7 @@ import {
 
 import { baseUrlFor } from "../hosts.js";
 import { reachFeedCard } from "../lib/feed-card.js";
+import { redirectsBesidesSilentCheck } from "../lib/silent-check.js";
 import { standHttpCredentials } from "../lib/stand-http-credentials.js";
 import {
   After,
@@ -248,7 +249,9 @@ When(
     const path = `${host.eventsPath}/${s.event.slug}`;
     const response = await page.goto(path, { waitUntil: "commit" });
     expect(response?.status()).toBe(200);
-    expect(response?.request().redirectedFrom()).toBeNull();
+    // 003 EARS-63: a signed-out first visit round-trips the silent check back
+    // to this very address; only a redirect away from the page is a failure.
+    expect(redirectsBesidesSilentCheck(response)).toEqual([]);
     // The predicate URL matcher waits for load, which the held scripts prevent.
     // Assert the committed document and actual browser address before hydration.
     const origin = new URL(baseUrlFor(host)).origin;

@@ -323,37 +323,45 @@ Then("no «Мои события» block exists in the DOM", async ({ page }) =>
   await expect(page.locator('[data-feed-block="my-events"]')).toHaveCount(0);
 });
 
+async function expectUpcomingCard(
+  page: Page,
+  host: HostConfig,
+  world: StepWorld,
+): Promise<void> {
+  await expect(
+    page.getByTestId("events-feed").getByText("Участвовать"),
+  ).toHaveCount(0);
+  await expect(page.locator('a[href^="/register"]')).toHaveCount(0);
+  await expect(page.getByTestId("events-my-events-skeleton")).toHaveCount(0);
+  // A live card keeps its strip action (019 «Amendment — 2026-10-06»).
+  const cards = feedCards(page).filter({ hasNotText: "В эфире" });
+  await expect(cards.first()).toBeVisible();
+  const count = await cards.count();
+  for (let index = 0; index < count; index += 1) {
+    const card = cards.nth(index);
+    const links = card.getByRole("link");
+    await expect(links).toHaveCount(1);
+    await expect(card.getByRole("button")).toHaveCount(0);
+    const href = await links.getAttribute("href");
+    expect(href).toMatch(new RegExp(`^${host.eventsPath}/[^/?#]+$`));
+    await expect(links, "the card link is labelled").toHaveAccessibleName(
+      /\S/u,
+    );
+    const title = (await links.innerText()).trim();
+    expect(title.length, "the card link has a title").toBeGreaterThan(0);
+    feedOf(world).card ??= { title, href: href! };
+  }
+}
+
 Then(
   "an upcoming card is one link to its event page with no action of its own",
   async ({ page, host, world }) => {
-    await expect(
-      page.getByTestId("events-feed").getByText("Участвовать"),
-    ).toHaveCount(0);
-    await expect(page.locator('a[href^="/register"]')).toHaveCount(0);
-    await expect(page.getByTestId("events-my-events-skeleton")).toHaveCount(0);
-    // A live card keeps its strip action (019 «Amendment — 2026-10-06»).
-    const cards = feedCards(page).filter({ hasNotText: "В эфире" });
-    await expect(cards.first()).toBeVisible();
-    const count = await cards.count();
-    for (let index = 0; index < count; index += 1) {
-      const card = cards.nth(index);
-      const links = card.getByRole("link");
-      await expect(links).toHaveCount(1);
-      await expect(card.getByRole("button")).toHaveCount(0);
-      const href = await links.getAttribute("href");
-      expect(href).toMatch(new RegExp(`^${host.eventsPath}/[^/?#]+$`));
-      await expect(links, "the card link is labelled").toHaveAccessibleName(
-        /\S/u,
-      );
-      const title = (await links.innerText()).trim();
-      expect(title.length, "the card link has a title").toBeGreaterThan(0);
-      feedOf(world).card ??= { title, href: href! };
-    }
+    await expectUpcomingCard(page, host, world);
   },
 );
 
 When(
-  "the {word} opens that upcoming card",
+  /^the (\w+) opens (?:that|an) upcoming card$/u,
   async ({ page, world }, _actor: string) => {
     const card = feedOf(world).card;
     if (!card) throw new Error("No upcoming card was read before");
@@ -1044,7 +1052,7 @@ Then(
 // ── EARS-8: the URL is the state ────────────────────────────────────────────
 
 When(
-  "the {word} opens the same URL in a fresh browser context",
+  /^the (\w+) (?:opens the same URL|copies the URL and opens it) in a fresh browser context$/u,
   async (
     { page, browser, baseURL, httpCredentials, locale, world },
     _actor: string,
@@ -2647,3 +2655,309 @@ Then("no such block exists in the DOM", async ({ page }) => {
   await expect(page.getByTestId("events-my-events-skeleton")).toHaveCount(0);
   await expect(page.locator('[data-feed-block="my-events"]')).toHaveCount(0);
 });
+
+// ── Original public navigation and mobile obligations (#3526) ──────────────
+
+Given(
+  "the doctor has applied a format facet, selected a day in the month grid and widened the horizon",
+  async ({ page, host, world }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openFeed(page, host.eventsPath);
+    await filterPanel(page)
+      .getByRole("group", { name: "Формат" })
+      .getByRole("button", { name: "Онлайн", exact: true })
+      .click();
+    await page.waitForURL((url) =>
+      url.searchParams.getAll("format").includes("online"),
+    );
+    await settle(page);
+    const before = await feedCards(page).count();
+    const more = page.getByTestId("events-feed-show-more");
+    const step = Number(/\d+/u.exec(await more.innerText())![0]);
+    await showMore(page, world);
+    await expect(feedCards(page)).toHaveCount(before + step);
+    expect(Number(params(page).get("count"))).toBe(before + step);
+    await pickCompactDay(page, world);
+  },
+);
+
+Then(
+  "the feed, the month view and the facet panel are fully readable",
+  async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(feedCards(page).first()).toBeVisible();
+    await expect(page.getByTestId("events-compact-month")).toBeVisible();
+    await expect(filterPanel(page)).toBeVisible();
+    await page
+      .getByRole("link", { name: "Календарь на месяц →", exact: true })
+      .filter({ visible: true })
+      .click();
+    await page.waitForURL((url) => url.searchParams.get("view") === "month");
+    await expect(page.getByTestId("month-grid-desktop")).toBeVisible();
+    await expect(filterPanel(page)).toBeVisible();
+    await page
+      .getByRole("link", { name: "← Лента событий", exact: true })
+      .filter({ visible: true })
+      .click();
+    await page.waitForURL((url) => !url.searchParams.has("view"));
+    await expect(feedCards(page).first()).toBeVisible();
+  },
+);
+
+Then(
+  "an upcoming card carries no action of its own",
+  async ({ page, host, world }) => {
+    await expectUpcomingCard(page, host, world);
+  },
+);
+
+Then(
+  "feature 020's event page for that event opens, carrying its one-click sign-up",
+  async ({ page, world }) => {
+    const card = feedOf(world).card;
+    if (!card) throw new Error("No upcoming card was read before");
+    await expectLanding(page, card.href, card.title);
+    const signup = page.getByTestId("event-signup-cta");
+    await expect(signup).toHaveCount(1);
+    await expect(signup).toBeVisible();
+    await expect(signup).toHaveAccessibleName(/\S/u);
+    const target = new URL((await signup.getAttribute("href"))!, page.url());
+    expect(target.pathname).toBe("/register");
+    expect(target.searchParams.get("returnTo")).toBe(card.href);
+  },
+);
+
+When(
+  "the doctor opens «События» with two facets applied",
+  async ({ page, host }) => {
+    await openFeed(page, `${host.eventsPath}?format=online&format=hybrid`);
+  },
+);
+
+Then(
+  "the facet panel is collapsed behind a «Фильтры» control showing the applied count",
+  async ({ page }) => {
+    await expect(page.getByTestId("events-filter-open")).toHaveText(
+      "Фильтры (2)",
+    );
+    await expect(page.getByTestId("events-column")).toBeHidden();
+  },
+);
+
+async function expectMobileFacetsOperable(page: Page): Promise<void> {
+  const sheet = page.getByTestId("events-filter-sheet");
+  await expect(sheet).toBeVisible();
+  for (const label of ["Онлайн", "Гибрид"]) {
+    const option = sheet
+      .getByRole("group", { name: "Формат", exact: true })
+      .getByRole("button", { name: label, exact: true });
+    await expect(option).toHaveAttribute("aria-pressed", "true");
+    await option.click();
+    await expect(option).toHaveAttribute("aria-pressed", "false");
+    await option.click();
+    await expect(option).toHaveAttribute("aria-pressed", "true");
+  }
+  const kind = sheet
+    .getByRole("group", { name: "Вид события", exact: true })
+    .getByRole("button", { name: "Вебинар", exact: true });
+  await kind.click();
+  await expect(kind).toHaveAttribute("aria-pressed", "true");
+  await kind.click();
+  await expect(kind).toHaveAttribute("aria-pressed", "false");
+  const specialty = sheet.getByRole("group", {
+    name: "Специальность",
+    exact: true,
+  });
+  for (const [label, value] of [
+    ["Все специальности", "all"],
+    ["Моя и смежные", null],
+  ] as const) {
+    const option = specialty.getByRole("button", { name: label, exact: true });
+    await option.click();
+    await expect(option).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(() => params(page).get("specialty")).toBe(value);
+  }
+  const query = "Вебинар";
+  const search = sheet.getByRole("searchbox");
+  await search.fill(query);
+  await expect.poll(() => params(page).get("q")).toBe(query);
+  await search.fill("");
+  await expect.poll(() => params(page).has("q")).toBe(false);
+
+  // 019 Oct-5 EARS-7/13: validate the real option source before asserting
+  // absent optional facets, rather than treating an absent control as a pass.
+  const reading = await publicDoctorRead<{
+    facets: Record<string, { slug: string; title: string; count: number }[]>;
+  }>(
+    page,
+    "/v1/storefront/doctor/events?tense=upcoming&format=online&format=hybrid",
+  );
+  for (const [key, label] of [
+    ["city", "Город"],
+    ["direction", "Направление"],
+  ] as const) {
+    const options = reading.facets[key] ?? [];
+    const group = sheet.getByRole("group", { name: label, exact: true });
+    if (options.length === 0) {
+      await expect(group, `${key}: no host options (019 Oct-5)`).toHaveCount(0);
+    } else {
+      const combo = group.getByRole("combobox");
+      await combo.click();
+      const option = page.getByRole("option", {
+        name: options[0]!.title,
+        exact: true,
+      });
+      await expect(option).toBeVisible();
+      await option.click();
+      await expect.poll(() => params(page).get(key!)).toBe(options[0]!.slug);
+    }
+  }
+  const nmo = sheet.getByRole("switch", { name: "Только с НМО", exact: true });
+  if (
+    (reading.facets.nmo ?? []).filter((option) => option.count > 0).length < 2
+  ) {
+    await expect(
+      nmo,
+      "019 Oct-5: source cannot distinguish both NMO values",
+    ).toHaveCount(0);
+  } else {
+    await nmo.click();
+    await expect(nmo).toBeChecked();
+    await nmo.click();
+    await expect(nmo).not.toBeChecked();
+  }
+  const show = sheet.getByTestId("events-filter-show");
+  await expect(show).toHaveText(/^Показать \d+ событи[йея]$/u);
+  await show.click();
+  await expect(sheet).toBeHidden();
+}
+
+Then(
+  "the panel opens as a sheet with every facet operable",
+  async ({ page }) => {
+    await expectMobileFacetsOperable(page);
+  },
+);
+
+async function expectInsideMobile(page: Page, locator: Locator): Promise<void> {
+  const box = await boxOf(locator, "mobile element");
+  expect(box.x).toBeGreaterThanOrEqual(-1);
+  expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+}
+
+async function expectMobileCards(page: Page): Promise<string[]> {
+  await expect(feedCards(page).first()).toBeVisible();
+  for (const card of await feedCards(page).all()) {
+    await expectInsideMobile(page, card);
+    const title = card.locator("h3 a");
+    await expect(title).toHaveAttribute("href", /^\/events\/[^/?#]+$/u);
+    await expect(title).toHaveAccessibleName(/\S/u);
+    const geometry = await card.evaluate((node) => {
+      const plate = node.querySelector("[data-time-plate]");
+      const body = plate?.nextElementSibling;
+      return {
+        display: getComputedStyle(node).display,
+        plateBottom: plate?.getBoundingClientRect().bottom,
+        bodyTop: body?.getBoundingClientRect().top,
+      };
+    });
+    expect(geometry.display).toBe("block");
+    expect(geometry.plateBottom, "mobile timeplate exists").toBeDefined();
+    expect(geometry.bodyTop, "mobile body exists").toBeDefined();
+    expect(geometry.bodyTop!).toBeGreaterThanOrEqual(geometry.plateBottom! - 1);
+  }
+  await expectNoOverflow(page.locator("html"), "mobile screen");
+  return feedCards(page).locator("[data-event-recording]").allTextContents();
+}
+
+Then(
+  "the day feed, the month grid, the live block and the card states render in the canvas mobile composition",
+  async ({ page, host, world, $testInfo }) => {
+    $testInfo.setTimeout(240_000);
+    for (const dark of [false, true]) {
+      await openFeed(page, `${host.eventsPath}?format=online&format=hybrid`);
+      await setTheme(page, dark);
+      await expect(page.getByTestId("events-filter-open")).toHaveText(
+        "Фильтры (2)",
+      );
+      await expect(page.getByTestId("events-column")).toBeHidden();
+      await page.getByTestId("events-filter-open").click();
+      await expectMobileFacetsOperable(page);
+      await openFeed(page, `${host.eventsPath}?format=online&format=hybrid`);
+      const live = liveBlock(page);
+      await expect(live).toBeVisible();
+      await expect(live.getByRole("status").first()).toContainText(
+        "Идёт сейчас",
+      );
+      await expectInsideMobile(page, live);
+      const liveBox = await boxOf(live, "live strip");
+      const feedBox = await boxOf(page.getByTestId("events-feed"), "day feed");
+      expect(feedBox.y).toBeGreaterThanOrEqual(liveBox.y + liveBox.height - 1);
+      const liveCards = feedCards(page).filter({ hasText: "В эфире" });
+      expect(await liveCards.count(), "real mobile LIVE card").toBeGreaterThan(
+        0,
+      );
+      for (const card of await liveCards.all()) {
+        await expect(
+          card.getByRole("status").filter({ visible: true }),
+        ).toContainText("В эфире");
+      }
+      await expectMobileCards(page);
+      await $testInfo.attach(`mobile-feed-${dark ? "dark" : "light"}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: "image/png",
+      });
+
+      await openFeed(page, `${host.eventsPath}?tense=past`);
+      let recordings: string[] = [];
+      for (let batch = 0; batch < 20; batch += 1) {
+        recordings = await expectMobileCards(page);
+        if (
+          recordings.some((text) => /Запись\s*·/u.test(text)) &&
+          recordings.some((text) => /Без записи/u.test(text))
+        )
+          break;
+        if ((await page.getByTestId("events-feed-show-more").count()) === 0)
+          break;
+        await showMore(page, world);
+        await settle(page);
+      }
+      expect(
+        recordings.some((text) => /Запись\s*·/u.test(text)),
+        "real published recording card",
+      ).toBe(true);
+      expect(
+        recordings.some((text) => /Без записи/u.test(text)),
+        "real card with no published cut",
+      ).toBe(true);
+      await $testInfo.attach(`mobile-past-${dark ? "dark" : "light"}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: "image/png",
+      });
+
+      await page
+        .getByRole("link", { name: "Календарь на месяц →", exact: true })
+        .filter({ visible: true })
+        .click();
+      await page.waitForURL((url) => url.searchParams.get("view") === "month");
+      const month = page.getByTestId("month-calendar-mobile");
+      await expect(month).toBeVisible();
+      await expect(page.getByTestId("month-grid-desktop")).toBeHidden();
+      await expectInsideMobile(page, month);
+      const day = month
+        .locator('button[aria-pressed="false"]:not([disabled])')
+        .first();
+      const label = await day.getAttribute("aria-label");
+      await day.focus();
+      await page.keyboard.press("Enter");
+      await expect(day).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByTestId("day-agenda")).toBeVisible();
+      expect(label, "labelled keyboard-operated day").toMatch(/\S/u);
+      await expectNoOverflow(page.locator("html"), "mobile month");
+      await $testInfo.attach(`mobile-month-${dark ? "dark" : "light"}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: "image/png",
+      });
+    }
+  },
+);

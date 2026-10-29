@@ -41,8 +41,9 @@ interface GuardResponse {
  * touches no other call site — the same pattern as `BotProtectionGuard`). For a
  * marked handler it derives the per-user key (the submitted identifier), the
  * per-IP key, and the per-ASN key, then asks {@link RateLimitService}. A refusal
- * is a generic `429` that reveals neither the breached dimension nor whether the
- * account exists (EARS-16).
+ * is a generic `429` that names no identifier-keyed dimension and does not reveal
+ * whether the account exists (EARS-16); a refusal by the per-IP window carries
+ * `Retry-After` until that window resets (003 EARS-13).
  *
  * When the marker carries a scope tag (`@RateLimited("<tag>")`, #1646) the
  * source-address windows are partitioned under it, so that handler's traffic

@@ -209,9 +209,10 @@ export interface RateLimitReceipt {
 
 /**
  * 003 EARS-13 (#3379): the window that refused an attempt and when it rolls
- * over, read at `atMs` on the limiter's clock. `ip` is the client-address
- * window; `user` (identifier) and `asn` are not, and their timing stays inside
- * the API (003 EARS-16).
+ * over, read at `atMs` on the limiter's clock. Only `ip`, the client-address
+ * window, has its reset exposed. `user` is identifier-keyed, so its timing stays
+ * inside the API (003 EARS-16); `asn` is shared by a whole network, so its reset
+ * reflects other clients' traffic and is not the caller's to act on.
  */
 export interface RateLimitRefusal {
   window: "ip" | "user" | "asn";

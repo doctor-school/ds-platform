@@ -460,7 +460,8 @@ gate touches no other call site:
 - **Rate limiting** (EARS-13) — `rate-limit/`: `@RateLimited` + a global guard
   over `RateLimitService` (per-user 10/15 min, per-IP 20/15 min, per-ASN 100/h;
   the per-user window is forgiven on a successful login or reset-complete),
-  on register/login/otp/verify/reset; a refusal is a generic `429`.
+  on register/login/otp/verify/reset; a refusal is a generic `429`. Only a
+  per-IP refusal carries `Retry-After` (whole seconds until that window resets).
   **The per-IP window splits by door** (#2684, EARS-13 amended): the
   VERIFICATION doors (`login`, `login/otp`, `verify` on both storefronts,
   `password/reset/complete`) keep `@RateLimited()` and the bare-address key, and

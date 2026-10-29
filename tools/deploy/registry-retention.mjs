@@ -12,11 +12,11 @@
 //   DRY_RUN            "true" prints the plan only; anything else deletes
 //   GITHUB_STEP_SUMMARY optional; the plan and the result are appended to it
 //
-// Order matters: the registry is listed BEFORE the releases, deployments, hotfix
-// branches, open PRs and `main`, so any tag in the snapshot was pushed after its
-// commit became visible — an open PR's or hotfix branch's current head or a `main`
-// commit can never be missing from the keep-set while its own tag is in the delete
-// list.
+// Execution prerequisite: registry-retention.yml holds the shared registry-images
+// workflow lock from BEFORE the snapshot through the final DELETE, excluding all
+// runtime-images.yml publishers. Listing before the GitHub keep-set lookup alone
+// cannot protect a digest that gains a fresh alias after the snapshot (#3144).
+// Every registry writer must participate in that same lock; never run standalone.
 //
 // Any failure exits non-zero. Before the first DELETE that is a delete of nothing;
 // a refused DELETE (e.g. 405 UNSUPPORTED — the registry does not allow deletion)

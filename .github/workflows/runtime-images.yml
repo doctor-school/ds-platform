@@ -40,11 +40,13 @@ on:
 permissions:
   contents: read
 
-# A PR run is superseded by its next push; a `main` run is never cancelled — every
-# merged SHA keeps its own run and its own digests.
+# Shared with registry-retention.yml: exclude deletion for the entire build,
+# publish, verify and manifest sequence (#3144). Matrix jobs still run in parallel.
+# Superseded PR runs finish; queue:max keeps up to 100 pending runs (not unlimited).
 concurrency:
-  group: runtime-images-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: registry-images
+  queue: max
+  cancel-in-progress: false
 
 env:
   REGISTRY: ds-platform.registry.twcstorage.ru

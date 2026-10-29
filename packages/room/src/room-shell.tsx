@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { createBrowserRoomApi } from "./client/room-api";
 import type { RoomShellProps } from "./types";
-import { PresenceHeartbeat } from "./ui/presence-heartbeat";
+import { PresenceHeartbeat, type RoomStatusProbeAnswer } from "./ui/presence-heartbeat";
 import { RoomHeaderBar } from "./ui/room-header-bar";
 import { RoomPresenceProvider } from "./ui/room-presence";
 import { RoomView } from "./ui/room-view";
@@ -51,6 +51,17 @@ export function RoomShell({
   // the broadcast ended does not re-open itself (a new broadcast is a new grant).
   const [ended, setEnded] = useState(false);
   const onRoomClosed = useCallback(() => setEnded(true), []);
+  // 006 EARS-7 (#1974) — closing the event stops the stream at once, but the room
+  // hears of the close only on its next beat. A player failure is therefore the
+  // moment to ask again: the heartbeat loop publishes its probe into this ref and
+  // the player awaits it on failure — holding its failure overlay meanwhile — so a
+  // closed room shows the end card instead of «Трансляция не загружается».
+  const statusProbe = useRef<(() => Promise<RoomStatusProbeAnswer>) | null>(null);
+  const probeRoomClosed = useCallback(
+    (): Promise<RoomStatusProbeAnswer> =>
+      statusProbe.current?.() ?? Promise.resolve<RoomStatusProbeAnswer>("not-closed"),
+    [],
+  );
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -67,13 +78,17 @@ export function RoomShell({
           api={api}
           intervalSeconds={config.heartbeatIntervalSeconds}
           onRoomClosed={onRoomClosed}
+          probeRef={statusProbe}
         />
         <RoomView
           api={api}
           config={config}
           context={context}
           copy={copy}
+          accountEventsHref={routes.accountEvents}
+          linkComponent={linkComponent}
           ended={ended}
+          probeRoomClosed={probeRoomClosed}
         />
       </RoomPresenceProvider>
     </main>

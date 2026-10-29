@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { PlayerFrame } from "./room-view";
 import type { RoomConfig, StreamProvider } from "@ds/schemas";
 import { createBrowserRoomApi } from "../client/room-api";
@@ -42,14 +43,18 @@ const copy = {
   playerRestart: "Перезапустить плеер",
   endedTitle: "Эфир завершён",
   endedBody: "Запись появится в разделе «Мои события»",
+  endedBodyLink: "Мои события",
 };
+
+/** The host's «Мои события» route (its `routes.accountEvents`), as the shell hands it down. */
+const ACCOUNT_EVENTS = "/account/events";
 
 function configFor(provider: StreamProvider, embedRef = "abc123"): RoomConfig {
   return { stream: { provider, embedRef } } as unknown as RoomConfig;
 }
 
 function renderPlayer(provider: StreamProvider) {
-  return render(<PlayerFrame config={configFor(provider)} copy={copy} />);
+  return render(<PlayerFrame config={configFor(provider)} copy={copy} accountEventsHref={ACCOUNT_EVENTS} />);
 }
 
 /** Advance fake timers by `ms` inside act (drives watchdog / retry timeouts). */
@@ -264,7 +269,7 @@ describe("006 EARS-18 player-failure two-grade model (component)", () => {
   // any player-failure UI, so neither an advisory nor a covering overlay can appear
   // there whatever the state machine holds.
   it("EARS-18.3: the EARS-2 unavailable branch never shows a player-failure state", () => {
-    render(<PlayerFrame config={{ stream: null } as unknown as RoomConfig} copy={copy} />);
+    render(<PlayerFrame config={{ stream: null } as unknown as RoomConfig} copy={copy} accountEventsHref={ACCOUNT_EVENTS} />);
     advance(PLAYER_WATCHDOG_MS * 3);
     expect(screen.getByTestId("room-player-unavailable")).toBeInTheDocument();
     expect(screen.queryByTestId("room-player-suspected")).toBeNull();
@@ -291,7 +296,7 @@ describe("006 EARS-7 the ended room's end card replaces the player", () => {
   });
 
   it("EARS-7.7: the ended player region states «Эфир завершён» and unmounts the embed", () => {
-    render(<PlayerFrame config={configFor("youtube")} copy={copy} ended />);
+    render(<PlayerFrame config={configFor("youtube")} copy={copy} accountEventsHref={ACCOUNT_EVENTS} ended />);
 
     const card = screen.getByTestId("room-player-ended");
     expect(card).toBeInTheDocument();
@@ -302,8 +307,49 @@ describe("006 EARS-7 the ended room's end card replaces the player", () => {
     expect(screen.queryByTestId("room-player-youtube")).toBeNull();
   });
 
+  it("EARS-7.7: the end card's «Мои события» is a link to the host's «Мои события» page, the sentence unchanged", () => {
+    render(<PlayerFrame config={configFor("youtube")} copy={copy} accountEventsHref={ACCOUNT_EVENTS} ended />);
+
+    const card = screen.getByTestId("room-player-ended");
+    const link = screen.getByRole("link", { name: copy.endedBodyLink });
+    expect(card).toContainElement(link);
+    expect(link.getAttribute("href")).toBe(ACCOUNT_EVENTS);
+    // No new text: the body reads exactly as before, only its «Мои события» words link.
+    expect(screen.getByTestId("room-player-ended-body").textContent).toBe(copy.endedBody);
+  });
+
+  it("EARS-7.7: the «Мои события» link keeps light ink on the dark plate when pressed, never the page-blue press tint", () => {
+    render(<PlayerFrame config={configFor("youtube")} copy={copy} accountEventsHref={ACCOUNT_EVENTS} ended />);
+
+    const link = screen.getByRole("link", { name: copy.endedBodyLink });
+    // The DS invariant light-ink tone: white at rest, the AA-safe light press step.
+    expect(link.classList.contains("text-primary-surface-foreground")).toBe(true);
+    expect(link.classList.contains("active:text-primary-surface-muted")).toBe(true);
+    // The default tone's dark-blue press tint would vanish on the near-black plate.
+    expect(link.classList.contains("active:text-primary-action/80")).toBe(false);
+  });
+
+  it("EARS-7.7: the «Мои события» link renders through the host's link component", () => {
+    const HostLink = ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
+      <a href={href} data-host-link="" {...rest}>
+        {children}
+      </a>
+    );
+    render(
+      <PlayerFrame
+        config={configFor("youtube")}
+        copy={copy}
+        accountEventsHref={ACCOUNT_EVENTS}
+        linkComponent={HostLink}
+        ended
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: copy.endedBodyLink }).hasAttribute("data-host-link")).toBe(true);
+  });
+
   it("EARS-7.7: the ended region carries no live badge and no control", () => {
-    render(<PlayerFrame config={configFor("youtube")} copy={copy} ended />);
+    render(<PlayerFrame config={configFor("youtube")} copy={copy} accountEventsHref={ACCOUNT_EVENTS} ended />);
 
     expect(screen.queryByText(copy.liveBadge)).toBeNull();
     // No restart, no refresh — the recording is not ready at close, so the room
@@ -318,7 +364,7 @@ describe("006 EARS-7 the ended room's end card replaces the player", () => {
     // auto-retry budget re-creates the embed. Draining the whole EARS-18 timer
     // surface (watchdog + every retry step) proves the end card owns the region —
     // no timer resurrects the embed or paints a status over the close.
-    render(<PlayerFrame config={configFor("vk")} copy={copy} ended />);
+    render(<PlayerFrame config={configFor("vk")} copy={copy} accountEventsHref={ACCOUNT_EVENTS} ended />);
     advance(
       PLAYER_WATCHDOG_MS + PLAYER_RETRY_DELAY_MS * (PLAYER_MAX_AUTO_RETRIES + 1),
     );
@@ -333,7 +379,7 @@ describe("006 EARS-7 the ended room's end card replaces the player", () => {
     render(
       <PlayerFrame
         config={{ stream: null } as unknown as RoomConfig}
-        copy={copy}
+        copy={copy} accountEventsHref={ACCOUNT_EVENTS}
         ended
       />,
     );
@@ -343,7 +389,7 @@ describe("006 EARS-7 the ended room's end card replaces the player", () => {
   });
 
   it("EARS-7.7: a room that has NOT ended is untouched — the embed and the live badge stay", () => {
-    render(<PlayerFrame config={configFor("youtube")} copy={copy} />);
+    render(<PlayerFrame config={configFor("youtube")} copy={copy} accountEventsHref={ACCOUNT_EVENTS} />);
 
     expect(screen.queryByTestId("room-player-ended")).toBeNull();
     expect(screen.getByTestId("room-player-youtube")).toBeInTheDocument();
@@ -392,7 +438,7 @@ describe("006 EARS-18.5 presence is decoupled from player state", () => {
           api={createBrowserRoomApi({ slug: "hsn" })}
           intervalSeconds={5}
         />
-        <PlayerFrame config={configFor("vk")} copy={copy} />
+        <PlayerFrame config={configFor("vk")} copy={copy} accountEventsHref={ACCOUNT_EVENTS} />
       </RoomPresenceProvider>,
     );
 

@@ -1,15 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@ds/design-system/badge";
+import { Link as DsLink } from "@ds/design-system/link";
 import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import type { RoomConfig } from "@ds/schemas";
 import { resolveEmbed } from "../model/room-player";
 import { usePlayerFailureState } from "../client/use-player-failure-state";
+import { ROOM_STATUS_PROBE_WAIT_MS } from "../model/room-player-state";
 import type { BrowserRoomApi } from "../client/room-api";
+import type { RoomStatusProbeAnswer } from "./presence-heartbeat";
 import type { RoomCopyStrings } from "../copy/room-copy";
-import type { RoomContext } from "../types";
+import type { RoomContext, RoomLinkComponent } from "../types";
 import { RoomChat, type RoomChatCopy } from "./room-chat";
+import { PlainAnchor } from "./room-header-bar";
 import { usePresenceCount } from "./room-presence";
 
 /**
@@ -66,6 +70,7 @@ export type RoomViewCopy = Pick<
   // the eyebrow/pill wording that replaces «Идёт эфир».
   | "endedTitle"
   | "endedBody"
+  | "endedBodyLink"
   | "endedBadge"
 > &
   RoomChatCopy & {
@@ -90,6 +95,7 @@ type PlayerCopy = Pick<
   | "playerRestart"
   | "endedTitle"
   | "endedBody"
+  | "endedBodyLink"
 >;
 
 /** The fixed-white outline restart control — the same «Перезапустить плеер» affordance
@@ -199,15 +205,74 @@ function postYouTubeListening(iframe: HTMLIFrameElement) {
   );
 }
 
+/**
+ * 006 EARS-7 (#3468) — the end card's body sentence with its «Мои события» words
+ * as a link to the host's «Мои события» page. The sentence is rendered WHOLE (no
+ * new text): `linkWords` is one occurrence inside `body` (pinned by the RU copy
+ * suite) and only that span becomes the link. The DS `Link` owns the hover +
+ * focus states via `asChild` over the host's link component; the inline variant
+ * keeps a resting underline, and `tone="on-primary"` — the DS invariant light-ink
+ * tone (white at rest, the AA-safe light press step, identical in every theme) —
+ * keeps it legible on the permanently-dark player plate in every state, where
+ * the default tone's dark-blue press tint would vanish.
+ */
+function EndedBody({
+  body,
+  linkWords,
+  href,
+  linkComponent,
+}: {
+  body: string;
+  linkWords: string;
+  href: string;
+  linkComponent?: RoomLinkComponent | undefined;
+}) {
+  const LinkImpl = linkComponent ?? PlainAnchor;
+  const at = body.indexOf(linkWords);
+  const link = (
+    <DsLink asChild variant="inline" tone="on-primary">
+      <LinkImpl href={href}>{linkWords}</LinkImpl>
+    </DsLink>
+  );
+  // Unreachable while the copy suite holds; the sentence stays truthful whole.
+  if (at < 0) return <>{body}</>;
+  return (
+    <>
+      {body.slice(0, at)}
+      {link}
+      {body.slice(at + linkWords.length)}
+    </>
+  );
+}
+
 export function PlayerFrame({
   config,
   copy,
+  accountEventsHref,
+  linkComponent,
   ended = false,
+  probeRoomClosed,
 }: {
   config: RoomConfig;
   copy: PlayerCopy;
+  /** 006 EARS-7 (#3468) — the host's «Мои события» page (`RoomRoutes.accountEvents`), the end card's link. */
+  accountEventsHref: string;
+  /** D7 — the host's link component; defaults to a plain anchor. */
+  linkComponent?: RoomLinkComponent | undefined;
   /** 006 EARS-7 — the broadcast is over (server-proven); render the end card. */
   ended?: boolean;
+  /**
+   * 006 EARS-7 (#1974) — the room's status probe, awaited each time the player
+   * enters a failure state (`failed` / `retrying`) and on a visible resume while
+   * failed. A closed event stops the stream, so a failure may be the close itself:
+   * the failure UI is HELD until the probe answers (bounded by
+   * `ROOM_STATUS_PROBE_WAIT_MS`). `closed` (the shell flips `ended`) keeps it
+   * held into the end card; `not-closed` releases it. While the tab is hidden the
+   * status cannot be asked (`unknown`): the failure stays held with no bounded
+   * wait running, and the visible resume beat is the probe.
+   * Absent, the failure UI renders at once (no room to ask).
+   */
+  probeRoomClosed?: (() => Promise<RoomStatusProbeAnswer>) | undefined;
 }) {
   const embed = resolveEmbed(config.stream);
   // 006 EARS-18 — the runtime player-failure state machine. Hooks run unconditionally
@@ -219,6 +284,61 @@ export function PlayerFrame({
   // state").
   const provider = embed.kind === "unavailable" ? "cdnvideo" : embed.kind;
   const { status, grade, failure, embedKey, restart } = usePlayerFailureState(provider);
+  // 006 EARS-7 (#1974) — the failure-overlay hold. Derived during render (never
+  // set from an effect) so the FIRST frame of a failure is already held: the
+  // overlay cannot flash for one probe round trip before the end card.
+  const probeRef = useRef(probeRoomClosed);
+  useEffect(() => {
+    probeRef.current = probeRoomClosed;
+  }, [probeRoomClosed]);
+  const holdsForProbe = probeRoomClosed !== undefined;
+  const inFailure = status === "failed" || status === "retrying";
+  // `true` once this failure episode's probe answered `not-closed` (or its bounded
+  // wait lapsed on a visible tab); reset when the episode ends and on a visible
+  // resume. A hidden tab never releases it: there is nobody to show the overlay
+  // to and no beat to ask with, so the resume beat decides.
+
+  const [probeReleased, setProbeReleased] = useState(false);
+  const [resumes, setResumes] = useState(0);
+  useEffect(() => {
+    if (!holdsForProbe) return;
+    // The tab-return path: a visible resume re-asks before showing a stale failure.
+    const onVisibilityChange = (): void => {
+      if (document.hidden) return;
+      setProbeReleased(false);
+      setResumes((n) => n + 1);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [holdsForProbe]);
+  useEffect(() => {
+    if (ended) return;
+    if (!inFailure) {
+      setProbeReleased(false);
+      return;
+    }
+    const probe = probeRef.current;
+    if (!probe) return;
+    // Hidden: nothing can be asked (EARS-4) — stay held until the visible resume
+    // re-runs this effect, and run no bounded wait that would release it unseen.
+    if (document.hidden) return;
+    let cancelled = false;
+    const release = (): void => {
+      if (!cancelled && !document.hidden) setProbeReleased(true);
+    };
+    const timer = setTimeout(release, ROOM_STATUS_PROBE_WAIT_MS);
+    void probe().then((answer) => {
+      // `closed`: stay held — the shell's `ended` swaps in the end card.
+      // `unknown`: the tab went hidden meanwhile — stay held for the resume beat.
+      if (answer === "not-closed") release();
+      else if (answer === "unknown") clearTimeout(timer);
+    }, release);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [status, inFailure, ended, resumes]);
+  const failureHeld = holdsForProbe && inFailure && !probeReleased;
   // The `origin` param YouTube's IFrame API wants is resolved AFTER mount so the
   // first client render matches SSR (both `?enablejsapi=1`), avoiding a hydration
   // mismatch; the extra param arrives on the post-mount re-render.
@@ -242,8 +362,16 @@ export function PlayerFrame({
         className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 px-6 text-center"
       >
         <p className="text-lg font-extrabold text-white">{copy.endedTitle}</p>
-        <p className="max-w-sm text-sm leading-relaxed text-white/60">
-          {copy.endedBody}
+        <p
+          data-testid="room-player-ended-body"
+          className="max-w-sm text-sm leading-relaxed text-white/60"
+        >
+          <EndedBody
+            body={copy.endedBody}
+            linkWords={copy.endedBodyLink}
+            href={accountEventsHref}
+            linkComponent={linkComponent}
+          />
         </p>
       </div>
     );
@@ -313,7 +441,8 @@ export function PlayerFrame({
         className="absolute inset-0 h-full w-full"
       />
       {/* CONFIRMED grade — covering overlay + (auto-retry) manual restart. */}
-      {(status === "retrying" || (status === "failed" && grade === "confirmed")) && (
+      {!failureHeld &&
+        (status === "retrying" || (status === "failed" && grade === "confirmed")) && (
         <PlayerFailureOverlay
           status={status}
           failure={failure}
@@ -322,7 +451,7 @@ export function PlayerFrame({
         />
       )}
       {/* SUSPECTED grade — non-covering advisory banner, embed stays visible. */}
-      {status === "failed" && grade === "suspected" && (
+      {!failureHeld && status === "failed" && grade === "suspected" && (
         <PlayerSuspectedBanner copy={copy} onRestart={restart} />
       )}
       {/* UNVERIFIED (cdnvideo, from mount) renders NOTHING of its own: the room has
@@ -402,19 +531,28 @@ export function RoomView({
   config,
   context,
   copy,
+  accountEventsHref,
+  linkComponent,
   ended = false,
+  probeRoomClosed,
 }: {
   /** The room's ONE browser transport — `createBrowserRoomApi({ slug })`. */
   api: BrowserRoomApi;
   config: RoomConfig;
   context: RoomContext;
   copy: RoomViewCopy;
+  /** 006 EARS-7 (#3468) — the host's «Мои события» page, handed to the end card. */
+  accountEventsHref: string;
+  /** D7 — the host's link component; defaults to a plain anchor. */
+  linkComponent?: RoomLinkComponent | undefined;
   /**
    * 006 EARS-7 — the server-proven ended phase, lifted by {@link RoomShell}. The
    * view does not derive it; it only projects it onto the player region, the
    * mobile eyebrow and the chat composer.
    */
   ended?: boolean;
+  /** 006 EARS-7 (#1974) — handed to {@link PlayerFrame}; the shell's room-status probe. */
+  probeRoomClosed?: (() => Promise<RoomStatusProbeAnswer>) | undefined;
 }) {
   const presenceCount = usePresenceCount();
   // Desktop chat collapse + the unread counter (messages missed while folded).
@@ -442,7 +580,16 @@ export function RoomView({
         setCollapsed(next);
         setUnread(0);
       }}
-      player={<PlayerFrame config={config} copy={copy} ended={ended} />}
+      player={
+        <PlayerFrame
+          config={config}
+          copy={copy}
+          accountEventsHref={accountEventsHref}
+          linkComponent={linkComponent}
+          ended={ended}
+          probeRoomClosed={probeRoomClosed}
+        />
+      }
       contextStrip={<ContextStrip context={context} />}
       context={<EventContext context={context} copy={copy} />}
       chat={

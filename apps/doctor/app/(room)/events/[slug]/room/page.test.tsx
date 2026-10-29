@@ -51,6 +51,7 @@ describe("#2073: /events/:slug/room is a mount of @ds/room-page with the doctor 
         room: {
           brandHome: "/",
           eventPage: "/events/cardio-live",
+          accountEvents: "/account/events",
         },
       },
     );

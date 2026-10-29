@@ -22,6 +22,7 @@ const ACADEMY: RoomRouteTableHost = {
   eventPage: "/webinars/:slug",
   brandHome: "/webinars",
   login: "/login",
+  accountEvents: "/account/events",
 };
 
 const DOCTOR: RoomRouteTableHost = {
@@ -29,6 +30,7 @@ const DOCTOR: RoomRouteTableHost = {
   eventPage: "/events/:slug",
   brandHome: "/",
   login: "/login",
+  accountEvents: "/account/events",
 };
 
 describe("006 room route table over host values", () => {
@@ -56,14 +58,18 @@ describe("006 room route table over host values", () => {
     expect(routes.entry.notLive).toBe("/webinars/cardio-live");
   });
 
-  it("006 EARS-11: the in-room links are the host's brand home and the event page", () => {
+  it("006 EARS-11 / EARS-7: the in-room links are the host's brand home, the event page and its «Мои события» page", () => {
     expect(buildRoomRouteTable("cardio-live", ACADEMY).room).toEqual({
       brandHome: "/webinars",
       eventPage: "/webinars/cardio-live",
+      accountEvents: "/account/events",
     });
-    expect(buildRoomRouteTable("cardio-live", DOCTOR).room).toEqual({
+    expect(
+      buildRoomRouteTable("cardio-live", { ...DOCTOR, accountEvents: "/me/events" }).room,
+    ).toEqual({
       brandHome: "/",
       eventPage: "/events/cardio-live",
+      accountEvents: "/me/events",
     });
   });
 

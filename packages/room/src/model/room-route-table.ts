@@ -31,13 +31,15 @@ export interface RoomRouteTableHost {
   readonly brandHome: string;
   /** The host's login route, e.g. `/login`. */
   readonly login: string;
+  /** The host's «Мои события» page, e.g. `/account/events` — the end card's link (006 EARS-7). */
+  readonly accountEvents: string;
 }
 
 /** The whole table one room render needs. */
 export interface RoomRouteTable {
   /** The three EARS-6 refusal targets consumed by `resolveRoomEntry`. */
   entry: RoomEntryRoutes;
-  /** The two in-room navigation targets consumed by `RoomShell`. */
+  /** The three in-room navigation targets consumed by `RoomShell`. */
   room: RoomRoutes;
 }
 
@@ -72,6 +74,7 @@ export function buildRoomRouteTable(
     room: {
       brandHome: host.brandHome,
       eventPage,
+      accountEvents: host.accountEvents,
     },
   };
 }

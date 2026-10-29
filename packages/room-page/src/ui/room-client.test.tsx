@@ -45,7 +45,11 @@ const PROPS: Omit<RoomClientProps, "displayName"> = {
   },
   context: { school: "Школа", title: "Эфир", speakers: "А. Иванов" },
   copy: { ...ROOM_COPY_RU, brandHome: "На страницу эфиров" },
-  routes: { brandHome: "/webinars", eventPage: "/webinars/cardio-live" },
+  routes: {
+    brandHome: "/webinars",
+    eventPage: "/webinars/cardio-live",
+    accountEvents: "/account/events",
+  },
 };
 
 beforeEach(() => {

@@ -43,6 +43,14 @@ describe("006 EARS-10 ROOM_COPY_RU — the default RU room copy", () => {
     expect(flatten(ROOM_COPY_RU).sort()).toEqual([...ROOM_COPY_KEYS].sort());
   });
 
+  it("EARS-7: the end card's link words are a part of its body sentence (owner 2026-10-29, #3468: no new text)", () => {
+    expect(ROOM_COPY_RU.endedBody).toContain(`«${ROOM_COPY_RU.endedBodyLink}»`);
+  });
+
+  it("EARS-7: an ended room's empty chat says no messages were sent (owner 2026-10-29, #3468)", () => {
+    expect(ROOM_COPY_RU.chatEmptyEnded).toBe("В этом эфире сообщений не было.");
+  });
+
   it("EARS-10: the four display-name validation strings are the shared validation wording (D18)", () => {
     expect(ROOM_COPY_RU.errors).toEqual({
       displayNameRequired: "Введите имя и фамилию.",

@@ -27,6 +27,18 @@ function provesRoomClosed(error: unknown): boolean {
 }
 
 /**
+ * 006 EARS-7 (#1974) — what an out-of-cadence status probe learned:
+ * - `closed` — the answer PROVED the event left `live` (already reported through
+ *   `onRoomClosed`);
+ * - `not-closed` — a beat was sent and its outcome proves nothing about a close
+ *   (accepted, refused otherwise, network/transport failure);
+ * - `unknown` — nothing was sent: the tab is hidden (EARS-4 sends no beat while
+ *   backgrounded), so the room's status is simply not known yet. The visible
+ *   resume beat is the next probe.
+ */
+export type RoomStatusProbeAnswer = "closed" | "not-closed" | "unknown";
+
+/**
  * Leave a diagnostic breadcrumb for a swallowed beat. The loop is best-effort by
  * design (EARS-4: a failed beat never surfaces an error to the doctor and never
  * clears the last known count), but a beat that fails with ZERO signal makes a
@@ -72,6 +84,7 @@ export function PresenceHeartbeat({
   api,
   intervalSeconds,
   onRoomClosed,
+  probeRef,
 }: {
   /** The room's ONE browser transport — `createBrowserRoomApi({ slug })`. */
   api: BrowserRoomApi;
@@ -83,6 +96,15 @@ export function PresenceHeartbeat({
    * ended phase; the component itself still renders nothing.
    */
   onRoomClosed?: (() => void) | undefined;
+  /**
+   * 006 EARS-7 (#1974) — the loop publishes a status probe here so the room can
+   * re-probe its status out of cadence (on a player failure) through the SAME
+   * gated call: no second endpoint, no second refusal reading. It resolves a
+   * {@link RoomStatusProbeAnswer} and obeys the loop's own gates — nothing is sent
+   * while hidden (`unknown`), a latched close resolves `closed` — and it JOINS a
+   * beat already in flight instead of sending a second one.
+   */
+  probeRef?: { current: (() => Promise<RoomStatusProbeAnswer>) | null } | undefined;
 }) {
   const setPresenceCount = usePresenceCountSetter();
   // Held in a ref so a host passing an inline callback cannot re-run the effect —
@@ -100,11 +122,13 @@ export function PresenceHeartbeat({
     // EARS-7 — a one-way latch. Once the server has proven the event left `live`,
     // the loop is done: no grid beat, and no beat on a later visible resume.
     let closed = false;
+    // The beat currently awaiting its answer — a status probe joins it (#1974).
+    let inflight: Promise<boolean> | null = null;
 
-    const beat = (): void => {
-      // Visibility gate: a backgrounded tab emits nothing (EARS-4).
-      if (closed || document.hidden) return;
-      void api
+    // One gated beat; resolves `true` iff the answer proved the event left `live`.
+    // It never rejects: every failure is handled (and diagnosed) in here.
+    const send = (): Promise<boolean> => {
+      const attempt = api
         .sendHeartbeat()
         .then((body) => {
           // Apply the ack as a best-effort fallback to primary Centrifugo count
@@ -115,6 +139,7 @@ export function PresenceHeartbeat({
           // A `null` count is the withheld one (006 EARS-19): it drops the shown count.
           if (ack.success) setPresenceCount(ack.data.presenceCount);
           else reportBeatFailure("ack payload failed the schema contract");
+          return false;
         })
         .catch((error: unknown) => {
           // EARS-7 — the ONE refusal that is a product event, not a diagnostic:
@@ -123,21 +148,42 @@ export function PresenceHeartbeat({
           // the end card. Latch first, so a beat already in flight cannot report
           // the close twice.
           if (provesRoomClosed(error)) {
-            if (closed) return;
+            if (closed) return true;
             closed = true;
             stop();
             onRoomClosedRef.current?.();
-            return;
+            return true;
           }
           // Presence capture is best-effort — a failed beat never reaches the
           // doctor, but it does leave a dev-visible breadcrumb (#1122).
           reportBeatFailure("beat request failed (refused/network/transport)", error);
+          return false;
         });
+      inflight = attempt;
+      void attempt.then(() => {
+        if (inflight === attempt) inflight = null;
+      });
+      return attempt;
+    };
+
+    const beat = (): void => {
+      // Visibility gate: a backgrounded tab emits nothing (EARS-4).
+      if (closed || document.hidden) return;
+      void send();
+    };
+
+    // 006 EARS-7 (#1974) — the out-of-cadence status probe (see `probeRef`).
+    const probe = (): Promise<RoomStatusProbeAnswer> => {
+      if (closed) return Promise.resolve("closed");
+      if (document.hidden) return Promise.resolve("unknown");
+      return (inflight ?? send()).then((proven) => (proven ? "closed" : "not-closed"));
     };
 
     const start = (): void => {
       if (timer || closed) return;
-      beat(); // capture from minute one / on re-entry, then on the N-second grid.
+      // Capture from minute one / on re-entry, then on the N-second grid. A probe
+      // already in flight (sent by the same visible resume) IS the re-entry beat.
+      if (!inflight) beat();
       timer = setInterval(beat, intervalSeconds * 1000);
     };
 
@@ -155,12 +201,14 @@ export function PresenceHeartbeat({
 
     if (!document.hidden) start();
     document.addEventListener("visibilitychange", onVisibilityChange);
+    if (probeRef) probeRef.current = probe;
 
     return () => {
+      if (probeRef?.current === probe) probeRef.current = null;
       stop();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [api, intervalSeconds, setPresenceCount]);
+  }, [api, intervalSeconds, setPresenceCount, probeRef]);
 
   return null;
 }

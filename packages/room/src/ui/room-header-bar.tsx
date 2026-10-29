@@ -59,7 +59,7 @@ export interface RoomHeaderBarProps {
 }
 
 /** The D7 default — a plain anchor, so the package hardcodes no router. */
-const PlainAnchor: RoomLinkComponent = ({ href, children, ...rest }) => (
+export const PlainAnchor: RoomLinkComponent = ({ href, children, ...rest }) => (
   <a href={href} {...rest}>
     {children}
   </a>

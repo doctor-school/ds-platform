@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DOCTOR_EVENT_PAGE,
+  DOCTOR_EVENTS_STOREFRONT,
   DOCTOR_ROOM_PAGE,
 } from "./events-storefront.host-config";
 import { DOCTOR_ROOM_RETURN_ROUTES } from "./room-config";
@@ -17,6 +18,7 @@ describe("006 EARS-6 DOCTOR_ROOM_PAGE — the doctor storefront's live-room host
         eventPage: "/events/:slug",
         brandHome: "/",
         login: "/login",
+        accountEvents: "/account/events",
       },
       copy: { brandHome: "На главную" },
       eventRead: {
@@ -28,6 +30,12 @@ describe("006 EARS-6 DOCTOR_ROOM_PAGE — the doctor storefront's live-room host
 
   it("EARS-6: the room template is the one the room-return codec reads", () => {
     expect(DOCTOR_ROOM_PAGE.routes.room).toBe(DOCTOR_ROOM_RETURN_ROUTES.room);
+  });
+
+  it("EARS-7: the end card's «Мои события» link is the storefront's own «Мои события» route", () => {
+    expect(DOCTOR_ROOM_PAGE.routes.accountEvents).toBe(
+      DOCTOR_EVENTS_STOREFRONT.routes.accountEvents,
+    );
   });
 
   it("EARS-2: the room's event context is the same read the doctor event page makes", () => {

@@ -50,6 +50,7 @@ const CONFIG: RoomPageHostConfig = {
     eventPage: "/webinars/:slug",
     brandHome: "/webinars",
     login: "/login",
+    accountEvents: "/account/events",
   },
   copy: { brandHome: "На страницу эфиров" },
   eventRead: { pagePath: "/v1/public/events" },
@@ -164,7 +165,11 @@ describe("006 EARS-2 / EARS-14: a granted doctor gets the room, or the name prom
         speakers: "А. Иванов · Б. Петрова",
       },
       copy: { ...ROOM_COPY_RU, brandHome: "На страницу эфиров" },
-      routes: { brandHome: "/webinars", eventPage: "/webinars/cardio-live" },
+      routes: {
+        brandHome: "/webinars",
+        eventPage: "/webinars/cardio-live",
+        accountEvents: "/account/events",
+      },
       displayName: "Иван Петров",
     });
   });

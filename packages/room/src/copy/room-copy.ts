@@ -93,12 +93,23 @@ export interface RoomCopyStrings {
   // both the header pill and the mobile slim-bar eyebrow (one wording, one key).
   endedTitle: string;
   endedBody: string;
+  /**
+   * The words of `endedBody` that link to the host's «Мои события» page — a part
+   * of the sentence, not new text (#3468): the card renders `endedBody` whole and
+   * turns this one occurrence into the link.
+   */
+  endedBodyLink: string;
   endedBadge: string;
   chatEnded: string;
   // Chat panel (EARS-3).
   moderatorPin: string;
   chatLoading: string;
   chatEmpty: string;
+  /**
+   * The ended room's empty-ledger line (#3468): a closed room with no messages
+   * must not promise that the chat «откроется» — it never will.
+   */
+  chatEmptyEnded: string;
   chatParticipant: string;
   chatYou: string;
   chatNewMessages: string;
@@ -160,11 +171,13 @@ export const ROOM_COPY_KEYS = [
   "programNow",
   "endedTitle",
   "endedBody",
+  "endedBodyLink",
   "endedBadge",
   "chatEnded",
   "moderatorPin",
   "chatLoading",
   "chatEmpty",
+  "chatEmptyEnded",
   "chatParticipant",
   "chatYou",
   "chatNewMessages",

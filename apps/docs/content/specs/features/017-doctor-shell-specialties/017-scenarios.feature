@@ -81,6 +81,46 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
       And each entry carries a stable id
       And specialties, directions and schools are three distinct read models
 
+  Rule: Public specialty choice, whole-book search and changing the choice
+
+    Background:
+      Given a guest uses the configured Doctor specialty catalog
+
+    @EARS-3 @failure @public-specialty-behavior @017-invalid-specialty-choice
+    Scenario: A specialty outside the book is refused
+      When a choice is submitted for an identifier that is not a member of the specialty book
+      Then the request is refused as a Problem Details document with an exact errorCode
+      And no choice is recorded
+      And no storefront path is able to write a new entry into the book
+
+    @EARS-5 @happy @public-specialty-behavior @017-whole-book-fragment-search
+    Scenario Outline: Typing a fragment narrows the whole book, not the frequent set
+      Given a visitor on the open catalog
+      When they type "<fragment>" into the search field
+      Then the list narrows to entries containing that fragment anywhere in the name
+      And the match ignores letter case and the ё/е distinction
+      And entries outside the frequent set are reachable this way
+
+      Examples:
+        | fragment |
+        | орто     |
+        | ОРТО     |
+        | акушер   |
+
+    @EARS-7 @happy @public-specialty-behavior @017-collapsed-choice-change
+    Scenario Outline: The collapsed row names the choice and offers to change it
+      Given a visitor whose remembered specialty is <specialty>
+      When they open the storefront home page
+      Then the catalog is collapsed to a single row naming <specialty>
+      And the row offers a «сменить» control and the line about the specialty and adjacent areas
+      When they activate «сменить»
+      Then the catalog re-opens in its full search-first form
+
+      Examples:
+        | specialty                    |
+        | Травматология и ортопедия    |
+        | Другое                       |
+
   Rule: Remaining storefront and operator scenarios
 
     Background:
@@ -129,30 +169,6 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
       And the four scale counters render from one computed read carrying its computedAt
       And no rouble amount, cart, subscription or payment affordance appears anywhere on the page
       And the page never states who finances the doctor's learning
-
-    @EARS-3 @failure
-    Scenario: A specialty outside the book is refused
-      When a choice is submitted for an identifier that is not a member of the specialty book
-      Then the request is refused as a Problem Details document with an exact errorCode
-      And no choice is recorded
-      And no storefront path is able to write a new entry into the book
-
-    # ----------------------------------------------------------- the catalog
-
-    @EARS-5 @happy
-    Scenario Outline: Typing a fragment narrows the whole book, not the frequent set
-      Given a visitor on the open catalog
-      When they type "<fragment>" into the search field
-      Then the list narrows to entries containing that fragment anywhere in the name
-      And the match ignores letter case and the ё/е distinction
-      And entries outside the frequent set are reachable this way
-
-      Examples:
-        | fragment |
-        | орто     |
-        | ОРТО     |
-        | акушер   |
-
     # -------------------------------------------------------------- the memory
 
     @EARS-6 @happy
@@ -183,21 +199,6 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
       When they sign in and make their first authenticated navigation
       Then the profile value stands unchanged
       And the session value is discarded with no prompt and no merge
-
-    @EARS-7 @happy
-    Scenario Outline: The collapsed row names the choice and offers to change it
-      Given a visitor whose remembered specialty is <specialty>
-      When they open the storefront home page
-      Then the catalog is collapsed to a single row naming <specialty>
-      And the row offers a «сменить» control and the line about the specialty and adjacent areas
-      When they activate «сменить»
-      Then the catalog re-opens in its full search-first form
-
-      Examples:
-        | specialty                    |
-        | Травматология и ортопедия    |
-        | Другое                       |
-
     @EARS-7 @happy
     Scenario: Re-choosing re-targets everything without a save step
       Given a visitor with a remembered specialty and the catalog re-opened

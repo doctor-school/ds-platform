@@ -3,7 +3,7 @@ title: "048 — Materials feed: own materials, the reading page and the rail on 
 description: "Requirements for slice 1 of feature 048: platform administrators write news items and expert columns in apps/admin with a TipTap rich-text editor of @ds/design-system, preview, publish, edit and unpublish them, optionally naming a partner from the 032 organisation registry that the card marks «Партнёрский материал · <партнёр>»; every published material becomes an entry of the one materials feed that later network connectors also write; the Academy home shows that feed as one horizontal rail «Новости, блог и видео» — newest first, the next card partly visible, ←/→ on desktop, swipe on a phone, keyboard scrolling, older materials loaded near the end, honest loading / empty / error states, nothing moving or playing by itself; each material has its own reading page on academy.doctor.school; the doctor storefront shows nothing of the feed; platform-administrator-only writes with the second factor and the 010 change audit. No network connector, source list or per-material hiding in this slice."
 slug: 048-materials-feed
 status: Draft
-issues: []
+issues: [3511, 3512, 3513, 3514, 3516, 3517]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/issues/3403
 prior_decisions:
@@ -137,9 +137,9 @@ Each Issue is a sub-issue of #3403 and ships its UI with its backend; slices and
 
 | EARS                                                    | Issue | Work package                                                                                                        | `blocked_by`                                               |
 | ------------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| EARS-2                                                  | —     | **Rich-text body** — body contract, TipTap editor primitive, shared renderer                                        | —                                                          |
-| EARS-1, EARS-4, EARS-5, EARS-6, EARS-7, EARS-8, EARS-19 | —     | **Materials authoring** — tables and migration, admin endpoints, «Материалы» list and form with the partner, access | Rich-text body; external #3492 (032 registry head)         |
-| EARS-9, EARS-10, EARS-11, EARS-19                       | —     | **Public reads** — feed read and material read, the read-time expert and partner projection                         | Materials authoring; external #3492                        |
-| EARS-3, EARS-12, EARS-17                                | —     | **Reading page** — `/materials/{slug}`, admin preview, doctor-host absence                                          | Public reads, Rich-text body                               |
-| EARS-13, EARS-14, EARS-15, EARS-16, EARS-19             | —     | **Feed card and home rail** — shared card with the partner mark, rail, paging and states on the Academy home        | Public reads; external #3492                               |
-| EARS-18, V-9 / V-10 journeys (EARS-1…EARS-17, EARS-19)  | —     | **Browser journeys** — CI Playwright admin and Academy journeys, narrow screens and axe                             | Materials authoring, Reading page, Feed card and home rail |
+| EARS-2                                                  | #3511 | **Rich-text body** — body contract, TipTap editor primitive, shared renderer                                        | —                                                          |
+| EARS-1, EARS-4, EARS-5, EARS-6, EARS-7, EARS-8, EARS-19 | #3512 | **Materials authoring** — tables and migration, admin endpoints, «Материалы» list and form with the partner, access | Rich-text body; external #3492 (032 registry head)         |
+| EARS-9, EARS-10, EARS-11, EARS-19                       | #3513 | **Public reads** — feed read and material read, the read-time expert and partner projection                         | Materials authoring; external #3492                        |
+| EARS-3, EARS-12, EARS-17                                | #3514 | **Reading page** — `/materials/{slug}`, admin preview, doctor-host absence                                          | Public reads, Rich-text body                               |
+| EARS-13, EARS-14, EARS-15, EARS-16, EARS-19             | #3516 | **Feed card and home rail** — shared card with the partner mark, rail, paging and states on the Academy home        | Public reads; external #3492                               |
+| EARS-18, V-9 / V-10 journeys (EARS-1…EARS-17, EARS-19)  | #3517 | **Browser journeys** — CI Playwright admin and Academy journeys, narrow screens and axe                             | Materials authoring, Reading page, Feed card and home rail |

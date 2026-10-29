@@ -90,7 +90,8 @@ sequenceDiagram
 
 - One transaction; rename, not copy, so ids, slugs, versions, timestamps and every `project_organisations` FK survive by construction. The final assertion aborts the migration on any mismatch rather than leaving a partially absorbed registry.
 - Display rules start on: every absorbed partner was publicly shown before, so the migration changes nothing a visitor sees.
-- The 010 audit rows of the former partners keep their entity reference; the entity type label is updated to `organisation` by the same migration so the edit history of one organisation reads as one history.
+- The 010 audit ledger is append-only (`audit_ledger_append_only()`, ADR-0003 §2.7), so the migration touches no ledger row: the former partners' rows keep their `data.partners.*` event type and `metadata.table` untouched, exactly as migration 0026 left the topics→directions rows. The history read finds one organisation's rows by its unchanged id (`pk`) under both entity names, so its edit history reads as one history.
+- Dependent objects the migration also handles: the `partners_audit` trigger is re-created as `organisations_audit` and `project_organisations_audit` for the audit-coverage guard (0026 pattern); the new `organisation_roles` and `organisation_role_assignments` get `audit_row_change()` triggers (EARS-13 depends on them); the `media_entity_kind` value `partner` and the `partner` slug base in `taxonomySlugBase` are kept as stored identifiers (renaming an enum value of retained media rows buys nothing a visitor sees), recorded as a lead decision.
 
 ## Endpoints
 
@@ -166,7 +167,9 @@ flowchart LR
   A[Registry and roles<br/>EARS-1,2,3,11,13,14] --> B[Lifecycle<br/>EARS-4,6,7,8]
   A --> C[Public projections<br/>EARS-5,12]
   A --> D[Find and dedupe<br/>EARS-9,10]
+  B --> E[Admin browser journey<br/>V-8]
+  D --> E
 ```
 
 - **Registry and roles** goes first: the migration, the renamed module and the replaced admin section must ship together — a release with the rename but without the admin section would leave the operator with no way to edit partners.
-- The other three depend only on it and can run in parallel. 030 slice 1 (project ↔ organisation panel) and 029 (home count line) depend on «Registry and roles» and «Public projections» respectively.
+- The other three depend only on it and can run in parallel; the **Admin browser journey** (V-8) closes the slice and waits on Registry and roles, Lifecycle and Find and dedupe. 030 slice 1 (project ↔ organisation panel) and 029 (home count line) depend on «Registry and roles» and «Public projections» respectively.

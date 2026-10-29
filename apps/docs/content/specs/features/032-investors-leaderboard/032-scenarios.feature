@@ -7,10 +7,10 @@ Feature: 032 — Organization registry and its admin
   Background:
     Given a platform administrator is signed in to the admin with a second factor
     And the role list holds «Инвестор», «Клиническая площадка» and «Образовательный лицензиат»
+    And the published partner "Фарма Плюс" is the primary partner of the project "Школа кардиологии"
 
   @EARS-11
   Scenario: The partners already entered appear as investor organizations
-    Given the published partner "Фарма Плюс" is the primary partner of the project "Школа кардиологии"
     When the administrator opens «Организации» from the admin navigation
     Then "Фарма Плюс" is listed with the role «Инвестор» and the status «Опубликована»
     And the project "Школа кардиологии" still has "Фарма Плюс" as its primary organization

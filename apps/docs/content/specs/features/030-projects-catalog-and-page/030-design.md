@@ -27,7 +27,7 @@ There is **no running counterpart** of the catalog or the project page: PRD [015
 
 ## Placement
 
-- **Schema** `packages/db/src/schema/taxonomy.ts` — `projects` extended; new `project_output_kinds`, `project_results`; `project_organisations` (from 032) extended. One forward migration in `apps/api/drizzle/` (EARS-17).
+- **Schema** `packages/db/src/schema/taxonomy.ts` — `projects` extended; new `project_output_kinds`, `project_results`; `project_organisations` (from 032) extended. One absorbing forward migration in `apps/api/drizzle/` (EARS-17); the project-page package adds its own forward migration for the nullable `projects.sought_specialty_id` (EARS-21), so the column ships with its reader and writer.
 - **API** `apps/api/src/taxonomy/` — `projects.*` (fields, publish rule), new `project-results.*`, `project-order.*`, `project-output-kinds.*`, `project-partners.*` → per-project role and note, new `public-projects.{controller,service,repository}.ts` for the four public reads. The module's problem filter, idempotency service and `lifecycle-impact.service.ts` are reused.
 - **Contract** `packages/schemas/src/taxonomy/` — `project.ts` (admin form, results, order), `project-output-kind.ts`, `public-project.ts` (catalog item, scale, project, results). `PublicProjectSummary` changes in place (EARS-8).
 - **Admin** `apps/admin/app/projects/` (form, «Результаты» tab, «Организации» tab), `apps/admin/app/projects/order/`, `apps/admin/app/project-output-kinds/`; `ADMIN_SECTION_NAV` in `apps/admin/lib/admin-access.ts` gains «Порядок показа» (under «Проекты») and «Виды результатов» as `full`-access (`platform_admin`) entries.
@@ -50,6 +50,7 @@ erDiagram
   ORGANISATION_ROLES ||--o{ PROJECT_ORGANISATIONS : as_role
   PROJECTS ||--o{ PROJECT_EXPERTS : curated_by
   PROJECTS ||--o{ EVENT_PROJECTS : outputs
+  SPECIALTIES_MINZDRAV |o--o{ PROJECTS : sought_expert
   PROJECTS {
     uuid id PK "kept"
     text slug UK "kept"
@@ -59,6 +60,7 @@ erDiagram
     enum stage "new: running|soon|completed"
     text stage_note "new: 1-80 iff soon"
     int display_position "new, dense"
+    uuid sought_specialty_id FK "new, nullable"
     enum legacy_kind "renamed from kind, nullable, read-only"
     enum status "draft|published|retired"
     timestamptz first_published_at
@@ -95,6 +97,7 @@ erDiagram
 - **Stage** is a closed enum — three values the badge vocabulary depends on; `stage_note` CHECK: `(stage = 'soon') = (stage_note IS NOT NULL)`. A new project defaults to `soon`.
 - **Display order** is `display_position` on `projects` — dense over non-retired rows, assigned `max + 1` on create, compacted on retire and on restore (restored project goes last). The order's ETag is a hash of the ordered `(id, version)` pairs of the non-retired rows; `PUT /v1/admin/projects/order` takes the full ordered id list and refuses a stale ETag or a list that is not exactly the current non-retired set (`412 PRECONDITION_FAILED`). Every touched row's `version` is bumped, so a concurrent form save on one of them fails its own `If-Match`.
 - **Per-project organisation role**: `role_id` NOT NULL, FK `organisation_roles`; the service refuses a role the organisation does not hold (an assignment-table check under the organisation row lock). The investor of the catalog and the page is the active `is_primary` link — the existing ≤ 1 partial unique index carries the «at most one investor» rule; its role is ordinarily «Инвестор», but the mark, not the role slug, decides attribution, so renaming or retiring the role never removes an investor (the role list is data, 032 EARS-3).
+- **Sought expert specialty** (EARS-21): `sought_specialty_id` nullable, FK `specialties_minzdrav(id)` `ON DELETE RESTRICT` — the Минздрав specialty book of `packages/db/src/schema/specialties.ts`, the same book the 012 taxonomy already links through `direction_specialties` and 017 serves through `packages/schemas/src/specialties/specialties.schema.ts`. Its rows survive a re-seed by `code`, so the reference stays valid across an amended nomenclature order; the book has no retirement, so the only refusal is an unknown id. The public label is the entry's verbatim `name` (never declined or abbreviated), which is why the sentence quotes it after «по специальности» instead of inflecting it as the canvas sample «по регенеративной медицине» does. It is not part of the publish-required set.
 - **Storefront URL**: absolute `https:`; its origin must equal `DOCTOR_STOREFRONT_ORIGIN` of the API config (the same value the Academy footer's crossing link uses). Validated in the Zod contract with the origin injected server-side.
 
 ## Public projection (EARS-8, 9, 13)
@@ -106,6 +109,7 @@ One predicate, `public_project`: `status = 'published' AND deleted_at IS NULL AN
 - **Investor**: the active `is_primary` link whose organisation passes 032's display predicate; `logoUrl` resolved only with `public_logo_visible`. `investorPlaceOpen` = no active `is_primary` link at all — a name-hidden investor closes the place without being disclosed (EARS-15).
 - **Scale**: `projects` = count of `public_project`; `partners` = the 032 EARS-12 query (`count(*) FROM organisations WHERE status = 'published'`, shared from the 032 public repository, never re-written); `broadcasts` / `firstBroadcastYear` = `count(DISTINCT e.id)` / `min(extract(year from e.starts_at))` over events in `published | live | ended | in_archive` joined by active `event_projects` to a `public_project`.
 - **Hero counts**: results = `count(project_results)`; experts = active `project_experts` whose expert is published; since-year = `min(year of public event start)` else `year(first_published_at)`.
+- **Sought specialty**: `soughtSpecialty { code, name }` of the referenced book entry or `null`; only the project read carries it, not the catalog item (EARS-21).
 - **Curator**: the expert's public display name as the 012 public expert projection composes it — no slug, no URL, no other field, so the page cannot link to an expert page before 031.
 - `404` for draft, retired, non-public and unknown alike; the key resolves by id or slug per 012 (`/:idOrSlug`).
 - The reads are anonymous, served by the Academy BFF server-side per request; `revalidate` follows the existing public taxonomy reads. No cache table.
@@ -139,6 +143,7 @@ Headers (`Idempotency-Key`, `If-Match`, `Lifecycle-Impact-Token`), problem codes
 | Method + path                                                   | Purpose                                          | EARS    |
 | --------------------------------------------------------------- | ------------------------------------------------ | ------- |
 | `POST /v1/admin/projects` · `PATCH /v1/admin/projects/{id}`     | fields, stage, stage note (no kind)              | EARS-1  |
+| `PATCH /v1/admin/projects/{id}` `soughtSpecialtyId` (nullable)  | set / clear the sought expert specialty          | EARS-21 |
 | `GET` / `PUT /v1/admin/projects/{id}/results`                   | read / replace the ordered result set            | EARS-2  |
 | `GET` / `POST /v1/admin/project-output-kinds` · `PATCH …/{id}`  | kind list (with result counts), create, rename   | EARS-3  |
 | `POST /v1/admin/project-output-kinds/{id}/retire` / `…/restore` | retire (refused while held) / restore            | EARS-3  |
@@ -149,6 +154,7 @@ Headers (`Idempotency-Key`, `If-Match`, `Lifecycle-Impact-Token`), problem codes
 | `GET /v1/public/projects`                                       | ordered catalog items                            | EARS-8  |
 | `GET /v1/public/projects/scale`                                 | scale line                                       | EARS-9  |
 | `GET /v1/public/projects/{idOrSlug}` · `…/{idOrSlug}/results`   | project page and its results block               | EARS-13 |
+| `GET /v1/public/projects/{idOrSlug}` `soughtSpecialty`          | the expert entry's specialty or `null`           | EARS-21 |
 
 `/scale` and `/order` are literal segments registered before `/:idOrSlug` (a slug can never equal them: `scale` and `order` are added to the reserved-slug list of the slugifier). Every admin route: `roles: [platform_admin]`, the MFA admin session, CSRF, `revalidate: "live"` on writes (EARS-18). The `endpoint-authz` and `route-mount` guards see the new routes as rows of their matrices.
 
@@ -180,30 +186,31 @@ stateDiagram-v2
 
 ### Academy (canvases, Stage A pending)
 
-| Surface             | Canvas → state                                                                                                                        | Notes                                                                                                                                                                                                                                                     |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project card        | `unit-project-card.dc.html` — props `kind` → fixed «Проект», `stage`, `count` → outputs line / stage note, `partnerName`, `emblem`    | The demo kickers «Школа» / «Медиа» / «Программа» and counts «24 эфира» are replaced (PRD lead decision); emblem = first two letters of the title, first upper-case.                                                                                       |
-| Catalog `/projects` | `academy-projects.dc.html` — header, scale line, grid, «Завершён» card last, closing plate                                            | Plate actions: «Предложить проект» → 033, «Стать партнёром» → 034. Empty and error states are not drawn: composed from `EmptyState` and the platform error block (approved kit), recorded at Stage A.                                                     |
-| Project page        | `academy-project.dc.html`, «Объём» = «срез 1», «Результаты» = А (grid), «Партнёр» = Б (separate block), «Инвестор» лого / текст / нет | Hero, «Результаты» with its loading / error / plan states, «Организации в проекте», «Войти в проект». Hidden in «срез 1»: number row, team, «Закулисье», dashboard. The investor card shows neither the contract line nor the period (late slice of 032). |
-| Home block          | `academy-home.dc.html` «Что мы делаем» — three `unit-project-card`                                                                    | Same `ProjectCard`; the rest of the home is 029.                                                                                                                                                                                                          |
+| Surface             | Canvas → state                                                                                                                        | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project card        | `unit-project-card.dc.html` — props `kind` → fixed «Проект», `stage`, `count` → outputs line / stage note, `partnerName`, `emblem`    | The demo kickers «Школа» / «Медиа» / «Программа» and counts «24 эфира» are replaced (PRD lead decision); emblem = first two letters of the title, first upper-case.                                                                                                                                                                                                                                                                                                         |
+| Catalog `/projects` | `academy-projects.dc.html` — header, scale line, grid, «Завершён» card last, closing plate                                            | Plate actions: «Предложить проект» → 033, «Стать партнёром» → 034. The header wording is not pinned by EARS: the canvas «Всё для врачей бесплатно» is replaced at Stage A of the catalog-UI Issue (Lead decision 17). Empty and error states are not drawn: composed from `EmptyState` and the platform error block (approved kit), recorded at Stage A.                                                                                                                    |
+| Project page        | `academy-project.dc.html`, «Объём» = «срез 1», «Результаты» = А (grid), «Партнёр» = Б (separate block), «Инвестор» лого / текст / нет | Hero, «Результаты» with its loading / error / plan states, «Организации в проекте», «Войти в проект». Hidden in «срез 1»: number row, team, «Закулисье», dashboard. The expert card's canvas sentence «Проект ищет эксперта по регенеративной медицине.» becomes «Проект ищет эксперта по специальности «<name>».» from `soughtSpecialty`, and is absent when it is `null` (EARS-21). The investor card shows neither the contract line nor the period (late slice of 032). |
+| Home block          | `academy-home.dc.html` «Что мы делаем» — three `unit-project-card`                                                                    | Same `ProjectCard`; the rest of the home is 029.                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ### Admin (approved-non-canvas)
 
-| State                   | Composition                                                                                                                                                                                                                             |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `project-form`          | full-page form: «Название», «Описание», «Обложка» (012 media slot), «Стадия» (radio: «Проект идёт» / «Скоро» / «Завершён»), «Что происходит сейчас» (shown for «Скоро»); read-only «Прежний тип (012)» notice when `legacy_kind` is set |
-| `project-results`       | «Результаты» tab: ordered repeatable rows («Вид» select of active kinds, «Название», «Описание», «Ссылка на doctor.school»), move up / down, remove, «Добавить результат»; a held retired kind marked «Вид снят»                        |
-| `project-organisations` | «Организации» tab: rows (organisation, role, note, «Инвестор проекта» mark); add dialog with a registry `Combobox` and a role select limited to the organisation's roles                                                                |
-| `project-order`         | «Порядок показа»: `AdminDataList` of non-retired projects (title, stage, status) with move up / down and «Сохранить порядок»; stale save → reload notice                                                                                |
-| `project-list-flags`    | project list adds the stage column and the mark «Не на сайте: нет результатов» for a published project without results                                                                                                                  |
-| `project-lifecycle`     | «Опубликовать» (field errors linking to the tab of each missing item); «Снять с публикации» with `lifecycle-impact-dialog`; «Вернуть» → draft                                                                                           |
-| `output-kinds`          | «Виды результатов»: `AdminDataList` with result counts + «Добавить вид»; a refused retire lists the holding projects                                                                                                                    |
+| State                   | Composition                                                                                                                                                                                                                                                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project-form`          | full-page form: «Название», «Описание», «Обложка» (012 media slot), «Стадия» (radio: «Проект идёт» / «Скоро» / «Завершён»), «Что происходит сейчас» (shown for «Скоро»), «Ищем эксперта по специальности» (clearable `Combobox` over the specialty book, EARS-21); read-only «Прежний тип (012)» notice when `legacy_kind` is set |
+| `project-results`       | «Результаты» tab: ordered repeatable rows («Вид» select of active kinds, «Название», «Описание», «Ссылка на doctor.school»), move up / down, remove, «Добавить результат»; a held retired kind marked «Вид снят»                                                                                                                  |
+| `project-organisations` | «Организации» tab: rows (organisation, role, note, «Инвестор проекта» mark); add dialog with a registry `Combobox` and a role select limited to the organisation's roles                                                                                                                                                          |
+| `project-order`         | «Порядок показа»: `AdminDataList` of non-retired projects (title, stage, status) with move up / down and «Сохранить порядок»; stale save → reload notice                                                                                                                                                                          |
+| `project-list-flags`    | project list adds the stage column and the mark «Не на сайте: нет результатов» for a published project without results                                                                                                                                                                                                            |
+| `project-lifecycle`     | «Опубликовать» (field errors linking to the tab of each missing item); «Снять с публикации» with `lifecycle-impact-dialog`; «Вернуть» → draft                                                                                                                                                                                     |
+| `output-kinds`          | «Виды результатов»: `AdminDataList` with result counts + «Добавить вид»; a refused retire lists the holding projects                                                                                                                                                                                                              |
 
 ## Dependencies
 
 - **032 slice 1 «Registry and roles» (#3492)** — `blocked_by`: `project_organisations`, `organisation_roles` and the investor seed role must exist (EARS-4, EARS-17). **032 «Public projections» (#3494)** — `blocked_by` for EARS-8 / 9 / 13 / 15 (display predicate and the count).
-- **012 EARS-13 / EARS-14 for projects (#1295 / #1296)** — project retire and restore do not exist today (`apps/admin/app/projects/[id]/page.tsx` publishes only). EARS-7 of 030 states the catalog consequences; the transitions themselves are those Issues' deliverable, so the 030 lifecycle work is `blocked_by` them (see Lead decisions).
-- **033 slice 1 and 034 slice 1 pages** — the catalog plate, the free investor place and «Войти в проект» link to them; the Academy UI Issues are `blocked_by` the respective page Issues so no link ships to a missing page (PRD «no link leads to a missing page»).
+- **012 EARS-13 / EARS-14 for projects (#1295 / #1296)** — `blocked_by` of the «Organisations, order, lifecycle» package (EARS-4, 5, 7): project retire and restore do not exist today (`apps/admin/app/projects/[id]/page.tsx` publishes only). Both Issues are open and tracked; EARS-7 of 030 states the catalog consequences, the transitions themselves (#1295 retirement through the signed impact preview, #1296 restore) are those Issues' deliverable (Lead decisions 13, 15).
+- **033 slice 1 (#1802) and 034 slice 1 (#1824) pages** — PRD-only today. The catalog plate and «Войти в проект» lead to both, the free investor place to 034; the «Catalog and home block» package (EARS-10, 11, 12, 19) and the «Project page» package (EARS-14, 15, 16, 20, 21) are each `blocked_by` #1802 and #1824 until those pages exist, so no link ships to a missing page (PRD «no link leads to a missing page»; Lead decision 16).
+- **Specialty book** (`specialties_minzdrav`, 017) — on `main` and seeded; EARS-21 references it, no edge.
 - **029** consumes the shared card and the catalog read for its relaunched home; 030 already replaces the fixture section (EARS-12), so 029 moves the block, never re-implements it.
 
 ## Delivery slices
@@ -215,8 +222,8 @@ flowchart LR
   A --> C[Public reads<br/>EARS-8,9,13]
   L[012 #1295 / #1296] --> B
   C --> D[Catalog and home block<br/>EARS-10,11,12,19]
-  C --> E[Project page<br/>EARS-14,15,16,20]
-  P[033 / 034 slice 1 pages] --> D
+  C --> E[Project page<br/>EARS-14,15,16,20,21]
+  P[033 #1802 / 034 #1824 pages] --> D
   P --> E
   B --> J[Browser journeys<br/>V-9, V-10]
   D --> J
@@ -243,3 +250,9 @@ The PRD's _agent-proposed — UNCONFIRMED_ items, specified as the PRD writes th
 11. **«Проекты» joins the Academy navigation** in slice 1 (canvas nav set А); «Эксперты» waits for 031 (EARS-10).
 12. **The home's existing projects section is wired in slice 1** to the real read and the shared card, rather than waiting for 029, so the fixture never coexists with a real catalog (EARS-12).
 13. **Project retire / restore stay owned by 012 #1295 / #1296**; 030's lifecycle package is `blocked_by` them instead of re-implementing the 012 transition protocol.
+14. **Sought expert specialty** (canvas `academy-project.dc.html` «Войти в проект», both the `full` and the slice-1 branch): an optional project field referencing one entry of the Минздрав specialty book `specialties_minzdrav`, edited on the admin project form and projected by the project read; set, the expert card reads «Проект ищет эксперта по специальности «<name>».» with the verbatim book name (book wording is never inflected, so the canvas's declined sample is not reproduced); empty, the card shows no sentence about a specialty and keeps its heading and action (EARS-21).
+15. **Retire / restore prerequisites are real**: #1295 (012 EARS-13) and #1296 (012 EARS-14) are open, tracked Issues and stay the `blocked_by` of the «Organisations, order, lifecycle» package (Dependencies).
+16. **Application pages first**: the «Catalog and home block» and «Project page» packages are `blocked_by` #1802 (033 slice 1) and #1824 (034 slice 1) until those pages exist; no link is shipped to a missing page (Dependencies).
+17. **Catalog header copy is not pinned by EARS**: the canvas header «Всё для врачей бесплатно» conflicts with ADR-0016 §4 and with the platform rule that the wording «бесплатно» is not used; the header wording is a Stage-A copy item of the catalog-UI Issue (EARS-10 pins only the scale line).
+18. **Results are their own read**: `GET /v1/public/projects/{idOrSlug}/results` is separate from the project read, so the «Результаты» block loads, fails and retries alone while the rest of the page works (EARS-13, EARS-14).
+19. **A published project without results stays off the site**: the `public_project` predicate requires at least one result, so a migrated 012 project is invisible on every public read until the operator states its results, rather than shown half-filled (EARS-8, EARS-17).

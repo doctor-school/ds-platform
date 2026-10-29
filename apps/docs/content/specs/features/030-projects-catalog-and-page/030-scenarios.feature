@@ -105,6 +105,21 @@ Feature: 030 — Projects: the container, its admin, the «Все проекты
     Then neither the card nor the page names "Фарма Плюс"
     And the page shows no free investor place
 
+  @EARS-21
+  Scenario: A project with a sought specialty names it in the expert entry
+    Given a platform administrator is signed in to the admin with a second factor
+    When the administrator sets «Ищем эксперта по специальности» of "Ортобиология" to «Травматология и ортопедия»
+    And a visitor opens the page of "Ортобиология"
+    Then the expert card of «Войти в проект» reads «Проект ищет эксперта по специальности «Травматология и ортопедия».»
+    And the card keeps «Место в команде открыто» and «Зайти как эксперт — подать заявку»
+
+  @EARS-21
+  Scenario: A project with no sought specialty names none
+    Given the public project "Ревматология" has no sought specialty
+    When a visitor opens the page of "Ревматология"
+    Then the expert card of «Войти в проект» reads «Место в команде открыто» with «Зайти как эксперт — подать заявку»
+    And the expert card names no specialty
+
   @EARS-15
   Scenario: A project with no investor offers the free place
     Given the public project "Ревматология" has no «Инвестор проекта»

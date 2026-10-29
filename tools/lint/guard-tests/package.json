@@ -8,6 +8,8 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@ds/auth-flow": "workspace:*",
+    "next": "16.4.1",
     "tsx": "^4.23.13",
     "vitest": "^4.1.12"
   }

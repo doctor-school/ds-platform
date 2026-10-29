@@ -1421,6 +1421,12 @@ importers:
 
   tools/lint/guard-tests:
     devDependencies:
+      '@ds/auth-flow':
+        specifier: workspace:*
+        version: link:../../../packages/auth-flow
+      next:
+        specifier: 16.4.1
+        version: 16.4.1(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       tsx:
         specifier: ^4.23.13
         version: 4.23.13

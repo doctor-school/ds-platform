@@ -137,7 +137,10 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      command: `pnpm --filter @ds/doctor exec next start -H 127.0.0.1 -p ${PORT} --keepAliveTimeout 125000`,
+      // Bound like the image (Dockerfile HOSTNAME=0.0.0.0): on a 127.0.0.1 bind
+      // Next hands the proxy a `localhost` URL, so a gate rewrite reads as
+      // external and loses its status (003 EARS-72 refusal page, #3379).
+      command: `pnpm --filter @ds/doctor exec next start -H 0.0.0.0 -p ${PORT} --keepAliveTimeout 125000`,
       url: BASE,
       env: {
         INTERNAL_API_URL: DOUBLE,

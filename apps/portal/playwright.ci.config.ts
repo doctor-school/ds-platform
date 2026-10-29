@@ -82,6 +82,8 @@ export default defineConfig({
     /[\\/]e2e[\\/]academy-home\.e2e\.spec\.ts$/,
     // 003 EARS-61 (#3172): the entries' 303 against the internal-API double.
     /[\\/]e2e[\\/]storefront-entry\.e2e\.spec\.ts$/,
+    // 003 EARS-72 (#3379): a refused entry's refusal page, same double.
+    /[\\/]e2e[\\/]storefront-entry-refusal\.e2e\.spec\.ts$/,
     // 028 V-4: the documents surface reads a workspace package from disk and
     // issues no api call, so it is hermetic in exactly this tier.
     /[\\/]e2e[\\/]documents\.spec\.ts$/,
@@ -116,7 +118,10 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      command: `pnpm --filter @ds/portal exec next start -H 127.0.0.1 -p ${PORT} --keepAliveTimeout 125000`,
+      // Bound like the image (Dockerfile HOSTNAME=0.0.0.0): on a 127.0.0.1 bind
+      // Next hands the proxy a `localhost` URL, so a gate rewrite reads as
+      // external and loses its status (003 EARS-72 refusal page, #3379).
+      command: `pnpm --filter @ds/portal exec next start -H 0.0.0.0 -p ${PORT} --keepAliveTimeout 125000`,
       url: READY_URL,
       timeout: 120_000,
       reuseExistingServer: false,

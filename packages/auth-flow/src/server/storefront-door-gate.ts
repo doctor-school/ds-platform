@@ -1,6 +1,6 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
-import { entryRefusalRewrite } from "./entry-refusal";
+import { ENTRY_REFUSAL_HEADER, entryRefusalRewrite } from "./entry-refusal";
 import { parkReturnTarget } from "./return-target-parking";
 import {
   storefrontEntry,
@@ -31,6 +31,14 @@ export async function storefrontDoorGate(
   host: StorefrontOidcHost,
   deps: StorefrontOidcDeps = {},
 ): Promise<Response | undefined> {
+  // 003 EARS-72: the refusal page is reached only by this gate's rewrite
+  // (an internal rewrite re-runs no gate); a request for it from outside
+  // loses any refusal it names, so the page answers 404.
+  if (request.nextUrl.pathname === STOREFRONT_ENTRY_REFUSAL_ROUTE) {
+    const headers = new Headers(request.headers);
+    headers.delete(ENTRY_REFUSAL_HEADER);
+    return NextResponse.next({ request: { headers } });
+  }
   const entry = doorEntry(host, request.nextUrl.pathname);
   if (!entry) return undefined;
   const parked = parkReturnTarget(request);

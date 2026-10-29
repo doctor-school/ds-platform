@@ -99,14 +99,8 @@ describe("008 EARS-2/12/13/14: the academy host config", () => {
     expect(ru.logo.href).toBe("/webinars");
   });
 
-  it("008 EARS-12: the chrome hides on the auth surfaces and in the room, and nowhere else", () => {
-    expect(ru.hiddenOnPaths).toEqual([
-      "/login",
-      "/register",
-      "/verify",
-      "/reset",
-      "/webinars/*/room",
-    ]);
+  it("008 EARS-12 / 003 EARS-72: the chrome hides in the room only — a door path's refusal page sits inside it", () => {
+    expect(ru.hiddenOnPaths).toEqual(["/webinars/*/room"]);
   });
 
   it("017 EARS-12: exactly one crossing out, and it is the doctor storefront", () => {

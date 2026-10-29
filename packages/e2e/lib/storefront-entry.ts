@@ -77,3 +77,16 @@ export async function expectStorefrontEntry(
   );
   return location;
 }
+
+/**
+ * 003 EARS-72 (#3379) — a refused storefront entry, as a backend-free tier
+ * sees it: the shared double refuses a transaction naming `refuse-429`,
+ * `refuse-429-bare` or `refuse-503`, and the door answers the storefront's
+ * refusal page at that status, the address left on the door URL.
+ */
+export const REFUSED_ENTRIES = {
+  /** Event page origin: the way out goes back to the эфир. */
+  rateLimitedFromEvent: "/login?returnTo=%2Fwebinars%2Frefuse-429",
+  rateLimitedBare: "/login?returnTo=%2Faccount%2Frefuse-429-bare",
+  unavailable: "/register?returnTo=%2Faccount%2Frefuse-503",
+} as const;

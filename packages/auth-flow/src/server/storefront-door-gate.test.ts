@@ -64,6 +64,29 @@ describe("storefront door gate", () => {
       expect(res).toBeUndefined();
     });
 
+    it(`003 EARS-72: on ${name} a direct request for the refusal page drops a browser-sent refusal, so the page is a 404`, async () => {
+      const res = await storefrontDoorGate(
+        door(STOREFRONT_ENTRY_REFUSAL_ROUTE, {
+          ...NAVIGATE,
+          [ENTRY_REFUSAL_HEADER]: "reason=unavailable",
+        }),
+        host,
+        {
+          fetchImpl: api(() => {
+            throw new Error("no call");
+          }),
+          env: ENV,
+        },
+      );
+      expect(res).toBeDefined();
+      expect(rewriteOf(res!)).toBeNull();
+      expect(res!.headers.get("x-middleware-next")).toBe("1");
+      expect(forwardedRefusal(res!)).toBeNull();
+      expect(
+        res!.headers.get("x-middleware-override-headers") ?? "",
+      ).not.toContain(ENTRY_REFUSAL_HEADER);
+    });
+
     it(`003 EARS-61: on ${name} a granted entry is the core's 303 unchanged, the parked return target riding on it`, async () => {
       const res = await storefrontDoorGate(
         door("/login?returnTo=%2Fdocuments"),

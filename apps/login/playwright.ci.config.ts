@@ -30,7 +30,7 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      command: `pnpm --filter @ds/login exec next start -H 127.0.0.1 -p ${PORT} --keepAliveTimeout 125000`,
+      command: `pnpm --filter @ds/login exec next start -H 0.0.0.0 -p ${PORT} --keepAliveTimeout 125000`,
       url: `${BASE}/icon.svg`,
       // 003 EARS-72 — the refusal page's way out names both storefronts,
       // read at request time from the storefronts' own origin variables.

@@ -376,6 +376,16 @@ Sign-out on either storefront: `POST` to its own sign-out route → the API term
 
 1. The doctor storefront's sign-in-host map entry and `new.doctor.school` redirect URIs per environment, including stage slots (`tools/staging`).
 
+## Production amendment — a refused sign-in entry is a page of its own (2026-10-29, #3379)
+
+Realizes EARS-72. One mechanism on all three hosts, the sign-in host's existing one copied whole.
+
+**The gate answers the door.** On a storefront the four door paths are answered by the storefront gate (`apps/portal/middleware.ts`, `apps/doctor/proxy.ts`) through the shared `storefrontDoorGate` (`packages/auth-flow/src/server/storefront-door-gate.ts`), which runs the return-target parking rule and `storefrontEntry`; the door `route.ts` handlers are gone, because a Next route handler cannot rewrite to a page and so could only answer a bare 500 or a `303` that loses the status. `storefrontEntry` returns a typed refusal `{reason: "rate-limited" | "unavailable", retryAfterSeconds, eventSlug}` instead of throwing: a 429 of `POST /v1/internal/oidc/transaction` is rate-limited with `Retry-After` parsed as delta-seconds (absent or unparseable → `null`), every other non-2xx and a transport failure is unavailable. The event slug is the one the entry already derives for the EARS-71 event target. A granted entry is its `303` unchanged. On the sign-in host `apps/login/proxy.ts` keeps its read of the entry and answers a refusal the same way.
+
+**The rewrite.** `entryRefusalRewrite` (`packages/auth-flow/src/server/entry-refusal.ts`) rewrites to the host's refusal route — `/auth/refused` on a storefront, the door page on the sign-in host — at 429 (forwarding `Retry-After`) or 503, and carries the refusal to the page in one request header. The address bar keeps the door URL, so the retry is a navigation to the same path and query. The storefront refusal route renders `notFound()` when the header is absent: the page has no address a person can open.
+
+**The page.** One package component (`packages/auth-flow/src/refusal/`) built from `@ds/design-system` `Button` and `Link`, the copy in `packages/auth-flow/src/copy/entry-refusal.ts`, the variant drawn by an injectable random picker per render. The storefront variant mounts in each storefront's shell route group with that host's config (home `/`, the event path template for «Вернуться к эфиру»); the sign-in host variant draws the logo top bar and links the two storefronts by their public origins from the sign-in host's host-config. The canvas is `design-source/sign-in-refusal.dc.html`.
+
 ## 1. Architecture overview
 
 `apps/api` is a **Backend-for-Frontend (BFF)** sitting between the portal's headless forms and Zitadel. It owns the domain mirror, consent, RBAC role grant, audit, and abuse guards; it delegates every credential operation to Zitadel via the Session / User v2 API. The portal renders inline forms on its own origin (Variant B, ADR-0001 §2) and talks only to the BFF; it never sees a token.

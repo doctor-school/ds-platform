@@ -1847,6 +1847,47 @@ Feature: Net-new web authentication producing a doctor_guest identity
       | Academy    |
       | doctor     |
 
+  # #3379. App-local tests: apps/{portal,doctor}/e2e/storefront-entry-refusal*.spec.ts
+  # and apps/login/e2e/entry-refusal.e2e.spec.ts (backend-free tiers, refusing doubles).
+  @EARS-72 @failure @entry-refusal-rate-limited
+  Scenario Outline: A guest whose entry hits the per-address limit waits out the countdown on the refusal page
+    Given the API refuses the <storefront> storefront's entry with 429 and "Retry-After: 105"
+    When a guest on the page of a published эфир follows the sign-in link
+    Then the response is a 429 forwarding "Retry-After: 105", and the address is still the door URL
+    And the page shows one of the three rate-limited headings with its own text, inside the storefront shell, with no form and no error banner
+    And the button is disabled and reads «Можно повторить через 1:45», counting down
+    And the way out is «Вернуться к эфиру» to that эфир's page
+    When the countdown reaches zero
+    Then the button reads «Попробовать ещё раз» and is enabled
+    When the guest presses it
+    Then the same door URL is opened again
+
+    Examples:
+      | storefront |
+      | Academy    |
+      | doctor     |
+
+  @EARS-72 @failure @entry-refusal-unavailable
+  Scenario Outline: A guest whose entry the API cannot answer can retry at once
+    Given the API does not answer the <storefront> storefront's entry
+    When a guest opens "/register"
+    Then the response is a 503 and the page shows one of the three unavailable headings with its own text
+    And the button reads «Попробовать ещё раз» and is enabled
+    And the way out is «На главную» to the storefront's home
+
+    Examples:
+      | storefront |
+      | Academy    |
+      | doctor     |
+
+  @EARS-72 @failure @entry-refusal-sign-in-host
+  Scenario: A refused entry on the sign-in host is the refusal page with both storefronts as the way out
+    Given the API refuses the sign-in host's entry read with 429 and no "Retry-After"
+    When the person arrives on the sign-in host's "/login" with that auth request
+    Then the response is a 429 and the page shows the platform logo bar, one rate-limited heading with its own text and no form
+    And the button reads «Попробовать ещё раз» and is enabled at once
+    And the way out reads «Или перейдите на сайт Академии или на витрину врача», each name a link to that storefront
+
   # Academy retained-baseline projection (#3180), not shared-sign-in-host acceptance.
   # Existing native login and SMS-budget contracts remain retained; no expiry proof.
   @EARS-7 @EARS-8 @EARS-17 @EARS-41 @EARS-42 @happy @login-sms-resend

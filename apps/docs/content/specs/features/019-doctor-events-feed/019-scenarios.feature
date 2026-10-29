@@ -424,7 +424,6 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       Then the feed lists only events of that specialty
       And no event is included because of a shared name prefix or a computed likeness
 
-
     @EARS-5 @happy
     Scenario: The month is a view of the same page
       When the doctor opens «События» and follows «Календарь на месяц →»
@@ -520,7 +519,6 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       And the screen holds the 10 most recent past events, «Показать ещё 10 (осталось N)» adding the next older ones
       And no separate archive page, tab or block below the feed is rendered
 
-
     @EARS-11 @happy
     Scenario: A signed-in doctor sees the short «Мои события» cut
       Given a signed-in doctor registered for two upcoming events
@@ -528,7 +526,6 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       Then a short cut lists those two events, at most the nearest three and no live one
       And «Все мои события →» leads into the account's «Мои события»
       And no ticket, QR or НМО check-in is rendered in the cut
-
 
     @EARS-12 @happy
     # Read under 019 «Amendment — 2026-10-06»: the card carries no action and no guest band renders.

@@ -1,4 +1,4 @@
-﻿import {
+import {
   expect,
   type Locator,
   type Page,

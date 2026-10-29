@@ -16,7 +16,7 @@
 <div class="{{ themeClass }}" data-screen-label="unit-feed-card" style="display:block;width:100%;min-width:0;font-family:var(--font-sans)">
 
   <sc-if value="{{ isSkeleton }}" hint-placeholder-val="{{ false }}">
-    <div aria-hidden="true">
+    <div aria-hidden="true" style="box-shadow:var(--shadow-lg)">
       <x-import component-from-global-scope="DsDesignSystem.Card" dc-props="{{ cardProps }}" hint-size="100%,430px">
         <div style="aspect-ratio:16/9;border-bottom:var(--border-width-2) solid var(--color-border)">
           <x-import component-from-global-scope="DsDesignSystem.Skeleton" dc-props="{{ fill }}" hint-size="100%,100%"></x-import>
@@ -37,7 +37,7 @@
   </sc-if>
 
   <sc-if value="{{ isCard }}" hint-placeholder-val="{{ true }}">
-    <a href="{{ href }}" target="{{ target }}" rel="{{ rel }}" style="position:relative;display:block;color:inherit;text-decoration:none;transition:transform 120ms ease-out" style-hover="transform:translate(-2px,-2px);color:inherit" style-focus="outline:3px solid var(--color-primary);outline-offset:3px">
+    <a data-link href="{{ href }}" target="{{ target }}" rel="{{ rel }}" style="position:relative;display:block;color:inherit;text-decoration:none;box-shadow:var(--shadow-lg);transition:box-shadow var(--duration-fast)" style-hover="box-shadow:var(--shadow-md)" style-focus="box-shadow:var(--shadow-focus)">
       <x-import component-from-global-scope="DsDesignSystem.Card" dc-props="{{ cardProps }}" hint-size="100%,430px">
 
         <div style="position:relative;aspect-ratio:16/9;border-bottom:var(--border-width-2) solid var(--color-border);background:var(--color-section);overflow:hidden">
@@ -145,7 +145,7 @@ class Component extends DCLogic {
     return {
       themeClass: p.dark ? 'dark' : '',
       isSkeleton: !!p.skeleton, isCard: !p.skeleton,
-      cardProps: { style: { padding: 0, gap: 0, overflow: 'hidden', display: 'block' } },
+      cardProps: { style: { padding: 0, gap: 0, overflow: 'hidden', display: 'block', boxShadow: 'none' } },
       fill: { style: { width: '100%', height: '100%', borderRadius: 0 } },
       href: p.href || (s.own ? 'academy-material.dc.html' : s.url),
       target: external ? '_blank' : undefined,

@@ -288,9 +288,9 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "unit-feed-card.dc.html": {
-      "sha256": "eb70d12f349d819e1a8b31b7cf7f8c98a4b38cf90ced77dc4ca247d5ab321ca8",
-      "pulledSha256": "aa0c0a65020aa40bbecc19ee4e2eccd14748bcfd1feb42cf206f240ea2043963",
-      "pulledAt": "2026-10-29T08:18:03.819Z",
+      "sha256": "27a239d946a5a1ef80586c1955d0f553f83608a1ac29d3570550736d4ec832d3",
+      "pulledSha256": "da47ef23c709e7b226da79a113891098fa8756945936af2388ae8143c323f96a",
+      "pulledAt": "2026-10-29T08:51:10.086Z",
       "remotePath": "unit-feed-card.dc.html"
     },
     "unit-project-card.dc.html": {

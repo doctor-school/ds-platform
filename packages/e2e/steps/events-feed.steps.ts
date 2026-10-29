@@ -2948,11 +2948,12 @@ Then(
         .locator('button[aria-pressed="false"]:not([disabled])')
         .first();
       const label = await day.getAttribute("aria-label");
-      await day.focus();
-      await page.keyboard.press("Enter");
-      await expect(day).toHaveAttribute("aria-pressed", "true");
-      await expect(page.getByTestId("day-agenda")).toBeVisible();
       expect(label, "labelled keyboard-operated day").toMatch(/\S/u);
+      const picked = month.getByRole("button", { name: label!, exact: true });
+      await picked.focus();
+      await page.keyboard.press("Enter");
+      await expect(picked).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByTestId("day-agenda")).toBeVisible();
       await expectNoOverflow(page.locator("html"), "mobile month");
       await $testInfo.attach(`mobile-month-${dark ? "dark" : "light"}`, {
         body: await page.screenshot({ fullPage: true }),

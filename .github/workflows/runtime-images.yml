@@ -247,10 +247,22 @@ jobs:
         if: needs.plan.outputs.push == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with: { pattern: digest-*, path: digests, merge-multiple: true }
-      - name: Download image tars
+      # Each tar is fetched by its exact artifact name into tars/image-<image>/, the
+      # path the load step reads: a download by `name` extracts into `path` itself,
+      # whatever number of artifacts the run holds (a `pattern` download nests a
+      # folder per artifact only when it matches more than one).
+      - name: Download image tar
         if: needs.plan.outputs.push != 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with: { pattern: "image-${{ matrix.app }}*", path: tars }
+        with:
+          {
+            name: "image-${{ matrix.app }}",
+            path: "tars/image-${{ matrix.app }}",
+          }
+      - name: Download migrate image tar
+        if: needs.plan.outputs.push != 'true' && matrix.app == 'api'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { name: image-api-migrate, path: tars/image-api-migrate }
       # Boot the image that was built — when pushed, pulled back BY DIGEST, so the
       # readiness evidence is about the exact artifact a deploy will pull.
       - name: Load the built images

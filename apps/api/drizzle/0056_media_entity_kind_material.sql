@@ -1,0 +1,1 @@
+ALTER TYPE "public"."media_entity_kind" ADD VALUE 'material';

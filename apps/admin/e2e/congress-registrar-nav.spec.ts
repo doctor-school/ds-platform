@@ -49,6 +49,7 @@ function headerLinks(page: Page) {
 
 const ADMIN_SECTIONS = [
   "nav-events",
+  "nav-materials",
   "nav-projects",
   "nav-experts",
   "nav-organisations",
@@ -116,6 +117,8 @@ test.describe("044 EARS-20 / EARS-38 — the registrar's admin is its event's ro
 
     // Exactly one link: the bound event's roster. No events list, no section.
     await expect(headerLinks(desk)).toHaveCount(1);
+    // 048 EARS-8 — no «Материалы» for a registrar.
+    await expect(desk.getByTestId("nav-materials")).toHaveCount(0);
     const roster = desk.getByTestId("nav-roster");
     await expect(roster).toHaveText("Реестр участников");
     await expect(roster).toHaveAttribute("href", `/events/${eventA}/roster`);

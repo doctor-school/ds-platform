@@ -52,6 +52,21 @@ export function refusedFields(error: unknown): string[] {
   return fields;
 }
 
+/**
+ * 048 EARS-1 / EARS-4 — the fields a material refusal addresses. A write refused
+ * by validation and a publish refused by its requirement set
+ * (`409 PUBLISH_REQUIREMENTS_NOT_MET`) both name their fields, and the form shows
+ * each reason at its field — so both codes are read here, unlike
+ * {@link refusedFields}, whose surfaces show a publish refusal as one sentence.
+ */
+export function materialRefusedFields(error: unknown): string[] {
+  const refusal = error as TaxonomyHttpError | undefined;
+  if (refusal?.errorCode === "PUBLISH_REQUIREMENTS_NOT_MET") {
+    return refusedFields({ ...refusal, errorCode: "VALIDATION_FAILED" });
+  }
+  return refusedFields(error);
+}
+
 export interface TaxonomyErrorContext {
   /** The command disambiguates a shared wire code without changing fallback truth. */
   action?: "restore-curator" | "restore-primary";
@@ -288,7 +303,12 @@ export function taxonomyErrorKey(
   // `PUBLISH_REQUIREMENTS_NOT_MET` keeps the shared tail mapping: the field-set
   // sentence is already per-kind there, and organisations have no completeness
   // branch at all (§5.2 — title alone is a complete public projection).
-  if (ns === "projects" || ns === "experts" || ns === "organisations") {
+  if (
+    ns === "projects" ||
+    ns === "experts" ||
+    ns === "organisations" ||
+    ns === "materials"
+  ) {
     switch (code) {
       case "PUBLISHED_PROJECT_REQUIRES_CURATOR":
         return "projects.errors.curatorRequired";

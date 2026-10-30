@@ -49,6 +49,13 @@ export interface AdminNavItem {
 /** The platform administrator's sections, in the chrome's reading order. */
 export const ADMIN_SECTION_NAV: readonly AdminNavItem[] = [
   { href: "/events", testId: "nav-events", labelKey: "app.nav.events" },
+  // 048 EARS-8 (#3512) — the Academy's own materials sit with the events: both
+  // are what the storefront publishes, before the books that classify them.
+  {
+    href: "/materials",
+    testId: "nav-materials",
+    labelKey: "app.nav.materials",
+  },
   { href: "/projects", testId: "nav-projects", labelKey: "app.nav.projects" },
   { href: "/experts", testId: "nav-experts", labelKey: "app.nav.experts" },
   // 032 EARS-11 (#3492) — «Организации» take the place of «Партнёры», and the

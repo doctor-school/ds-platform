@@ -326,6 +326,64 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     for (const theme of THEMES) await scan(page, theme);
   });
 
+  // 048 (#3512) — «Материалы»: the list with its kind facet, the full-page form
+  // with the radio kind, the two server-backed comboboxes and the rich-text
+  // editor; the refused column (an error at «Эксперт»), the publish refusal at
+  // «Текст» and the unpublish confirmation are each scanned as their own state.
+  test("048 EARS-7: the material list + form + lifecycle surfaces pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto("/materials");
+    await page.getByTestId("materials-filters").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.goto("/materials/create");
+    await page.getByTestId("material-form").waitFor({ state: "visible" });
+    await page
+      .getByTestId("material-body")
+      .locator('[contenteditable="true"]')
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The refused column: the field error at «Эксперт».
+    await page
+      .getByTestId("material-kind-column")
+      .locator("xpath=ancestor::label[1]")
+      .click();
+    await page.getByTestId("material-title").fill(`Axe-скан ${Date.now()}`);
+    await page.getByTestId("submit-material").click();
+    await expect(
+      page.getByText("Выберите эксперта — колонка выходит от его имени."),
+    ).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+
+    // A saved draft with no text: the publish refusal at «Текст».
+    await page
+      .getByTestId("material-kind-news")
+      .locator("xpath=ancestor::label[1]")
+      .click();
+    await page.getByTestId("submit-material").click();
+    await page.waitForURL(/\/materials\/[0-9a-f-]{36}$/);
+    await page.getByTestId("material-publish").click();
+    await expect(page.getByTestId("material-body-error")).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+
+    // Published, then the unpublish confirmation open.
+    const editor = page
+      .getByTestId("material-body")
+      .locator('[contenteditable="true"]');
+    await editor.click();
+    await page.keyboard.type("Текст для скана.");
+    await page.getByTestId("submit-material").click();
+    await expect(page.getByTestId("update-saved")).toBeVisible();
+    await page.getByTestId("material-publish").click();
+    await expect(page.getByTestId("material-status")).toHaveText("Опубликован");
+    await page.getByTestId("material-unpublish").click();
+    await expect(page.getByTestId("material-unpublish-confirm")).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
   test("032 EARS-14: the organisation-role list + add + rename surfaces pass WCAG 2 A/AA (light)", async ({
     page,
   }) => {

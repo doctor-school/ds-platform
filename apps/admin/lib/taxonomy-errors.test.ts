@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createTranslator } from "next-intl";
 import {
+  materialRefusedFields,
   narrowRefusal,
   refusedFields,
   taxonomyErrorKey,
@@ -291,6 +292,59 @@ describe("narrowRefusal — 012 EARS-25 bounded narrowing refusal (#2509)", () =
         { count: 217 } as never,
       ),
     ).toBe("и ещё 217");
+  });
+});
+
+describe("materialRefusedFields — the material form's field-addressed refusals (048)", () => {
+  it("048 EARS-4: a publish refused by its requirement set names each missing field", () => {
+    expect(
+      materialRefusedFields({
+        message: "x",
+        statusCode: 409,
+        errorCode: "PUBLISH_REQUIREMENTS_NOT_MET",
+        fieldErrors: [
+          { path: "body", message: "a published material needs body text" },
+          { path: "expertId", message: "a published expert" },
+        ],
+      }),
+    ).toEqual(["body", "expertId"]);
+  });
+
+  it("048 EARS-1: a refused write addresses its fields; a stale one none", () => {
+    expect(
+      materialRefusedFields({
+        message: "x",
+        statusCode: 400,
+        errorCode: "VALIDATION_FAILED",
+        fieldErrors: [{ path: "body.content.0", message: "unknown node" }],
+      }),
+    ).toEqual(["body"]);
+    expect(
+      materialRefusedFields({
+        message: "x",
+        statusCode: 412,
+        errorCode: "PRECONDITION_FAILED",
+      }),
+    ).toEqual([]);
+  });
+
+  it("048 EARS-8: a stale material write maps to the reload notice", () => {
+    expect(
+      taxonomyErrorKey(
+        { message: "x", statusCode: 412, errorCode: "PRECONDITION_FAILED" },
+        "materials.errors.updateFailed",
+      ),
+    ).toBe("materials.errors.stale");
+    expect(
+      taxonomyErrorKey(
+        {
+          message: "x",
+          statusCode: 409,
+          errorCode: "PUBLISH_REQUIREMENTS_NOT_MET",
+        },
+        "materials.errors.publishFailed",
+      ),
+    ).toBe("materials.errors.publishRequirements");
   });
 });
 

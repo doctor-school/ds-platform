@@ -55,6 +55,7 @@ export function useServerCombobox<T>({
   fetchPage,
   toOption,
   selectedId,
+  initialSelected = null,
   pageSize = SERVER_COMBOBOX_PAGE_SIZE,
   debounceMs = SERVER_COMBOBOX_DEBOUNCE_MS,
 }: {
@@ -66,6 +67,11 @@ export function useServerCombobox<T>({
   toOption: (item: T) => ServerComboboxOption;
   /** The value the host form currently holds, kept visible while searching. */
   selectedId?: string | null;
+  /**
+   * The stored value's label as the host's detail read already carries it, so a
+   * saved choice reads as a name before (or without) a page that contains it.
+   */
+  initialSelected?: ServerComboboxOption | null;
   pageSize?: number;
   debounceMs?: number;
 }): ServerComboboxController {
@@ -73,7 +79,9 @@ export function useServerCombobox<T>({
     serverComboboxReducer,
     serverComboboxInitialState,
   );
-  const [selected, setSelected] = useState<ServerComboboxOption | null>(null);
+  const [selected, setSelected] = useState<ServerComboboxOption | null>(
+    initialSelected,
+  );
 
   // The callers rebuild these every render (they close over form state); the
   // effect below must not re-query because an identity changed.

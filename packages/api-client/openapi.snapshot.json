@@ -7791,6 +7791,110 @@
         "tags": ["LegacyBroadcastsAdmin"]
       }
     },
+    "/v1/admin/materials": {
+      "get": {
+        "operationId": "MaterialsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["MaterialsAdmin"]
+      },
+      "post": {
+        "operationId": "MaterialsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["MaterialsAdmin"]
+      }
+    },
+    "/v1/admin/materials/{id}": {
+      "get": {
+        "operationId": "MaterialsAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["MaterialsAdmin"]
+      },
+      "patch": {
+        "operationId": "MaterialsAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["MaterialsAdmin"]
+      }
+    },
+    "/v1/admin/materials/{id}/publish": {
+      "post": {
+        "operationId": "MaterialsAdminController_publish",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["MaterialsAdmin"]
+      }
+    },
+    "/v1/admin/materials/{id}/unpublish": {
+      "post": {
+        "operationId": "MaterialsAdminController_unpublish",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["MaterialsAdmin"]
+      }
+    },
     "/v1/admin/organisation-roles": {
       "get": {
         "operationId": "OrganisationRolesAdminController_list",

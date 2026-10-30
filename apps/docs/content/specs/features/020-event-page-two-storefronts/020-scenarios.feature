@@ -109,15 +109,6 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
 
     # --- Cross-host identity and one account ---
 
-    @EARS-1 @EARS-18 @happy
-    Scenario: The two storefronts render the same event from one core under their own headers
-      When an anonymous reader requests the event on doctor.school
-      And an anonymous reader requests the same event on academy.doctor.school
-      Then the two public bodies are content-identical
-      And the two renders differ only in the storefront header, the route envelope and copy defaults
-      And a component-tree scan finds no second page composition, read model or CTA resolver in either application
-      And no import from apps/portal exists in apps/doctor and none from apps/doctor in apps/portal
-
     # Amendment 2026-10-21 (#3006): «already signed in» is the Academy's server-side silent
     # check against the shared sign-in-host session, with no guest render first (EARS-22);
     # the return after registration is the transaction's stored return path (003 EARS-61/62).
@@ -405,3 +396,15 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
       When any visitor requests that same event by its slug on academy.doctor.school
       Then the response is not-found and is indistinguishable from a non-existent event
       And no title, description, programme, speaker or date of the draft event appears in either response body
+
+  Rule: Public cross-host event identity
+
+    @public-read-boundaries
+    @EARS-1 @EARS-18 @happy
+    Scenario: The two storefronts render the same event from one core under their own headers
+      When an anonymous reader requests the event on doctor.school
+      And an anonymous reader requests the same event on academy.doctor.school
+      Then the two public bodies are content-identical
+      And the two renders differ only in the storefront header, the route envelope and copy defaults
+      And a component-tree scan finds no second page composition, read model or CTA resolver in either application
+      And no import from apps/portal exists in apps/doctor and none from apps/doctor in apps/portal

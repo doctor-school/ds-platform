@@ -346,11 +346,11 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
       # A project publishes only with at least one result (030 EARS-6).
       Examples:
-        | kind    | empty_or_optional_state                                                 |
+        | kind    | empty_or_optional_state                                                    |
         | project | one eligible curator and one result but zero events, partners and no cover |
-        | expert  | zero events and projects and no photo                         |
-        | topic   | zero events                                                    |
-        | partner | zero projects and no logo or website                           |
+        | expert  | zero events and projects and no photo                                      |
+        | topic   | zero events                                                                |
+        | partner | zero projects and no logo or website                                       |
 
     @EARS-5 @failure
     Scenario Outline: A project without one eligible curator cannot publish
@@ -361,10 +361,10 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       And the project remains draft
 
       Examples:
-        | curator_state                    |
-        | no curator                       |
-        | two active curators              |
-        | one curator whose expert is draft |
+        | curator_state                       |
+        | no curator                          |
+        | two active curators                 |
+        | one curator whose expert is draft   |
         | one curator whose expert is retired |
 
     @EARS-6 @happy

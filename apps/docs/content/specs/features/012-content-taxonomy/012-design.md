@@ -57,10 +57,12 @@ erDiagram
   PROJECTS {
     uuid id PK
     text slug UK
-    project_kind kind
     text title
     text description
     text cover_ref
+    project_stage stage
+    text stage_note
+    project_kind legacy_kind
     timestamptz first_published_at
     taxonomy_status status
     timestamptz deleted_at
@@ -129,11 +131,11 @@ The omitted joins use the same envelope: UUID id, their two endpoint FKs, `activ
 
 ### 2.1 Database constraints
 
-- `taxonomy_status = draft | published | retired`; `relationship_status = active | retired`; `project_kind = school | media | program`; `project_expert_role = curator | member`.
+- `taxonomy_status = draft | published | retired`; `relationship_status = active | retired`; `project_expert_role = curator | member`. A project's `stage` / `stage_note` and its results are 030's (030 EARS-1, EARS-2); `project_kind = school | media | program` types only the read-only `legacy_kind` hint (030 EARS-17) and no write sets it.
 - CHECK constraints bind lifecycle to deletion timestamp: top rows `(status = 'retired') = (deleted_at IS NOT NULL)`; joins `(status = 'retired') = (deleted_at IS NOT NULL)`.
 - Every FK is the default `NO ACTION` or explicit `RESTRICT`; no cascade appears in generated migration SQL.
 - Unique `(project_id, expert_id)`, `(event_id, project_id)`, `(event_id, expert_id)`, `(project_id, partner_id)`, `(event_id, topic_id)` include retained rows while their endpoints are present. A partial unique index permits at most one active `project_experts(role='curator')` per project; another permits at most one active `project_partners(is_primary=true)` per project.
-- Publishing a project additionally requires exactly one active curator whose expert is `published` and non-retired; drafts may be incomplete.
+- Publishing a project additionally requires exactly one active curator whose expert is `published` and non-retired and at least one result (the full project publish set is 030 EARS-6); drafts may be incomplete.
 - Slug identity is plain per-kind uniqueness over retained rows. Every project/expert/topic/partner create mutation generates a collision-safe canonical slug server-side; no mutation schema or form accepts a slug. Canonical UUID text is never generated, keeping `/:idOrSlug` unambiguous. A removed row permanently reserves its slug.
 - `experts.user_id` has a nullable unique index and restrictive FK to Users. `content_removed_at IS NOT NULL` implies `status='retired'`, non-null `deleted_at`, and null structured names, photo, role, credentials, affiliation and bio; audit/admin derive `[удалён]` rather than storing sentinel text.
 - `version` starts at 1 and is incremented atomically by every successful update or lifecycle command.

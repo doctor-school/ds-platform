@@ -20,6 +20,7 @@ const VALUES: Record<string, string> = {
   DATABASE_URL: "postgres://u:p@localhost:5432/db",
   AUDIT_IDENTIFIER_PEPPER: "a".repeat(64),
   LIFECYCLE_IMPACT_TOKEN_SECRET: "b".repeat(64),
+  DOCTOR_PUBLIC_ORIGIN: "https://doctor.school",
 };
 
 function productionEnv(): Record<string, string> {
@@ -38,6 +39,7 @@ describe("1468: the api production boot enforces the runtime-env contract", () =
       "DATABASE_URL",
       "AUDIT_IDENTIFIER_PEPPER",
       "LIFECYCLE_IMPACT_TOKEN_SECRET",
+      "DOCTOR_PUBLIC_ORIGIN",
     ]);
   });
 

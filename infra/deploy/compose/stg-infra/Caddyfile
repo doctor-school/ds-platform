@@ -33,16 +33,20 @@
 # or 502 (credentials, no upstream) — never a certificate error, never an indexable
 # page.
 #
-# Basic-auth exemptions — exactly three, each because the caller carries no browser
+# Basic-auth exemptions — exactly four (spec §3), each because the caller carries no browser
 # credentials and is authenticated by its own mechanism:
 #   1. the two Centrifugo path families on `api-<slot>` (websocket upgrade + the
 #      api's X-API-Key publish path) — protected by Centrifugo's HMAC token / API
 #      key, as in production (infra/deploy/compose/api-prod/Caddyfile);
-#   2. the shared IdP host `id.stage.doctor.school` — every slot api reaches it
+#   2. `POST /v1/auth/back-channel-logout` on `api-<slot>`, that method and path
+#      only — Zitadel posts the OIDC back-channel logout to the public slot api
+#      (tools/staging/idp.mjs); the endpoint verifies the signed logout token and is
+#      rate-limited (ADR-0015 §4 req 9), and production has no gate in front of it;
+#   3. the shared IdP host `id.stage.doctor.school` — every slot api reaches it
 #      machine-to-machine through this public origin (IDP_ISSUER is the public URL,
 #      infra/deploy/api.env.example), and so does the converge form (b)
-#      (README → «Zitadel converge»); Zitadel authenticates on its own.
-#   3. the shared object-storage host `s3.stage.doctor.school` — every object URL the
+#      (README → «Zitadel converge»); Zitadel authenticates on its own;
+#   4. the shared object-storage host `s3.stage.doctor.school` — every object URL the
 #      api hands a browser is a PRESIGNED SigV4 GET (apps/api/src/storage/storage.s3.ts),
 #      which is its own, per-object, time-bounded authorization; an unsigned request
 #      gets MinIO's own 403. The gate could not apply anyway: an `<img src>` never
@@ -125,9 +129,10 @@
 # 502 behind the basic-auth challenge; a malformed name is refused before any ACME
 # order starts.
 #
-# THE ALTERNATIONS BELOW MUST AGREE WITH THE `@stage_slot` / `@stage_centrifugo`
-# MATCHERS IN THE HTTPS SITE AT THE BOTTOM OF THIS FILE. That agreement is asserted
-# by tools/staging/stage-edge.test.mjs — change one, change the other.
+# THE ALTERNATIONS BELOW MUST AGREE WITH THE `@stage_slot` / `@stage_centrifugo` /
+# `@stage_back_channel_logout` MATCHERS IN THE HTTPS SITE AT THE BOTTOM OF THIS FILE.
+# That agreement is asserted by tools/staging/stage-edge.test.mjs — change one,
+# change the other.
 #
 # The dots inside `{$STAGE_BASE_DOMAIN}` are not escaped (the value is an env
 # substitution, not a literal), so they stay regexp wildcards. Harmless: Caddy only
@@ -195,7 +200,7 @@ http://127.0.0.1:2020 {
 	}
 
 	# Shared object storage — one MinIO, one bucket per slot (`ds-<slot>`, created by
-	# `slot up`). Not behind basic auth: see the header of this file (exemption 3).
+	# `slot up`). Not behind basic auth: see the header of this file (exemption 4).
 	# Path style, so the bucket is the first path segment and this single host serves
 	# every slot; no wildcard beneath it and no console.
 	@s3 host s3.{$STAGE_BASE_DOMAIN}
@@ -228,16 +233,32 @@ http://127.0.0.1:2020 {
 		}
 	}
 
-	# Centrifugo path families on `api-<slot>` — the ONE basic-auth exemption on a
-	# slot (spec §3): browser websocket + the api's key-gated publish path. The
-	# capture name `slot` is shared with `@stage_slot` below, so `{re.slot.2}` names
-	# the slot in either branch.
+	# Centrifugo path families on `api-<slot>` — one of the TWO basic-auth
+	# exemptions on a slot host (four stand-wide, with `id` and `s3`; spec §3):
+	# browser websocket + the api's key-gated publish path. The capture name `slot`
+	# is shared with `@stage_slot` below, so `{re.slot.2}` names the slot in either
+	# branch.
 	@stage_centrifugo {
 		header_regexp slot Host "^(api)-(main|pr-[1-9][0-9]{0,9})[.]"
 		path /connection/websocket /api/*
 	}
 	handle @stage_centrifugo {
 		reverse_proxy {re.slot.2}-centrifugo:8000
+	}
+
+	# The OIDC back-channel logout on `api-<slot>` — the other slot-host exemption
+	# (spec §3, #3545): `POST /v1/auth/back-channel-logout` ONLY. Zitadel posts it to the
+	# public slot api (tools/staging/idp.mjs) carrying no browser credentials; the
+	# endpoint verifies the signed logout token and is rate-limited (ADR-0015 §4
+	# req 9), and production has no gate in front of `api.` at all. Any other method
+	# or path on `api-<slot>` stays behind `staging_gate`.
+	@stage_back_channel_logout {
+		header_regexp slot Host "^(api)-(main|pr-[1-9][0-9]{0,9})[.]"
+		method POST
+		path /v1/auth/back-channel-logout
+	}
+	handle @stage_back_channel_logout {
+		reverse_proxy {re.slot.2}-api:3000
 	}
 
 	# Every slot host, live or not. The domain suffix is already guaranteed by this

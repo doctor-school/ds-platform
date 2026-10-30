@@ -226,7 +226,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       refusePuts = true;
       const mp = multipartBody(
-        { kind: "media", defaultAudience: "doctors", title: "Проект с недоступным хранилищем" },
+        { stage: "running", defaultAudience: "doctors", title: "Проект с недоступным хранилищем" },
         await stillPng(),
       );
       const k = key();
@@ -378,7 +378,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
                 "content-type": "application/json",
                 "idempotency-key": key(),
               },
-              payload: { kind: "media", defaultAudience: "doctors", title: exhaustedTitle },
+              payload: { stage: "running", defaultAudience: "doctors", title: exhaustedTitle },
             }) as never,
         },
         {
@@ -753,7 +753,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       refusePuts = true;
       const k = key();
       const mp = multipartBody(
-        { kind: "media", defaultAudience: "doctors", title: `Отказ хранилища ${Date.now()}` },
+        { stage: "running", defaultAudience: "doctors", title: `Отказ хранилища ${Date.now()}` },
         await stillPng(),
       );
       const res = await app.inject({
@@ -800,7 +800,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "content-type": "application/json",
           "idempotency-key": k,
         },
-        payload: { kind: "program", defaultAudience: "doctors", title: "Проект для истечения записи" },
+        payload: { stage: "running", defaultAudience: "doctors", title: "Проект для истечения записи" },
       });
       expect(res.statusCode).toBe(201);
       createdProjectIds.push((JSON.parse(res.payload) as { id: string }).id);
@@ -838,7 +838,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "content-type": "application/json",
           "idempotency-key": k,
         },
-        payload: { kind: "program", defaultAudience: "doctors", title: "Проект для истечения записи" },
+        payload: { stage: "running", defaultAudience: "doctors", title: "Проект для истечения записи" },
       });
       expect(reuse.statusCode).toBe(409);
       expect(

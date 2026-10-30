@@ -2723,7 +2723,15 @@ Then(
     await expect(signup).toHaveAccessibleName(/\S/u);
     const target = new URL((await signup.getAttribute("href"))!, page.url());
     expect(target.pathname).toBe("/register");
-    expect(target.searchParams.get("returnTo")).toBe(card.href);
+    // 020 LD-9 (020-design.md «The guest round trip»): the return target is
+    // this page's URL including the mode tab, so a hybrid event returns to
+    // the tab the page renders; a single-format event has no tab.
+    const tabs = page.getByTestId("event-format-tabs");
+    const mode =
+      (await tabs.count()) > 0 ? await tabs.getAttribute("data-mode") : null;
+    expect(target.searchParams.get("returnTo")).toBe(
+      mode ? `${card.href}?mode=${mode}` : card.href,
+    );
   },
 );
 

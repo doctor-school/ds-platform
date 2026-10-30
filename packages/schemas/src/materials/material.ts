@@ -60,7 +60,7 @@ const fields = {
  */
 export function materialAuthorIssues(input: {
   kind: MaterialKind;
-  expertId: string | null | undefined;
+  expertId?: string | null | undefined;
 }): { path: string; message: string }[] {
   if (input.kind === "column" && !input.expertId) {
     return [{ path: "expertId", message: "a column needs its expert" }];

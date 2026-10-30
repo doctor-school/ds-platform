@@ -3,9 +3,10 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { and, eq, lte, or, sql } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
-import { experts, mediaCleanupJobs, projects } from "@ds/db";
+import { mediaCleanupJobs } from "@ds/db";
 import { DRIZZLE_DB } from "../../database/database.tokens.js";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../storage/index.js";
+import { MediaSlotRegistry } from "./media-slot.registry.js";
 
 // 012-design §5.1 — the durable old-reference cleanup obligation and its leased
 // worker.
@@ -47,6 +48,7 @@ export class MediaCleanupService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Db,
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
+    @Inject(MediaSlotRegistry) private readonly slots: MediaSlotRegistry,
   ) {}
 
   /**
@@ -161,7 +163,12 @@ export class MediaCleanupService {
       // delete but still serves the object is exactly the case that would leave
       // a "removed" cover publicly reachable.
       if (await this.storage.exists(objectKey)) {
-        await this.recordFailure(id, nextEpoch, owner, "object_storage_unavailable");
+        await this.recordFailure(
+          id,
+          nextEpoch,
+          owner,
+          "object_storage_unavailable",
+        );
         return false;
       }
     } catch (err) {
@@ -170,7 +177,12 @@ export class MediaCleanupService {
           err instanceof Error ? err.message : String(err)
         }`,
       );
-      await this.recordFailure(id, nextEpoch, owner, "object_storage_unavailable");
+      await this.recordFailure(
+        id,
+        nextEpoch,
+        owner,
+        "object_storage_unavailable",
+      );
       return false;
     }
 
@@ -203,35 +215,35 @@ export class MediaCleanupService {
   }
 
   /**
-   * Whether any current domain row still references `objectKey`. #1283 owns the
-   * `projects.cover_ref` slot and #1284 added `experts.photo_ref`; #1286 extends
-   * this predicate with `partners.logo_ref` when that column lands.
+   * Whether any current domain row still references `objectKey`, asked of
+   * every media-slot column in {@link MediaSlotRegistry}. The registry is the
+   * only list of slots: a column absent from it is one whose live objects both
+   * sweeps delete after their window.
    *
    * PUBLIC because `UploadReconcileService` asks the same question about a
    * different handle (an upload locator rather than a cleanup job). Keeping ONE
-   * predicate means a new media slot cannot be taught to one sweep and forgotten
-   * in the other — which would let that sweep delete a live object.
+   * predicate over ONE registry means a new media slot cannot be taught to one
+   * sweep and forgotten in the other — which would let that sweep delete a live
+   * object.
    */
   async isObjectReferenced(objectKey: string): Promise<boolean> {
-    const [coverHit] = await this.db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(eq(projects.coverRef, objectKey))
-      .limit(1);
-    if (coverHit) return true;
-    const [photoHit] = await this.db
-      .select({ id: experts.id })
-      .from(experts)
-      .where(eq(experts.photoRef, objectKey))
-      .limit(1);
-    return Boolean(photoHit);
+    for (const column of this.slots.columns()) {
+      const [hit] = await this.db
+        .select({ hit: sql<number>`1` })
+        .from(column.table)
+        .where(eq(column, objectKey))
+        .limit(1);
+      if (hit) return true;
+    }
+    return false;
   }
 
   private async recordFailure(
     id: string,
     epoch: number,
     owner: string,
-    error: "object_storage_unavailable" | "cdn_unavailable" | "still_referenced",
+    error:
+      "object_storage_unavailable" | "cdn_unavailable" | "still_referenced",
   ): Promise<void> {
     await this.db
       .update(mediaCleanupJobs)

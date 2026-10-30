@@ -30,6 +30,7 @@ import { LifecycleImpactService } from "./lifecycle-impact.service.js";
 import { MediaCleanupService } from "./media/media-cleanup.service.js";
 import { StillImageNormalizer } from "./media/still-image-normalizer.js";
 import { UploadReconcileService } from "./media/upload-reconcile.service.js";
+import { MediaSlotRegistry } from "./media/media-slot.registry.js";
 import { OrganisationRolesAdminController } from "./organisation-roles.admin.controller.js";
 import { OrganisationRolesRepository } from "./organisation-roles.repository.js";
 import { OrganisationRolesService } from "./organisation-roles.service.js";
@@ -142,6 +143,7 @@ import { EventKindsService } from "./event-kinds.service.js";
   providers: [
     IdempotencyService,
     StillImageNormalizer,
+    MediaSlotRegistry,
     MediaCleanupService,
     UploadReconcileService,
     ProjectsRepository,
@@ -200,6 +202,10 @@ import { EventKindsService } from "./event-kinds.service.js";
     // provider is what keeps 014 on ONE RFC 7807 filter instead of a copy.
     TaxonomyProblemFilter,
     StillImageNormalizer,
+    // #3572 — exported so a module outside taxonomy that writes a media slot
+    // through the same upload pipeline registers its column here (onModuleInit)
+    // and both sweeps' reference predicate sees it.
+    MediaSlotRegistry,
     MediaCleanupService,
     UploadReconcileService,
   ],

@@ -10,10 +10,15 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import sharp from "sharp";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
-import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
+import {
+  DRIZZLE_DB,
+  DRIZZLE_POOL,
+} from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/index.js";
+import { MediaCleanupService } from "../../src/taxonomy/media/media-cleanup.service.js";
+import { UploadReconcileService } from "../../src/taxonomy/media/upload-reconcile.service.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { adminHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
@@ -1488,6 +1493,94 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "data.organisation_role_assignments.insert",
       ]);
       expect(rows.every((r) => r.subject_id !== null)).toBe(true);
+    });
+
+    // ── #3572: both media sweeps keep a referenced organisation logo ───────
+
+    /** Create an organisation with one logo; return its id, live key and idempotency key. */
+    async function createWithLogo(): Promise<{
+      id: string;
+      logoRef: string;
+      idempotencyKey: string;
+    }> {
+      const mp = multipartBody({ payload: JSON.stringify(validPayload()) }, [
+        {
+          field: "logo",
+          filename: "live.png",
+          contentType: "image/png",
+          body: await stillPng(40, 30),
+        },
+      ]);
+      const idempotencyKey = key();
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/admin/organisations",
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": mp.contentType,
+          "idempotency-key": idempotencyKey,
+        },
+        payload: mp.body,
+      });
+      expect(res.statusCode).toBe(201);
+      const body = await created(res);
+      const logoRef = (
+        await pool.query<{ logo_ref: string }>(
+          "SELECT logo_ref FROM organisations WHERE id = $1",
+          [body.id],
+        )
+      ).rows[0]!.logo_ref;
+      expect(await storage.exists(logoRef)).toBe(true);
+      return { id: body.id, logoRef, idempotencyKey };
+    }
+
+    it("3572: when a cleanup job names a logo a live organisation still references, the cleanup worker shall keep the object and leave the obligation open", async () => {
+      const org = await createWithLogo();
+      const cleanup = app.get(MediaCleanupService);
+      // A stale obligation for the LIVE key — the shape an operator re-pointing
+      // the row back at a released key produces (012-design §5.1).
+      const jobId = await cleanup.enqueue(app.get(DRIZZLE_DB), {
+        cleanupKind: "replace",
+        entityKind: "partner",
+        entityId: org.id,
+        slot: "logo",
+        objectKey: org.logoRef,
+      });
+
+      await cleanup.runDueJobs(100);
+
+      expect(await storage.exists(org.logoRef)).toBe(true);
+      const { rows } = await pool.query<{ status: string; last_error: string }>(
+        "SELECT status, last_error FROM media_cleanup_jobs WHERE id = $1",
+        [jobId],
+      );
+      expect(rows[0]).toMatchObject({
+        status: "active",
+        last_error: "still_referenced",
+      });
+    });
+
+    it("3572: when the upload reconciler reaches the quiescent locator of a committed logo create, it shall clear the locator and keep the live logo", async () => {
+      const org = await createWithLogo();
+      // Age the record past lease expiry + the in-flight/skew grace (§6).
+      await pool.query(
+        `UPDATE idempotency_keys
+            SET created_at = now() - interval '2 days',
+                lease_expires_at = CASE WHEN lease_expires_at IS NULL THEN NULL
+                                        ELSE now() - interval '2 days' END
+          WHERE key = $1`,
+        [org.idempotencyKey],
+      );
+
+      await app.get(UploadReconcileService).reconcileDueLocators();
+
+      expect(await storage.exists(org.logoRef)).toBe(true);
+      const { rows } = await pool.query<{ cleanup_object_key: string | null }>(
+        "SELECT cleanup_object_key FROM idempotency_keys WHERE key = $1",
+        [org.idempotencyKey],
+      );
+      expect(rows[0]!.cleanup_object_key).toBeNull();
     });
   },
 );

@@ -58,8 +58,8 @@ interface GuardResponse {
 @Injectable()
 export class RateLimitGuard implements CanActivate {
   constructor(
-    private readonly limiter: RateLimitService,
-    private readonly reflector: Reflector = new Reflector(),
+    @Inject(RateLimitService) private readonly limiter: RateLimitService,
+    @Inject(Reflector) private readonly reflector: Reflector = new Reflector(),
     @Inject(AUTH_AUDIT) private readonly audit: AuthAuditLog,
   ) {}
 

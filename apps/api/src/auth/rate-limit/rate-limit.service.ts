@@ -1,4 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { normalizeSignInIdentifier } from "../idp/idp.types.js";
 import { InMemoryRateLimitStore } from "./rate-limit.store.fake.js";
 import {
   RATE_LIMIT_STORE,
@@ -26,11 +27,13 @@ interface Dimension extends RateLimitWindowSpec {
 
 /**
  * Store keys per dimension: one namespace each, so a per-user key can never
- * collide with an address. The per-user key is the lower-cased identifier —
- * no account lookup, so no per-attempt query and no EARS-16 timing channel.
+ * collide with an address. The per-user key is the identifier under the same
+ * normalisation the password check applies before its IdP lookup
+ * ({@link normalizeSignInIdentifier}) — no account lookup, so no per-attempt
+ * query and no EARS-16 timing channel.
  */
 const userKey = (identifier: string): string =>
-  `user:${identifier.toLowerCase()}`;
+  `user:${normalizeSignInIdentifier(identifier)}`;
 const ipKey = (scope: string | undefined, ip: string): string =>
   `ip:${scoped(scope, ip)}`;
 const asnKey = (scope: string | undefined, asn: string): string =>

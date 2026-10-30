@@ -3319,6 +3319,19 @@ describe("003 confirmed phone (#2449) — adapter wire shape", () => {
     );
   });
 
+  it("EARS-13: password sign-in checks the email under the normalised identifier the per-user window keys on", async () => {
+    const { fetchImpl, calls } = recordingFetch();
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await client.passwordLogin("  Ｕser@DS.test	", "pw");
+    const create = calls.find((c) => c.url.endsWith("/v2/sessions"));
+    expect(JSON.parse(create!.body ?? "{}")).toEqual({
+      checks: {
+        user: { loginName: "user@ds.test" },
+        password: { password: "pw" },
+      },
+    });
+  });
+
   it("EARS-58: password sign-in by a confirmed phone checks the confirmed account by id, never by the phone as a login name", async () => {
     const { fetchImpl, calls } = recordingFetch();
     const client = new ZitadelIdpClient({

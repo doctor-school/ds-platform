@@ -23,11 +23,11 @@ export const MFA_LOCKOUT_CLOCK = Symbol("MFA_LOCKOUT_CLOCK");
  * 011 EARS-7 second-factor lockout (ADR-0001 §7: _10 failed / 30 min → soft-lock
  * + notification_).
  *
- * **Why the BFF owns this counter, unlike 003's password lockout.** On the
- * password path Zitadel's native policy both counts and locks, and `apps/api`
- * only *observes* the verdict (`AccountLocked` → `auth.lockout.triggered`). There
- * is no equivalent per-subject TOTP-attempt lock the BFF can read back: the IdP's
- * TOTP verify answers a bare accept/refuse. So a lockout that exists only in the
+ * **Why the BFF owns this counter.** Passwords are never locked: 003 EARS-15
+ * throttles a password guess through the EARS-13 per-user window and leaves the
+ * IdP lockout off. A second factor does lock, and there is no per-subject
+ * TOTP-attempt lock the BFF can read back: the IdP's TOTP verify answers a bare
+ * accept/refuse. So a lockout that exists only in the
  * ADR would be a clause with nothing behind it — the AGENTS.md §6 untracked-seam
  * shape. This service is the counter, and it is deliberately the ONLY place the
  * threshold and window are written down.

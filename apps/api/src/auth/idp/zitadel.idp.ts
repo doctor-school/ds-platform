@@ -24,6 +24,7 @@ import {
   type IdpProjectGrantHolder,
   type IdpUser,
   isPhoneIdentifier,
+  normalizeSignInIdentifier,
   type PasswordLoginResult,
   type RevalidateAdminAuthorityInput,
   type SmsResetOutcome,
@@ -836,7 +837,9 @@ export class ZitadelIdpClient implements IdpClient {
     // it to `rejected` so the caller stays enumeration-safe (EARS-16); the
     // password lockout is off, guessing is throttled (003 EARS-15). The session
     // that comes back has already passed its check (design §3).
-    const userCheck = await this.signInUserCheck(identifier);
+    const userCheck = await this.signInUserCheck(
+      normalizeSignInIdentifier(identifier),
+    );
     if (!userCheck) return { outcome: "rejected" };
     const res = await this.fetchImpl(this.url("/v2/sessions"), {
       method: "POST",

@@ -88,6 +88,20 @@ describe("RateLimitService (EARS-13)", () => {
     ).toBe(false);
   });
 
+  it("EARS-13: two spellings of one address (whitespace, Unicode width, case) share one per-user budget", async () => {
+    // The key uses the sign-in identifier normalisation the password check
+    // applies before its IdP lookup, so a variant spelling earns no fresh budget.
+    for (let i = 0; i < thresholds.perUserPer15Min; i++) {
+      await svc.tryConsume({
+        ip: `10.0.1.${i}`,
+        identifier: "  Ｕser@DS.test	",
+      });
+    }
+    expect(
+      await svc.tryConsume({ ip: "10.0.1.99", identifier: "user@ds.test" }),
+    ).toBe(false);
+  });
+
   it("EARS-13: enforces the per-IP 15-min limit independent of identifier", async () => {
     // Same IP, distinct identifiers (so per-user never trips): the 21st refused.
     for (let i = 0; i < thresholds.perIpPer15Min; i++) {

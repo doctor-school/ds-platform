@@ -221,6 +221,17 @@ export function isPhoneIdentifier(identifier: string): boolean {
 }
 
 /**
+ * The one spelling of a submitted sign-in identifier: trimmed, Unicode NFKC
+ * (full-width and compatibility forms fold to their plain characters) and
+ * lower-cased. The password check looks the account up under it, and the
+ * EARS-13 per-user window keys on it, so a variant spelling of one address
+ * reaches the same account and spends the same budget (003 EARS-13/15).
+ */
+export function normalizeSignInIdentifier(identifier: string): string {
+  return identifier.trim().normalize("NFKC").toLowerCase();
+}
+
+/**
  * The outcome of an SMS send the BFF asked the IdP for (003 EARS-7/53):
  * `sent` — the IdP accepted it; `unconfirmed` — the phone is not a confirmed
  * account phone (EARS-58), nothing was sent, EARS-56 counts it; `failed` — a

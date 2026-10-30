@@ -4,6 +4,7 @@ import {
   IdpAmbiguousEmailError,
   IdpInvalidArgumentError,
   IdpUnavailableError,
+  normalizeSignInIdentifier,
   type AdminAuthorityVerdict,
   type CreatedUser,
   type CreateUserInput,
@@ -398,7 +399,7 @@ export class FakeIdpClient implements IdpClient {
     password: string,
   ): Promise<PasswordLoginResult> {
     const record =
-      this.byEmail.get(identifier.toLowerCase()) ??
+      this.byEmail.get(normalizeSignInIdentifier(identifier)) ??
       this.confirmedPhoneRecord(identifier);
 
     // Unknown identifier and wrong password are indistinguishable (EARS-16); a

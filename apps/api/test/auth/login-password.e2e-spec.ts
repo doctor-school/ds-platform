@@ -19,8 +19,8 @@ import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // Password login (EARS-5). Success establishes a BFF session (EARS-8) — a
 // `__Host-` cookie, no token in the body; failure is an enumeration-resistant
-// generic error and the credential check (whose failure the native Zitadel
-// lockout policy counts, EARS-15) is delegated to the IdP port. Runs against a
+// generic error and the credential check is delegated to the IdP port; a
+// failed check is throttled, never locked (EARS-15). Runs against a
 // real Postgres with the IdP bound to the in-memory fake (design §2); the fake
 // stores the registration password so the password check is exercised.
 describe.skipIf(!process.env.DATABASE_URL)("Login with password (e2e)", () => {

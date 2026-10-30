@@ -1,5 +1,393 @@
 # @ds/design-system
 
+## 6.0.0
+
+### Major Changes
+
+- [#3053](https://github.com/doctor-school/ds-platform/pull/3053) [`ba5c902`](https://github.com/doctor-school/ds-platform/commit/ba5c902323c279cba67e535cc431bc7c89ead8e1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Event page wave 3 ([#2072](https://github.com/doctor-school/ds-platform/issues/2072)), the format block, the seats statement, the social proof and the viewers count on both hosts at once. An offline event's format block states the remaining seats (no ticket, QR or venue lines); a hybrid event shows «Очно / Онлайн» tabs whose active tab is in the page URL (`?mode=offline|online`), survives reload and back, rides into the registration return target and defaults to the participation policy's half; a hybrid event with no seats left opens on «Онлайн» and says «Очных мест не осталось». The sign-up card's proof slot carries «Уже записались N коллег» and, separately, the adjacent specialties; an ended event's meta row states «Эфир прошёл» with the date and «Смотрели N коллег». An ended event's card no longer carries the «Участие · Бесплатно для врача» row, and «Комната эфира откроется за 10 минут до начала» renders only before the start.
+
+  `@ds/design-system` (breaking): `eventFormatBlockProps` takes the participation CTA as its new second positional argument (`(view, cta?, copy?)` — an old `(view, copy)` call now passes the copy as the CTA) and returns an `EventFormatModel` instead of `EventFormatBlockProps`, and `EventPageCopy` gains required keys, so a caller-built copy object must add them. `EventFormatBlock` gains the `offline` and `hybrid` kinds and the `EventFormatRoomPanel` / `EventFormatSeatsPanel` panels; the format model is `null` for an ended or hidden event; new `eventSocialProof`, `eventAiredMeta` and `eventViewersMeta` projections; `eventPageTimeParts` also returns `dateWithYear`.
+
+- [#2572](https://github.com/doctor-school/ds-platform/pull/2572) [`de024c9`](https://github.com/doctor-school/ds-platform/commit/de024c9daecee663cc52a498712e7641e18759fb) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One code step (003 EARS-42/41): sign-in by code and the post-registration confirmation draw the same step on both storefronts — «Проверьте почту» / «Проверьте телефон», the address exactly as typed (bold, wrapping inside the column), six letter-or-digit cells, «Подтвердить и войти», «← Изменить способ» / «← Изменить почту» beside the resend cooldown, and «Мы отправили новый код на …» after a resend; the sign-in method tabs are hidden on that step. Every code step — this one, the reset «Новый пароль» step and every resend note — names the email or phone exactly as the visitor typed it, never masked ([#2607](https://github.com/doctor-school/ds-platform/issues/2607)).
+
+  The auth screens converge on the approved canvas (`design-source/auth.dc.html`) on both storefronts: «Создать аккаунт» / «Забыли пароль?» share one row under the sign-in card and its code step (`AuthCard` footer), the form column stands on the 16px mobile gutter (`AuthLayout`, the new `gutter-sm` spacing role), the return-context plate above a form bleeds by that same token so a 390 screen never scrolls sideways, and «Начать заново» on the reset code step sits on the content edge.
+
+  The Academy sign-in and registration screens show the white «Doctor School» lockup on the dark page (the host states `darkSrc`, as the doctor host does); `dark:` now means the theme class in every app (`@custom-variant dark` in `@ds/design-system/globals.css`, the doctor app's local copy removed), so the swap follows the theme the page shows — the stored choice or the system scheme.
+
+  Breaking (`@ds/design-system`): the 8-digit login code is gone — `LOGIN_OTP_LENGTH`, `EMAIL_CONFIRM_OTP_LENGTH` and every `otpLength` prop of `LoginCard` / `EmailConfirmCard` are removed (`CODE_STEP_LENGTH` = 6); `OtpFocusScreen` takes `backLabel` / `onBack` and no longer renders a title, a sent-to line, a length, a variant or a charset; `OtpField` drops the `plain` variant and its `variant` / `placeholder` props; `LoginCardCopy.otp.verifyTitle` / `codeLabel` are per channel and `resentTo` is new; `EmailConfirmCard` loses the co-equal sign-in / reset links (`links`, `renderLink`, the existing-account copy) and requires `onBack` and `resend`; `takePendingRegistration` is replaced by `peekPendingRegistration` over a `{ identifier, registration, form }` hold; `maskDestination` is removed and `LoginCard` / `PasswordRecoveryCard` render the destination unmasked ([#2607](https://github.com/doctor-school/ds-platform/issues/2607)).
+
+  Breaking (`@ds/auth-flow`): the host config names its verify command in `api.verifyPath`; the code step submits the held registration values with the code to it and the accepted answer is the session — the post-verify password replay and the cold-step routing to `/login` are gone. A 021 access-condition refusal on the doctor verify reads as the registration door reads that condition.
+
+- [#2815](https://github.com/doctor-school/ds-platform/pull/2815) [`f7405fb`](https://github.com/doctor-school/ds-platform/commit/f7405fb4e9b9a68f3fa353d469056d188229b415) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The phone row in /account can be filled in and confirmed on both storefronts ([#2776](https://github.com/doctor-school/ds-platform/issues/2776), 003 EARS-47…51, 59). A doctor adds or changes a number, receives a 6-digit SMS code, and the row shows the confirmed number with its badge. A number from the doctor's congress application is offered as «Из заявки на конгресс». A wrong code, and a number already confirmed on another account, get the same generic «Неверный код». `@ds/auth-flow/client` gains `requestPhoneCode` / `confirmPhone` and the shared `accountPhoneActions` adapter.
+
+  BREAKING (`@ds/design-system`): `AccountProfileCard` takes a **required** `phoneActions` prop and a `copy.phone` block (`AccountPhoneCopy`). Every host must wire the phone transport, so no surface can render a phone row that does nothing.
+
+- [#2898](https://github.com/doctor-school/ds-platform/pull/2898) [`59ba497`](https://github.com/doctor-school/ds-platform/commit/59ba49768494c1dd54cd8f3a86ca38e745dfb1e5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Auth screens on both storefronts ([#2882](https://github.com/doctor-school/ds-platform/issues/2882), canvas `design-source/auth.dc.html`): the password fields — sign-in, registration and the reset «Новый пароль» — show no placeholder. Under the six code cells every code step states how long the code lives: «Код действует 1 час.» for the registration confirmation and the reset code, «Код действует 5 минут.» for sign-in by code; a mailed code adds «Не видите письмо — проверьте папку «Спам».». The line is the code field's description, so a screen reader reads it with the field. «Эл. почта» keeps its two words on one line (no-break space) in the channel switch and the SMS hint.
+
+  Breaking (`@ds/design-system`): `LoginCardCopy.password.passwordPlaceholder` and `RegisterCardCopy.passwordPlaceholder` are removed. New optional `OtpField.hint`, `OtpFocusScreen.codeHint`, `EmailConfirmCardCopy.codeHint`, `LoginCardCopy.otp.codeHint` (per channel) and `PasswordRecoveryCardCopy.complete.codeHint` (per held identifier).
+
+  Breaking (`@ds/auth-flow`): the copy keys `login.password.passwordPlaceholder` and `register.passwordPlaceholder` are removed; `login.otp.codeLifetimeHint`, `verify.codeLifetimeHint` and `reset.codeLifetimeHint` are new.
+
+- [#3461](https://github.com/doctor-school/ds-platform/pull/3461) [`33bb5c4`](https://github.com/doctor-school/ds-platform/commit/33bb5c4db4266b22af15ab557e62c5a78f10e85d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The event page's sign-up footnote follows the viewer: a guest keeps «Нужна регистрация — вернём вас на эту страницу.», a signed-in doctor not yet registered reads «Спишем N Pul при записи.» from the event's own cost, and a zero-cost event carries no footnote ([#3307](https://github.com/doctor-school/ds-platform/issues/3307)). `eventSignupCardProps` takes a required `viewer: EventSignupViewer` argument.
+
+### Minor Changes
+
+- [#3004](https://github.com/doctor-school/ds-platform/pull/3004) [`ce4873c`](https://github.com/doctor-school/ds-platform/commit/ce4873c54d81d9677719abc2fc2a9fb74188be52) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The doctor storefront's event page `/events/[slug]` mounts `@ds/event-page` ([#2072](https://github.com/doctor-school/ds-platform/issues/2072), wave-3 PR 3.2), so it gains the Academy's ended-event recording badge, readiness plaque, guest sign-in gate, signed-in player and the room-guidance strip. On both hosts: the partners plate names the partners without a financing note; the guest gate's sub-line reads «Вход — по почте, две минуты.»; a failed page read shows an explicit error with «Повторить» and loading shows the page skeleton (`EventPageError` and `EventPageSkeleton` of `@ds/event-page`, the skeleton block in `@ds/design-system`); online and hybrid times are re-formatted into the viewer's zone after hydration while offline stays МСК. `fetchPublicEventPage` reads at the host's `contentSet` with its relay cookie and gives up after 10 seconds, so a hung api renders the error state its copy promises. The `@ds/design-system` `WebinarPageContent` primitive drops its `sponsorNote` prop (no financing note, D5).
+
+- [#2757](https://github.com/doctor-school/ds-platform/pull/2757) [`423dd7d`](https://github.com/doctor-school/ds-platform/commit/423dd7d9151d4d078c6d4c6df040ef5c75acb90e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Congress roster sort in admin (044 EARS-22/EARS-37, owner Stage-A pick S1). `DataTable` gains an opt-in server-sort API: a column (or the record column) declares `sortKey`, the table is controlled through `sort` + `onSortChange`, and a sortable header renders as a `<button>` inside `<th aria-sort>` with an always-visible muted double arrow and, on the active column, a single direction arrow in the `primary-action` accent; the active column's body cells are shaded with the new semantic token `table-sorted` (neutral.50 light / neutral.925 dark); a column's optional `headerDetail` renders as a smaller second header line; the sort button follows the column alignment; below `md` `sortSelect` renders a «Сортировка» select over the record cards. With `defaultSort` a header is the tri-state cycle — ascending, descending, back to the default order — and `sortActionLabel` puts what the next click does on its `title`; `TableRow` drops its `transition-colors`, so every DS table's hover / pressed row tint is instant, and the sorted cells carry no transition either — a hovered row's sorted cell repaints in the same frame as the row. Tables without `sortKey` are unchanged. `AdminDataList` carries an optional `sort` in its query state (a sort change resets to page 1). The roster sorts by ФИО, специальность, город, телефон and дата регистрации, and by «Присутствие» for the chosen congress day (header «Присутствие» over «день ДД.ММ»); the sort lives in the address (`?sort=&dir=`) and defaults to registration date ascending (a third header click, or the «По умолчанию — …» option, returns to it and clears the address) — an address sort the screen cannot honour (presence after a reload drops the day) is rewritten to the default.
+
+- [#2809](https://github.com/doctor-school/ds-platform/pull/2809) [`9bce5b4`](https://github.com/doctor-school/ds-platform/commit/9bce5b49b6ae7849ed003fcb4c145fba052eec77) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 044 EARS-23 — the congress roster's «Все фильтры» (owner layout F1): `FilterBar` gains an opt-in `moreFilters` toggle (applied-count badge, open/closed caret) expanding a filter panel inside the same bar, plus `FilterBarTextField` on the bar's debounce and a `count` `Badge` variant. The admin roster filters by ФИО, место работы, город, регион, телефон, email, специальность, статус письма and a registration date range — city, region and specialty through searchable selectors — each applied filter a chip, all in the address and composing with search, presence and sort.
+
+- [#2622](https://github.com/doctor-school/ds-platform/pull/2622) [`22c8d1e`](https://github.com/doctor-school/ds-platform/commit/22c8d1ef07a7ebf501389b75ae8b1309eb3e0de9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One event-time formatter (004 EARS-12 as amended): `formatEventTime` in `@ds/schemas` presents an online/hybrid event in the viewer's zone and an offline one in Moscow, with an explicit «МСК» / «GMT±N[:MM]» label and grouping keys of the shown time; `@ds/events-storefront` re-exports it and adds `useViewerZone()` (`./ui`); the design system adds the `min-w-zone-label` token. Every former Moscow-time copy (portal, admin, auth-flow, doctor feed, event page, mailer) now delegates to it pinned to Moscow — output unchanged.
+
+- [#2579](https://github.com/doctor-school/ds-platform/pull/2579) [`8c72f43`](https://github.com/doctor-school/ds-platform/commit/8c72f43cd72f8fad78a7952e6e71309ab055b2b0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - EventList: the group plates (days in «Будущие», months in «Прошедшие») stick to the top of the viewport while their group scrolls, as block behaviour — the desktop plate (label + rule) on the page-background surface, the mobile plate keeping the `DayBand` section background — hosts need no page CSS. New `stickyHeaderOffset` prop (number px or CSS length, default `0`) places them under a sticky storefront header.
+
+- [#2621](https://github.com/doctor-school/ds-platform/pull/2621) [`d2f3d91`](https://github.com/doctor-school/ds-platform/commit/d2f3d91dcae0e6be16cb50c9c598dfd000f4a678) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `<LoginCard>`: the sign-in tabs «Пароль» and «По коду» share one typed identifier — switching either way keeps the email or phone already typed; a carried phone opens «По коду» on the sms channel where the host serves it (003 EARS-43, [#2615](https://github.com/doctor-school/ds-platform/issues/2615)). The password and errors are not carried.
+
+- [#2656](https://github.com/doctor-school/ds-platform/pull/2656) [`4016b60`](https://github.com/doctor-school/ds-platform/commit/4016b60050758927b682d76baae9cddbfd2d9330) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Six-digit codes in every emailed/SMS code ([#2636](https://github.com/doctor-school/ds-platform/issues/2636)): the Zitadel generators converge to six digits, `VERIFY_CODE_PATTERN` is `^[0-9]{6}$` and the BFF refuses any other value before an IdP hop. Code cells (003 EARS-22/EARS-42, 021 EARS-11): `<OtpField charset="numeric">` takes the `design-source/auth.dc.html` code-cell attributes (`pattern="[0-9]*"`, `autocapitalize`/`autocorrect` off, no spellcheck) and keeps only the digits of every keystroke, paste and autofill — a letter never fills a cell; `<OtpFocusScreen>` and `<PasswordRecoveryCard>` take the numeric charset — the digit keypad and one-time-code autofill on every registration, sign-in and reset code step of both storefronts. `resolveVerificationCode` follows the six-digit `VERIFY_CODE_PATTERN`.
+
+- [#2827](https://github.com/doctor-school/ds-platform/pull/2827) [`afb9041`](https://github.com/doctor-school/ds-platform/commit/afb90416e89733c738cca23832c98a741077d1ec) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - SMS truthfulness on sign-in and reset (003 EARS-54, 55, 59, [#2777](https://github.com/doctor-school/ds-platform/issues/2777)). `LoginCard` gains an optional `copy.otp.channelSmsHint`, drawn under «Канал кода» only while «SMS» is selected; `PasswordRecoveryCard` gains an optional `copy.request.identifierHint(identifier)`, drawn under the identifier from its live value. The shared `@ds/auth-flow` doors fill both on every storefront: «Код по SMS придёт, только если телефон подтверждён в профиле…» under the SMS switch and, on `/reset`, while the identifier holds a phone; the reset code step for a phone now reads «Если телефон **N** подтверждён в профиле, мы отправили на него код по SMS…» (an email keeps «Код отправлен на …»). New copy keys `login.otp.channelSmsHint`, `reset.identifierPhoneHint`, `reset.completeDescriptionPhone`; new helper `isPhoneIdentifier` (the E.164 branch of the identifier union).
+
+- [#3083](https://github.com/doctor-school/ds-platform/pull/3083) [`da58550`](https://github.com/doctor-school/ds-platform/commit/da585506e07514d57ce6fd8083a1c28c8b543cb5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `NativeSelect` gains an opt-in `wrapValue` prop that shows the chosen option in full on a wrapping line (the real select stays native, laid transparently over it); `DataTable`'s below-`md` «Сортировка» select uses it, so the admin congress roster's sort value is no longer cut to «…» at 390 px ([#2838](https://github.com/doctor-school/ds-platform/issues/2838)).
+
+- [#2869](https://github.com/doctor-school/ds-platform/pull/2869) [`65af6b1`](https://github.com/doctor-school/ds-platform/commit/65af6b1b8c7490cb0982233a3c41fa4bf0009da1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-28 / 019 EARS-7, EARS-17 (Amendment — 2026-10-13, owner decision «Даже если вид снят с публикации, это не повод его исключать из фильтров.»): a retired event kind stays a storefront filter value. `@ds/api`: `GET /v1/public/event-kinds` now serves published and retired kinds (same `{ id, slug, title }`, no status, never a draft), and the doctor feed's kind facet offers a retired kind under its title while its events are in the reading — breaking for any consumer that read the list as «published only». `@ds/design-system`: `EventsFilterOptions` gains the optional `appliedNames`, so an applied «Формат» / «Вид события» value the reading does not offer stays a selected, removable chip under the name the host gives it. Behaviour change for a host that passes no `appliedNames`: such an applied value is now drawn as a chip labelled by its raw id (before: no chip, yet counted), and a chip facet with no options now renders while it has an applied value. `@ds/events-storefront`: an applied kind is always named by its title from the public dictionary (panel and empty state); a kind slug the dictionary does not carry is dropped before any read, like a format outside the fixed set; adds `fetchEventKindTitles` (`null` on a failed read), `KindTitle`, `withKnownKinds`; `FacetColumn`, `FeedSection` and `MonthView` take the required `kinds` dictionary.
+
+- [#2889](https://github.com/doctor-school/ds-platform/pull/2889) [`477fb14`](https://github.com/doctor-school/ds-platform/commit/477fb1436b9796becaf35b3f390576afc2e15bc0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The doctor events feed falls back to every specialty when the doctor's default «Моя и смежные» — own specialty plus adjacent areas — has no events (019 LD-9, EARS-9, [#2871](https://github.com/doctor-school/ds-platform/issues/2871)); a doctor whose own specialty is empty but whose adjacent areas have events keeps «Моя и смежные». When the read names no specialty scope and the remembered specialty's directions and their adjacent ones carry no upcoming doctors-audience event, `GET /v1/storefront/doctor/events` (and the month reads) answer with `targeting.mode: "all"`; an explicit `specialty` in the request is honoured as before. The new `targeting.defaultScopeEmpty` describes the visitor, not the query: every read reports it, whatever scope the request names. `DoctorEventsFeedQuerySchema.specialty` and the month query's `specialty` are optional with no default, so an absent scope is distinguishable from an explicit «Моя и смежные». The shared facet panel shows «Все специальности» selected under the fall-back as this visitor's default: `EventsFilter` takes `defaultSpecialtyScope` and `countAppliedFacets` an `AppliedCountOptions`, so the default scope is counted in neither «Применено: N» nor «Фильтры (N)» and «Сбросить» appears only for a facet beyond it. For this visitor an explicit `specialty=all` is the default too (uncounted, left out of the URL), while «Моя и смежные» is a narrowing: counted with «Сбросить», written as `specialty=mine-and-adjacent` and kept across later facet changes, so the fall-back does not take it back. Removing the last picked specialty returns to the visitor's default scope (`EventsFilter` uses `defaultSpecialtyScope`), and `hasAppliedFacets` / the empty state treat only that default as no facet. In the no-match state, a picked specialty whose removal falls back to every specialty is passed over — no «Показать смежные специальности» — and the next applied facet is weakened (`WidenMatching` now answers a `WidenRead`).
+
+- [#2921](https://github.com/doctor-school/ds-platform/pull/2921) [`ca8b0ec`](https://github.com/doctor-school/ds-platform/commit/ca8b0ec7ef2229680f7ac3893cc5329528b6539c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `Button` gains `size="field"` — a button in one row with a text field takes the field control height (`h-11`, the same as `Input` / `NativeSelect` / `Combobox`) with the default horizontal padding, for every variant. The «Доступы» temporary-password row uses it, so «Скопировать» is no longer taller than the read-only password field.
+
+- [#2338](https://github.com/doctor-school/ds-platform/pull/2338) [`8ae9c15`](https://github.com/doctor-school/ds-platform/commit/8ae9c15f908d94e49a857121c70a4e9390f1ca14) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One sign-up door on both storefronts ([#2027](https://github.com/doctor-school/ds-platform/issues/2027), epic [#2020](https://github.com/doctor-school/ds-platform/issues/2020) wave 1).
+  `@ds/auth-flow/register` owns the `/register` screen — the credential fields, the
+  consent block, the bot-protection challenge and the post-registration confirmation
+  step — and both hosts mount it from their own route file plus host config. The
+  Academy door is now rendered by the package rather than by
+  `apps/portal/app/register/page.tsx`, with no change a signed-in user can see.
+
+  Both doors gain the already-registered visitor's way out, «Уже есть аккаунт?
+  Войти» ([#2331](https://github.com/doctor-school/ds-platform/issues/2331)), which carries the return target forward like every other
+  transition between auth screens; the shared error dictionary now answers a
+  rate-limited (429) or failing (5xx) sign-up with the same sentence on both hosts;
+  and a return target only rides along once the shared guards have revalidated it.
+
+  Consent tiers, the medical-worker declaration and the partner-data item stay host
+  DATA, so each storefront keeps asking exactly what it asked before. The doctor
+  storefront's confirmation step is unchanged in what it does and says — it is now
+  rendered by the package.
+
+  `<RegisterCard>` draws ONE sign-up composition now. The three host-divergence
+  knobs (`submitBlock`, `spacing`, `pendingAffordance`) are gone and the block
+  follows the owner's canvas on both storefronts: no consent-withdrawal sentence
+  stands on the door (the package default `managerNote` is gone; `consentNote`
+  stays a generic slot no host fills), a hairline rule separates the conditions, the
+  read-only «продолжая, вы соглашаетесь…» statement stands after that frame and
+  above the challenge, and the optional opt-in below the submit carries no
+  «необязательно» marker — its position says it. A new `partnerPlateSlot` renders
+  the partner-link notice under the promo field. `<LoginCard>` moves the challenge
+  from the head of the sign-in-code step to directly above the button it protects,
+  as it already stood on the password method. The `Checkbox` box no longer shrinks
+  when its label wraps onto several lines.
+
+  Every auth sentence now has ONE source: the package copy defaults, taken from the
+  owner's auth canvas. A host config states the SET of fields it renders, its routes,
+  endpoints, channels and brand assets — no host words a field any more. The
+  optional `copy` deep-partial override carries exactly one host statement: the
+  Academy's brand panel (eyebrow «Академия Doctor.School», headline «Среда обитания
+  экспертов здравоохранения», sub-copy «Эфиры, программы и сертификация от
+  практикующих экспертов — в одном пространстве.», footer «© Doctor.School.»); the
+  doctor storefront keeps the package brand copy. On the doctor storefront the
+  return-context panel beside the door takes the brand panel's measures: the
+  eyebrow at .14em in the panel's pale blue, the assurance line at 14px on the 1.6
+  line in the same pale blue, capped at 44ch. `AuthFlowBrandCopy.subcopy` is
+  `string | null`, and `<AuthShell>` renders no sub-copy node when its `copy.subcopy`
+  is absent or null. The sign-in password field shows the same canvas `••••••••`
+  placeholder as sign-up on both hosts (new optional
+  `LoginCard` `copy.password.passwordPlaceholder`, package default in auth-flow).
+
+  The sign-up button is LIVE in every state, as the owner's canvas draws it. The
+  disabled submit and the reason line beside it are gone — with them the
+  `RegisterCardProps.unmetPrecondition` prop and the `RegisterCardTestIds.submitReason`
+  test id, both removed from the block's public surface (breaking for any consumer
+  that set them; both storefronts are updated here). Pressing with an access
+  condition still ungranted states it UNDER the row it belongs to — the same
+  sentence as before, now tied to its own checkbox, which turns to the danger tone
+  while the statement stands — and sends no command; granting one condition clears
+  only its own statement, and the optional opt-in never states anything. A host
+  that words a condition its read model carries no statement for says so in the
+  card's error banner instead, so a misconfiguration fails at the door rather than
+  silently at the server.
+
+  The consent block is drawn from the canvas: the access-conditions frame loses its
+  filled header bar for a quiet eyebrow inside a uniform padding, the two
+  conditions are separated by a hairline rule, and every consent label — the
+  marketing opt-in included — is bold in the ink tone above a small quiet help
+  line. `Checkbox` therefore renders its label bold everywhere it is used, and
+  paints its box in the danger tone while the control it wraps is `aria-invalid`.
+
+  The auth card family now renders to the canvas measures on both storefronts: the
+  logo, the card and the processing notice under it share a 440px column (new
+  `--container-auth` token, `max-w-auth`); the title stands 10px above its
+  sub-copy; the badge glyph is 26px and takes the tile's accent in dark mode too;
+  the «Уже есть аккаунт? Войти» line sits 24px under the form instead of 36px; an
+  error-free sign-up card no longer reserves an empty banner gap above the glyph;
+  the invisible bot-protection mount no longer adds a second gap above the submit;
+  the password hint hangs 7px under its field; the processing notice under the card
+  is a left-aligned faint 12/18 line; and the sign-up password field shows the
+  canvas `••••••••` placeholder (new `RegisterCardCopy.passwordPlaceholder`).
+
+- [#2388](https://github.com/doctor-school/ds-platform/pull/2388) [`c754a6d`](https://github.com/doctor-school/ds-platform/commit/c754a6d5a11e8d72ef26d7cc756cc26cafda3977) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One confirmation step on both storefronts ([#2027](https://github.com/doctor-school/ds-platform/issues/2027), epic [#2020](https://github.com/doctor-school/ds-platform/issues/2020) wave 1).
+  `@ds/auth-flow/verify` owns the «Проверьте почту» step — the code field, the
+  resend link with its notice line, the success banner and the «Уже
+  регистрировались?» way out — and both hosts render it: the Academy mounts
+  `@ds/auth-flow/verify/route` from `apps/portal/app/verify/page.tsx`, the doctor
+  storefront renders the same body inline on its registration door. The Academy
+  deep link from the verification mail (`/verify#email=…`) keeps working; a host
+  opts into it with `verify.deepLinkEntry`.
+
+  What a visitor can notice: every failure — a wrong code, a refused resend, a
+  rate-limited (429) or failing (5xx) request — now appears as ONE banner above the
+  title, worded by the shared error dictionary on both hosts; an incomplete code
+  says «Введите код.»; the doctor storefront shows «Код принят — входим…» once the
+  code is accepted and refreshes the page after landing, as the Academy did.
+  The code stays six characters with a letter-capable keyboard.
+
+  `<EmailConfirmCard>` follows the owner's canvas: canvas eyebrows and gaps, the
+  hint and the resend notice at the 13px `caption` step, a hairline rule above the
+  already-registered block, the two actions sharing one
+  wrapping row, and the error plate above the title. New, additive: a `testIds`
+  prop (defaults are the ids the block shipped with) and the exported
+  `EMAIL_CONFIRM_TEST_IDS` / `EmailConfirmCardTestIds`.
+
+- [#2474](https://github.com/doctor-school/ds-platform/pull/2474) [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - «Мои заявки на Конгресс» on the doctor storefront (046 EARS-4…13, 16, 17, [#2433](https://github.com/doctor-school/ds-platform/issues/2433)):
+  the new shared `@ds/congress-submissions` section at `/account/congress` — the
+  list with status labels and filter, the revision deadline with its countdown,
+  the kind choice (every kind with its own intake line; poster and abstracts not
+  yet startable), the oral talk
+  form with the authors editor and autosave, the send panel with the error summary,
+  consent and confirmation, «Забрать на исправление», «Отозвать» and draft deletion.
+  Change, send and withdrawal times and the
+  autosave stamp are in the viewer's time zone; intake and revision dates stay in
+  МСК. A guest is sent to the login and lands back on the section. The account page
+  shows the row «Мои заявки на Конгресс» for an account registered for the
+  congress. `@ds/design-system`: the account card takes an optional `congressHref`
+  row, and `Link` gains the `muted` and `danger` tones, the `caption` size and the
+  `semibold` weight (the canvas quiet action, 13px/600); `cn()` keeps the
+  `text-lead` size beside a text colour instead of dropping it.
+
+- [#2239](https://github.com/doctor-school/ds-platform/pull/2239) [`509bfe2`](https://github.com/doctor-school/ds-platform/commit/509bfe21fa31222013dc78b7d70b78d5e04e51d0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#2027](https://github.com/doctor-school/ds-platform/issues/2027) — every auth form in the package submits by POST. `<LoginCard>`,
+  `<PasswordRecoveryCard>`, `<RegisterCard>`, `<EmailConfirmCard>` and
+  `<OtpFocusScreen>` render their `<form>` with `method="post"`, so a visitor who
+  presses the button before the bundle hydrates submits natively into the request
+  BODY instead of GET-ing their password, identifier or one-time code into the
+  URL, the browser history and every access log on the way. `action` stays off:
+  the HTML default is the current document URL, which is the path the native
+  submit should use, and a path prop would put a host route inside the design
+  system. No visual delta — the rendered surface is unchanged.
+
+  The auth family is also retuned to the owner's canvas, in RENDERING and not only
+  in words. The sign-up and sign-in cards step their inner padding to 36px, raise
+  the badge tile to 52px with the accent glyph, put the title on its own 26px kegel
+  and drop the footer to the 13px caption; every secondary line of the door — the
+  password hint, the access-conditions eyebrow, the consent-note slot, the consent
+  help and the terms sentence — moves to the faint tone and the half-step kegels
+  the canvas actually draws. Two of those are package defaults rather than auth
+  overrides, because a field is one thing: `Checkbox` states its label at 13.5px on
+  the 1.4 line, and `FormMessage` speaks its helper in the 12px/600 faint voice for
+  every field in the system.
+
+  `FormError` gains a public `variant` prop. `banner` draws the canvas plate an
+  operation-level refusal deserves — a 2px danger frame on the danger tint, the
+  sentence itself at 13px/700 in ink so it is read rather than shouted — while the
+  default `inline` keeps the bare line a field-level failure uses. The plate frame
+  takes the danger text tone, so in dark mode it reads `#E15555` with its glyph, as
+  the canvas draws it; light is unchanged. The sign-in door
+  now reports a refused attempt as that plate, and both of its choice groups are
+  named with the same eyebrow the sign-up door's conditions use.
+
+  New type tokens back the above: `font.size.pill` (11.5px, `text-pill`) and
+  `font.size.title-xl` (26px, `text-title-xl`); the named `font.line-height` tokens
+  are additionally mapped onto Tailwind's `--leading-*` namespace, so
+  `leading-title|label|notice|prose` exist as utilities — previously those tokens
+  drove no utility at all.
+
+  Dark-mode field controls now sit on the surface colour (`bg-card`) instead of
+  the page background, matching every design-source canvas: `Input`, `Textarea`,
+  `NativeSelect` and the `Combobox` control and search field. Light is unchanged
+  (both tokens are white there). An invalid field's frame — `Input`, `Textarea`,
+  `NativeSelect` and the `Combobox` control, hover and press included — takes the
+  danger text tone, so it reads `#E15555` in dark as the canvas draws it; light is
+  byte-identical (both tokens are `#C81E1E` there).
+
+  The auth brand panel takes the canvas measures: a `.95fr 1.05fr` split, the fluid
+  `clamp(40px,4vw,64px)` padding, the eyebrow at .14em in the panel's pale blue, a
+  fluid 30–46px headline on the 1.05 line capped at 16ch (the long Academy headline
+  no longer runs into the padding), the 17px sub-copy at 38ch and the 13px footer
+  in white at 85% — new tokens `text-lead`, `text-panel-headline`,
+  `leading-display`, `tracking-eyebrow|display`, `p-panel`,
+  `max-w-panel-headline|panel-lead`, `primary-surface-soft|footer`. The return-context
+  assurance line on that panel adds `leading-assurance` (1.6) and
+  `max-w-panel-assurance` (44ch).
+
+- [#2405](https://github.com/doctor-school/ds-platform/pull/2405) [`026327e`](https://github.com/doctor-school/ds-platform/commit/026327eb09f34c722b68a6a50e0e2b4a3018003c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - New `Sheet` primitive — a side panel for record inspectors ([#2396](https://github.com/doctor-school/ds-platform/issues/2396)), adopted from
+  official shadcn/ui `sheet` (MIT) on the Radix Dialog substrate and re-skinned to
+  the DS tokens. `SheetContent` docks right (or left) at a third (`md`) or half
+  (`lg`) of the viewport; from the `lg` breakpoint it is non-modal so the list
+  behind stays visible, scrollable and clickable, and below `lg` it becomes a modal
+  full cover with a focus trap. Esc and × close it; `onNavigate` pages to the
+  previous/next record on ↑/↓ unless focus is in a form field. `SheetBody` is the
+  only scrolling region and `SheetFooter` holds the actions, so one panel hosts
+  both a read card and an entry form.
+
+- [#2578](https://github.com/doctor-school/ds-platform/pull/2578) [`b0d5750`](https://github.com/doctor-school/ds-platform/commit/b0d57504a82e638ebc4475fee62943e90bd85d40) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `EventsFilter` renders the storefront's own facet set from `host` (doctor: name search, specialty «Моя и смежные» / «Все специальности» + combobox, format, kind, city, direction, «Только с НМО»; Academy: project, expert, topic) per the approved `events-facets.dc.html`; picked combobox values are removable chips, the header states «Фильтры», the applied count and «Сбросить» only while something is applied, and `showHeader={false}` yields the mobile sheet body. Replaces the `fill` / `view` / `tense` / `freeByPul` API; adds `countAppliedFacets` and `defaultAppliedFacets`.
+
+- [#2198](https://github.com/doctor-school/ds-platform/pull/2198) [`bc6cc00`](https://github.com/doctor-school/ds-platform/commit/bc6cc0013ce4aeee6fe3b4e990030a7718a0703f) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One shared storefront shell for both storefronts ([#2180](https://github.com/doctor-school/ds-platform/issues/2180)). The topbar, header,
+  footer and theme control now live in `@ds/storefront-shell`, built from the
+  owner-approved `design-source/ds-shell.dc.html` canvas, and each host supplies
+  values only: a `lib/shell-config.ts` config object and an `auth: ShellAuthState`
+  DATA prop it maps its own session onto — the cluster's markup, geometry and press
+  chain are the package's, so neither host can draw its own chip. The Doctor showcase mounts the pair from its `(storefront)` layout; the
+  Academy mounts the header through its three `@chrome` slots and the footer —
+  new to that host, 008 EARS-14 — from the root layout. The six host twins
+  (`app-shell-header`, `header-user-cluster`, `storefront-header`,
+  `storefront-footer`, and both `theme-toggle` copies) are deleted, closing the
+  2026-09-03 duplicated-theme-toggle debt line.
+
+  `minor` on all four: `@ds/storefront-shell` is net-new to `main` (additive),
+  both apps gain shell surface rather than losing a capability, and
+  `@ds/design-system` gains five additive tokens for the canvas-exact chrome —
+  `--font-size-topbar` / `--font-letter-spacing-topbar` (the 9px / .22em BBM
+  micro-band), `--container-search` (the 440px desktop search cap) and
+  `--font-size-chip` / `--spacing-chip-x` (the 13.5px / 22px header-chip geometry).
+  The `on-primary` Button variant IS that chip now: it absorbs the deleted
+  `HEADER_CHIP_BASE` constant, loses its `border-2` (the canvas paints none) and
+  gains the `chip` and `avatar` sizes, so the chip changes in ONE place for both
+  storefronts. Every other `on-primary` call site loses the border with it. Three
+  visible deltas ride along — the storefront footer appears on every non-auth,
+  non-room Academy route; the guest control is the ONE «Войти / Регистрация»
+  chip of the canvas on BOTH hosts (the Academy label was «Войти», the Doctor
+  showcase drew a «Войти» + «Регистрация» pair), one cluster at every width
+  instead of a separate entry inside the mobile `≡` menu (017 EARS-1 forbids a
+  second cluster in the DOM); the Doctor header search stops at the canvas cap
+  instead of spanning the bar; and the BBM topbar's micro type moves onto the band
+  itself, so its text is centred in the band rather than riding the body's
+  line-height strut.
+
+  The BBM topbar keeps the contrast the canvas paints; that is an owner-accepted
+  a11y exception recorded as Issue [#2189](https://github.com/doctor-school/ds-platform/issues/2189) and carried in the e2e axe scans as a
+  single leaf-scoped node exclusion.
+
+  The chrome's look lives in the primitives, not at the shell's call sites:
+  `@ds/design-system` gains `Input variant="header"` (the navy-band search field),
+  `Link` `tone="header-nav" | "neutral"`, `variant="wrapper" | "mobile-nav-row"`,
+  `size="sm"` and `weight="strong"`, `Button tone="header"`, and a new
+  `DisclosureSummary` primitive (the `≡` control as the on-header chip). Every
+  value is the canvas value, moved — the rendered result is unchanged — and the
+  four shell files are consequently NOT on the `local/no-primitive-style-override`
+  legacy baseline, which now stands at 143 hits across 23 files.
+
+- [#2577](https://github.com/doctor-school/ds-platform/pull/2577) [`4053361`](https://github.com/doctor-school/ds-platform/commit/40533617334ba73a7d9e53b3bf6c6af38c56d744) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `WebinarCard`: new `kindLabel` prop — the event kind and the participation format (`formatLabel`) are two separate parts of the time-plate label row («Мастер-класс · гибрид»); a format-only caller renders as before. New `venueTimeLabel` prop — a hybrid event's start in the venue's local time («На площадке 16:00 GMT+7») in its own line under the date. `recordingLabel` now renders on past cards only.
+
+  Past cards (`variant="past"`) are no longer dimmed with whole-card opacity, which pushed the time-plate text below WCAG AA contrast: the time plate now uses the full-strength muted tokens (`bg-muted` / `text-muted-foreground`).
+
+### Patch Changes
+
+- [#3066](https://github.com/doctor-school/ds-platform/pull/3066) [`c9d821d`](https://github.com/doctor-school/ds-platform/commit/c9d821d314725927d7f20aacc04081f07f8629e7) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The event page hero title hyphenates long words at a syllable boundary instead of breaking them mid-word without a hyphen on narrow screens.
+
+- [#2691](https://github.com/doctor-school/ds-platform/pull/2691) [`4f6fb18`](https://github.com/doctor-school/ds-platform/commit/4f6fb1869cbf13a68d7433c7aaf798fac21af4ab) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The registration code step on both storefronts (`/verify`) sends an accepted code once: from «Код принят — входим…» until the page moves on, «Подтвердить и войти» stays busy and inert, and a click, Enter or a re-typed or pasted code no longer posts the spent code again — so the visitor no longer sees a «code did not fit» error under the success row ([#2469](https://github.com/doctor-school/ds-platform/issues/2469)).
+
+- [#2632](https://github.com/doctor-school/ds-platform/pull/2632) [`3f5fb3e`](https://github.com/doctor-school/ds-platform/commit/3f5fb3efc32cb9b49e61662a57e79157e52fc2eb) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `WebinarCard` renders the sign-up chip label first and the count after a colon («Коллег записались: 128»), so the wording needs no Russian plural agreement ([#2617](https://github.com/doctor-school/ds-platform/issues/2617)); the doctor feed passes the capitalised label. The golden seed no longer lists «Терапия» twice on an эфир whose own specialty is already «Терапия», which rendered the chip twice on the Academy listing ([#2618](https://github.com/doctor-school/ds-platform/issues/2618)).
+
+- [#2641](https://github.com/doctor-school/ds-platform/pull/2641) [`1e18f3f`](https://github.com/doctor-school/ds-platform/commit/1e18f3fcad2965d8494fba1339d170eddc8d06d2) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Congress sign-in hand-off on `/login` (003 EARS-44): `/login?method=code&handoff=<ref>` on both storefronts redeems the reference once per page load and opens straight on the code step «Мы отправили код на <address>»; a refused reference falls back to «По коду» with an empty field, a throttled one shows the usual «Слишком много попыток» line; `handoff` leaves the address bar by history replace in every case, and `/login` is served with `Referrer-Policy: no-referrer`. The sign-in code step no longer shows «Мы отправили новый код» on its first open under React StrictMode.
+
+- [#2865](https://github.com/doctor-school/ds-platform/pull/2865) [`5c52004`](https://github.com/doctor-school/ds-platform/commit/5c52004c3403f167dd0d89a4544defd3a6a172c3) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 003 EARS-55: the SMS hint on the sign-in channel switch and the phone hint under the /reset identifier box are announced with their control (`aria-describedby`). `IdentifierField` takes an optional `description`.
+
+- [#2887](https://github.com/doctor-school/ds-platform/pull/2887) [`d752f97`](https://github.com/doctor-school/ds-platform/commit/d752f970b3931bb6a5d2699800a1466254471145) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The code step sends a typed code once ([#2881](https://github.com/doctor-school/ds-platform/issues/2881)): when the host refuses it, `<OtpField>` (via the new `rejection` prop, threaded through `<OtpFocusScreen>`, `<EmailConfirmCard>`, `<LoginCard>` and `<PasswordRecoveryCard>`) empties every cell and returns the caret to the first, so the confirm button or Enter can no longer re-send the refused code. The refusal plate stays; the reset step keeps the new password.
+
+  A code step now opens with the caret in its first cell ([#2881](https://github.com/doctor-school/ds-platform/issues/2881)): `<OtpField autoFocus>` (threaded through `<OtpFocusScreen>`) places it when the field mounts, never on a re-render. `<EmailConfirmCard>`, `<LoginCard>` and `<PasswordRecoveryCard>` set it on their code step; the new `autoFocusCode` prop (default `true`) lets a catalog specimen opt out.
+
+- [#2935](https://github.com/doctor-school/ds-platform/pull/2935) [`6d58229`](https://github.com/doctor-school/ds-platform/commit/6d58229bb05897b4e121b7e2f56a22dcf2f73de4) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `OtpCodeFieldSchema` is the six-digit `code` FieldSpec rule, so the sign-in and password-reset code steps refuse an incomplete code in the browser with «Введите код.», keep the typed digits and send no request (003 EARS-22, [#2899](https://github.com/doctor-school/ds-platform/issues/2899)).
+
+- [#2921](https://github.com/doctor-school/ds-platform/pull/2921) [`ca8b0ec`](https://github.com/doctor-school/ds-platform/commit/ca8b0ec7ef2229680f7ac3893cc5329528b6539c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `<DataTable>`: the mobile record card omits a field whose column `fullValue` is blank for that row, so a card never shows a label with nothing after it; the desktop grid keeps the empty cell. Columns without `fullValue` are unchanged.
+
+- [#2914](https://github.com/doctor-school/ds-platform/pull/2914) [`a96324a`](https://github.com/doctor-school/ds-platform/commit/a96324ad91d0598643e8dccedf71e41c7c6feed2) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Preserve the password field's caret and entered value when its reveal control is clicked with a pointer.
+
+- [#3099](https://github.com/doctor-school/ds-platform/pull/3099) [`e712be2`](https://github.com/doctor-school/ds-platform/commit/e712be27b7564e1a925532377002638c1164489b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The sign-in code step reached by SMS no longer claims the code was sent ([#2997](https://github.com/doctor-school/ds-platform/issues/2997)): it reads «Если номер … подтверждён в профиле, мы отправили на него код.» and, after a resend, «… новый код.». `login.otp.sentTo` / `resentTo` become per-channel (`{ email, sms }`) and `LoginCard`'s `sentTo` / `resentTo` receive the channel as their second argument. The e-mail branch is unchanged.
+
+- [#2408](https://github.com/doctor-school/ds-platform/pull/2408) [`247b352`](https://github.com/doctor-school/ds-platform/commit/247b3524c9addd7e7ebf83a19ac8615a79b3e306) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One password-recovery flow on both storefronts ([#2027](https://github.com/doctor-school/ds-platform/issues/2027), epic [#2020](https://github.com/doctor-school/ds-platform/issues/2020) wave 1).
+  `@ds/auth-flow/reset` owns both stages of «Сброс пароля» — the identifier step
+  behind the invisible challenge, the code and new-password step with its reveal
+  toggle, the resend with its neutral notice, «Начать заново» and the way back to
+  sign-in — and both hosts mount it from their `/reset` route through
+  `@ds/auth-flow/reset/route`. A signed-in doctor can still open `/reset` (the
+  cabinet «Сменить пароль» entry), and a completed reset still lands signed in on
+  this host's account page — or on the account or эфир page the visitor arrived
+  carrying; any other carried page, an эфир room included, lands on the account
+  page.
+
+  What a visitor can notice: the words now follow the owner's canvas on both
+  hosts — «Сброс пароля» / «Новый пароль», «Отправить код сброса», «Задать новый
+  пароль», «← Вернуться ко входу» and the conditional «Если для … есть аккаунт, мы
+  повторно отправили код.» (the doctor storefront used its own wording before);
+  the card shows the canvas key glyph; the doctor storefront's new-password field
+  gains the show-password toggle the Academy already had; and a reset that
+  started from an эфир on the doctor storefront now completes that registration
+  before landing, as sign-in does. The doctor storefront, which serves no SMS,
+  accepts an email address in the identifier box. The code field is unchanged.
+  A refused request, a refused code or password and a refused resend are now
+  said in the one error plate above the key glyph, as on the other sign-in
+  screens; asking for a new code withdraws a standing «Код не подошёл или пароль
+  отклонён.».
+
+- [#2513](https://github.com/doctor-school/ds-platform/pull/2513) [`1d53550`](https://github.com/doctor-school/ds-platform/commit/1d535508dc5f0bcb0b82964b12ecc1f74d58b52a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Congress posters on the author's submissions API (046 EARS-18…20, [#2434](https://github.com/doctor-school/ds-platform/issues/2434)): a
+  poster draft carries the title, the authors in publication order with no
+  presenting mark, the goal (1–1000) and the content (1–3000), with no file
+  field. Migration 0045 adds the nullable `users.birth_date`, written only by its
+  holder through the new `PUT /v1/me/birth-date` and shown back to them in the
+  section (`birthDate`). A poster draft is created without a birth date; sending
+  it without one is refused (`field-invalid` on `birthDate`). A kind with an age
+  limit refuses an account whose full years on the event's Moscow start day
+  reach it — at creation when a birth date is stored, and at send — with an
+  `age-limit` refusal carrying `{maxAgeYears, eventStartDate, age}` that the
+  cabinet reads as «Постерные доклады принимают от участников младше {N} лет на
+  дату начала Конгресса — {дата}. На эту дату вам будет {возраст} лет.». The
+  section's kinds carry `maxAgeYears`; other kinds are unaffected.
+
+  The cabinet offers the poster: the kind choice creates the draft. The poster
+  form holds the topic, the authors in publication order (no speaker choice, no
+  on-site line), «Цель» and «Содержание», and — until the holder has an earlier
+  sent poster — the birth date («Дата рождения», the DS date control: a calendar
+  day from 1900-01-01 up to today in Moscow, «Спрашиваем один раз — перед первым
+  постером.»), written on blur, with «Укажите дату рождения» when it is empty or
+  out of that range at send. A holder at or above the age limit sees the
+  refusal on the poster card with no start and on a poster draft in place of the
+  send; the birth date stays editable there for correction.
+
+  A failed send keeps «Текст заявки сохранён.» under the refusal also when the
+  refusal is tied to no field (limit, revision deadline, closed intake).
+
+  `@ds/design-system`: the theme root declares `color-scheme` — `light` on
+  `:root`, `dark` under `.dark` — so native control parts (the date picker
+  indicator, scrollbars, autofill, select chrome) follow the resolved theme; in
+  dark the calendar glyph of a date input was a dark icon on the near-black field.
+  Embedded frames keep the UA scheme (`iframe { color-scheme: normal }`): per
+  CSS Color Adjust 1 §2.4 a frame whose scheme differs from its document's gets
+  an opaque Canvas backdrop, so the inherited `dark` turned the light SmartCaptcha
+  challenge into a solid light box over a dark page.
+
+  A cabinet field's error line is referenced by its control's
+  `aria-describedby` (topic, «Цель»/«Содержание» and the other text fields, the
+  birth date with its hint).
+
+- [#2361](https://github.com/doctor-school/ds-platform/pull/2361) [`e33baab`](https://github.com/doctor-school/ds-platform/commit/e33baab31e3f594a62470977270848e733a20fcc) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `Table`: the horizontal scroll wrapper becomes a keyboard-focusable named region (`role="region"`, `tabIndex=0`, `aria-label` from the new `regionLabel` prop, default «Таблица») only while the table overflows, with a token focus ring. `DataTable` lays the grid out with `table-fixed` so its declared column widths and truncation finally apply, and names the region with its caption. A `DataTable` whose every column declares an ABSOLUTE width (`rem`/`px`/`em`/`ch`) gets a table `min-width` equal to their sum and single-line (`whitespace-nowrap`) headers, so a grid wider than its frame scrolls inside that focusable region instead of squeezing its columns; the percent-width contract is unchanged.
+
+- [#2610](https://github.com/doctor-school/ds-platform/pull/2610) [`bb4b540`](https://github.com/doctor-school/ds-platform/commit/bb4b540302e36d4edace761fe5e68e96932cdecd) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `NativeSelect` no longer clips the descenders of its selected value: its
+  vertical padding now leaves a content box one `text-sm` line tall (44px control,
+  2px border, `py-2.5`), since a native select clips its value to the content box
+  instead of centring the line the way `Input` does ([#2509](https://github.com/doctor-school/ds-platform/issues/2509)).
+
+- [#2231](https://github.com/doctor-school/ds-platform/pull/2231) [`82697f8`](https://github.com/doctor-school/ds-platform/commit/82697f8e81fdc31989757c83b93a96547eed06a9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Pin the shared storefront footer to the viewport bottom on short pages of both storefronts ([#2228](https://github.com/doctor-school/ds-platform/issues/2228)): the Academy root layout becomes a min-full-height flex column with the route content growing, and the cabinet screens / profile block stop claiming a full viewport of their own so the footer follows the content instead of dropping a viewport below the fold.
+- Updated dependencies [[`7c196df`](https://github.com/doctor-school/ds-platform/commit/7c196df34bf9d8b4299f1d6c8778f7e02eaae065), [`9388284`](https://github.com/doctor-school/ds-platform/commit/9388284e74a18eeb87478fc8ccc405a7caf631c9), [`9388284`](https://github.com/doctor-school/ds-platform/commit/9388284e74a18eeb87478fc8ccc405a7caf631c9), [`5922a37`](https://github.com/doctor-school/ds-platform/commit/5922a373daa5fd617f2b3076cf7ea9be97f4c32b), [`b54d3db`](https://github.com/doctor-school/ds-platform/commit/b54d3dbda91585981f3c29b162049031cd7d3336), [`ba5c902`](https://github.com/doctor-school/ds-platform/commit/ba5c902323c279cba67e535cc431bc7c89ead8e1), [`ba5c902`](https://github.com/doctor-school/ds-platform/commit/ba5c902323c279cba67e535cc431bc7c89ead8e1), [`423dd7d`](https://github.com/doctor-school/ds-platform/commit/423dd7d9151d4d078c6d4c6df040ef5c75acb90e), [`9bce5b4`](https://github.com/doctor-school/ds-platform/commit/9bce5b49b6ae7849ed003fcb4c145fba052eec77), [`d343086`](https://github.com/doctor-school/ds-platform/commit/d34308684b0abd775bd38a6d79f8535a19d3ca53), [`8350915`](https://github.com/doctor-school/ds-platform/commit/835091584a7a9f2e44a3e5dbbc70bd27e7b17495), [`3cbb163`](https://github.com/doctor-school/ds-platform/commit/3cbb16363e5cda884853b49278a30d373507c408), [`6afe6e3`](https://github.com/doctor-school/ds-platform/commit/6afe6e336b15e8a0eaa9c502e72a17c9a1f09a99), [`44902f9`](https://github.com/doctor-school/ds-platform/commit/44902f9e0b23af2eb8e3227ed78392f3afaa891d), [`22c8d1e`](https://github.com/doctor-school/ds-platform/commit/22c8d1ef07a7ebf501389b75ae8b1309eb3e0de9), [`de024c9`](https://github.com/doctor-school/ds-platform/commit/de024c9daecee663cc52a498712e7641e18759fb), [`1e18f3f`](https://github.com/doctor-school/ds-platform/commit/1e18f3fcad2965d8494fba1339d170eddc8d06d2), [`4016b60`](https://github.com/doctor-school/ds-platform/commit/4016b60050758927b682d76baae9cddbfd2d9330), [`a8eed16`](https://github.com/doctor-school/ds-platform/commit/a8eed16a5c10884386df93c1af1fd650296ef2d9), [`0b41632`](https://github.com/doctor-school/ds-platform/commit/0b41632eda3cdbbf574fe202624bbdf6b1e754e3), [`0d8d973`](https://github.com/doctor-school/ds-platform/commit/0d8d973b1e42c3ec60635d8856c1f65dc2085265), [`d2df276`](https://github.com/doctor-school/ds-platform/commit/d2df276fae7fa13cedbd6c3ba22a628908b7b1d0), [`0d4da1f`](https://github.com/doctor-school/ds-platform/commit/0d4da1f1f7cbdf106e09e1907dc2d07d5478591f), [`8c46e5a`](https://github.com/doctor-school/ds-platform/commit/8c46e5a7a9c912d43e9dbe69c46810cbbc2f5a1b), [`477fb14`](https://github.com/doctor-school/ds-platform/commit/477fb1436b9796becaf35b3f390576afc2e15bc0), [`4fcb5c7`](https://github.com/doctor-school/ds-platform/commit/4fcb5c756b1b7fcb6cade20c32f1d4c96193ea2a), [`ca8b0ec`](https://github.com/doctor-school/ds-platform/commit/ca8b0ec7ef2229680f7ac3893cc5329528b6539c), [`94e9c36`](https://github.com/doctor-school/ds-platform/commit/94e9c36ccdaa90005a9a9958279b6b521e5bbf8a), [`0614f2c`](https://github.com/doctor-school/ds-platform/commit/0614f2c6ac5c52fe7b7b107505c0fdcf2cd29d1b), [`6040122`](https://github.com/doctor-school/ds-platform/commit/6040122fdbe6d98643612e1a3ad851b0861257a0), [`68eda66`](https://github.com/doctor-school/ds-platform/commit/68eda66a9527bc38218da64bcb10097451d856f6), [`0212f80`](https://github.com/doctor-school/ds-platform/commit/0212f80678da2fb087688192404cf0c5447f1521), [`d8ab3cf`](https://github.com/doctor-school/ds-platform/commit/d8ab3cfd6532eec4e41db63a5953a4d114c50d82), [`c8c05f2`](https://github.com/doctor-school/ds-platform/commit/c8c05f2845da1edaf3376eeda5a8c0fa103ad8b7), [`ee5f0d5`](https://github.com/doctor-school/ds-platform/commit/ee5f0d5cc4b86a1e6dc45722ff88cc03cf690dd5), [`fb38777`](https://github.com/doctor-school/ds-platform/commit/fb387779501473a8c19f1aaf19272b4b4bc3962e), [`7ac7bd1`](https://github.com/doctor-school/ds-platform/commit/7ac7bd1567b47af7d321d87b94a68eb171e2598b), [`ed94b36`](https://github.com/doctor-school/ds-platform/commit/ed94b36260d4ef98d16a9d8f0f1e1bdbd33c8449), [`dbc5624`](https://github.com/doctor-school/ds-platform/commit/dbc5624ef3cacf00d7fb60119f5045248fe22299), [`87e7143`](https://github.com/doctor-school/ds-platform/commit/87e7143dd89b7d6d9942f7008f92c64899dd8431), [`1853c46`](https://github.com/doctor-school/ds-platform/commit/1853c46b619aa78d69e4da96c6d5e1a7a02d517d), [`b7e535c`](https://github.com/doctor-school/ds-platform/commit/b7e535c34ce4bbd750c5167f750c3e88dd7b381d), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`096f73f`](https://github.com/doctor-school/ds-platform/commit/096f73ff412db2ac636cd04cb624209e7613da93), [`b1e5396`](https://github.com/doctor-school/ds-platform/commit/b1e5396f7a3516895a1e1dcd10a7fd62090d9f61), [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a), [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508), [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84), [`3ae7607`](https://github.com/doctor-school/ds-platform/commit/3ae7607a52c1143dcd1fae78b854ce627cf94b6b), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`1d53550`](https://github.com/doctor-school/ds-platform/commit/1d535508dc5f0bcb0b82964b12ecc1f74d58b52a), [`bb4b540`](https://github.com/doctor-school/ds-platform/commit/bb4b540302e36d4edace761fe5e68e96932cdecd), [`2680028`](https://github.com/doctor-school/ds-platform/commit/26800282aa5c1ec2e30bc099b836f8aab06b9c18), [`103c74d`](https://github.com/doctor-school/ds-platform/commit/103c74deb7f6e51c0467c520ebfd1813272000bb), [`5912916`](https://github.com/doctor-school/ds-platform/commit/5912916deaab5efea847a94fada3f0ea232634b1), [`972ccca`](https://github.com/doctor-school/ds-platform/commit/972ccca5d12e9bbe83f2be7c0c4ca90aa9401e9e)]:
+  - @ds/schemas@7.0.0
+
 ## 5.4.0
 
 ### Minor Changes

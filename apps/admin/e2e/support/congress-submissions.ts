@@ -1,6 +1,8 @@
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE } from "@ds/schemas";
-import { ADMIN_ORIGIN, bootstrapDoctorSession } from "@ds/e2e/admin-events";
+import { ADMIN_ORIGIN } from "@ds/e2e/admin-events";
+
+import { signInDoctorOnAdminOrigin } from "./storefront-session";
 
 /**
  * Seeding for the 046 committee specs, through the PRODUCTION writers only —
@@ -48,26 +50,13 @@ export async function congressAuthor(
   eventSlug: string,
   displayName: string,
 ): Promise<CongressAuthor> {
-  const { email, password } = await bootstrapDoctorSession(
-    ADMIN_ORIGIN,
-    "author",
-  );
   const context = await browser.newContext({ baseURL: ADMIN_ORIGIN });
   const page = await context.newPage();
   await page.goto("/login");
+  const { email } = await signInDoctorOnAdminOrigin(page, "author");
   const outcome = await page.evaluate(
     async (input) => {
       const json = { "content-type": "application/json" };
-      const login = await fetch("/v1/auth/login", {
-        method: "POST",
-        credentials: "include",
-        headers: json,
-        body: JSON.stringify({
-          identifier: input.email,
-          password: input.password,
-        }),
-      });
-      if (!login.ok) return `login HTTP ${login.status}`;
       const named = await fetch("/v1/me/display-name", {
         method: "PUT",
         credentials: "include",
@@ -82,7 +71,7 @@ export async function congressAuthor(
       if (!registered.ok) return `registration HTTP ${registered.status}`;
       return "ok";
     },
-    { email, password, displayName, eventSlug },
+    { displayName, eventSlug },
   );
   expect(outcome, `author ${email}`).toBe("ok");
   return { email, context, page };

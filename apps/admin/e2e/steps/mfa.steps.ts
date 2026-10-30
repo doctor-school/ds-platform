@@ -9,9 +9,9 @@ import {
 } from "../support/fixtures";
 import {
   bootstrapAdminSession,
-  bootstrapDoctorSession,
   totpCode,
 } from "@ds/e2e/admin-events";
+import { signInDoctorOnAdminOrigin } from "../support/storefront-session";
 
 /**
  * 011 — the browser steps behind `features/admin-mfa-journey.feature`.
@@ -209,27 +209,12 @@ Given(
 Given(
   "a signed-in doctor holding a valid portal session cookie on the admin origin",
   async ({ page }) => {
-    const { email, password } = await bootstrapDoctorSession(adminOrigin());
-    // The 003 login rides the admin origin's same-origin `/v1/*` proxy, so the
-    // portal cookie lands in THIS page's jar — the browser state an operator
-    // would really be carrying if they used both surfaces from one machine.
+    // The storefront session is minted through the sign-in host (the
+    // production sign-in) and lands in THIS page's jar on the admin origin —
+    // the browser state an operator would really be carrying if they used both
+    // surfaces from one machine. The helper proves it live before returning.
     await page.goto("/login");
-    const status = await page.evaluate(
-      async (creds) => {
-        const res = await fetch("/v1/auth/login", {
-          method: "POST",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            identifier: creds.email,
-            password: creds.password,
-          }),
-        });
-        return res.status;
-      },
-      { email, password },
-    );
-    expect(status, "the 003 portal login must succeed").toBe(200);
+    await signInDoctorOnAdminOrigin(page, "doc");
 
     const cookies = await page.context().cookies();
     expect(

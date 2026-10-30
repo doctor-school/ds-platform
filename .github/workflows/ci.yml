@@ -1645,6 +1645,19 @@ jobs:
       # steps read ONE value — the 047 step-up flow ages the operator's second
       # factor in that store (apps/admin/e2e/support/staff-access.ts).
       REDIS_URL: redis://localhost:6379
+      # The sign-in host's API block, as in `api-e2e` (003 EARS-60/64, ADR-0015
+      # §4): the admin flows seed a doctor's STOREFRONT session the production
+      # way, through the sign-in host (#3565,
+      # packages/e2e/lib/storefront-session-seed.ts). The two storefront client
+      # ids, their private_key_jwt keys and INTERNAL_API_TOKEN come from
+      # provision.sh below; INTERNAL_API_URL is where a storefront server
+      # reaches the api's `/v1/internal/*` routes. Dev-stand ports, a CI-only
+      # record key (no data outlives the job).
+      IDP_SIGN_IN_BASE_URI: http://localhost:3005
+      SIGN_IN_ACADEMY_LOGIN_URL: http://localhost:3001/login
+      SIGN_IN_DOCTOR_LOGIN_URL: http://localhost:3004/login
+      SIGN_IN_RECORD_KEY: Y2ktb25seS1zaWduLWluLXJlY29yZC1rZXktMzJieXQ=
+      INTERNAL_API_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -1769,12 +1782,29 @@ jobs:
       - name: Provision the IdP project, client and roles
         env:
           IDP_BASE_URL: http://localhost:9080
+          # The storefront OIDC clients (003 EARS-60, provision.sh step 3.bis), as
+          # in `api-e2e`: they exist only where their URIs are configured. Step
+          # 3.bis.2 writes their JSON keys and INTERNAL_API_TOKEN into the secret
+          # env file only (never stdout); each value is masked before it enters
+          # $GITHUB_ENV, as the client secret is.
+          IDP_BACK_CHANNEL_LOGOUT_URI: http://localhost:3000/v1/auth/back-channel-logout
+          IDP_ACADEMY_REDIRECT_URI: http://localhost:3001/auth/callback
+          IDP_ACADEMY_POST_LOGOUT_URI: http://localhost:3001/
+          IDP_DOCTOR_REDIRECT_URI: http://localhost:3004/auth/callback
+          IDP_DOCTOR_POST_LOGOUT_URI: http://localhost:3004/
+          IDP_SECRET_ENV_FILE: ${{ runner.temp }}/idp-secret.env
         run: |
           set -euo pipefail
           bash infra/dev-stand/idp/provision.sh --pat-file ./idp-pat.txt > ./idp-provision.out
           client_secret="$(grep -E '^IDP_CLIENT_SECRET=' ./idp-provision.out | cut -d= -f2- || true)"
           if [ -n "$client_secret" ]; then echo "::add-mask::$client_secret"; fi
-          grep -E '^IDP_(PROJECT_ID|CLIENT_ID|CLIENT_SECRET)=' ./idp-provision.out >> "$GITHUB_ENV"
+          grep -E '^IDP_(PROJECT_ID|CLIENT_ID|CLIENT_SECRET|ACADEMY_CLIENT_ID|DOCTOR_CLIENT_ID)=' ./idp-provision.out >> "$GITHUB_ENV"
+          for name in IDP_ACADEMY_CLIENT_KEY IDP_DOCTOR_CLIENT_KEY INTERNAL_API_TOKEN; do
+            value="$(grep -E "^${name}=" "$IDP_SECRET_ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
+            if [ -z "$value" ]; then echo "provision.sh wrote no ${name}" >&2; exit 1; fi
+            echo "::add-mask::$value"
+            echo "${name}=${value}" >> "$GITHUB_ENV"
+          done
 
       # ─ application layer ─
       # `drizzle:migrate:ci`, never `drizzle:migrate`: the latter chains

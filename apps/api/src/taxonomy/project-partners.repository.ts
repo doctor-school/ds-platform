@@ -17,7 +17,12 @@ import type {
   Project,
   ProjectOrganisation,
 } from "@ds/db";
-import { organisations, projectOrganisations, projects } from "@ds/db";
+import {
+  organisations,
+  projectOrganisations,
+  projects,
+  SEED_ORGANISATION_ROLES,
+} from "@ds/db";
 import type { ProjectPartnerAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
@@ -152,6 +157,10 @@ export class ProjectPartnersRepository {
         .values({
           projectId: values.projectId,
           organisationId: values.partnerId,
+          // 030 EARS-17: until the «Организации» panel offers a per-project
+          // role (030 EARS-4), a new link takes the investor role every
+          // absorbed link received from migration 0055.
+          roleId: SEED_ORGANISATION_ROLES.investor.id,
           isPrimary: values.isPrimary,
         })
         .returning();

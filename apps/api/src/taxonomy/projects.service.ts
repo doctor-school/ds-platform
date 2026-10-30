@@ -5,6 +5,8 @@ import {
   type CreateProjectRequest,
   type ProjectAdminDetail,
   type ProjectAdminList,
+  type ProjectStage,
+  STAGE_NOTE_REQUIRED_MESSAGE,
   taxonomyETag,
   type UpdateProjectRequest,
 } from "@ds/schemas";
@@ -146,15 +148,19 @@ export class ProjectsService {
       const slug = await allocateTaxonomySlug(base, "project", (candidate) =>
         this.repo.slugTaken(tx, candidate),
       );
+      const stage = input.payload.stage;
       const created = await this.repo.insert(tx, {
         slug,
-        kind: input.payload.kind,
         title: input.payload.title,
+        stage,
+        // 030 EARS-1: the note is stored only while the stage is `soon`.
+        stageNote: stage === "soon" ? (input.payload.stageNote ?? null) : null,
+        displayPosition: await this.repo.nextDisplayPosition(tx),
         defaultAudience: input.payload.defaultAudience,
         description: input.payload.description ?? null,
         coverRef: uploaded?.key ?? null,
       });
-      const detail = await this.toDetail(created);
+      const detail = await this.toDetail(created, 0);
       await this.idempotency.complete(tx, input.lease, {
         status: 201,
         body: detail,
@@ -165,7 +171,7 @@ export class ProjectsService {
     });
 
     return {
-      detail: await this.toDetail(row),
+      detail: await this.toDetail(row, 0),
       etag: taxonomyETag(row.version),
     };
   }
@@ -181,6 +187,10 @@ export class ProjectsService {
         "the project changed since it was read; reload and retry",
       );
     }
+
+    // 030 EARS-1 — the stage note follows the EFFECTIVE stage; a refusal here
+    // changes nothing (re-applied under the row lock below).
+    resolveStagePatch(current, input.payload);
 
     // A PATCH that would leave a PUBLISHED projection incomplete is refused
     // without touching value, version or audit history (012-design §2.2).
@@ -227,9 +237,7 @@ export class ProjectsService {
         input.id,
         input.expectedVersion,
         {
-          ...(input.payload.kind !== undefined
-            ? { kind: input.payload.kind }
-            : {}),
+          ...resolveStagePatch(locked, input.payload),
           ...(input.payload.defaultAudience !== undefined
             ? { defaultAudience: input.payload.defaultAudience }
             : {}),
@@ -260,18 +268,19 @@ export class ProjectsService {
           objectKey: releasedRef,
         });
       }
-      const detail = await this.toDetail(updated);
+      const results = await this.repo.resultCount(tx, updated.id);
+      const detail = await this.toDetail(updated, results);
       await this.idempotency.complete(tx, input.lease, {
         status: 200,
         body: detail,
         etag: taxonomyETag(updated.version),
       });
-      return updated;
+      return { row: updated, results };
     });
 
     return {
-      detail: await this.toDetail(row),
-      etag: taxonomyETag(row.version),
+      detail: await this.toDetail(row.row, row.results),
+      etag: taxonomyETag(row.row.version),
     };
   }
 
@@ -345,9 +354,22 @@ export class ProjectsService {
         );
       }
 
-      // 5. The field matrix, then the structural invariant. Field blockers come
-      //    first because they are the ones a form can point at.
-      const blockers = publishRequirementBlockers(locked);
+      // 5. 030 EARS-6 — every missing item reported together, as field errors:
+      //    the title, the description, ≥1 result, the stage note of a `soon`
+      //    project and the single active curator of 012 EARS-5.
+      const results = await this.repo.resultCount(tx, input.id);
+      const blockers = [
+        ...publishRequirementBlockers(locked),
+        ...(results === 0
+          ? [
+              {
+                path: "results",
+                message: "a published project requires at least one result",
+              },
+            ]
+          : []),
+        ...curatorBlockers(confirmed, lockedExperts),
+      ];
       if (blockers.length > 0) {
         throw new TaxonomyError(
           "PUBLISH_REQUIREMENTS_NOT_MET",
@@ -355,7 +377,6 @@ export class ProjectsService {
           blockers,
         );
       }
-      assertExactlyOneEligibleCurator(confirmed, lockedExperts);
 
       const moved = await this.repo.transitionVersioned(
         tx,
@@ -375,18 +396,18 @@ export class ProjectsService {
           "the project changed since it was read; reload and retry",
         );
       }
-      const detail = await this.toDetail(moved);
+      const detail = await this.toDetail(moved, results);
       await this.idempotency.complete(tx, input.lease, {
         status: 200,
         body: detail,
         etag: taxonomyETag(moved.version),
       });
-      return moved;
+      return { row: moved, results };
     });
 
     return {
-      detail: await this.toDetail(row),
-      etag: taxonomyETag(row.version),
+      detail: await this.toDetail(row.row, row.results),
+      etag: taxonomyETag(row.row.version),
     };
   }
 
@@ -394,8 +415,9 @@ export class ProjectsService {
   async detail(id: string): Promise<ProjectCommandResult> {
     const row = await this.repo.findById(id);
     if (!row) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    const results = await this.repo.resultCount(undefined, id);
     return {
-      detail: await this.toDetail(row),
+      detail: await this.toDetail(row, results),
       etag: taxonomyETag(row.version),
     };
   }
@@ -407,7 +429,8 @@ export class ProjectsService {
       data: rows.map((row) => ({
         id: row.id,
         slug: row.slug,
-        kind: row.kind,
+        stage: row.stage,
+        resultCount: row.resultCount,
         title: row.title,
         defaultAudience: row.defaultAudience,
         status: row.status,
@@ -474,12 +497,18 @@ export class ProjectsService {
     return { key, normalized };
   }
 
-  private async toDetail(row: Project): Promise<ProjectAdminDetail> {
+  private async toDetail(
+    row: Project,
+    resultCount: number,
+  ): Promise<ProjectAdminDetail> {
     return {
       id: row.id,
       slug: row.slug,
-      kind: row.kind,
       title: row.title,
+      stage: row.stage,
+      stageNote: row.stageNote,
+      legacyKind: row.legacyKind,
+      resultCount,
       defaultAudience: row.defaultAudience,
       description: row.description,
       coverUrl: row.coverRef ? await this.storage.urlFor(row.coverRef) : null,
@@ -503,6 +532,13 @@ function publishRequirementBlockers(
   patch: UpdateProjectRequest = {},
 ): { path: string; message: string }[] {
   const blockers: { path: string; message: string }[] = [];
+  const title = patch.title !== undefined ? patch.title : current.title;
+  if (!title) {
+    blockers.push({
+      path: "title",
+      message: "a published project requires a title",
+    });
+  }
   const description =
     patch.description !== undefined ? patch.description : current.description;
   if (description === null || description === undefined) {
@@ -529,21 +565,27 @@ function publishRequirementBlockers(
  * missing from it is one that vanished between discovery and the lock — treated
  * as ineligible rather than as absent, because the row is gone either way.
  */
-function assertExactlyOneEligibleCurator(
+function curatorBlockers(
   curatorIds: readonly string[],
   lockedExperts: readonly ExpertLifecycle[],
-): void {
+): { path: string; message: string }[] {
   if (curatorIds.length === 0) {
-    throw new TaxonomyError(
-      "PUBLISHED_PROJECT_REQUIRES_CURATOR",
-      "a published project needs exactly one active curator; this project has none",
-    );
+    return [
+      {
+        path: "curator",
+        message:
+          "a published project needs exactly one active curator; this project has none",
+      },
+    ];
   }
   if (curatorIds.length > 1) {
-    throw new TaxonomyError(
-      "PUBLISHED_PROJECT_REQUIRES_CURATOR",
-      "a published project needs exactly one active curator; this project has more than one",
-    );
+    return [
+      {
+        path: "curator",
+        message:
+          "a published project needs exactly one active curator; this project has more than one",
+      },
+    ];
   }
   const curator = lockedExperts.find((expert) => expert.id === curatorIds[0]);
   const eligible =
@@ -552,9 +594,37 @@ function assertExactlyOneEligibleCurator(
     curator.deletedAt === null &&
     curator.contentRemovedAt === null;
   if (!eligible) {
-    throw new TaxonomyError(
-      "PUBLISHED_PROJECT_REQUIRES_CURATOR",
-      "the project's curator is not publicly visible; publish the curator first",
-    );
+    return [
+      {
+        path: "curator",
+        message:
+          "the project's curator is not publicly visible; publish the curator first",
+      },
+    ];
   }
+  return [];
+}
+
+/**
+ * 030 EARS-1 — the stage columns a PATCH writes, from the EFFECTIVE stage: a
+ * `soon` project must keep a stage note (refused with a `stageNote` field
+ * error otherwise), and any other stage stores the note empty.
+ */
+function resolveStagePatch(
+  current: Project,
+  patch: UpdateProjectRequest,
+): { stage?: ProjectStage; stageNote?: string | null } {
+  if (patch.stage === undefined && patch.stageNote === undefined) return {};
+  const stage = patch.stage ?? current.stage;
+  if (stage !== "soon") {
+    return { ...(patch.stage !== undefined ? { stage } : {}), stageNote: null };
+  }
+  const note =
+    patch.stageNote !== undefined ? patch.stageNote : current.stageNote;
+  if (!note) {
+    throw new TaxonomyError("VALIDATION_FAILED", "invalid project payload", [
+      { path: "stageNote", message: STAGE_NOTE_REQUIRED_MESSAGE },
+    ]);
+  }
+  return { stage, stageNote: note };
 }

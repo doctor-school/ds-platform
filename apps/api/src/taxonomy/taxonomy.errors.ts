@@ -31,6 +31,7 @@ export const TAXONOMY_ERROR_STATUS: Readonly<
   PUBLISH_REQUIREMENTS_NOT_MET: 409,
   PUBLISHED_PROJECT_REQUIRES_CURATOR: 409,
   INVALID_TRANSITION: 409,
+  OUTPUT_KIND_IN_USE: 409,
   SPEAKER_POSITION_OCCUPIED: 409,
   CONTENT_REMOVED: 409,
   RECORDING_KIND_OCCUPIED: 409,
@@ -63,6 +64,7 @@ const TAXONOMY_ERROR_TITLE: Readonly<Record<TaxonomyErrorCode, string>> = {
   PUBLISH_REQUIREMENTS_NOT_MET: "Publication requirements not met",
   PUBLISHED_PROJECT_REQUIRES_CURATOR: "Published project requires a curator",
   INVALID_TRANSITION: "Invalid lifecycle transition",
+  OUTPUT_KIND_IN_USE: "Output kind is in use",
   SPEAKER_POSITION_OCCUPIED: "Speaker position occupied",
   CONTENT_REMOVED: "Content was editorially removed",
   RECORDING_KIND_OCCUPIED: "Recording kind already occupied",
@@ -128,6 +130,8 @@ export const DETERMINISTIC_TERMINAL_ERROR_CODES: ReadonlySet<TaxonomyErrorCode> 
     "PUBLISH_REQUIREMENTS_NOT_MET",
     "PUBLISHED_PROJECT_REQUIRES_CURATOR",
     "INVALID_TRANSITION",
+    // 030 EARS-3 — the holders under the kind's row lock decide it
+    "OUTPUT_KIND_IN_USE",
     "SPEAKER_POSITION_OCCUPIED",
     "CONTENT_REMOVED",
     // 409 — 014 recording invariants (014-design §3): both are properties of the

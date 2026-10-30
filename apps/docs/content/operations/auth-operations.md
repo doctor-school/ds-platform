@@ -19,8 +19,8 @@ ADR-0001 (auth architecture); the
 [engineering-readiness spec](../specs/tech/2026-05-12-engineering-readiness-design-en.md)
 (Vault, Caddy, the trusted-zone topology).
 
-Roles referenced are **roles, not names** (AGENTS.md §7): the **Tech Lead /
-System Architect** owns the IdP/infra config in Phase 0.
+Roles referenced are **roles, not names** (AGENTS.md §7): the **Tech Lead** (the
+single CODEOWNERS owner) owns the IdP/infra config in Phase 0.
 
 ## The two sync surfaces
 

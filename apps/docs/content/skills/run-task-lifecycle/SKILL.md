@@ -11,7 +11,7 @@ mode: inline
 
 **Kind:** orchestration · **Mode:** inline (the lead agent runs this procedure itself; it dispatches subagents only at the steps marked **dispatch**).
 
-This is the **connective** lifecycle skill. It does not re-implement any step — it names the canonical sequence and **invokes the existing catalog skill** at each gate. Its whole reason to exist is that the audit (epic #247) found the two highest-frequency deviations are at the **ends** of the lifecycle: fields not set at Issue creation (Theme B) and the lifecycle stopping short of merge→close→board-Done→report (Theme A — "почему не отправил на ревью?", "почему ждёт моего мёржа?", "CI прошёл, но задача висит", "почему не проставил зависимости / майлстоун?"). Per **AGENTS.md §6 — "PR lifecycle runs to completion"**: "PR open" is not "done", and the agent runs through merge autonomously.
+This is the **connective** lifecycle skill. It does not re-implement any step — it names the canonical sequence and **invokes the existing catalog skill** at each gate. Its whole reason to exist is that the audit (epic #247) found the two highest-frequency deviations are at the **ends** of the lifecycle: fields not set at Issue creation (Theme B) and the lifecycle stopping short of merge→close→board-Done→report (Theme A — "почему не отправил на ревью?", "почему ждёт моего мёржа?", "CI прошёл, но задача висит", "почему не проставил зависимости / майлстоун?"). Per **AGENTS.md §6 — "Finish the PR tail"**: "PR open" is not "done", and the agent runs through merge autonomously.
 
 > **Cannot proceed without** — the verdict artifacts of `request-mode-a-review` (APPROVE) and the per-kind orchestration gates. The lead does not advance past a gate without its artifact in hand (ADR-0007 §2.4).
 

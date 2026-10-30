@@ -7,7 +7,7 @@
  * Why: the post-merge tail (board Done, worktree teardown, branch/PR re-sweep)
  * is a multi-command sequence run by hand after every merge, and the audit
  * trail shows its steps are the most-forgotten part of the lifecycle
- * (AGENTS.md §6 "PR lifecycle runs to completion"). This wrapper makes the
+ * (AGENTS.md §6 "Finish the PR tail"). This wrapper makes the
  * whole tail ONE deterministic command, without weakening any gate semantics:
  *
  *   1. gate       — spawns `tools/lint/pr-preflight.mjs <N> --pre-merge`

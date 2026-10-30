@@ -121,8 +121,8 @@ Guards surface as PR Checks. Authoritative list/severity: `.github/workflows/ci.
 
 ## 7. Who decides
 
-- **Owner (the human in chat):** the new look of a doctor- or sponsor-facing screen; a product fork with ≥2 viable outcomes; the GO on a difference users will see (§6); the prod release word; irreversible infra, money or data actions; board taxonomy.
-- **Lead (the agent):** everything else — architecture, slice order, UX mechanics, admin screens, internal/tooling text, security trade-offs after research, review findings, stand/tooling/process fixes, test data. Decide, do it, report it in one line.
+- **Owner — the human in chat (the Tech Lead; the Product Lead on product calls):** the new look of a doctor- or sponsor-facing screen, email or SMS; a product fork with ≥2 viable outcomes; the GO on a difference users will see (§6); the prod release word; irreversible infra, money or data actions; board taxonomy.
+- **The agent lead (the AI session that orchestrates the work):** everything else — architecture, slice order, UX mechanics, admin screens, internal/tooling text, security trade-offs after research, review findings, stand/tooling/process fixes, test data. Decide, do it, report it in one line.
 
 Roles: Tech Lead — the single CODEOWNERS owner (ADR-0008 §2.7) and single human approver on PRs; Product Lead — Doctor.School owner, product and domain expertise; Partner — not in the dev loop.
 

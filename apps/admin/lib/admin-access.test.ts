@@ -76,6 +76,7 @@ describe("044 EARS-20 admin access projection", () => {
     expect(adminNavItems(access)).toEqual(ADMIN_SECTION_NAV);
     expect(ADMIN_SECTION_NAV.map((item) => item.href)).toEqual([
       "/events",
+      "/materials",
       "/projects",
       "/experts",
       "/organisations",
@@ -113,6 +114,25 @@ describe("044 EARS-20 admin access projection", () => {
       "/access",
     );
     expect(canAccessPath(registrar, "/access")).toBe(false);
+  });
+
+  it("048 EARS-8: «Материалы» is drawn for platform_admin only and its route opens for no one else", () => {
+    const admin = adminAccess(platformAdmin);
+    expect(adminNavItems(admin)).toContainEqual({
+      href: "/materials",
+      testId: "nav-materials",
+      labelKey: "app.nav.materials",
+    });
+    expect(canAccessPath(admin, "/materials")).toBe(true);
+    expect(canAccessResource(admin, "materials")).toBe(true);
+
+    const registrar = adminAccess(registrarBoundToA);
+    expect(adminNavItems(registrar).map((item) => item.href)).not.toContain(
+      "/materials",
+    );
+    expect(canAccessPath(registrar, "/materials")).toBe(false);
+    expect(canAccessPath(registrar, "/materials/create")).toBe(false);
+    expect(canAccessResource(registrar, "materials")).toBe(false);
   });
 
   it("044 EARS-20.4: an unreadable session fails closed — nothing drawn, nothing reachable", () => {

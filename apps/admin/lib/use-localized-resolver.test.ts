@@ -8,6 +8,7 @@ import {
   EventFormSchema,
   ExpertFormSchema,
   LoginFormSchema,
+  MaterialFormSchema,
   OrganisationFormSchema,
   OrganisationRoleFormSchema,
   ProjectFormSchema,
@@ -562,6 +563,40 @@ describe("event-kind form (012 EARS-25, #2509)", () => {
         title: "Лекция",
         allowedFormats: ["online", "hybrid"],
       }).success,
+    ).toBe(true);
+  });
+});
+
+describe("translateIssue — the material form (048 EARS-1)", () => {
+  const empty = {
+    kind: "news" as const,
+    title: "",
+    authorLine: "",
+    expertId: "",
+    partnerOrganisationId: "",
+  };
+
+  it("048 EARS-1: an empty title and an over-long author line map to their keys", () => {
+    expect(keysFor(MaterialFormSchema, empty)).toEqual(["required"]);
+    expect(
+      keysFor(MaterialFormSchema, {
+        ...empty,
+        title: "Новость",
+        authorLine: "а".repeat(121),
+      }),
+    ).toEqual(["maxLength"]);
+  });
+
+  it("048 EARS-1: a column with no expert is refused at the expert, never fallback", () => {
+    expect(
+      keysFor(MaterialFormSchema, {
+        ...empty,
+        kind: "column",
+        title: "Колонка",
+      }),
+    ).toEqual(["expert"]);
+    expect(
+      MaterialFormSchema.safeParse({ ...empty, title: "Новость" }).success,
     ).toBe(true);
   });
 });

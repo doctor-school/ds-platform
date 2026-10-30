@@ -95,6 +95,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   onResetExtra,
   moreFilters,
   includeRetiredLabel,
+  retainsRetired = true,
   caption,
   record,
   columns,
@@ -162,6 +163,12 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
    * the vocabulary is the resource's.
    */
   includeRetiredLabel?: string;
+  /**
+   * Whether the resource RETAINS withdrawn rows at all. A material (048) is a
+   * draft or published and nothing else — an unpublished one is a draft again —
+   * so a «показывать снятые» switch would filter by a state that never exists.
+   */
+  retainsRetired?: boolean;
   caption: string;
   record: DataTableRecordColumn<Row>;
   columns: DataTableColumn<Row>[];
@@ -348,22 +355,24 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
                   the shared control height (`h-11`, the `Input`/`NativeSelect`
                   box) puts the track on that centre line — the same fix, in the
                   same token, on both shells. */}
-                <div className="flex h-11 items-center">
-                  <Switch
-                    id={`${testId}-include-retired`}
-                    checked={query.includeRetired}
-                    data-testid={`${testId}-include-retired`}
-                    onChange={(event) =>
-                      onQueryChange({
-                        ...query,
-                        includeRetired: event.target.checked,
-                        page: 1,
-                      })
-                    }
-                  >
-                    {includeRetiredLabel ?? t("common.list.includeRetired")}
-                  </Switch>
-                </div>
+                {retainsRetired ? (
+                  <div className="flex h-11 items-center">
+                    <Switch
+                      id={`${testId}-include-retired`}
+                      checked={query.includeRetired}
+                      data-testid={`${testId}-include-retired`}
+                      onChange={(event) =>
+                        onQueryChange({
+                          ...query,
+                          includeRetired: event.target.checked,
+                          page: 1,
+                        })
+                      }
+                    >
+                      {includeRetiredLabel ?? t("common.list.includeRetired")}
+                    </Switch>
+                  </div>
+                ) : null}
               </>
             ) : null}
           </FilterBar>

@@ -35,6 +35,9 @@ import {
   StreamProviderSchema,
   CongressDeskRegistrationRequestSchema,
   CreateEventKindRequestSchema,
+  MATERIAL_AUTHOR_LINE_MAX,
+  MATERIAL_TITLE_MAX,
+  MaterialKindSchema,
   type EventAudience,
   type EventParticipationFormat,
   EventParticipationFormatSchema,
@@ -715,3 +718,27 @@ export interface DeskRegistrationFormFields {
   contactPhone: string;
   paperConsent: boolean;
 }
+
+/**
+ * The material full-page form (048 EARS-1, EARS-19; `material-form` of
+ * 048-design §Admin). The bounds are the SSOT's (`MATERIAL_TITLE_MAX`,
+ * `MATERIAL_AUTHOR_LINE_MAX`); the kind-dependent author is the SSOT rule
+ * `materialAuthorIssues` read from the form's side — a column needs its expert,
+ * a news item's expert box is not on the form at all. An empty select is `""`.
+ * The body is not an RHF field: the editor owns its document, and the server is
+ * the authority on the EARS-2 allowlist (its refusal lands at «Текст»).
+ */
+export const MaterialFormSchema = z
+  .object({
+    kind: MaterialKindSchema,
+    title: z.string().trim().min(1).max(MATERIAL_TITLE_MAX),
+    authorLine: z.string().trim().max(MATERIAL_AUTHOR_LINE_MAX),
+    expertId: z.string(),
+    partnerOrganisationId: z.string(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.kind === "column" && !value.expertId) {
+      ctx.addIssue({ code: "custom", path: ["expertId"] });
+    }
+  });
+export type MaterialFormFields = z.infer<typeof MaterialFormSchema>;

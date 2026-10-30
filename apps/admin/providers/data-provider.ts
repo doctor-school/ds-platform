@@ -16,12 +16,15 @@ import type {
   CreateEventRequest,
   LegacyBroadcastCreateBody,
   CreateExpertRequest,
+  CreateMaterialRequest,
   CreateOrganisationRequest,
   CreateProjectRequest,
   EventAdminDetail,
   EventAdminListItem,
   ExpertAdminDetail,
   ExpertAdminListItem,
+  MaterialAdminDetail,
+  MaterialAdminListItem,
   OrganisationAdminDetail,
   OrganisationAdminListItem,
   ProjectAdminDetail,
@@ -35,6 +38,7 @@ import type {
   UpdateEventExpertRequest,
   UpdateEventRequest,
   UpdateExpertRequest,
+  UpdateMaterialRequest,
   UpdateOrganisationRequest,
   UpdateProjectRequest,
   UpdateRecordingRequest,
@@ -82,6 +86,9 @@ import type {
  *
  *   organisations (032)  the same four calls against /v1/admin/organisations, with
  *                   `logo` as the file part (012 #1286, 032 #3492 — the renamed partners).
+ *
+ *   materials (048)  the same four calls against /v1/admin/materials, JSON only
+ *                   (the body is the EARS-2 document; the list adds the `kind` facet).
  *
  *   directions   (012)  the same four calls against /v1/admin/directions, with NO file
  *                   part at all — a direction is a title plus its address, so every
@@ -133,6 +140,9 @@ const TAXONOMY_MEDIA_PART = {
   // 012 EARS-25 (#2509) — an event kind is a title plus its allowed formats, no
   // image; registered like a direction, so its writes are always JSON.
   "event-kinds": null,
+  // 048 (#3512) — a material is authored as JSON; its body is the EARS-2
+  // document, not a file part, so every write is JSON like a direction's.
+  materials: null,
 } as const;
 type TaxonomyResource = keyof typeof TAXONOMY_MEDIA_PART;
 
@@ -194,8 +204,14 @@ export type CreateEventKindVars = CreateEventKindRequest;
 /** Event-kind edit variables. `version` becomes the `If-Match` precondition. */
 export type UpdateEventKindVars = UpdateEventKindRequest & { version: number };
 
+/** Material create variables (048 EARS-1): JSON only — no cover part in this slice. */
+export type CreateMaterialVars = CreateMaterialRequest;
+/** Material edit variables (048 EARS-5). `version` becomes the `If-Match` precondition. */
+export type UpdateMaterialVars = UpdateMaterialRequest & { version: number };
+
 /** The taxonomy detail projections this provider can return. */
 type TaxonomyDetail =
+  | MaterialAdminDetail
   | ProjectAdminDetail
   | ExpertAdminDetail
   | OrganisationAdminDetail
@@ -203,6 +219,7 @@ type TaxonomyDetail =
   | EventKindAdminDetail;
 /** The taxonomy list rows this provider can return. */
 type TaxonomyListItem =
+  | MaterialAdminListItem
   | ProjectAdminListItem
   | ExpertAdminListItem
   | OrganisationAdminListItem
@@ -417,6 +434,10 @@ function taxonomyListQuery(params: {
     }
     if (filter.field === "status" && typeof value === "string" && value) {
       query.set("status", value as TaxonomyStatus);
+    }
+    // 048 EARS-7 — the material kind facet; no other resource sends it.
+    if (filter.field === "kind" && typeof value === "string" && value) {
+      query.set("kind", value);
     }
     if (filter.field === "includeRetired" && value === true) {
       query.set("includeRetired", "true");
@@ -1101,6 +1122,12 @@ export const expertsUrl = {
 
 export const organisationsUrl = {
   publish: (id: string) => `${ADMIN_BASE}/organisations/${id}/publish`,
+};
+
+/** 048 EARS-4 / EARS-6 — the two named lifecycle commands of a material. */
+export const materialsUrl = {
+  publish: (id: string) => `${ADMIN_BASE}/materials/${id}/publish`,
+  unpublish: (id: string) => `${ADMIN_BASE}/materials/${id}/unpublish`,
 };
 
 /**

@@ -34,6 +34,15 @@ export function Providers({ children }: { children: ReactNode }) {
           edit: "/events/:id",
           meta: { label: t("app.nav.events") },
         },
+        // 048 EARS-7 (#3512) — the Academy's own materials, on the taxonomy
+        // provider path (JSON writes, If-Match on every non-create).
+        {
+          name: "materials",
+          list: "/materials",
+          create: "/materials/create",
+          edit: "/materials/:id",
+          meta: { label: t("app.nav.materials") },
+        },
         // 012 content taxonomy: projects (#1283), experts (#1284), directions
         // (#1285) and organisations (012 #1286 partners, renamed by 032 #3492)
         // on the same shared list shell and provider — one composition.

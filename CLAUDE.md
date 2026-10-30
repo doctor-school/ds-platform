@@ -18,4 +18,4 @@ Claude judgment/implementation: `ds-implementer` / `ds-reviewer` with Opus; scou
 
 ## Auto-memory
 
-Claude uses `~/.claude/projects/<project>/memory/`: MEMORY.md is an English index (first 200 lines /25 KB loaded), topics on demand; RU only for verbatim artifacts. Promote hard rules to the repo. Apply active memory permissions and the approved wrap subset; never route Codex memory here.
+Claude uses `~/.claude/projects/<project>/memory/`: MEMORY.md is an English index (first 200 lines /25 KB loaded), topics on demand; RU only for verbatim artifacts. Promote hard rules to the repo. Apply active memory permissions and only the explicitly approved subset of proposed edits; never route Codex memory here.

@@ -957,7 +957,7 @@ Effective root startup sets включают этот обязательный r
 
 ### 10.2 CLAUDE.md (Claude-only overlay)
 
-CLAUDE.md владеет Claude SessionStart injection, Claude model routing/context thresholds и Claude auto-memory bindings. Он ссылается на общую дисциплину вместо её дублирования. Codex его не импортирует; `.codex/agents/` задаёт роли Codex с наследуемыми поддерживаемыми настройками. Указанные в skills tools и модели — запросы capabilities, а не доказательство их наличия. Permissions активного harness и явная авторизация владельца приоритетнее проектной процедуры. Только прямой запрос владельца разрешает обновление памяти Codex; wrap сам по себе разрешает предложения, не запись.
+CLAUDE.md владеет Claude SessionStart injection, Claude model routing/context thresholds и Claude auto-memory bindings. Он ссылается на общую дисциплину вместо её дублирования. Codex его не импортирует; `.codex/agents/` задаёт роли Codex с наследуемыми поддерживаемыми настройками. Указанные в skills tools и модели — запросы capabilities, а не доказательство их наличия. Permissions активного harness и явная авторизация владельца приоритетнее проектной процедуры. Только прямой запрос владельца разрешает обновление памяти Codex.
 
 ---
 

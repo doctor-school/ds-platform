@@ -958,7 +958,7 @@ The effective root startup sets include this mandatory reference. `pnpm lint:ins
 
 ### 10.2 CLAUDE.md (Claude-only overlay)
 
-CLAUDE.md owns Claude SessionStart injection, Claude model routing/context thresholds and Claude auto-memory bindings. It references shared discipline instead of duplicating it. Codex does not import it; `.codex/agents/` defines Codex roles with inherited supported settings. Tools and models named in skills are capability requests, not evidence they exist. The active harness's permissions and explicit owner authorization take precedence over project procedure. Only a direct owner request permits Codex memory updates; wrap alone permits proposals, not writes.
+CLAUDE.md owns Claude SessionStart injection, Claude model routing/context thresholds and Claude auto-memory bindings. It references shared discipline instead of duplicating it. Codex does not import it; `.codex/agents/` defines Codex roles with inherited supported settings. Tools and models named in skills are capability requests, not evidence they exist. The active harness's permissions and explicit owner authorization take precedence over project procedure. Only a direct owner request permits Codex memory updates.
 
 ---
 

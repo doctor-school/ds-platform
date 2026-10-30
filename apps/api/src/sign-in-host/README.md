@@ -123,8 +123,9 @@ the caller is Zitadel's one address), excluded from the OpenAPI document.
 
 A reset (EARS-12) ends every session of the person through the one subject
 revocation (`SessionService.revokeSubject` → this module's records and their
-Zitadel sessions). An automatic lockout (EARS-15, native Zitadel) ends every
-session of the person inside Zitadel: the session projection deletes their
+Zitadel sessions). Failed passwords never lock (EARS-15); an IdP admin or
+console lock (`POST /v2/users/{id}/lock`) ends every session of the person
+inside Zitadel: the session projection deletes their
 Zitadel sessions and the token endpoint refuses their refresh
 (`invalid_request` `Errors.User.NotActive`, proved live in
 `test/auth/zitadel-lock-ends-sessions.e2e-spec.ts`), so each linked storefront

@@ -2,19 +2,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
 
 /**
- * 003 EARS-65 (lockout clause), ADR-0015 §4 req. 11 — what a lock does to a
+ * 003 EARS-65 (lock clause), ADR-0015 §4 req. 11 — what a lock does to a
  * person's sessions, proved against a **running** Zitadel, not the fake.
  *
- * The automatic lockout of EARS-15 is native Zitadel: a tripped policy
- * appends `user.locked` (v4.17.3 `internal/command/user_human_password.go`).
- * The admin lock (`POST /v2/users/{id}/lock`) appends the same event, and
- * everything downstream keys on the event, not on what wrote it: the session
- * projection deletes every Zitadel session of the user
+ * Failed passwords never lock (EARS-15: the password lockout is off,
+ * `maxPasswordAttempts = 0`); the only lock is the IdP admin or console lock
+ * (`POST /v2/users/{id}/lock`), which appends `user.locked`. Downstream of
+ * that event the session projection deletes every Zitadel session of the user
  * (`internal/query/projection/session.go` `reduceUserStateNotActive`), and a
  * refresh for a user who is not active is refused — live, a 400
- * `invalid_request` `Errors.User.NotActive` (`internal/command/oidc_session.go`). This spec writes the event through the
- * admin lock because the shared dev-stand provisions no lockout policy, and
- * setting one would change every parallel session's sign-in.
+ * `invalid_request` `Errors.User.NotActive` (`internal/command/oidc_session.go`).
  *
  * That refusal is not `invalid_grant`, so the storefront adapter reads it as a
  * plain `failed` refresh, not reuse (`storefront-oidc.idp.ts`): each linked

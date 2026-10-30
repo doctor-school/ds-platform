@@ -193,7 +193,9 @@ test("3545: the back-channel logout exemption admits only POST of the one logout
   );
 
   // Caddy's semantics for this matcher set: every matcher must hold (AND); `path`
-  // is an exact, case-insensitive match; `method` is exact.
+  // is an exact, case-insensitive match; `method` is exact. This model documents
+  // the intended scope; the protection itself is the exact-body deepEqual above
+  // plus the upstream and ordering checks below.
   const host = new RegExp(hostRe[1]);
   const exempt = (h, method, path) =>
     host.test(h) && method === "POST" && path.toLowerCase() === "/v1/auth/back-channel-logout";

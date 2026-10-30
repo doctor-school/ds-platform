@@ -33,16 +33,20 @@
 # or 502 (credentials, no upstream) — never a certificate error, never an indexable
 # page.
 #
-# Basic-auth exemptions — exactly three, each because the caller carries no browser
+# Basic-auth exemptions — exactly four (spec §3), each because the caller carries no browser
 # credentials and is authenticated by its own mechanism:
 #   1. the two Centrifugo path families on `api-<slot>` (websocket upgrade + the
 #      api's X-API-Key publish path) — protected by Centrifugo's HMAC token / API
 #      key, as in production (infra/deploy/compose/api-prod/Caddyfile);
-#   2. the shared IdP host `id.stage.doctor.school` — every slot api reaches it
+#   2. `POST /v1/auth/back-channel-logout` on `api-<slot>`, that method and path
+#      only — Zitadel posts the OIDC back-channel logout to the public slot api
+#      (tools/staging/idp.mjs); the endpoint verifies the signed logout token and is
+#      rate-limited (ADR-0015 §4 req 9), and production has no gate in front of it;
+#   3. the shared IdP host `id.stage.doctor.school` — every slot api reaches it
 #      machine-to-machine through this public origin (IDP_ISSUER is the public URL,
 #      infra/deploy/api.env.example), and so does the converge form (b)
-#      (README → «Zitadel converge»); Zitadel authenticates on its own.
-#   3. the shared object-storage host `s3.stage.doctor.school` — every object URL the
+#      (README → «Zitadel converge»); Zitadel authenticates on its own;
+#   4. the shared object-storage host `s3.stage.doctor.school` — every object URL the
 #      api hands a browser is a PRESIGNED SigV4 GET (apps/api/src/storage/storage.s3.ts),
 #      which is its own, per-object, time-bounded authorization; an unsigned request
 #      gets MinIO's own 403. The gate could not apply anyway: an `<img src>` never
@@ -196,7 +200,7 @@ http://127.0.0.1:2020 {
 	}
 
 	# Shared object storage — one MinIO, one bucket per slot (`ds-<slot>`, created by
-	# `slot up`). Not behind basic auth: see the header of this file (exemption 3).
+	# `slot up`). Not behind basic auth: see the header of this file (exemption 4).
 	# Path style, so the bucket is the first path segment and this single host serves
 	# every slot; no wildcard beneath it and no console.
 	@s3 host s3.{$STAGE_BASE_DOMAIN}

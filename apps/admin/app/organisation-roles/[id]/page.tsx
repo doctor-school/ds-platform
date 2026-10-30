@@ -130,12 +130,17 @@ export default function OrganisationRoleDetailPage() {
                       void query.refetch();
                     },
                     onError: (error) => {
-                      setRefused(refusedFields(error));
+                      // A refusal addressed to the title is shown ON the field only
+                      // (one message); the banner is for failures no field owns.
+                      const fields = refusedFields(error);
+                      setRefused(fields);
                       setErrorKey(
-                        taxonomyErrorKey(
-                          error,
-                          "organisationRoles.errors.updateFailed",
-                        ),
+                        fields.includes("title")
+                          ? null
+                          : taxonomyErrorKey(
+                              error,
+                              "organisationRoles.errors.updateFailed",
+                            ),
                       );
                     },
                   },

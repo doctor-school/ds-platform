@@ -179,7 +179,7 @@ export default function ProjectDetailPage() {
                 />
               </TabsContent>
 
-              {/* «Партнёры» (012 EARS-10, 012-design §5.1) — the AUTHORING side of
+              {/* «Организации» (012 EARS-10, 012-design §5.1) — the AUTHORING side of
                   the project↔partner relation, including which partner is the
                   primary one the public project page shows. */}
               <TabsContent value="partners">

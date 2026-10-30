@@ -1,11 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, count, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, eq, ne, sql } from "drizzle-orm";
 import type { DrizzleHandle, OrganisationRole } from "@ds/db";
-import {
-  organisationRoleAssignments,
-  organisationRoles,
-  organisations,
-} from "@ds/db";
+import { organisationRoleAssignments, organisationRoles } from "@ds/db";
 import type { OrganisationRoleStatus } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
@@ -18,7 +14,11 @@ import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 type Db = DrizzleHandle["db"];
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-/** A role row with the number of draft and published organisations holding it. */
+/**
+ * A role row with the number of organisations holding it — EVERY holder,
+ * whatever its lifecycle status (a retired organisation still holds the role;
+ * 032 EARS-3 «the number of organizations holding it»).
+ */
 export type OrganisationRoleWithCount = OrganisationRole & {
   organisationCount: number;
 };
@@ -129,21 +129,12 @@ export class OrganisationRolesRepository {
     return row ?? null;
   }
 
-  /** Draft and published (not retired) organisations holding `roleId`. */
+  /** Every organisation holding `roleId`, retired holders included. */
   async holderCount(tx: Tx | Db, roleId: string): Promise<number> {
     const [row] = await tx
       .select({ value: count() })
       .from(organisationRoleAssignments)
-      .innerJoin(
-        organisations,
-        eq(organisations.id, organisationRoleAssignments.organisationId),
-      )
-      .where(
-        and(
-          eq(organisationRoleAssignments.roleId, roleId),
-          isNull(organisations.deletedAt),
-        ),
-      );
+      .where(eq(organisationRoleAssignments.roleId, roleId));
     return Number(row?.value ?? 0);
   }
 
@@ -157,11 +148,6 @@ export class OrganisationRolesRepository {
         n: count().as("n"),
       })
       .from(organisationRoleAssignments)
-      .innerJoin(
-        organisations,
-        eq(organisations.id, organisationRoleAssignments.organisationId),
-      )
-      .where(isNull(organisations.deletedAt))
       .groupBy(organisationRoleAssignments.roleId)
       .as("holders");
     const rows = await this.db

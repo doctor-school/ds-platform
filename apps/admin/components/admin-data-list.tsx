@@ -228,6 +228,9 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
     ...extraApplied,
   ];
 
+  const hasFilterControls =
+    searchable || filterable || Boolean(extraFilters) || Boolean(moreFilters);
+
   const resetAll = () => {
     if (onResetExtra) onResetExtra();
     else extraApplied.forEach((filter) => filter.onRemove());
@@ -263,94 +266,109 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
         </p>
       ) : null}
 
-      {/* `FilterBar` takes no arbitrary DOM props, so the e2e handle lives on the
-          wrapper rather than being smuggled into the block. */}
-      <div className="mb-5" data-testid={`${testId}-filters`}>
-        <FilterBar
-          applyMode="instant"
-          label={t("common.list.filtersLabel")}
-          search={
-            searchable
-              ? {
-                  value: query.q,
-                  onCommit: (value: string) =>
-                    onQueryChange({ ...query, q: value.trim(), page: 1 }),
-                  label: searchLabel ?? t("common.list.search"),
-                  placeholder:
-                    searchPlaceholder ?? t("common.list.searchPlaceholder"),
-                }
-              : undefined
-          }
-          applied={applied}
-          appliedLabel={t("common.list.appliedLabel")}
-          removeFilterLabel={t("common.list.removeFilter")}
-          onResetAll={applied.length > 0 ? resetAll : undefined}
-          resetLabel={t("common.list.resetAll")}
-          isBusy={isLoading}
-          busyLabel={t("common.list.busy")}
-          moreFilters={moreFilters}
-          resultCount={
-            <span data-testid={`${testId}-total`}>
-              {t("common.list.found", { total })}
-            </span>
-          }
+      {/* A list with no search and no filter at all (a small book the API
+          answers whole) shows only its count: an empty bordered filter box
+          would offer nothing to set. */}
+      {!hasFilterControls ? (
+        <p
+          role="status"
+          aria-live="polite"
+          className="mb-5 text-caption text-muted-foreground"
         >
-          {extraFilters}
-          {filterable ? (
-            <>
-              <div className="flex flex-col gap-1.5 sm:w-56">
-                <Label htmlFor={`${testId}-status`}>
-                  {t("common.list.status")}
-                </Label>
-                <NativeSelect
-                  id={`${testId}-status`}
-                  value={query.status}
-                  data-testid={`${testId}-status`}
-                  onChange={(event) =>
-                    onQueryChange({
-                      ...query,
-                      status: event.target.value as Status | "",
-                      page: 1,
-                    })
+          <span data-testid={`${testId}-total`}>
+            {t("common.list.found", { total })}
+          </span>
+        </p>
+      ) : (
+        /* `FilterBar` takes no arbitrary DOM props, so the e2e handle lives on the
+          wrapper rather than being smuggled into the block. */
+        <div className="mb-5" data-testid={`${testId}-filters`}>
+          <FilterBar
+            applyMode="instant"
+            label={t("common.list.filtersLabel")}
+            search={
+              searchable
+                ? {
+                    value: query.q,
+                    onCommit: (value: string) =>
+                      onQueryChange({ ...query, q: value.trim(), page: 1 }),
+                    label: searchLabel ?? t("common.list.search"),
+                    placeholder:
+                      searchPlaceholder ?? t("common.list.searchPlaceholder"),
                   }
-                >
-                  <option value="">{t("common.list.statusAny")}</option>
-                  {(
-                    statuses ??
-                    (TAXONOMY_STATUSES as readonly string[] as readonly Status[])
-                  ).map((status) => (
-                    <option key={status} value={status}>
-                      {statusLabels[status]}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
-              {/* The row aligns its children on `items-end`, so a bare switch
+                : undefined
+            }
+            applied={applied}
+            appliedLabel={t("common.list.appliedLabel")}
+            removeFilterLabel={t("common.list.removeFilter")}
+            onResetAll={applied.length > 0 ? resetAll : undefined}
+            resetLabel={t("common.list.resetAll")}
+            isBusy={isLoading}
+            busyLabel={t("common.list.busy")}
+            moreFilters={moreFilters}
+            resultCount={
+              <span data-testid={`${testId}-total`}>
+                {t("common.list.found", { total })}
+              </span>
+            }
+          >
+            {extraFilters}
+            {filterable ? (
+              <>
+                <div className="flex flex-col gap-1.5 sm:w-56">
+                  <Label htmlFor={`${testId}-status`}>
+                    {t("common.list.status")}
+                  </Label>
+                  <NativeSelect
+                    id={`${testId}-status`}
+                    value={query.status}
+                    data-testid={`${testId}-status`}
+                    onChange={(event) =>
+                      onQueryChange({
+                        ...query,
+                        status: event.target.value as Status | "",
+                        page: 1,
+                      })
+                    }
+                  >
+                    <option value="">{t("common.list.statusAny")}</option>
+                    {(
+                      statuses ??
+                      (TAXONOMY_STATUSES as readonly string[] as readonly Status[])
+                    ).map((status) => (
+                      <option key={status} value={status}>
+                        {statusLabels[status]}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+                {/* The row aligns its children on `items-end`, so a bare switch
                   (26px tall) would sit on the BOTTOM edge of the 44px fields
                   beside it instead of on their centre line. Giving the wrapper
                   the shared control height (`h-11`, the `Input`/`NativeSelect`
                   box) puts the track on that centre line — the same fix, in the
                   same token, on both shells. */}
-              <div className="flex h-11 items-center">
-                <Switch
-                  id={`${testId}-include-retired`}
-                  checked={query.includeRetired}
-                  data-testid={`${testId}-include-retired`}
-                  onChange={(event) =>
-                    onQueryChange({
-                      ...query,
-                      includeRetired: event.target.checked,
-                      page: 1,
-                    })
-                  }
-                >
-                  {includeRetiredLabel ?? t("common.list.includeRetired")}
-                </Switch>
-              </div>
-            </>
-          ) : null}
-        </FilterBar>
-      </div>
+                <div className="flex h-11 items-center">
+                  <Switch
+                    id={`${testId}-include-retired`}
+                    checked={query.includeRetired}
+                    data-testid={`${testId}-include-retired`}
+                    onChange={(event) =>
+                      onQueryChange({
+                        ...query,
+                        includeRetired: event.target.checked,
+                        page: 1,
+                      })
+                    }
+                  >
+                    {includeRetiredLabel ?? t("common.list.includeRetired")}
+                  </Switch>
+                </div>
+              </>
+            ) : null}
+          </FilterBar>
+        </div>
+      )}
 
       <div data-testid={`${testId}-table`}>
         <DataTable<Row>

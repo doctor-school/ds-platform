@@ -16,7 +16,7 @@ import { organisationRolesUrl } from "@/providers/data-provider";
  * which mints one Idempotency-Key per call and sends the CSRF proof. On success
  * the operator returns to the book, where the new role is listed — and offered
  * on every organisation form at once. A duplicate active title is marked on the
- * title field.
+ * title field only — no second message above the form.
  */
 export default function CreateOrganisationRolePage() {
   const t = useTranslations();
@@ -58,12 +58,17 @@ export default function CreateOrganisationRolePage() {
               {
                 onSuccess: () => router.push("/organisation-roles"),
                 onError: (error) => {
-                  setRefused(refusedFields(error));
+                  // A refusal addressed to the title is shown ON the field only
+                  // (one message); the banner is for failures no field owns.
+                  const fields = refusedFields(error);
+                  setRefused(fields);
                   setErrorKey(
-                    taxonomyErrorKey(
-                      error,
-                      "organisationRoles.errors.createFailed",
-                    ),
+                    fields.includes("title")
+                      ? null
+                      : taxonomyErrorKey(
+                          error,
+                          "organisationRoles.errors.createFailed",
+                        ),
                   );
                 },
               },

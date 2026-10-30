@@ -91,7 +91,13 @@ test.describe("032 EARS-14 — the organisation registry in the live admin", () 
       );
     }
     // The table row and the narrow card both carry the count; one is shown.
-    await expect(page.getByTestId("role-count-investor").first()).toBeAttached();
+    await expect(
+      page.getByTestId("role-count-investor").first(),
+    ).toBeAttached();
+    // The book has no search and no filter: its count stands alone, with no
+    // empty filter box around it.
+    await expect(page.getByTestId("organisation-roles-total")).toBeVisible();
+    await expect(page.getByTestId("organisation-roles-filters")).toHaveCount(0);
 
     // ── EARS-3 reject: an empty title never leaves the browser ─────────────
     await page.getByTestId("organisation-roles-create").click();
@@ -111,6 +117,8 @@ test.describe("032 EARS-14 — the organisation registry in the live admin", () 
       "aria-invalid",
       "true",
     );
+    // One message, on the field — no banner repeating it above the form.
+    await expect(page.getByTestId("create-error")).toHaveCount(0);
     expect(page.url()).toMatch(/\/organisation-roles\/create$/);
 
     // ── EARS-3 accept: the new role joins the book ─────────────────────────
@@ -197,7 +205,8 @@ test.describe("032 EARS-14 — the organisation registry in the live admin", () 
     // every held role. Reject: the book request fails, the form says so and
     // cannot be saved. Accept: the retry loads it, the held roles are still
     // ticked, and a save keeps them.
-    const isRoleBook = (url: URL) => url.pathname.endsWith("/organisation-roles");
+    const isRoleBook = (url: URL) =>
+      url.pathname.endsWith("/organisation-roles");
     await page.route(isRoleBook, (route) => route.abort("failed"));
     await page.reload();
     await expect(page.getByTestId("organisation-roles-error")).toBeVisible({
@@ -271,6 +280,7 @@ test.describe("032 EARS-14 — the organisation registry in the live admin", () 
     await expect(
       page.getByText("Роль с таким названием уже есть", { exact: false }),
     ).toBeVisible();
+    await expect(page.getByTestId("update-error")).toHaveCount(0);
     await expect(page.getByTestId("organisation-role-heading")).toHaveText(
       renamedRole,
     );

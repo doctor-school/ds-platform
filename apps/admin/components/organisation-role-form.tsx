@@ -77,7 +77,11 @@ export function OrganisationRoleForm({
       >
         <FormSection
           legend={t("organisationRoles.sections.main")}
-          description={t("organisationRoles.sections.mainDescription")}
+          description={t(
+            detail
+              ? "organisationRoles.sections.mainDescription"
+              : "organisationRoles.sections.createDescription",
+          )}
         >
           <FormField
             control={form.control}

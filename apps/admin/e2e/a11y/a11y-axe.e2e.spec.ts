@@ -346,7 +346,9 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     // The server-refused duplicate title — the field-addressed error state.
     await page.getByTestId("organisation-role-title").fill("Инвестор");
     await page.getByTestId("submit-organisation-role").click();
-    await page.getByTestId("create-error").waitFor({ state: "visible" });
+    await page
+      .locator('[data-testid="organisation-role-title"][aria-invalid="true"]')
+      .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
     await page.goto("/organisation-roles");

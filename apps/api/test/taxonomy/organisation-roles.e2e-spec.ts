@@ -257,7 +257,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(active.data.map((r) => r.id)).toContain(body.id);
     });
 
-    it("032 EARS-3: the list shall count the draft and published organisations holding each role", async () => {
+    it("032 EARS-3: the list shall count every organisation holding each role, a retired (withdrawn) holder included", async () => {
       const role = JSON.parse(
         (await createRole(`Счётная ${tag()}`)).payload,
       ) as {
@@ -281,7 +281,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         );
       }
       const listed = (await listRoles()).data.find((r) => r.id === role.id);
-      expect(listed?.organisationCount).toBe(2);
+      expect(listed?.organisationCount).toBe(3);
     });
 
     it("032 EARS-3: when a role is renamed with a matching If-Match, the system shall keep its id and slug and bump its version", async () => {

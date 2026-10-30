@@ -48,6 +48,7 @@ Feature: 045 — Education index demo
     And the "show more" and "export for reporting" controls are disabled
 
   @EARS-12
+  @public-education-index-rendering
   Scenario Outline: theme and viewport render correctly
     When the visitor opens "/education-index" and "/education-index/partner-demo" with theme "<theme>" and viewport "<viewport>"
     Then both pages render with no unstyled or missing token
@@ -58,11 +59,13 @@ Feature: 045 — Education index demo
       | light | 390      |
 
   @EARS-13
+  @public-education-index-rendering
   Scenario: no forbidden compliance word appears
     When the visitor opens "/education-index" and "/education-index/partner-demo"
     Then the response contains none of "пациент, спасённая жизнь, помощь родственникам, связь с продажами, торговое название препарата, спонсор, рекламодатель, вкладчик, майнинг"
 
   @EARS-13
+  @public-education-index-rendering
   Scenario: pages are not indexable
     When the visitor requests either route
     Then the response carries a noindex robots directive

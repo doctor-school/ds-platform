@@ -248,3 +248,314 @@ Then("no value renders before the index launch date", async ({ page }) => {
   expect(await chart.innerText()).not.toMatch(/нед\. (0|-\d)/u);
   await expect(chart.getByTestId("dynamics-bar")).toHaveCount(12);
 });
+
+// 045 EARS-12: independent semantic-token expectations for both demo surfaces.
+const renderingTokens = [
+  "--space-2-5",
+  "--space-2",
+  "--space-gutter",
+  "--color-warning-tint",
+  "--color-warning",
+  "--font-size-eyebrow",
+  "--font-weight-extrabold",
+  "--font-line-height-normal",
+  "--color-foreground",
+  "--color-hero",
+  "--space-6",
+  "--font-size-caption",
+  "--font-weight-bold",
+  "--color-hero-muted",
+  "--space-4",
+  "--font-size-xs",
+  "--color-white",
+  "--color-blue-700",
+  "--font-letter-spacing-micro",
+  "--color-header-topbar",
+  "--color-background",
+  "--space-8",
+  "--font-size-2xl",
+  "--font-size-4xl",
+  "--font-letter-spacing-display",
+  "--color-hero-foreground",
+  "--font-size-base",
+  "--font-line-height-relaxed",
+  "--font-weight-medium",
+  "--space-1",
+  "--space-16",
+  "--space-12",
+  "--space-5",
+  "--font-size-3xl",
+  "--color-primary-action",
+  "--space-1-5",
+  "--font-weight-semibold",
+  "--color-faint",
+  "--space-3",
+  "--color-muted-foreground",
+  "--color-section",
+  "--color-border",
+  "--font-size-2xs",
+  "--color-hairline",
+  "--color-ring",
+  "--font-size-body-compact",
+  "--color-tint",
+  "--color-tint-foreground",
+  "--font-size-lg",
+  "--font-letter-spacing-heading",
+  "--color-success-text",
+  "--color-destructive-text",
+  "--color-info",
+  "--color-card",
+  "--space-7",
+  "--font-letter-spacing-tight",
+  "--font-line-height-tight",
+  "--color-neutral-900",
+  "--font-size-sm",
+  "--color-elevation-soft",
+  "--font-line-height-snug",
+  "--shadow-lg",
+  "--font-size-xl",
+  "--font-family-sans",
+  "--color-success",
+  "--color-success-tint",
+  "--color-elevation",
+];
+
+const renderingRoutes = [
+  "/education-index",
+  "/education-index/partner-demo",
+] as const;
+type ResponseReceipt = { route: string; html: string };
+type Presentation = Awaited<ReturnType<typeof inspectPresentation>> & {
+  route: string;
+  theme: string;
+  width: number;
+  failedStyles: string[];
+};
+const rendering = new WeakMap<
+  StepWorld,
+  { responses?: ResponseReceipt[]; presentations?: Presentation[] }
+>();
+
+async function readRenderingResponses(page: Page, origin: string) {
+  const responses: ResponseReceipt[] = [];
+  for (const route of renderingRoutes) {
+    const response = await page.request.get(`${origin}${route}`, {
+      maxRedirects: 0,
+    });
+    expect(response.status()).toBe(200);
+    expect(new URL(response.url()).pathname).toBe(route);
+    const html = await response.text();
+    expect(html).toContain(
+      route.endsWith("partner-demo")
+        ? "Ортелла Биотех"
+        : "Образовательный индекс Doctor.School",
+    );
+    expect(html).toContain('data-testid="demo-plaque"');
+    responses.push({ route, html });
+  }
+  return responses;
+}
+
+async function inspectPresentation(page: Page) {
+  return page.evaluate((tokens: string[]) => {
+    const root = document.documentElement;
+    const computedRoot = getComputedStyle(root);
+    const rules: CSSStyleRule[] = [];
+    const errors: string[] = [];
+    function collect(list: CSSRuleList) {
+      for (const rule of list) {
+        // CSSStyleRule can also have cssRules: inspect it AND its descendants.
+        if (rule instanceof CSSStyleRule) rules.push(rule);
+        if ("cssRules" in rule) collect((rule as CSSGroupingRule).cssRules);
+      }
+    }
+    for (const sheet of document.styleSheets) {
+      try {
+        collect(sheet.cssRules);
+      } catch {
+        errors.push("inaccessible stylesheet");
+      }
+    }
+    let tokenUses = 0;
+    const missing: string[] = [];
+    for (const rule of rules) {
+      let elements: NodeListOf<Element>;
+      try {
+        elements = document.querySelectorAll(rule.selectorText);
+      } catch {
+        // Pseudo-element rules cannot be queried as DOM elements.
+        continue;
+      }
+      for (const property of rule.style) {
+        for (const match of rule.style
+          .getPropertyValue(property)
+          .matchAll(/var\((--[\w-]+)/g)) {
+          const name = match[1]!;
+          if (!/^--(?:ds-|color-|font-|spacing|radius|space-)/.test(name))
+            continue;
+          for (const element of elements) {
+            tokenUses++;
+            if (!getComputedStyle(element).getPropertyValue(name).trim())
+              missing.push(`${name}: ${property} in ${rule.selectorText}`);
+          }
+        }
+      }
+    }
+    const heading = document.querySelector("h1")!;
+    const plaque = document.querySelector('[data-testid="demo-plaque"]')!;
+    return {
+      dark: root.classList.contains("dark"),
+      rules: rules.length,
+      stylesheets: document.styleSheets.length,
+      errors,
+      tokenUses,
+      missing,
+      semanticTokenCount: tokens.length,
+      missingRootTokens: tokens.filter(
+        (name) => !computedRoot.getPropertyValue(name).trim(),
+      ),
+      overflow: root.scrollWidth > innerWidth,
+      headingFont: getComputedStyle(heading).fontFamily,
+      headingSize: getComputedStyle(heading).fontSize,
+      plaquePosition: getComputedStyle(plaque).position,
+    };
+  }, renderingTokens);
+}
+
+When(
+  /^the visitor opens "\/education-index" and "\/education-index\/partner-demo" with theme "(dark|light)" and viewport "(1440|390)"$/,
+  async (
+    { browser, host, httpCredentials, locale, world },
+    theme: "dark" | "light",
+    viewport: string,
+  ) => {
+    const width = Number(viewport);
+    const context = await browser.newContext({
+      baseURL: new URL(baseUrlFor(host)).origin,
+      ...(httpCredentials ? { httpCredentials } : {}),
+      ...(locale ? { locale } : {}),
+      colorScheme: theme,
+      viewport: { width, height: 1000 },
+    });
+    const presentations: Presentation[] = [];
+    try {
+      await context.addInitScript(
+        (preference) => localStorage.setItem("ds-theme", preference),
+        theme,
+      );
+      for (const route of renderingRoutes) {
+        const page = await context.newPage();
+        const failedStyles: string[] = [];
+        page.on("response", (response) => {
+          if (
+            response.request().resourceType() === "stylesheet" &&
+            !response.ok()
+          )
+            failedStyles.push(new URL(response.url()).pathname);
+        });
+        page.on("requestfailed", (request) => {
+          if (request.resourceType() === "stylesheet")
+            failedStyles.push(new URL(request.url()).pathname);
+        });
+        expect(
+          (await page.goto(route, { waitUntil: "networkidle" }))?.status(),
+        ).toBe(200);
+        expect(new URL(page.url()).pathname).toBe(route);
+        await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+        await expect(page.getByTestId("demo-plaque")).toBeVisible();
+        await expect(page.getByRole("heading", { level: 1 })).toContainText(
+          route.endsWith("partner-demo")
+            ? "Ортелла Биотех"
+            : "Образовательный индекс Doctor.School",
+        );
+        presentations.push({
+          route,
+          theme,
+          width,
+          failedStyles,
+          ...(await inspectPresentation(page)),
+        });
+        await page.close();
+      }
+    } finally {
+      await context.close();
+    }
+    rendering.set(world, { presentations });
+  },
+);
+
+Then(
+  "both pages render with no unstyled or missing token",
+  async ({ world }) => {
+    const presentations = rendering.get(world)!.presentations!;
+    expect(presentations.map(({ route }) => route)).toEqual(renderingRoutes);
+    for (const result of presentations) {
+      expect(result.dark).toBe(result.theme === "dark");
+      expect(result.stylesheets).toBeGreaterThanOrEqual(3);
+      expect(result.rules).toBeGreaterThan(1000);
+      expect(result.tokenUses).toBeGreaterThan(1000);
+      expect(result.semanticTokenCount).toBe(67);
+      expect(result.missingRootTokens).toEqual([]);
+      expect(result.missing).toEqual([]);
+      expect(result.errors).toEqual([]);
+      expect(result.failedStyles).toEqual([]);
+      expect(result.overflow).toBe(false);
+      expect(result.headingFont).toContain("Inter");
+      expect(result.headingSize).toBe(
+        result.width === 390
+          ? "28px"
+          : result.route.endsWith("partner-demo")
+            ? "40px"
+            : "56px",
+      );
+      expect(result.plaquePosition).toBe("sticky");
+    }
+  },
+);
+
+When(
+  /^the visitor opens "\/education-index" and "\/education-index\/partner-demo"$/,
+  async ({ page, host, world }) => {
+    rendering.set(world, {
+      responses: await readRenderingResponses(
+        page,
+        new URL(baseUrlFor(host)).origin,
+      ),
+    });
+  },
+);
+
+Then(
+  "the response contains none of {string}",
+  async ({ world }, phraseList: string) => {
+    const phrases = phraseList.split(", ");
+    expect(phrases).toHaveLength(9);
+    const responses = rendering.get(world)!.responses!;
+    expect(responses.map(({ route }) => route)).toEqual(renderingRoutes);
+    for (const { html } of responses)
+      for (const phrase of phrases)
+        expect(html.toLowerCase()).not.toContain(phrase);
+  },
+);
+
+When("the visitor requests either route", async ({ page, host, world }) => {
+  rendering.set(world, {
+    responses: await readRenderingResponses(
+      page,
+      new URL(baseUrlFor(host)).origin,
+    ),
+  });
+});
+
+Then("the response carries a noindex robots directive", async ({ world }) => {
+  const responses = rendering.get(world)!.responses!;
+  expect(responses.map(({ route }) => route)).toEqual(renderingRoutes);
+  for (const { html } of responses) {
+    const robots = [...html.matchAll(/<meta\b[^>]*>/gi)]
+      .filter(([tag]) => /\bname=["']robots["']/i.test(tag))
+      .map(([tag]) => /\bcontent=["']([^"']*)["']/i.exec(tag)?.[1] ?? "");
+    expect(
+      robots.flatMap((content) => content.toLowerCase().split(/\s*,\s*/)),
+    ).toContain("noindex");
+  }
+});

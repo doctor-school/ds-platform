@@ -17,3 +17,4 @@ export * from "./registration-attendance.js";
 export * from "./congress-submission-settings.js";
 export * from "./congress-submissions.js";
 export * from "./sign-in-host-records.js";
+export * from "./materials.js";

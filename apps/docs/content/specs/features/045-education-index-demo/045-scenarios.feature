@@ -17,13 +17,13 @@ Feature: 045 — Education index demo
     And the leaderboard shows exactly 12 organisations with no podium above the table
     And each row shows its index, rank delta, investment amount and share, doctors, lessons and events
 
-  @EARS-6
+  @EARS-6 @public-education-index
   Scenario: Ortella Biotech row is open by default
     Given the visitor opens "/education-index"
     Then the Ortella Biotech row is already expanded
     And two sub-metric bars appear for education-investment share and doctor-attention share
 
-  @EARS-6
+  @EARS-6 @public-education-index
   Scenario: any leaderboard row toggles open and closed independently
     Given the visitor is on "/education-index"
     When the visitor clicks a leaderboard row that is closed
@@ -31,7 +31,7 @@ Feature: 045 — Education index demo
     When the visitor clicks that same row again
     Then that row collapses, and every other row's open/closed state is unchanged
 
-  @EARS-7
+  @EARS-7 @public-education-index
   Scenario: index dynamics start at the launch date
     Given the visitor is on "/education-index"
     Then the dynamics chart shows 4 weekly bars for the top-3 organisations starting at week 1

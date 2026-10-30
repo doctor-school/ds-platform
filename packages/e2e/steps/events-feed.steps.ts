@@ -2723,7 +2723,14 @@ Then(
     await expect(signup).toHaveAccessibleName(/\S/u);
     const target = new URL((await signup.getAttribute("href"))!, page.url());
     expect(target.pathname).toBe("/register");
-    expect(target.searchParams.get("returnTo")).toBe(card.href);
+    // A hybrid event opens on a tab, and its CTA returns the doctor to that tab:
+    // the one query a return target carries is `?mode=offline|online` (020 LD-4).
+    const returnTo = target.searchParams.get("returnTo") ?? "";
+    const [returnPath, returnQuery] = returnTo.split("?", 2);
+    expect(returnPath).toBe(card.href);
+    if (returnQuery !== undefined) {
+      expect(returnQuery).toMatch(/^mode=(?:offline|online)$/u);
+    }
   },
 );
 

@@ -142,7 +142,7 @@ export class CanonicalExpertFixture {
           "INSERT exact owned Expert and active sparse-position relation",
         );
         await this.query(
-          "INSERT INTO experts(id,slug,family_name,given_name,credentials,professional_role,status,first_published_at,deleted_at) VALUES($1,$2,'Резолвер',$3,'к.м.н.','Кардиолог',$4,$5,$6)",
+          "INSERT INTO experts(id,slug,family_name,given_name,credentials,professional_role,affiliation,bio,status,first_published_at,deleted_at) VALUES($1,$2,'Резолвер',$3,'к.м.н.','Кардиолог','Тестовая клиника','Профессиональная биография тестового эксперта.',$4,$5,$6)",
           [
             expert.id,
             expert.slug,

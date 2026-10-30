@@ -230,9 +230,10 @@ http://127.0.0.1:2020 {
 	}
 
 	# Centrifugo path families on `api-<slot>` — one of the TWO basic-auth
-	# exemptions on a slot (spec §3): browser websocket + the api's key-gated
-	# publish path. The capture name `slot` is shared with `@stage_slot` below, so
-	# `{re.slot.2}` names the slot in either branch.
+	# exemptions on a slot host (four stand-wide, with `id` and `s3`; spec §3):
+	# browser websocket + the api's key-gated publish path. The capture name `slot`
+	# is shared with `@stage_slot` below, so `{re.slot.2}` names the slot in either
+	# branch.
 	@stage_centrifugo {
 		header_regexp slot Host "^(api)-(main|pr-[1-9][0-9]{0,9})[.]"
 		path /connection/websocket /api/*
@@ -241,8 +242,8 @@ http://127.0.0.1:2020 {
 		reverse_proxy {re.slot.2}-centrifugo:8000
 	}
 
-	# The OIDC back-channel logout on `api-<slot>` — the other slot exemption (spec
-	# §3, #3545): `POST /v1/auth/back-channel-logout` ONLY. Zitadel posts it to the
+	# The OIDC back-channel logout on `api-<slot>` — the other slot-host exemption
+	# (spec §3, #3545): `POST /v1/auth/back-channel-logout` ONLY. Zitadel posts it to the
 	# public slot api (tools/staging/idp.mjs) carrying no browser credentials; the
 	# endpoint verifies the signed logout token and is rate-limited (ADR-0015 §4
 	# req 9), and production has no gate in front of `api.` at all. Any other method

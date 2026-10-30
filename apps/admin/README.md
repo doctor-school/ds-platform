@@ -83,8 +83,13 @@ curator, then proves from the first Expert side that the retained row cannot be
 restored into the occupied seat and directs the operator to curator replacement.
 The EARS-9/22 reverse-authoring path creates a member relationship from the
 Expert detail, records its retained row identity, and proves that the project
-and Expert endpoints both show that same row and role exactly once. Run all five
-slices with `pnpm --filter @ds/admin test:e2e --project taxonomy --grep "standalone Expert retains|project roster keeps exactly one curator|Expert-side authoring creates one retained member relationship|retired project Expert relationship returns|retired curator relationship stays retired"`.
+and Expert endpoints both show that same row and role exactly once.
+The two `@public-read-boundaries` originals cover EARS-12/16 empty versus
+ineligible relationship reads and EARS-29 audience placement through cookie-free
+public API requests. They require `E2E_API_URL` and the existing fixture selectors
+`E2E_TAXONOMY_DOCTORS_EVENT_SLUG`, `E2E_TAXONOMY_EXPERTS_EVENT_SLUG` and
+`E2E_TAXONOMY_EMPTY_EVENT_SLUG`; the CI step supplies its existing seed rows.
+Run all seven slices with `pnpm --filter @ds/admin test:e2e --project taxonomy --grep "standalone Expert retains|project roster keeps exactly one curator|Expert-side authoring creates one retained member relationship|retired project Expert relationship returns|retired curator relationship stays retired|@public-read-boundaries"`.
 The selected taxonomy journeys also run in the `admin-e2e` CI job against its
 real Admin/API/database/MFA stack. Unbound 012 contracts remain visible as skipped; the existing `chromium`
 project keeps strict generation for its 007/011 scenarios. Validation, editing,

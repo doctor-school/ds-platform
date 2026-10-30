@@ -559,13 +559,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
         | taxonomy endpoint |
         | join              |
 
-    @EARS-12 @EARS-16 @happy
-    Scenario: An eligible source with no eligible relations is distinct from an ineligible source
-      Given one public source has no eligible related rows and another source is draft, retired or unknown
-      When a zero-auth caller reads the same relationship direction for each source
-      Then the eligible source returns 200 with empty data, null nextCursor and hasMore false
-      And the ineligible source returns 404 RESOURCE_NOT_FOUND Problem Details
-
     @EARS-10 @EARS-12 @happy
     Scenario: Base taxonomy routes remain executable without future surface aggregates
       Given a published project and expert each have several eligible relationships
@@ -1062,14 +1055,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the public kind list is read
     Then the draft kind is not listed
 
-  @EARS-29 @happy
-  Scenario: The audience alone places an event on one storefront
-    Given a published event with the audience doctors
-    And a published event with the audience experts
-    When the doctor storefront and the Academy read their events
-    Then the doctors-audience event is read only by the doctor storefront
-    And the experts-audience event is read only by the Academy
-
   @EARS-29 @failure
   Scenario: An event without a valid audience is refused
     When the admin saves an event with no audience or an unknown audience
@@ -1112,3 +1097,22 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
   Scenario: A project without a default audience is refused
     When the admin saves a project with no default audience
     Then the project contract rejects the write
+
+  Rule: Public relationship and audience reads
+
+    @public-read-boundaries
+    @EARS-12 @EARS-16 @happy
+    Scenario: An eligible source with no eligible relations is distinct from an ineligible source
+      Given one public source has no eligible related rows and another source is draft, retired or unknown
+      When a zero-auth caller reads the same relationship direction for each source
+      Then the eligible source returns 200 with empty data, null nextCursor and hasMore false
+      And the ineligible source returns 404 RESOURCE_NOT_FOUND Problem Details
+
+    @public-read-boundaries
+    @EARS-29 @happy
+    Scenario: The audience alone places an event on one storefront
+      Given a published event with the audience doctors
+      And a published event with the audience experts
+      When the doctor storefront and the Academy read their events
+      Then the doctors-audience event is read only by the doctor storefront
+      And the experts-audience event is read only by the Academy

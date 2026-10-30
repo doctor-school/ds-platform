@@ -9,14 +9,18 @@ import {
 import type { HostId } from "../hosts.js";
 import { prepareCaptchaForJourney } from "./captcha-stub.js";
 import {
+  sendHostCommandFromForm,
+  type SentHostCommand,
+} from "./captured-response.js";
+import {
   captureAddressedMailCheckpoint,
   fetchRecoveryCode,
   mailpitUrlFor,
   nativeRecoveryMail,
 } from "./mailpit.js";
 import { inputSecret } from "./owned-registration.js";
-import { signInWithPassword } from "./sign-in.js";
-import { isSignInHostForm } from "./sign-in-host-api.js";
+import { isReactHydrated, signInWithPassword } from "./sign-in.js";
+import { isSignInHostForm, signInHostApiPath } from "./sign-in-host-api.js";
 import { standHttpCredentials } from "./stand-http-credentials.js";
 
 /**
@@ -84,6 +88,101 @@ export async function signInPageThroughHost(
     credentials,
     base.replace(/\/$/, ""),
   );
+}
+
+/**
+ * A refusal-replay probe on the sign-in host (#3565): `page` opens the
+ * storefront `/login` at `base`, lands on the host's password form for the
+ * auth request the IdP handed THIS browser, and sends `command` to the host
+ * API `pathname` as that form's own post — the password step's submit,
+ * intercepted and redirected with its `authRequest` + `csrf`
+ * ({@link sendHostCommandFromForm}). The placeholder credentials typed into
+ * the form never leave the page. `page` ends back on the storefront `base`,
+ * where the caller reads the session and profile the replay must not grant.
+ */
+export async function replayOnHostForm(
+  page: Page,
+  base: string,
+  pathname: string,
+  command: Record<string, unknown>,
+): Promise<SentHostCommand> {
+  const root = base.replace(/\/$/, "");
+  await page.goto(`${root}${LOGIN_PATH}`, { waitUntil: "load" });
+  expect(
+    isSignInHostForm(page.url()),
+    "the storefront login entry leads to the sign-in host form",
+  ).toBe(true);
+  const form = page.locator("form", {
+    has: page.locator('input[autocomplete="current-password"]'),
+  });
+  await expect(form).toHaveCount(1);
+  await page.waitForFunction(isReactHydrated, await form.elementHandle());
+  await page
+    .locator('input[autocomplete="username"]')
+    .fill("replay-probe@example.test");
+  await page
+    .locator('input[autocomplete="current-password"]')
+    .fill("Replay-probe-placeholder-aA1!");
+  const sent = await sendHostCommandFromForm(
+    page,
+    pathname,
+    command,
+    () => page.getByRole("button", { name: /войти|продолжить/i }).click(),
+    {},
+    { via: signInHostApiPath("/v1/auth/login") },
+  );
+  await page.goto(`${root}/`, { waitUntil: "load" });
+  await page.waitForLoadState("networkidle");
+  return sent;
+}
+
+const STATUS_ERRORS: Readonly<Record<number, string>> = {
+  400: "Bad Request",
+  401: "Unauthorized",
+};
+
+/**
+ * True when `body` is exactly the API's generic refusal: `statusCode`,
+ * `message` and `error` and nothing else (no field names the account or why).
+ */
+export function genericRefusal(
+  body: string,
+  status: 400 | 401,
+  message: string,
+): boolean {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (parsed === null || typeof parsed !== "object") return false;
+    const fields = parsed as Record<string, unknown>;
+    return (
+      Object.keys(fields).length === 3 &&
+      fields.statusCode === status &&
+      fields.message === message &&
+      fields.error === STATUS_ERRORS[status]
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** The storefront session and profile statuses `page`'s browser gets on its storefront origin. */
+export async function privateAccess(
+  page: Page,
+): Promise<{ session: number; profile: number }> {
+  return page.evaluate(async () => ({
+    session: (
+      await fetch("/v1/auth/session", {
+        credentials: "include",
+        cache: "no-store",
+      })
+    ).status,
+    profile: (
+      await fetch("/v1/me/profile", {
+        credentials: "include",
+        cache: "no-store",
+      })
+    ).status,
+  }));
 }
 
 /** The browser `page` runs in, for a detached context beside it. */

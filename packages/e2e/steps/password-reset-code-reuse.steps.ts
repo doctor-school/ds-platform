@@ -23,7 +23,12 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
-import { browserOf, closeOwnedLoginWindow } from "../lib/host-sign-in.js";
+import {
+  browserOf,
+  closeOwnedLoginWindow,
+  genericRefusal,
+  replayOnHostForm,
+} from "../lib/host-sign-in.js";
 
 const SESSION = "__Host-ds_session";
 interface ResetReuse {
@@ -291,40 +296,32 @@ When(
       "different policy-conforming replay proposal",
     ).toBe(true);
     const guest = await privatePage(browser, state, world.hostBaseUrl);
-    // #3172 — the storefront `/reset` is now an entry to the sign-in host,
-    // whose origin has no storefront session or profile to observe. The replay
-    // targets the storefront's own reset BFF (still served) from a storefront
-    // page, where the same tab reads its session and profile.
+    // #3565 — the replay goes where a reset code is entered now: the sign-in
+    // host's reset-complete step, as a host form post of the guest's own auth
+    // request; the guest is then back on the storefront, whose session and
+    // profile the replay must not have granted.
     await guest.goto(`${world.hostBaseUrl}/`, { waitUntil: "load" });
     await guest.waitForLoadState("networkidle");
     await noPrivateAccess(guest);
     // Replay the retained code without requesting a replacement challenge.
-    const pending = captureResponse(guest, "/v1/auth/password/reset/complete");
-    const evidence = await guest.evaluate(
-      async ({ identifier, code, newPassword }) => {
-        const response = await fetch("/v1/auth/password/reset/complete", {
-          method: "POST",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ identifier, code, newPassword }),
-        });
-        const body = await response.json().catch(() => ({}));
-        return {
-          status: response.status,
-          generic:
-            Object.keys(body).length === 3 &&
-            body.statusCode === 400 &&
-            body.message === "the request could not be completed" &&
-            body.error === "Bad Request",
-        };
-      },
+    const refused = await replayOnHostForm(
+      guest,
+      world.hostBaseUrl,
+      signInHostApiPath("/v1/auth/password/reset/complete"),
       {
         identifier: state.email,
         code: state.code,
         newPassword: state.rejectedPassword,
       },
     );
-    const refused = await pending;
+    const evidence = {
+      status: refused.response.status(),
+      generic: genericRefusal(
+        refused.body,
+        400,
+        "the request could not be completed",
+      ),
+    };
     expect(evidence, "consumed reset code is refused generically").toEqual({
       status: 400,
       generic: true,

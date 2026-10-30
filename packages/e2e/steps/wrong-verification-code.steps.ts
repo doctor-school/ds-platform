@@ -28,6 +28,8 @@ interface Probe extends OwnedCredentials {
   context: BrowserContext;
   page: Page;
   before?: WrongVerificationSnapshot;
+  /** The form-post fields of the code step's own UI post (003 EARS-69/70). */
+  form?: { authRequest: string; csrf: string };
 }
 interface Refusal {
   status: number;
@@ -225,9 +227,16 @@ When(
       const captured = await pending;
       let codeOnly = false;
       try {
-        const request: unknown = hostCommand(JSON.parse(
+        const posted: unknown = JSON.parse(
           captured.response.request().postData() ?? "",
-        ));
+        );
+        const request: unknown = hostCommand(posted);
+        // hostCommand yields a non-empty command only for a post carrying
+        // both form fields as non-empty strings.
+        if (Object.keys(request as object).length > 0) {
+          const fields = posted as { authRequest: string; csrf: string };
+          probe.form = { authRequest: fields.authRequest, csrf: fields.csrf };
+        }
         codeOnly =
           request !== null &&
           typeof request === "object" &&
@@ -278,16 +287,19 @@ When(
     // Five measured round-robin rounds follow the discarded UI warm-up round.
     // 18 refusals + one prerequisite confirmation fit ADR-0001's 20/IP budget.
     value.samples = value.probes.map(() => []);
+    // #3565 — each measured refusal is the host's code step, posted from the
+    // probe's own host page with the form fields its UI post carried.
     for (let round = 0; round < 5; round += 1) {
       for (const [index, probe] of value.probes.entries()) {
+        if (!probe.form) throw new Error("the code step's form fields missing");
         const observed = await probe.page.evaluate(
-          async ({ email, code }) => {
+          async ({ path, email, code, form }) => {
             const started = performance.now();
-            const response = await fetch("/v1/auth/verify", {
+            const response = await fetch(path, {
               method: "POST",
               credentials: "include",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ email, code }),
+              body: JSON.stringify({ email, code, ...form }),
             });
             const body = await response.text();
             return {
@@ -296,7 +308,12 @@ When(
               ms: performance.now() - started,
             };
           },
-          { email: probe.email, code: value.wrongCode! },
+          {
+            path: signInHostApiPath("/v1/auth/verify"),
+            email: probe.email,
+            code: value.wrongCode!,
+            form: probe.form,
+          },
         );
         value.samples[index]!.push({
           ...observed,

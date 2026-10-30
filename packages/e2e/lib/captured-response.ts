@@ -55,10 +55,7 @@ const pendingCaptures = new WeakMap<
   Map<string, Promise<CapturedResponse>>
 >();
 
-function startCapture(
-  page: Page,
-  pathname: string,
-): Promise<CapturedResponse> {
+function startCapture(page: Page, pathname: string): Promise<CapturedResponse> {
   const matches = (url: URL) => url.pathname === pathname;
   let resolveFetched: (fetched: APIResponse) => void = () => undefined;
   const fetchedResponse = new Promise<APIResponse>((resolve) => {
@@ -89,7 +86,10 @@ function startCapture(
 }
 
 /** The page's `Response`, its header reads answered by the fulfilled `fetched`. */
-function withFetchedHeaders(response: Response, fetched: APIResponse): Response {
+function withFetchedHeaders(
+  response: Response,
+  fetched: APIResponse,
+): Response {
   const headers = fetched.headersArray();
   const values = (name: string) =>
     headers
@@ -143,7 +143,10 @@ export interface SentHostCommand extends CapturedResponse {
  * from the door's own post; `headers` overrides request headers (`null`
  * removes one). The API's answer reaches the page unchanged, and the returned
  * `sent` / `sentHeaders` are what the API received — the page's `Request`
- * still shows the form's original body, so evidence reads `sent`.
+ * still shows the form's original body, so evidence reads `sent`. `via` names
+ * the host API path the door's submit really posts to when it is not
+ * `pathname` (a replay probe riding the password step's post to another host
+ * command); the page then sees `pathname`'s answer under `via`.
  */
 export async function sendHostCommandFromForm(
   page: Page,
@@ -151,7 +154,9 @@ export async function sendHostCommandFromForm(
   command: Record<string, unknown>,
   submit: () => Promise<void>,
   headers: Record<string, string | null> = {},
+  options: { readonly via?: string } = {},
 ): Promise<SentHostCommand> {
+  const posted = options.via ?? pathname;
   let resolveSent: (value: {
     fetched: APIResponse;
     sent: string;
@@ -180,19 +185,23 @@ export async function sendHostCommandFromForm(
       if (value === null) delete sentHeaders[name.toLowerCase()];
       else sentHeaders[name.toLowerCase()] = value;
     }
-    const fetched = await route.fetch({ postData: sent, headers: sentHeaders });
+    const fetched = await route.fetch({
+      postData: sent,
+      headers: sentHeaders,
+      ...(posted === pathname
+        ? {}
+        : { url: new URL(pathname, route.request().url()).toString() }),
+    });
     await fetched.body();
     resolveSent({ fetched, sent, sentHeaders });
     await route.fulfill({ response: fetched });
   };
-  await page.route(
-    (url: URL) => url.pathname === pathname,
-    handler,
-    { times: 1 },
-  );
+  await page.route((url: URL) => url.pathname === posted, handler, {
+    times: 1,
+  });
   const response = page.waitForResponse(
     (candidate) =>
-      new URL(candidate.url()).pathname === pathname &&
+      new URL(candidate.url()).pathname === posted &&
       candidate.request().method() === "POST",
   );
   await submit();

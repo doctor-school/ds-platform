@@ -24,6 +24,11 @@ import {
   verificationEvidence,
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
+import {
+  genericRefusal,
+  privateAccess,
+  replayOnHostForm,
+} from "../lib/host-sign-in.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { test, After, Given, Then, When } from "./support/auth-fixtures.js";
 
@@ -121,11 +126,7 @@ Given(
       "/account",
     );
     expect(
-      registrationEvidence(
-        response.request().postData() ?? "",
-        body,
-        state,
-      ),
+      registrationEvidence(response.request().postData() ?? "", body, state),
     ).toEqual({
       credentialsMatch: true,
       consentMatches: true,
@@ -368,47 +369,25 @@ Then(
     const visitor = await guest.newPage();
     state.guest = { context: guest, page: visitor };
     {
-      // #3172 — the storefront `/login` is now an entry to the sign-in host,
-      // whose origin has no storefront session or profile to observe. The
-      // replay targets the storefront's own credential BFF (still served) from
-      // a storefront page, where the same tab reads its session and profile.
-      await visitor.goto(`${world.hostBaseUrl}/`, { waitUntil: "load" });
+      // #3565 — the replay goes where a code is entered now: the sign-in
+      // host's login-code step, as a host form post of the guest's own auth
+      // request; the guest is then back on the storefront, whose session and
+      // profile the replay must not have granted.
       expect(
         (await guest.cookies()).some((cookie) => cookie.name === SESSION),
         "replay starts without the owner's session",
       ).toBe(false);
-      const pending = captureResponse(visitor, "/v1/auth/login/otp");
-      const evidence = await visitor.evaluate(
-        async ({ identifier, code }) => {
-          const response = await fetch("/v1/auth/login/otp", {
-            method: "POST",
-            credentials: "include",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ identifier, channel: "email", code }),
-          });
-          const body = await response.json().catch(() => ({}));
-          const session = await fetch("/v1/auth/session", {
-            credentials: "include",
-            cache: "no-store",
-          });
-          const profile = await fetch("/v1/me/profile", {
-            credentials: "include",
-            cache: "no-store",
-          });
-          return {
-            status: response.status,
-            generic:
-              Object.keys(body).length === 3 &&
-              body.statusCode === 401 &&
-              body.message === "invalid credentials" &&
-              body.error === "Unauthorized",
-            session: session.status,
-            profile: profile.status,
-          };
-        },
-        { identifier: state.email, code: state.code },
+      const refusal = await replayOnHostForm(
+        visitor,
+        world.hostBaseUrl,
+        signInHostApiPath("/v1/auth/login/otp"),
+        { identifier: state.email, channel: "email", code: state.code },
       );
-      const refusal = await pending;
+      const evidence = {
+        status: refusal.response.status(),
+        generic: genericRefusal(refusal.body, 401, "invalid credentials"),
+        ...(await privateAccess(visitor)),
+      };
       expect(
         evidence,
         "the consumed code is generically refused without private access",

@@ -29,6 +29,12 @@ The new _look_ of a doctor- or sponsor-facing surface is the owner's taste decis
 - **Show** — the lead first drives the change in the running app (accept + reject paths, dependent states, error language; AGENTS.md §6); the PR screenshots record that drive and never stand in for it. Then the owner gives the GO on those screenshots; no staging slot. Record the common fields plus `Stage-B-evidence: <https PR capture URL>` in place of `Stage-B-live-url`, and the Stage-B request names what was driven and how accept and reject behaved.
 - **Ask** — the full stand procedure below.
 
+Every GO, any tier:
+
+- **A GO is an unconditional acceptance.** A reply that lists findings and ends «остальное ок» is a findings list, not a GO: fix the findings (or move them to an Issue the owner agrees to), re-capture, send a new request (#3454).
+- **The pre-GO drive is exploratory, not the scripted path.** Before any GO ask the lead sweeps the surface as an operator — every transition from every state, repeat and out-of-order clicks, form saves interleaved with transitions, each refusal message cleared by the next success — and fixes what it finds first — the owner's GO is acceptance, not QA; a green `e2e-stage` run is not the drive (#1705, #3265).
+- **The lead views every capture whole before the ask.** Open each linked capture and check the whole frame (cards, headers, clipping, empty boxes), not only the changed element; a reviewer's «no mismatch» is not this check (#2869).
+
 The rest of this section is the Ask procedure for a visible difference. Stage A never substitutes for the live verdict: the owner re-confirms the rendered result on the running stand, which stays **up** until verdict; an unanswered approval question **BLOCKS merge** (never screenshot-only or after-the-fact).
 
 - **Behavioral-only lead self-cert (narrow carve-out).** Only with **no new/changed visual surface** and explicit owner autonomous-merge authorization; never bypass a pending design question. On a PR without environment-sensitive paths (`.claude/rules/change-tiers.md` → Enforcement) record `Stage-B: N/A (no visual surface) — lead-certified` with green CI e2e on the head plus main-vs-head captures of every touched screen as `Stage-B-evidence`. A PR with environment-sensitive paths needs the lead's live slot run instead: record `Stage-B: N/A (no visual surface) — lead-certified; harness: <command>; run UTC: <timestamp>; report: <Issue/PR artifact URL>` and put complete owner-readable stdout and tested SHA at that URL. Webinar presence/chat uses `pnpm loadtest:room:verify`, not a build/unit/e2e summary.
@@ -54,6 +60,7 @@ The rest of this section is the Ask procedure for a visible difference. Stage A 
   ```
 
 - **Press states are driven before the request.** Capture a driven `:active`/press state of every interactive element on a non-default surface, both themes (live pointer or `CSS.forcePseudoState`, one CDP session — memory `reference_cdp_forced_pseudo_state_isolation`); reasoning from markup is not verification. A round that fixes a state carries a captured BEFORE≠AFTER pair of that state, judged against rest and hover.
+- **Walk links come from the stand DB.** Query the stand for the titles and ids the walk names and give direct links; never a nav label, title or slug from an earlier request (#2358).
 - **An anomaly seen is re-observed, never explained away.** Anything odd in the pre-request pass is reproduced live before the request; an inference («момент загрузки») is not an observation.
 - **Operator comprehension is part of the drive.** For every new form field and nav entry the verifier states what an operator would enter or expect from the rendered label + hint alone; a field whose meaning is not derivable, or a nav label that opens something else, is a FAIL even when the round-trip passes.
 - **Representative stand data first** — within the session's own branch DB only (`ds_dev_<N>`: `dev:db:drop <N>` + `dev:db:branch <N>`, or realistic RU rows seeded there); the shared stand DB is seeded, never purged (`dev-stand.md` → Shared-stand discipline). E2e fixtures for user-visible text use realistic values.

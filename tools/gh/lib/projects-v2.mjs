@@ -17,7 +17,7 @@
  * own error posture — set-board-status dies, pr-land's board-clear stage treats a
  * failure as a non-fatal reported line.
  *
- * Board coordinates: memory `feedback_project_status_done_on_merge`.
+ * Board coordinates: the doctor-school org Projects v2 board #1 (constants below).
  */
 import { spawnSync } from "node:child_process";
 

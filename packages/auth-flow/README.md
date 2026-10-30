@@ -231,7 +231,10 @@ has always worked this way; the doctor storefront was brought to it on 2026-09-1
 by the owner's verdict on PR #2239 («в Академии такого нет, сразу идёт редирект в
 конечную точку. Бед доп. шагов и нажатий кнопок.»), amending 021 EARS-10. The
 no-session branch is unchanged: the visitor goes to this host's sign-in door
-carrying the target, per S3.
+carrying the target, per S3. Any auth change that leaves the page by soft
+navigation (sign-in, auto-login, logout) also calls `router.refresh()`, so the
+server-read header and the layout guards see the new session and Back does not
+show a stale signed-in or signed-out screen (PR #2282).
 
 **Tested, not asserted.** Each rule is pinned per route: S1/S2 by a page-level test
 that a guest (or a signed-in visitor) request REDIRECTS rather than returning a

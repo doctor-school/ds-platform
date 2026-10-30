@@ -64,8 +64,7 @@
  * 2 = TIMEOUT (still pending at deadline); 3 = usage / gh-spawn error;
  * 4 = worktree guard refusal.
  *
- * Canon: AGENTS.md §4, skill `merge-when-green` Step 1, memory
- * `feedback_phase0_merge_gate_manual`. Issue #836.
+ * Canon: AGENTS.md §4, skill `merge-when-green` Step 1. Issue #836.
  */
 import { normalizeReviewBody } from "./review-body.mjs";
 import {

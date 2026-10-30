@@ -50,7 +50,9 @@ export class ProjectResultsRepository {
     projectId: string,
     rows: readonly ProjectResultInsert[],
   ): Promise<void> {
-    await tx.delete(projectResults).where(eq(projectResults.projectId, projectId));
+    await tx
+      .delete(projectResults) // retained-data-ok: 030 EARS-2 — the result set is replaced as one ordered set; each removed row is captured by the 010 `project_results_audit` trigger
+      .where(eq(projectResults.projectId, projectId));
     if (rows.length === 0) return;
     await tx
       .insert(projectResults)

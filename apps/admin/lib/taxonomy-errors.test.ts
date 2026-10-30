@@ -360,6 +360,11 @@ describe("030 project container refusals", () => {
       expect(lookup(`projects.publish.blockers.${path}`)).toEqual(
         expect.any(String),
       );
+      // The tab that fixes the item is its own short control, so a narrow
+      // screen wraps the item text instead of side-scrolling (EARS-20).
+      expect(lookup(`projects.publish.blockerTabs.${path}`)).toEqual(
+        expect.any(String),
+      );
     }
     expect(
       publishBlockers({ message: "x", statusCode: 412, errorCode: "STALE" }),

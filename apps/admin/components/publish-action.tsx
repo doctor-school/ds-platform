@@ -55,8 +55,9 @@ export function PublishAction({
   onPublished: () => void;
   /**
    * 030 EARS-6 — when given, a refused publish lists each missing item
-   * (`<namespace>.publish.blockers.<item>`) as a control that opens the tab
-   * fixing it; the host owns the tabs.
+   * (`<namespace>.publish.blockers.<item>`) with a control naming the tab
+   * (`<namespace>.publish.blockerTabs.<item>`) that opens it; the host owns
+   * the tabs.
    */
   onOpenBlocker?: (item: string) => void;
 }) {
@@ -84,15 +85,16 @@ export function PublishAction({
                 data-testid="publish-blockers"
               >
                 {blockers.map((item) => (
-                  <li key={item}>
+                  <li key={item} data-testid={`publish-blocker-${item}`}>
+                    {t(`${namespace}.publish.blockers.${item}`)} —{" "}
                     <Button
                       type="button"
                       variant="link"
                       size="sm"
-                      data-testid={`publish-blocker-${item}`}
+                      data-testid={`publish-blocker-${item}-open`}
                       onClick={() => onOpenBlocker(item)}
                     >
-                      {t(`${namespace}.publish.blockers.${item}`)}
+                      {t(`${namespace}.publish.blockerTabs.${item}`)}
                     </Button>
                   </li>
                 ))}

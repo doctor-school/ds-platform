@@ -244,6 +244,17 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
         stageNote: "x".repeat(81),
       }),
     ).toEqual(["maxLength"]);
+    // Through the resolver's error map (as `useLocalizedResolver` parses): an
+    // explicit issue message would outrank the map and render English, so the
+    // «Скоро» refusal must reach the operator as the catalog key.
+    const viaMap = ProjectFormSchema.safeParse(
+      { ...filled, stage: "soon", stageNote: "" },
+      { error: (issue) => translateIssue(issue as ZodIssueLike, id) },
+    );
+    expect(viaMap.success).toBe(false);
+    expect(viaMap.error?.issues.map((issue) => issue.message)).toEqual([
+      "stageNote",
+    ]);
     // Another stage stores the note empty, so an empty note is legal there.
     expect(
       ProjectFormSchema.safeParse({
@@ -263,6 +274,20 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
         storefrontUrl: "http://doctor.school/x",
       }),
     ).toEqual(["outputKind", "required", "maxLength", "storefrontUrl"]);
+    // Through the resolver's error map: the link refusal reaches the operator
+    // as the catalog key, not the SSOT schema's English refine message.
+    const viaMap = ProjectResultRowFormSchema.safeParse(
+      {
+        outputKindId: "k",
+        title: "Вебинар",
+        description: "",
+        storefrontUrl: "http://doctor.school/x",
+      },
+      { error: (issue) => translateIssue(issue as ZodIssueLike, id) },
+    );
+    expect(viaMap.error?.issues.map((issue) => issue.message)).toEqual([
+      "storefrontUrl",
+    ]);
   });
 
   it("EARS-20: the expert form validates structured names and exposes no authored slug", () => {

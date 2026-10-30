@@ -13,7 +13,6 @@ import {
   ProjectResultInputSchema,
   type ProjectStage,
   ProjectStageSchema,
-  STAGE_NOTE_REQUIRED_MESSAGE,
   CreateDirectionRequestSchema,
   CreateDirectionSpecialtyRequestSchema,
   type DirectionAdjacencyKind,
@@ -315,12 +314,11 @@ export const ProjectFormSchema = z
     stageNote: z.string().trim().max(PROJECT_STAGE_NOTE_MAX),
   })
   .superRefine((value, ctx) => {
+    // No `message`: an explicit issue message outranks the resolver's error
+    // map, so the operator would read the SSOT English text instead of the
+    // RU catalog's `stageNote` (the event form's `school` / `venue` precedent).
     if (value.stage === "soon" && value.stageNote.length === 0) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["stageNote"],
-        message: STAGE_NOTE_REQUIRED_MESSAGE,
-      });
+      ctx.addIssue({ code: "custom", path: ["stageNote"] });
     }
   });
 
@@ -344,7 +342,17 @@ export const ProjectResultRowFormSchema = z.object({
   outputKindId: z.string().min(1),
   title: resultInput.title,
   description: z.string().trim().max(PROJECT_RESULT_DESCRIPTION_MAX),
-  storefrontUrl: resultInput.storefrontUrl,
+  // The SSOT link rule, folded in with each issue stripped of its resolved
+  // `message`: the schema's English refine text would otherwise outrank the
+  // localized per-parse error map (#200 precedent).
+  storefrontUrl: z.string().superRefine((value, ctx) => {
+    const result = resultInput.storefrontUrl.safeParse(value);
+    if (result.success) return;
+    for (const issue of result.error.issues) {
+      const { message: _resolved, path: _path, ...rest } = issue;
+      ctx.addIssue(rest as never);
+    }
+  }),
 });
 
 export interface ProjectResultRowFormFields {

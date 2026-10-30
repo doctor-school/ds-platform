@@ -85,6 +85,10 @@ export function ProjectResultsPanel({
   onSaved: () => void;
 }) {
   const t = useTranslations();
+  // Held here, not in the editor: the editor is keyed by the stored version, so
+  // a successful save remounts it — and a notice kept inside would vanish with
+  // the re-read that follows the save.
+  const [saved, setSaved] = useState(false);
   const { result: stored, query: storedQuery } = useCustom<ProjectResults>({
     url: projectsUrl.results(projectId),
     method: "get",
@@ -137,7 +141,10 @@ export function ProjectResultsPanel({
       }))}
       activeKinds={activeKinds}
       heldKinds={heldKinds}
+      saved={saved}
+      onSaving={() => setSaved(false)}
       onSaved={() => {
+        setSaved(true);
         void storedQuery.refetch();
         onSaved();
       }}
@@ -151,6 +158,8 @@ function ResultsEditor({
   initial,
   activeKinds,
   heldKinds,
+  saved,
+  onSaving,
   onSaved,
 }: {
   projectId: string;
@@ -158,6 +167,10 @@ function ResultsEditor({
   initial: ProjectResultRowFormFields[];
   activeKinds: ProjectOutputKindRef[];
   heldKinds: Map<string, ProjectOutputKindRef>;
+  /** The last save succeeded (owned by the host, which outlives a remount). */
+  saved: boolean;
+  /** A new save started: the previous success notice goes. */
+  onSaving: () => void;
   onSaved: () => void;
 }) {
   const t = useTranslations();
@@ -175,7 +188,6 @@ function ResultsEditor({
   const rows = useFieldArray({ control: form.control, name: "results" });
   const { mutate, mutation } = useCustomMutation();
   const [errorKey, setErrorKey] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   const [refusal, setRefusal] = useState<TaxonomyHttpError | null>(null);
 
   const activeIds = useMemo(
@@ -213,7 +225,7 @@ function ResultsEditor({
         noValidate
         onSubmit={form.handleSubmit((fields) => {
           setErrorKey(null);
-          setSaved(false);
+          onSaving();
           setRefusal(null);
           const body: ReplaceProjectResultsRequestInput = {
             results: fields.results.map((row) => ({
@@ -232,7 +244,6 @@ function ResultsEditor({
             },
             {
               onSuccess: () => {
-                setSaved(true);
                 onSaved();
               },
               onError: (error) => {

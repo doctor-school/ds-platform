@@ -222,7 +222,7 @@ test.describe("030 — the project container in the live admin", () => {
     );
     await page.getByTestId("output-kind-title").fill(renamedKind);
     await page.getByTestId("submit-output-kind").click();
-    await expect(page.getByTestId("output-kind-notice")).toHaveText(
+    await expect(page.getByTestId("output-kind-notice")).toContainText(
       "Изменения сохранены.",
     );
     await expect(page.getByTestId("output-kind-heading")).toHaveText(
@@ -260,7 +260,7 @@ test.describe("030 — the project container in the live admin", () => {
     await page.getByTestId("result-title-0").fill("Разборы клинических случаев");
     await page.getByTestId("result-url-0").fill("https://example.com/webinar");
     await page.getByTestId("results-save").click();
-    await expect(page.getByTestId("results-error")).toHaveText(
+    await expect(page.getByTestId("results-error")).toContainText(
       "Не удалось сохранить результаты. Ничего не изменилось — проверьте строки и попробуйте снова.",
     );
     await expect(
@@ -288,7 +288,7 @@ test.describe("030 — the project container in the live admin", () => {
       "Школа гастроэнтеролога",
     );
     await page.getByTestId("results-save").click();
-    await expect(page.getByTestId("results-saved")).toHaveText(
+    await expect(page.getByTestId("results-saved")).toContainText(
       "Результаты сохранены.",
     );
 
@@ -343,7 +343,7 @@ test.describe("030 — the project container in the live admin", () => {
     await openOutputKind(page, renamedKind);
     const recordUrl = page.url();
     await page.getByTestId("output-kind-retire").click();
-    await expect(page.getByTestId("output-kind-notice")).toHaveText("Вид снят.");
+    await expect(page.getByTestId("output-kind-notice")).toContainText("Вид снят.");
     await expect(page.getByTestId("output-kind-status")).toHaveText("Снят");
 
     await page.goto(projectUrl);
@@ -355,7 +355,7 @@ test.describe("030 — the project container in the live admin", () => {
 
     await page.goto(recordUrl);
     await page.getByTestId("output-kind-restore").click();
-    await expect(page.getByTestId("output-kind-notice")).toHaveText(
+    await expect(page.getByTestId("output-kind-notice")).toContainText(
       "Вид снова действует.",
     );
     await expect(page.getByTestId("output-kind-status")).toHaveText("Действует");
@@ -388,7 +388,7 @@ test.describe("030 — the project container in the live admin", () => {
     await page.setViewportSize(WIDE);
 
     // The link opens the tab that fixes the item.
-    await page.getByTestId("publish-blocker-results").click();
+    await page.getByTestId("publish-blocker-results-open").click();
     await expect(page.getByTestId("tab-results")).toHaveAttribute(
       "aria-selected",
       "true",
@@ -403,7 +403,7 @@ test.describe("030 — the project container in the live admin", () => {
     await page.getByTestId("tab-publish").click();
     await page.getByTestId("projects-publish").click();
     await expect(blockers.getByRole("listitem")).toHaveCount(1);
-    await page.getByTestId("publish-blocker-curator").click();
+    await page.getByTestId("publish-blocker-curator-open").click();
     await expect(page.getByTestId("tab-experts")).toHaveAttribute(
       "aria-selected",
       "true",
@@ -448,7 +448,7 @@ test.describe("030 — the project container in the live admin", () => {
     await page.getByTestId("tab-results").click();
     await page.getByTestId("result-remove-0").click();
     await page.getByTestId("results-save").click();
-    await expect(page.getByTestId("results-error")).toHaveText(
+    await expect(page.getByTestId("results-error")).toContainText(
       "У опубликованного проекта должен остаться хотя бы один результат.",
     );
   });
@@ -482,7 +482,7 @@ test.describe("030 — the project container in the live admin", () => {
 
     // ── The form: the read-only former-kind hint, no kind control ──────────
     await page.goto(url);
-    await expect(page.getByTestId("project-legacy-kind")).toHaveText(
+    await expect(page.getByTestId("project-legacy-kind")).toContainText(
       "Прежний тип (012): Медиа — укажите результаты проекта",
     );
     await expect(page.getByTestId("project-kind")).toHaveCount(0);

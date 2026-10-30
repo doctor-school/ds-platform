@@ -3,7 +3,6 @@ import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
-  request,
   type APIRequestContext,
   type Browser,
   type BrowserContext,
@@ -29,6 +28,7 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
+import { browserOf, closeOwnedLoginWindow } from "../lib/host-sign-in.js";
 
 const SESSION = "__Host-ds_session";
 interface SmsResetReuse {
@@ -165,70 +165,13 @@ async function passwordLogin(
   let attemptFailed = false;
   return runGatedLoginAttempt(
     {
-      close: async () => {
-        let closingFailed = false;
-        let closing: Awaited<ReturnType<typeof request.newContext>>;
-        try {
-          closing = await request.newContext({
-            baseURL: base,
-            ...(state.httpCredentials
-              ? { httpCredentials: state.httpCredentials }
-              : {}),
-          });
-        } catch {
-          if (!attemptFailed)
-            throw new Error("Owned login closure context could not be created");
-          test.info().annotations.push({
-            type: "cleanup-failed",
-            description:
-              "Owned login closure context failed; original password attempt failure retained.",
-          });
-          return;
-        }
-        try {
-          state.closures.push(closing);
-          const accepted = await closing.post("/v1/auth/login", {
-            data: { identifier: state.email, password: state.acceptedPassword },
-          });
-          expect(
-            accepted.status(),
-            "owned successful sign-in closes the failure window",
-          ).toBe(200);
-        } catch {
-          closingFailed = true;
-        } finally {
-          try {
-            const revoked = await closing.post("/v1/auth/logout");
-            expect(
-              revoked.status(),
-              "exact owned closing session is revoked",
-            ).toBe(200);
-          } catch {
-            closingFailed = true;
-          } finally {
-            if (!closingFailed) {
-              await closing.dispose().catch(() => {
-                closingFailed = true;
-              });
-              if (!closingFailed)
-                state.closures = state.closures.filter(
-                  (owned) => owned !== closing,
-                );
-            }
-          }
-        }
-        if (closingFailed) {
-          if (!attemptFailed)
-            throw new Error(
-              "Owned successful-login closure or its session cleanup failed",
-            );
-          test.info().annotations.push({
-            type: "cleanup-failed",
-            description:
-              "Owned login closure failed; original password attempt failure retained; lead must inspect scoped cleanup.",
-          });
-        }
-      },
+      close: () =>
+        closeOwnedLoginWindow(
+          browserOf(page),
+          base,
+          { email: state.email, password: state.acceptedPassword },
+          attemptFailed,
+        ),
     },
     async () => {
       try {

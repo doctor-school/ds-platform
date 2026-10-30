@@ -113,11 +113,12 @@ async function toList(page: Page) {
 }
 
 test("046 EARS-4: a guest is sent to the login door, signs in by the emailed code and lands back on the section", async ({
+  browser,
   page,
   context,
 }) => {
   test.setTimeout(120_000);
-  const doctor = await provisionDoctor("guest");
+  const doctor = await provisionDoctor(browser, "guest");
   expect(await context.cookies()).toHaveLength(0);
 
   // #3172: the door is the sign-in host's form, entered through this
@@ -148,10 +149,11 @@ test("046 EARS-4: a guest is sent to the login door, signs in by the emailed cod
 });
 
 test("046 EARS-5: without a congress registration the section shows only the line and the registration link", async ({
+  browser,
   page,
 }) => {
   test.setTimeout(120_000);
-  const doctor = await provisionDoctor("noreg");
+  const doctor = await provisionDoctor(browser, "noreg");
   await signInInPage(page, doctor);
   await page.goto(SECTION);
 
@@ -170,8 +172,8 @@ test.describe("a registered participant", () => {
   const TALK = "PRP при латеральном эпикондилите: результаты 120 пациентов";
   const LATE = "Черновик, который не успели отправить";
 
-  test.beforeAll(async () => {
-    author = await provisionDoctor("author");
+  test.beforeAll(async ({ browser }) => {
+    author = await provisionDoctor(browser, "author");
     await registerForCongress(author, eventId);
   });
 
@@ -410,12 +412,12 @@ test.describe("a poster author", () => {
   // the shared event is closed by the EARS-10 leg above.
   let posterEventId = "";
 
-  test.beforeAll(async () => {
+  test.beforeAll(async ({ browser }) => {
     posterEventId = await createCongressEvent();
     await openPosterIntake(posterEventId, MAX_AGE);
-    author = await provisionDoctor("poster");
+    author = await provisionDoctor(browser, "poster");
     await registerForCongress(author, posterEventId);
-    senior = await provisionDoctor("senior");
+    senior = await provisionDoctor(browser, "senior");
     await registerForCongress(senior, posterEventId);
   });
 
@@ -552,11 +554,12 @@ test.describe("a poster author", () => {
   });
 
   test("046 EARS-20: correcting the date in a poster draft to one above the limit shows the refusal in place of the send", async ({
+    browser,
     page,
   }) => {
     // The date is shown for correction in the first poster draft (canvas
     // `askBirth`), so the leg starts a new author's first poster.
-    const fresh = await provisionDoctor("poster-fix");
+    const fresh = await provisionDoctor(browser, "poster-fix");
     await registerForCongress(fresh, posterEventId);
     await signInInPage(page, fresh);
     await page.goto(SECTION);
@@ -599,10 +602,10 @@ test.describe("an abstract author", () => {
   let author: CongressDoctor;
   let abstractEventId = "";
 
-  test.beforeAll(async () => {
+  test.beforeAll(async ({ browser }) => {
     abstractEventId = await createCongressEvent();
     await openAbstractIntake(abstractEventId, 3);
-    author = await provisionDoctor("abstract");
+    author = await provisionDoctor(browser, "abstract");
     await registerForCongress(author, abstractEventId);
   });
 
@@ -814,11 +817,12 @@ test.describe("an abstract author", () => {
 });
 
 test("046 EARS-11: a talk returned for revision shows its deadline with the countdown; an expired one says the term is over", async ({
+  browser,
   page,
 }) => {
   test.setTimeout(120_000);
   const reviewEvent = await createCongressEvent();
-  const doctor = await provisionDoctor("revision");
+  const doctor = await provisionDoctor(browser, "revision");
   await registerForCongress(doctor, reviewEvent);
   await signInInPage(page, doctor);
 

@@ -17,11 +17,5 @@ requireLiveStandEnv(["E2E_DOCTOR_URL", "MAILPIT_URL"]);
 
 defineAccountAuthPathTests({
   host: HOSTS.doctor,
-  registerPath: "/v1/storefront/doctor/register",
-  verifyPath: "/v1/storefront/doctor/verify",
-  registration: {
-    medicalWorkerDeclaration: true,
-    consent: [{ purpose: "partner-data-sharing", version: "v1" }],
-  },
   resetPath: "/reset",
 });

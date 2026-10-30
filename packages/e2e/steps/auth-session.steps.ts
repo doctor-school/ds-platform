@@ -287,16 +287,20 @@ When(
     await page
       .locator('input[autocomplete="current-password"]')
       .fill("wrong-password-for-staging-2431");
-    const refused = await gatedPasswordLogin(page, async () => {
-      const loginResponse = page.waitForResponse(
-        (response) =>
-          new URL(response.url()).pathname ===
-            signInHostApiPath("/v1/auth/login") &&
-          response.request().method() === "POST",
-      );
-      await page.getByRole("button", { name: /Войти|Продолжить/i }).click();
-      return loginResponse;
-    });
+    const refused = await gatedPasswordLogin(
+      page,
+      world.hostBaseUrl,
+      async () => {
+        const loginResponse = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname ===
+              signInHostApiPath("/v1/auth/login") &&
+            response.request().method() === "POST",
+        );
+        await page.getByRole("button", { name: /Войти|Продолжить/i }).click();
+        return loginResponse;
+      },
+    );
     refusedLoginResponses.set(page, refused);
   },
 );

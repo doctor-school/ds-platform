@@ -74,11 +74,12 @@ async function scan(page: Page, what: string) {
 test.describe.configure({ mode: "serial" });
 
 test("046 EARS-11: the section list and the kind choice pass WCAG 2 A/AA (both themes)", async ({
+  browser,
   page,
 }) => {
   test.setTimeout(120_000);
   const eventId = await createCongressEvent();
-  const doctor = await provisionDoctor("axe");
+  const doctor = await provisionDoctor(browser, "axe");
   await registerForCongress(doctor, eventId);
   await signInInPage(page, doctor);
   await sendTalkThroughApi(page, eventId, "Доклад для проверки доступности");
@@ -105,12 +106,13 @@ test("046 EARS-11: the section list and the kind choice pass WCAG 2 A/AA (both t
 });
 
 test("046 EARS-18…20: the poster form with its birth-date field and the age refusal pass WCAG 2 A/AA (both themes)", async ({
+  browser,
   page,
 }) => {
   test.setTimeout(180_000);
   const eventId = await createCongressEvent();
   await openPosterIntake(eventId, 40);
-  const doctor = await provisionDoctor("axe-poster");
+  const doctor = await provisionDoctor(browser, "axe-poster");
   await registerForCongress(doctor, eventId);
   await signInInPage(page, doctor);
 
@@ -130,19 +132,22 @@ test("046 EARS-18…20: the poster form with its birth-date field and the age re
   await scan(page, "the poster form with the error summary");
 
   // EARS-20 — the draft of a holder above the limit: the refusal in place of the send.
-  await page.getByLabel("Дата рождения").fill(`${new Date().getFullYear() - 50}-06-15`);
+  await page
+    .getByLabel("Дата рождения")
+    .fill(`${new Date().getFullYear() - 50}-06-15`);
   await page.getByLabel("Дата рождения").blur();
   await expect(page.getByText(/На эту дату вам будет/).first()).toBeVisible();
   await scan(page, "the poster draft with the age refusal");
 });
 
 test("046 EARS-21…23: the abstract form with its statements, its total counter near and above the limit and the error summary at send passes WCAG 2 A/AA (both themes)", async ({
+  browser,
   page,
 }) => {
   test.setTimeout(180_000);
   const eventId = await createCongressEvent();
   await openAbstractIntake(eventId, 3);
-  const doctor = await provisionDoctor("axe-abstract");
+  const doctor = await provisionDoctor(browser, "axe-abstract");
   await registerForCongress(doctor, eventId);
   await signInInPage(page, doctor);
 

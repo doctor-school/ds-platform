@@ -135,7 +135,7 @@ async function passwordProbe(
     page.locator('input[autocomplete="current-password"]'),
     state.password,
   );
-  const submitted = await gatedPasswordLogin(page, async () => {
+  const submitted = await gatedPasswordLogin(page, base, async () => {
     const pending = captureResponse(page, signInHostApiPath("/v1/auth/login"));
     await page.getByTestId("password-login-submit").click();
     return pending;

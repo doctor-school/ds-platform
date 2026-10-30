@@ -18,7 +18,8 @@
     "./sign-in-host-api": "./lib/sign-in-host-api.ts",
     "./storefront-entry-watch": "./lib/storefront-entry-watch.ts",
     "./admin-events": "./admin/index.ts",
-    "./feed-card": "./lib/feed-card.ts"
+    "./feed-card": "./lib/feed-card.ts",
+    "./host-sign-in": "./lib/host-sign-in.ts"
   },
   "scripts": {
     "check:host-tags": "tsx bin/check-host-tags.ts",

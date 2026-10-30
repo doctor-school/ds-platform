@@ -17,8 +17,5 @@ requireLiveStandEnv(["E2E_PORTAL_URL", "MAILPIT_URL"]);
 
 defineAccountAuthPathTests({
   host: HOSTS.academy,
-  registerPath: "/v1/auth/register",
-  verifyPath: "/v1/auth/verify",
-  registration: { consent: [{ purpose: "tos", version: "2026-01" }] },
   resetPath: "/reset",
 });

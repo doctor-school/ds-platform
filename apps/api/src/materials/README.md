@@ -25,5 +25,8 @@ EARS-19); the public feed and material reads follow (#3513).
 3. **The card date never moves.** The entry's `published_at` is the material's
    `first_published_at`; an edit rewrites the card and keeps it, a re-publish
    restores it (EARS-5, EARS-6).
-4. **Cover upload is not wired yet.** `cover_ref` exists; the upload waits on the
-   shared media reference predicate learning `materials.cover_ref`.
+4. **The cover is a 012 media slot.** `materials.cover_ref` rides the taxonomy
+   upload pipeline (shared normalizer, upload locator, `media_cleanup_jobs` with
+   `entity_kind = material` on replace / clear) and is registered with the
+   `MediaSlotRegistry` from `MaterialsModule.onModuleInit`, so neither media
+   sweep deletes a live cover (048 EARS-1, #3572).

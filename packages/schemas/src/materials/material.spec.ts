@@ -95,6 +95,22 @@ describe("048 material contract", () => {
     expect(cleared.success).toBe(true);
   });
 
+  it("048 EARS-1: the cover clear shall be a PATCH-only verb", () => {
+    expect(
+      UpdateMaterialRequestSchema.safeParse({ mediaAction: "clear" }).success,
+    ).toBe(true);
+    expect(
+      UpdateMaterialRequestSchema.safeParse({ mediaAction: "drop" }).success,
+    ).toBe(false);
+    expect(
+      CreateMaterialRequestSchema.safeParse({
+        kind: "news",
+        title: "Новость",
+        mediaAction: "clear",
+      }).success,
+    ).toBe(false);
+  });
+
   it("048 EARS-1: when the request carries a storage reference or a slug, the system shall refuse the unknown key", () => {
     expect(
       CreateMaterialRequestSchema.safeParse({

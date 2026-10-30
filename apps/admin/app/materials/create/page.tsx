@@ -64,6 +64,7 @@ export default function CreateMaterialPage() {
                 ? { partnerOrganisationId: values.partnerOrganisationId }
                 : {}),
               body: values.body,
+              cover: values.cover,
             };
             create(
               { resource: "materials", values: vars },

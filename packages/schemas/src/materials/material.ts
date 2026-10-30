@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   ADMIN_LIST_PAGE_SIZE_DEFAULT,
   ADMIN_LIST_PAGE_SIZE_MAX,
+  MediaActionSchema,
   SlugSchema,
   TaxonomyIdSchema,
   TaxonomyStatusSchema,
@@ -108,6 +109,8 @@ export const UpdateMaterialRequestSchema = z
     expertId: fields.expertId,
     partnerOrganisationId: fields.partnerOrganisationId,
     body: fields.body,
+    /** `"clear"` drops the cover; a new cover rides the multipart `cover` part. */
+    mediaAction: MediaActionSchema.optional(),
   })
   .strict();
 export type UpdateMaterialRequest = z.infer<typeof UpdateMaterialRequestSchema>;

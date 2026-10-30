@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useForm, useWatch } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
-import { Button, Input, Radio } from "@ds/design-system";
+import { Button, Input, Label, MediaDropzone, Radio } from "@ds/design-system";
 import { Combobox, FormActions, FormSection } from "@ds/design-system/blocks";
 import {
   Form,
@@ -17,7 +17,9 @@ import {
   FormMessage,
 } from "@ds/design-system/form";
 import {
+  ACCEPTED_IMAGE_MIME_TYPES,
   emptyMaterialBody,
+  MAX_IMAGE_BYTES,
   type MaterialAdminDetail,
   type MaterialBody,
   type MaterialKind,
@@ -51,10 +53,13 @@ const RichTextEditor = dynamic(
  *   from the non-retired 012 experts (the list read excludes retired rows).
  * - «Партнёр» — optional, any non-retired 032 organisation, clearable; a clear
  *   is sent as `null` on an edit (PATCH omission would keep the old partner).
+ * - «Обложка» — the optional 012 media slot on `MediaDropzone`, as the project
+ *   cover and the organisation logo: a picked file rides the multipart `cover`
+ *   part, «убрать» on a stored cover sends `mediaAction: "clear"`; the dropzone
+ *   preflights type and size, the API normalizer is authoritative.
  * - «Текст» — the `RichTextEditor` over the EARS-2 document; the server is the
  *   allowlist authority and its refusal lands at this field.
  *
- * The cover slot of the design is not on this form yet (#3572 gates it).
  * Every server refusal is shown AT its field (`refused`) — a write refusal with
  * the `fieldRefusals` sentence, a publish refusal (EARS-4) with the missing
  * item's `publishRefusals` sentence.
@@ -69,6 +74,10 @@ export interface MaterialFormValues {
   /** The optional partner; `null` when none (or cleared). */
   partnerOrganisationId: string | null;
   body: MaterialBody;
+  /** A newly picked cover; `null` keeps the stored one (or none). */
+  cover: File | null;
+  /** True when the operator asked to drop the STORED cover (`mediaAction: "clear"`). */
+  removeCover: boolean;
 }
 
 export interface MaterialFieldRefusals {
@@ -138,6 +147,9 @@ export function MaterialForm({
   );
   const [bodyDirty, setBodyDirty] = useState(false);
   const [bodyRefusal, setBodyRefusal] = useState<string | null>(null);
+  const [cover, setCover] = useState<File | null>(null);
+  const [removeCover, setRemoveCover] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
 
   const expertPicker = useRelationshipCombobox({
     resource: "experts",
@@ -156,7 +168,8 @@ export function MaterialForm({
       : null,
   });
 
-  const dirty = form.formState.isDirty || bodyDirty;
+  const dirty =
+    form.formState.isDirty || bodyDirty || cover !== null || removeCover;
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -195,6 +208,7 @@ export function MaterialForm({
         data-testid="material-form"
         noValidate
         onSubmit={form.handleSubmit((fields) => {
+          if (coverError) return;
           const column = fields.kind === "column";
           onSubmit({
             kind: fields.kind,
@@ -203,6 +217,8 @@ export function MaterialForm({
             expertId: column ? fields.expertId || null : null,
             partnerOrganisationId: fields.partnerOrganisationId || null,
             body,
+            cover,
+            removeCover,
           });
         })}
       >
@@ -401,6 +417,51 @@ export function MaterialForm({
               </FormItem>
             )}
           />
+
+          {/* Cover — a File part, not an RHF field, so it is a plain labelled
+              block (FormItem/FormLabel require a <FormField> context). */}
+          <div className="flex flex-col gap-2.5">
+            <Label htmlFor="material-cover">
+              {t("materials.fields.cover")}
+            </Label>
+            <MediaDropzone
+              id="material-cover"
+              accept={ACCEPTED_IMAGE_MIME_TYPES}
+              maxBytes={MAX_IMAGE_BYTES}
+              currentUrl={detail?.coverUrl ?? null}
+              file={cover}
+              removed={removeCover}
+              labels={{
+                prompt: t("materials.fields.coverPrompt"),
+                hint: t("materials.fields.coverHint"),
+                remove: t("materials.fields.coverRemove"),
+                previewAlt: t("materials.fields.coverAlt"),
+              }}
+              onFileChange={(file) => {
+                setCover(file);
+                if (file) setRemoveCover(false);
+                setCoverError(null);
+              }}
+              onRemoveCurrent={() => {
+                setCover(null);
+                setRemoveCover(true);
+                setCoverError(null);
+              }}
+              onPreflightError={(reason) => {
+                setCover(null);
+                setCoverError(
+                  reason === "type"
+                    ? t("materials.errors.coverType")
+                    : t("materials.errors.coverSize"),
+                );
+              }}
+            />
+            {coverError ? (
+              <FormError data-testid="material-cover-error">
+                {coverError}
+              </FormError>
+            ) : null}
+          </div>
         </FormSection>
 
         <FormSection

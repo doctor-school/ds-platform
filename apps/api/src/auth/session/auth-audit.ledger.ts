@@ -155,7 +155,7 @@ export function toLedgerRow(
         eventType: "auth.session.terminated",
         subjectId: event.sub,
         sid: event.sid,
-        reason: "logout",
+        reason: event.reason ?? "logout",
         metadata: {},
       };
     case "PasswordResetRequested":

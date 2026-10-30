@@ -29,6 +29,7 @@ import type {
 
 import type { AuthFlowApiConfig } from "../host-config";
 import { leaveHost } from "../sign-in-host/host-history";
+import { STOREFRONT_SIGN_OUT_PATH } from "../sign-out-path";
 
 /**
  * The ONE same-origin BFF auth client both storefronts mount (#2027, gate rows
@@ -287,9 +288,16 @@ export function createAuthClient(api: AuthFlowApiConfig) {
         captchaToken,
       ),
 
-    /** 003 EARS-10 — revoke THIS origin's session server-side. */
+    /**
+     * 003 EARS-10 (amended) — sign out through the storefront's own route,
+     * which ends the shared session on both storefronts and sets the guest
+     * marker on this one (EARS-63 (a)).
+     */
     logout: () =>
-      postJson<Record<string, never>, LogoutResponse>(auth("logout"), {}),
+      postJson<Record<string, never>, LogoutResponse>(
+        STOREFRONT_SIGN_OUT_PATH,
+        {},
+      ),
 
     /** 003 EARS-9 — rotate the session server-side; the silent-refresh retry. */
     refresh: () =>

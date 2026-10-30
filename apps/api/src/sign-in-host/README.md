@@ -27,6 +27,7 @@ into a storefront session (that is the storefront callback's redeem, below).
 | Transaction, redeem, linked-session refresh                       | `storefront-oidc.service.ts`           | 8, 62, 64, 71                 |
 | Storefront clients' token calls, `private_key_jwt` (+ fake)       | `storefront-oidc.idp.ts`, `*.jwt.ts`   | 8, 62                         |
 | Internal credential (bearer `INTERNAL_API_TOKEN`, 404 without it) | `internal-api.middleware.ts`           | 62                            |
+| Back-channel logout (`POST /v1/auth/back-channel-logout`)         | `back-channel-logout.controller.ts`    | 65                            |
 
 Contract (SSOT): `packages/schemas/src/auth/sign-in-host.schema.ts`; the
 internal routes: `packages/schemas/src/auth/storefront-oidc.schema.ts`.
@@ -103,6 +104,37 @@ session, deletes the record and revokes every session linked to it on both
 storefronts; a fresh credential step that replaces a record revokes the
 sessions linked to the old one (EARS-64). Legacy sessions keep their paths.
 
+### Back-channel logout (003 EARS-65)
+
+`POST /v1/auth/back-channel-logout` is the `back_channel_logout_uri` both
+storefront clients register at Zitadel (OIDC Back-Channel Logout 1.0). Zitadel
+posts a form-encoded `logout_token` when it ends a session outside a storefront
+sign-out (the IdP console, «sign out on all devices»). The token is verified
+before anything is revoked — RS256 against the issuer JWKS, `iss`, `aud` one
+of the two storefront clients, a fresh `iat`/`exp`, the back-channel
+`events` member, a `sid`, no `nonce` (`verifyLogoutToken`,
+`storefront-oidc.jwt.ts`); then every storefront session linked to that `sid`
+is revoked on both storefronts (`SessionRevoked` each, reason `force`) and,
+when the token carries the `sub` (Zitadel always sends it), the record holding
+it deleted. `200` on success, `400 {"error":"invalid_request"}` on any invalid
+or non-form request, both `Cache-Control: no-store`; public (the signature is
+the credential), own per-IP bucket `oidc:back-channel-logout` (1200 / 15 min —
+the caller is Zitadel's one address), excluded from the OpenAPI document.
+
+A reset (EARS-12) ends every session of the person through the one subject
+revocation (`SessionService.revokeSubject` → this module's records and their
+Zitadel sessions). Failed passwords never lock (EARS-15); an IdP admin or
+console lock (`POST /v2/users/{id}/lock`) ends every session of the person
+inside Zitadel: the session projection deletes their
+Zitadel sessions and the token endpoint refuses their refresh
+(`invalid_request` `Errors.User.NotActive`, proved live in
+`test/auth/zitadel-lock-ends-sessions.e2e-spec.ts`), so each linked storefront
+session ends alone at its next refresh; this module adds no revocation for it.
+Only a refresh Zitadel refuses as `invalid_grant` is reuse: it revokes the
+whole linked set (`SessionRevoked` reason `theft_detected`). Any other refused
+refresh — an IdP outage, a locked person — ends only the presenting session
+(reason `force`), with no theft verdict.
+
 ## The record and its lifetime
 
 One row per browser behind `__Host-ds_login`; the table holds only
@@ -155,6 +187,6 @@ parsed at boot and never logged (a client without its key fails closed).
 
 ## Not here
 
-The storefront routes themselves (entry, callback, cookie relay — the storefront
-Next servers), the silent check and back-channel logout (#3173), the Next app,
+The storefront routes themselves (entry, callback, sign-out, cookie relay — the
+storefront Next servers), the silent check (#3173), the Next app,
 headers and CSP of the sign-in host.

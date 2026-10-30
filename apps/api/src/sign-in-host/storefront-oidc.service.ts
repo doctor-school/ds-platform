@@ -141,6 +141,24 @@ export class StorefrontOidcService
   }
 
   /**
+   * 003 EARS-65, ADR-0015 §4 «One sign-out» req. 6 — OIDC Back-Channel
+   * Logout: Zitadel ended a session outside a storefront sign-out (the IdP
+   * console, «sign out on all devices»). A verified logout token revokes every
+   * storefront session linked to its `sid` on both storefronts and deletes the
+   * sign-in-host record holding that session (already ended at Zitadel, so it
+   * is not terminated again). An unsigned, foreign-audience or malformed
+   * token revokes nothing: `false`. Takes nothing else from the caller.
+   */
+  async backChannelLogout(logoutToken: string): Promise<boolean> {
+    const verified = await this.oidc.verifyLogoutToken(logoutToken);
+    if (!verified) return false;
+    if (verified.sub)
+      await this.records.deleteBySession(verified.sub, verified.sid);
+    await this.sessions.revokeLinked(verified.sid, "force");
+    return true;
+  }
+
+  /**
    * 003 EARS-8 (amended) — a linked session's refresh token rotates through
    * the storefront client it was issued to, with that client's
    * `private_key_jwt`; the BFF client never presents it.

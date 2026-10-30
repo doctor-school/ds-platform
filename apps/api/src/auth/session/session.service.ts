@@ -6,7 +6,11 @@ import {
   type IdpClient,
   type IdpSession,
 } from "../idp/idp.types.js";
-import { AUTH_AUDIT, type AuthAuditLog } from "./auth-audit.types.js";
+import {
+  AUTH_AUDIT,
+  type AuthAuditLog,
+  type SessionRevokedReason,
+} from "./auth-audit.types.js";
 import {
   clearSessionCookie,
   serializeSessionCookie,
@@ -27,6 +31,7 @@ import { SubjectRevocationHub } from "./subject-revocation.js";
 export type RefreshOutcome =
   | { status: "rotated"; claims: SessionClaims }
   | { status: "reuse_detected" }
+  | { status: "refresh_failed" }
   | { status: "no_session" };
 
 /**
@@ -101,14 +106,20 @@ export class SessionService {
   /**
    * 003 EARS-10 / EARS-64 — revoke every storefront session linked to the
    * Zitadel session `zitadelSessionId`, on both storefronts, each with its
-   * `SessionRevoked`. Synchronous in the API's own store.
+   * `SessionRevoked` carrying the ADR-0001 §7.3 `reason` (`logout` for a
+   * sign-out, `force` for an IdP-side termination, `theft_detected` for the
+   * refresh-reuse cascade). Synchronous in the API's own store.
    */
-  async revokeLinked(zitadelSessionId: string): Promise<void> {
+  async revokeLinked(
+    zitadelSessionId: string,
+    reason: SessionRevokedReason = "logout",
+  ): Promise<void> {
     for (const record of await this.store.deleteLinked(zitadelSessionId)) {
       await this.audit.record({
         type: "SessionRevoked",
         sub: record.sub,
         sid: record.sid,
+        ...(reason === "logout" ? {} : { reason }),
       });
     }
   }
@@ -181,6 +192,20 @@ export class SessionService {
           record.refreshToken,
         )
       : await this.idp.refreshTokens(record.refreshToken);
+    if ("failed" in result) {
+      // 003 EARS-65 — any refusal other than reuse (an IdP outage, or Zitadel's
+      // `Errors.User.NotActive` for a locked user) is not theft: the presenting
+      // session fails closed alone, records no theft verdict, and every other
+      // linked session meets the same refusal at its own next refresh.
+      await this.store.delete(sid);
+      await this.audit.record({
+        type: "SessionRevoked",
+        sub: record.sub,
+        sid,
+        reason: "force",
+      });
+      return { status: "refresh_failed" };
+    }
     if (result.reuseDetected) {
       await this.store.delete(sid);
       await this.audit.record({
@@ -188,6 +213,10 @@ export class SessionService {
         sub: record.sub,
         sid,
       });
+      // 003 EARS-65 — reuse on a linked session ends the whole linked set
+      // (every storefront session of that shared session, both storefronts).
+      if (record.oidcClient)
+        await this.revokeLinked(record.zitadelSessionId, "theft_detected");
       return { status: "reuse_detected" };
     }
 

@@ -60,6 +60,8 @@ export {
   type SilentCheckOutcome,
 } from "./silent-check";
 export { resolveOwnHandoff } from "./handoff-ownership";
+export { storefrontSignOut, type StorefrontSignOutDeps } from "./sign-out";
+export { STOREFRONT_SIGN_OUT_PATH } from "../sign-out-path";
 export { isTopLevelNavigation } from "./top-level-navigation";
 /**
  * Row 32 / #1987 - the account shape of the LANDING codec. It rides on the

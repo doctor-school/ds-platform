@@ -60,6 +60,9 @@ export type AdminSessionRejectionReason =
  * no `"expiry"` member is declared here — a union member advertising an emission
  * that does not exist reads as coverage the ledger cannot deliver.
  */
+/** ADR-0001 §7.3 `auth.session.terminated` reasons a storefront session revocation records. */
+export type SessionRevokedReason = "logout" | "force" | "theft_detected";
+
 export type AdminSessionEndReason = "logout" | "force";
 
 /**
@@ -170,7 +173,15 @@ export type AuthAuditEvent =
   | { type: "RefreshRotated"; sub: string; sid: string }
   // EARS-9 reuse / EARS-10 logout (F4 seam — wire ids reconciled here now).
   | { type: "RefreshReuseDetected"; sub: string; sid: string }
-  | { type: "SessionRevoked"; sub: string; sid: string }
+  // `reason` is the ADR-0001 §7.3 `auth.session.terminated` reason; absent =
+  // `logout`. `force` = the IdP or the system ended it (back-channel logout,
+  // an IdP outage on refresh); `theft_detected` = the refresh-reuse cascade.
+  | {
+      type: "SessionRevoked";
+      sub: string;
+      sid: string;
+      reason?: SessionRevokedReason;
+    }
   // EARS-11 reset initiate (identifier masked; no subject — pre-identity).
   // 003 EARS-57: `channel: "sms"` marks a reset code actually texted to a
   // confirmed phone (EARS-53); an email-identifier request carries none.

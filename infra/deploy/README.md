@@ -340,22 +340,31 @@ Our own images are built once per commit in GitHub Actions and pushed to a priva
 Timeweb Cloud container registry (#2981, tech spec
 `apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md` §3–§4).
 
-**Publisher/retention exclusion (#3144).** `runtime-images.yml` and
-`registry-retention.yml` share the constant workflow-level concurrency group
-`registry-images`, with `queue: max` and `cancel-in-progress: false`. The lock covers
-the entire image build/publish/verify/manifest run and the entire retention
+**Publisher/retention exclusion (#3144).** `registry-retention.yml` and every
+`runtime-images.yml` run except `pull_request` share the workflow-level concurrency
+group `registry-images`, with `queue: max` and `cancel-in-progress: false`. The lock
+covers the entire image build/publish/verify/manifest run and the entire retention
 snapshot/plan/delete run. Matrix builds remain parallel inside one run. A digest
 can be reused by a fresh tag, so a snapshot followed by another keep-set read is
 insufficient while a publisher can still add aliases. These are the only workflows
-holding `REGISTRY_PUSH_TOKEN`; any new writer must join the same lock. The retention
+holding `REGISTRY_PUSH_TOKEN`; any new writer that can re-tag an existing digest must
+join the same lock — the one exception is the `pull_request` run below. The retention
 runner must never be run standalone, and out-of-workflow registry writes are outside
 this coordination boundary.
 
-The tradeoff is serialized Runtime images runs, including superseded PR heads:
-they finish instead of being cancelled by the next push. GitHub permits up to 100
-pending runs with `queue: max`; additional arrivals are cancelled when full. Queue
-order follows when a run starts waiting, so dispatch order is not guaranteed. See
+A `pull_request` run (pushing `pr/*` only) takes the per-PR group
+`runtime-images-pr-<N>` with `cancel-in-progress: true` instead (#3561): a newer
+head cancels the superseded build, and `main` never waits behind PR builds. It is
+safe outside the lock because its images carry the label
+`org.opencontainers.image.revision=<head-sha>`, so a PR digest belongs to one head
+and an image-neutral push never re-tags a digest retention may be deleting. `main`
+images carry no such label, so an unchanged service keeps its digest across SHAs.
+GitHub keeps up to 100 pending runs with `queue: max`; additional arrivals are
+cancelled when full. Queue order follows when a run starts waiting, so dispatch
+order is not guaranteed. See
 [GitHub's concurrency contract](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
+`pnpm release:lane` prints the image-build, Stage main and deploy queues with the
+release candidate.
 
 **Activation boundary.** Runs using old workflow revisions (including reruns) retain
 their old concurrency configuration. After this fix merges, observe existing old

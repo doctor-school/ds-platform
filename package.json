@@ -127,6 +127,7 @@
     "deploy:prod": "node tools/deploy/prod.mjs",
     "deploy:release-notes": "node tools/deploy/release-notes.mjs",
     "deploy:smoke": "node tools/deploy/smoke-prod.mjs",
+    "release:lane": "node tools/deploy/release-lane.mjs",
     "task:worktree": "node tools/dev/task-worktree.mjs",
     "worktree:teardown": "node tools/dev/worktree-teardown.mjs",
     "land:freshness": "node tools/gh/land-freshness.mjs",

@@ -42,16 +42,16 @@ const GREEN_STAGE_SUITE = "newest green stage-suite";
 
 /**
  * The release candidate: the newest `main` commit whose `stage-suite` commit status
- * is `success` (#3240) — a release refuses any other, so pruning it blocks the
- * release once `main` moves MAIN_SHAS_KEPT commits past it with a red suite.
- * `readState(sha)` resolves the state (null when there is none) and throws when the
- * status cannot be read. A walk that does not find the candidate — an unreadable
- * status, or the bound reached — throws a `RetentionError`: the candidate may lie
- * further back, so no partial keep is safe and nothing is deleted.
+ * is `success` (#3240) — a release refuses any other. `readState(sha)` resolves the
+ * state (null when there is none) and throws when the status cannot be read. The walk
+ * stops at the first green commit, at the first unreadable status (the candidate may
+ * lie further back, so nothing past it is known) or at `depth` commits.
+ * Shared by registry retention and `pnpm release:lane` (#3561).
  *
- * @returns {Promise<{greenSha: string, walked: number}>}
+ * @returns {Promise<{greenSha: string | null, walked: number,
+ *   unreadable: {sha: string, message: string} | null, bounded: boolean}>}
  */
-export async function findGreenStageSuite(
+export async function newestGreenStageSuite(
   mainHistory,
   readState,
   depth = STAGE_SUITE_WALK_DEPTH,
@@ -62,16 +62,53 @@ export async function findGreenStageSuite(
     try {
       state = await readState(walk[i]);
     } catch (error) {
-      throw new RetentionError(
-        `stage-suite of main commit ${walk[i]} could not be read (${error.message}) — the release candidate may lie further back; refusing to delete anything`,
-      );
+      return {
+        greenSha: null,
+        walked: i + 1,
+        unreadable: { sha: walk[i], message: error.message },
+        bounded: false,
+      };
     }
-    if (state === "success") return { greenSha: walk[i], walked: i + 1 };
+    if (state === "success")
+      return {
+        greenSha: walk[i],
+        walked: i + 1,
+        unreadable: null,
+        bounded: false,
+      };
   }
+  return {
+    greenSha: null,
+    walked: walk.length,
+    unreadable: null,
+    bounded: walk.length === depth,
+  };
+}
+
+/**
+ * The release candidate retention keeps. Pruning it blocks the release once `main`
+ * moves MAIN_SHAS_KEPT commits past it with a red suite, so a walk that does not find
+ * it — an unreadable status, or the bound reached — throws a `RetentionError`: no
+ * partial keep is safe and nothing is deleted.
+ *
+ * @returns {Promise<{greenSha: string, walked: number}>}
+ */
+export async function findGreenStageSuite(
+  mainHistory,
+  readState,
+  depth = STAGE_SUITE_WALK_DEPTH,
+) {
+  const result = await newestGreenStageSuite(mainHistory, readState, depth);
+  if (result.greenSha)
+    return { greenSha: result.greenSha, walked: result.walked };
+  if (result.unreadable)
+    throw new RetentionError(
+      `stage-suite of main commit ${result.unreadable.sha} could not be read (${result.unreadable.message}) — the release candidate may lie further back; refusing to delete anything`,
+    );
   throw new RetentionError(
-    walk.length < depth
-      ? `no green stage-suite among all ${walk.length} main commits — refusing to delete anything`
-      : `no green stage-suite among the newest ${depth} main commits (STAGE_SUITE_WALK_DEPTH) — the release candidate is further back or absent; refusing to delete anything`,
+    result.bounded
+      ? `no green stage-suite among the newest ${depth} main commits (STAGE_SUITE_WALK_DEPTH) — the release candidate is further back or absent; refusing to delete anything`
+      : `no green stage-suite among all ${result.walked} main commits — refusing to delete anything`,
   );
 }
 

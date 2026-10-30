@@ -1,4 +1,5 @@
-import { hostCommand,
+import {
+  hostCommand,
   isAuthCommandPath,
   signInHostApiPath,
 } from "../lib/sign-in-host-api.js";
@@ -6,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
+import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
 import {
   assertNoAddressedMail,
   captureAddressedMailCheckpoint,
@@ -158,7 +160,10 @@ Given(
               sameAccount: true,
               verified: true,
             });
-            const logout = captureResponse(visitor.page, "/v1/auth/logout");
+            const logout = captureResponse(
+              visitor.page,
+              STOREFRONT_SIGN_OUT_PATH,
+            );
             await visitor.page.getByTestId("logout").click();
             expect(
               (await logout).response.status(),
@@ -241,7 +246,9 @@ When(
             !Array.isArray(body) &&
             Object.keys(body).length === 1 &&
             body.status === "resend_requested";
-          const submitted = hostCommand(captured.response.request().postDataJSON());
+          const submitted = hostCommand(
+            captured.response.request().postDataJSON(),
+          );
           identifierOnly =
             submitted !== null &&
             typeof submitted === "object" &&

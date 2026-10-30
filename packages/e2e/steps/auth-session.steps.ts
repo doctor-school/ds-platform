@@ -1,4 +1,7 @@
-import { isSignInHostForm, signInHostApiPath } from "../lib/sign-in-host-api.js";
+import {
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import {
   expect,
   type APIRequestContext,
@@ -9,6 +12,7 @@ import {
 
 import { installCaptchaStub } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
+import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
 import { goldenDoctorPassword } from "../lib/golden.js";
 import {
   captureAddressedMailCheckpoint,
@@ -359,7 +363,7 @@ Given(
 When("the doctor logs out from the Academy account", async ({ page }) => {
   const logoutResponse = page.waitForResponse(
     (response) =>
-      new URL(response.url()).pathname === "/v1/auth/logout" &&
+      new URL(response.url()).pathname === STOREFRONT_SIGN_OUT_PATH &&
       response.request().method() === "POST",
   );
   await page.getByTestId("logout").click();

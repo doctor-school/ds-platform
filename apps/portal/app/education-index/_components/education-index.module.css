@@ -667,6 +667,12 @@
   .plateTitle {
     font-size: var(--font-size-xl);
   }
+  /* The longest section title (cabinet audience) leaves ~7px at 390; on a
+     wider-rendering engine or a narrower phone it must wrap, not push the
+     page sideways (EARS-12). */
+  .sectionTitle {
+    white-space: normal;
+  }
   .shares {
     height: 44px;
   }

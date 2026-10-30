@@ -40,13 +40,19 @@ on:
 permissions:
   contents: read
 
-# Shared with registry-retention.yml: exclude deletion for the entire build,
-# publish, verify and manifest sequence (#3144). Matrix jobs still run in parallel.
-# Superseded PR runs finish; queue:max keeps up to 100 pending runs (not unlimited).
+# main / hotfix / dispatch runs share `registry-images` with registry-retention.yml:
+# deletion is excluded for the entire build, publish, verify and manifest sequence
+# (#3144); queue:max keeps up to 100 pending runs and none is cancelled. Matrix jobs
+# still run in parallel. A pull_request run takes its own per-PR group instead and a
+# newer head cancels it (#3561), so main never waits behind PR builds. That run is
+# outside the lock and safe without it: its images carry the head SHA as a label, so
+# every PR digest is unique to one head and no new tag can alias a digest retention
+# is about to delete. GitHub refuses queue:max with cancel-in-progress:true, hence
+# queue:single for the PR group (its single pending slot is the newest head).
 concurrency:
-  group: registry-images
-  queue: max
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('runtime-images-pr-{0}', github.event.pull_request.number) || 'registry-images' }}
+  queue: ${{ github.event_name == 'pull_request' && 'single' || 'max' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   REGISTRY: ds-platform.registry.twcstorage.ru
@@ -172,6 +178,9 @@ jobs:
           target: ${{ matrix.target }}
           build-args: ${{ matrix.build-args }}
           tags: ${{ env.TAG }}
+          # A PR digest is unique to its head (see `concurrency`); main digests stay
+          # content-addressed so an unchanged service keeps its digest across SHAs.
+          labels: ${{ github.event_name == 'pull_request' && format('org.opencontainers.image.revision={0}', needs.plan.outputs.sha) || '' }}
           push: ${{ needs.plan.outputs.push == 'true' }}
           # Without a push the image travels to the verify job as a tar.
           outputs: ${{ needs.plan.outputs.push != 'true' && format('type=docker,dest={0}/image.tar', runner.temp) || '' }}

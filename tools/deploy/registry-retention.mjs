@@ -22,11 +22,15 @@
 // a refused DELETE (e.g. 405 UNSUPPORTED — the registry does not allow deletion)
 // stops the run at once and is reported, never skipped.
 
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync } from "node:fs";
-import { promisify } from "node:util";
 
+import {
+  ghLines,
+  latestProductionSha,
+  mainHistory,
+  stageSuiteState,
+} from "./lib/github-release-facts.mjs";
 import { IMAGE_REGISTRY } from "./lib/registry.mjs";
 import {
   RetentionError,
@@ -39,7 +43,6 @@ import {
   retentionRepos,
 } from "./lib/registry-retention.mjs";
 
-const run = promisify(execFile);
 const MANIFEST_ACCEPT = [
   "application/vnd.oci.image.index.v1+json",
   "application/vnd.oci.image.manifest.v1+json",
@@ -186,11 +189,6 @@ async function snapshotRegistry(request) {
   return tags;
 }
 
-async function ghLines(args) {
-  const { stdout } = await run("gh", args, { maxBuffer: 64 * 1024 * 1024 });
-  return stdout.split("\n").filter(Boolean);
-}
-
 async function listReleases(repo) {
   const lines = await ghLines([
     "api",
@@ -220,52 +218,6 @@ async function listHotfixHeads(repo) {
     "--jq",
     ".[].object.sha",
   ]);
-}
-
-/** The SHA of the newest production Deployment (`deployment-record.mjs`) whose
- *  latest status is `success`; throws when none can be read. */
-async function latestProductionSha(repo) {
-  const deployments = await ghLines([
-    "api",
-    `repos/${repo}/deployments?environment=production&per_page=100`,
-    "--jq",
-    ".[] | {id, sha}",
-  ]);
-  for (const line of deployments) {
-    const { id, sha } = JSON.parse(line);
-    const [state] = await ghLines([
-      "api",
-      `repos/${repo}/deployments/${id}/statuses?per_page=1`,
-      "--jq",
-      ".[].state",
-    ]);
-    if (state === "success") return sha;
-  }
-  throw new RetentionError(
-    "no successful production GitHub Deployment found — refusing to decide what production runs",
-  );
-}
-
-/** The state of the latest `stage-suite` commit status on `sha` (`stage.yml`), or
- *  null when there is none; throws when the status cannot be read. */
-async function stageSuiteState(repo, sha) {
-  const [state] = await ghLines([
-    "api",
-    `repos/${repo}/commits/${sha}/status?per_page=100`,
-    "--jq",
-    '.statuses[] | select(.context == "stage-suite") | .state',
-  ]);
-  return state ?? null;
-}
-
-async function mainHistory() {
-  await run("git", ["fetch", "--quiet", "--filter=tree:0", "origin", "main"]);
-  const { stdout } = await run(
-    "git",
-    ["rev-list", "--first-parent", "FETCH_HEAD"],
-    { maxBuffer: 64 * 1024 * 1024 },
-  );
-  return stdout.split("\n").filter(Boolean);
 }
 
 function summarize(text) {

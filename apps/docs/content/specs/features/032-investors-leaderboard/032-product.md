@@ -76,7 +76,7 @@ The public **investor leaderboard and the investor page** are the late slice, be
 - **What may be shown publicly** is recorded per organization and is respected by every public surface that shows organizations, starting with project cards (030).
 - The **Academy home partner count is computed from the registry** at request time as the number of all published organizations of any role, including those whose public display is forbidden; no one types or edits that number, and publishing or retiring an organization changes it.
 - Only **platform administrators** in an admin session with the second factor (existing staff access 047, admin 2FA 011) can create, edit, publish, retire or restore organizations and roles; every such change is recorded in the platform's edit history (010).
-- Organizations belong to the **Academy** storefront and the admin; the doctor storefront shows none of this (ADR-0016 §8; the doctor sees results, not the backstage — REQ-51).
+- The organization registry is one platform registry for every storefront (ADR-0016 §8): the leaderboard and the organization cabinets are on the **Academy** and in the admin, and the doctor storefront reads the same registry wherever it shows an organization — the partner attribution at doctor registration — never a copy of its own; the doctor sees no leaderboard and no backstage (REQ-51).
 - The registry list and the form work on a narrow screen and pass the platform's accessibility gate.
 
 ## Out of scope

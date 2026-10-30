@@ -183,3 +183,14 @@ export const OrganisationAdminListSchema = z.object({
   pageSize: z.number().int().positive(),
 });
 export type OrganisationAdminList = z.infer<typeof OrganisationAdminListSchema>;
+
+/**
+ * 032 EARS-12 — `GET /v1/public/organisations/count`: the number of published
+ * organisations of any role, display rules regardless, computed per request.
+ */
+export const PublicOrganisationCountSchema = z
+  .object({ count: z.number().int().nonnegative() })
+  .strict();
+export type PublicOrganisationCount = z.infer<
+  typeof PublicOrganisationCountSchema
+>;

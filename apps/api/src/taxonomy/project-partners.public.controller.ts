@@ -10,6 +10,7 @@ import {
 import {
   CANONICAL_UUID_REGEX,
   PublicCursorQuerySchema,
+  type PublicOrganisationCount,
   type PublicPartnerProjectItemPage,
   type PublicProjectPartnerItemPage,
 } from "@ds/schemas";
@@ -89,6 +90,33 @@ export class ProjectPartnersPublicController {
       publicKey(idOrSlug),
       parseCursorQuery(rawQuery),
     );
+  }
+}
+
+@Controller({ path: "public/organisations", version: "1" })
+@UseFilters(TaxonomyProblemFilter)
+export class OrganisationCountPublicController {
+  constructor(
+    @Inject(ProjectPartnersService)
+    private readonly relations: ProjectPartnersService,
+  ) {}
+
+  /**
+   * 032 EARS-12 — `GET /v1/public/organisations/count`: `{ count }` of the
+   * published organisations of any role, display rules regardless, computed
+   * per request. The Academy home (029) is its only storefront consumer; it
+   * owns any HTTP cache, so this route sends none.
+   */
+  @Get("count")
+  @Public()
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-12"],
+  })
+  count(): Promise<PublicOrganisationCount> {
+    return this.relations.publicOrganisationCount();
   }
 }
 

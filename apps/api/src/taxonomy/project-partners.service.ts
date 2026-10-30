@@ -7,6 +7,7 @@ import {
   type ProjectPartnerAdminList,
   type ProjectPartnerAdminListQuery,
   type PublicCursorQuery,
+  type PublicOrganisationCount,
   type PublicPartnerProjectItemPage,
   type PublicProjectPartnerItemPage,
   taxonomyETag,
@@ -196,7 +197,9 @@ export class ProjectPartnersService {
     query: PublicCursorQuery,
   ): Promise<PublicPartnerProjectItemPage> {
     const partner = await this.repo.findPublicPartner(key);
-    if (!partner || partner.status !== "published" || partner.deletedAt) {
+    // 032 EARS-5: the repository applies the one display predicate, so an
+    // unknown, unpublished, retired or name-hidden partner is the same 404.
+    if (!partner) {
       throw new TaxonomyError("RESOURCE_NOT_FOUND");
     }
     const after = decodeCursor(query.cursor, TITLE_CURSOR_SHAPE);
@@ -224,6 +227,15 @@ export class ProjectPartnersService {
         hasMore,
       },
     };
+  }
+
+  /**
+   * `GET /v1/public/organisations/count` (032 EARS-12) — published
+   * organisations of any role, hidden-rule ones included, read live from the
+   * registry so a publish, retire or restore changes the next answer.
+   */
+  async publicOrganisationCount(): Promise<PublicOrganisationCount> {
+    return { count: await this.repo.countPublished() };
   }
 
   /**

@@ -5,6 +5,7 @@ import {
   ORGANISATION_DESCRIPTION_MAX,
   ORGANISATION_TITLE_MAX,
   OrganisationAdminDetailSchema,
+  PublicOrganisationCountSchema,
   UpdateOrganisationRequestSchema,
 } from "./organisation.js";
 import {
@@ -153,6 +154,23 @@ describe("032 organisation-role contract", () => {
     expect(
       OrganisationRoleAdminListQuerySchema.safeParse({ status: "draft" })
         .success,
+    ).toBe(false);
+  });
+});
+
+describe("032 public organisation count contract", () => {
+  it("032 EARS-12: the count body is exactly { count }, a non-negative integer", () => {
+    expect(PublicOrganisationCountSchema.parse({ count: 14 })).toEqual({
+      count: 14,
+    });
+    expect(PublicOrganisationCountSchema.safeParse({ count: -1 }).success).toBe(
+      false,
+    );
+    expect(
+      PublicOrganisationCountSchema.safeParse({ count: 1.5 }).success,
+    ).toBe(false);
+    expect(
+      PublicOrganisationCountSchema.safeParse({ count: 1, total: 1 }).success,
     ).toBe(false);
   });
 });

@@ -8,6 +8,12 @@ export {
 } from "./taxonomy.errors.js";
 export { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 export { SpeakerProjectionService } from "./speaker-projection.service.js";
+export {
+  organisationPubliclyDisplayed,
+  publicOrganisationColumns,
+  type PublicOrganisationRow,
+} from "./organisation-public-display.js";
+export { toPartnerSummary } from "./public-project-summary.service.js";
 export type { PublicEventKey } from "./speaker-projection.repository.js";
 export {
   IdempotencyService,

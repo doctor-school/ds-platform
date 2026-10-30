@@ -114,7 +114,7 @@ Every admin route: `roles: [platform_admin]`, the dedicated MFA admin session, C
 
 ## Display rules on public reads (EARS-5)
 
-One predicate in the public repository, shared by every partner projection: `status = 'published' AND deleted_at IS NULL AND public_name_visible`, and `logoUrl` resolved only when `public_logo_visible`. A name-hidden organisation is omitted rather than returned without a title: `PublicPartner.title` is required, and its logo alone would still identify it. The embedded primary partner of a project summary therefore becomes `null` when its organisation is name-hidden — a state the DTO already allows (012 EARS-10).
+One predicate in its own module (`organisation-public-display.ts`), shared by every partner projection: `status = 'published' AND deleted_at IS NULL AND public_name_visible`, and `logoUrl` resolved only when `public_logo_visible`. A name-hidden organisation is omitted rather than returned without a title: `PublicPartner.title` is required, and its logo alone would still identify it. The embedded primary partner of a project summary therefore becomes `null` when its organisation is name-hidden — a state the DTO already allows (012 EARS-10).
 
 ## Partner count (EARS-12)
 

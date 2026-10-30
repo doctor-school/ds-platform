@@ -11,17 +11,17 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import type {
-  DrizzleHandle,
-  Organisation,
-  Project,
-  ProjectOrganisation,
-} from "@ds/db";
+import type { DrizzleHandle, Project, ProjectOrganisation } from "@ds/db";
 import { organisations, projectOrganisations, projects } from "@ds/db";
 import type { ProjectPartnerAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { withRelationConflictMapping } from "./taxonomy.errors.js";
+import {
+  organisationPubliclyDisplayed,
+  publicOrganisationColumns,
+  type PublicOrganisationRow,
+} from "./organisation-public-display.js";
 
 // 012 EARS-10 (#1292) — Drizzle data access for the `project_organisations` join
 // (the 012 `project_partners` table, renamed by 032 migration 0054).
@@ -72,7 +72,7 @@ export interface ProjectPartnerPatch {
 /** One §5.2 partner item of a project, before its logo URL is signed. */
 export interface PublicProjectPartnerRow {
   isPrimary: boolean;
-  partner: Organisation;
+  partner: PublicOrganisationRow;
 }
 
 /** One §5.2 project item of a partner, before its summary is built. */
@@ -289,22 +289,47 @@ export class ProjectPartnersRepository {
     return row ?? null;
   }
 
-  /** Resolve a partner by canonical UUID or slug; eligibility is the caller's. */
+  /**
+   * Resolve a publicly displayed partner by canonical UUID or slug (032 EARS-5).
+   * An unknown, unpublished, retired OR name-hidden organisation is the same
+   * `null`, so the keyed read discloses no hidden organisation's existence.
+   */
   async findPublicPartner(key: {
     id?: string;
     slug?: string;
-  }): Promise<Organisation | null> {
+  }): Promise<{ id: string } | null> {
     const where = key.id
       ? eq(organisations.id, key.id)
       : eq(organisations.slug, key.slug!);
-    const [row] = await this.db.select().from(organisations).where(where);
+    const [row] = await this.db
+      .select({ id: organisations.id })
+      .from(organisations)
+      .where(and(where, organisationPubliclyDisplayed));
     return row ?? null;
   }
 
   /**
+   * 032 EARS-12 — the number of published organisations of any role, display
+   * rules regardless, computed per request (no stored figure).
+   */
+  async countPublished(): Promise<number> {
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(organisations)
+      .where(
+        and(
+          eq(organisations.status, "published"),
+          isNull(organisations.deletedAt),
+        ),
+      );
+    return Number(row?.value ?? 0);
+  }
+
+  /**
    * §5.2 — the publicly eligible partners of one project, keyset-paginated on
-   * `(title, id)`. Only ACTIVE relations to PUBLISHED, non-retired partners are
-   * traversed. The order is alphabetical rather than "primary first": the
+   * `(title, id)`. Only ACTIVE relations are traversed, and the partner side is
+   * filtered by the shared `organisationPubliclyDisplayed` predicate so every
+   * public partner projection applies the same 032 EARS-5 rule. The order is alphabetical rather than "primary first": the
    * primary is identified by its own `isPrimary` field on every item, so the
    * client can hoist it without the server making the page order depend on a
    * flag that a later write can move.
@@ -318,8 +343,7 @@ export class ProjectPartnersRepository {
       eq(projectOrganisations.projectId, projectId),
       eq(projectOrganisations.status, "active"),
       isNull(projectOrganisations.deletedAt),
-      eq(organisations.status, "published"),
-      isNull(organisations.deletedAt),
+      organisationPubliclyDisplayed,
     ];
     if (after) {
       filters.push(
@@ -335,7 +359,7 @@ export class ProjectPartnersRepository {
     const rows = await this.db
       .select({
         isPrimary: projectOrganisations.isPrimary,
-        partner: organisations,
+        partner: publicOrganisationColumns,
       })
       .from(projectOrganisations)
       .innerJoin(

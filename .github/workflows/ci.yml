@@ -281,6 +281,14 @@ jobs:
       - name: unit
         if: needs.changes.outputs.code == 'true'
         run: pnpm exec turbo run test --concurrency=1 --filter='!@ds/api'
+      # An instruction-only diff skips the `build` step above, but guard specs
+      # import workspace packages that resolve through their built `dist/`
+      # (e.g. smoke-prod-entry-contract → @ds/auth-flow → @ds/schemas, #3574).
+      # Build exactly the dependency closure of @ds/lint-guard-tests (`^...`)
+      # first, so the step does not depend on which spec imports what.
+      - name: discipline guards (deps)
+        if: needs.changes.outputs.code != 'true' && needs.changes.outputs.discipline == 'true'
+        run: pnpm exec turbo run build --filter=@ds/lint-guard-tests^...
       - name: discipline guards (instruction-only changes)
         if: needs.changes.outputs.code != 'true' && needs.changes.outputs.discipline == 'true'
         run: pnpm --filter @ds/lint-guard-tests test

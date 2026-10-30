@@ -43,6 +43,8 @@ export interface MaterialInsert {
   expertId: string | null;
   partnerOrganisationId: string | null;
   body: unknown;
+  /** Server-generated object key of the normalized cover, or `null`. */
+  coverRef: string | null;
 }
 
 /** Every column an edit or a lifecycle move may write. */
@@ -54,6 +56,7 @@ export interface MaterialPatch {
   expertId?: string | null;
   partnerOrganisationId?: string | null;
   body?: unknown;
+  coverRef?: string | null;
   status?: "draft" | "published";
   /** Written by the first publish only; the DB trigger pins it thereafter. */
   firstPublishedAt?: Date;

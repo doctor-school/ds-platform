@@ -430,6 +430,23 @@ routes:
     route: /organisation-roles
     file: apps/admin/app/organisation-roles/page.tsx
     status: product-ready
+  # 048 «Материалы» (#3512) — the list with its kind / status facets, the
+  # full-page create form and the edit form with publish / unpublish (048
+  # EARS-1, 4–8, 19). Real product deliverables, driven live in
+  # `apps/admin/e2e/materials.spec.ts` and scanned by the 048 blocks of
+  # `apps/admin/e2e/a11y/a11y-axe.e2e.spec.ts`.
+  - app: admin
+    route: /materials
+    file: apps/admin/app/materials/page.tsx
+    status: product-ready
+  - app: admin
+    route: /materials/create
+    file: apps/admin/app/materials/create/page.tsx
+    status: product-ready
+  - app: admin
+    route: /materials/[id]
+    file: apps/admin/app/materials/[id]/page.tsx
+    status: product-ready
   - app: admin
     route: /organisation-roles/create
     file: apps/admin/app/organisation-roles/create/page.tsx

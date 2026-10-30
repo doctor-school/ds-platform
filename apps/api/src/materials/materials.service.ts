@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Material } from "@ds/db";
 import {
   type AdminMaterialListQuery,
@@ -14,10 +14,18 @@ import {
   type UpdateMaterialRequest,
 } from "@ds/schemas";
 import {
+  OBJECT_STORAGE,
+  ObjectAlreadyExistsError,
+  type ObjectStorage,
+} from "../storage/index.js";
+import {
   type IdempotencyLease,
   IdempotencyService,
   markReplayable,
+  MediaCleanupService,
+  StillImageNormalizer,
   TaxonomyError,
+  type UploadedImage,
 } from "../taxonomy/index.js";
 import { allocateMaterialSlug, materialSlugBase } from "./materials-slug.js";
 import {
@@ -38,12 +46,14 @@ type FieldError = { path: string; message: string };
 
 export interface CreateMaterialInput {
   payload: CreateMaterialRequest;
+  cover?: UploadedImage | undefined;
   lease: IdempotencyLease;
 }
 
 export interface UpdateMaterialInput {
   id: string;
   payload: UpdateMaterialRequest;
+  cover?: UploadedImage | undefined;
   expectedVersion: number;
   lease: IdempotencyLease;
 }
@@ -61,8 +71,13 @@ export interface MaterialCommandResult {
 
 const STALE = "the material changed since it was read; reload and retry";
 
+/** Where material covers live in the bucket. */
+const COVER_PREFIX = "materials/covers";
+
 @Injectable()
 export class MaterialsService {
+  private readonly logger = new Logger(MaterialsService.name);
+
   // Explicit @Inject tokens — the endpoint-authz gate boots this graph under
   // `tsx`, which emits no `design:paramtypes` (see organisations.service.ts).
   constructor(
@@ -71,6 +86,10 @@ export class MaterialsService {
     private readonly feed: OwnMaterialsFeedSource,
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
+    @Inject(StillImageNormalizer)
+    private readonly normalizer: StillImageNormalizer,
+    @Inject(MediaCleanupService) private readonly cleanup: MediaCleanupService,
+    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
   ) {}
 
   create(input: CreateMaterialInput): Promise<MaterialCommandResult> {
@@ -109,6 +128,12 @@ export class MaterialsService {
     const kind = payload.kind;
     const expertId = kind === "column" ? (payload.expertId ?? null) : null;
     const partnerOrganisationId = payload.partnerOrganisationId ?? null;
+    // Normalization and the PUT run BEFORE the transaction (012 §5.1 order): a
+    // refused image writes no row, and a later refusal leaves only a noted
+    // locator the upload reconciler reclaims.
+    const coverRef = input.cover
+      ? await this.normalizeAndUpload(input.cover, input.lease)
+      : null;
     return this.repo.transaction(async (tx) => {
       await this.assertReferences(tx, { expertId, partnerOrganisationId });
       const base = materialSlugBase(payload.title);
@@ -124,6 +149,7 @@ export class MaterialsService {
         expertId,
         partnerOrganisationId,
         body: payload.body ?? emptyMaterialBody(),
+        coverRef,
       });
       return this.complete(tx, input.lease, created, 201);
     });
@@ -140,6 +166,17 @@ export class MaterialsService {
     input: UpdateMaterialInput,
   ): Promise<MaterialCommandResult> {
     const { payload } = input;
+    // Optimistic pre-check OUTSIDE the transaction, so a doomed request never
+    // uploads; the same check repeats under the row lock below.
+    const seen = await this.repo.findById(input.id);
+    if (!seen) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    if (seen.version !== input.expectedVersion) {
+      throw new TaxonomyError("PRECONDITION_FAILED", STALE);
+    }
+    const uploadedRef = input.cover
+      ? await this.normalizeAndUpload(input.cover, input.lease)
+      : null;
+    const clearing = payload.mediaAction === "clear";
     return this.repo.transaction(async (tx) => {
       const current = await this.lockVersion(
         tx,
@@ -194,6 +231,8 @@ export class MaterialsService {
         expertId,
         partnerOrganisationId,
         body,
+        ...(uploadedRef ? { coverRef: uploadedRef } : {}),
+        ...(clearing && !uploadedRef ? { coverRef: null } : {}),
       };
       // The slug follows the title until the first publish freezes it.
       if (!current.firstPublishedAt && title !== current.title) {
@@ -210,8 +249,21 @@ export class MaterialsService {
         patch,
       );
       if (!updated) throw new TaxonomyError("PRECONDITION_FAILED", STALE);
+      // The released object's deletion obligation is durable and rides the SAME
+      // transaction as the reference change (012-design §5.1).
+      const releasedRef =
+        (uploadedRef || clearing) && current.coverRef ? current.coverRef : null;
+      if (releasedRef && releasedRef !== updated.coverRef) {
+        await this.cleanup.enqueue(tx, {
+          cleanupKind: uploadedRef ? "replace" : "clear",
+          entityKind: "material",
+          entityId: updated.id,
+          slot: "cover",
+          objectKey: releasedRef,
+        });
+      }
       if (updated.status === "published") {
-        await this.feed.write(tx, updated, coverUrlOf(updated));
+        await this.feed.write(tx, updated, await this.coverUrlOf(updated));
       }
       return this.complete(tx, input.lease, updated, 200);
     });
@@ -260,7 +312,7 @@ export class MaterialsService {
         },
       );
       if (!moved) throw new TaxonomyError("PRECONDITION_FAILED", STALE);
-      await this.feed.write(tx, moved, coverUrlOf(moved));
+      await this.feed.write(tx, moved, await this.coverUrlOf(moved));
       return this.complete(tx, input.lease, moved, 200);
     });
   }
@@ -403,6 +455,55 @@ export class MaterialsService {
     return { detail, etag };
   }
 
+  /** The cover's URL from object storage, or `null` without a cover. */
+  private async coverUrlOf(row: Material): Promise<string | null> {
+    return row.coverRef ? this.storage.urlFor(row.coverRef) : null;
+  }
+
+  /**
+   * Normalize the cover and PUT the canonical WebP under a deterministic,
+   * record-scoped key with write-once semantics — the 012 project/partner flow
+   * against the SAME shared normalizer (012-design §2.2): a cover is not a
+   * different kind of still image.
+   */
+  private async normalizeAndUpload(
+    cover: UploadedImage,
+    lease: IdempotencyLease,
+  ): Promise<string> {
+    const normalized = await this.normalizer.normalize(cover);
+    const key = this.idempotency.objectKeyFor({
+      lease,
+      prefix: COVER_PREFIX,
+      canonicalSha256: normalized.canonicalSha256,
+      extension: "webp",
+    });
+    // Record the locator BEFORE the PUT: an orphan we know about is reclaimable.
+    await this.idempotency.noteUploadLocator(lease, key);
+    try {
+      await this.storage.put({
+        key,
+        body: normalized.body,
+        contentType: normalized.contentType,
+        onlyIfAbsent: true,
+      });
+    } catch (err) {
+      if (err instanceof ObjectAlreadyExistsError) {
+        this.logger.log(`cover object ${key} already present — resumed request`);
+        return key;
+      }
+      this.logger.error(
+        `object storage refused the cover PUT: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      throw new TaxonomyError(
+        "MEDIA_STORAGE_UNAVAILABLE",
+        "the cover could not be stored; no material data changed",
+      );
+    }
+    return key;
+  }
+
   private async toDetail(
     tx: Parameters<MaterialsRepository["readExpert"]>[0],
     row: Material,
@@ -429,7 +530,7 @@ export class MaterialsService {
       partner: partner
         ? { id: partner.id, title: partner.title, status: partner.status }
         : null,
-      coverUrl: coverUrlOf(row),
+      coverUrl: await this.coverUrlOf(row),
       body: row.body as MaterialBody,
       status: row.status,
       firstPublishedAt: row.firstPublishedAt?.toISOString() ?? null,
@@ -440,14 +541,6 @@ export class MaterialsService {
   }
 }
 
-/**
- * The cover's public URL. No write path sets `cover_ref` yet: the cover upload
- * needs the shared media reference predicate taught `materials.cover_ref`
- * first (see the #3512 hand-off), so every material reads `null` here.
- */
-function coverUrlOf(_row: Material): string | null {
-  return null;
-}
 
 function validation(errors: FieldError[]): TaxonomyError {
   return new TaxonomyError(

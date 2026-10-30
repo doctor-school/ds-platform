@@ -146,6 +146,12 @@ export default function MaterialDetailPage() {
                   expertId: values.expertId,
                   partnerOrganisationId: values.partnerOrganisationId,
                   body: values.body,
+                  // A picked file replaces the cover; «убрать» on the stored
+                  // one clears it — the form never sends both.
+                  ...(values.removeCover && !values.cover
+                    ? { mediaAction: "clear" as const }
+                    : {}),
+                  cover: values.cover,
                   version: detail.version,
                 };
                 update(

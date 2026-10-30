@@ -18,6 +18,15 @@ import { selectRelationshipCombobox } from "./support/relationship-combobox";
  * into the list / form captures the PR body cites.
  */
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
+/** Two different decodable still images — the API normalizer is real. */
+const PNG_1x1 = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
+  "base64",
+);
+const REPLACEMENT_PNG_1x1 = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
 const WIDE = { width: 1440, height: 900 };
 const NARROW = { width: 390, height: 844 };
 
@@ -180,6 +189,86 @@ test.describe("048 — «Материалы» in the live admin", () => {
       "Набор открыт до конца месяца.",
     );
     expect(page.url()).toBe(url);
+  });
+
+  test("048 EARS-1: «Обложка» refuses a non-image before any request, then sets, replaces and clears the cover", async ({
+    page,
+  }) => {
+    const stamp = Date.now();
+    await page.goto("/materials/create");
+    await page.getByTestId("material-form").waitFor({ state: "visible" });
+    await page.getByTestId("material-title").fill(`С обложкой ${stamp}`);
+
+    // Refusal: a non-image is refused by the dropzone preflight, nothing sent.
+    let writes = 0;
+    const countWrite = (request: { method: () => string; url: () => string }) => {
+      if (
+        request.method() === "POST" &&
+        new URL(request.url()).pathname === "/v1/admin/materials"
+      )
+        writes += 1;
+    };
+    page.on("request", countWrite);
+    await page.setInputFiles("#material-cover", {
+      name: "записка.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("not an image"),
+    });
+    await expect(page.getByTestId("material-cover-error")).toContainText(
+      "Формат не подходит: нужен JPEG, PNG или WebP.",
+    );
+    await page.getByTestId("submit-material").click();
+    await expect(page.getByTestId("material-cover-error")).toBeVisible();
+    expect(writes).toBe(0);
+    page.off("request", countWrite);
+
+    // Set: the create rides multipart with the cover part.
+    await page.setInputFiles("#material-cover", {
+      name: "обложка.png",
+      mimeType: "image/png",
+      buffer: PNG_1x1,
+    });
+    await expect(page.getByTestId("material-cover-error")).toHaveCount(0);
+    await expect(page.getByAltText("Обложка материала")).toBeVisible();
+    const createRequest = page.waitForRequest(
+      (r) =>
+        r.method() === "POST" &&
+        new URL(r.url()).pathname === "/v1/admin/materials",
+    );
+    await submitCreate(page);
+    expect((await createRequest).headers()["content-type"]).toContain(
+      "multipart/form-data",
+    );
+    await page.reload();
+    const stored = page.getByAltText("Обложка материала");
+    await expect(stored).toBeVisible();
+    const firstSrc = await stored.getAttribute("src");
+    expect(firstSrc).toMatch(/materials\/covers\//);
+
+    // Replace: a new file swaps the stored cover for another object.
+    await page.setInputFiles("#material-cover", {
+      name: "замена.png",
+      mimeType: "image/png",
+      buffer: REPLACEMENT_PNG_1x1,
+    });
+    await page.getByTestId("submit-material").click();
+    await expect(page.getByTestId("update-saved")).toBeVisible();
+    await page.reload();
+    const replaced = page.getByAltText("Обложка материала");
+    await expect(replaced).toBeVisible();
+    const secondSrc = await replaced.getAttribute("src");
+    expect(new URL(secondSrc!, page.url()).pathname).not.toBe(
+      new URL(firstSrc!, page.url()).pathname,
+    );
+
+    // Clear: «убрать» on the stored cover saves the material without one.
+    await page.getByRole("button", { name: "убрать" }).click();
+    await expect(page.getByAltText("Обложка материала")).toHaveCount(0);
+    await page.getByTestId("submit-material").click();
+    await expect(page.getByTestId("update-saved")).toBeVisible();
+    await page.reload();
+    await page.getByTestId("material-form").waitFor({ state: "visible" });
+    await expect(page.getByAltText("Обложка материала")).toHaveCount(0);
   });
 
   test("048 EARS-19: a partner is chosen from the organisation registry, kept on reload, and cleared", async ({
@@ -467,6 +556,14 @@ test.describe("048 — «Материалы» in the live admin", () => {
       title: `Открыт набор центров в исследование PRP ${stamp}`,
       body: "Центры подают заявку до конца месяца.",
     });
+    // The form capture carries a stored cover, so «Обложка» shows its preview.
+    await page.setInputFiles("#material-cover", {
+      name: "обложка.png",
+      mimeType: "image/png",
+      buffer: PNG_1x1,
+    });
+    await page.getByTestId("submit-material").click();
+    await expect(page.getByTestId("update-saved")).toBeVisible();
     await page.getByTestId("material-publish").click();
     await expect(page.getByTestId("material-status")).toHaveText("Опубликован");
     await page.reload();

@@ -3,7 +3,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { and, eq, lte, or, sql } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
-import { mediaCleanupJobs } from "@ds/db";
+import { mediaCleanupJobs, mediaEntityKind, mediaSlot } from "@ds/db";
 import { DRIZZLE_DB } from "../../database/database.tokens.js";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../storage/index.js";
 import { MediaSlotRegistry } from "./media-slot.registry.js";
@@ -32,9 +32,10 @@ export const CLEANUP_LEASE_MS = 5 * 60 * 1000;
 
 export interface CleanupJobInput {
   cleanupKind: "replace" | "clear" | "content_removal";
-  entityKind: "project" | "expert" | "partner";
+  /** The `media_entity_kind` enum — a slot registered from outside taxonomy adds its kind there. */
+  entityKind: (typeof mediaEntityKind.enumValues)[number];
   entityId: string;
-  slot: "cover" | "photo" | "logo";
+  slot: (typeof mediaSlot.enumValues)[number];
   /** The RELEASED object key — the one that must eventually disappear. */
   objectKey: string;
   /** CDN key/path to purge or invalidate; equal to the object key by default. */

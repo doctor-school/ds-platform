@@ -7,11 +7,18 @@ import {
 import { VersioningType } from "@nestjs/common";
 import multipart from "@fastify/multipart";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import sharp from "sharp";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
-import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
+import {
+  DRIZZLE_DB,
+  DRIZZLE_POOL,
+} from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/index.js";
+import { MediaCleanupService } from "../../src/taxonomy/media/media-cleanup.service.js";
+import { UploadReconcileService } from "../../src/taxonomy/media/upload-reconcile.service.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { adminHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
@@ -31,6 +38,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
+    let storage: ObjectStorage;
     const fake = new FakeIdpClient();
     const password = "Aa1!ufficiently-long-pw";
     const device = {
@@ -257,11 +265,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await app.init();
       await app.getHttpAdapter().getInstance().ready();
       pool = app.get<pg.Pool>(DRIZZLE_POOL);
+      storage = app.get<ObjectStorage>(OBJECT_STORAGE);
       ({ sid: adminSid, sub: adminSub } = await adminSession());
     });
 
     afterEach(async () => {
       for (const id of materialIds.splice(0)) {
+        await pool.query("DELETE FROM media_cleanup_jobs WHERE entity_id = $1", [
+          id,
+        ]);
         await pool.query("DELETE FROM feed_entries WHERE material_id = $1", [
           id,
         ]);
@@ -728,6 +740,317 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ]);
       // `subject_id` is the acting administrator's opaque IdP `sub`.
       for (const r of rows) expect(r.subject_id).toBe(adminSub);
+    });
+
+    // ── EARS-1: the cover — the 012 media slot `materials.cover_ref` ─────
+
+    function multipartBody(
+      fields: Record<string, string>,
+      files: {
+        field: string;
+        filename: string;
+        contentType: string;
+        body: Buffer;
+      }[] = [],
+    ): { body: Buffer; contentType: string } {
+      const boundary = `----ds3512${Math.random().toString(16).slice(2)}`;
+      const chunks: Buffer[] = [];
+      for (const [k, v] of Object.entries(fields)) {
+        chunks.push(
+          Buffer.from(
+            `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`,
+          ),
+        );
+      }
+      for (const file of files) {
+        chunks.push(
+          Buffer.from(
+            `--${boundary}\r\nContent-Disposition: form-data; name="${file.field}"; filename="${file.filename}"\r\nContent-Type: ${file.contentType}\r\n\r\n`,
+          ),
+        );
+        chunks.push(file.body, Buffer.from("\r\n"));
+      }
+      chunks.push(Buffer.from(`--${boundary}--\r\n`));
+      return {
+        body: Buffer.concat(chunks),
+        contentType: `multipart/form-data; boundary=${boundary}`,
+      };
+    }
+
+    async function stillPng(width = 40, height = 30): Promise<Buffer> {
+      return sharp({
+        create: {
+          width,
+          height,
+          channels: 3,
+          background: { r: 20, g: 60, b: 160 },
+        },
+      })
+        .png()
+        .toBuffer();
+    }
+
+    interface CoverCall {
+      payload: Record<string, unknown>;
+      cover?: { body: Buffer; contentType?: string; filename?: string };
+      ifMatch?: string;
+      idempotencyKey?: string;
+    }
+
+    /** A multipart write: one `payload` JSON part plus at most one `cover` file. */
+    function coverWrite(method: "POST" | "PATCH", url: string, c: CoverCall) {
+      const mp = multipartBody(
+        { payload: JSON.stringify(c.payload) },
+        c.cover
+          ? [
+              {
+                field: "cover",
+                filename: c.cover.filename ?? "cover.png",
+                contentType: c.cover.contentType ?? "image/png",
+                body: c.cover.body,
+              },
+            ]
+          : [],
+      );
+      return app.inject({
+        method,
+        url,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": mp.contentType,
+          "idempotency-key": c.idempotencyKey ?? key(),
+          ...(c.ifMatch ? { "if-match": c.ifMatch } : {}),
+        },
+        payload: mp.body,
+      });
+    }
+
+    async function coverRef(id: string): Promise<string | null> {
+      const { rows } = await pool.query<{ cover_ref: string | null }>(
+        "SELECT cover_ref FROM materials WHERE id = $1",
+        [id],
+      );
+      return rows[0]!.cover_ref;
+    }
+
+    async function materialCount(): Promise<number> {
+      const { rows } = await pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM materials",
+      );
+      return Number(rows[0]!.n);
+    }
+
+    /** Create a news item with one cover; return its detail, live key and idempotency key. */
+    async function createWithCover(): Promise<{
+      detail: Detail & { coverUrl: string | null };
+      ref: string;
+      idempotencyKey: string;
+    }> {
+      const idempotencyKey = key();
+      const res = await coverWrite("POST", "/v1/admin/materials", {
+        payload: news(),
+        cover: { body: await stillPng(40, 30) },
+        idempotencyKey,
+      });
+      expect(res.statusCode, res.payload).toBe(201);
+      const detail = json(res) as Detail & { coverUrl: string | null };
+      materialIds.push(detail.id);
+      const ref = await coverRef(detail.id);
+      expect(ref).not.toBeNull();
+      expect(await storage.exists(ref!)).toBe(true);
+      return { detail, ref: ref!, idempotencyKey };
+    }
+
+    it("048 EARS-1: when a material is created with a cover, the system shall store canonical WebP bytes under a server-generated key and project its URL on the detail", async () => {
+      const { detail, ref } = await createWithCover();
+      expect(ref).toMatch(/^materials\/covers\/.+\.webp$/);
+      expect(detail.coverUrl).toBe(await storage.urlFor(ref));
+      const read = json(
+        await call("GET", `/v1/admin/materials/${detail.id}`),
+      ) as { coverUrl: string | null };
+      expect(read.coverUrl).toBe(detail.coverUrl);
+    });
+
+    it("048 EARS-1: when a cover is replaced and then cleared, the system shall swap the reference and enqueue a cleanup job for each released key", async () => {
+      const { detail, ref: firstRef } = await createWithCover();
+      const replace = await coverWrite(
+        "PATCH",
+        `/v1/admin/materials/${detail.id}`,
+        {
+          payload: {},
+          cover: { body: await stillPng(48, 36) },
+          ifMatch: `W/"${detail.version}"`,
+        },
+      );
+      expect(replace.statusCode, replace.payload).toBe(200);
+      const secondRef = await coverRef(detail.id);
+      expect(secondRef).not.toBeNull();
+      expect(secondRef).not.toBe(firstRef);
+      const replaced = json(replace) as Detail & { coverUrl: string | null };
+      expect(replaced.coverUrl).toBe(await storage.urlFor(secondRef!));
+
+      const clear = await patch(replaced, { mediaAction: "clear" });
+      expect(clear.statusCode, clear.payload).toBe(200);
+      expect(json(clear)).toMatchObject({ coverUrl: null });
+      expect(await coverRef(detail.id)).toBeNull();
+
+      const { rows } = await pool.query<{
+        object_key: string;
+        cleanup_kind: string;
+        entity_kind: string;
+        slot: string;
+        status: string;
+      }>(
+        `SELECT object_key, cleanup_kind, entity_kind, slot, status
+           FROM media_cleanup_jobs WHERE entity_id = $1 ORDER BY created_at`,
+        [detail.id],
+      );
+      expect(rows).toEqual([
+        {
+          object_key: firstRef,
+          cleanup_kind: "replace",
+          entity_kind: "material",
+          slot: "cover",
+          status: "active",
+        },
+        {
+          object_key: secondRef,
+          cleanup_kind: "clear",
+          entity_kind: "material",
+          slot: "cover",
+          status: "active",
+        },
+      ]);
+    });
+
+    it("048 EARS-1: when a published material's cover changes, the system shall rewrite the feed entry's image", async () => {
+      const { detail } = await createWithCover();
+      const published = json(await publish(detail)) as Detail & {
+        coverUrl: string | null;
+      };
+      expect((await entries(detail.id))[0]).toMatchObject({
+        image_url: published.coverUrl,
+      });
+      const cleared = await patch(published, { mediaAction: "clear" });
+      expect(cleared.statusCode, cleared.payload).toBe(200);
+      expect((await entries(detail.id))[0]).toMatchObject({ image_url: null });
+    });
+
+    it("048 EARS-1: when the cover is not a still image, rides a clear or uses the wrong part name, the system shall refuse it and change nothing", async () => {
+      const before = await materialCount();
+      const gif = await sharp({
+        create: {
+          width: 8,
+          height: 8,
+          channels: 3,
+          background: { r: 0, g: 0, b: 0 },
+        },
+      })
+        .gif()
+        .toBuffer();
+      const notImage = await coverWrite("POST", "/v1/admin/materials", {
+        payload: news(),
+        cover: { body: gif, contentType: "image/gif", filename: "a.gif" },
+      });
+      expect(notImage.statusCode).toBe(400);
+      expect(problem(notImage).errorCode).toBe("MEDIA_INVALID");
+      const text = await coverWrite("POST", "/v1/admin/materials", {
+        payload: news(),
+        cover: {
+          body: Buffer.from("not an image"),
+          contentType: "text/plain",
+          filename: "a.txt",
+        },
+      });
+      expect(text.statusCode).toBe(400);
+      expect(problem(text).errorCode).toBe("MEDIA_INVALID");
+      expect(await materialCount()).toBe(before);
+
+      const m = await create(news());
+      const conflict = await coverWrite(
+        "PATCH",
+        `/v1/admin/materials/${m.id}`,
+        {
+          payload: { mediaAction: "clear" },
+          cover: { body: await stillPng() },
+          ifMatch: `W/"${m.version}"`,
+        },
+      );
+      expect(conflict.statusCode).toBe(400);
+      expect(problem(conflict).errorCode).toBe("MEDIA_INPUT_CONFLICT");
+      const mp = multipartBody({ payload: "{}" }, [
+        {
+          field: "logo",
+          filename: "a.png",
+          contentType: "image/png",
+          body: await stillPng(),
+        },
+      ]);
+      const wrongPart = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/materials/${m.id}`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": mp.contentType,
+          "idempotency-key": key(),
+          "if-match": `W/"${m.version}"`,
+        },
+        payload: mp.body,
+      });
+      expect(wrongPart.statusCode).toBe(400);
+      expect(problem(wrongPart).errorCode).toBe("MEDIA_INPUT_CONFLICT");
+      expect(await row(m.id)).toMatchObject({ version: m.version });
+      expect(await coverRef(m.id)).toBeNull();
+    });
+
+    // ── #3572: both media sweeps keep a referenced material cover ────────
+
+    it("3572: when a cleanup job names a cover a live material still references, the cleanup worker shall keep the object and leave the obligation open", async () => {
+      const { detail, ref } = await createWithCover();
+      const cleanup = app.get(MediaCleanupService);
+      const jobId = await cleanup.enqueue(app.get(DRIZZLE_DB), {
+        cleanupKind: "replace",
+        entityKind: "material",
+        entityId: detail.id,
+        slot: "cover",
+        objectKey: ref,
+      });
+
+      await cleanup.runDueJobs(100);
+
+      expect(await storage.exists(ref)).toBe(true);
+      const { rows } = await pool.query<{ status: string; last_error: string }>(
+        "SELECT status, last_error FROM media_cleanup_jobs WHERE id = $1",
+        [jobId],
+      );
+      expect(rows[0]).toMatchObject({
+        status: "active",
+        last_error: "still_referenced",
+      });
+    });
+
+    it("3572: when the upload reconciler reaches the quiescent locator of a committed cover create, it shall clear the locator and keep the live cover", async () => {
+      const { ref, idempotencyKey } = await createWithCover();
+      // Age the record past lease expiry + the in-flight/skew grace.
+      await pool.query(
+        `UPDATE idempotency_keys
+            SET created_at = now() - interval '2 days',
+                lease_expires_at = CASE WHEN lease_expires_at IS NULL THEN NULL
+                                        ELSE now() - interval '2 days' END
+          WHERE key = $1`,
+        [idempotencyKey],
+      );
+
+      await app.get(UploadReconcileService).reconcileDueLocators();
+
+      expect(await storage.exists(ref)).toBe(true);
+      const { rows } = await pool.query<{ cleanup_object_key: string | null }>(
+        "SELECT cleanup_object_key FROM idempotency_keys WHERE key = $1",
+        [idempotencyKey],
+      );
+      expect(rows[0]!.cleanup_object_key).toBeNull();
     });
   },
 );

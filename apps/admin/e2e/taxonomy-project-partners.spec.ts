@@ -286,7 +286,7 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
       .getByTestId("project-partners-panel")
       .locator('[data-testid^="project-partner-row-"]')
       .filter({ hasText: first.title });
-    await expect(firstRow).toContainText("Основной");
+    await expect(firstRow).toContainText("Основная");
 
     // ── The flag is now taken: the create form withholds it entirely ───────
     // The hint names the way through («сначала снимите отметку»), so the operator

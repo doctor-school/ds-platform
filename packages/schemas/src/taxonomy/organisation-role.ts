@@ -50,7 +50,7 @@ export type OrganisationRoleRef = z.infer<typeof OrganisationRoleRefSchema>;
 /** The admin projection of one role, with the number of organisations holding it. */
 export const OrganisationRoleAdminDetailSchema =
   OrganisationRoleRefSchema.extend({
-    /** Draft and published organisations holding the role (EARS-3 / EARS-4). */
+    /** Every organisation holding the role, whatever its status (032 EARS-3). */
     organisationCount: z.number().int().nonnegative(),
     version: z.number().int().positive(),
     createdAt: z.string(),

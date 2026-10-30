@@ -5,7 +5,7 @@ import { useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { Alert, Button } from "@ds/design-system";
 import type { TaxonomyStatus } from "@ds/schemas";
-import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
+import { publishBlockers, taxonomyErrorKey } from "@/lib/taxonomy-errors";
 
 /**
  * The publish command of a project / expert / partner record (012 EARS-5, #1287).
@@ -30,9 +30,11 @@ import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
  * - **No delete wording anywhere** (§3.1): the platform retires, never deletes.
  *
  * Refusals are shown as the mapped RU sentence, never a wire code: the
- * completeness refusal, the missing-curator refusal (projects) and the occupied
- * speaker slot (experts) each have their own actionable line in
- * `taxonomy-errors.ts`.
+ * completeness refusal and the occupied speaker slot (experts) each have their
+ * own actionable line in `taxonomy-errors.ts`. A project's completeness
+ * refusal names each missing item — title, description, a result, the stage
+ * note, the curator (030 EARS-6) — and, with `onOpenBlocker`, each is a control
+ * that opens the tab fixing it.
  */
 export function PublishAction({
   namespace,
@@ -41,6 +43,7 @@ export function PublishAction({
   version,
   publishUrl,
   onPublished,
+  onOpenBlocker,
 }: {
   /** The message + error namespace: `projects` | `experts` | `organisations`. */
   namespace: "projects" | "experts" | "organisations";
@@ -50,10 +53,17 @@ export function PublishAction({
   publishUrl: (id: string) => string;
   /** Re-read the detail: the row's version moved, so the next write asserts the new one. */
   onPublished: () => void;
+  /**
+   * 030 EARS-6 — when given, a refused publish lists each missing item
+   * (`<namespace>.publish.blockers.<item>`) as a control that opens the tab
+   * fixing it; the host owns the tabs.
+   */
+  onOpenBlocker?: (item: string) => void;
 }) {
   const t = useTranslations();
   const { mutate: publish, mutation: publishing } = useCustomMutation();
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [blockers, setBlockers] = useState<string[]>([]);
   const [published, setPublished] = useState(false);
 
   return (
@@ -63,7 +73,32 @@ export function PublishAction({
     >
       {errorKey ? (
         <Alert variant="danger" data-testid="publish-error">
-          {t(errorKey)}
+          <p>{t(errorKey)}</p>
+          {onOpenBlocker && blockers.length > 0 ? (
+            <>
+              <p className="mt-2 font-bold">
+                {t(`${namespace}.publish.blockersTitle`)}
+              </p>
+              <ul
+                className="mt-1 flex list-disc flex-col gap-1 pl-5"
+                data-testid="publish-blockers"
+              >
+                {blockers.map((item) => (
+                  <li key={item}>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      data-testid={`publish-blocker-${item}`}
+                      onClick={() => onOpenBlocker(item)}
+                    >
+                      {t(`${namespace}.publish.blockers.${item}`)}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
         </Alert>
       ) : published ? (
         <Alert variant="success" data-testid="publish-notice">
@@ -109,6 +144,7 @@ export function PublishAction({
                   },
                   onError: (error) => {
                     setPublished(false);
+                    setBlockers(publishBlockers(error));
                     setErrorKey(
                       taxonomyErrorKey(
                         error,

@@ -11,6 +11,7 @@ import {
   OrganisationFormSchema,
   OrganisationRoleFormSchema,
   ProjectFormSchema,
+  ProjectResultRowFormSchema,
   EventKindFormSchema,
   RecordingExpectedByFormSchema,
   StreamConfigFormSchema,
@@ -190,47 +191,78 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     expect(malformed).not.toContain("fallback");
   });
 
-  it("project form (012 EARS-1): every field's real failing rule maps to a specific key, never fallback", () => {
+  it("project form (012 EARS-1, 030 EARS-1): every field's real failing rule maps to a specific key, never fallback", () => {
     // Empty submit — title and description are required. The address is not an
     // authored field: the server derives it after save.
     const empty = keysFor(ProjectFormSchema, {
-      kind: "school",
       defaultAudience: "",
       title: "",
       description: "",
+      stage: "running",
+      stageNote: "",
     });
     expect(empty).toContain("required");
     expect(empty).not.toContain("fallback");
 
     // Over-long title/description → the length key.
     const tooLong = keysFor(ProjectFormSchema, {
-      kind: "school",
       defaultAudience: "experts",
       title: "x".repeat(161),
       description: "x".repeat(2001),
+      stage: "running",
+      stageNote: "",
     });
     expect(tooLong).toEqual(["maxLength", "maxLength"]);
 
-    // An attempted client slug cannot enter the form's parsed mutation shape.
-    expect(
-      ProjectFormSchema.parse({
-        kind: "school",
-        defaultAudience: "doctors",
-        title: "Школа",
-        description: "Описание",
-        slug: "Not valid",
-      }),
-    ).not.toHaveProperty("slug");
+    // Neither a client slug nor a former 012 kind enters the parsed shape:
+    // 030 EARS-1 offers no project kind.
+    const parsed = ProjectFormSchema.parse({
+      defaultAudience: "doctors",
+      title: "Школа",
+      description: "Описание",
+      stage: "running",
+      stageNote: "",
+      slug: "Not valid",
+      kind: "school",
+    });
+    expect(parsed).not.toHaveProperty("slug");
+    expect(parsed).not.toHaveProperty("kind");
 
-    // An unknown kind maps to its own key.
+    // 030 EARS-1 — «Скоро» requires «Что происходит сейчас», with its own key.
+    const filled = {
+      defaultAudience: "doctors",
+      title: "Школа",
+      description: "Описание",
+    };
+    expect(
+      keysFor(ProjectFormSchema, { ...filled, stage: "soon", stageNote: " " }),
+    ).toEqual(["stageNote"]);
     expect(
       keysFor(ProjectFormSchema, {
-        kind: "podcast",
-        defaultAudience: "doctors",
-        title: "Школа",
-        description: "Описание",
+        ...filled,
+        stage: "soon",
+        stageNote: "x".repeat(81),
       }),
-    ).toEqual(["kind"]);
+    ).toEqual(["maxLength"]);
+    // Another stage stores the note empty, so an empty note is legal there.
+    expect(
+      ProjectFormSchema.safeParse({
+        ...filled,
+        stage: "completed",
+        stageNote: "",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("030 EARS-2: a result row's real failing rules map to specific keys, never fallback", () => {
+    expect(
+      keysFor(ProjectResultRowFormSchema, {
+        outputKindId: "",
+        title: "",
+        description: "x".repeat(301),
+        storefrontUrl: "http://doctor.school/x",
+      }),
+    ).toEqual(["outputKind", "required", "maxLength", "storefrontUrl"]);
   });
 
   it("EARS-20: the expert form validates structured names and exposes no authored slug", () => {

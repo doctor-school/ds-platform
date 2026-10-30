@@ -20,8 +20,22 @@ import { EventProjectsPanel } from "@/components/event-projects-panel";
 import { ProjectExpertsPanel } from "@/components/project-experts-panel";
 import { ProjectPartnersPanel } from "@/components/project-partners-panel";
 import { PublishAction } from "@/components/publish-action";
-import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
+import { ProjectResultsPanel } from "@/components/project-results-panel";
+import {
+  publishBlockers,
+  refusedFields,
+  taxonomyErrorKey,
+} from "@/lib/taxonomy-errors";
 import { projectsUrl, type UpdateProjectVars } from "@/providers/data-provider";
+
+/** 030 EARS-6 — the tab that fixes each item a refused publish names. */
+const BLOCKER_TAB: Record<string, string> = {
+  title: "main",
+  description: "main",
+  stageNote: "main",
+  results: "results",
+  curator: "experts",
+};
 
 /**
  * Project detail / edit (012 EARS-1) in the Stage-A composition-B tabbed layout
@@ -45,7 +59,10 @@ export default function ProjectDetailPage() {
   });
   const { mutate: update, mutation } = useUpdate();
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [refused, setRefused] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
+  // Controlled, so a refused publish can open the tab of each missing item.
+  const [tab, setTab] = useState("main");
 
   const statusLabels: Record<TaxonomyStatus, string> = {
     draft: t("projects.statuses.draft"),
@@ -104,10 +121,13 @@ export default function ProjectDetailPage() {
               </Alert>
             ) : null}
 
-            <Tabs defaultValue="main">
+            <Tabs value={tab} onValueChange={setTab}>
               <TabsList>
                 <TabsTrigger value="main" data-testid="tab-main">
                   {t("projects.tabs.main")}
+                </TabsTrigger>
+                <TabsTrigger value="results" data-testid="tab-results">
+                  {t("projects.tabs.results")}
                 </TabsTrigger>
                 <TabsTrigger value="events" data-testid="tab-events">
                   {t("projects.tabs.events")}
@@ -127,13 +147,17 @@ export default function ProjectDetailPage() {
                   detail={detail}
                   submitLabel={t("common.save")}
                   submitting={mutation.isPending}
+                  refused={refused}
                   onSubmit={(values) => {
                     setErrorKey(null);
+                    setRefused([]);
                     setSaved(false);
                     const vars: UpdateProjectVars = {
                       title: values.title,
                       description: values.description,
                       defaultAudience: values.defaultAudience,
+                      stage: values.stage,
+                      stageNote: values.stageNote,
                       ...(values.removeCover && !values.cover
                         ? { mediaAction: "clear" as const }
                         : {}),
@@ -147,16 +171,33 @@ export default function ProjectDetailPage() {
                           setSaved(true);
                           void query.refetch();
                         },
-                        onError: (error) =>
+                        onError: (error) => {
+                          // 030 EARS-1 / EARS-6 — a refusal (a bad field, or
+                          // an edit that would leave a published project
+                          // incomplete) is marked at its fields.
+                          setRefused([
+                            ...refusedFields(error),
+                            ...publishBlockers(error),
+                          ]);
                           setErrorKey(
                             taxonomyErrorKey(
                               error,
                               "projects.errors.updateFailed",
                             ),
-                          ),
+                          );
+                        },
                       },
                     );
                   }}
+                />
+              </TabsContent>
+
+              {/* «Результаты» (030 EARS-2) — the ordered set, saved whole under
+                  the project's version; the project is re-read after a save. */}
+              <TabsContent value="results">
+                <ProjectResultsPanel
+                  projectId={detail.id}
+                  onSaved={() => void query.refetch()}
                 />
               </TabsContent>
 
@@ -185,10 +226,10 @@ export default function ProjectDetailPage() {
                 <ProjectPartnersPanel mode="project" entityId={detail.id} />
               </TabsContent>
 
-              {/* «Публикация» (012 EARS-5) — publish only, and only from a
-                  draft: the withdraw/restore routes do not exist for projects
-                  yet (#1295/#1296). The refusal an operator meets most often
-                  here points at the «Эксперты» tab, not at a field. */}
+              {/* «Публикация» (012 EARS-5, 030 EARS-6) — publish only, and only
+                  from a draft: the withdraw/restore routes are #3504's. A
+                  refusal lists each missing item as a control opening the tab
+                  that fixes it. */}
               <TabsContent value="publish">
                 <PublishAction
                   namespace="projects"
@@ -197,6 +238,7 @@ export default function ProjectDetailPage() {
                   version={detail.version}
                   publishUrl={projectsUrl.publish}
                   onPublished={() => void query.refetch()}
+                  onOpenBlocker={(item) => setTab(BLOCKER_TAB[item] ?? "main")}
                 />
               </TabsContent>
             </Tabs>

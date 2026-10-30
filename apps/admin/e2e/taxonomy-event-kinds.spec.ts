@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { chooseEventClassification, signInAsAdmin } from "@ds/e2e/admin-events";
-import { chooseProjectDefaultAudience } from "./support/event-classification";
+import {
+  chooseProjectDefaultAudience,
+  chooseProjectStage,
+} from "./support/event-classification";
 import { selectRelationshipCombobox } from "./support/relationship-combobox";
 import { visible } from "./support/visible";
 
@@ -234,6 +237,7 @@ test.describe("012 EARS-25…30 — event kinds and event classification in the 
     await page.locator("#title").fill(projectTitle);
     await page.locator("#description").fill("Проект для врачей.");
     await chooseProjectDefaultAudience(page, "doctors");
+    await chooseProjectStage(page);
     await page.getByTestId("submit-project").click();
     await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/, { timeout: 20_000 });
     await page.reload();
@@ -340,6 +344,7 @@ test.describe("012 EARS-25…30 — event kinds and event classification in the 
     await expect(hint).toHaveCount(0);
     // …and the hint returns once the audience is chosen.
     await chooseProjectDefaultAudience(page, "doctors");
+    await chooseProjectStage(page);
     await expect(hint).toBeVisible();
   });
 });

@@ -1814,6 +1814,10 @@ jobs:
           # here and are never reused off this runner.
           AUDIT_IDENTIFIER_PEPPER: ci-admin-e2e-audit-pepper
           LIFECYCLE_IMPACT_TOKEN_SECRET: ci-admin-e2e-lifecycle-secret
+          # 030 EARS-2 — a project result's storefront link must sit on the
+          # configured doctor-storefront origin (HTTPS); the admin flows tier
+          # saves one (`e2e/projects-catalog.spec.ts`, whose default matches).
+          DOCTOR_PUBLIC_ORIGIN: https://doctor.ds.test
           # The #1076 ops-window ceilings: the MFA arc spends several auth calls
           # from ONE loopback address, which the production ceilings would
           # throttle into a false red.

@@ -6,7 +6,14 @@ import {
   CreateExpertRequestSchema,
   CreateOrganisationRequestSchema,
   CreateOrganisationRoleRequestSchema,
+  CreateProjectOutputKindRequestSchema,
   CreateProjectRequestSchema,
+  PROJECT_RESULT_DESCRIPTION_MAX,
+  PROJECT_STAGE_NOTE_MAX,
+  ProjectResultInputSchema,
+  type ProjectStage,
+  ProjectStageSchema,
+  STAGE_NOTE_REQUIRED_MESSAGE,
   CreateDirectionRequestSchema,
   CreateDirectionSpecialtyRequestSchema,
   type DirectionAdjacencyKind,
@@ -294,18 +301,57 @@ export { parseSpecialties };
  */
 const projectCreate = CreateProjectRequestSchema.shape;
 
-export const ProjectFormSchema = z.object({
-  title: projectCreate.title,
-  description: z.string().trim().min(1).max(2000),
-  // 012 EARS-30 (#2509) — required; "" (nothing chosen yet) is the
-  // «Обязательное поле.» refusal rather than an unknown-value one.
-  defaultAudience: z.string().min(1),
-});
+export const ProjectFormSchema = z
+  .object({
+    title: projectCreate.title,
+    description: z.string().trim().min(1).max(2000),
+    // 012 EARS-30 (#2509) — required; "" (nothing chosen yet) is the
+    // «Обязательное поле.» refusal rather than an unknown-value one.
+    defaultAudience: z.string().min(1),
+    // 030 EARS-1 — «Проект идёт» / «Скоро» / «Завершён».
+    stage: ProjectStageSchema,
+    // Bounded here; required only for «Скоро» (the refinement below), and the
+    // form sends nothing for another stage, which the server stores empty.
+    stageNote: z.string().trim().max(PROJECT_STAGE_NOTE_MAX),
+  })
+  .superRefine((value, ctx) => {
+    if (value.stage === "soon" && value.stageNote.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["stageNote"],
+        message: STAGE_NOTE_REQUIRED_MESSAGE,
+      });
+    }
+  });
 
 export interface ProjectFormFields {
   title: string;
   description: string;
   defaultAudience: EventAudience | "";
+  stage: ProjectStage;
+  stageNote: string;
+}
+
+/**
+ * One row of the «Результаты» editor (030 EARS-2), DERIVED from the SSOT result
+ * input: the same bounds and the same absolute-https link shape. The kind box
+ * is a select, so «nothing chosen» is its own refusal; whether the link sits on
+ * the doctor-storefront origin is the server's answer (it holds the origin).
+ */
+const resultInput = ProjectResultInputSchema.shape;
+
+export const ProjectResultRowFormSchema = z.object({
+  outputKindId: z.string().min(1),
+  title: resultInput.title,
+  description: z.string().trim().max(PROJECT_RESULT_DESCRIPTION_MAX),
+  storefrontUrl: resultInput.storefrontUrl,
+});
+
+export interface ProjectResultRowFormFields {
+  outputKindId: string;
+  title: string;
+  description: string;
+  storefrontUrl: string;
 }
 
 /**
@@ -455,6 +501,15 @@ export const OrganisationRoleFormSchema = z.object({
 });
 
 export interface OrganisationRoleFormFields {
+  title: string;
+}
+
+/** The 030 EARS-3 output-kind add / rename form: the title, trimmed 1–60 by the SSOT. */
+export const ProjectOutputKindFormSchema = z.object({
+  title: CreateProjectOutputKindRequestSchema.shape.title,
+});
+
+export interface ProjectOutputKindFormFields {
   title: string;
 }
 

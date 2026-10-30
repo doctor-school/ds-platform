@@ -1,6 +1,7 @@
 import { Global, Logger, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { loadEnv } from "../../config/env.schema.js";
+import { SessionModule } from "../session/session.module.js";
 import { RateLimitGuard } from "./rate-limit.guard.js";
 import { RateLimitService } from "./rate-limit.service.js";
 import {
@@ -20,13 +21,16 @@ import {
  *   rebinds to drive the boundary) — and `Date.now` as the clock (a fake in the
  *   unit spec);
  * - registers {@link RateLimitGuard} globally so any `@RateLimited` handler is
- *   gated without per-controller `@UseGuards` wiring.
+ *   gated without per-controller `@UseGuards` wiring; it appends a refused
+ *   `@PasswordLoginDoor` request to the AUTH_AUDIT ledger (003 EARS-15).
  *
  * `@Global` + exported so the service is injectable/rebindable from feature
  * modules and tests, like {@link BotProtectionModule}.
  */
 @Global()
 @Module({
+  // The guard's AUTH_AUDIT sink (003 EARS-15 throttled password logins).
+  imports: [SessionModule],
   providers: [
     RateLimitService,
     {

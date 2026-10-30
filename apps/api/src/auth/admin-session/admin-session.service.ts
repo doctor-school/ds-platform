@@ -203,7 +203,7 @@ export class AdminSessionService {
         type: "AdminPrimaryAuthFailed",
         identifier,
         sub: null,
-        reason: result.outcome === "locked" ? "lock" : "wrong_password",
+        reason: "wrong_password",
       });
       return { status: "refused" };
     }

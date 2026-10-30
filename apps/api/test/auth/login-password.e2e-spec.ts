@@ -111,8 +111,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Login with password (e2e)", () => {
 
     expect(res.statusCode).toBe(401);
     expect(setCookie(res)).not.toContain(SESSION_COOKIE_NAME);
-    // The failed check was delegated to Zitadel (its native lockout policy is
-    // what increments the durable counter, EARS-15) — not short-circuited.
+    // The failed check was delegated to Zitadel — not short-circuited (the
+    // password lockout is off; guessing is throttled, 003 EARS-15).
     expect(idp.failedAttempts(email)).toBe(before + 1);
   });
 

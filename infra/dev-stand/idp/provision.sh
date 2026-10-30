@@ -1455,6 +1455,43 @@ for i in "${!EMAILED_CODE_GENERATORS[@]}"; do
   echo "${CODE_GENERATOR}: read-back ok (${EMAILED_CODE_LENGTH} digits, expiry ${CODE_GENERATOR_LIVE_EXPIRY})" >&2
 done
 
+# ── 8.octies. password lockout OFF — maxPasswordAttempts = 0 (003 EARS-15, #3539) ─
+# A tripped Zitadel lockout appends `user.locked`, which deletes every session
+# of the person and refuses their refresh: anyone who knows the address could
+# sign them out everywhere with ten wrong guesses (OWASP WSTG weak lock out).
+# Guessing is bounded by the EARS-13 windows and captcha (EARS-17) instead, so
+# the instance lockout policy carries no password threshold. Unconditional on
+# purpose: this script is the converge path of the dev stand, stage and prod.
+#
+# Admin API: GET/PUT /admin/v1/policies/lockout. The PUT is a proto3 full
+# message, so the OTP threshold is written back as read (not this step's
+# decision). proto3 JSON omits a zero uint, and a uint64 arrives as a string.
+# READ-BEFORE-WRITE like 8.sexies; the read-back re-reads while the
+# asynchronous read model still serves the pre-write row, then fails closed.
+LOCKOUT_POLICY="$(api GET /admin/v1/policies/lockout | jq '.policy')"
+lockout_password_attempts() { jq -r '(.maxPasswordAttempts // "0") | tonumber'; }
+if [[ "$(lockout_password_attempts <<< "$LOCKOUT_POLICY")" == "0" ]]; then
+  echo "lockout policy: already off (maxPasswordAttempts=0)" >&2
+else
+  LOCKOUT_POLICY_UPDATE="$(jq -c '{
+      maxPasswordAttempts: 0,
+      maxOtpAttempts: ((.maxOtpAttempts // "0") | tonumber)
+    }' <<< "$LOCKOUT_POLICY")"
+  api_idempotent PUT /admin/v1/policies/lockout "$LOCKOUT_POLICY_UPDATE" >/dev/null \
+    && echo "lockout policy: converged to maxPasswordAttempts=0" >&2
+fi
+LOCKOUT_READBACK_DEADLINE=$((SECONDS + 30))
+while :; do
+  LOCKOUT_LIVE="$(api GET /admin/v1/policies/lockout | jq -c '.policy')"
+  [[ "$(lockout_password_attempts <<< "$LOCKOUT_LIVE")" == "0" ]] && break
+  if (( SECONDS >= LOCKOUT_READBACK_DEADLINE )); then
+    echo "FATAL: lockout policy read-back still shows a password lockout after 30s — expected maxPasswordAttempts=0 (003 EARS-15); live: ${LOCKOUT_LIVE}" >&2
+    exit 1
+  fi
+  sleep 1
+done
+echo "lockout policy: read-back ok (maxPasswordAttempts=0)" >&2
+
 # ── 9. MFA capability on the default login policy (011 EARS-8) ───────────────
 # Spec: apps/docs/content/specs/features/011-admin-session-2fa/011-requirements-en.md
 # (EARS-8). TOTP for `platform_admin` is mandatory (ADR-0001 §4). Zitadel supplies

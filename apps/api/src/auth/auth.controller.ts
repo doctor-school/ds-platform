@@ -33,6 +33,7 @@ import { BotProtected } from "../bot-protection/index.js";
 import {
   ConsumedIpWindow,
   LOGIN_HANDOFF_OWNERSHIP_RATE_LIMIT_SCOPE,
+  PasswordLoginDoor,
   RateLimited,
   RateLimitService,
 } from "./rate-limit/index.js";
@@ -135,6 +136,7 @@ export class AuthController {
   @Post("login")
   @Public()
   @RateLimited()
+  @PasswordLoginDoor()
   @TimingEqualized()
   @LoginChallenged()
   @HttpCode(200)

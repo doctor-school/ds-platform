@@ -32,6 +32,7 @@ import {
 } from "../auth/login-challenge/index.js";
 import {
   ConsumedIpWindow,
+  PasswordLoginDoor,
   RateLimited,
   RateLimitService,
 } from "../auth/rate-limit/index.js";
@@ -102,7 +103,7 @@ const warmProof = (
  * `AuthController` carries — `@RateLimited` (the same per-user / per-IP /
  * per-ASN windows, keyed identically, so one origin meets one ceiling across
  * both hosts), `@TimingEqualized`, `@BotProtected` / `@LoginChallenged`, the
- * SMS budget and the native lockout inside the shared `AuthService` steps —
+ * SMS budget and the throttled-login audit (003 EARS-15) —
  * and runs the same `AuthService` check (EARS-69, req. 8/9). The difference is
  * only where the checked session goes: into the shared sign-in-host record and
  * the auth request's finalisation, never into a storefront session.
@@ -153,6 +154,7 @@ export class SignInHostController {
   @Post("login")
   @Public()
   @RateLimited()
+  @PasswordLoginDoor()
   @TimingEqualized()
   @LoginChallenged()
   @HttpCode(200)

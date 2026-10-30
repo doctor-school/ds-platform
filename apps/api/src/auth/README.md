@@ -9,7 +9,7 @@ establishment + token exchange), **F3** (#87: passwordless login — email-OTP +
 SMS-OTP + SMS toll-fraud budget), **F4** (#88: session refresh rotation +
 logout), **F5** (#89: password reset — enumeration-safe initiate + complete with
 global session revocation), and **F6** (#90: cross-cutting security — rate limit,
-timing equalization, login captcha policy, native-lockout observation, and the
+timing equalization, login captcha policy, throttled-password-login audit, and the
 durable `audit_ledger` writer).
 
 ## What's here
@@ -510,12 +510,12 @@ consumedIpWindow)` beside `reset(...)`. The guard leaves a receipt on the
   statically `@BotProtected`; verify/OTP confirmation and reset completion are
   deliberately not. Missing and rejected proofs use the shared
   `BOT_PROTECTION_REQUIRED` / `BOT_PROTECTION_REJECTED` codes, never provider text.
-- **Account lockout** — two different mechanisms behind one canonical wire id
-  (`auth.lockout.triggered`), told apart by the row's `reason`:
-  - **Password lockout** (003 EARS-15, `reason: "lock"`) — a native Zitadel
-    policy. The BFF only _observes_ the `locked` verdict from
-    `IdpClient.passwordLogin` and emits the row; the counter, the lock, and the
-    notification email are all native.
+- **No password lockout** (003 EARS-15) — the Zitadel password lockout is off
+  (`maxPasswordAttempts = 0`, provisioning step 8.octies) because a lock ends
+  every session of the person. Guessing is bounded by the EARS-13 windows and
+  captcha; a password login the limiter refuses (`@PasswordLoginDoor`) is
+  appended by `RateLimitGuard` as `auth.login.failure` reason `throttled`.
+- **Account lockout** (`auth.lockout.triggered`):
   - **Second-factor lockout** (011 EARS-7, `reason: "mfa_attempts"`) — **the
     BFF's own**, in `admin-session/mfa-lockout.service.ts`: 10 failed TOTP
     verifies / 30 min, keyed by IdP subject, shared across the enrollment and
@@ -584,7 +584,7 @@ SELECT metadata->>'identifier_hash' AS id_hash,
 
 **Zitadel-side view (`tools/ops/auth-events.mjs`).** For the lower-level identity
 events the ledger cannot enrich (the null-payload `*.check.failed`, code add/sent,
-native lockout), a **read-only** ops script replaces the ad-hoc SSH SQL. The DSN is
+a user lock), a **read-only** ops script replaces the ad-hoc SSH SQL. The DSN is
 read from `--dsn` / `$AUTH_EVENTS_DSN` (the **Zitadel** database, a separate DB from
 `DATABASE_URL`) and is never hardcoded; every query runs in a `READ ONLY`
 transaction. See `node tools/ops/auth-events.mjs --help`.

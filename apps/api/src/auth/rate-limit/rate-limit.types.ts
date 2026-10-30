@@ -241,6 +241,12 @@ export const RATE_LIMIT_CLOCK = Symbol("RATE_LIMIT_CLOCK");
 export const RATE_LIMITED_KEY = "ds:rate-limited";
 
 /**
+ * Nest metadata key `@PasswordLoginDoor` writes: the guard audits a refusal of
+ * this handler as a throttled password login (003 EARS-15).
+ */
+export const THROTTLED_PASSWORD_LOGIN_KEY = "ds:throttled-password-login";
+
+/**
  * What `@RateLimited` writes into {@link RATE_LIMITED_KEY}: `true` for the
  * shared auth budget (a verification door), `{ door }` for an auth door that
  * declares its kind (#2684 — the sending doors), or a scope tag for a consumer

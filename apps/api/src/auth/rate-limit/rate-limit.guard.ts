@@ -1,15 +1,18 @@
 import {
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   type CanActivate,
   type ExecutionContext,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
+import { AUTH_AUDIT, type AuthAuditLog } from "../session/auth-audit.types.js";
 import { RateLimitService } from "./rate-limit.service.js";
 import {
   RATE_LIMITED_KEY,
   RATE_LIMIT_RECEIPT_KEY,
+  THROTTLED_PASSWORD_LOGIN_KEY,
   type RateLimitReceipt,
   type RateLimitedMarker,
 } from "./rate-limit.types.js";
@@ -56,18 +59,20 @@ export class RateLimitGuard implements CanActivate {
   constructor(
     private readonly limiter: RateLimitService,
     private readonly reflector: Reflector = new Reflector(),
+    @Inject(AUTH_AUDIT) private readonly audit: AuthAuditLog,
   ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const marked = this.reflector.getAllAndOverride<
       RateLimitedMarker | undefined
     >(RATE_LIMITED_KEY, [context.getHandler(), context.getClass()]);
     if (!marked) return true;
 
     const request = context.switchToHttp().getRequest<GuardRequest>();
+    const identifier = this.extractIdentifier(request);
     const decision = this.limiter.consume({
       ip: request.ip ?? "",
-      identifier: this.extractIdentifier(request),
+      identifier,
       asn: this.extractAsn(request),
       // `true` (the argument-less 003 form, a verification door) leaves the
       // source-address windows keyed on the address alone (003 EARS-13). A string
@@ -89,6 +94,21 @@ export class RateLimitGuard implements CanActivate {
           .switchToHttp()
           .getResponse<GuardResponse>()
           .header("Retry-After", String(seconds));
+      }
+      // 003 EARS-15: throttling replaces the password lockout, so a refused
+      // password login keeps the audit trail a lock used to leave.
+      if (
+        identifier !== undefined &&
+        this.reflector.getAllAndOverride<true | undefined>(
+          THROTTLED_PASSWORD_LOGIN_KEY,
+          [context.getHandler(), context.getClass()],
+        )
+      ) {
+        await this.audit.record({
+          type: "LoginFailed",
+          identifier,
+          reason: "throttled",
+        });
       }
       throw new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);
     }

@@ -6,6 +6,7 @@ import {
 import {
   RATE_LIMITED_KEY,
   RATE_LIMIT_RECEIPT_KEY,
+  THROTTLED_PASSWORD_LOGIN_KEY,
   type RateLimitReceipt,
   type RateLimitDoor,
   type RateLimitedMarker,
@@ -41,6 +42,15 @@ export function RateLimited(
 ): MethodDecorator & ClassDecorator {
   const marker: RateLimitedMarker = scopeOrDoor ?? true;
   return SetMetadata(RATE_LIMITED_KEY, marker);
+}
+
+/**
+ * `@PasswordLoginDoor()` — this `@RateLimited` handler is a password login: a
+ * request the limiter refuses here is appended as `auth.login.failure` with
+ * reason `throttled` (003 EARS-15), the audit row a lockout used to leave.
+ */
+export function PasswordLoginDoor(): MethodDecorator {
+  return SetMetadata(THROTTLED_PASSWORD_LOGIN_KEY, true);
 }
 
 /**

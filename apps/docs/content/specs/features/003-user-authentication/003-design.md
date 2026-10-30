@@ -438,7 +438,7 @@ Established by research against current Zitadel docs. `apps/api` builds **only**
 | SMS OTP code                   | ✅ `otp_sms` (challenge on session create)       | toll-fraud guard + daily budget                                                     |
 | Password reset / forgot        | ✅ User v2 reset code (`returnCode`)             | enumeration-safe wrapper + code-only BFF-mailer delivery (§14)                      |
 | Email/phone verification       | ✅ verification code (`returnCode` for email)    | mirror flag sync + code-only BFF-mailer delivery (§14)                              |
-| Account lockout                | ✅ lockout policy (max password/OTP attempts)    | notification email                                                                  |
+| Password guessing              | lockout policy off (`maxPasswordAttempts = 0`)   | EARS-13 throttling + captcha + notification email (EARS-15)                         |
 | Enumeration resistance         | ⚠️ "ignore unknown usernames" (had CVE bypasses) | idempotent responses + timing ≤50 ms + rate-limit backstop                          |
 | MFA TOTP / passkeys            | ✅ (not used by `doctor_guest` in v1)            | — (seam only)                                                                       |
 | Domain user mirror + RBAC      | —                                                | `users` table, `doctor_guest` grant, reconciliation                                 |

@@ -15,13 +15,12 @@ import {
 } from "../setup/rate-limit.js";
 import {
   FakeIdpClient,
-  FAKE_LOCKOUT_THRESHOLD,
   FAKE_VALID_CODE,
 } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
-// EARS-18 (audit_ledger writer) + EARS-15 (native-lockout observation), over
+// EARS-18 (audit_ledger writer), over
 // HTTP into the real durable ledger. Every state-changing auth command must
 // append exactly one terminal row with its canonical `auth.<class>.<event>` wire
 // id (ADR-0001 §7.3) and NO raw PD — only a hashed identifier (ADR-0003 §6).
@@ -216,30 +215,6 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
     expect(mine.length).toBeGreaterThanOrEqual(1);
     expect(JSON.stringify(failures)).not.toContain(email);
     expect(failures.every((r) => r.subject_id === null)).toBe(true);
-  });
-
-  it("EARS-15: when password attempts reach the native lockout threshold, the system shall append exactly one auth.lockout.triggered", async () => {
-    const email = uniqueEmail("lock");
-    await register(email);
-    const sub = await subjectForEmail(email);
-
-    // Drive failures up to the native threshold (the fake models the count).
-    for (let i = 0; i < FAKE_LOCKOUT_THRESHOLD; i++) {
-      await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password: "wrong-password-here" },
-      });
-    }
-
-    const ledger = await rowsFor("subject_id = $1", sub);
-    const lockouts = ledger.filter(
-      (r) => r.event_type === "auth.lockout.triggered",
-    );
-    // Exactly once — the state transition, not once per failed attempt.
-    expect(lockouts).toHaveLength(1);
-    expect(lockouts[0]?.reason).toBe("lock");
   });
 
   it("EARS-18: when an authenticated user logs out, the system shall append auth.session.terminated (reason logout)", async () => {

@@ -833,16 +833,9 @@ export class ZitadelIdpClient implements IdpClient {
   ): Promise<PasswordLoginResult> {
     // Zitadel Session v2: POST /v2/sessions with a user + password check. A
     // failed check (unknown loginName / wrong password) is a non-2xx — resolve
-    // it to `rejected` so the caller stays enumeration-safe (EARS-16); Zitadel's
-    // native lockout policy counts the failure (EARS-15). The session that comes
-    // back has already passed its check (design §3).
-    //
-    // Native-lockout *observation* (the `locked` verdict, EARS-15) is not
-    // distinguished here: the BFF's lockout audit is a best-effort observation
-    // and Zitadel owns the authoritative lock + its own notification + audit.
-    // Mapping a specific locked-account error to `locked` is a refinement for
-    // when this adapter is exercised against the live dev-stand instance (the
-    // token-exchange paths below are still integration seams, design §11).
+    // it to `rejected` so the caller stays enumeration-safe (EARS-16); the
+    // password lockout is off, guessing is throttled (003 EARS-15). The session
+    // that comes back has already passed its check (design §3).
     const userCheck = await this.signInUserCheck(identifier);
     if (!userCheck) return { outcome: "rejected" };
     const res = await this.fetchImpl(this.url("/v2/sessions"), {

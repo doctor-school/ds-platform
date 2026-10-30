@@ -20,7 +20,7 @@ export type LoginMethod = "password" | "email-otp" | "sms-otp";
 
 /** Why a login failed — the `auth.login.failure` reason (ADR-0001 §7.3). Audit-only; never surfaced (EARS-16). */
 export type LoginFailureReason =
-  "wrong_password" | "no_user" | "lock" | "captcha_failed";
+  "wrong_password" | "no_user" | "throttled" | "captcha_failed";
 
 /**
  * Why a verify / password-reset-complete failed (#1112 auth-failure observability).
@@ -181,9 +181,6 @@ export type AuthAuditEvent =
     }
   // EARS-12 reset complete (user-level; spans every session of the subject).
   | { type: "PasswordResetCompleted"; sub: string }
-  // EARS-15 native-lockout observation. Subject-level; the BFF records it when
-  // the IdP reports the account soft-locked (the counter itself is Zitadel's).
-  | { type: "AccountLocked"; sub: string }
   // EARS-3 (email) / EARS-4 (phone) verification success: the identifier reached
   // verified state (the account is activated). One unified event carrying the
   // opaque subject + the verified `channel` — mirroring `Registered`'s shape (a
@@ -288,10 +285,9 @@ export type AuthAuditEvent =
   | ({ type: "StepUpRequested" } & StepUpAttempt)
   | ({ type: "StepUpSucceeded" } & StepUpAttempt)
   | ({ type: "StepUpFailed" } & StepUpAttempt)
-  // EARS-7: the §7 lockout threshold (10 failed verifies / 30 min) crossed — the
-  // admin-tier counterpart of 003's `AccountLocked`, which OBSERVES Zitadel's
-  // native password lockout. This one the BFF owns outright, because Zitadel has
-  // no per-subject TOTP-attempt lock the BFF can read. Emitted exactly once per
+  // EARS-7: the §7 lockout threshold (10 failed verifies / 30 min) crossed. The
+  // BFF owns this lock outright, because Zitadel has no per-subject TOTP-attempt
+  // lock the BFF can read; passwords are throttled, never locked (003 EARS-15). Emitted exactly once per
   // lock (the attempt that crosses the threshold), never once per attempt while
   // locked.
   | { type: "LockoutTriggered"; sub: string }
@@ -344,7 +340,6 @@ export const AUTH_AUDIT_EVENT_TYPES = [
   "SessionRevoked",
   "PasswordResetRequested",
   "PasswordResetCompleted",
-  "AccountLocked",
   "IdentifierVerified",
   "ReconcileDivergence",
   "PhoneConfirmRequested",

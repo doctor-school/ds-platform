@@ -342,10 +342,8 @@ function deployedLine(status: ProjectRealityStatus): string {
 }
 
 /** The merged-but-not-deployed delta line, or `null` when there is no deployed
- *  basis to diff against (all-unreachable). A non-zero delta renders the
- *  explicit D-trigger verdict (spec §10.2 — a detection signal, not a passive
- *  cue): the §10.3 change-class + the §10.4 checklist as the next action. A
- *  missing verdict degrades to the escalate wording (default-escalate). */
+ *  basis to diff against (all-unreachable). A non-zero delta names its change
+ *  class; a missing verdict degrades to escalate (default-escalate). */
 function deltaLine(
   status: ProjectRealityStatus,
   deployClass?: DeployClassVerdict | null,
@@ -361,23 +359,18 @@ function deltaLine(
   }
   const verdict: DeployClassVerdict = deployClass ?? {
     class: "escalate",
-    reasons: ["change-class unavailable — default-escalate (spec §10.3)"],
+    reasons: ["change-class unavailable — default-escalate"],
   };
   const why = verdict.reasons.slice(0, 3).join("; ");
-  const head = `- Merged since deploy: ${n} product PR(s) NOT yet on prod${anchor} — D-trigger (spec §10.2): class ${verdict.class} (${why})`;
-  if (verdict.class === "standing-auth") {
-    return `${head} → run the §10.4 release-readiness checklist (skill run-prod-deploy), then ship via \`pnpm deploy:prod\`.`;
-  }
-  return `${head} → run the §10.4 release-readiness checklist, then ask the owner: "ready to ship X — go?" before \`pnpm deploy:prod\`.`;
+  return `- Merged since deploy: ${n} product changes merged, not on prod yet${anchor} — class ${verdict.class} (${why}).`;
 }
 
 /**
  * Render the full `## Project reality` section as an array of markdown lines: a
  * loud reconcile banner (on mismatch/unreachable) FIRST, then the heading, the
  * latest-release line, the deployed-sha line (with the health-match indicator),
- * the merged-not-deployed delta with its explicit D-trigger verdict (spec
- * §10.2/§10.3 — pass `deployClass` from `classifyDeployRange`; omitted/null
- * degrades to the escalate wording), and the cumulative `gh release list`
+ * the merged-not-deployed delta with its change class (pass `deployClass` from
+ * `classifyDeployRange`; omitted/null degrades to escalate), and the cumulative `gh release list`
  * scope pointer. Pure — no I/O.
  */
 export function renderProjectReality(

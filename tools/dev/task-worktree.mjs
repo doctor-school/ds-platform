@@ -27,6 +27,8 @@
 //   pnpm task:worktree 359 my-slug feat        # issue — explicit slug + prefix
 //   pnpm task:worktree --spec 008 portal-shell # spec  — derive path + feat/spec-008-portal-shell
 //   pnpm task:worktree spec-008 --branch feat/spec-008-portal-shell  # spec — explicit branch
+//   pnpm task:worktree <N> --session <name>    # issue — your own claim names <name>
+//   pnpm task:worktree <N> --session <name> --take-over "<reason>"  # take a claimed Issue
 //
 // What it does, in order:
 //   1. resolve the main repo root from `git rev-parse --git-common-dir` (so the
@@ -36,7 +38,12 @@
 //      (title → slug, kind label → branch prefix). SPEC mode: derive the
 //      `.claude/worktrees/spec-NNN` path + `feat/spec-NNN-<slug>` branch (or use
 //      an explicit `--branch`),
-//   3. refuse early with a clear message if the worktree path or branch exists,
+//   3. refuse early with a clear message if the worktree path or branch exists;
+//      ISSUE mode also refuses (exit 3) an Issue another session holds — a live
+//      claim comment naming a different session (or none), or an open PR from
+//      another branch (#3560; claim rules shared with `pnpm backlog:triage` in
+//      tools/gh/lib/claim.mjs). `--take-over "<reason>"` proceeds and posts
+//      `claim: <session> — take-over: <reason>`,
 //   4. `git fetch origin <default-branch>` then
 //      `git worktree add -b <branch> <path> origin/<default>`
 //      (short numeric / spec-NNN path → dodge Windows long-path on deep
@@ -44,12 +51,14 @@
 //   5. print the next steps (EnterWorktree + `pnpm install`).
 //
 // Exit codes: 0 = worktree ready; 1 = pre-flight refusal (exists / git error);
-// 2 = usage error.
+// 2 = usage error; 3 = the Issue is held by another session (#3560).
 
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { claimVerdict, formatClaimComment } from "../gh/lib/claim.mjs";
 
 // ── pure derivation helpers (unit-tested in guard-tests) ────────────────────
 
@@ -187,6 +196,34 @@ export function nextStepsLines(relPath) {
   ];
 }
 
+// ── claim gate (#3560) ──────────────────────────────────────────────────────
+
+/**
+ * Decide what `task:worktree` does about the claim verdict for Issue `n`.
+ * `proceed` — nobody else holds it; `refuse` — exit 3 with `message`;
+ * `take-over` — proceed after posting `comment` as the new claim.
+ * A take-over needs `session`, so the posted claim names an addressable session.
+ *
+ * @param {{n:number|string, verdict:{ok:boolean, reasons?:string[]}, session?:string|null, takeOver?:string|null}} input
+ * @returns {{action:"proceed"} | {action:"refuse", message:string} | {action:"take-over", comment:string}}
+ */
+export function claimGate({ n, verdict, session, takeOver }) {
+  if (verdict.ok) return { action: "proceed" };
+  const reason = typeof takeOver === "string" ? takeOver.trim() : "";
+  if (reason && session) {
+    return { action: "take-over", comment: formatClaimComment(session, `take-over: ${reason}`) };
+  }
+  const lines = [
+    `refusing #${n}: another session holds it.`,
+    ...(verdict.reasons ?? []).map((r) => `  ${r}`),
+    "  Ask the claimant first (Claude Code: ListAgents, then SendMessage to it).",
+    "  Your own claim? Re-run with --session <your session name>.",
+    '  Taking it over? Re-run with --session <your session name> --take-over "<reason>".',
+  ];
+  if (reason && !session) lines.push("  --take-over needs --session, so the new claim names you.");
+  return { action: "refuse", message: lines.join("\n") };
+}
+
 // ── impure CLI (skipped on import) ──────────────────────────────────────────
 
 function out(msg) {
@@ -241,14 +278,14 @@ function branchExists(branch) {
   );
 }
 
-/** Read the issue's title + kind labels via gh, or null if unavailable. */
+/** Read the issue's title, kind labels and comments via gh, or null if unavailable. */
 function fetchIssue(n) {
   const res = run("gh", [
     "issue",
     "view",
     String(n),
     "--json",
-    "title,labels",
+    "title,labels,comments",
   ]);
   if (res.status !== 0) return null;
   try {
@@ -256,9 +293,66 @@ function fetchIssue(n) {
     return {
       title: j.title ?? "",
       labels: (j.labels ?? []).map((l) => l.name),
+      comments: (j.comments ?? []).map((c) => ({
+        body: c.body ?? "",
+        createdAtMs: Date.parse(c.createdAt ?? "") || 0,
+      })),
     };
   } catch {
     return null;
+  }
+}
+
+/** Open PRs (number, head branch, title, body) via gh, or null if unavailable. */
+function fetchOpenPrs() {
+  const res = run("gh", [
+    "pr",
+    "list",
+    "--state",
+    "open",
+    "--limit",
+    "200",
+    "--json",
+    "number,headRefName,title,body",
+  ]);
+  if (res.status !== 0) return null;
+  try {
+    return JSON.parse(res.stdout);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Refuse (exit 3) an Issue another session holds, or post the take-over claim.
+ * Without gh data the check cannot run: it says so and lets the worktree be
+ * created — absent data is not evidence of a foreign claim.
+ */
+function checkClaim(n, issue, branch, session, takeOver) {
+  const openPrs = fetchOpenPrs();
+  if (!issue || !openPrs) {
+    out(`warning: could not read #${n}'s comments or open PRs via gh — claim check skipped.`);
+    return;
+  }
+  const verdict = claimVerdict({
+    n: Number(n),
+    session,
+    branch,
+    nowMs: Date.now(),
+    comments: issue.comments,
+    openPrs,
+  });
+  const gate = claimGate({ n, verdict, session, takeOver });
+  if (gate.action === "refuse") die(gate.message, 3);
+  if (gate.action === "take-over") {
+    // Explicit argv, no shell: the reason is free text.
+    const posted = run("gh", ["issue", "comment", String(n), "--body", gate.comment], {
+      shell: false,
+    });
+    if (posted.status !== 0) {
+      die(`could not post the take-over claim on #${n}: ${posted.stderr.trim()}`, 1);
+    }
+    out(`posted on #${n}: ${gate.comment}`);
   }
 }
 
@@ -334,16 +428,17 @@ function runSpec(nnn, slug, branchOverride) {
 }
 
 /** ISSUE mode: `.claude/worktrees/<N>` on `<prefix>/<N>-<slug>` (default). */
-function runIssue(n, slugArg, prefixArg) {
+function runIssue(n, slugArg, prefixArg, session, takeOver) {
   if (!n || !/^\d+$/.test(n)) {
     die("Usage: node tools/dev/task-worktree.mjs <issue-number> [slug] [prefix]");
   }
   let slug = slugArg;
   let prefix = prefixArg;
 
+  // The claim check needs the comments, so the issue is always read.
+  const issue = fetchIssue(n);
   // Derive any missing slug/prefix from the issue. Args win over gh.
   if (!slug || !prefix) {
-    const issue = fetchIssue(n);
     if (!issue) {
       if (!slug) {
         die(
@@ -364,6 +459,7 @@ function runIssue(n, slugArg, prefixArg) {
   const branch = branchName(prefix, n, slug);
   const relPath = worktreeRelPath(n);
   const absPath = join(root, ".claude", "worktrees", String(n));
+  checkClaim(n, issue, branch, session, takeOver);
   createWorktree(root, relPath, absPath, branch);
 }
 
@@ -374,9 +470,13 @@ function main() {
   let branchOverride = null;
   let specFlag = null;
   let specMode = false;
+  let session = null;
+  let takeOver = null;
   for (let i = 0; i < rawArgs.length; i += 1) {
     const a = rawArgs[i];
     if (a === "--branch") branchOverride = rawArgs[(i += 1)];
+    else if (a === "--session") session = rawArgs[(i += 1)] ?? null;
+    else if (a === "--take-over") takeOver = rawArgs[(i += 1)] ?? null;
     else if (a === "--spec") {
       specMode = true;
       specFlag = rawArgs[(i += 1)];
@@ -410,7 +510,8 @@ function main() {
     return;
   }
 
-  runIssue(positional[0], positional[1], positional[2]);
+  if (takeOver != null && !takeOver.trim()) die("--take-over needs a non-empty reason.");
+  runIssue(positional[0], positional[1], positional[2], session, takeOver);
 }
 
 // Run only as the entry point — guarding this keeps the pure derivation helpers

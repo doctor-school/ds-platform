@@ -16,8 +16,9 @@
  *
  * `## Epics` (#2957): every open `epic:` Issue with its native sub-issue bar
  * (`<completed>/<total> sub-issues closed`) and each open child as `ready` or
- * `blocked … — by #X` (open native `blocked_by` edges); the first ready child
- * is marked `next →`. A failed fetch prints `(unknown — see Warnings)`.
+ * `blocked … — by #X` (open native `blocked_by` edges). Which child is next is
+ * the lead's call per track (#3560), so none is marked. A failed fetch prints
+ * `(unknown — see Warnings)`.
  *
  * `## Stage suite (main)` (#3269): the newest main commit's `stage-suite` status
  * and the newest green SHA (`tools/staging/stage-suite.mjs`, shared with
@@ -498,16 +499,13 @@ export function renderEpicsSection(epics: EpicRow[] | null): string[] {
     out.push(
       `- #${e.number} ${clip(e.title)} — ${e.completed}/${e.total} sub-issues closed`,
     );
-    const nextReady = e.openChildren.find((c) => c.blockedBy.length === 0);
     for (const c of e.openChildren.slice(0, EPIC_CHILDREN_MAX)) {
       if (c.blockedBy.length > 0) {
         out.push(
           `  - blocked #${c.number} ${clip(c.title)} — by ${c.blockedBy.map((n) => `#${n}`).join(", ")}`,
         );
       } else {
-        out.push(
-          `  - ${c === nextReady ? "next → " : ""}ready #${c.number} ${clip(c.title)}`,
-        );
+        out.push(`  - ready #${c.number} ${clip(c.title)}`);
       }
     }
     const more = e.openChildren.length - EPIC_CHILDREN_MAX;

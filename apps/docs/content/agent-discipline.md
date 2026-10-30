@@ -28,7 +28,7 @@ Verify required tools and permissions before dispatch.
 
 - Read/search/edit — Claude: Read, Grep, Glob, Edit/Write; Codex: UTF-8 shell reads, `rg`, available patch tool; absolute worktree paths
 - Shell — Claude: Bash; Codex: Available shell execution; translate Bash syntax for PowerShell
-- Dispatch/status/message — Claude: Agent/Task, notifications, SendMessage; Codex: Collaboration tools; project TOML role or a general agent with the same brief
+- Dispatch/status/message — Claude: Agent/Task, notifications, SendMessage, ListAgents peers (CLAUDE.md); Codex: Collaboration tools, no peers — claim comment only; project TOML role or a general agent with the same brief
 - Owner input — Claude: AskUserQuestion; Codex: Permitted input tool or concise direct question
 - Browse / image — Claude: WebFetch, Read image; Codex: Real browsing/image-view tools; open primary pages, deliver artifacts separately
 - Browser — Claude: Playwright MCP or script; Codex: Available browser tool or committed Playwright; real live journey evidence
@@ -55,7 +55,7 @@ Delegate large interactive browser payloads. The lead owns any Stage-B stand the
 
 ## Shell, verification and evidence
 
-Workers isolate themselves and use that worktree for deliverable reads/writes/tests; the lead's cwd stays in the main tree all session — where canonical landing runs (repo-conventions → Closeout) — reaching a worktree through absolute paths and `git -C`. Run `pnpm install` before a worktree's first commit so hooks run. Stage explicit paths and preserve others' files and listeners.
+Worktree isolation: AGENTS.md §6. Stage explicit paths and preserve others' files and listeners.
 
 Use a literal UTF-8 `--body-file` for GitHub multiline text. On secret exposure stop repeating the value, record it and assess rotation within authorization.
 

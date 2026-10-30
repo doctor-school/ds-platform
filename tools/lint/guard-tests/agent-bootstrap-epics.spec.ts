@@ -39,7 +39,7 @@ describe("agent-bootstrap ## Epics (#2957)", () => {
     ]);
   });
 
-  it("prints the sub-issue bar and marks the first ready child as next", () => {
+  it("prints the sub-issue bar and marks no child as next (#3560)", () => {
     const lines = renderEpicsSection([
       epic({
         openChildren: [child(2071, [2500, 2501]), child(2072), child(2073)],
@@ -49,14 +49,9 @@ describe("agent-bootstrap ## Epics (#2957)", () => {
       "## Epics",
       "- #2020 epic: One code for two storefronts — 16/22 sub-issues closed",
       "  - blocked #2071 child 2071 — by #2500, #2501",
-      "  - next → ready #2072 child 2072",
+      "  - ready #2072 child 2072",
       "  - ready #2073 child 2073",
     ]);
-  });
-
-  it("prints no next marker when every open child is blocked", () => {
-    const lines = renderEpicsSection([epic({ openChildren: [child(1, [9])] })]);
-    expect(lines.join("\n")).not.toContain("next →");
   });
 
   it("truncates long titles and caps the open children list", () => {
@@ -71,7 +66,7 @@ describe("agent-bootstrap ## Epics (#2957)", () => {
     expect(lines[1]).toContain(`${"x".repeat(EPIC_TITLE_MAX - 7)}…`);
     expect(lines[1]).not.toContain("x".repeat(EPIC_TITLE_MAX));
     expect(lines[2]).toBe(
-      `  - next → ready #100 ${"x".repeat(EPIC_TITLE_MAX - 1)}…`,
+      `  - ready #100 ${"x".repeat(EPIC_TITLE_MAX - 1)}…`,
     );
     // head + epic line + EPIC_CHILDREN_MAX children + the "more" row
     expect(lines).toHaveLength(2 + EPIC_CHILDREN_MAX + 1);

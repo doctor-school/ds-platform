@@ -179,8 +179,7 @@ describe("project-reality renderProjectReality()", () => {
     expect(lines[0]).toBe(PROJECT_REALITY_HEADING);
     expect(text).toContain("release-2026.07.15-1 (2026-07-15)");
     expect(text).toMatch(/health ✓ matches Deployment record/);
-    expect(text).toContain("3 product PR(s) NOT yet on prod");
-    expect(text).toContain("pnpm deploy:prod");
+    expect(text).toContain("3 product changes merged, not on prod yet");
     expect(text).toContain("gh release list");
     // No loud banner on the happy path.
     expect(text).not.toContain("RECONCILE");
@@ -320,23 +319,22 @@ describe("project-reality classifyDeployRange() — D+B change-class (spec §10.
   });
 });
 
-describe("project-reality D-trigger verdict rendering (spec §10.2)", () => {
+describe("project-reality merged-not-deployed line (#3560)", () => {
   const rel: ReleaseInfo = { tag: null, publishedAt: null };
   const status = (n: number) =>
     evaluateProjectReality(
       probe({ deploymentSha: "b9d81e6", healthSha: "b9d81e6", mergedNotDeployed: n }),
     );
 
-  it("standing-auth verdict → autonomous-ship wording with the checklist pointer", () => {
+  it("a non-zero delta is one plain line with its change class, no spec sections", () => {
     const text = renderProjectReality(
       status(2),
       rel,
       classifyDeployRange(["apps/portal/src/page.tsx"]),
     ).join("\n");
-    expect(text).toContain("D-trigger (spec §10.2): class standing-auth");
-    expect(text).toContain("§10.4 release-readiness checklist");
-    expect(text).toContain("pnpm deploy:prod");
-    expect(text).not.toContain("ready to ship");
+    expect(text).toContain("2 product changes merged, not on prod yet — class standing-auth");
+    expect(text).not.toContain("§10");
+    expect(text).not.toContain("D-trigger");
   });
 
   it("escalate verdict → owner one-liner wording with the reason", () => {
@@ -346,24 +344,22 @@ describe("project-reality D-trigger verdict rendering (spec §10.2)", () => {
       classifyDeployRange(["apps/api/drizzle/0042_x.sql"]),
     ).join("\n");
     expect(text).toContain("class escalate (migration in range");
-    expect(text).toContain('ready to ship X — go?');
   });
 
   it("no verdict passed (classifier unavailable) → degrades to the escalate wording, never throws", () => {
     const text = renderProjectReality(status(1), rel).join("\n");
     expect(text).toContain("class escalate");
     expect(text).toContain("default-escalate");
-    expect(text).toContain('ready to ship X — go?');
   });
 
-  it("zero delta stays the level line — no D-trigger verdict", () => {
+  it("zero delta stays the level line — no change class", () => {
     const text = renderProjectReality(
       status(0),
       rel,
       classifyDeployRange(["apps/portal/src/page.tsx"]),
     ).join("\n");
     expect(text).toContain("prod is level");
-    expect(text).not.toContain("D-trigger");
+    expect(text).not.toContain("class standing-auth");
   });
 });
 
@@ -421,7 +417,7 @@ describe("project-reality hotfix delta anchoring (#1881)", () => {
       classifyDeployRange(["apps/portal/src/page.tsx"]),
     ).join("\n");
     expect(text).toContain(`[${note}]`);
-    expect(text).toContain("D-trigger");
+    expect(text).toContain("not on prod yet");
   });
 
   it("renders the note on a zero delta line too", () => {

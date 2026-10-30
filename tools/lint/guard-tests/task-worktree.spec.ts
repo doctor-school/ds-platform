@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  claimSession,
+  claimVerdict,
+  latestOpenClaim,
+} from "../../gh/lib/claim.mjs";
+import {
   branchName,
   branchPrefixFromLabels,
+  claimGate,
   isSpecToken,
   nextStepsLines,
   parseSpecId,
@@ -143,5 +149,156 @@ describe("task-worktree spec-form derivation (#787)", () => {
     expect(specBranchName("008", "portal-shell")).toBe(
       "feat/spec-008-portal-shell",
     );
+  });
+});
+
+/**
+ * Claim gate (#3560): `task:worktree <N>` refuses an Issue another session
+ * holds — a live claim naming a different session (or none) or an open PR from
+ * another branch — and `--take-over` proceeds while posting a new claim.
+ */
+describe("task-worktree claim gate (#3560)", () => {
+  const H = 3_600_000;
+  const now = 100 * H;
+  const branch = "tooling/3560-session-coordination";
+  const claim = (body: string, hoursAgo: number) => ({
+    body,
+    createdAtMs: now - hoursAgo * H,
+  });
+
+  it("reads the session out of `claim: <session> — <plan>`; legacy claims name nobody", () => {
+    expect(
+      claimSession("claim: ds-platform-d5 — taking #3560, tooling slice"),
+    ).toBe("ds-platform-d5");
+    expect(claimSession("claim: codex-1a2b - plan")).toBe("codex-1a2b");
+    expect(claimSession("claim: lead session 2026-10-22 — wave 2")).toBeNull();
+    expect(claimSession("Starting work — plan: extend classify().")).toBeNull();
+    expect(claimSession("Claim released — owner reprioritised.")).toBeNull();
+  });
+
+  it("refuses a foreign claim, naming the claimant and its age", () => {
+    const v = claimVerdict({
+      n: 3560,
+      session: "ds-platform-c8",
+      branch,
+      nowMs: now,
+      comments: [claim("claim: ds-platform-d5 — taking it", 2)],
+      openPrs: [],
+    });
+    expect(v.ok).toBe(false);
+    if (v.ok) return;
+    expect(v.reasons[0]).toMatch(/claimed by ds-platform-d5 2h ago/);
+    const gate = claimGate({
+      n: 3560,
+      verdict: v,
+      session: "ds-platform-c8",
+      takeOver: null,
+    });
+    expect(gate.action).toBe("refuse");
+    if (gate.action === "refuse") {
+      expect(gate.message).toContain("ds-platform-d5");
+      expect(gate.message).toContain("--take-over");
+    }
+  });
+
+  it("refuses an unnamed claim — it cannot be told apart from a peer's", () => {
+    const v = claimVerdict({
+      n: 3560,
+      session: "ds-platform-c8",
+      branch,
+      nowMs: now,
+      comments: [claim("Taking this one for the wave-2 batch.", 30)],
+    });
+    expect(v.ok).toBe(false);
+    if (!v.ok) expect(v.reasons[0]).toMatch(/an unnamed session 1d ago/);
+  });
+
+  it("allows this session's own claim", () => {
+    const v = claimVerdict({
+      n: 3560,
+      session: "ds-platform-c8",
+      branch,
+      nowMs: now,
+      comments: [claim("claim: ds-platform-c8 — taking it", 1)],
+      openPrs: [],
+    });
+    expect(v).toEqual({ ok: true });
+    expect(
+      claimGate({ n: 3560, verdict: v, session: "ds-platform-c8" }),
+    ).toEqual({ action: "proceed" });
+  });
+
+  it("a stop-state newer than the claim releases it; a newer claim re-takes it", () => {
+    const released = [
+      claim("claim: ds-platform-d5 — taking it", 5),
+      claim("**Where I stopped:** PR open, review pending.", 3),
+    ];
+    expect(latestOpenClaim(released)).toBeNull();
+    expect(
+      claimVerdict({
+        n: 3560,
+        session: null,
+        branch,
+        nowMs: now,
+        comments: released,
+      }),
+    ).toEqual({
+      ok: true,
+    });
+    const retaken = [...released, claim("claim: ds-platform-e1 — resuming", 1)];
+    expect(latestOpenClaim(retaken)?.session).toBe("ds-platform-e1");
+  });
+
+  it("refuses an Issue an open PR from another branch closes; its own branch passes", () => {
+    const openPrs = [
+      {
+        number: 3600,
+        headRefName: "tooling/3560-other-attempt",
+        title: "t",
+        body: "Closes #3560",
+      },
+      { number: 3601, headRefName: branch, title: "t", body: "Closes #3560" },
+      { number: 3602, headRefName: "fix/1-x", title: "t", body: "Refs #3560" },
+    ];
+    const v = claimVerdict({
+      n: 3560,
+      session: null,
+      branch,
+      nowMs: now,
+      comments: [],
+      openPrs,
+    });
+    expect(v.ok).toBe(false);
+    if (!v.ok)
+      expect(v.reasons).toEqual([
+        "#3560 has open PR #3600 from branch tooling/3560-other-attempt",
+      ]);
+  });
+
+  it("--take-over with a session posts a named take-over claim", () => {
+    const verdict = {
+      ok: false,
+      reasons: ["#3560 claimed by ds-platform-d5 2h ago: claim: …"],
+    };
+    expect(
+      claimGate({
+        n: 3560,
+        verdict,
+        session: "ds-platform-c8",
+        takeOver: " owner: «бери» ",
+      }),
+    ).toEqual({
+      action: "take-over",
+      comment: "claim: ds-platform-c8 — take-over: owner: «бери»",
+    });
+    const noSession = claimGate({
+      n: 3560,
+      verdict,
+      session: null,
+      takeOver: "owner said so",
+    });
+    expect(noSession.action).toBe("refuse");
+    if (noSession.action === "refuse")
+      expect(noSession.message).toMatch(/--take-over needs --session/);
   });
 });

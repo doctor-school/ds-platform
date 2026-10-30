@@ -24,16 +24,6 @@
  * absent owning subsystem), and each takeable item that an EARS prose-ref
  * unblocked carries a `prose ref resolved: EARS-N closed as #M` note.
  *
- * Queue grouping (#1855): readiness answers "can this be worked", not "should it
- * be worked NEXT". Takeable rows are therefore grouped by queue position —
- * QUEUE-HEAD (the Issue sits in its track's current release milestone, the open
- * one with the earliest owner-set `due_on`) first, then PLATFORM / EPIC, then
- * AHEAD-OF-QUEUE rows tagged with the head they jump. Grouping is presentation
- * only: readiness stays graph-computed, and an AHEAD-OF-QUEUE row is still listed,
- * never hidden. The same pure rules (`tools/gh/lib/queue-position.mjs`) back the
- * claim guard in `tools/gh/set-board-status.mjs`, which refuses `In Progress` on
- * an AHEAD-OF-QUEUE Issue (exit 3) absent `--ahead-of-queue "<owner quote>"`.
- *
  * `decision-debt` is NOT treated as "blocked" — it is a DEFERRED-decision label;
  * an item is takeable the moment its resolved deps are all closed (AGENTS.md §6,
  * memory `feedback_blocked_is_computed_not_labeled`).
@@ -57,9 +47,10 @@
  * start/claim comment vs its latest stop-state comment, and reports matching
  * rows as `IN-FLIGHT-ELSEWHERE (worktree|start-comment, age <a>)` instead of
  * takeable. The age is always SURFACED, never auto-suppressed — an abandoned
- * worktree is the human's call. The claim convention (post a one-line claim
- * comment or create the worktree BEFORE the first edit) lives in
- * `.claude/rules/repo-conventions.md` → Issue conventions.
+ * worktree is the human's call. The claim convention (`claim: <session> —
+ * <plan>` before the first edit) lives in `.claude/rules/repo-conventions.md` →
+ * Issue conventions; the comment rules are shared with `pnpm task:worktree`
+ * (`tools/gh/lib/claim.mjs`, #3560).
  *
  * GROOMING SECTIONS (#1873) — the deterministic half of a backlog groom; the
  * judgment + owner dialogue half is the catalog skill `groom-backlog`, which
@@ -72,10 +63,8 @@
  *     the same path). Removed from Takeable — AGENTS.md §6 forbids the second
  *     implementation; the matched path is always printed.
  *   - `## Orphans`            — open, no native `blocked_by`, no sub-issue
- *     parent, milestone ≠ the track's queue head (`no-blocker`, `no-parent`,
- *     `off-head (<milestone>)`). Fails open when no head is computable (#1857),
- *     and the whole section degrades to one `skipped` line when the board scan
- *     that carries the sub-issue parent probe failed.
+ *     parent (`no-blocker`, `no-parent`). The whole section degrades to one
+ *     `skipped` line when the board scan that carries the parent probe failed.
  *   - `## Stalled`            — undelivered work to DRAIN first: `STALE-CLAIM`
  *     (claim older than `--stalled-days`, default 3, with no open PR),
  *     `READY-TO-LAND` (open PR with a head-pinned Mode-a APPROVE + green checks,
@@ -88,13 +77,13 @@
  *     dense with roadmap/board/dependency refs, and matching them flagged 55%
  *     of the open backlog. `epic:` / `gate:` Issues are excluded (they outlive
  *     every PR that names them). Verify against the diff, then close.
- *   - `## Release rotation`   — per track, open milestones in queue order with
- *     their open counts and the `EMPTY-NEXT` / `ALL-CLOSED-STILL-OPEN` /
- *     `POZHE: n` flags.
+ *   - `## Tracks`             — per product track, the active (claimed) Issues
+ *     and the takeable count; `MORE-THAN-ONE-ACTIVE` when a track runs more
+ *     than one (owner 2026-10-28: one active task per track, never by release).
  *
  * The pure resolution/classification seams (`parseProseBlockers`, `classify`,
  * `detectClaim`, `findWaitForReuse`, `findOrphans`, `findStalled`,
- * `findLikelyDone`, `releaseRotation`)
+ * `findLikelyDone`, `trackActivity`)
  * are exported and unit-tested (tools/lint/guard-tests/backlog-triage.spec.ts)
  * WITHOUT firing the `gh` subprocesses — the `main()` entry point is guarded.
  *
@@ -111,19 +100,21 @@ import {
   parseBoardItemsPage,
 } from "./gh/lib/projects-v2.mjs";
 import {
-  TRACK_MILESTONE_PREFIXES,
   formatRoadmapHygiene,
   isEpicTitle,
   parseIssueBoardNode,
   roadmapHygiene,
 } from "./gh/lib/roadmap-taxonomy.mjs";
 import {
-  LITMUS_LINE,
-  isLaterMilestone,
-  queueHead,
-  queuePosition,
-  trackOf,
-} from "./gh/lib/queue-position.mjs";
+  closesRefs,
+  formatClaimAge,
+  isStartClaimComment,
+  isStopStateComment,
+  latestOpenClaim,
+} from "./gh/lib/claim.mjs";
+// Re-exported so the guard-test suite keeps covering the shared claim rules
+// through this module, as before #3560 moved them to lib/.
+export { closesRefs, formatClaimAge, isStartClaimComment, isStopStateComment };
 // The single definition of a head-pinned Mode (a) APPROVE (#1867) — reused, not
 // re-implemented. `merge-gate.mjs` guards its own entry point, so importing the
 // pure classifier fires no `gh` call.
@@ -390,75 +381,18 @@ export interface Triage {
    * `IN-FLIGHT-ELSEWHERE (worktree|start-comment, age <a>)` instead of takeable.
    */
   claim?: ClaimSignal;
-  /**
-   * Queue position (#1855), attached by `main()` for TAKEABLE items only.
-   * Presentation grouping — readiness stays graph-computed.
-   */
-  queue?: QueueAnnotation;
-}
-
-/** Where a takeable Issue sits relative to its track's release queue (#1855). */
-export type QueuePosition =
-  | "QUEUE-HEAD"
-  | "AHEAD-OF-QUEUE"
-  | "PLATFORM"
-  | "EPIC";
-
-export interface QueueAnnotation {
-  position: QueuePosition;
-  /** The track's queue-head milestone, when the track has one. */
-  head: string | null;
-}
-
-/** A repository milestone as the queue rules consume it. */
-export interface MilestoneRecord {
-  title: string;
-  due_on: string | null;
-  state?: string;
 }
 
 /**
- * Map a queue-position reason onto the report's position tag (#1855) — pure,
- * so the report can be unit-tested without any `gh` call.
- *
- * Returns `null` when the milestones payload is empty (#1857): the `gh api
- * milestones` read is best-effort and degrades to `[]`, and annotating every
- * takeable row `[AHEAD-OF-QUEUE (head: none)]` on that failure would report a
- * priority verdict the tool did not compute. No data ⇒ no annotation.
+ * The `track:*` label an Issue carries; null when it carries none. With several,
+ * the first in academy/doctor/platform order wins, so the result never depends
+ * on label order.
  */
-export function queueAnnotationFor(
-  issue: { title: string; labels: string[]; milestone: string | null },
-  milestones: MilestoneRecord[],
-): QueueAnnotation | null {
-  if (!Array.isArray(milestones) || milestones.length === 0) return null;
-  const result = queuePosition(
-    {
-      track: trackOf(issue.labels),
-      milestone: issue.milestone ?? "",
-      title: issue.title,
-    },
-    milestones,
-  );
-  // A computable-but-headless track is the same non-verdict as an empty payload.
-  if (result.reason === "no-queue-data") return null;
-  const position: QueuePosition = !result.ok
-    ? "AHEAD-OF-QUEUE"
-    : result.reason === "epic"
-      ? "EPIC"
-      : result.reason === "queue-head"
-        ? "QUEUE-HEAD"
-        : "PLATFORM";
-  return { position, head: result.head ?? null };
-}
-
-/** Per-track queue heads, for the report's summary lines (#1855). */
-export function trackQueueHeads(
-  milestones: MilestoneRecord[],
-): Array<{ track: string; head: string | null }> {
-  return ["track:doctor", "track:academy"].map((track) => ({
-    track,
-    head: queueHead(track, milestones),
-  }));
+export function trackOf(labels: string[]): string | null {
+  const names = new Set(labels.map((l) => l.trim()));
+  for (const track of ["track:academy", "track:doctor", "track:platform"])
+    if (names.has(track)) return track;
+  return null;
 }
 
 /** A blocker parsed out of the Issue body prose, pre-state-resolution. */
@@ -816,59 +750,8 @@ export interface ClaimSignal {
   source: "worktree" | "start-comment";
   /** Age of the signal (never negative — future mtimes clamp to 0). */
   ageMs: number;
-}
-
-/**
- * Is this comment a START/CLAIM comment (repo-conventions.md → Issue
- * conventions, #811)? Canonical shape is a one-liner opening with `claim:`;
- * tolerant of the other natural openers a session posts when taking an Issue
- * (`Start…`/`Started…`/`Starting…`, `Taking…`, `In progress…`). Matched against
- * the first non-empty line only — a mid-comment "starting with" never claims.
- */
-export function isStartClaimComment(body: string): boolean {
-  const first = firstNonEmptyLine(body);
-  if (!first) return false;
-  // `Claim released …` opens with `claim` — a release must never read as a claim.
-  if (STOP_STATE_OPENER.test(first)) return false;
-  return /^\s*(?:\*\*)?\s*(?:claim(?:ed|ing)?\b|start(?:ed|ing)?\b|taking\b|in[- ]progress\b)/i.test(
-    first,
-  );
-}
-
-/**
- * Openers that release a claim: the canonical `**Where I stopped:**`
- * (board-design §6 four-field shape) plus the release openers sessions actually
- * post — `Stop-state: …` / `stop state …` / `Claim released …` (#3408: the
- * #1611 and #2020 releases were missed), as tolerant as the claim openers.
- */
-const STOP_STATE_OPENER =
-  /^\s*(?:\*\*)?\s*(?:where i stopped|stop[- ]state|claim released)\b/i;
-
-function firstNonEmptyLine(body: string): string | undefined {
-  return body
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .find((l) => l.trim() !== "");
-}
-
-/**
- * Is this comment a STOP-STATE / CLAIM-RELEASE comment (`STOP_STATE_OPENER`)?
- * First non-empty line only — a mention of "stop-state" elsewhere never
- * releases.
- */
-export function isStopStateComment(body: string): boolean {
-  const first = firstNonEmptyLine(body);
-  return !!first && STOP_STATE_OPENER.test(first);
-}
-
-/** Compact claim age: `<1m`, `34m`, `2h`, `3d`. */
-export function formatClaimAge(ms: number): string {
-  const min = Math.floor(Math.max(0, ms) / 60_000);
-  if (min < 1) return "<1m";
-  if (min < 60) return `${min}m`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h}h`;
-  return `${Math.floor(h / 24)}d`;
+  /** The session a `claim: <session> — <plan>` comment names (#3560). */
+  session?: string;
 }
 
 /**
@@ -877,9 +760,8 @@ export function formatClaimAge(ms: number): string {
  *   - WORKTREE: `.claude/worktrees/<N>` exists under the primary tree. Always a
  *     signal, however old — the age is surfaced (mtime-derived) and the human
  *     decides whether it's live or abandoned. Never auto-suppressed.
- *   - START-COMMENT: the Issue's latest start/claim comment is NEWER than its
- *     latest stop-state comment (a stop-state posted after the claim releases
- *     it — that session ended and recorded where it stopped).
+ *   - START-COMMENT: the Issue's latest claim comment is NEWER than its latest
+ *     stop-state comment (`latestOpenClaim`, shared with `pnpm task:worktree`).
  *
  * When both fire, the FRESHEST signal is reported (ties → worktree). Returns
  * null when neither fires — the item stays plainly takeable.
@@ -892,21 +774,12 @@ export function detectClaim(probe: ClaimProbe): ClaimSignal | null {
       ageMs: Math.max(0, probe.nowMs - probe.worktreeMtimeMs),
     });
   }
-  let latestStart: number | undefined;
-  let latestStop: number | undefined;
-  for (const c of probe.comments ?? []) {
-    if (isStartClaimComment(c.body)) {
-      if (latestStart == null || c.createdAtMs > latestStart)
-        latestStart = c.createdAtMs;
-    } else if (isStopStateComment(c.body)) {
-      if (latestStop == null || c.createdAtMs > latestStop)
-        latestStop = c.createdAtMs;
-    }
-  }
-  if (latestStart != null && (latestStop == null || latestStart > latestStop)) {
+  const claim = latestOpenClaim(probe.comments);
+  if (claim) {
     signals.push({
       source: "start-comment",
-      ageMs: Math.max(0, probe.nowMs - latestStart),
+      ageMs: Math.max(0, probe.nowMs - claim.createdAtMs),
+      ...(claim.session ? { session: claim.session } : {}),
     });
   }
   if (signals.length === 0) return null;
@@ -918,7 +791,8 @@ export function detectClaim(probe: ClaimProbe): ClaimSignal | null {
 
 /** Render the report label: `IN-FLIGHT-ELSEWHERE (worktree, age 2h)`. */
 export function claimLabel(claim: ClaimSignal): string {
-  return `IN-FLIGHT-ELSEWHERE (${claim.source}, age ${formatClaimAge(claim.ageMs)})`;
+  const who = claim.session ? ` ${claim.session}` : "";
+  return `IN-FLIGHT-ELSEWHERE (${claim.source}${who}, age ${formatClaimAge(claim.ageMs)})`;
 }
 
 // ── grooming sections (#1873) — pure seams ──────────────────────────────────
@@ -1176,7 +1050,6 @@ export interface OrphanInput {
   number: number;
   title: string;
   labels: string[];
-  milestone: string | null;
   /** The Issue has at least one native `blocked_by` edge. */
   hasNativeBlockedBy: boolean;
   /** The Issue is a native sub-issue of some parent. */
@@ -1193,53 +1066,35 @@ export interface Orphan {
 
 /**
  * Open Issues with NO attachment to the critical path (owner 2026-09-05:
- * «критический путь понятен, нет issue-сирот»): no native `blocked_by`, no
- * sub-issue parent, and a milestone that is not the track's queue head. Epic
- * and gate Issues are roots by construction and never orphans.
- *
- * FAILS OPEN like the claim guard (#1857): a track whose queue head could not
- * be computed yields no verdict at all, rather than declaring every Issue
- * off-head. Read-only — attaching an orphan is the lead's / owner's call.
+ * «критический путь понятен, нет issue-сирот»): no native `blocked_by` and no
+ * sub-issue parent. Epic and gate Issues are roots by construction and never
+ * orphans. Read-only — attaching an orphan is the lead's / owner's call.
  */
-export function findOrphans(
-  inputs: OrphanInput[],
-  queueHeads: Array<{ track: string; head: string | null }>,
-): Orphan[] {
-  const headByTrack = new Map(queueHeads.map((q) => [q.track, q.head]));
+export function findOrphans(inputs: OrphanInput[]): Orphan[] {
   const out: Orphan[] = [];
   for (const i of inputs) {
     const title = i.title.trim().toLowerCase();
     if (title.startsWith("epic:") || title.startsWith("gate:")) continue;
     if (i.hasNativeBlockedBy || i.hasParent) continue;
-    const track = trackOf(i.labels) as string | null;
-    const head = track ? (headByTrack.get(track) ?? null) : null;
-    if (head == null) continue;
-    const milestone = i.milestone ?? "";
-    if (milestone === head) continue;
     out.push({
       number: i.number,
       title: i.title,
-      track,
-      reasons: [
-        "no-blocker",
-        "no-parent",
-        `off-head (${milestone || "no milestone"})`,
-      ],
+      track: trackOf(i.labels),
+      reasons: ["no-blocker", "no-parent"],
     });
   }
   return out.sort((a, b) => a.number - b.number);
 }
 
 const ORPHANS_LEAD =
-  "Open, unattached to the critical path: no native `blocked_by`, no sub-issue parent, milestone ≠ the track's queue head. Judge each one — attach to its epic, wire a technical `blocked_by` WITH a rationale, re-milestone, or ask the owner. Listing only: nothing is closed or re-linked here.";
+  "Open, unattached to the critical path: no native `blocked_by`, no sub-issue parent. Judge each one — attach to its epic, wire a technical `blocked_by` WITH a rationale, or ask the owner. Listing only: nothing is closed or re-linked here.";
 
 /**
  * Render the `## Orphans` section (#1873). The sub-issue `parent` probe is the
  * board scan; when that scan FAILED the whole section degrades to one skipped
  * line rather than rendering with `no-parent` true for every Issue — a report
  * telling the lead to re-link ~114 Issues that are already sub-issues is worse
- * than no section at all (same fail-open posture as the missing queue head,
- * #1857). The failure itself is already a `## Warnings` row.
+ * than no section at all. The failure itself is already a `## Warnings` row.
  */
 export function formatOrphans(rows: Orphan[], boardScanOk = true): string {
   if (!boardScanOk) {
@@ -1260,15 +1115,6 @@ export function formatOrphans(rows: Orphan[], boardScanOk = true): string {
 }
 
 // ── stalled + likely-done ───────────────────────────────────────────────────
-
-/** Every `Closes/Fixes/Resolves #N` Issue ref in a PR title/body. */
-export function closesRefs(text: string): number[] {
-  const out = new Set<number>();
-  const re = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#(\d+)/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(String(text ?? ""))) !== null) out.add(Number(m[1]));
-  return Array.from(out).sort((a, b) => a - b);
-}
 
 /** One `statusCheckRollup` entry, reduced to what the green test needs. */
 export interface RollupCheck {
@@ -1446,7 +1292,7 @@ export function findStalled(input: {
       kind: "STALE-CLAIM",
       number: i.number,
       title: i.title,
-      track: trackOf(i.labels) as string | null,
+      track: trackOf(i.labels),
       detail: `claimed ${formatClaimAge(i.claimAgeMs)} ago, no open PR (threshold ${input.stalledDays}d)`,
     });
   }
@@ -1461,7 +1307,7 @@ export function findStalled(input: {
       kind: "READY-TO-LAND",
       number: p.number,
       title: p.title,
-      track: linked ? (trackOf(linked.labels) as string | null) : null,
+      track: linked ? (trackOf(linked.labels)) : null,
       detail: `PR — Mode (a) APPROVE pinned to ${p.headRefOid.slice(0, 7)} + all checks green, unmerged${
         closes.length > 0 ? ` (closes ${closes.map((n) => `#${n}`).join(", ")})` : ""
       }`,
@@ -1480,7 +1326,7 @@ export function findStalled(input: {
         kind: "MERGED-BUT-OPEN",
         number: n,
         title: issue.title,
-        track: trackOf(issue.labels) as string | null,
+        track: trackOf(issue.labels),
         detail: `merged PR #${p.number} says \`Closes #${n}\` — Issue still open`,
       });
     }
@@ -1552,7 +1398,7 @@ export function findLikelyDone(
     out.push({
       number: i.number,
       title: i.title,
-      track: trackOf(i.labels) as string | null,
+      track: trackOf(i.labels),
       prs,
     });
   }
@@ -1571,136 +1417,55 @@ export function formatLikelyDone(rows: LikelyDone[]): string {
   );
 }
 
-// ── release rotation ────────────────────────────────────────────────────────
+// ── tracks ──────────────────────────────────────────────────────────────────
 
-/** One rendered milestone row of the rotation table. */
-export interface RotationRow {
-  title: string;
-  due: string | null;
-  open: number;
-  flags: string[];
-}
-
-/** The rotation view of one track. */
-export interface RotationTrack {
+/** One product track's work-in-progress view. */
+export interface TrackActivity {
   track: string;
-  head: string | null;
-  rows: RotationRow[];
+  /** Claimed (in-flight) takeable Issues on the track. */
+  active: Array<{ number: number; title: string; claim: ClaimSignal }>;
+  /** Unclaimed takeable Issues on the track. */
+  takeable: number;
 }
 
 /**
- * Milestone track membership, from the SAME Russian prefixes the queue rules
- * use (`TRACK_MILESTONE_PREFIXES`). A milestone matching no track prefix
- * («Platform ops & hardening») belongs to `track:platform`.
+ * Per product track, what is active and how much is takeable (owner
+ * 2026-10-28: two tracks, granular tasks, one active task per track — never
+ * ordered by release milestones). Platform work is not a track of its own here.
  */
-export function milestoneTrackOf(title: string): string {
-  for (const track of ["track:academy", "track:doctor"]) {
-    const prefix = (
-      TRACK_MILESTONE_PREFIXES as Record<string, string | undefined>
-    )[track];
-    if (prefix && String(title ?? "").startsWith(prefix)) return track;
-  }
-  return "track:platform";
+export function trackActivity(
+  rows: Array<{
+    number: number;
+    title: string;
+    track: string | null;
+    readiness: Readiness;
+    claim?: ClaimSignal;
+  }>,
+): TrackActivity[] {
+  return ["track:academy", "track:doctor"].map((track) => {
+    const mine = rows.filter((r) => r.track === track && r.readiness === "takeable");
+    return {
+      track,
+      active: mine
+        .filter((r) => r.claim)
+        .map((r) => ({ number: r.number, title: r.title, claim: r.claim! }))
+        .sort((a, b) => a.number - b.number),
+      takeable: mine.filter((r) => !r.claim).length,
+    };
+  });
 }
 
-/**
- * Release rotation (owner 2026-09-05: «каждый релиз должен быть наполнен»):
- * per track, every OPEN milestone ordered the way the queue orders them —
- * dated by `due_on` first, then undated, with the «· Позже» backlog last of
- * all — carrying its open-Issue count and the rotation flags:
- *
- *   - `EMPTY-NEXT`            — the release right AFTER the queue head has zero
- *     open Issues: the next release is empty and needs filling / a «Позже» lift.
- *   - `ALL-CLOSED-STILL-OPEN` — an open milestone, past its `due_on`, with zero
- *     open Issues: it shipped, close the milestone.
- *   - `POZHE: <n>`            — the size of the track's «· Позже» backlog, the
- *     pool the last question of every groom lifts from.
- */
-export function releaseRotation(
-  milestones: MilestoneRecord[],
-  issues: Array<{ milestone: string | null }>,
-  nowMs: number = Date.now(),
-): RotationTrack[] {
-  const openByMilestone = new Map<string, number>();
-  for (const i of issues) {
-    const key = i.milestone ?? "";
-    if (!key) continue;
-    openByMilestone.set(key, (openByMilestone.get(key) ?? 0) + 1);
-  }
-  const heads = new Map(
-    trackQueueHeads(milestones).map((q) => [q.track, q.head]),
-  );
-
-  return GROOM_TRACKS.map((track) => {
-    const mine = milestones
-      .filter(
-        (m) =>
-          typeof m.title === "string" &&
-          (m.state ?? "open") === "open" &&
-          milestoneTrackOf(m.title) === track,
-      )
-      .sort((a, b) => {
-        const later = (m: MilestoneRecord) => (isLaterMilestone(m.title) ? 1 : 0);
-        if (later(a) !== later(b)) return later(a) - later(b);
-        if (a.due_on && b.due_on)
-          return a.due_on < b.due_on ? -1 : a.due_on > b.due_on ? 1 : a.title.localeCompare(b.title);
-        if (a.due_on) return -1;
-        if (b.due_on) return 1;
-        return a.title.localeCompare(b.title);
-      });
-
-    const head = heads.get(track) ?? null;
-    const headIndex = head ? mine.findIndex((m) => m.title === head) : -1;
-    // The release right after the head, skipping the «· Позже» backlog.
-    const nextTitle =
-      headIndex >= 0
-        ? (mine.slice(headIndex + 1).find((m) => !isLaterMilestone(m.title))
-            ?.title ?? null)
-        : null;
-
-    const rows: RotationRow[] = mine.map((m) => {
-      const open = openByMilestone.get(m.title) ?? 0;
-      const flags: string[] = [];
-      if (m.title === head) flags.push("QUEUE-HEAD");
-      if (m.title === nextTitle && open === 0) flags.push("EMPTY-NEXT");
-      if (isLaterMilestone(m.title)) flags.push(`POZHE: ${open}`);
-      else if (
-        open === 0 &&
-        m.due_on != null &&
-        Date.parse(m.due_on) < nowMs
-      )
-        flags.push("ALL-CLOSED-STILL-OPEN");
-      return {
-        title: m.title,
-        due: m.due_on ? m.due_on.slice(0, 10) : null,
-        open,
-        flags,
-      };
-    });
-    return { track, head, rows };
-  }).filter((t) => t.rows.length > 0);
-}
-
-/** Render the `## Release rotation` section (#1873). */
-export function formatReleaseRotation(tracks: RotationTrack[]): string {
-  const total = tracks.reduce((n, t) => n + t.rows.length, 0);
+/** Render the `## Tracks` section. */
+export function formatTrackActivity(tracks: TrackActivity[]): string {
   const out = [
-    `## Release rotation (${total})`,
-    "Open milestones per track, in queue order (dated by `due_on`, then undated, «· Позже» last). `EMPTY-NEXT` = the release after the head has nothing in it; `ALL-CLOSED-STILL-OPEN` = it shipped, close the milestone; `POZHE: n` = the backlog the last groom question lifts from. Moving a milestone is an OWNER decision — this only reports.",
+    "## Tracks",
+    "One active task per product track; the next one is the most valuable takeable Issue of that track. `MORE-THAN-ONE-ACTIVE` = finish or release one before taking another.",
   ];
-  if (total === 0) {
-    out.push("none");
-    return out.join("\n");
-  }
   for (const t of tracks) {
-    out.push(`### ${t.track} (head: ${t.head ?? "none"})`);
-    for (const r of t.rows) {
-      out.push(
-        `- ${r.title} — due ${r.due ?? "—"}, ${r.open} open${
-          r.flags.length > 0 ? ` [${r.flags.join(" | ")}]` : ""
-        }`,
-      );
-    }
+    const flag = t.active.length > 1 ? " [MORE-THAN-ONE-ACTIVE]" : "";
+    out.push(`### ${t.track}${flag} — ${t.active.length} active, ${t.takeable} takeable`);
+    for (const a of t.active)
+      out.push(`- #${a.number} ${claimLabel(a.claim)} — ${truncateTitle(a.title, 70)}`);
   }
   return out.join("\n");
 }
@@ -1747,34 +1512,6 @@ async function listOpenIssues(): Promise<RawIssue[]> {
     { cwd: REPO_ROOT },
   );
   return JSON.parse(stdout) as RawIssue[];
-}
-
-/**
- * Every OPEN repository milestone, for the queue-head computation (#1855).
- * A failure degrades to an empty list (rows then group as PLATFORM/AHEAD by the
- * pure rules) with a warning — the triage run never dies on it.
- */
-async function listMilestones(): Promise<MilestoneRecord[]> {
-  const { stdout } = await execa(
-    "gh",
-    [
-      "api",
-      "repos/:owner/:repo/milestones",
-      "--paginate",
-      "-X",
-      "GET",
-      "-f",
-      "state=open",
-      "--jq",
-      "[.[] | {title, due_on, state}]",
-    ],
-    { cwd: REPO_ROOT },
-  );
-  // `--paginate` concatenates one JSON array per page.
-  return stdout
-    .split("\n")
-    .filter((line) => line.trim().length > 0)
-    .flatMap((line) => JSON.parse(line) as MilestoneRecord[]);
 }
 
 /**
@@ -2228,7 +1965,6 @@ function ts(): string {
 
 export function formatReport(
   triaged: Triage[],
-  queueHeads: Array<{ track: string; head: string | null }> = [],
   waitForReuse: WaitForReuse[] = [],
 ): string {
   const out: string[] = [];
@@ -2263,39 +1999,12 @@ export function formatReport(
     items.filter((t) => t.stream === stream);
   const kindTag = (t: Triage) => (t.noKindLabel ? " (no kind label)" : "");
 
-  // Queue grouping (#1855): QUEUE-HEAD / PLATFORM / EPIC rows first, then the
-  // AHEAD-OF-QUEUE ones tagged with the head they jump. Presentation only —
-  // nothing is hidden, and readiness stays graph-computed.
-  const QUEUE_ORDER: QueuePosition[] = [
-    "QUEUE-HEAD",
-    "PLATFORM",
-    "EPIC",
-    "AHEAD-OF-QUEUE",
-  ];
-  const positionOf = (t: Triage): QueuePosition => t.queue?.position ?? "PLATFORM";
-  const queueRank = (t: Triage) => QUEUE_ORDER.indexOf(positionOf(t));
-  const queueTag = (t: Triage) => {
-    if (!t.queue) return "";
-    return t.queue.position === "AHEAD-OF-QUEUE"
-      ? ` [AHEAD-OF-QUEUE (head: ${t.queue.head ?? "none"})]`
-      : ` [${t.queue.position}]`;
-  };
-
   out.push(`## Takeable (${takeable.length})`);
   out.push(
     "Rank takeable by value + readiness ONLY — owner Stage-B is a handback, not a deprioritizer (F-22; memory feedback_own_lead_decisions).",
   );
-  if (queueHeads.length > 0) {
-    for (const { track, head } of queueHeads)
-      out.push(`- queue head: ${track} → ${head ?? "(no dated open release milestone)"}`);
-    out.push(
-      `Claim litmus before taking anything: «${LITMUS_LINE}» — an AHEAD-OF-QUEUE claim needs \`--ahead-of-queue "<owner quote>"\` (#1855).`,
-    );
-  }
   for (const stream of ["product", "process"] as const) {
-    const items = byStream(takeable, stream).sort(
-      (a, b) => queueRank(a) - queueRank(b) || a.number - b.number,
-    );
+    const items = byStream(takeable, stream);
     out.push(`### ${stream === "product" ? "Product" : "Process"} (${items.length})`);
     if (items.length === 0) out.push("(none)");
     for (const t of items) {
@@ -2303,7 +2012,7 @@ export function formatReport(
         ? " [decision-debt — deferred decision, deps all closed]"
         : "";
       out.push(
-        `- #${t.number}${queueTag(t)}${tag} ${truncateTitle(t.title, 80)}${kindTag(t)}`,
+        `- #${t.number}${tag} ${truncateTitle(t.title, 80)}${kindTag(t)}`,
       );
       for (const n of t.notes) out.push(`    ↳ (${n})`);
     }
@@ -2462,33 +2171,11 @@ async function main(): Promise<void> {
     if (claim) t.claim = claim;
   }
 
-  // Queue position (#1855) — takeable items only, from the open milestones and
-  // the SAME pure rules the claim guard uses.
-  let milestones: MilestoneRecord[] = [];
-  try {
-    milestones = await listMilestones();
-  } catch (e) {
-    note("gh api milestones", e);
-  }
   const rawByNumber = new Map(issues.map((raw) => [raw.number, raw]));
-  for (const t of triaged) {
-    if (t.readiness !== "takeable") continue;
-    const raw = rawByNumber.get(t.number);
-    const annotation = queueAnnotationFor(
-      {
-        title: t.title,
-        labels: (raw?.labels ?? []).map((l) => l.name),
-        milestone: raw?.milestone?.title ?? null,
-      },
-      milestones,
-    );
-    if (annotation) t.queue = annotation;
-  }
 
   // ── grooming inputs (#1873) ───────────────────────────────────────────────
   // Every fetch below is best-effort: a failure degrades ITS section to a
   // `## Warnings` row, never kills the run (the #497 posture).
-  const queueHeads = milestones.length > 0 ? trackQueueHeads(milestones) : [];
   const claimAgeByNumber = new Map<number, number | null>(
     triaged.map((t) => [t.number, t.claim?.ageMs ?? null]),
   );
@@ -2523,7 +2210,7 @@ async function main(): Promise<void> {
     issues.map((raw) => ({
       number: raw.number,
       title: raw.title,
-      track: trackOf((raw.labels ?? []).map((l) => l.name)) as string | null,
+      track: trackOf((raw.labels ?? []).map((l) => l.name)),
       reuse: parseReuseField(raw.body ?? ""),
       building: (claimAgeByNumber.get(raw.number) ?? null) != null,
     })),
@@ -2553,7 +2240,7 @@ async function main(): Promise<void> {
 
   const out: string[] = [];
   if (staleBanner) out.push(`> ${staleBanner}`, "");
-  out.push(formatReport(triaged, queueHeads, waitForReuse));
+  out.push(formatReport(triaged, waitForReuse));
 
   out.push(
     formatOrphans(
@@ -2562,11 +2249,9 @@ async function main(): Promise<void> {
           number: raw.number,
           title: raw.title,
           labels: (raw.labels ?? []).map((l) => l.name),
-          milestone: raw.milestone?.title ?? null,
           hasNativeBlockedBy: hasNativeEdge.get(raw.number) ?? false,
           hasParent: parented.has(raw.number),
         })),
-        queueHeads,
       ),
       board != null,
     ),
@@ -2585,10 +2270,12 @@ async function main(): Promise<void> {
   );
   out.push(formatLikelyDone(findLikelyDone(groomIssues, mergedPrs)), "");
   out.push(
-    formatReleaseRotation(
-      releaseRotation(
-        milestones,
-        issues.map((raw) => ({ milestone: raw.milestone?.title ?? null })),
+    formatTrackActivity(
+      trackActivity(
+        triaged.map((t) => ({
+          ...t,
+          track: trackOf((rawByNumber.get(t.number)?.labels ?? []).map((l) => l.name)),
+        })),
       ),
     ),
     "",

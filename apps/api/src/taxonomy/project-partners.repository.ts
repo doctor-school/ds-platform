@@ -327,8 +327,9 @@ export class ProjectPartnersRepository {
 
   /**
    * §5.2 — the publicly eligible partners of one project, keyset-paginated on
-   * `(title, id)`. Only ACTIVE relations to PUBLISHED, non-retired partners are
-   * traversed. The order is alphabetical rather than "primary first": the
+   * `(title, id)`. Only ACTIVE relations are traversed, and the partner side is
+   * filtered by the shared `organisationPubliclyDisplayed` predicate so every
+   * public partner projection applies the same 032 EARS-5 rule. The order is alphabetical rather than "primary first": the
    * primary is identified by its own `isPrimary` field on every item, so the
    * client can hoist it without the server making the page order depend on a
    * flag that a later write can move.

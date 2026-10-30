@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Authenticated, useCustom, useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Badge, Button } from "@ds/design-system";
+import { Alert, Badge, Button, Link as DsLink } from "@ds/design-system";
 import type {
   ProjectOutputKindAdminDetail,
   ProjectOutputKindAdminList,
@@ -118,12 +118,11 @@ export default function ProjectOutputKindDetailPage() {
                   >
                     {holders.map((holder) => (
                       <li key={holder.id}>
-                        <Link
-                          href={`/projects/${holder.id}`}
-                          className="underline underline-offset-2"
-                        >
-                          {holder.title}
-                        </Link>
+                        <DsLink asChild variant="inline">
+                          <Link href={`/projects/${holder.id}`}>
+                            {holder.title}
+                          </Link>
+                        </DsLink>
                       </li>
                     ))}
                   </ul>

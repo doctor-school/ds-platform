@@ -17,6 +17,8 @@ const HOUR_MS = 60 * 60 * 1000;
 interface Window {
   count: number;
   resetAtMs: number;
+  /** A refusal already happened in this window (003 EARS-15 `tripped`). */
+  refused?: true;
 }
 
 /** A dimension to evaluate for one attempt: its counter map, key, window, ceiling. */
@@ -144,10 +146,17 @@ export class RateLimitService {
     for (const d of dims) {
       if (this.current(d, t) >= d.limit) {
         // A full window is live, so it exists and has not rolled over.
-        const resetAtMs = d.map.get(d.key)!.resetAtMs;
+        const w = d.map.get(d.key)!;
+        const tripped = w.refused === undefined;
+        w.refused = true;
         return {
           allowed: false,
-          refusal: { window: d.window, resetAtMs, atMs: t },
+          refusal: {
+            window: d.window,
+            resetAtMs: w.resetAtMs,
+            atMs: t,
+            tripped,
+          },
         };
       }
     }

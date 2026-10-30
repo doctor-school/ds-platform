@@ -218,6 +218,12 @@ export interface RateLimitRefusal {
   window: "ip" | "user" | "asn";
   resetAtMs: number;
   atMs: number;
+  /**
+   * The first refusal of this live window — the window "tripped" (003 EARS-15:
+   * one audit row and one notice per tripped per-user window, never one per
+   * refused request).
+   */
+  tripped: boolean;
 }
 
 /** {@link RateLimitService.consume}'s answer: a receipt, or the refusing window. */
@@ -245,6 +251,9 @@ export const RATE_LIMITED_KEY = "ds:rate-limited";
  * this handler as a throttled password login (003 EARS-15).
  */
 export const THROTTLED_PASSWORD_LOGIN_KEY = "ds:throttled-password-login";
+
+/** Which password login a `@PasswordLoginDoor` is: the 003 storefront/sign-in-host one, or the 011 admin primary auth. */
+export type PasswordLoginTier = "user" | "admin";
 
 /**
  * What `@RateLimited` writes into {@link RATE_LIMITED_KEY}: `true` for the

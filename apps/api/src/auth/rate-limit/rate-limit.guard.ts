@@ -13,6 +13,7 @@ import {
   RATE_LIMITED_KEY,
   RATE_LIMIT_RECEIPT_KEY,
   THROTTLED_PASSWORD_LOGIN_KEY,
+  type PasswordLoginTier,
   type RateLimitReceipt,
   type RateLimitedMarker,
 } from "./rate-limit.types.js";
@@ -95,20 +96,30 @@ export class RateLimitGuard implements CanActivate {
           .getResponse<GuardResponse>()
           .header("Retry-After", String(seconds));
       }
-      // 003 EARS-15: throttling replaces the password lockout, so a refused
-      // password login keeps the audit trail a lock used to leave.
-      if (
-        identifier !== undefined &&
-        this.reflector.getAllAndOverride<true | undefined>(
-          THROTTLED_PASSWORD_LOGIN_KEY,
-          [context.getHandler(), context.getClass()],
-        )
-      ) {
-        await this.audit.record({
-          type: "LoginFailed",
-          identifier,
-          reason: "throttled",
-        });
+      // 003 EARS-15: throttling replaces the password lockout — one audit row
+      // per tripped per-user window, as the lock left one per lock.
+      const { window, tripped } = decision.refusal;
+      if (identifier !== undefined && window === "user" && tripped) {
+        const tier = this.reflector.getAllAndOverride<
+          PasswordLoginTier | true | undefined
+        >(THROTTLED_PASSWORD_LOGIN_KEY, [
+          context.getHandler(),
+          context.getClass(),
+        ]);
+        if (tier === "admin") {
+          await this.audit.record({
+            type: "AdminPrimaryAuthFailed",
+            identifier,
+            sub: null,
+            reason: "throttled",
+          });
+        } else if (tier) {
+          await this.audit.record({
+            type: "LoginFailed",
+            identifier,
+            reason: "throttled",
+          });
+        }
       }
       throw new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);
     }

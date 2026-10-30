@@ -7,6 +7,7 @@ import {
   RATE_LIMITED_KEY,
   RATE_LIMIT_RECEIPT_KEY,
   THROTTLED_PASSWORD_LOGIN_KEY,
+  type PasswordLoginTier,
   type RateLimitReceipt,
   type RateLimitDoor,
   type RateLimitedMarker,
@@ -45,12 +46,15 @@ export function RateLimited(
 }
 
 /**
- * `@PasswordLoginDoor()` — this `@RateLimited` handler is a password login: a
- * request the limiter refuses here is appended as `auth.login.failure` with
- * reason `throttled` (003 EARS-15), the audit row a lockout used to leave.
+ * `@PasswordLoginDoor()` — this `@RateLimited` handler is a password login: the
+ * per-user window tripping here is appended once per window with reason
+ * `throttled` (003 EARS-15) — `auth.login.failure`, or the admin tier's
+ * primary-auth failure for `@PasswordLoginDoor("admin")`.
  */
-export function PasswordLoginDoor(): MethodDecorator {
-  return SetMetadata(THROTTLED_PASSWORD_LOGIN_KEY, true);
+export function PasswordLoginDoor(
+  tier: PasswordLoginTier = "user",
+): MethodDecorator {
+  return SetMetadata(THROTTLED_PASSWORD_LOGIN_KEY, tier);
 }
 
 /**

@@ -435,7 +435,12 @@ describe("RateLimitService (EARS-13)", () => {
       }
       expect(svc.consume({ ip, identifier: "u99@ds.test" })).toEqual({
         allowed: false,
-        refusal: { window: "ip", resetAtMs: opened + WINDOW_MS, atMs: now },
+        refusal: {
+          window: "ip",
+          resetAtMs: opened + WINDOW_MS,
+          atMs: now,
+          tripped: true,
+        },
       });
     });
 
@@ -446,6 +451,23 @@ describe("RateLimitService (EARS-13)", () => {
       const d = svc.consume({ ip: "10.0.0.99", identifier });
       expect(d.allowed).toBe(false);
       expect(d.allowed ? undefined : d.refusal.window).toBe("user");
+    });
+
+    it("003 EARS-15: only the first refusal of a live window is the trip; a new window trips afresh", () => {
+      for (let i = 0; i < thresholds.perUserPer15Min; i++) {
+        svc.tryConsume({ ip: `10.0.0.${i}`, identifier });
+      }
+      const trip = () => {
+        const d = svc.consume({ ip: "10.0.0.99", identifier });
+        return d.allowed ? undefined : d.refusal.tripped;
+      };
+      expect(trip()).toBe(true);
+      expect(trip()).toBe(false);
+      now += WINDOW_MS;
+      for (let i = 0; i < thresholds.perUserPer15Min; i++) {
+        svc.tryConsume({ ip: `10.0.1.${i}`, identifier });
+      }
+      expect(trip()).toBe(true);
     });
 
     it("003 EARS-13: an allowed attempt returns its receipt", () => {

@@ -97,7 +97,7 @@ describe("RateLimitGuard throttled password login (003 EARS-15)", () => {
     scopedPerIpPer15Min: {},
   };
 
-  function setup(passwordLogin: boolean) {
+  function setup(passwordLogin: boolean | "admin") {
     const reflector = new Reflector();
     vi.spyOn(reflector, "getAllAndOverride").mockImplementation((key) =>
       key === RATE_LIMITED_KEY
@@ -135,14 +135,30 @@ describe("RateLimitGuard throttled password login (003 EARS-15)", () => {
     return { audit, attempt };
   }
 
-  it("EARS-15: a throttled password login appends auth.login.failure with reason throttled", async () => {
+  it("EARS-15: the per-user window tripping on a password login appends one auth.login.failure with reason throttled per window", async () => {
     const { audit, attempt } = setup(true);
     expect(await attempt("user@ds.test")).toBe(true);
     expect(await attempt("user@ds.test")).toBe(true);
     expect(audit.events).toEqual([]);
     expect(await attempt("user@ds.test")).toBe(false);
+    // Further refusals in the same tripped window append nothing more.
+    expect(await attempt("User@ds.test")).toBe(false);
+    expect(await attempt("user@ds.test")).toBe(false);
     expect(audit.events).toEqual([
       { type: "LoginFailed", identifier: "user@ds.test", reason: "throttled" },
+    ]);
+  });
+
+  it("EARS-15: the admin password login records its own primary-auth failure with reason throttled", async () => {
+    const { audit, attempt } = setup("admin");
+    for (let i = 0; i < 4; i++) await attempt("admin@ds.test");
+    expect(audit.events).toEqual([
+      {
+        type: "AdminPrimaryAuthFailed",
+        identifier: "admin@ds.test",
+        sub: null,
+        reason: "throttled",
+      },
     ]);
   });
 

@@ -221,7 +221,8 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       // 011 EARS-3: primary auth at the admin origin. Success emits the canonical
       // `auth.login.success` carrying `tier: "admin"` and NO session (the policy
       // fork issues a pending reference instead); every refusal branch — wrong
-      // password, locked, and a principal the `role → mfa_required` policy does
+      // password, a tripped per-user window (`throttled`, RateLimitGuard, 003
+      // EARS-15), and a principal the `role → mfa_required` policy does
       // not cover — emits `auth.login.failure` with the same tier field.
       emits: ["AdminPrimaryAuthSucceeded", "AdminPrimaryAuthFailed"],
       coveredBy:

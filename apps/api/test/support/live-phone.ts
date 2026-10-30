@@ -28,6 +28,13 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import {
+  hostLogin,
+  Jar,
+  lastHostSession,
+  storefrontSession,
+  withSignInHost,
+} from "../setup/storefront-harness.js";
 import { MAILER } from "../../src/mailer/mailer.types.js";
 import { SmtpMailer } from "../../src/mailer/smtp-mailer.js";
 
@@ -160,48 +167,49 @@ export interface LiveHarness {
     headers: Record<string, string>,
     code: string,
   ): ReturnType<NestFastifyApplication["inject"]>;
-  passwordLogin(
-    identifier: string,
-  ): ReturnType<NestFastifyApplication["inject"]>;
+  passwordLogin(identifier: string): ReturnType<typeof hostLogin>;
   close(): Promise<void>;
 }
 
 export async function liveHarness(): Promise<LiveHarness> {
-  const moduleRef: TestingModule = await Test.createTestingModule({
-    imports: [AppModule],
-  })
-    .overrideProvider(RATE_LIMIT_THRESHOLDS)
-    .useValue(RELAXED_RATE_LIMIT)
-    // The per-phone limit stays at its EARS-14 value; the per-IP / per-ASN /
-    // global windows are opened because every case sends from one address.
-    .overrideProvider(SMS_BUDGET_THRESHOLDS)
-    .useValue({
-      ...DEFAULT_SMS_BUDGET_THRESHOLDS,
-      perIpPerHour: 1_000_000,
-      perAsnPerHour: 1_000_000,
-      globalPerDay: 1_000_000,
+  const moduleRef: TestingModule = await withSignInHost(
+    Test.createTestingModule({
+      imports: [AppModule],
     })
-    // The EARS-52 notice goes through the real BFF mailer into the dev-stand
-    // Mailpit intercept. CI provides no `MAILER_SMTP_*` (only `MAILPIT_URL`),
-    // so the env-built mailer would fail closed on its intercept host; wire
-    // the same intercept from `MAILPIT_URL`, as the sibling live specs do.
-    .overrideProvider(MAILER)
-    .useValue(
-      new SmtpMailer({
-        intercept: {
-          host: process.env.MAILER_SMTP_HOST ?? new URL(MAILPIT_BASE).hostname,
-          port: Number(process.env.MAILER_SMTP_PORT ?? 1025),
-          from: process.env.MAILER_SMTP_FROM ?? "noreply@doctor.school",
-        },
-        isEnabled: () => false,
-      }),
-    )
-    // The reset request is captcha-gated; not under test here.
-    .overrideProvider(BOT_PROTECTION)
-    .useValue({
-      verify: (): Promise<BotProtectionResult> => Promise.resolve({ ok: true }),
-    } satisfies BotProtection)
-    .compile();
+      .overrideProvider(RATE_LIMIT_THRESHOLDS)
+      .useValue(RELAXED_RATE_LIMIT)
+      // The per-phone limit stays at its EARS-14 value; the per-IP / per-ASN /
+      // global windows are opened because every case sends from one address.
+      .overrideProvider(SMS_BUDGET_THRESHOLDS)
+      .useValue({
+        ...DEFAULT_SMS_BUDGET_THRESHOLDS,
+        perIpPerHour: 1_000_000,
+        perAsnPerHour: 1_000_000,
+        globalPerDay: 1_000_000,
+      })
+      // The EARS-52 notice goes through the real BFF mailer into the dev-stand
+      // Mailpit intercept. CI provides no `MAILER_SMTP_*` (only `MAILPIT_URL`),
+      // so the env-built mailer would fail closed on its intercept host; wire
+      // the same intercept from `MAILPIT_URL`, as the sibling live specs do.
+      .overrideProvider(MAILER)
+      .useValue(
+        new SmtpMailer({
+          intercept: {
+            host:
+              process.env.MAILER_SMTP_HOST ?? new URL(MAILPIT_BASE).hostname,
+            port: Number(process.env.MAILER_SMTP_PORT ?? 1025),
+            from: process.env.MAILER_SMTP_FROM ?? "noreply@doctor.school",
+          },
+          isEnabled: () => false,
+        }),
+      )
+      // The reset request is captcha-gated; not under test here.
+      .overrideProvider(BOT_PROTECTION)
+      .useValue({
+        verify: (): Promise<BotProtectionResult> =>
+          Promise.resolve({ ok: true }),
+      } satisfies BotProtection),
+  ).compile();
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter(),
   );
@@ -212,13 +220,15 @@ export async function liveHarness(): Promise<LiveHarness> {
   const idp = app.get<IdpClient>(IDP_CLIENT);
   const created: { email: string; sub: string }[] = [];
 
+  /** The host's password step in a fresh browser (EARS-69): 200 accepted, 401 refused. */
   const passwordLogin = (identifier: string) =>
-    app.inject({
-      method: "POST",
-      url: "/v1/auth/login",
-      headers: DEVICE,
-      payload: { identifier, password: PASSWORD },
-    });
+    hostLogin(
+      app,
+      new Jar(),
+      identifier,
+      { password: PASSWORD },
+      { device: DEVICE },
+    );
 
   return {
     app,
@@ -246,13 +256,18 @@ export async function liveHarness(): Promise<LiveHarness> {
         res = await passwordLogin(email);
       }
       expect(res.statusCode, res.body).toBe(200);
-      const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
+      const sid = await storefrontSession(
+        app,
+        lastHostSession(app),
+        "academy",
+        DEVICE,
+      );
       return {
         email,
         sub,
         headers: {
           ...DEVICE,
-          cookie: `${SESSION_COOKIE_NAME}=${cookie!.value}`,
+          cookie: `${SESSION_COOKIE_NAME}=${sid}`,
         },
       };
     },

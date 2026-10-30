@@ -33,6 +33,7 @@ import {
 } from "../../src/mailer/notice-emails.js";
 import { CONGRESS_SIGN_UP_CLOCK } from "../../src/congress/congress-signup.tokens.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import { scanRealRouteSet } from "../../src/authz/authz.gate.js";
 import type { MatrixRow } from "../../src/authz/authz.matrix.js";
 import { ADMIN_DEVICE, establishAdminSession } from "../setup/admin-session.js";
@@ -143,18 +144,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const createdEventIds: string[] = [];
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        .overrideProvider(MAILER)
-        .useValue(mailer)
-        .overrideProvider(CONGRESS_SIGN_UP_CLOCK)
-        .useValue(() => clock.at ?? new Date())
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake)
+          .overrideProvider(MAILER)
+          .useValue(mailer)
+          .overrideProvider(CONGRESS_SIGN_UP_CLOCK)
+          .useValue(() => clock.at ?? new Date())
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
       );
@@ -237,19 +239,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     async function author(prefix: string) {
       const a = await account(prefix);
-      const login = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: a.email, password },
-      });
-      expect(login.statusCode).toBe(200);
-      const cookie = login.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
+      const sid = await signIn(app, a.email, password, { device });
       return {
         ...a,
         headers: {
           ...device,
-          cookie: `${SESSION_COOKIE_NAME}=${cookie!.value}`,
+          cookie: `${SESSION_COOKIE_NAME}=${sid}`,
         },
       };
     }

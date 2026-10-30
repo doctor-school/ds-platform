@@ -7,6 +7,7 @@ import { VersioningType } from "@nestjs/common";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
@@ -456,14 +457,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .overrideProvider(IDP_CLIENT)
-        .useValue(new FakeIdpClient())
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT)
+          .overrideProvider(IDP_CLIENT)
+          .useValue(new FakeIdpClient()),
+      ).compile();
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
       );
@@ -654,15 +656,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("EARS-9.6: an admin route refusing a portal cookie appends exactly one auth.session.rejected carrying its reason and tier: admin", async () => {
       const { email: portalEmail } = await registerUser("portal");
-      const portal = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: ADMIN_DEVICE,
-        payload: { identifier: portalEmail, password },
+      const portalSid = await signIn(app, portalEmail, password, {
+        device: ADMIN_DEVICE,
       });
-      const portalSid = portal.cookies.find(
-        (c) => c.name === SESSION_COOKIE_NAME,
-      )!.value;
 
       const since = await dbNow();
       const refused = await app.inject({
@@ -717,13 +713,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       const { email: portalEmail, sub: portalSub } =
         await registerUser("tierportal");
-      const portalLogin = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: ADMIN_DEVICE,
-        payload: { identifier: portalEmail, password },
-      });
-      expect(portalLogin.statusCode).toBe(200);
+      await signIn(app, portalEmail, password, { device: ADMIN_DEVICE });
       const adminRows = await rowsFor(admin.sub, since);
       const portalRows = await rowsFor(portalSub, since);
 

@@ -1,12 +1,5 @@
 import type pg from "pg";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  describe,
-  expect,
-  it,
-} from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { BACK_CHANNEL_LOGOUT_RATE_LIMIT_SCOPE } from "../../src/sign-in-host/back-channel-logout.controller.js";
@@ -15,6 +8,8 @@ import {
   DEVICE,
   DOCTOR,
   Jar,
+  openHostForm,
+  postHostForm,
   storefrontHarness,
   type StorefrontHarness,
 } from "../setup/storefront-harness.js";
@@ -83,12 +78,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("EARS-65: a valid logout token revokes by sid every storefront session linked to that Zitadel session and deletes its record", async () => {
       const { address, session, academy, doctor } =
         await signedInOnBoth("valid");
-      // Another browser of the same person holds its own shared session.
+      // Another browser of the same person holds its own shared session; the
+      // registration browser (h.account) holds a third.
       const other = await h.storefrontSession(
         await h.hostSignIn(new Jar(), address),
         "doctor",
       );
-      expect(await records(address)).toBe(2);
+      expect(await records(address)).toBe(3);
 
       const res = await backChannel(
         form(
@@ -104,7 +100,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(await h.sessionLive(academy)).toBe(false);
       expect(await h.sessionLive(doctor)).toBe(false);
       expect(await h.sessionLive(other)).toBe(true);
-      expect(await records(address)).toBe(1);
+      expect(await records(address)).toBe(2);
       // ADR-0001 §7.3: an IdP-side termination is recorded as `force`.
       const { rows } = await pool.query<{ reason: string }>(
         "SELECT reason FROM audit_ledger WHERE event_type = 'auth.session.terminated' AND sid = ANY($1)",
@@ -166,27 +162,30 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("EARS-65: after a completed reset the other storefront's next request is signed out and its silent check ends in login_required", async () => {
       const { address, jar, academy, doctor } = await signedInOnBoth("reset");
-      const reset = await h.app.inject({
-        method: "POST",
-        url: "/v1/auth/password/reset",
-        headers: DEVICE,
-        payload: { identifier: address },
+      // The reset runs on the host in another browser, which the completed
+      // reset signs in: its fresh record is the only one left.
+      const resetting = new Jar();
+      const form = await openHostForm(h.app, resetting);
+      const reset = await postHostForm(h.app, resetting, "password/reset", {
+        identifier: address,
+        ...form,
       });
       expect(reset.statusCode).toBe(200);
-      const complete = await h.app.inject({
-        method: "POST",
-        url: "/v1/auth/password/reset/complete",
-        headers: DEVICE,
-        payload: {
+      const complete = await postHostForm(
+        h.app,
+        resetting,
+        "password/reset/complete",
+        {
           identifier: address,
           code: FAKE_VALID_CODE,
           newPassword: "Bb2!another-long-pw",
+          ...form,
         },
-      });
-      expect(complete.statusCode).toBe(200);
+      );
+      expect(complete.statusCode, complete.body).toBe(200);
       expect(await h.sessionLive(academy)).toBe(false);
       expect(await h.sessionLive(doctor)).toBe(false);
-      expect(await records(address)).toBe(0);
+      expect(await records(address)).toBe(1);
       await expectSilentLoginRequired(jar);
     });
 

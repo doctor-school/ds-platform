@@ -14,6 +14,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import { authHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -96,14 +97,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     async function portalCookie(staff: boolean): Promise<string> {
       const email = uniqueEmail(staff ? "staff13" : "doctor13");
       await registerAccount(email, staff);
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password },
-      });
-      expect(res.statusCode).toBe(200);
-      return res.cookies.find((c) => c.name === SESSION_COOKIE_NAME)!.value;
+      return signIn(app, email, password, { device });
     }
 
     function payloadBody(payload: Record<string, unknown>) {
@@ -170,14 +164,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
       );

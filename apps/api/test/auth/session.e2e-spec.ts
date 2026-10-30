@@ -7,6 +7,12 @@ import { VersioningType } from "@nestjs/common";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
+import {
+  hostSignIn,
+  Jar,
+  storefrontRedeem,
+  withSignInHost,
+} from "../setup/storefront-harness.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import {
@@ -51,30 +57,36 @@ describe.skipIf(!process.env.DATABASE_URL)("BFF session (e2e)", () => {
     });
     expect(reg.statusCode).toBe(200);
 
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/login",
-      headers: device,
-      payload: { identifier: email, password },
-    });
-    expect(res.statusCode).toBe(200);
-
-    const raw = res.headers["set-cookie"];
-    const setCookieHeader = Array.isArray(raw) ? raw[0]! : (raw as string);
-    const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
-    expect(cookie).toBeDefined();
-    return { setCookieHeader, cookieValue: cookie!.value };
+    // The host's credential step, then the storefront callback that mints
+    // the session and relays its Set-Cookie (003 EARS-8, EARS-69).
+    const session = await hostSignIn(
+      app,
+      new Jar(),
+      email,
+      { password },
+      {
+        device,
+      },
+    );
+    const { sid, setCookie } = await storefrontRedeem(
+      app,
+      session,
+      "academy",
+      device,
+    );
+    return { setCookieHeader: setCookie, cookieValue: sid };
   }
 
   beforeAll(async () => {
-    const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(IDP_CLIENT)
-      .useValue(new FakeIdpClient())
-      .overrideProvider(RATE_LIMIT_THRESHOLDS)
-      .useValue(RELAXED_RATE_LIMIT)
-      .compile();
+    const moduleRef: TestingModule = await withSignInHost(
+      Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(new FakeIdpClient())
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT),
+    ).compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),

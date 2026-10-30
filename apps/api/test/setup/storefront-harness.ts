@@ -3,11 +3,15 @@ import {
   FastifyAdapter,
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
-import { Test } from "@nestjs/testing";
+import { Test, type TestingModuleBuilder } from "@nestjs/testing";
 import type pg from "pg";
 import { expect } from "vitest";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
-import { IDP_CLIENT, type IdpSession } from "../../src/auth/idp/idp.types.js";
+import {
+  IDP_CLIENT,
+  type IdpClient,
+  type IdpSession,
+} from "../../src/auth/idp/idp.types.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { resolveTrustProxy } from "../../src/config/trust-proxy.js";
 import { AppModule } from "../../src/app.module.js";
@@ -20,10 +24,16 @@ import { deleteUserFixture } from "./fixture-cleanup.js";
 import { RATE_LIMIT_THRESHOLDS, RELAXED_RATE_LIMIT } from "./rate-limit.js";
 
 /**
- * 003 EARS-10 / EARS-65 — the two-storefront harness: the API booted with the
- * sign-in host enabled and every IdP port faked, a browser cookie jar, and the
- * steps that put one shared browser session (a sign-in-host record) behind a
- * session on each storefront (credential step → code → redeem).
+ * 003 EARS-8 / EARS-10 / EARS-65 / EARS-69 — the one way an API e2e signs a
+ * person in to a storefront: the production path through the sign-in host.
+ * A credential step on the host (password, or a login code) puts a checked
+ * Zitadel session into a sign-in-host record; the storefront's callback
+ * redeems a code for that session and mints the storefront session linked to
+ * it. The IdP's OIDC endpoints (the auth request the authorize endpoint
+ * opens, the code its token endpoint redeems) are the only faked hops:
+ * {@link withSignInHost} puts their fakes on a suite's own testing module, and
+ * {@link signIn} walks the whole path for one person. {@link storefrontHarness}
+ * is the two-storefront suite built on the same steps.
  */
 
 // The sign-in-host block and the internal credential are read at module
@@ -45,11 +55,10 @@ const ACADEMY_CALLBACK = "http://localhost:3001/auth/callback";
 const DOCTOR_CALLBACK = "http://localhost:3004/auth/callback";
 export const PASSWORD = "Aa1!ufficiently-long-pw";
 const CONSENT = [{ purpose: "tos", version: "2026-01" }];
-export const DEVICE = {
+export const DEVICE: Record<string, string> = {
   "user-agent": "StorefrontTest/1.0",
   "accept-language": "ru-RU",
 };
-const INTERNAL = { ...DEVICE, authorization: `Bearer ${TOKEN}` };
 
 export type Storefront = "academy" | "doctor";
 
@@ -66,12 +75,297 @@ export class Jar {
   }
 }
 
+/** The faked OIDC hops of the IdP the sign-in host and the storefront callback talk to. */
+export interface SignInHostFakes {
+  readonly hostIdp: FakeSignInHostIdp;
+  readonly oidc: FakeStorefrontOidc;
+}
+
+export function signInHostFakes(): SignInHostFakes {
+  return {
+    hostIdp: new FakeSignInHostIdp(),
+    oidc: new FakeStorefrontOidc([ACADEMY, DOCTOR]),
+  };
+}
+
+/**
+ * A suite's own testing module with the sign-in host's IdP ports faked
+ * (`fakes`, fresh by default); chain it like any `overrideProvider`.
+ */
+export function withSignInHost(
+  builder: TestingModuleBuilder,
+  fakes: SignInHostFakes = signInHostFakes(),
+): TestingModuleBuilder {
+  return builder
+    .overrideProvider(SIGN_IN_HOST_IDP)
+    .useValue(fakes.hostIdp)
+    .overrideProvider(STOREFRONT_OIDC_IDP)
+    .useValue(fakes.oidc);
+}
+
+function fakesOf(app: NestFastifyApplication): SignInHostFakes {
+  const hostIdp = app.get(SIGN_IN_HOST_IDP, { strict: false }) as unknown;
+  const oidc = app.get(STOREFRONT_OIDC_IDP, { strict: false }) as unknown;
+  if (
+    !(hostIdp instanceof FakeSignInHostIdp) ||
+    !(oidc instanceof FakeStorefrontOidc)
+  ) {
+    throw new Error(
+      "the app was not built with withSignInHost(...) — no faked sign-in host IdP",
+    );
+  }
+  return { hostIdp, oidc };
+}
+
+/** The credential the host's step checks: a password, or a login code on its channel. */
+export type HostCredential =
+  { password: string } | { code: string; channel?: "email" | "sms" };
+
+export interface HostStepOptions {
+  /** The browser's device headers; the record and the storefront session bind to them (EARS-64). */
+  device?: Record<string, string>;
+  /** The storefront whose authorize request opened the host form. */
+  client?: Storefront;
+  prompt?: string[];
+}
+
+function clientIdOf(client: Storefront): string {
+  return client === "academy" ? ACADEMY : DOCTOR;
+}
+
+/** Open the host form for a fresh auth request in `jar`: the request id and the form's CSRF token. */
+export async function openHostForm(
+  app: NestFastifyApplication,
+  jar: Jar,
+  opts: HostStepOptions = {},
+): Promise<{ authRequest: string; csrf: string }> {
+  const { hostIdp } = fakesOf(app);
+  const authRequest = hostIdp.seedAuthRequest({
+    clientId: clientIdOf(opts.client ?? "academy"),
+    ...(opts.prompt ? { prompt: opts.prompt } : {}),
+  });
+  const entry = await app.inject({
+    method: "GET",
+    url: `/v1/sign-in-host/entry?authRequest=${authRequest}`,
+    headers: { ...(opts.device ?? DEVICE), cookie: jar.header() },
+  });
+  jar.apply(entry.cookies);
+  const body = entry.json() as { action: string; csrf?: string };
+  expect(body.action, entry.body).toBe("render");
+  return { authRequest, csrf: body.csrf! };
+}
+
+/** One same-origin form post to the host (`step` under `/v1/sign-in-host/`) in `jar`. */
+export async function postHostForm(
+  app: NestFastifyApplication,
+  jar: Jar,
+  step: string,
+  payload: Record<string, unknown>,
+  device: Record<string, string> = DEVICE,
+) {
+  const res = await app.inject({
+    method: "POST",
+    url: `/v1/sign-in-host/${step}`,
+    headers: {
+      ...device,
+      origin: HOST_ORIGIN,
+      "sec-fetch-site": "same-origin",
+      cookie: jar.header(),
+    },
+    payload,
+  });
+  jar.apply(res.cookies);
+  return res;
+}
+
+/**
+ * The host's credential step for `identifier` on a fresh form in `jar` — the
+ * raw answer (200 accepted, 401 refused), for the suites that assert it.
+ */
+export async function hostLogin(
+  app: NestFastifyApplication,
+  jar: Jar,
+  identifier: string,
+  credential: HostCredential,
+  opts: HostStepOptions = {},
+) {
+  const form = await openHostForm(app, jar, opts);
+  return "password" in credential
+    ? postHostForm(
+        app,
+        jar,
+        "login",
+        { identifier, password: credential.password, ...form },
+        opts.device,
+      )
+    : postHostForm(
+        app,
+        jar,
+        "login/otp",
+        {
+          identifier,
+          code: credential.code,
+          channel: credential.channel ?? "email",
+          ...form,
+        },
+        opts.device,
+      );
+}
+
+/** The Zitadel session of the host's latest finalisation (the step that just succeeded). */
+export function lastHostSession(app: NestFastifyApplication): IdpSession {
+  const last = fakesOf(app).hostIdp.finalised.at(-1);
+  if (!last || !("session" in last)) throw new Error("not finalised");
+  return last.session;
+}
+
+/** An accepted credential step in `jar`; the Zitadel session it put in the record. */
+export async function hostSignIn(
+  app: NestFastifyApplication,
+  jar: Jar,
+  identifier: string,
+  credential: HostCredential = { password: PASSWORD },
+  opts: HostStepOptions = {},
+): Promise<IdpSession> {
+  const res = await hostLogin(app, jar, identifier, credential, opts);
+  expect(res.statusCode, res.body).toBe(200);
+  return lastHostSession(app);
+}
+
+/**
+ * The storefront callback for `session` on `client`: a transaction, the code
+ * the IdP issues for the record's Zitadel session (with the project roles
+ * the IdP holds for the subject, as its ID token asserts them), the redeem.
+ * The minted session's `sid` and the raw `Set-Cookie` the storefront relays.
+ */
+export async function storefrontRedeem(
+  app: NestFastifyApplication,
+  session: IdpSession,
+  client: Storefront = "academy",
+  device: Record<string, string> = DEVICE,
+): Promise<{ sid: string; setCookie: string }> {
+  const { oidc } = fakesOf(app);
+  const internal = { ...device, authorization: `Bearer ${TOKEN}` };
+  const tx = await app.inject({
+    method: "POST",
+    url: "/v1/internal/oidc/transaction",
+    headers: internal,
+    payload: { client, kind: "interactive", door: "login" },
+  });
+  expect(tx.statusCode, tx.body).toBe(200);
+  const { txId, authorizeUrl } = tx.json() as {
+    txId: string;
+    authorizeUrl: string;
+  };
+  const q = new URL(authorizeUrl).searchParams;
+  const roles = await app
+    .get<IdpClient>(IDP_CLIENT, { strict: false })
+    .getProjectRoles(session.sub);
+  const code = oidc.issueCode({
+    clientId: clientIdOf(client),
+    redirectUri: client === "academy" ? ACADEMY_CALLBACK : DOCTOR_CALLBACK,
+    codeChallenge: q.get("code_challenge")!,
+    sid: session.zitadelSessionId,
+    sub: session.sub,
+    nonce: q.get("nonce")!,
+    roles,
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: "/v1/internal/oidc/redeem",
+    headers: internal,
+    payload: { client, txId, state: q.get("state")!, code },
+  });
+  expect(res.statusCode, res.body).toBe(200);
+  const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
+  if (!cookie) throw new Error("no session minted");
+  const raw = res.headers["set-cookie"];
+  return { sid: cookie.value, setCookie: Array.isArray(raw) ? raw[0]! : raw! };
+}
+
+/** {@link storefrontRedeem}'s minted `sid`. */
+export async function storefrontSession(
+  app: NestFastifyApplication,
+  session: IdpSession,
+  client: Storefront = "academy",
+  device: Record<string, string> = DEVICE,
+): Promise<string> {
+  return (await storefrontRedeem(app, session, client, device)).sid;
+}
+
+/**
+ * Sign `identifier` in to a storefront the production way — the host's
+ * credential step in a fresh browser, then that storefront's callback — and
+ * return the storefront session's `sid` (the `SESSION_COOKIE_NAME` value).
+ * `credential` is the password, or a login code.
+ */
+export async function signIn(
+  app: NestFastifyApplication,
+  identifier: string,
+  credential: string | HostCredential = PASSWORD,
+  opts: HostStepOptions & { jar?: Jar } = {},
+): Promise<string> {
+  const session = await hostSignIn(
+    app,
+    opts.jar ?? new Jar(),
+    identifier,
+    typeof credential === "string" ? { password: credential } : credential,
+    opts,
+  );
+  return storefrontSession(app, session, opts.client ?? "academy", opts.device);
+}
+
+/**
+ * Register `email` on the host's Academy registration form and enter the
+ * code — the registration that signs the browser in (its record lands in
+ * `jar`). The Zitadel session the code step put in the record.
+ */
+export async function hostRegister(
+  app: NestFastifyApplication,
+  jar: Jar,
+  email: string,
+  input: {
+    password?: string;
+    consent?: ReadonlyArray<{ purpose: string; version: string }>;
+    device?: Record<string, string>;
+  } = {},
+): Promise<IdpSession> {
+  const device = input.device ?? DEVICE;
+  const form = await openHostForm(app, jar, { device });
+  const reg = await postHostForm(
+    app,
+    jar,
+    "register",
+    {
+      email,
+      password: input.password ?? PASSWORD,
+      consent: input.consent ?? CONSENT,
+      ...form,
+    },
+    device,
+  );
+  expect(reg.statusCode, reg.body).toBe(200);
+  const v = await postHostForm(
+    app,
+    jar,
+    "verify",
+    { email, code: FAKE_VALID_CODE, ...form },
+    device,
+  );
+  expect(v.statusCode, v.body).toBe(200);
+  return lastHostSession(app);
+}
+
 export interface StorefrontHarness {
   readonly app: NestFastifyApplication;
   readonly idp: FakeIdpClient;
   readonly hostIdp: FakeSignInHostIdp;
   readonly oidc: FakeStorefrontOidc;
-  /** A registered, verified account; deleted (with its records) by {@link cleanup}. */
+  /**
+   * A registered, verified account (registered on the host, so its
+   * registration browser holds one record of its own); deleted (with its
+   * records) by {@link cleanup}.
+   */
   account(tag: string): Promise<string>;
   /** A credential step on the sign-in host in `jar`; the Zitadel session it put in the record. */
   hostSignIn(
@@ -91,18 +385,15 @@ export async function storefrontHarness(
   thresholds = RELAXED_RATE_LIMIT,
 ): Promise<StorefrontHarness> {
   const idp = new FakeIdpClient();
-  const hostIdp = new FakeSignInHostIdp();
-  const oidc = new FakeStorefrontOidc([ACADEMY, DOCTOR]);
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(IDP_CLIENT)
-    .useValue(idp)
-    .overrideProvider(SIGN_IN_HOST_IDP)
-    .useValue(hostIdp)
-    .overrideProvider(STOREFRONT_OIDC_IDP)
-    .useValue(oidc)
-    .overrideProvider(RATE_LIMIT_THRESHOLDS)
-    .useValue(thresholds)
-    .compile();
+  const fakes = signInHostFakes();
+  const moduleRef = await withSignInHost(
+    Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(IDP_CLIENT)
+      .useValue(idp)
+      .overrideProvider(RATE_LIMIT_THRESHOLDS)
+      .useValue(thresholds),
+    fakes,
+  ).compile();
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter({ trustProxy: resolveTrustProxy({}) }),
   );
@@ -115,100 +406,8 @@ export async function storefrontHarness(
   async function account(tag: string): Promise<string> {
     const address = `bcl-${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
     created.push(address);
-    const r = await app.inject({
-      method: "POST",
-      url: "/v1/auth/register",
-      payload: { email: address, password: PASSWORD, consent: CONSENT },
-    });
-    expect(r.statusCode, r.body).toBe(200);
-    const v = await app.inject({
-      method: "POST",
-      url: "/v1/auth/verify",
-      headers: DEVICE,
-      payload: {
-        email: address,
-        code: FAKE_VALID_CODE,
-        registration: { password: PASSWORD, consent: CONSENT },
-      },
-    });
-    expect(v.statusCode).toBe(200);
+    await hostRegister(app, new Jar(), address);
     return address;
-  }
-
-  async function hostSignIn(
-    jar: Jar,
-    address: string,
-    extra: { prompt?: string[] } = {},
-  ): Promise<IdpSession> {
-    const authRequest = hostIdp.seedAuthRequest({
-      clientId: ACADEMY,
-      ...extra,
-    });
-    const entry = await app.inject({
-      method: "GET",
-      url: `/v1/sign-in-host/entry?authRequest=${authRequest}`,
-      headers: { ...DEVICE, cookie: jar.header() },
-    });
-    jar.apply(entry.cookies);
-    const body = entry.json() as { action: string; csrf?: string };
-    expect(body.action).toBe("render");
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/sign-in-host/login",
-      headers: {
-        ...DEVICE,
-        origin: HOST_ORIGIN,
-        "sec-fetch-site": "same-origin",
-        cookie: jar.header(),
-      },
-      payload: {
-        identifier: address,
-        password: PASSWORD,
-        authRequest,
-        csrf: body.csrf,
-      },
-    });
-    expect(res.statusCode).toBe(200);
-    jar.apply(res.cookies);
-    const last = hostIdp.finalised.at(-1);
-    if (!last || !("session" in last)) throw new Error("not finalised");
-    return last.session;
-  }
-
-  async function storefrontSession(
-    session: IdpSession,
-    client: Storefront,
-  ): Promise<string> {
-    const tx = await app.inject({
-      method: "POST",
-      url: "/v1/internal/oidc/transaction",
-      headers: INTERNAL,
-      payload: { client, kind: "interactive", door: "login" },
-    });
-    expect(tx.statusCode, tx.body).toBe(200);
-    const { txId, authorizeUrl } = tx.json() as {
-      txId: string;
-      authorizeUrl: string;
-    };
-    const q = new URL(authorizeUrl).searchParams;
-    const code = oidc.issueCode({
-      clientId: client === "academy" ? ACADEMY : DOCTOR,
-      redirectUri: client === "academy" ? ACADEMY_CALLBACK : DOCTOR_CALLBACK,
-      codeChallenge: q.get("code_challenge")!,
-      sid: session.zitadelSessionId,
-      sub: session.sub,
-      nonce: q.get("nonce")!,
-    });
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/internal/oidc/redeem",
-      headers: INTERNAL,
-      payload: { client, txId, state: q.get("state")!, code },
-    });
-    expect(res.statusCode, res.body).toBe(200);
-    const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
-    if (!cookie) throw new Error("no session minted");
-    return cookie.value;
   }
 
   async function sessionLive(sid: string): Promise<boolean> {
@@ -221,23 +420,20 @@ export async function storefrontHarness(
   }
 
   async function cleanup(): Promise<void> {
-    for (const email of created.splice(0)) {
-      await pool.query(
-        "DELETE FROM sign_in_host_records WHERE subject IN (SELECT zitadel_sub FROM users WHERE email = $1)",
-        [email],
-      );
+    for (const email of created.splice(0))
       await deleteUserFixture(pool, "email", email);
-    }
   }
 
   return {
     app,
     idp,
-    hostIdp,
-    oidc,
+    hostIdp: fakes.hostIdp,
+    oidc: fakes.oidc,
     account,
-    hostSignIn,
-    storefrontSession,
+    hostSignIn: (jar, address, extra = {}) =>
+      hostSignIn(app, jar, address, { password: PASSWORD }, extra),
+    storefrontSession: (session, client) =>
+      storefrontSession(app, session, client),
     sessionLive,
     cleanup,
     close: () => app.close(),

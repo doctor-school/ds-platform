@@ -33,6 +33,7 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { establishAdminSession } from "../setup/admin-session.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import { UserMirrorService } from "../../src/auth/user-mirror.service.js";
 import {
   deleteEventFixture,
@@ -153,16 +154,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: { email, password, consent },
       });
       expect(reg.statusCode).toBe(200);
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password },
-      });
-      expect(res.statusCode).toBe(200);
-      const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
-      expect(cookie).toBeDefined();
-      return cookie!.value;
+      return signIn(app, email, password, { device });
     }
 
     /** A registered `platform_admin` holding a real admin session (011 EARS-1). */
@@ -308,18 +300,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       process.env.CONGRESS_SIGNUP_EVENT_ID = eventId;
       process.env.CONGRESS_SIGNUP_CONSENT_VERSION = CONSENT_VERSION;
 
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        .overrideProvider(MAILER)
-        .useValue(mailer)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .overrideProvider(CONGRESS_SIGN_UP_CLOCK)
-        .useValue(() => now)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake)
+          .overrideProvider(MAILER)
+          .useValue(mailer)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT)
+          .overrideProvider(CONGRESS_SIGN_UP_CLOCK)
+          .useValue(() => now),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),

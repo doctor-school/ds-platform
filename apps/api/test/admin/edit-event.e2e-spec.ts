@@ -12,7 +12,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/index.js";
-import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import { authHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -90,16 +90,7 @@ describe.skipIf(
       return admin.sid;
     }
 
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/login",
-      headers: device,
-      payload: { identifier: email, password },
-    });
-    expect(res.statusCode).toBe(200);
-    const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
-    expect(cookie).toBeDefined();
-    return cookie!.value;
+    return signIn(app, email, password, { device });
   }
 
   /** Build a multipart/form-data body from string fields + one optional file part. */
@@ -222,14 +213,15 @@ describe.skipIf(
   }
 
   beforeAll(async () => {
-    const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(IDP_CLIENT)
-      .useValue(fake)
-      .overrideProvider(RATE_LIMIT_THRESHOLDS)
-      .useValue(RELAXED_RATE_LIMIT)
-      .compile();
+    const moduleRef: TestingModule = await withSignInHost(
+      Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(fake)
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT),
+    ).compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),

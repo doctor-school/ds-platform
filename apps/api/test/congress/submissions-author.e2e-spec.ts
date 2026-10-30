@@ -22,6 +22,7 @@ import { FakeMailer } from "../../src/mailer/mailer.fake.js";
 import { MAILER } from "../../src/mailer/mailer.types.js";
 import { congressSubmissionReceiptMessage } from "../../src/mailer/notice-emails.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -113,14 +114,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: { email, password, consent },
       });
       expect(reg.statusCode, reg.payload).toBe(200);
-      const login = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password },
-      });
-      expect(login.statusCode).toBe(200);
-      const cookie = login.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
+      const sid = await signIn(app, email, password, { device });
       const { rows } = await pool.query<{ id: string }>(
         "SELECT id FROM users WHERE email = $1",
         [email],
@@ -128,7 +122,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return {
         headers: {
           ...device,
-          cookie: `${SESSION_COOKIE_NAME}=${cookie!.value}`,
+          cookie: `${SESSION_COOKIE_NAME}=${sid}`,
         },
         userId: rows[0]!.id,
         email,
@@ -299,16 +293,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     beforeAll(async () => {
       process.env.CONGRESS_SIGNUP_CONSENT_VERSION = VERSION_A;
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        .overrideProvider(MAILER)
-        .useValue(mailer)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake)
+          .overrideProvider(MAILER)
+          .useValue(mailer)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),

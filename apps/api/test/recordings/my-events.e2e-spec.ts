@@ -14,6 +14,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -123,16 +124,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: { email, password, consent },
       });
       expect(reg.statusCode).toBe(200);
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password },
-      });
-      expect(res.statusCode).toBe(200);
-      const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
-      expect(cookie).toBeDefined();
-      return cookie!.value;
+      return signIn(app, email, password, { device });
     }
 
     async function userIdOf(email: string): Promise<string> {
@@ -159,10 +151,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
     }
 
-    async function myEvents(
-      cookie: string,
-      tab?: string,
-    ): Promise<MyEvents> {
+    async function myEvents(cookie: string, tab?: string): Promise<MyEvents> {
       const url = tab ? `/v1/me/events?tab=${tab}` : "/v1/me/events";
       const res = await app.inject({
         method: "GET",
@@ -179,14 +168,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const DAY = 24 * HOUR;
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
@@ -237,7 +227,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("014 EARS-9.2: ?tab=recordings returns the full ended history newest first, with no window", async () => {
       const recent = await seedEvent("ended", iso(-2 * DAY), "Недавний эфир");
       const older = await seedEvent("ended", iso(-90 * DAY), "Прошлой весной");
-      const ancient = await seedEvent("ended", iso(-800 * DAY), "Два года назад");
+      const ancient = await seedEvent(
+        "ended",
+        iso(-800 * DAY),
+        "Два года назад",
+      );
       const upcoming = await seedEvent("published", iso(1 * DAY), "Завтра");
 
       const email = uniqueEmail("doc");

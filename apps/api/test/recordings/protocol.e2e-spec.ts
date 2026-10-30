@@ -13,6 +13,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import {
   ADMIN_DEVICE,
   adminHeaders,
@@ -26,7 +27,10 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
-import { eventClassification, eventClassificationSql } from "../setup/event-classification.js";
+import {
+  eventClassification,
+  eventClassificationSql,
+} from "../setup/event-classification.js";
 
 // 014 EARS-17 (#1349) — the CROSS-route write-protocol floor.
 //
@@ -204,13 +208,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     async function doctorSession(): Promise<string> {
       const email = uniqueEmail("p1349-doctor");
       await registeredSub(email);
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: ADMIN_DEVICE,
-        payload: { identifier: email, password },
-      });
-      return res.cookies.find((c) => c.name === SESSION_COOKIE_NAME)!.value;
+      return signIn(app, email, password, { device: ADMIN_DEVICE });
     }
 
     // ── Fixtures ───────────────────────────────────────────────────────────
@@ -358,8 +356,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       {
         name: "PATCH /v1/admin/events/:id/recordings/:rid",
         method: "PATCH",
-        url: (f) =>
-          `/v1/admin/events/${f.eventId}/recordings/${f.recordingId}`,
+        url: (f) => `/v1/admin/events/${f.eventId}/recordings/${f.recordingId}`,
         payload: () => ({ durationSec: 4200 }),
         conditional: true,
         protocolFloor: true,
@@ -466,7 +463,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
      * non-empty `traceId` — and never a 5xx, because 014 defines none.
      */
     function expectProblem(
-      res: { statusCode: number; headers: Record<string, unknown>; payload: string },
+      res: {
+        statusCode: number;
+        headers: Record<string, unknown>;
+        payload: string;
+      },
       status: number,
       errorCode: string,
       envelope: Envelope = "problem",
@@ -565,14 +566,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     // ── Boot ───────────────────────────────────────────────────────────────
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
@@ -873,7 +875,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const k = key();
       const created201 = await createLegacy(first, k);
       expect(created201.statusCode).toBe(201);
-      createdEventIds.push((JSON.parse(created201.payload) as { id: string }).id);
+      createdEventIds.push(
+        (JSON.parse(created201.payload) as { id: string }).id,
+      );
 
       const other = legacyPayload(`p1349-${randomUUID()}`);
       const otherTitle = other.title as string;

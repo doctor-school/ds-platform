@@ -957,6 +957,124 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     });
 
+    // ── 032 display rules (EARS-5) and the organisation count (EARS-12) ─────
+
+    it("032 EARS-5: a name-hidden organisation shall be absent from project→partners and the embedded primary partner, and its keyed partner→projects read shall be 404 like an unknown one", async () => {
+      // Scenario «An organization whose name may not be shown is counted but never displayed».
+      const projectId = await insertProject();
+      const hidden = await insertPartner({
+        title: "Скрытая Фарма",
+        public_name_visible: false,
+      });
+      const shown = await insertPartner({ title: "Открытая Фарма" });
+      await seedRelation(projectId, hidden, true);
+      await seedRelation(projectId, shown, false);
+      await publishProject(projectId);
+
+      const partners = await publicGet(
+        `/v1/public/projects/${projectId}/partners`,
+      );
+      expect(partners.statusCode, partners.payload).toBe(200);
+      expect(page(partners).data.map((r) => r.id)).toEqual([shown]);
+
+      // The embedded primary partner becomes null — the DTO already allows it.
+      const viaShown = await publicGet(`/v1/public/partners/${shown}/projects`);
+      expect(viaShown.statusCode, viaShown.payload).toBe(200);
+      expect(page(viaShown).data[0]).toMatchObject({
+        id: projectId,
+        isPrimary: false,
+        primaryPartner: null,
+      });
+
+      // No existence oracle: the hidden organisation answers exactly as an unknown one.
+      const slug = (
+        await pool.query<{ slug: string }>(
+          "SELECT slug FROM organisations WHERE id = $1",
+          [hidden],
+        )
+      ).rows[0]!.slug;
+      for (const url of [
+        `/v1/public/partners/${hidden}/projects`,
+        `/v1/public/partners/${slug}/projects`,
+      ]) {
+        const res = await publicGet(url);
+        expect(res.statusCode, url).toBe(404);
+        expect(problem(res).errorCode).toBe("RESOURCE_NOT_FOUND");
+      }
+    });
+
+    it("032 EARS-5: a logo-hidden organisation shall answer logoUrl: null on every partner projection with the wire shape unchanged", async () => {
+      const projectId = await insertProject();
+      const logoHidden = await insertPartner({
+        title: "Альфа без логотипа",
+        logo_ref: "partners/logos/032-ears5-hidden.webp",
+        public_logo_visible: false,
+      });
+      const logoShown = await insertPartner({
+        title: "Бета с логотипом",
+        logo_ref: "partners/logos/032-ears5-shown.webp",
+      });
+      await seedRelation(projectId, logoHidden, true);
+      await seedRelation(projectId, logoShown, false);
+      await publishProject(projectId);
+
+      const res = await publicGet(`/v1/public/projects/${projectId}/partners`);
+      expect(res.statusCode, res.payload).toBe(200);
+      const [hiddenItem, shownItem] = page(res).data;
+      expect(hiddenItem).toMatchObject({ id: logoHidden, logoUrl: null });
+      expect(shownItem).toMatchObject({ id: logoShown });
+      expect(shownItem!.logoUrl).toEqual(expect.any(String));
+      for (const item of [hiddenItem!, shownItem!]) {
+        expect(Object.keys(item).sort()).toEqual([
+          "id",
+          "isPrimary",
+          "logoUrl",
+          "slug",
+          "title",
+          "websiteUrl",
+        ]);
+      }
+
+      const embedded = await publicGet(
+        `/v1/public/partners/${logoHidden}/projects`,
+      );
+      expect(embedded.statusCode, embedded.payload).toBe(200);
+      expect(page(embedded).data[0]!.primaryPartner).toEqual({
+        id: logoHidden,
+        slug: expect.any(String) as unknown as string,
+        title: "Альфа без логотипа",
+        logoUrl: null,
+        websiteUrl: "https://partner.example",
+      });
+    });
+
+    async function organisationCount(): Promise<number> {
+      const res = await publicGet("/v1/public/organisations/count");
+      expect(res.statusCode, res.payload).toBe(200);
+      const parsed = JSON.parse(res.payload) as { count: number };
+      expect(Object.keys(parsed)).toEqual(["count"]);
+      return parsed.count;
+    }
+
+    it("032 EARS-12: the public organisation count shall include hidden-rule organisations and exclude drafts and retired rows, recomputed on every read", async () => {
+      const before = await organisationCount();
+
+      await insertPartner();
+      await insertPartner({ public_name_visible: false });
+      const logoHidden = await insertPartner({ public_logo_visible: false });
+      await insertPartner({ status: "draft", first_published_at: null });
+      await insertPartner({ status: "retired", deleted_at: new Date() });
+      expect(await organisationCount()).toBe(before + 3);
+
+      // Retiring a published organisation changes the very next answer.
+      await pool.query(
+        `UPDATE organisations SET status = 'retired', deleted_at = now()
+          WHERE id = $1`,
+        [logoHidden],
+      );
+      expect(await organisationCount()).toBe(before + 2);
+    });
+
     it("012 EARS-10: a cursor this API did not issue shall be refused as a 400, never reach the query as an operand", async () => {
       // The cursor is caller-supplied bytes on a ZERO-AUTH route: a decoded
       // non-UUID `id` would hit a `uuid` column as Postgres 22P02 — a 500 for

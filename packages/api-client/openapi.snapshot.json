@@ -9591,6 +9591,18 @@
         "tags": ["ExpertProjectsPublic"]
       }
     },
+    "/v1/public/organisations/count": {
+      "get": {
+        "operationId": "OrganisationCountPublicController_count",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["OrganisationCountPublic"]
+      }
+    },
     "/v1/public/partners/{idOrSlug}/projects": {
       "get": {
         "operationId": "PartnerProjectsPublicController_projects",

@@ -49,6 +49,7 @@ import { ProjectExpertsRepository } from "./project-experts.repository.js";
 import { ProjectExpertsService } from "./project-experts.service.js";
 import { ProjectPartnersAdminController } from "./project-partners.admin.controller.js";
 import {
+  OrganisationCountPublicController,
   PartnerProjectsPublicController,
   ProjectPartnersPublicController,
 } from "./project-partners.public.controller.js";
@@ -124,6 +125,7 @@ import { EventKindsService } from "./event-kinds.service.js";
     // #1292 EARS-10 — the partner↔project JOIN surface and its two §5.2 reads.
     ProjectPartnersAdminController,
     ProjectPartnersPublicController,
+    OrganisationCountPublicController,
     PartnerProjectsPublicController,
     EventDirectionsPublicController,
     DirectionEventsPublicController,

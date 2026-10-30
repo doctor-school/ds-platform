@@ -5,6 +5,11 @@ import { organisations, projectOrganisations } from "@ds/db";
 import type { PublicPartnerSummary, PublicProjectSummary } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
+import {
+  organisationPubliclyDisplayed,
+  publicOrganisationColumns,
+  type PublicOrganisationRow,
+} from "./organisation-public-display.js";
 
 // 012 EARS-10 (#1292) — the ONE place a `PublicProjectSummary` is built.
 //
@@ -20,11 +25,12 @@ import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
 // is BATCHED over the whole page: one extra query per page rather than one per
 // row, which is what keeps a 50-row page from issuing 50 round-trips.
 //
-// Eligibility of the primary partner is the same publish-visibility test §5.2
-// applies to every other public traversal: the relation is `active` and the
-// partner itself is `published` and non-retired. A project whose primary partner
-// is still a draft therefore reports `primaryPartner: null` — truthfully, since
-// nothing about that partner is public yet.
+// Eligibility of the primary partner is the same display predicate every other
+// public traversal applies (`organisation-public-display.ts`, 032 EARS-5): the
+// relation is `active` and the partner is published, non-retired and
+// name-visible. A project whose primary partner is a draft or name-hidden
+// therefore reports `primaryPartner: null`; a logo-hidden one reports
+// `logoUrl: null`.
 
 @Injectable()
 export class PublicProjectSummaryService {
@@ -72,11 +78,7 @@ export class PublicProjectSummaryService {
     const rows = await this.db
       .select({
         projectId: projectOrganisations.projectId,
-        id: organisations.id,
-        slug: organisations.slug,
-        title: organisations.title,
-        logoRef: organisations.logoRef,
-        websiteUrl: organisations.websiteUrl,
+        ...publicOrganisationColumns,
       })
       .from(projectOrganisations)
       .innerJoin(
@@ -89,36 +91,27 @@ export class PublicProjectSummaryService {
           eq(projectOrganisations.status, "active"),
           isNull(projectOrganisations.deletedAt),
           eq(projectOrganisations.isPrimary, true),
-          eq(organisations.status, "published"),
-          isNull(organisations.deletedAt),
+          organisationPubliclyDisplayed,
         ),
       );
 
     const map = new Map<string, PublicPartnerSummary>();
-    for (const row of rows) {
-      map.set(row.projectId, {
-        id: row.id,
-        slug: row.slug,
-        title: row.title,
-        // Signed at read time — the bucket is private, so an unsigned URL is
-        // dead (#842); PRESENT and nullable so the client renders its fallback.
-        logoUrl: row.logoRef ? await this.storage.urlFor(row.logoRef) : null,
-        websiteUrl: row.websiteUrl,
-      });
+    for (const { projectId, ...partner } of rows) {
+      map.set(projectId, await toPartnerSummary(partner, this.storage));
     }
     return map;
   }
 }
 
-/** The §5.2 public summary of one partner — shared by both §5.2 partner reads. */
+/**
+ * The §5.2 public summary of one partner — shared by both §5.2 partner reads.
+ * `row` comes from `publicOrganisationColumns`, so `logoRef` is already null
+ * for a logo-hidden organisation (032 EARS-5). Signed at read time — the bucket
+ * is private, so an unsigned URL is dead (#842); PRESENT and nullable so the
+ * client renders its fallback.
+ */
 export async function toPartnerSummary(
-  row: {
-    id: string;
-    slug: string;
-    title: string;
-    logoRef: string | null;
-    websiteUrl: string | null;
-  },
+  row: PublicOrganisationRow,
   storage: ObjectStorage,
 ): Promise<PublicPartnerSummary> {
   return {

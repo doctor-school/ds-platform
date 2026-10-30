@@ -24,6 +24,7 @@
     "./sheet": "./src/primitives/sheet.tsx",
     "./alert-dialog": "./src/primitives/alert-dialog.tsx",
     "./textarea": "./src/primitives/textarea.tsx",
+    "./rich-text-editor": "./src/primitives/rich-text-editor.tsx",
     "./media-dropzone": "./src/primitives/media-dropzone.tsx",
     "./filter-chip": "./src/primitives/filter-chip.tsx",
     "./badge": "./src/primitives/badge.tsx",
@@ -46,6 +47,7 @@
     "./recording-spoiler": "./src/blocks/recording-spoiler.tsx",
     "./account-profile-card": "./src/blocks/account-profile-card.tsx",
     "./legal-document": "./src/blocks/legal-document.tsx",
+    "./rich-text-content": "./src/blocks/rich-text-content.tsx",
     "./blocks": "./src/blocks/index.ts"
   },
   "scripts": {
@@ -62,6 +64,12 @@
     "@radix-ui/react-popover": "^1.1.16",
     "@radix-ui/react-slot": "^1.3.3",
     "@radix-ui/react-tabs": "^1.1.21",
+    "@tiptap/core": "3.32.0",
+    "@tiptap/extension-link": "3.32.0",
+    "@tiptap/extension-list": "3.32.0",
+    "@tiptap/pm": "3.32.0",
+    "@tiptap/react": "3.32.0",
+    "@tiptap/starter-kit": "3.32.0",
     "@yandex/smart-captcha": "2.9.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

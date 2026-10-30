@@ -106,8 +106,8 @@ A feed entry exists only while its source record is published (it is deleted on 
 | marks `bold`, `italic`      | —                                                                          |
 | mark `link`                 | `href` absolute `https:` / `http:` / `mailto:`, ≤ 2048 chars; nothing else |
 
-- **One allowlist, three consumers.** `material-body.ts` exports the node/mark set and a Zod schema; `RichTextEditor` registers exactly the TipTap extensions of that set (StarterKit trimmed to it + Link with `protocols` limited and `autolink` on), so paste from Word or a browser drops images, tables, colours and fonts by schema; the API refuses any document the schema rejects (`400` with the field `body`); `RichTextContent` walks only that set and throws in tests on anything else.
-- **Limits**: 60 000 characters of text (a long column is ≈ 20 000), nesting depth 6, 2 000 nodes — bounds on the JSON a request can make the renderer walk.
+- **One allowlist, three consumers.** `material-body.ts` exports the node/mark set and a Zod schema; `RichTextEditor` registers exactly the TipTap extensions of that set (StarterKit trimmed to it + Link with `protocols` limited and `autolink` on), so paste from Word or a browser drops images, tables, colours and fonts by schema; the API refuses any document the schema rejects (`400` with the field `body`); `RichTextContent` walks only that set and drops any node or mark outside the allowlist (the renderer tests assert the drop).
+- **Limits**: 60 000 characters of text (a long column is ≈ 20 000), nesting depth 6 (block levels below `doc`), 2 000 nodes — bounds on the JSON a request can make the renderer walk.
 - **No HTML anywhere**: nothing stored is HTML, nothing rendered uses `dangerouslySetInnerHTML`, so no sanitiser exists to be wrong (Lead decision 5). A link to another host renders `target="_blank" rel="noopener noreferrer"`; a link to `academy.doctor.school` renders in the same tab.
 - **Plain-text projection** for length checks and the admin list search comes from the same walk (`bodyText(doc)`).
 
@@ -257,7 +257,7 @@ The PRD's _agent-proposed — UNCONFIRMED_ items, specified as the PRD writes th
 13. **Next-page failure** keeps the loaded cards and offers «Повторить» in a trailing slot — not drawn on the canvas, a Stage-A item of the rail package (EARS-15).
 14. **Reading-page canvas is a Stage-A gate**, not invented from prose: the page's behaviour is in EARS-12, its look is the vendored `academy-material.dc.html`, built once the owner approves it at Stage A.
 15. **Capability row is registered with this design spec**, as the PRD says: «Materials feed (feed card + home rail + reading page, 048)» in `capability-ownership.md`, status «Spec 048 slice 1; implementation Issues to follow»; each implementation PR keeps it in step with the files it lands.
-16. **Body bounds**: 60 000 characters of text, nesting depth 6, 2 000 nodes, links ≤ 2048 characters (EARS-2).
+16. **Body bounds**: 60 000 characters of text, nesting depth 6 (block levels below `doc`), 2 000 nodes, links ≤ 2048 characters (EARS-2).
 17. **Page sizes from the canvas**: first page 12, then 8 on a desktop and 6 on a phone; placeholders 10 / 3 for the first load (EARS-15, EARS-16).
 18. **Retention**: materials and entries are retained editorial rows with no time limit; no PD retention-matrix row (Retention).
 19. **US-1 field set gains the partner**: partner — optional, from the 032 registry; the PRD's acceptance line requires the mark (EARS-19).

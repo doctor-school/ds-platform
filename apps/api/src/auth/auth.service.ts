@@ -235,8 +235,7 @@ export class AuthService {
 
   /**
    * EARS-5: password login. Delegates the credential check to the IdP port
-   * (which is where the native Zitadel lockout counter increments on failure,
-   * EARS-15) and, on success, establishes the BFF session (EARS-8). Returns
+   * and, on success, establishes the BFF session (EARS-8). Returns
    * `null` for every failure — unknown identifier and wrong password are
    * indistinguishable so the controller responds enumeration-resistantly
    * (EARS-16). The `fingerprint` is computed by the controller from the request
@@ -254,7 +253,7 @@ export class AuthService {
 
   /**
    * The EARS-5 password check with every guarantee of {@link loginWithPassword}
-   * (native lockout observation, the EARS-18 ledger rows, the one `null` for
+   * (the EARS-18 ledger rows, the one `null` for
    * every failure), handing the checked session to `accept` instead of minting
    * the storefront session itself. The storefront login accepts it into a BFF
    * session; the sign-in host (003 EARS-5 amended, EARS-69) into its shared
@@ -267,21 +266,6 @@ export class AuthService {
   ): Promise<T | null> {
     const result = await this.idp.passwordLogin(identifier, password);
 
-    // EARS-15: observe the native lockout verdict. The terminal failure event is
-    // `auth.login.failure` (reason `lock`); the state-transition `lockout.triggered`
-    // fires exactly once, on the attempt that tripped it. Both stay enumeration-safe
-    // — the controller still answers the same generic 401 (`null`) as a rejection.
-    if (result.outcome === "locked") {
-      await this.audit.record({
-        type: "LoginFailed",
-        identifier,
-        reason: "lock",
-      });
-      if (result.justLocked) {
-        await this.audit.record({ type: "AccountLocked", sub: result.sub });
-      }
-      return null;
-    }
     if (result.outcome === "rejected") {
       // EARS-18: `auth.login.failure` (reason `wrong_password`) — unknown
       // identifier and wrong password are one indistinguishable reason here.

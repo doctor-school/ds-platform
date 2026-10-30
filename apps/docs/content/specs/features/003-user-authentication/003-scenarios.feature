@@ -853,11 +853,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Per-IP/per-ASN coverage stays in abuse-limits.e2e-spec.ts EARS-13.
 
   @EARS-15 @failure
-  Scenario: Account soft-locks after repeated failures
-    Given a doctor_guest user
-    When the user submits a wrong password 10 times within 30 minutes
-    Then the account is soft-locked by the Zitadel lockout policy
-    And a lockout notification email is sent
+  Scenario: Repeated wrong passwords are throttled, never locked
+    Given a doctor_guest user signed in on another device
+    When a wrong password is submitted for the user more often than the per-user window allows
+    Then the next password login is refused with the generic throttled response
+    And auth.login.failure is recorded with reason throttled
+    And the user's session on the other device stays signed in
+    And one notification email is sent for the tripped window
+    And after the window resets the correct password signs in
 
   @EARS-19 @happy
   Scenario: Mirror reconciliation closes a webhook-miss divergence

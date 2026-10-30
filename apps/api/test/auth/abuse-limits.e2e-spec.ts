@@ -12,8 +12,13 @@ import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import {
   DEFAULT_RATE_LIMIT_THRESHOLDS,
+  RATE_LIMIT_CLOCK,
   RateLimitService,
 } from "../../src/auth/rate-limit/index.js";
+import {
+  hashIdentifier,
+  TEST_FALLBACK_PEPPER,
+} from "../../src/auth/session/auth-audit.ledger.js";
 import { PARTNER_DATA_SHARING_PURPOSE } from "@ds/schemas";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import {
@@ -27,6 +32,10 @@ import type {
   BotProtectionResult,
 } from "../../src/bot-protection/index.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+// A fresh in-memory window store per app: these boundary suites count from
+// zero, whatever store REDIS_URL would bind (#3539).
+import { InMemoryRateLimitStore } from "../../src/auth/rate-limit/rate-limit.store.fake.js";
+import { RATE_LIMIT_STORE } from "../../src/auth/rate-limit/rate-limit.store.js";
 
 const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
 
@@ -75,6 +84,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
       app = await bootApp((b) =>
         b
           // Tight per-user window so the boundary is reached in a few requests.
+          .overrideProvider(RATE_LIMIT_STORE)
+          .useValue(new InMemoryRateLimitStore())
           .overrideProvider(RATE_LIMIT_THRESHOLDS)
           .useValue({
             perUserPer15Min: 3,
@@ -124,6 +135,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
           // Per-user ceiling of 3 (per-IP wide open) so the boundary is quick.
           // The `register` below consumes ONE per-user slot for `email` (the body
           // field the guard keys on), so the in-test budget is the remaining two.
+          .overrideProvider(RATE_LIMIT_STORE)
+          .useValue(new InMemoryRateLimitStore())
           .overrideProvider(RATE_LIMIT_THRESHOLDS)
           .useValue({
             perUserPer15Min: 3,
@@ -209,7 +222,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
       expect(verified.statusCode).toBe(200);
       // Arrange an empty per-user window for the code sign-in under test: the
       // setup above spent slots on the same identifier.
-      app.get(RateLimitService).reset({ ip: "", identifier: otpEmail });
+      await app.get(RateLimitService).reset({ ip: "", identifier: otpEmail });
 
       // Slot 1: request the code; slot 2: the code sign-in SUCCEEDS and forgives.
       expect(
@@ -351,11 +364,15 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
     /** A fresh app (fresh limiter) with one verified account to sign in. */
     async function bootWithDoctor(): Promise<void> {
       app = await bootApp((b) =>
-        b.overrideProvider(RATE_LIMIT_THRESHOLDS).useValue({
-          ...DEFAULT_RATE_LIMIT_THRESHOLDS,
-          perUserPer15Min: 1_000_000,
-          perAsnPerHour: 1_000_000,
-        }),
+        b
+          .overrideProvider(RATE_LIMIT_STORE)
+          .useValue(new InMemoryRateLimitStore())
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue({
+            ...DEFAULT_RATE_LIMIT_THRESHOLDS,
+            perUserPer15Min: 1_000_000,
+            perAsnPerHour: 1_000_000,
+          }),
       );
       // Sending window: 1 (register). Verification window: the successful
       // verify gives its unit back, so it stays at 0.
@@ -430,11 +447,102 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
   });
 
   // ── EARS-16: timing equalization ──────────────────────────────────────────
+  describe("EARS-15: password guessing is throttled, never locked", () => {
+    let app: NestFastifyApplication;
+    let now = 1_700_000_000_000;
+    const email = `ears15-${Date.now()}@ds.test`;
+    const password = "Aa1!ufficiently-long-pw";
+    beforeAll(async () => {
+      app = await bootApp((b) =>
+        b
+          .overrideProvider(RATE_LIMIT_STORE)
+          .useValue(new InMemoryRateLimitStore())
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue({
+            perUserPer15Min: DEFAULT_RATE_LIMIT_THRESHOLDS.perUserPer15Min,
+            perIpPer15Min: 1000,
+            perAsnPerHour: 1000,
+            scopedPerIpPer15Min: {},
+          })
+          .overrideProvider(RATE_LIMIT_CLOCK)
+          .useValue(() => now),
+      );
+      await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        headers: device,
+        payload: {
+          email,
+          password,
+          consent: [{ purpose: "tos", version: "2026-01" }],
+        },
+      });
+      // The register spent a per-user unit; start the guessing on a fresh window.
+      now += 15 * 60 * 1000;
+    });
+    afterAll(() => cleanup(app, [email]));
+
+    it("EARS-15: a throttled password login appends auth.login.failure reason throttled and no lockout, and the correct password signs in after the window resets", async () => {
+      const pool = app.get<pg.Pool>(DRIZZLE_POOL);
+      const since = (await pool.query<{ now: string }>("SELECT now() AS now"))
+        .rows[0]!.now;
+      const login = (pw: string) =>
+        app.inject({
+          method: "POST",
+          url: "/v1/auth/login",
+          headers: device,
+          payload: { identifier: email, password: pw },
+        });
+      const limit = DEFAULT_RATE_LIMIT_THRESHOLDS.perUserPer15Min;
+      for (let i = 0; i < limit; i++)
+        expect((await login("wrong-password-here")).statusCode).toBe(401);
+      const throttled = await login(password);
+      expect(throttled.statusCode).toBe(429);
+
+      const { rows } = await pool.query<{
+        event_type: string;
+        reason: string | null;
+      }>(
+        `SELECT event_type, reason FROM audit_ledger
+         WHERE created_at >= $1 AND metadata->>'identifier_hash' = $2`,
+        [
+          since,
+          hashIdentifier(
+            email,
+            process.env.AUDIT_IDENTIFIER_PEPPER ?? TEST_FALLBACK_PEPPER,
+          ),
+        ],
+      );
+      expect(rows.filter((r) => r.reason === "throttled")).toEqual([
+        { event_type: "auth.login.failure", reason: "throttled" },
+      ]);
+      const sub = (
+        await pool.query<{ zitadel_sub: string }>(
+          "SELECT zitadel_sub FROM users WHERE email = $1",
+          [email],
+        )
+      ).rows[0]!.zitadel_sub;
+      const lockouts = await pool.query(
+        `SELECT 1 FROM audit_ledger WHERE created_at >= $1 AND subject_id = $2
+         AND event_type = 'auth.lockout.triggered'`,
+        [since, sub],
+      );
+      expect(lockouts.rowCount).toBe(0);
+
+      now += 15 * 60 * 1000;
+      expect((await login(password)).statusCode).toBe(200);
+    });
+  });
+
   describe("EARS-16: timing equalization", () => {
     let app: NestFastifyApplication;
     beforeAll(async () => {
       app = await bootApp((b) =>
-        b.overrideProvider(RATE_LIMIT_THRESHOLDS).useValue(RELAXED_RATE_LIMIT),
+        b
+          .overrideProvider(RATE_LIMIT_STORE)
+          .useValue(new InMemoryRateLimitStore())
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
       );
     });
     afterAll(() => cleanup(app, ["timing-known@ds.test"]));
@@ -492,6 +600,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
     beforeAll(async () => {
       app = await bootApp((b) =>
         b
+          .overrideProvider(RATE_LIMIT_STORE)
+          .useValue(new InMemoryRateLimitStore())
           .overrideProvider(RATE_LIMIT_THRESHOLDS)
           .useValue(RELAXED_RATE_LIMIT)
           .overrideProvider(BOT_PROTECTION)

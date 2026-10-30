@@ -42,6 +42,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+// A fresh in-memory window store per app: these boundary suites count from
+// zero, whatever store REDIS_URL would bind (#3539).
+import { InMemoryRateLimitStore } from "../../src/auth/rate-limit/rate-limit.store.fake.js";
+import { RATE_LIMIT_STORE } from "../../src/auth/rate-limit/rate-limit.store.js";
 
 // The sign-in-host block and the internal credential are read at module
 // compile; a bare run gets a complete, dev-only block (the CI job sets its own).
@@ -92,6 +96,8 @@ async function compile(thresholds = RELAXED_RATE_LIMIT) {
     .useValue(hostIdp)
     .overrideProvider(STOREFRONT_OIDC_IDP)
     .useValue(oidc)
+    .overrideProvider(RATE_LIMIT_STORE)
+    .useValue(new InMemoryRateLimitStore())
     .overrideProvider(RATE_LIMIT_THRESHOLDS)
     .useValue(thresholds)
     .compile();
@@ -293,7 +299,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const real = limiter.tryConsume.bind(limiter);
       vi.spyOn(limiter, "tryConsume").mockImplementation((ctx) =>
         ctx.scope === STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE
-          ? false
+          ? Promise.resolve(false)
           : real(ctx),
       );
     }

@@ -116,9 +116,9 @@ export class DoctorRegisterPublicController {
     // like every successful login, forgives the per-user window keyed on
     // `email` (003 EARS-13, #2614).
     const { cookie, body } = await this.doctorRegister.verify(dto, fingerprint);
-    this.rateLimit.reset({ ip, identifier: dto.email });
+    await this.rateLimit.reset({ ip, identifier: dto.email });
     // #2684: a successful verification gives back its own per-IP unit.
-    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
+    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     reply.header("set-cookie", cookie);
     return body;
   }

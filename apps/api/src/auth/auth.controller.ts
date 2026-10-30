@@ -33,6 +33,7 @@ import { BotProtected } from "../bot-protection/index.js";
 import {
   ConsumedIpWindow,
   LOGIN_HANDOFF_OWNERSHIP_RATE_LIMIT_SCOPE,
+  PasswordLoginDoor,
   RateLimited,
   RateLimitService,
 } from "./rate-limit/index.js";
@@ -135,6 +136,7 @@ export class AuthController {
   @Post("login")
   @Public()
   @RateLimited()
+  @PasswordLoginDoor()
   @TimingEqualized()
   @LoginChallenged()
   @HttpCode(200)
@@ -171,8 +173,8 @@ export class AuthController {
     // it. The per-IP window gets back only this request's own unit (#2684), so
     // it counts failed verifications; the per-ASN window is left intact.
     this.loginChallenge.reset(ip);
-    this.rateLimit.reset({ ip, identifier: dto.identifier });
-    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
+    await this.rateLimit.reset({ ip, identifier: dto.identifier });
+    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     reply.header("set-cookie", result.cookie);
     return { status: "authenticated" };
   }
@@ -257,7 +259,7 @@ export class AuthController {
       return { status: "already_signed_in" };
     }
     const email = resolution.identifier;
-    if (!this.rateLimit.tryConsumeUser(email)) {
+    if (!(await this.rateLimit.tryConsumeUser(email))) {
       throw new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);
     }
     await this.auth.requestLoginOtp(
@@ -344,9 +346,9 @@ export class AuthController {
 
     // A code sign-in is a successful login (EARS-13, #2614): forgive the per-user
     // window for this identifier exactly as the password login does.
-    this.rateLimit.reset({ ip, identifier: dto.identifier });
+    await this.rateLimit.reset({ ip, identifier: dto.identifier });
     // #2684: a successful verification gives back its own per-IP unit.
-    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
+    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     reply.header("set-cookie", result.cookie);
     return { status: "authenticated" };
   }
@@ -471,9 +473,9 @@ export class AuthController {
     // line means the code signed the user in — a successful login that forgives
     // the per-user window keyed on `email`, as the guard keyed it (EARS-13, #2614).
     const { cookie, body } = await this.auth.verify(dto, fingerprint);
-    this.rateLimit.reset({ ip, identifier: dto.email });
+    await this.rateLimit.reset({ ip, identifier: dto.email });
     // #2684: a successful verification gives back its own per-IP unit.
-    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
+    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     reply.header("set-cookie", cookie);
     return body;
   }
@@ -578,9 +580,9 @@ export class AuthController {
     );
     // Forgive the EARS-13 per-user window on success (#222), keyed identically to
     // the guard; mint the fresh session by setting its __Host- cookie.
-    this.rateLimit.reset({ ip, identifier: dto.identifier });
+    await this.rateLimit.reset({ ip, identifier: dto.identifier });
     // #2684: a successful verification gives back its own per-IP unit.
-    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
+    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     reply.header("set-cookie", cookie);
     return body;
   }

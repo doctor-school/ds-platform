@@ -221,6 +221,17 @@ export function isPhoneIdentifier(identifier: string): boolean {
 }
 
 /**
+ * The one spelling of a submitted sign-in identifier: trimmed, Unicode NFKC
+ * (full-width and compatibility forms fold to their plain characters) and
+ * lower-cased. The password check looks the account up under it, and the
+ * EARS-13 per-user window keys on it, so a variant spelling of one address
+ * reaches the same account and spends the same budget (003 EARS-13/15).
+ */
+export function normalizeSignInIdentifier(identifier: string): string {
+  return identifier.trim().normalize("NFKC").toLowerCase();
+}
+
+/**
  * The outcome of an SMS send the BFF asked the IdP for (003 EARS-7/53):
  * `sent` — the IdP accepted it; `unconfirmed` — the phone is not a confirmed
  * account phone (EARS-58), nothing was sent, EARS-56 counts it; `failed` — a
@@ -294,23 +305,15 @@ export interface IdpSession {
 }
 
 /**
- * Outcome of a password check (EARS-5/15/18). The BFF stays enumeration-safe by
+ * Outcome of a password check (EARS-5/18). The BFF stays enumeration-safe by
  * collapsing every non-success to the same generic 401 (EARS-16) at the
- * controller, but the IdP's verdict is richer than a bare `null` so the audit
- * ledger can record the real reason (EARS-18) and the native lockout can be
- * observed (EARS-15):
+ * controller:
  * - `authenticated` — checked session to trade for tokens.
  * - `rejected` — unknown identifier or wrong password (indistinguishable).
- * - `locked` — the native Zitadel lockout policy has soft-locked the account
- *   (EARS-15); `justLocked` is true only on the attempt that tripped it, so the
- *   BFF emits `auth.lockout.triggered` exactly once. The counter, the lock, and
- *   the notification email are all native Zitadel (Constraints); the BFF only
- *   *observes* the verdict here — it never counts failures itself.
+ * No lockout verdict exists: the password lockout is off (003 EARS-15).
  */
 export type PasswordLoginResult =
-  | { outcome: "authenticated"; session: IdpSession }
-  | { outcome: "rejected" }
-  | { outcome: "locked"; sub: string; justLocked: boolean };
+  { outcome: "authenticated"; session: IdpSession } | { outcome: "rejected" };
 
 /**
  * The principal claims Zitadel asserts for the authenticated subject. These are
@@ -387,8 +390,7 @@ export type EmailCodeTrigger = "sign-in" | "re-registration";
  * pre-verification password is then kept, for exactly that account.
  */
 export type EmailCodeRegistration =
-  | { password: string }
-  | { keepPasswordOf: string };
+  { password: string } | { keepPasswordOf: string };
 
 /**
  * 003 EARS-41: the outcome of an accepted email code.
@@ -668,10 +670,8 @@ export interface IdpClient {
   /**
    * EARS-5: create a Zitadel session with a password check for `identifier`
    * (email or phone). Resolves to a {@link PasswordLoginResult} — `authenticated`
-   * on success, or `rejected` / `locked` on failure (the two failure variants are
-   * indistinguishable to the *client* per EARS-16, but the BFF uses the verdict
-   * for the audit ledger and the EARS-15 lockout observation). A failed check is
-   * counted by the native Zitadel lockout policy (EARS-15), never by the BFF.
+   * on success, or `rejected` on failure (EARS-16). Guessing is bounded by the
+   * EARS-13 throttling, never by an IdP lockout (003 EARS-15).
    */
   passwordLogin(
     identifier: string,

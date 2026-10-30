@@ -4,6 +4,7 @@ import {
   IdpAmbiguousEmailError,
   IdpInvalidArgumentError,
   IdpUnavailableError,
+  normalizeSignInIdentifier,
   type AdminAuthorityVerdict,
   type CreatedUser,
   type CreateUserInput,
@@ -35,13 +36,6 @@ import {
  * path and anything else for the invalid/expired path (EARS-3/4).
  */
 export const FAKE_VALID_CODE = "424242";
-
-/**
- * Failed-password attempts that trip the native lockout (EARS-15: 10 / 30 min).
- * The fake models the threshold (not the 30-min window — that is Zitadel's), so
- * the BFF's lockout *observation* (`auth.lockout.triggered`) is testable.
- */
-export const FAKE_LOCKOUT_THRESHOLD = 10;
 
 /**
  * The issuer label the fake stamps into its `otpauth://` provisioning URIs — the
@@ -107,7 +101,7 @@ export class FakeIdpClient implements IdpClient {
   private readonly liveRefresh = new Map<string, string>();
   /** Refresh tokens already rotated once — replaying one is RFC-6819 reuse (EARS-9). */
   private readonly consumedRefresh = new Set<string>();
-  /** Per-identifier failed-check tally — the fake's stand-in for the native Zitadel lockout counter (EARS-15), asserted by EARS-5 tests. */
+  /** Per-identifier failed-check tally — asserted by EARS-5 tests; it never locks (003 EARS-15). */
   private readonly failed = new Map<string, number>();
   /** Subs with a live reset code → the code that completes it (EARS-11/12). Models Zitadel's forgot-password code flow; single-use, cleared on completion. */
   private readonly resetCodes = new Map<string, string>();
@@ -405,38 +399,13 @@ export class FakeIdpClient implements IdpClient {
     password: string,
   ): Promise<PasswordLoginResult> {
     const record =
-      this.byEmail.get(identifier.toLowerCase()) ??
+      this.byEmail.get(normalizeSignInIdentifier(identifier)) ??
       this.confirmedPhoneRecord(identifier);
 
-    // An existing account whose failure tally has reached the threshold is
-    // soft-locked (EARS-15) — even a correct password is refused while locked,
-    // matching the native policy. `justLocked` is false here (the lock already
-    // tripped on an earlier attempt), so no duplicate `lockout.triggered`.
-    if (
-      record &&
-      (this.failed.get(identifier) ?? 0) >= FAKE_LOCKOUT_THRESHOLD
-    ) {
-      return Promise.resolve({
-        outcome: "locked",
-        sub: record.sub,
-        justLocked: false,
-      });
-    }
-
     // Unknown identifier and wrong password are indistinguishable (EARS-16); a
-    // failed check is tallied (the native Zitadel lockout counter, EARS-15).
+    // failed check is tallied, and never locks (003 EARS-15: lockout off).
     if (!record || record.password !== password) {
-      const count = (this.failed.get(identifier) ?? 0) + 1;
-      this.failed.set(identifier, count);
-      // The attempt that reaches the threshold trips the lock — but only for a
-      // real account (an unknown identifier cannot be locked).
-      if (record && count >= FAKE_LOCKOUT_THRESHOLD) {
-        return Promise.resolve({
-          outcome: "locked",
-          sub: record.sub,
-          justLocked: count === FAKE_LOCKOUT_THRESHOLD,
-        });
-      }
+      this.failed.set(identifier, (this.failed.get(identifier) ?? 0) + 1);
       return Promise.resolve({ outcome: "rejected" });
     }
 

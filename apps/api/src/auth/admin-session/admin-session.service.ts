@@ -203,7 +203,7 @@ export class AdminSessionService {
         type: "AdminPrimaryAuthFailed",
         identifier,
         sub: null,
-        reason: result.outcome === "locked" ? "lock" : "wrong_password",
+        reason: "wrong_password",
       });
       return { status: "refused" };
     }
@@ -643,7 +643,7 @@ export class AdminSessionService {
     stage: AdminMfaStage;
     check: () => Promise<T | undefined>;
   }): Promise<GuardedCheckOutcome<T>> {
-    if (!this.limiter.tryConsumeUser(input.identifier)) {
+    if (!(await this.limiter.tryConsumeUser(input.identifier))) {
       return { status: "throttled" };
     }
 
@@ -668,7 +668,7 @@ export class AdminSessionService {
     // per-IP / per-ASN windows are deliberately NOT refunded, so a success cannot
     // buy back an origin's broader budget).
     this.lockout.clear(input.sub);
-    this.limiter.reset({ ip: "", identifier: input.identifier });
+    await this.limiter.reset({ ip: "", identifier: input.identifier });
     return { status: "verified", proven };
   }
 

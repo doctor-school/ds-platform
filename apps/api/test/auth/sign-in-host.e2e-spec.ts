@@ -78,6 +78,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+// A fresh in-memory window store per app: these boundary suites count from
+// zero, whatever store REDIS_URL would bind (#3539).
+import { InMemoryRateLimitStore } from "../../src/auth/rate-limit/rate-limit.store.fake.js";
+import { RATE_LIMIT_STORE } from "../../src/auth/rate-limit/rate-limit.store.js";
 
 // The sign-in-host block is read at module compile (`loadEnv` in the
 // factories). The dev stand and the CI api-e2e job set it; a bare run gets a
@@ -130,6 +134,8 @@ async function compile(
     })
     .overrideProvider(SIGN_IN_HOST_IDP)
     .useValue(hostIdp)
+    .overrideProvider(RATE_LIMIT_STORE)
+    .useValue(new InMemoryRateLimitStore())
     .overrideProvider(RATE_LIMIT_THRESHOLDS)
     .useValue(thresholds);
   if (settingsOverride)

@@ -139,11 +139,12 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
         },
       },
     "POST /v1/auth/login": {
-      // Success and both failure branches (wrong_password / lock) emit here; the
-      // tripping transition also emits AccountLocked (EARS-15).
-      emits: ["LoginSucceeded", "LoginFailed", "AccountLocked"],
+      // Success and the wrong_password failure emit in AuthService; a request
+      // the limiter refuses emits LoginFailed `throttled` in RateLimitGuard
+      // (EARS-15).
+      emits: ["LoginSucceeded", "LoginFailed"],
       coveredBy:
-        "audit-ledger.e2e: EARS-18 login.success / login.failure + EARS-15 lockout.triggered",
+        "audit-ledger.e2e: EARS-18 login.success / login.failure; abuse-limits.e2e: EARS-15 login.failure reason throttled",
     },
     "POST /v1/auth/login/otp": {
       emits: ["LoginSucceeded", "LoginFailed"],
@@ -220,7 +221,8 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       // 011 EARS-3: primary auth at the admin origin. Success emits the canonical
       // `auth.login.success` carrying `tier: "admin"` and NO session (the policy
       // fork issues a pending reference instead); every refusal branch — wrong
-      // password, locked, and a principal the `role → mfa_required` policy does
+      // password, a tripped per-user window (`throttled`, RateLimitGuard, 003
+      // EARS-15), and a principal the `role → mfa_required` policy does
       // not cover — emits `auth.login.failure` with the same tier field.
       emits: ["AdminPrimaryAuthSucceeded", "AdminPrimaryAuthFailed"],
       coveredBy:
@@ -355,7 +357,7 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
         "storefront-oidc.e2e: EARS-62 (req. 3) a foreign state burns the transaction, discards the tokens and appends auth.session.rejected (state_mismatch, storefront tier)",
     },
     "POST /v1/sign-in-host/login": {
-      emits: ["LoginSucceeded", "LoginFailed", "AccountLocked"],
+      emits: ["LoginSucceeded", "LoginFailed"],
       coveredBy:
         "sign-in-host.e2e: EARS-18 the host password step appends auth.login.success, a wrong password auth.login.failure (AuthService.passwordStep, the POST /v1/auth/login command site)",
     },

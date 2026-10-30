@@ -25,7 +25,7 @@ const helpers = source.slice(
 );
 const step = source.slice(
   source.indexOf("# ── 8.septies."),
-  source.indexOf("# ── 9. MFA capability"),
+  source.indexOf("# ── 8.octies."),
 );
 
 const SMS = "SECRET_GENERATOR_TYPE_OTP_SMS";

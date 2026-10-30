@@ -130,9 +130,8 @@ export interface Mailer {
    * account is temporarily locked and names the operator recovery path, nothing
    * more.
    *
-   * The BFF owes this mail (unlike 003's password lockout, where Zitadel's native
-   * policy both locks and notifies): the TOTP-attempt lock is the BFF's own
-   * counter, so a silent lock would be an operator locked out with no signal.
+   * The BFF owes this mail: the TOTP-attempt lock is the BFF's own counter, so
+   * a silent lock would be an operator locked out with no signal.
    * Implementations MUST reject an empty / blank / syntactically invalid email
    * (contract parity: the fake is no more permissive than the real adapter).
    */

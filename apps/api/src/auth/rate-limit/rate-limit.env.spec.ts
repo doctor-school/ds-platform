@@ -171,15 +171,16 @@ describe("oidc:silent-check bucket (003 EARS-63, ADR-0015 §4 req. 9)", () => {
     );
   });
 
-  it("EARS-63: exhausting the silent bucket leaves the interactive entry and the auth doors of that IP untouched", () => {
+  it("EARS-63: exhausting the silent bucket leaves the interactive entry and the auth doors of that IP untouched", async () => {
     const svc = new RateLimitService(DEFAULT_RATE_LIMIT_THRESHOLDS, () => 0);
     const ip = "198.51.100.7";
     const silent = { ip, scope: STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE };
-    for (let i = 0; i < 1200; i++) expect(svc.tryConsume(silent)).toBe(true);
-    expect(svc.tryConsume(silent)).toBe(false);
+    for (let i = 0; i < 1200; i++)
+      expect(await svc.tryConsume(silent)).toBe(true);
+    expect(await svc.tryConsume(silent)).toBe(false);
     expect(
-      svc.tryConsume({ ip, scope: STOREFRONT_ENTRY_RATE_LIMIT_SCOPE }),
+      await svc.tryConsume({ ip, scope: STOREFRONT_ENTRY_RATE_LIMIT_SCOPE }),
     ).toBe(true);
-    expect(svc.tryConsume({ ip })).toBe(true);
+    expect(await svc.tryConsume({ ip })).toBe(true);
   });
 });

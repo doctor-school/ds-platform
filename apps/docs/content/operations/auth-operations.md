@@ -190,11 +190,10 @@ doctor portal share the canonical `auth.session.*` / `auth.login.*` classes, so
 that attribute — not a parallel class family — is what keeps an admin forensic
 query from silently returning portal rows. Portal rows carry no `tier` at all.
 
-**`auth.lockout.triggered` has two producers**, told apart by `reason`:
+**`auth.lockout.triggered` has one producer** — passwords are throttled, never
+locked (003 EARS-15: the Zitadel password lockout is off). A throttled password
+login is an `auth.login.failure` row with `reason: "throttled"`.
 
-- `reason: "lock"` — the **native Zitadel password lockout**, merely _observed_
-  by the BFF off `IdpClient.passwordLogin`. Zitadel owns the counter, the lock,
-  and the notification email.
 - `reason: "mfa_attempts"` — the **BFF-owned second-factor lockout** (011
   EARS-7): 10 failed TOTP verifies / 30 min, keyed by IdP subject, shared across
   the enrollment and challenge endpoints. The BFF owns it because Zitadel exposes
@@ -244,8 +243,8 @@ ORDER BY created_at;
   `auth.lockout.triggered` (`reason: "mfa_attempts"`) ⇒ the **BFF soft-lock**;
   every `auth.mfa.failure` after it carries `reason: "locked"` — the code was
   never checked, so a _correct_ code is refused too;
-- `auth.lockout.triggered` with `reason: "lock"` ⇒ the **native Zitadel password
-  lockout** — they are failing the password, not the code;
+- `auth.login.failure` with `reason: "throttled"` ⇒ the EARS-13 per-user window
+  refused their password login — they are failing the password, not the code;
 - `auth.login.failure` with `reason: "not_permitted"` ⇒ the credentials are
   valid but the principal holds no `platform_admin` grant;
 - a `429` with no ledger row at all ⇒ the ADR-0001 §7 rate limit, not a lock.

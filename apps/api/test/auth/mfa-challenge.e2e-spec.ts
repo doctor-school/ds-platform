@@ -31,6 +31,10 @@ import {
 } from "../../src/auth/admin-session/admin-session.cookie.js";
 import { ADMIN_DEVICE } from "../setup/admin-session.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+// A fresh in-memory window store per app: these boundary suites count from
+// zero, whatever store REDIS_URL would bind (#3539).
+import { InMemoryRateLimitStore } from "../../src/auth/rate-limit/rate-limit.store.fake.js";
+import { RATE_LIMIT_STORE } from "../../src/auth/rate-limit/rate-limit.store.js";
 
 const ENROLL_START_URL = "/v1/admin/auth/mfa/enroll/start";
 const ENROLL_VERIFY_URL = "/v1/admin/auth/mfa/enroll/verify";
@@ -190,6 +194,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       })
         .overrideProvider(IDP_CLIENT)
         .useValue(fake)
+        .overrideProvider(RATE_LIMIT_STORE)
+        .useValue(new InMemoryRateLimitStore())
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(RELAXED_RATE_LIMIT)
         .compile();
@@ -585,6 +591,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       })
         .overrideProvider(IDP_CLIENT)
         .useValue(fake)
+        .overrideProvider(RATE_LIMIT_STORE)
+        .useValue(new InMemoryRateLimitStore())
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue({
           perUserPer15Min: PER_USER,

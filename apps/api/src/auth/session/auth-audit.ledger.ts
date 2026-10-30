@@ -16,7 +16,7 @@ type Db = DrizzleHandle["db"];
  * DB-gated e2e suite runs without provisioning a secret. Never reached in any
  * non-test runtime — the writer fails closed there when no real pepper is set.
  */
-const TEST_FALLBACK_PEPPER = "test-only-insecure-audit-identifier-pepper";
+export const TEST_FALLBACK_PEPPER = "test-only-insecure-audit-identifier-pepper";
 
 /**
  * 011 EARS-9 tier discriminator. The admin tier shares the canonical
@@ -181,14 +181,6 @@ export function toLedgerRow(
         sid: null,
         reason: "reset",
         metadata: { by: "self" },
-      };
-    case "AccountLocked":
-      return {
-        eventType: "auth.lockout.triggered",
-        subjectId: event.sub,
-        sid: null,
-        reason: "lock",
-        metadata: {},
       };
     case "IdentifierVerified":
       // EARS-3/4 verification success — the account's identifier reached the
@@ -365,10 +357,8 @@ export function toLedgerRow(
         },
       };
     case "LockoutTriggered":
-      // EARS-7: the admin-tier soft-lock. Shares 003's canonical
-      // `auth.lockout.triggered` id; `reason: "mfa_attempts"` is what separates a
-      // BFF-owned TOTP-attempt lock from the `lock` rows that merely OBSERVE
-      // Zitadel's native password lockout (`AccountLocked`).
+      // EARS-7: the admin-tier soft-lock, canonical `auth.lockout.triggered`
+      // with `reason: "mfa_attempts"` (passwords never lock, 003 EARS-15).
       return {
         eventType: "auth.lockout.triggered",
         subjectId: event.sub,
@@ -456,7 +446,7 @@ export class DrizzleAuthAuditLog implements AuthAuditLog {
  * fixed test pepper under VITEST; throws otherwise so a misconfigured non-test
  * runtime never masks with a missing secret.
  */
-function resolveAuditPepper(): string {
+export function resolveAuditPepper(): string {
   const pepper = loadEnv().AUDIT_IDENTIFIER_PEPPER;
   if (pepper) return pepper;
   if (process.env.VITEST) return TEST_FALLBACK_PEPPER;

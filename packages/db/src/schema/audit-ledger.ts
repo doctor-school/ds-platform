@@ -44,7 +44,7 @@ export const auditLedger = pgTable(
     subjectId: text("subject_id"),
     /** Session id, when the event is session-scoped (logout, rotation, reuse). */
     sid: text("sid"),
-    /** Discriminating reason where the taxonomy carries one (logout/theft_detected/wrong_password/lock/captcha_failed). */
+    /** Discriminating reason where the taxonomy carries one (logout/theft_detected/wrong_password/throttled/captcha_failed). */
     reason: text("reason"),
     /** Masked, non-PD context (identifier_hash, method, channel, …). Never raw PD. */
     metadata: jsonb("metadata").notNull().default({}),

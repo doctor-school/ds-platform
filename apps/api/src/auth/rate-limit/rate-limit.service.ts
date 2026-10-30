@@ -1,4 +1,11 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { normalizeSignInIdentifier } from "../idp/idp.types.js";
+import { InMemoryRateLimitStore } from "./rate-limit.store.fake.js";
+import {
+  RATE_LIMIT_STORE,
+  type RateLimitStore,
+  type RateLimitWindowSpec,
+} from "./rate-limit.store.js";
 import {
   AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET,
   RATE_LIMIT_CLOCK,
@@ -13,20 +20,24 @@ import {
 const FIFTEEN_MIN_MS = 15 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 
-/** One fixed window's live state: how many hits, and when the window rolls over. */
-interface Window {
-  count: number;
-  resetAtMs: number;
+/** A dimension to evaluate for one attempt: which window, its store key, length, ceiling. */
+interface Dimension extends RateLimitWindowSpec {
+  window: RateLimitRefusal["window"];
 }
 
-/** A dimension to evaluate for one attempt: its counter map, key, window, ceiling. */
-interface Dimension {
-  window: RateLimitRefusal["window"];
-  map: Map<string, Window>;
-  key: string;
-  windowMs: number;
-  limit: number;
-}
+/**
+ * Store keys per dimension: one namespace each, so a per-user key can never
+ * collide with an address. The per-user key is the identifier under the same
+ * normalisation the password check applies before its IdP lookup
+ * ({@link normalizeSignInIdentifier}) — no account lookup, so no per-attempt
+ * query and no EARS-16 timing channel.
+ */
+const userKey = (identifier: string): string =>
+  `user:${normalizeSignInIdentifier(identifier)}`;
+const ipKey = (scope: string | undefined, ip: string): string =>
+  `ip:${scoped(scope, ip)}`;
+const asnKey = (scope: string | undefined, asn: string): string =>
+  `asn:${scoped(scope, asn)}`;
 
 /**
  * Key a SOURCE-ADDRESS dimension (per-IP, per-ASN) inside its bucket (#1646).
@@ -66,22 +77,19 @@ function scoped(scope: string | undefined, address: string): string {
  * the request-rate sibling of {@link SmsBudgetService}; the same fixed-window
  * shape, gating every decorated auth endpoint.
  *
- * State is in-memory: correct for a single BFF instance. A multi-instance
- * deployment shares the counters through the same Redis the session store uses;
- * that backing rebinds this service without touching the guard call site
- * (mirroring the SESSION_STORE fake/Redis split) — the documented EARS-13
- * distributed-limit seam.
+ * The windows live in the {@link RateLimitStore} (#3539): Redis when
+ * `REDIS_URL` is set, so they survive a restart and are shared by every
+ * replica — with the IdP lockout gone (003 EARS-15) they are the only bound on
+ * password guessing — and in memory otherwise.
  */
 @Injectable()
 export class RateLimitService {
-  private readonly byUser = new Map<string, Window>();
-  private readonly byIp = new Map<string, Window>();
-  private readonly byAsn = new Map<string, Window>();
-
   constructor(
     @Inject(RATE_LIMIT_THRESHOLDS)
     private readonly thresholds: RateLimitThresholds,
     @Inject(RATE_LIMIT_CLOCK) private readonly now: Clock,
+    @Inject(RATE_LIMIT_STORE)
+    private readonly store: RateLimitStore = new InMemoryRateLimitStore(),
   ) {}
 
   /**
@@ -91,8 +99,8 @@ export class RateLimitService {
    * evaluated only when their key is supplied (an identifier-less endpoint or a
    * missing edge `x-asn` simply skips that dimension).
    */
-  tryConsume(ctx: RateLimitContext): boolean {
-    return this.consume(ctx).allowed;
+  async tryConsume(ctx: RateLimitContext): Promise<boolean> {
+    return (await this.consume(ctx)).allowed;
   }
 
   /**
@@ -102,7 +110,7 @@ export class RateLimitService {
    * (003 EARS-13, #2684). A refusal names the refusing window and its reset
    * time instead (003 EARS-13, #3379).
    */
-  consume(ctx: RateLimitContext): RateLimitDecision {
+  async consume(ctx: RateLimitContext): Promise<RateLimitDecision> {
     const t = this.now();
     // #2684: an unscoped SENDING door keys its per-IP window under its own
     // bucket (60 / 15 min); every other attempt keeps the caller's scope.
@@ -114,8 +122,7 @@ export class RateLimitService {
     const dims: Dimension[] = [
       {
         window: "ip",
-        map: this.byIp,
-        key: scoped(ipBucket, ctx.ip),
+        key: ipKey(ipBucket, ctx.ip),
         windowMs: FIFTEEN_MIN_MS,
         limit: this.perIpLimit(ipBucket),
       },
@@ -123,8 +130,7 @@ export class RateLimitService {
     if (ctx.identifier !== undefined) {
       dims.push({
         window: "user",
-        map: this.byUser,
-        key: ctx.identifier.toLowerCase(),
+        key: userKey(ctx.identifier),
         windowMs: FIFTEEN_MIN_MS,
         limit: this.thresholds.perUserPer15Min,
       });
@@ -132,31 +138,30 @@ export class RateLimitService {
     if (ctx.asn !== undefined) {
       dims.push({
         window: "asn",
-        map: this.byAsn,
-        key: scoped(ctx.scope, ctx.asn),
+        key: asnKey(ctx.scope, ctx.asn),
         windowMs: HOUR_MS,
         limit: this.thresholds.perAsnPerHour,
       });
     }
 
-    // Phase 1 — check every window before mutating any, so a request refused on
-    // the last dimension does not leave the earlier ones spuriously incremented.
-    for (const d of dims) {
-      if (this.current(d, t) >= d.limit) {
-        // A full window is live, so it exists and has not rolled over.
-        const resetAtMs = d.map.get(d.key)!.resetAtMs;
-        return {
-          allowed: false,
-          refusal: { window: d.window, resetAtMs, atMs: t },
-        };
-      }
+    // One atomic check-then-take: a request refused on any window takes no
+    // unit from the others.
+    const result = await this.store.consume(dims, t);
+    if (!result.allowed) {
+      const d = dims[result.index]!;
+      return {
+        allowed: false,
+        refusal: {
+          window: d.window,
+          resetAtMs: result.resetAtMs,
+          atMs: t,
+          tripped: await this.store.claimTrip(d.key, result.resetAtMs, t),
+        },
+      };
     }
-    // Phase 2 — allowed: consume one unit from each window.
-    for (const d of dims) this.bump(d, t);
-    const ipWindow = this.byIp.get(dims[0]!.key)!;
     return {
       allowed: true,
-      receipt: { ipWindowResetAtMs: ipWindow.resetAtMs },
+      receipt: { ipWindowResetAtMs: result.resetAtMs[0]! },
     };
   }
 
@@ -180,18 +185,18 @@ export class RateLimitService {
    * budget genuinely **shared** with primary auth and across both verify
    * endpoints (011 design §6) rather than three parallel allowances.
    */
-  tryConsumeUser(identifier: string): boolean {
-    const dimension: Dimension = {
-      window: "user",
-      map: this.byUser,
-      key: identifier.toLowerCase(),
-      windowMs: FIFTEEN_MIN_MS,
-      limit: this.thresholds.perUserPer15Min,
-    };
-    const t = this.now();
-    if (this.current(dimension, t) >= dimension.limit) return false;
-    this.bump(dimension, t);
-    return true;
+  async tryConsumeUser(identifier: string): Promise<boolean> {
+    const result = await this.store.consume(
+      [
+        {
+          key: userKey(identifier),
+          windowMs: FIFTEEN_MIN_MS,
+          limit: this.thresholds.perUserPer15Min,
+        },
+      ],
+      this.now(),
+    );
+    return result.allowed;
   }
 
   /**
@@ -205,9 +210,9 @@ export class RateLimitService {
    * of failed verifications). An identifier-less context (no per-user key) is a
    * no-op.
    */
-  reset(ctx: RateLimitContext): void {
+  async reset(ctx: RateLimitContext): Promise<void> {
     if (ctx.identifier === undefined) return;
-    this.byUser.delete(ctx.identifier.toLowerCase());
+    await this.store.clear(userKey(ctx.identifier));
   }
 
   /**
@@ -222,18 +227,16 @@ export class RateLimitService {
    * rolled over — or no receipt exists — there is nothing of this request's to
    * give back, and decrementing the fresh window would erase a failure.
    */
-  refundIpUnit(ip: string, consumedWindowResetAtMs: number | undefined): void {
+  async refundIpUnit(
+    ip: string,
+    consumedWindowResetAtMs: number | undefined,
+  ): Promise<void> {
     if (consumedWindowResetAtMs === undefined) return;
-    const w = this.byIp.get(scoped(undefined, ip));
-    if (
-      w === undefined ||
-      w.resetAtMs !== consumedWindowResetAtMs ||
-      this.now() >= w.resetAtMs ||
-      w.count === 0
-    ) {
-      return;
-    }
-    w.count--;
+    await this.store.refund(
+      ipKey(undefined, ip),
+      consumedWindowResetAtMs,
+      this.now(),
+    );
   }
 
   /**
@@ -247,21 +250,5 @@ export class RateLimitService {
       this.thresholds.scopedPerIpPer15Min[scope] ??
       this.thresholds.perIpPer15Min
     );
-  }
-
-  /** Current count in the dimension's live window (0 if absent or rolled over). */
-  private current(d: Dimension, t: number): number {
-    const w = d.map.get(d.key);
-    return w === undefined || t >= w.resetAtMs ? 0 : w.count;
-  }
-
-  /** Consume one unit, opening a fresh window if none is live. */
-  private bump(d: Dimension, t: number): void {
-    const w = d.map.get(d.key);
-    if (w === undefined || t >= w.resetAtMs) {
-      d.map.set(d.key, { count: 1, resetAtMs: t + d.windowMs });
-    } else {
-      w.count++;
-    }
   }
 }

@@ -560,9 +560,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // `@RateLimited()` verification doors (login, verify, reset-complete) do:
       // the unscoped bare-address window (003 EARS-13).
       for (let i = 0; i < PER_IP_CEILING; i++) {
-        expect(limiter.tryConsume({ ip: OTHER_GUEST_IP })).toBe(true);
+        expect(await limiter.tryConsume({ ip: OTHER_GUEST_IP })).toBe(true);
       }
-      expect(limiter.tryConsume({ ip: OTHER_GUEST_IP })).toBe(false);
+      expect(await limiter.tryConsume({ ip: OTHER_GUEST_IP })).toBe(false);
 
       // The storefront POST from that very address is unaffected — an auth burst
       // cannot lock a visitor out of choosing a specialty.
@@ -582,10 +582,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
       // The auth window's own state is exactly where it was — still refusing on
       // its own count, and its scoped sibling's exhaustion added nothing to it.
-      expect(limiter.tryConsume({ ip: OTHER_GUEST_IP })).toBe(false);
+      expect(await limiter.tryConsume({ ip: OTHER_GUEST_IP })).toBe(false);
       // A THIRD party's scope is likewise untouched by either.
       expect(
-        limiter.tryConsume({
+        await limiter.tryConsume({
           ip: OTHER_GUEST_IP,
           scope: `${SPECIALTY_CHOICE_RATE_LIMIT_SCOPE}:other`,
         }),

@@ -37,6 +37,10 @@ import {
   medianSpread,
   sampleInterleaved,
 } from "../support/timing-oracle.js";
+// A fresh in-memory window store per app: these boundary suites count from
+// zero, whatever store REDIS_URL would bind (#3539).
+import { InMemoryRateLimitStore } from "../../src/auth/rate-limit/rate-limit.store.fake.js";
+import { RATE_LIMIT_STORE } from "../../src/auth/rate-limit/rate-limit.store.js";
 
 /**
  * 003 EARS-44 — `POST /v1/auth/login/otp/handoff`: the Congress sign-up's
@@ -84,6 +88,8 @@ async function boot(thresholds: RateLimitThresholds): Promise<Harness> {
     .useValue(new StubBotProtection())
     .overrideProvider(LOGIN_HANDOFF_STORE)
     .useValue(store)
+    .overrideProvider(RATE_LIMIT_STORE)
+    .useValue(new InMemoryRateLimitStore())
     .overrideProvider(RATE_LIMIT_THRESHOLDS)
     .useValue(thresholds)
     .compile();
@@ -466,7 +472,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const cookie = await signIn(other.email);
       clearMail();
 
-      for (const ref of [owner.ref, "Y".repeat(43), "not a ref", "", undefined]) {
+      for (const ref of [
+        owner.ref,
+        "Y".repeat(43),
+        "not a ref",
+        "",
+        undefined,
+      ]) {
         expect(await own(ref, cookie)).toEqual({
           status: 200,
           body: { own: false },

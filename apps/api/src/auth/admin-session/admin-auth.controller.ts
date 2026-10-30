@@ -29,7 +29,7 @@ import type {
 import { Authz, EventGrantPolicy, Public } from "../../authz/index.js";
 import { StepUpRoutes } from "../../authz/step-up-routes.js";
 import { IdpUnavailableError } from "../idp/idp.types.js";
-import { RateLimited } from "../rate-limit/index.js";
+import { PasswordLoginDoor, RateLimited } from "../rate-limit/index.js";
 import { TimingEqualized } from "../timing/index.js";
 import { computeFingerprint, parseCookies } from "../session/session.cookie.js";
 import {
@@ -134,6 +134,7 @@ export class AdminAuthController {
   @Post("login")
   @Public()
   @RateLimited()
+  @PasswordLoginDoor("admin")
   @TimingEqualized()
   @HttpCode(200)
   @Authz({

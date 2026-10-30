@@ -267,7 +267,8 @@ export class StorefrontOidcService
     // 003 EARS-63 (f), req. 9 — a silent transaction's callback counts in the
     // silent path's own bucket; limited, it redeems nothing (the transaction
     // is already taken, so deleted) and ends as on `login_required`.
-    if (tx.kind === "silent" && !this.admitSilent(ip)) throw refused(tx);
+    if (tx.kind === "silent" && !(await this.admitSilent(ip)))
+      throw refused(tx);
     // An OIDC error answer (the person aborted, `login_required`) carries no
     // code: the transaction is spent and nothing is minted. A transaction
     // without a verifier is never redeemed.
@@ -334,7 +335,7 @@ export class StorefrontOidcService
   }
 
   /** One unit of the silent path's per-IP bucket (`oidc:silent-check`, req. 9). */
-  private admitSilent(ip: string): boolean {
+  private admitSilent(ip: string): Promise<boolean> {
     return this.limiter.tryConsume({
       ip,
       scope: STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
@@ -388,7 +389,7 @@ export class StorefrontOidcService
     // path and kind come back so the callback lands there with `ds_guest=1` —
     // one round trip per navigation, never a loop.
     if (!req.txId && named?.kind === "silent") {
-      this.admitSilent(ip);
+      await this.admitSilent(ip);
       throw refused(named);
     }
     throw refused(mine);

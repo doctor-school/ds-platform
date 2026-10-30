@@ -833,7 +833,7 @@ export const projectExpertsUrl = {
 };
 
 /**
- * The `project_partners` relationship endpoints (012-design §5.1, EARS-10 / #1292).
+ * The `project_organisations` relationship endpoints (012-design §5.1, EARS-10 / #1292).
  *
  * Same bidirectional shape as `projectExpertsUrl`. There is no «сделать основным»
  * command URL: `isPrimary` is an ATTRIBUTE of the row and moves through the

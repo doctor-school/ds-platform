@@ -209,10 +209,13 @@ export async function applyGoldenStep(
     set[key] = sql.raw(`excluded."${column.name}"`);
   }
 
-  await tx
-    .insert(step.table)
-    .values(step.rows)
-    .onConflictDoUpdate({ target, set });
+  // A key-only row (a link table such as `organisation_role_assignments`)
+  // has no column to refresh: `ON CONFLICT DO UPDATE` needs a non-empty SET,
+  // and a re-run of such a row is a no-op on its conflict target.
+  const insert = tx.insert(step.table).values(step.rows);
+  await (Object.keys(set).length === 0
+    ? insert.onConflictDoNothing({ target })
+    : insert.onConflictDoUpdate({ target, set }));
   return step.rows.length;
 }
 

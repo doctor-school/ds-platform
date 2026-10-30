@@ -756,6 +756,34 @@ describe("#2063 golden step execution", () => {
     );
   });
 
+  it("re-runs a key-only step (an organisation's role link) as a no-op on its conflict target", async () => {
+    // `organisation_role_assignments` rows carry nothing but their composite
+    // key, so there is no column to refresh: an empty `ON CONFLICT DO UPDATE
+    // SET` is not valid SQL, and the re-run must leave the held link alone.
+    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const step = plan.find((s) => s.name === "organisation_role_assignments")!;
+    expect(step.rows.length).toBeGreaterThan(0);
+    expect(step.updateKeys).toEqual([]);
+    const nothing: { target: unknown[] }[] = [];
+    const tx = {
+      insert: () => ({
+        values: () => ({
+          onConflictDoUpdate: () => {
+            throw new Error("No values to set");
+          },
+          onConflictDoNothing: (config: { target: unknown[] }) => {
+            nothing.push(config);
+            return Promise.resolve();
+          },
+        }),
+      }),
+    };
+
+    await expect(applyGoldenStep(tx, step)).resolves.toBe(step.rows.length);
+    expect(nothing).toHaveLength(1);
+    expect(nothing[0]!.target).toHaveLength(2);
+  });
+
   it("refuses a plan key that is not a column of the table", async () => {
     const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
     const step = { ...plan[0]!, updateKeys: ["notAColumn"] };

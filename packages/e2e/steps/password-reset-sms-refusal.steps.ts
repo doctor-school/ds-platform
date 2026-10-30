@@ -10,7 +10,6 @@ import {
 import { randomUUID } from "node:crypto";
 import {
   expect,
-  request,
   type APIRequestContext,
   type Browser,
   type BrowserContext,
@@ -38,6 +37,7 @@ import {
   waitForSmsCode,
 } from "../lib/sms-sink.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
+import { browserOf, closeOwnedLoginWindow } from "../lib/host-sign-in.js";
 
 const SESSION = "__Host-ds_session";
 interface ResetRefusal {
@@ -188,40 +188,13 @@ async function passwordSignIn(
   let attemptFailed = false;
   const accepted = await runGatedLoginAttempt(
     {
-      close: async () => {
-        let failed = false;
-        let closure: APIRequestContext | undefined;
-        try {
-          closure = await request.newContext({
-            baseURL: base,
-            ...(state.httpCredentials
-              ? { httpCredentials: state.httpCredentials }
-              : {}),
-          });
-          state.closures.push(closure);
-          const response = await closure.post("/v1/auth/login", {
-            data: { identifier: state.email, password },
-          });
-          expect(
-            response.status(),
-            "owned successful login closes suite gate",
-          ).toBe(200);
-          await revoke(closure, base);
-          await closure.dispose();
-          state.closures = state.closures.filter((owned) => owned !== closure);
-        } catch {
-          failed = true;
-        }
-        if (failed) {
-          if (!attemptFailed)
-            throw new Error("Owned password closure or cleanup failed");
-          test.info().annotations.push({
-            type: "cleanup-failed",
-            description:
-              "Owned password closure failed; original attempt failure retained.",
-          });
-        }
-      },
+      close: () =>
+        closeOwnedLoginWindow(
+          browserOf(page),
+          base,
+          { email: state.email, password: password },
+          attemptFailed,
+        ),
     },
     async () => {
       try {
@@ -504,7 +477,10 @@ When(
     expect({
       status: completed.response.status(),
       exactCommand,
-      tokenFree: storefrontCallbackAcknowledgement(completed.body, world.hostBaseUrl),
+      tokenFree: storefrontCallbackAcknowledgement(
+        completed.body,
+        world.hostBaseUrl,
+      ),
     }).toEqual({ status: 200, exactCommand: true, tokenFree: true });
     state.resetCompleted = true;
     await reset.waitForURL((url) => url.pathname === "/account");

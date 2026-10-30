@@ -338,16 +338,20 @@ When(
       )
         state.passwordRequests! += 1;
     });
-    state.refusal = await gatedPasswordLogin(guest, async () => {
-      const pending = guest.waitForResponse(
-        (response) =>
-          response.request().method() === "POST" &&
-          new URL(response.url()).pathname ===
-            signInHostApiPath("/v1/auth/login"),
-      );
-      await guest.getByTestId("password-login-submit").click();
-      return pending;
-    });
+    state.refusal = await gatedPasswordLogin(
+      guest,
+      world.hostBaseUrl,
+      async () => {
+        const pending = guest.waitForResponse(
+          (response) =>
+            response.request().method() === "POST" &&
+            new URL(response.url()).pathname ===
+              signInHostApiPath("/v1/auth/login"),
+        );
+        await guest.getByTestId("password-login-submit").click();
+        return pending;
+      },
+    );
     let matches = false;
     try {
       const submitted = state.refusal.request().postDataJSON();

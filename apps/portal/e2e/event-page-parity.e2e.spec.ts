@@ -2,6 +2,7 @@ import path from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
 import { MAIN_LANDMARK_RULES } from "@ds/e2e";
+import { signInPageThroughHost } from "@ds/e2e/host-sign-in";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 
 /**
@@ -96,32 +97,15 @@ async function useTheme(page: Page, theme: "light" | "dark") {
 }
 
 /**
- * Sign the doctor in through the portal's own BFF, the way the app does: a
- * `POST /v1/auth/login` issued FROM the portal origin, so the `__Host-ds_session`
- * the api sets lands on the origin the page will be read from.
+ * Sign the doctor in the way a doctor does: the portal's `/login` entry, the
+ * sign-in host's password form, back on the portal origin with the
+ * `__Host-ds_session` its callback set (`@ds/e2e/host-sign-in`).
  */
 async function signIn(page: Page): Promise<void> {
-  await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-  const outcome = await page.evaluate<
-    { status: number; body: string },
-    [string, string]
-  >(
-    async ([id, pw]) => {
-      const response = await fetch("/v1/auth/login", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identifier: id, password: pw }),
-      });
-      return { status: response.status, body: await response.text() };
-    },
-    [DOCTOR_EMAIL!, DOCTOR_PASSWORD!],
-  );
-
-  expect(
-    outcome.status,
-    `POST /v1/auth/login through the portal BFF should authenticate — got ${outcome.status}: ${outcome.body}`,
-  ).toBe(200);
+  await signInPageThroughHost(page, BASE, {
+    email: DOCTOR_EMAIL!,
+    password: DOCTOR_PASSWORD!,
+  });
 }
 
 async function expectNoHorizontalOverflow(page: Page, width: number) {

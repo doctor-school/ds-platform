@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { signInPageThroughHost } from "@ds/e2e/host-sign-in";
 import { provisionDoctorCreds } from "./support/doctor-session";
 import { narrowGrantToPlatformAdmin } from "./support/zitadel-admin";
 
@@ -332,33 +333,27 @@ const ADMIN_TIER =
   !!process.env.MAILPIT_URL;
 
 /**
- * Sign in on the portal origin (in-page, through the `/v1/*` rewrite, so the
- * cookie carries the page's fingerprint) and return the status the api gives
- * THIS session for the per-user registration read.
+ * Sign in on the portal origin through the sign-in host and return the status
+ * the api gives THIS session for the per-user registration read (`-1` when the
+ * sign-in itself did not complete, so a poll keeps trying).
  */
 async function signInAndReadRegistration(
   page: Page,
   account: { email: string; password: string },
 ): Promise<number> {
   await page.context().clearCookies();
-  await page.goto(`${BASE}/webinars`, { waitUntil: "domcontentloaded" });
-  return page.evaluate(
-    async ([identifier, password, slug]) => {
-      const login = await fetch("/v1/auth/login", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identifier, password }),
-      });
-      if (login.status !== 200) return -login.status;
-      const read = await fetch(
-        `/v1/events/${encodeURIComponent(slug)}/registration`,
-        { credentials: "include" },
-      );
-      return read.status;
-    },
-    [account.email, account.password, SLUG!] as const,
-  );
+  try {
+    await signInPageThroughHost(page, BASE, account);
+  } catch {
+    return -1;
+  }
+  return page.evaluate(async (slug) => {
+    const read = await fetch(
+      `/v1/events/${encodeURIComponent(slug)}/registration`,
+      { credentials: "include" },
+    );
+    return read.status;
+  }, SLUG!);
 }
 
 test.describe("#2232 a non-doctor session on the Academy webinar page", () => {

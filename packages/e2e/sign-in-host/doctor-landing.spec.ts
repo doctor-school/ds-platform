@@ -30,6 +30,7 @@ import {
   expectEnteredThrough,
   watchStorefrontEntries,
 } from "../lib/storefront-entry-watch.js";
+import { tickConsent } from "../lib/host-sign-in.js";
 
 /**
  * WHERE a doctor lands on the doctor storefront once the sign-in host is done
@@ -111,15 +112,6 @@ async function endedEventSlug(request: APIRequestContext): Promise<string> {
   return slug!;
 }
 
-/** Put a consent into the ticked state through its label (idempotent). */
-async function setConsent(page: Page, testId: string) {
-  const box = page.getByTestId(testId);
-  if (!(await box.isChecked())) {
-    await box.locator("xpath=ancestor::label[1]").click();
-  }
-  await expect(box).toBeChecked({ timeout: 2_000 });
-}
-
 /**
  * 003 EARS-41/23 on the doctor door (DoctorVerifyRegistrationSchema): the warm
  * code step's `registration` is exactly the typed password, the medical-worker
@@ -168,8 +160,8 @@ async function completeRegistrationFromHere(
   // A value typed into the pre-hydration DOM is discarded by the first client
   // render; the form is filled when the door itself agrees it is complete.
   await expect(async () => {
-    await setConsent(page, "register-medworker");
-    await setConsent(page, "register-partner-data");
+    await tickConsent(page, "register-medworker");
+    await tickConsent(page, "register-partner-data");
     await inputSecret(page.getByTestId("register-email"), account.email);
     await inputSecret(page.getByTestId("register-password"), account.password);
     await expect(page.getByTestId("register-submit")).toBeEnabled({

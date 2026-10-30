@@ -1,11 +1,6 @@
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
-import {
-  expect,
-  request,
-  type BrowserContext,
-  type Page,
-} from "@playwright/test";
+import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
 import { runGatedLoginAttempt } from "../lib/login-failure-gate.js";
@@ -26,6 +21,7 @@ import {
   type SmsCheckpoint,
 } from "../lib/sms-sink.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
+import { browserOf, closeOwnedLoginWindow } from "../lib/host-sign-in.js";
 
 interface AbandonedPhone {
   context: BrowserContext;
@@ -132,34 +128,13 @@ async function passwordSignIn(state: AbandonedPhone, base: string) {
   );
   const accepted = await runGatedLoginAttempt(
     {
-      close: async () => {
-        const user = process.env.E2E_HTTP_USER;
-        const password = process.env.E2E_HTTP_PASS;
-        const closing = await request.newContext({
-          baseURL: base,
-          ...(user && password
-            ? { httpCredentials: { username: user, password } }
-            : {}),
-        });
-        try {
-          const response = await closing.post("/v1/auth/login", {
-            data: { identifier: state.email, password: state.password },
-          });
-          expect(
-            response.status(),
-            "owned successful sign-in closes the failure window",
-          ).toBe(200);
-        } finally {
-          try {
-            const revoked = await closing.post("/v1/auth/logout");
-            expect(revoked.status(), "owned closing session is revoked").toBe(
-              200,
-            );
-          } finally {
-            await closing.dispose();
-          }
-        }
-      },
+      close: () =>
+        closeOwnedLoginWindow(
+          browserOf(state.page),
+          base,
+          { email: state.email, password: state.password },
+          false,
+        ),
     },
     async () => {
       const pending = captureResponse(

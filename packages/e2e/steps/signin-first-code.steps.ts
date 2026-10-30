@@ -1,5 +1,6 @@
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
-import { hostCommand,
+import {
+  hostCommand,
   isAuthCommandPath,
   signInHostApiPath,
 } from "../lib/sign-in-host-api.js";
@@ -153,7 +154,9 @@ Then(
   async ({ page }) => {
     const state = firstCode(page);
     const requested = state.requested!;
-    const request = hostCommand(parsedObject(requested.response.request().postData() ?? ""));
+    const request = hostCommand(
+      parsedObject(requested.response.request().postData() ?? ""),
+    );
     expect(
       request.identifier === state.email && request.channel === "email",
       "code request belongs to the owned email",
@@ -254,9 +257,9 @@ When(
       state.code!,
     );
     state.accepted = await accepted;
-    const request = hostCommand(parsedObject(
-      state.accepted.response.request().postData() ?? "",
-    ));
+    const request = hostCommand(
+      parsedObject(state.accepted.response.request().postData() ?? ""),
+    );
     expect(
       state.accepted.response.status(),
       "fresh sign-in code accepted",
@@ -373,17 +376,23 @@ When(
       )
         state.passwordRequests! += 1;
     });
-    state.refusal = await gatedPasswordLogin(guest, async () => {
-      const pending = captureResponse(
-        guest,
-        signInHostApiPath("/v1/auth/login"),
-      );
-      await guest.getByTestId("password-login-submit").click();
-      return pending;
-    });
+    state.refusal = await gatedPasswordLogin(
+      guest,
+      world.hostBaseUrl,
+      async () => {
+        const pending = captureResponse(
+          guest,
+          signInHostApiPath("/v1/auth/login"),
+        );
+        await guest.getByTestId("password-login-submit").click();
+        return pending;
+      },
+    );
     let matches = false;
     try {
-      const submitted = hostCommand(state.refusal.response.request().postDataJSON());
+      const submitted = hostCommand(
+        state.refusal.response.request().postDataJSON(),
+      );
       matches =
         submitted.identifier === state.email &&
         submitted.password === state.password;

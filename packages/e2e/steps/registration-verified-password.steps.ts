@@ -525,14 +525,18 @@ Then(
         if (request.method() === "POST" && isAuthCommandPath(pathname))
           posts.push(pathname);
       });
-      const submitted = await gatedPasswordLogin(guest, async () => {
-        const pending = captureResponse(
-          guest,
-          signInHostApiPath("/v1/auth/login"),
-        );
-        await guest.getByTestId("password-login-submit").click();
-        return pending;
-      });
+      const submitted = await gatedPasswordLogin(
+        guest,
+        world.hostBaseUrl,
+        async () => {
+          const pending = captureResponse(
+            guest,
+            signInHostApiPath("/v1/auth/login"),
+          );
+          await guest.getByTestId("password-login-submit").click();
+          return pending;
+        },
+      );
       let credentialsMatch = false;
       try {
         const body = submitted.response.request().postDataJSON();

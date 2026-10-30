@@ -3,7 +3,6 @@ import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
-  request,
   type APIRequestContext,
   type BrowserContext,
   type BrowserContextOptions,
@@ -20,6 +19,7 @@ import {
 import { assertSecureSession } from "../lib/secure-session.js";
 import { freshConfirmablePhone, smsSinkUrl } from "../lib/sms-sink.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
+import { browserOf, closeOwnedLoginWindow } from "../lib/host-sign-in.js";
 
 const SESSION = "__Host-ds_session";
 interface PhonePassword {
@@ -223,47 +223,13 @@ When(
     let attemptFailed = false;
     const accepted = await runGatedLoginAttempt(
       {
-        close: async () => {
-          let closure: APIRequestContext | undefined;
-          let failed = false;
-          try {
-            closure = await request.newContext({
-              baseURL: world.hostBaseUrl,
-              ...(state.httpCredentials
-                ? { httpCredentials: state.httpCredentials }
-                : {}),
-            });
-            state.closures.push(closure);
-            const response = await closure.post("/v1/auth/login", {
-              data: { identifier: state.email, password: state.password },
-            });
-            expect(
-              response.status(),
-              "owned successful login closes suite failure gate",
-            ).toBe(200);
-          } catch {
-            failed = true;
-          } finally {
-            if (closure) {
-              try {
-                await revokeClosure(closure);
-                await closure.dispose();
-                state.closures = state.closures.filter((c) => c !== closure);
-              } catch {
-                failed = true;
-              }
-            }
-          }
-          if (failed) {
-            if (!attemptFailed)
-              throw new Error("Owned login closure or cleanup failed");
-            test.info().annotations.push({
-              type: "cleanup-failed",
-              description:
-                "Owned login closure failed; original password attempt failure retained; scoped cleanup required.",
-            });
-          }
-        },
+        close: () =>
+          closeOwnedLoginWindow(
+            browserOf(state.page),
+            world.hostBaseUrl,
+            { email: state.email, password: state.password },
+            attemptFailed,
+          ),
       },
       async () => {
         try {
@@ -287,7 +253,10 @@ When(
             {
               status: result.response.status(),
               exactCommand,
-              tokenFree: storefrontCallbackAcknowledgement(result.body, world.hostBaseUrl),
+              tokenFree: storefrontCallbackAcknowledgement(
+                result.body,
+                world.hostBaseUrl,
+              ),
             },
             "confirmed phone accepted by actual password endpoint",
           ).toEqual({ status: 200, exactCommand: true, tokenFree: true });

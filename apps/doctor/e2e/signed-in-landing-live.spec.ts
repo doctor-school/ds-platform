@@ -1,15 +1,9 @@
+import { test, expect, type Browser, type Page } from "@playwright/test";
 import {
-  test,
-  expect,
-  request as playwrightRequest,
-  type APIRequestContext,
-  type Page,
-} from "@playwright/test";
-import { captchaTestTokenHeaders } from "@ds/e2e/captcha-stub";
-import {
-  standBasicAuthHeaders,
-  standHttpCredentials,
-} from "@ds/e2e/stand-http-credentials";
+  provisionConfirmedAccount,
+  signInPageThroughHost,
+} from "@ds/e2e/host-sign-in";
+import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 
 /**
@@ -67,119 +61,55 @@ requireLiveStandEnv([
 ]);
 
 const DOCTOR_URL = (process.env.E2E_DOCTOR_URL ?? "").replace(/\/$/, "");
-const MAILPIT_BASE = (process.env.MAILPIT_URL ?? "").replace(/\/$/, "");
 const EVENT_SLUG = process.env.E2E_LANDING_EVENT_SLUG ?? "";
 /** A specialty code of the seeded catalog (017). */
 const PROFILE_SPECIALTY = "kardiologiya";
-/** Stable tail of the verify-email subject (BFF `code-emails.ts`, §13.3). */
-const VERIFY_SUBJECT = "код подтверждения Doctor.School";
 
 const newEmail = (): string =>
   `e2e-2333-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
 const livePassword = (): string => `Doc-${Date.now()}-aA1!`;
 
 /**
- * The confirmation code of the newest verify-email to `email` delivered after
- * `afterIso` — polled, because SMTP delivery is async after the BFF's 2xx.
+ * Provision a confirmed doctor through the doctor storefront's `/register` door
+ * on the sign-in host; with `specialty`, remember it on the PROFILE (never in a
+ * browser cookie) from a signed-in context of its own.
  */
-async function confirmationCode(
-  email: string,
-  afterIso: string,
-): Promise<string> {
-  const after = Date.parse(afterIso);
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const res = await fetch(
-      `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
-      { headers: standBasicAuthHeaders() },
-    );
-    if (res.ok) {
-      const data = (await res.json()) as {
-        messages?: Array<{ ID?: string; Created?: string; Subject?: string }>;
-      };
-      const hit = (data.messages ?? []).find(
-        (m) =>
-          m.Created &&
-          Date.parse(m.Created) >= after &&
-          (m.Subject ?? "").includes(VERIFY_SUBJECT),
-      );
-      // The branded subject leads with the code (#869).
-      const code = hit?.Subject?.match(/^(\d{6})\s+—/)?.[1];
-      if (code) return code;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  throw new Error(`no verify-email reached Mailpit for ${email}`);
-}
-
-async function expectOk(
-  api: APIRequestContext,
-  method: "POST" | "PUT",
-  path: string,
-  data: unknown,
-  headers: Record<string, string> = {},
-): Promise<void> {
-  const response = await api.fetch(path, { method, data, headers });
-  expect(
-    response.ok(),
-    `${method} ${path} should succeed — got ${response.status()}: ${await response.text()}`,
-  ).toBe(true);
-}
-
-/**
- * Provision a confirmed doctor through the doctor host's own commands; with
- * `specialty`, remember it on the PROFILE (never in a browser cookie).
- */
-async function provisionDoctor(specialty?: string) {
-  const email = newEmail();
-  const password = livePassword();
-  const api = await playwrightRequest.newContext({
-    baseURL: DOCTOR_URL,
-    httpCredentials: standHttpCredentials(),
-  });
-  try {
-    const sentAt = new Date().toISOString();
-    await expectOk(
-      api,
-      "POST",
-      "/v1/storefront/doctor/register",
-      {
-        email,
-        password,
-        medicalWorkerDeclaration: true,
-        consent: [{ purpose: "partner-data-sharing", version: "v1" }],
-      },
-      captchaTestTokenHeaders(),
-    );
-    const code = await confirmationCode(email, sentAt);
-    // 003 EARS-23/41: confirm through the doctor door's code step with the
-    // in-tab registration values — the bare `/v1/auth/verify` replaces the
-    // pre-verification password, so the login below would be 401 (#2678, #3150).
-    await expectOk(api, "POST", "/v1/storefront/doctor/verify", {
-      email,
-      code,
-      registration: {
-        password,
-        medicalWorkerDeclaration: true,
-        consent: [{ purpose: "partner-data-sharing", version: "v1" }],
-      },
+async function provisionDoctor(browser: Browser, specialty?: string) {
+  const doctor = { email: newEmail(), password: livePassword() };
+  await provisionConfirmedAccount(browser, "doctor", DOCTOR_URL, doctor);
+  if (specialty) {
+    const httpCredentials = standHttpCredentials();
+    const context = await browser.newContext({
+      locale: "ru-RU",
+      ...(httpCredentials ? { httpCredentials } : {}),
     });
-    if (specialty) {
-      await expectOk(api, "POST", "/v1/auth/login", {
-        identifier: email,
-        password,
-      });
-      await expectOk(
-        api,
-        "PUT",
-        "/v1/me/specialty",
-        { specialty },
-        { "idempotency-key": crypto.randomUUID() },
+    try {
+      const page = await context.newPage();
+      await signInPageThroughHost(page, DOCTOR_URL, doctor);
+      const saved = await page.evaluate(
+        async ([code, key]) => {
+          const response = await fetch("/v1/me/specialty", {
+            method: "PUT",
+            credentials: "include",
+            headers: {
+              "content-type": "application/json",
+              "idempotency-key": key,
+            },
+            body: JSON.stringify({ specialty: code }),
+          });
+          return { status: response.status, body: await response.text() };
+        },
+        [specialty, crypto.randomUUID()] as const,
       );
+      expect(
+        saved.status < 300,
+        `PUT /v1/me/specialty should succeed — got ${saved.status}: ${saved.body}`,
+      ).toBe(true);
+    } finally {
+      await context.close();
     }
-  } finally {
-    await api.dispose();
   }
-  return { email, password };
+  return doctor;
 }
 
 /** Sign in through the door's own password form, as a doctor would. */
@@ -199,10 +129,11 @@ test.describe("021 EARS-3: the landing after sign-in on the doctor storefront", 
   test.setTimeout(120_000);
 
   test("021 EARS-3: a doctor whose specialty is on the PROFILE signs in at /login → the specialty feed", async ({
+    browser,
     page,
     context,
   }) => {
-    const doctor = await provisionDoctor(PROFILE_SPECIALTY);
+    const doctor = await provisionDoctor(browser, PROFILE_SPECIALTY);
     expect(await context.cookies()).toHaveLength(0);
 
     await page.goto("/login");
@@ -212,10 +143,11 @@ test.describe("021 EARS-3: the landing after sign-in on the doctor storefront", 
   });
 
   test("021 EARS-3: the same doctor carrying ?returnTo=/events/<slug> → that event (a validated target wins)", async ({
+    browser,
     page,
     context,
   }) => {
-    const doctor = await provisionDoctor(PROFILE_SPECIALTY);
+    const doctor = await provisionDoctor(browser, PROFILE_SPECIALTY);
     expect(await context.cookies()).toHaveLength(0);
 
     await page.goto(
@@ -229,10 +161,11 @@ test.describe("021 EARS-3: the landing after sign-in on the doctor storefront", 
   });
 
   test("021 EARS-3: a doctor with no remembered specialty signs in at /login → the front page", async ({
+    browser,
     page,
     context,
   }) => {
-    const doctor = await provisionDoctor();
+    const doctor = await provisionDoctor(browser);
     expect(await context.cookies()).toHaveLength(0);
 
     await page.goto("/login");
@@ -279,20 +212,26 @@ async function narrowGrantToPlatformAdmin(email: string): Promise<void> {
     const users = await fetch(`${IDP_BASE}/management/v1/users/_search`, {
       method: "POST",
       headers: idpHeaders(),
-      body: JSON.stringify({ queries: [{ emailQuery: { emailAddress: email } }] }),
+      body: JSON.stringify({
+        queries: [{ emailQuery: { emailAddress: email } }],
+      }),
     });
     if (!users.ok) continue;
     const sub = ((await users.json()) as { result?: { id: string }[] })
       .result?.[0]?.id;
     if (!sub) continue;
-    const search = await fetch(`${IDP_BASE}/management/v1/users/grants/_search`, {
-      method: "POST",
-      headers: idpHeaders(),
-      body: JSON.stringify({ queries: [{ userIdQuery: { userId: sub } }] }),
-    });
+    const search = await fetch(
+      `${IDP_BASE}/management/v1/users/grants/_search`,
+      {
+        method: "POST",
+        headers: idpHeaders(),
+        body: JSON.stringify({ queries: [{ userIdQuery: { userId: sub } }] }),
+      },
+    );
     if (!search.ok) continue;
-    const grant = (((await search.json()) as { result?: Grant[] }).result ?? [])
-      .find((g) => g.projectId === projectId);
+    const grant = (
+      ((await search.json()) as { result?: Grant[] }).result ?? []
+    ).find((g) => g.projectId === projectId);
     if (!grant) continue;
     const update = await fetch(
       `${IDP_BASE}/management/v1/users/${sub}/grants/${grant.id}`,
@@ -309,33 +248,27 @@ async function narrowGrantToPlatformAdmin(email: string): Promise<void> {
 }
 
 /**
- * Sign in on the doctor origin (the in-page login through the host's `/v1/*`
- * rewrite, so the cookie carries the page's own fingerprint) and return the
- * status the api gives THIS session for the per-user registration read.
+ * Sign in on the doctor origin through the sign-in host and return the status
+ * the api gives THIS session for the per-user registration read (`-1` when
+ * the sign-in itself did not complete, so a poll keeps trying).
  */
 async function signInAndReadRegistration(
   page: Page,
   account: { email: string; password: string },
 ): Promise<number> {
   await page.context().clearCookies();
-  await page.goto("/", { waitUntil: "domcontentloaded" });
-  return page.evaluate(
-    async ([identifier, password, slug]) => {
-      const login = await fetch("/v1/auth/login", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identifier, password }),
-      });
-      if (login.status !== 200) return -login.status;
-      const read = await fetch(
-        `/v1/events/${encodeURIComponent(slug)}/registration`,
-        { credentials: "include" },
-      );
-      return read.status;
-    },
-    [account.email, account.password, EVENT_SLUG] as const,
-  );
+  try {
+    await signInPageThroughHost(page, DOCTOR_URL, account);
+  } catch {
+    return -1;
+  }
+  return page.evaluate(async (slug) => {
+    const read = await fetch(
+      `/v1/events/${encodeURIComponent(slug)}/registration`,
+      { credentials: "include" },
+    );
+    return read.status;
+  }, EVENT_SLUG);
 }
 
 test.describe("#2232 a non-doctor session on the doctor event page", () => {
@@ -343,9 +276,10 @@ test.describe("#2232 a non-doctor session on the doctor event page", () => {
   test.setTimeout(180_000);
 
   test("#2232: a platform_admin session gets the event page rendered as for a guest — 200, the «Участвовать» door, no server error", async ({
+    browser,
     page,
   }) => {
-    const admin = await provisionDoctor();
+    const admin = await provisionDoctor(browser);
     await narrowGrantToPlatformAdmin(admin.email);
 
     // The precondition, proven against the live api: THIS session is refused
@@ -366,15 +300,18 @@ test.describe("#2232 a non-doctor session on the doctor event page", () => {
   });
 
   test("#2232: a doctor_guest session is unchanged — 200 and the in-place one-tap", async ({
+    browser,
     page,
   }) => {
-    const doctor = await provisionDoctor();
+    const doctor = await provisionDoctor(browser);
     expect(await signInAndReadRegistration(page, doctor)).toBe(200);
 
     const response = await page.goto(`/events/${EVENT_SLUG}`);
     expect(response?.status()).toBe(200);
     await expect(page.getByTestId("event-register-one-tap")).toBeVisible();
-    await expect(page.getByRole("link", { name: /Участвовать/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /Участвовать/ })).toHaveCount(
+      0,
+    );
   });
 });
 
@@ -389,9 +326,10 @@ test.describe("#2456 a staff session on the doctor account page", () => {
   test.setTimeout(180_000);
 
   test("#2456: a platform_admin-only session opens /account — its profile, no error frame — and signs out from it", async ({
+    browser,
     page,
   }) => {
-    const admin = await provisionDoctor();
+    const admin = await provisionDoctor(browser);
     await narrowGrantToPlatformAdmin(admin.email);
 
     // Precondition against the live api: this session holds no visitor role.

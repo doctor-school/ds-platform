@@ -89,7 +89,7 @@ async function passwordSignIn(
   await open(page, `${base}/login?returnTo=%2Faccount`);
   await input(page.locator('input[autocomplete="username"]'), email);
   await input(page.locator('input[autocomplete="current-password"]'), password);
-  return gatedPasswordLogin(page, async () => {
+  return gatedPasswordLogin(page, base, async () => {
     const pending = post(page, signInHostApiPath("/v1/auth/login"));
     await page.getByTestId("password-login-submit").click();
     return pending;

@@ -126,7 +126,7 @@ export async function signInGoldenDoctor(
  */
 export async function signInWithPassword(
   page: Page,
-  host: HostConfig,
+  host: Pick<HostConfig, "loginPath">,
   credentials: { readonly email: string; readonly password: string },
   baseUrl?: string,
 ): Promise<void> {
@@ -173,7 +173,7 @@ export async function signInOnHostForm(
  */
 export async function submitSignInHostForm(
   page: Page,
-  host: HostConfig,
+  host: Pick<HostConfig, "loginPath">,
   credentials: { readonly email: string; readonly password: string },
   storefrontOrigin: string,
 ): Promise<void> {

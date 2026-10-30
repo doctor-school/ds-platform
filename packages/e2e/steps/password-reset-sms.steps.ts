@@ -321,11 +321,15 @@ Then(
         fresh.locator('input[autocomplete="current-password"]'),
         password,
       );
-      const answer = await gatedPasswordLogin(fresh, async () => {
-        const pending = post(fresh, signInHostApiPath("/v1/auth/login"));
-        await fresh.getByTestId("password-login-submit").click();
-        return pending;
-      });
+      const answer = await gatedPasswordLogin(
+        fresh,
+        world.hostBaseUrl,
+        async () => {
+          const pending = post(fresh, signInHostApiPath("/v1/auth/login"));
+          await fresh.getByTestId("password-login-submit").click();
+          return pending;
+        },
+      );
       return answer.status();
     };
     expect(await signIn(state.newPassword), "new password signs in").toBe(200);

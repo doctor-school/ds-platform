@@ -125,9 +125,10 @@
 # 502 behind the basic-auth challenge; a malformed name is refused before any ACME
 # order starts.
 #
-# THE ALTERNATIONS BELOW MUST AGREE WITH THE `@stage_slot` / `@stage_centrifugo`
-# MATCHERS IN THE HTTPS SITE AT THE BOTTOM OF THIS FILE. That agreement is asserted
-# by tools/staging/stage-edge.test.mjs — change one, change the other.
+# THE ALTERNATIONS BELOW MUST AGREE WITH THE `@stage_slot` / `@stage_centrifugo` /
+# `@stage_back_channel_logout` MATCHERS IN THE HTTPS SITE AT THE BOTTOM OF THIS FILE.
+# That agreement is asserted by tools/staging/stage-edge.test.mjs — change one,
+# change the other.
 #
 # The dots inside `{$STAGE_BASE_DOMAIN}` are not escaped (the value is an env
 # substitution, not a literal), so they stay regexp wildcards. Harmless: Caddy only
@@ -228,16 +229,31 @@ http://127.0.0.1:2020 {
 		}
 	}
 
-	# Centrifugo path families on `api-<slot>` — the ONE basic-auth exemption on a
-	# slot (spec §3): browser websocket + the api's key-gated publish path. The
-	# capture name `slot` is shared with `@stage_slot` below, so `{re.slot.2}` names
-	# the slot in either branch.
+	# Centrifugo path families on `api-<slot>` — one of the TWO basic-auth
+	# exemptions on a slot (spec §3): browser websocket + the api's key-gated
+	# publish path. The capture name `slot` is shared with `@stage_slot` below, so
+	# `{re.slot.2}` names the slot in either branch.
 	@stage_centrifugo {
 		header_regexp slot Host "^(api)-(main|pr-[1-9][0-9]{0,9})[.]"
 		path /connection/websocket /api/*
 	}
 	handle @stage_centrifugo {
 		reverse_proxy {re.slot.2}-centrifugo:8000
+	}
+
+	# The OIDC back-channel logout on `api-<slot>` — the other slot exemption (spec
+	# §3, #3545): `POST /v1/auth/back-channel-logout` ONLY. Zitadel posts it to the
+	# public slot api (tools/staging/idp.mjs) carrying no browser credentials; the
+	# endpoint verifies the signed logout token and is rate-limited (ADR-0015 §4
+	# req 9), and production has no gate in front of `api.` at all. Any other method
+	# or path on `api-<slot>` stays behind `staging_gate`.
+	@stage_back_channel_logout {
+		header_regexp slot Host "^(api)-(main|pr-[1-9][0-9]{0,9})[.]"
+		method POST
+		path /v1/auth/back-channel-logout
+	}
+	handle @stage_back_channel_logout {
+		reverse_proxy {re.slot.2}-api:3000
 	}
 
 	# Every slot host, live or not. The domain suffix is already guaranteed by this

@@ -73,7 +73,7 @@ test("the routing matcher and the ask responder use the same app alternation", (
 });
 
 test("every host matcher uses the same slot alternation", () => {
-  for (const name of ["stage_slot", "stage_ask", "stage_centrifugo"]) {
+  for (const name of ["stage_slot", "stage_ask", "stage_centrifugo", "stage_back_channel_logout"]) {
     const pattern = matcherRegexp(name);
     assert.ok(
       pattern.includes(SLOT_ALTERNATION),
@@ -161,6 +161,63 @@ test("the object-storage host is routed to MinIO's S3 port with no gate and no c
 test("the Centrifugo exemption is scoped to the api host and its two path families", () => {
   assert.match(matcherRegexp("stage_centrifugo"), /\^\(api\)-/);
   assert.match(text, /path \/connection\/websocket \/api\/\*/);
+});
+
+/** A named matcher's (or handler's) body lines, trimmed, from its `{` to its `}`. */
+function blockBody(opener) {
+  const lines = text.split(NEWLINE);
+  const at = lines.findIndex((line) => line.trimStart().startsWith(opener));
+  assert.notEqual(at, -1, `${opener} is missing from the Caddyfile`);
+  const end = lines.findIndex((line, i) => i > at && line.trim() === "}");
+  return lines
+    .slice(at + 1, end)
+    .map((line) => line.trim().split(SPACES).join(" "))
+    .filter((line) => line && !line.startsWith("#"));
+}
+
+test("3545: the back-channel logout exemption admits only POST of the one logout path on api-<slot>", () => {
+  // Zitadel posts the OIDC back-channel logout (003 EARS-65) to the PUBLIC
+  // `https://api-<slot>.<base>/v1/auth/back-channel-logout` (tools/staging/idp.mjs)
+  // with no browser credentials; the endpoint authenticates the signed logout
+  // token itself and is rate-limited (ADR-0015 §4 req 9), exactly as in prod.
+  const body = blockBody("@stage_back_channel_logout {");
+  const hostLine = body.find((line) => line.startsWith("header_regexp "));
+  assert.ok(hostLine, "the exemption is scoped by a Host regexp");
+  const hostRe = hostLine.match(/^header_regexp slot Host "([^"]+)"$/);
+  assert.ok(hostRe, `the Host regexp shares the \`slot\` capture name, got ${hostLine}`);
+  assert.equal(hostRe[1], `^(api)-${SLOT_ALTERNATION}[.]`);
+  assert.deepEqual(
+    body.filter((line) => line !== hostLine),
+    ["method POST", "path /v1/auth/back-channel-logout"],
+    "no other matcher widens or narrows the exemption",
+  );
+
+  // Caddy's semantics for this matcher set: every matcher must hold (AND); `path`
+  // is an exact, case-insensitive match; `method` is exact.
+  const host = new RegExp(hostRe[1]);
+  const exempt = (h, method, path) =>
+    host.test(h) && method === "POST" && path.toLowerCase() === "/v1/auth/back-channel-logout";
+  assert.ok(exempt("api-pr-7.stage.test", "POST", "/v1/auth/back-channel-logout"));
+  assert.ok(exempt("api-main.stage.test", "POST", "/v1/auth/back-channel-logout"));
+  assert.ok(!exempt("api-pr-7.stage.test", "GET", "/v1/auth/back-channel-logout"), "GET stays gated");
+  assert.ok(!exempt("api-pr-7.stage.test", "POST", "/v1/auth/back-channel-logout/x"), "no sub-path");
+  assert.ok(!exempt("api-pr-7.stage.test", "POST", "/v1/auth/logout"), "no other auth path");
+  assert.ok(!exempt("api-pr-7.stage.test", "POST", "/v1/health"), "no other api path");
+  for (const other of ["academy", "doctor", "admin", "login"]) {
+    assert.ok(!exempt(`${other}-pr-7.stage.test`, "POST", "/v1/auth/back-channel-logout"), `${other} stays gated`);
+  }
+
+  // The handler goes straight to the slot's api — the same upstream `@stage_slot`
+  // maps `api` to — with no gate, and it is reached before the gated slot handler.
+  const [, service, port] = mapRows().find((row) => row.startsWith("api ")).split(" ");
+  assert.deepEqual(blockBody("handle @stage_back_channel_logout {"), [
+    `reverse_proxy {re.slot.2}-${service}:${port}`,
+  ]);
+  const lines = text.split(NEWLINE).map((line) => line.trim());
+  assert.ok(
+    lines.indexOf("handle @stage_back_channel_logout {") < lines.indexOf("handle @stage_slot {"),
+    "the exemption precedes the gated slot handler",
+  );
 });
 
 test("every public app label has an upstream in the map table", () => {

@@ -176,8 +176,8 @@ Max-Age=31536000; Secure; HttpOnly; SameSite=Lax`; a request carrying that cooki
   is repeated for each live slot (see «Operating» below) — after which every browser
   is asked once more. Non-browser callers (`pnpm stage:slot up`'s `/v1/health` leg, `pnpm e2e:stage`,
   curl) keep basic-auth and never receive the cookie unless they authenticate. The
-  `id` vhost and the Centrifugo paths are untouched (no challenge, no cookie); the
-  unknown-host 404 stays a plain challenge.
+  `id` vhost, the Centrifugo paths and the back-channel logout POST are untouched (no
+  challenge, no cookie); the unknown-host 404 stays a plain challenge.
 - **Base domain.** The site address `*.{$STAGE_BASE_DOMAIN}`, the `id` vhost and the
   `@stage_ask` matcher all read `STAGE_BASE_DOMAIN` from `stage.env` via the `caddy`
   service's `environment:` block. `tools/staging/slot.mjs` reads the SAME variable to
@@ -210,18 +210,30 @@ network `slot-<slot>`, which `slot up` attaches this Caddy container to; the sam
 names are derived and unit-tested as `containerAliases()` in `tools/staging/slot.mjs`.
 Changing either side alone silently 502s the whole slot.
 
-**The two basic-auth exemptions** — and only two, both because the caller carries no
+**The four basic-auth exemptions** — and only four, all because the caller carries no
 browser credentials and authenticates by its own mechanism:
 
 1. the two Centrifugo path families on `api-<slot>` (`/connection/websocket` and
    `/api/*`), guarded by Centrifugo's HMAC token and its API key, exactly as in
    production (`infra/deploy/compose/api-prod/Caddyfile`);
-2. the whole shared IdP host `id.stage.doctor.school`. Every slot api reaches the IdP
+2. `POST /v1/auth/back-channel-logout` on `api-<slot>` — that method and that exact path
+   only (`@stage_back_channel_logout`; a GET or any other path stays gated). Zitadel
+   posts the OIDC back-channel logout (003 EARS-65) to the public slot api the slot's
+   storefront clients are provisioned with (`tools/staging/idp.mjs`), and the Zitadel
+   container resolves that public name like any client, so a challenge there drops
+   every IdP-side session end (console, «sign out on all devices») before it reaches
+   the slot. The endpoint verifies the signed logout token and is rate-limited
+   (ADR-0015 §4 req. 9), and production has no gate in front of `api.` at all, so the
+   exemption exposes nothing prod does not;
+3. the whole shared IdP host `id.stage.doctor.school`. Every slot api reaches the IdP
    machine-to-machine through the PUBLIC issuer origin (`IDP_ISSUER` is the public URL
    in production too, `infra/deploy/api.env.example`), and converge form (b) does the
    same. A challenge there breaks OIDC discovery and token exchange while protecting
    nothing — Zitadel authenticates every caller on its own. `noindex` still applies to
-   `id`.
+   `id`;
+4. the shared object-storage host `s3.stage.doctor.school` (#2223), routed to MinIO's
+   S3 port only: a presigned SigV4 GET is its own authorization and an `<img src>` sends
+   no basic-auth credentials.
 
 **Certificates cost quota — a probe is an issuance, not a refusal.** Any name matching
 the `<app>-<slot>.<base domain>` convention is admitted by `ask` whether or not a slot
@@ -245,7 +257,7 @@ curl -sI https://academy-main.stage.doctor.school/
 #   route, NOT a Caddy 401 — the slot is not up yet, #2065)
 
 curl -sI https://id.stage.doctor.school/.well-known/openid-configuration
-# observed: 200 with X-Robots-Tag: noindex, nofollow and NO basic auth (exemption 2)
+# observed: 200 with X-Robots-Tag: noindex, nofollow and NO basic auth (exemption 3)
 
 openssl s_client -connect academy-main.stage.doctor.school:443 \
   -servername academy-main.stage.doctor.school </dev/null 2>/dev/null | \
@@ -293,7 +305,7 @@ sudo docker inspect pr-2216-api --format '{{json .Config.Env}}'
 
 curl -sI https://s3.stage.doctor.school/
 # observed: HTTP/2 400, server: MinIO, via: 1.1 Caddy,
-#           x-robots-tag: noindex, nofollow — and NO 401, i.e. no gate (exemption 3)
+#           x-robots-tag: noindex, nofollow — and NO 401, i.e. no gate (exemption 4)
 ```
 
 Round trip from an operator machine against the slot bucket, using the api's own
@@ -547,7 +559,8 @@ the `slot render` subcommand that used to write them.
 
 **The edge is static.** `Caddyfile` derives the upstream from the matched host name with
 ONE regexp over the `<app>-<slot>.<base domain>` convention (`academy` → the slot's
-`portal`, `doctor`, `admin`, `api`, plus the two Centrifugo path families on `api-<slot>`),
+`portal`, `doctor`, `admin`, `api`, plus the two Centrifugo path families and the
+back-channel logout POST on `api-<slot>`),
 so a slot coming up or going down **never reloads Caddy**. The on-demand-TLS `ask`
 responder answers 200 from that same regexp plus the shared IdP host and 404 for
 everything else: a well-formed name with nothing behind it gets a certificate and then a

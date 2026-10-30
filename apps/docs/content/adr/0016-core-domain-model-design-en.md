@@ -223,22 +223,24 @@ Load-bearing invariants:
 
 ## 4. Storefront ownership
 
-| Entity                                               | Owner      | Note                                                                  |
-| ---------------------------------------------------- | ---------- | --------------------------------------------------------------------- |
-| Person (account)                                     | both       | one account, two storefronts                                          |
-| Role assignment                                      | admin-only | granted in the admin surface                                          |
-| Organisation                                         | academy    | investor/clinical-base cabinets are backstage                         |
-| Membership                                           | academy    | managed by the organisation admin                                     |
-| Project                                              | academy    | the doctor sees outputs, not the container                            |
-| Output — event / recording                           | both       | authored in the Academy, consumed on the doctor storefront            |
-| Output — school / course / module / lesson / podcast | both       | same                                                                  |
-| Minzdrav specialty                                   | both       | profile + documents                                                   |
-| Direction                                            | both       | catalogue axis on the doctor storefront, planning axis in the Academy |
-| Expert                                               | both       | public expert card on both; editing is backstage                      |
-| Account ↔ expert link                                | both       | claimed on the doctor storefront ("It's me"), confirmed admin-only    |
-| Ledger account / posting                             | academy    | the doctor sees only their own points balance, a read projection      |
-| Document record                                      | admin-only | uploaded by the doctor, readable only with the verification right     |
-| Consent record                                       | both       | granted and revoked by the doctor, read across the platform           |
+One schema and one database serve every storefront. The `Shown on` column says which storefronts show the entity; it never means a per-storefront copy — every storefront that shows an entity reads the same rows through the same contract, and a feature reuses an existing entity before it defines a new one.
+
+| Entity                                               | Shown on   | Note                                                                                                                                                                                                                                      |
+| ---------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Person (account)                                     | both       | one account, two storefronts                                                                                                                                                                                                              |
+| Role assignment                                      | admin-only | granted in the admin surface                                                                                                                                                                                                              |
+| Organisation                                         | both       | one registry; the investor / clinical-base cabinets and the investors leaderboard are on the Academy, the doctor storefront reads the same registry where it shows an organisation (partner / representative attribution at registration) |
+| Membership                                           | academy    | managed by the organisation admin                                                                                                                                                                                                         |
+| Project                                              | academy    | the doctor storefront shows outputs, which reference the same project rows, never a project page                                                                                                                                          |
+| Output — event / recording                           | both       | authored in the Academy, consumed on the doctor storefront                                                                                                                                                                                |
+| Output — school / course / module / lesson / podcast | both       | same                                                                                                                                                                                                                                      |
+| Minzdrav specialty                                   | both       | profile + documents                                                                                                                                                                                                                       |
+| Direction                                            | both       | catalogue axis on the doctor storefront, planning axis in the Academy                                                                                                                                                                     |
+| Expert                                               | both       | public expert card on both; editing is backstage                                                                                                                                                                                          |
+| Account ↔ expert link                                | both       | claimed on the doctor storefront ("It's me"), confirmed admin-only                                                                                                                                                                        |
+| Ledger account / posting                             | both       | one ledger; the doctor storefront shows the doctor's own points balance, the Academy shows accruals and postings                                                                                                                          |
+| Document record                                      | admin-only | uploaded by the doctor, readable only with the verification right                                                                                                                                                                         |
+| Consent record                                       | both       | granted and revoked by the doctor, read across the platform                                                                                                                                                                               |
 
 `admin-only` means the entity has no public surface on either storefront.
 

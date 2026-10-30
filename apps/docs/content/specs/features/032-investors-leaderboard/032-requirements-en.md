@@ -8,7 +8,7 @@ surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/issues/1823
 prior_decisions:
   - "ADR-0016 §2 — the organisation is a first-class entity; its kinds are an open, extensible set, starting with investor, clinical base and licensee / educational organisation; one organisation may hold several kinds; «employer» is not a kind"
-  - "ADR-0016 §8 — every entity declares its storefront ownership; the organisation registry is `academy` (and the admin), the doctor storefront reads none of it"
+  - "ADR-0016 §8 — every entity declares its storefront ownership; over one schema and one database the organisation registry is a platform entity shown on `both` storefronts: the investors leaderboard and the organisation cabinets are on the Academy, and every storefront reads the same registry where it shows an organisation (the doctor-registration partner attribution, 021 EARS-8, reads it)"
   - "ADR-0016 §9 — feature 012 is absorbed, never rewritten: `partners` is the organisation seed (renamed + extended), `project_partners` follows the rename"
   - "ADR-0014 §2 — every EARS clause carries `realizes: US-N` of `032-product.md`"
   - "ADR-0006 §4 — triplet layout, flat EARS numbering"
@@ -57,7 +57,7 @@ lang: en
 - Slugs stay system-generated and permanent over every retained row (012 authoring contract); a client slug is rejected.
 - The role list is data, not code: adding, renaming or retiring a role is a row change, never a migration or a deploy (Q-40, ADR-0016 §2).
 - Logo input follows the 012 media contract (one still JPEG/PNG/WebP, the shared normalizer, the retained cleanup queue); the website stays an optional absolute HTTPS URL up to 2048 characters.
-- The doctor storefront (`apps/doctor`) reads no organization data (ADR-0016 §8; REQ-51).
+- The organization registry is one platform entity over one schema and one database (ADR-0016 §8): this slice ships the Academy and admin surfaces, and the doctor storefront (`apps/doctor`) reads the same registry, never a copy, where it shows an organization — the doctor-registration partner attribution (021 EARS-8). The doctor storefront shows no leaderboard and no organization cabinet (REQ-51).
 
 ## Prior decisions
 

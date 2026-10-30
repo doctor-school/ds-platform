@@ -48,6 +48,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const createdEmails: string[] = [];
     const createdPartnerIds: string[] = [];
     const usedKeys: string[] = [];
+    const createdRoleIds: string[] = [];
     let adminSid: string;
     let otherAdminSid: string;
 
@@ -157,7 +158,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     async function createJson({ payload, sid, idempotencyKey }: JsonPost) {
       return app.inject({
         method: "POST",
-        url: "/v1/admin/partners",
+        url: "/v1/admin/organisations",
         headers: {
           ...device,
           ...adminHeaders(sid ?? adminSid),
@@ -221,7 +222,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "DELETE FROM media_cleanup_jobs WHERE entity_id = $1",
           [id],
         );
-        await pool.query("DELETE FROM partners WHERE id = $1", [id]);
+        await pool.query(
+          "DELETE FROM organisation_role_assignments WHERE organisation_id = $1",
+          [id],
+        );
+        await pool.query("DELETE FROM organisations WHERE id = $1", [id]);
+      }
+      for (const id of createdRoleIds.splice(0)) {
+        await pool.query(
+          "DELETE FROM organisation_role_assignments WHERE role_id = $1",
+          [id],
+        );
+        await pool.query("DELETE FROM organisation_roles WHERE id = $1", [id]);
       }
       for (const k of usedKeys.splice(0)) {
         await pool.query("DELETE FROM idempotency_keys WHERE key = $1", [k]);
@@ -256,12 +268,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // The slug is derived from the TITLE — a partner has no personal name.
       expect(body.slug).toMatch(/^romashka-/);
       expect(res.headers.etag).toBe('W/"1"');
-      expect(res.headers.location).toBe(`/v1/admin/partners/${body.id}`);
+      expect(res.headers.location).toBe(`/v1/admin/organisations/${body.id}`);
 
       // The SAME row is what the list and the detail render — no second copy.
       const detail = await app.inject({
         method: "GET",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(detail.statusCode).toBe(200);
@@ -271,7 +283,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       const list = await app.inject({
         method: "GET",
-        url: `/v1/admin/partners?q=${encodeURIComponent(marker)}`,
+        url: `/v1/admin/organisations?q=${encodeURIComponent(marker)}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       const listBody = JSON.parse(list.payload) as {
@@ -295,7 +307,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ]);
       const res = await app.inject({
         method: "POST",
-        url: "/v1/admin/partners",
+        url: "/v1/admin/organisations",
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -309,7 +321,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(body.logoUrl).toBeTypeOf("string");
 
       const { rows } = await pool.query<{ logo_ref: string }>(
-        "SELECT logo_ref FROM partners WHERE id = $1",
+        "SELECT logo_ref FROM organisations WHERE id = $1",
         [body.id],
       );
       const ref = rows[0]!.logo_ref;
@@ -328,7 +340,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const body = await created(await createJson({ payload: validPayload() }));
       const res = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -350,7 +362,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // "unchanged", so the two must not be the same request.
       const cleared = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -366,7 +378,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         version: 3,
       });
       const { rows } = await pool.query<{ count: string; website_url: null }>(
-        "SELECT count(*) FROM partners WHERE id = $1",
+        "SELECT count(*) FROM organisations WHERE id = $1",
         [body.id],
       );
       expect(Number(rows[0]!.count)).toBe(1);
@@ -383,7 +395,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ]);
       const createRes = await app.inject({
         method: "POST",
-        url: "/v1/admin/partners",
+        url: "/v1/admin/organisations",
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -395,7 +407,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const body = await created(createRes);
       const firstRef = (
         await pool.query<{ logo_ref: string }>(
-          "SELECT logo_ref FROM partners WHERE id = $1",
+          "SELECT logo_ref FROM organisations WHERE id = $1",
           [body.id],
         )
       ).rows[0]!.logo_ref;
@@ -411,7 +423,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ]);
       const replace = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -424,7 +436,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(replace.statusCode).toBe(200);
       const secondRef = (
         await pool.query<{ logo_ref: string }>(
-          "SELECT logo_ref FROM partners WHERE id = $1",
+          "SELECT logo_ref FROM organisations WHERE id = $1",
           [body.id],
         )
       ).rows[0]!.logo_ref;
@@ -455,7 +467,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // Now CLEAR the current logo — a second obligation, kind `clear`.
       const clear = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -486,7 +498,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // LD-6: ordinary case-insensitive substring search over the title.
       const found = await app.inject({
         method: "GET",
-        url: `/v1/admin/partners?q=${encodeURIComponent(marker.toUpperCase())}`,
+        url: `/v1/admin/organisations?q=${encodeURIComponent(marker.toUpperCase())}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(
@@ -496,12 +508,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).toContain(body.id);
 
       await pool.query(
-        "UPDATE partners SET status = 'retired', deleted_at = now() WHERE id = $1",
+        "UPDATE organisations SET status = 'retired', deleted_at = now() WHERE id = $1",
         [body.id],
       );
       const def = await app.inject({
         method: "GET",
-        url: `/v1/admin/partners?q=${marker}`,
+        url: `/v1/admin/organisations?q=${marker}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(
@@ -512,7 +524,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const withRetired = await app.inject({
         method: "GET",
-        url: `/v1/admin/partners?q=${marker}&includeRetired=true`,
+        url: `/v1/admin/organisations?q=${marker}&includeRetired=true`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(
@@ -524,7 +536,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // The detail route addresses a retired row directly (restore path input).
       const detail = await app.inject({
         method: "GET",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(detail.statusCode).toBe(200);
@@ -537,7 +549,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const before = await partnerCount();
       const anon = await app.inject({
         method: "POST",
-        url: "/v1/admin/partners",
+        url: "/v1/admin/organisations",
         headers: { ...device, "content-type": "application/json" },
         payload: validPayload(),
       });
@@ -547,7 +559,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const doctor = await doctorCookie();
       const wrongTier = await app.inject({
         method: "POST",
-        url: "/v1/admin/partners",
+        url: "/v1/admin/organisations",
         headers: {
           ...device,
           "content-type": "application/json",
@@ -594,7 +606,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((JSON.parse(replay.payload) as { id: string }).id).toBe(body.id);
       expect(replay.headers.etag).toBe('W/"1"');
       const { rows } = await pool.query(
-        "SELECT count(*) FROM partners WHERE slug = $1",
+        "SELECT count(*) FROM organisations WHERE slug = $1",
         [body.slug],
       );
       expect(Number(rows[0]!.count)).toBe(1);
@@ -642,7 +654,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await createJson({ payload: validPayload({ title }) }),
       );
       await pool.query(
-        "UPDATE partners SET status = 'retired', deleted_at = now() WHERE id = $1",
+        "UPDATE organisations SET status = 'retired', deleted_at = now() WHERE id = $1",
         [first.id],
       );
       const second = await created(
@@ -680,7 +692,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const body = await created(await createJson({ payload: validPayload() }));
       const res = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -693,13 +705,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode).toBe(400);
       expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
       const { rows } = await pool.query<{ slug: string; version: number }>(
-        "SELECT slug, version FROM partners WHERE id = $1",
+        "SELECT slug, version FROM organisations WHERE id = $1",
         [body.id],
       );
       expect(rows[0]).toMatchObject({ slug: body.slug, version: 1 });
       const detail = await app.inject({
         method: "GET",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(JSON.parse(detail.payload)).not.toHaveProperty("slugEditable");
@@ -707,7 +719,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // A normal title edit retains the system-owned address.
       const echo = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -729,7 +741,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const body = await created(await createJson({ payload: validPayload() }));
       const absent = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -743,7 +755,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const stale = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -756,7 +768,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(stale.statusCode).toBe(412);
       expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
       const { rows } = await pool.query<{ title: string; version: number }>(
-        "SELECT title, version FROM partners WHERE id = $1",
+        "SELECT title, version FROM organisations WHERE id = $1",
         [body.id],
       );
       expect(rows[0]!.version).toBe(1);
@@ -798,7 +810,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const noFile = multipartBody({ payload });
       const noFileRes = await app.inject({
         method: "POST",
-        url: "/v1/admin/partners",
+        url: "/v1/admin/organisations",
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -823,7 +835,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         ]);
         const wrongNameRes = await app.inject({
           method: "POST",
-          url: "/v1/admin/partners",
+          url: "/v1/admin/organisations",
           headers: {
             ...device,
             ...adminHeaders(adminSid),
@@ -852,7 +864,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ]);
       const twoFilesRes = await app.inject({
         method: "POST",
-        url: "/v1/admin/partners",
+        url: "/v1/admin/organisations",
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -883,7 +895,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       const res = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -896,7 +908,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode).toBe(400);
       expect(problem(res).errorCode).toBe("MEDIA_INPUT_CONFLICT");
       const { rows } = await pool.query<{ version: number; logo_ref: null }>(
-        "SELECT version, logo_ref FROM partners WHERE id = $1",
+        "SELECT version, logo_ref FROM organisations WHERE id = $1",
         [body.id],
       );
       expect(rows[0]).toMatchObject({ version: 1, logo_ref: null });
@@ -924,7 +936,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ]);
       const res = await app.inject({
         method: "POST",
-        url: "/v1/admin/partners",
+        url: "/v1/admin/organisations",
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -941,7 +953,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("012 EARS-4: when an unknown partner id is addressed, the system shall answer 404 RESOURCE_NOT_FOUND without disclosing anything", async () => {
       const res = await app.inject({
         method: "GET",
-        url: `/v1/admin/partners/${randomUUID()}`,
+        url: `/v1/admin/organisations/${randomUUID()}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(res.statusCode).toBe(404);
@@ -949,7 +961,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // A slug is not an admin address — the admin surface is id-only.
       const bySlug = await app.inject({
         method: "GET",
-        url: "/v1/admin/partners/romashka",
+        url: "/v1/admin/organisations/romashka",
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(bySlug.statusCode).toBe(404);
@@ -965,7 +977,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           WHERE metadata->'pk'->>'id' = $1`,
         [body.id],
       );
-      expect(rows.map((r) => r.event_type)).toContain("data.partners.insert");
+      expect(rows.map((r) => r.event_type)).toContain(
+        "data.organisations.insert",
+      );
       expect(rows[0]!.subject_id).not.toBeNull();
     });
 
@@ -994,7 +1008,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           : overrides.idempotencyKey;
       return app.inject({
         method: "POST",
-        url: `/v1/admin/partners/${id}/publish`,
+        url: `/v1/admin/organisations/${id}/publish`,
         headers: {
           ...device,
           ...adminHeaders(overrides.sid ?? adminSid),
@@ -1012,7 +1026,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         version: number;
         first_published_at: Date | null;
       }>(
-        "SELECT status, version, first_published_at FROM partners WHERE id = $1",
+        "SELECT status, version, first_published_at FROM organisations WHERE id = $1",
         [id],
       );
       return rows[0]!;
@@ -1116,7 +1130,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // etag the second operator is still holding describes the previous row.
       const patched = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/partners/${body.id}`,
+        url: `/v1/admin/organisations/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -1211,14 +1225,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     async function partnerCount(): Promise<number> {
-      const { rows } = await pool.query("SELECT count(*) FROM partners");
+      const { rows } = await pool.query("SELECT count(*) FROM organisations");
       return Number(rows[0]!.count);
     }
 
     /** How many partner-logo objects the store currently holds. */
     async function logoObjectCount(): Promise<number> {
       const { rows } = await pool.query<{ logo_ref: string | null }>(
-        "SELECT logo_ref FROM partners WHERE logo_ref IS NOT NULL",
+        "SELECT logo_ref FROM organisations WHERE logo_ref IS NOT NULL",
       );
       let present = 0;
       for (const row of rows) {
@@ -1226,5 +1240,254 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }
       return present;
     }
+
+    // ── 032 EARS-1 / EARS-2 / EARS-13 — the organisation registry (#3492) ──
+
+    const INVESTOR = "03200000-0000-4000-8000-000000000001";
+    const CLINICAL_BASE = "03200000-0000-4000-8000-000000000002";
+
+    async function patchJson(
+      id: string,
+      version: number,
+      payload: Record<string, unknown>,
+      sid = adminSid,
+    ) {
+      return app.inject({
+        method: "PATCH",
+        url: `/v1/admin/organisations/${id}`,
+        headers: {
+          ...device,
+          ...adminHeaders(sid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": `W/"${version}"`,
+        },
+        payload,
+      });
+    }
+
+    /** A role row written straight to the book, optionally already retired. */
+    async function fixtureRole(retired = false): Promise<string> {
+      const tag = Math.random().toString(36).slice(2, 8);
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO organisation_roles (slug, title, status, deleted_at)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [
+          `e2e-role-${tag}`,
+          `Роль ${tag}`,
+          retired ? "retired" : "active",
+          retired ? new Date() : null,
+        ],
+      );
+      createdRoleIds.push(rows[0]!.id);
+      return rows[0]!.id;
+    }
+
+    async function heldRoleIds(id: string): Promise<string[]> {
+      const { rows } = await pool.query<{ role_id: string }>(
+        "SELECT role_id FROM organisation_role_assignments WHERE organisation_id = $1 ORDER BY role_id",
+        [id],
+      );
+      return rows.map((r) => r.role_id);
+    }
+
+    it("032 EARS-1: when a platform_admin creates an organisation with every field, the system shall persist one row with the description, the roles and both display rules and render it on the detail and the list", async () => {
+      const title = `Организация ${Math.random().toString(36).slice(2, 8)}`;
+      const res = await createJson({
+        payload: {
+          title: `  ${title}  `,
+          websiteUrl: "https://org.example",
+          description: "  Фармацевтическая компания  ",
+          roleIds: [INVESTOR, CLINICAL_BASE],
+          publicNameVisible: true,
+          publicLogoVisible: false,
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const body = await created(res);
+      expect(body).toMatchObject({
+        title,
+        websiteUrl: "https://org.example",
+        description: "Фармацевтическая компания",
+        publicNameVisible: true,
+        publicLogoVisible: false,
+        status: "draft",
+        version: 1,
+      });
+      expect(
+        (body.roles as { slug: string; status: string }[]).map((r) => [
+          r.slug,
+          r.status,
+        ]),
+      ).toEqual([
+        ["investor", "active"],
+        ["clinical-base", "active"],
+      ]);
+      expect(await heldRoleIds(body.id)).toEqual(
+        [INVESTOR, CLINICAL_BASE].sort(),
+      );
+
+      const detail = await app.inject({
+        method: "GET",
+        url: `/v1/admin/organisations/${body.id}`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      expect(JSON.parse(detail.payload)).toEqual(body);
+
+      const list = await app.inject({
+        method: "GET",
+        url: `/v1/admin/organisations?q=${encodeURIComponent(title)}`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      const row = (
+        JSON.parse(list.payload) as { data: { id: string; roles: unknown[] }[] }
+      ).data.find((r) => r.id === body.id);
+      expect(row?.roles).toHaveLength(2);
+    });
+
+    it("032 EARS-1: when the display rules are omitted, the system shall store both on and no description", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      expect(body).toMatchObject({
+        description: null,
+        publicNameVisible: true,
+        publicLogoVisible: true,
+        roles: [],
+      });
+    });
+
+    it("032 EARS-1: when the description exceeds 1000 characters or the title 160, the system shall refuse with field-addressed reasons and write no row", async () => {
+      const before = await partnerCount();
+      const long = await createJson({
+        payload: validPayload({ description: "д".repeat(1001) }),
+      });
+      expect(long.statusCode).toBe(400);
+      expect(problem(long).errorCode).toBe("VALIDATION_FAILED");
+      expect(JSON.stringify(JSON.parse(long.payload))).toContain("description");
+      const longTitle = await createJson({
+        payload: validPayload({ title: "т".repeat(161) }),
+      });
+      expect(longTitle.statusCode).toBe(400);
+      expect(JSON.stringify(JSON.parse(longTitle.payload))).toContain("title");
+      expect(await partnerCount()).toBe(before);
+    });
+
+    it("032 EARS-1: when an edit changes the description and the display rules, the system shall update the same row and an explicit null shall clear the description", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const edited = await patchJson(body.id, 1, {
+        description: "Новое описание",
+        publicNameVisible: false,
+      });
+      expect(edited.statusCode).toBe(200);
+      expect(JSON.parse(edited.payload)).toMatchObject({
+        id: body.id,
+        description: "Новое описание",
+        publicNameVisible: false,
+        publicLogoVisible: true,
+        version: 2,
+      });
+      const cleared = await patchJson(body.id, 2, { description: null });
+      expect(JSON.parse(cleared.payload)).toMatchObject({
+        description: null,
+        version: 3,
+      });
+    });
+
+    it("032 EARS-2: when the roles are saved, the system shall store them as a set and replace it on the next save", async () => {
+      const body = await created(
+        await createJson({ payload: validPayload({ roleIds: [INVESTOR] }) }),
+      );
+      expect(await heldRoleIds(body.id)).toEqual([INVESTOR]);
+      const replaced = await patchJson(body.id, 1, {
+        roleIds: [CLINICAL_BASE],
+      });
+      expect(replaced.statusCode).toBe(200);
+      expect(await heldRoleIds(body.id)).toEqual([CLINICAL_BASE]);
+      expect(JSON.parse(replaced.payload).version).toBe(2);
+      // Omission leaves the set; an empty set is allowed on a draft.
+      await patchJson(body.id, 2, { title: `${String(body.title)} 2` });
+      expect(await heldRoleIds(body.id)).toEqual([CLINICAL_BASE]);
+      const emptied = await patchJson(body.id, 3, { roleIds: [] });
+      expect(emptied.statusCode).toBe(200);
+      expect(await heldRoleIds(body.id)).toEqual([]);
+    });
+
+    it("032 EARS-2: when a role id is unknown or retired and not already held, the system shall refuse with a roleIds field error and change nothing", async () => {
+      const retired = await fixtureRole(true);
+      const before = await partnerCount();
+      for (const roleId of [retired, "0fffffff-0000-4000-8000-000000000000"]) {
+        const res = await createJson({
+          payload: validPayload({ roleIds: [roleId] }),
+        });
+        expect(res.statusCode).toBe(400);
+        expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
+        expect(JSON.stringify(JSON.parse(res.payload))).toContain("roleIds");
+      }
+      expect(await partnerCount()).toBe(before);
+
+      const body = await created(
+        await createJson({ payload: validPayload({ roleIds: [INVESTOR] }) }),
+      );
+      const refused = await patchJson(body.id, 1, {
+        roleIds: [INVESTOR, retired],
+      });
+      expect(refused.statusCode).toBe(400);
+      expect(await heldRoleIds(body.id)).toEqual([INVESTOR]);
+      const { rows } = await pool.query<{ version: number }>(
+        "SELECT version FROM organisations WHERE id = $1",
+        [body.id],
+      );
+      expect(rows[0]!.version).toBe(1);
+    });
+
+    it("032 EARS-2: when an organisation already holds a role that is later retired, the system shall keep it on the row, show it retired and accept it on the next save", async () => {
+      const role = await fixtureRole(false);
+      const body = await created(
+        await createJson({
+          payload: validPayload({ roleIds: [INVESTOR, role] }),
+        }),
+      );
+      await pool.query(
+        "UPDATE organisation_roles SET status = 'retired', deleted_at = now() WHERE id = $1",
+        [role],
+      );
+      const detail = await app.inject({
+        method: "GET",
+        url: `/v1/admin/organisations/${body.id}`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      const roles = (
+        JSON.parse(detail.payload) as {
+          roles: { id: string; status: string }[];
+        }
+      ).roles;
+      expect(roles.find((r) => r.id === role)?.status).toBe("retired");
+
+      const kept = await patchJson(body.id, 1, { roleIds: [INVESTOR, role] });
+      expect(kept.statusCode).toBe(200);
+      expect(await heldRoleIds(body.id)).toEqual([INVESTOR, role].sort());
+    });
+
+    it("032 EARS-13: when a role set changes, feature 010 shall record the assignment rows under the acting administrator", async () => {
+      const body = await created(
+        await createJson({ payload: validPayload({ roleIds: [INVESTOR] }) }),
+      );
+      await patchJson(body.id, 1, { roleIds: [CLINICAL_BASE] });
+      const { rows } = await pool.query<{
+        event_type: string;
+        subject_id: string | null;
+      }>(
+        `SELECT event_type, subject_id FROM audit_ledger
+          WHERE metadata->>'table' = 'organisation_role_assignments'
+            AND metadata->'pk'->>'organisation_id' = $1
+          ORDER BY event_type`,
+        [body.id],
+      );
+      expect(rows.map((r) => r.event_type)).toEqual([
+        "data.organisation_role_assignments.delete",
+        "data.organisation_role_assignments.insert",
+        "data.organisation_role_assignments.insert",
+      ]);
+      expect(rows.every((r) => r.subject_id !== null)).toBe(true);
+    });
   },
 );

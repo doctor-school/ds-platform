@@ -25,7 +25,7 @@ export function useRelationshipCombobox({
   value,
   removedLabel,
 }: {
-  resource: "events" | "projects" | "experts" | "directions" | "partners";
+  resource: "events" | "projects" | "experts" | "directions" | "organisations";
   excludedIds: string[];
   value: string;
   removedLabel?: string;

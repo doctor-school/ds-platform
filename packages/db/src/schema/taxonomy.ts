@@ -7,6 +7,7 @@ import {
   integer,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -21,7 +22,7 @@ import { users } from "./users.js";
 
 // 012 — Content taxonomy: the retained entity write model (012-design §2, §2.1;
 // ADR-0003 §4 retained-row lifecycle). EARS-1 (#1283) lands the FIRST entity of
-// the four — `projects`. `experts` / `directions` / `partners` are their own W1
+// the four — `projects`. `experts` / `directions` / `organisations` (012 `partners`) are their own W1
 // verticals (#1284–#1286) and land in this same file as siblings; the two enums
 // and the shared constraint vocabulary below are authored once here.
 //
@@ -476,8 +477,10 @@ export const eventKinds = pgTable(
 export type EventKind = typeof eventKinds.$inferSelect;
 export type NewEventKind = typeof eventKinds.$inferInsert;
 
-export const PARTNER_TITLE_MAX = 160;
-export const PARTNER_WEBSITE_URL_MAX = 2048;
+export const ORGANISATION_TITLE_MAX = 160;
+export const ORGANISATION_WEBSITE_URL_MAX = 2048;
+export const ORGANISATION_DESCRIPTION_MAX = 1000;
+export const ORGANISATION_ROLE_TITLE_MAX = 80;
 
 /**
  * The absolute-HTTPS shape a partner website must have (012-design §2.2 — "an
@@ -491,28 +494,27 @@ export const PARTNER_WEBSITE_URL_MAX = 2048;
 export const HTTPS_URL_PATTERN = "^https://[^\\s/?#]+[^\\s]*$";
 
 /**
- * `partners` — the descriptive sponsor record (012 EARS-4, #1286).
+ * `organisations` — the one organisation registry (032 EARS-1, EARS-11), the
+ * feature-012 `partners` table (012 EARS-4, #1286) renamed in place by
+ * migration 0054 so every id, slug, version and project link survived.
  *
- * A partner is a first-class retained editorial row, never a per-event sponsor
- * string: `events.partner_ref` is the pre-012 free-text field this entity
- * replaces, and one `partners` row feeds the admin list, the admin detail, the
- * public projection (#1294) and the `project_partners` join (#1291) — including
- * its at-most-one-active-primary rule. There is no inline creation path.
+ * One row is one organisation whatever its roles: the roles are a SET held in
+ * `organisation_role_assignments` over the `organisation_roles` reference
+ * book (032-design §Data model), never a table per kind. One row feeds the
+ * admin list, the admin detail, the public partner projection (#1294) and the
+ * `project_organisations` join (#1291). There is no inline creation path.
  *
- * Shape-wise it is the `projects` lifecycle plus ONE media slot and ONE URL:
- * `title` is NOT NULL (like a direction's — a partner with no title would be an
- * unlabelled row with nothing else to identify it), while `logo_ref` and
- * `website_url` are nullable because §5.2 declares both optional and nullable on
- * `PublicPartner`. Neither is therefore publish-required: a published partner
- * with no logo and no site is a complete projection, so no
- * `PUBLISH_REQUIREMENTS_NOT_MET` branch exists for this entity.
+ * Shape-wise it is the `projects` lifecycle plus ONE media slot, ONE URL, an
+ * optional plain-text description and the two public display rules (both on by
+ * default — the absorbed partners were all publicly shown). `title` is NOT
+ * NULL; `logo_ref`, `website_url` and `description` are nullable.
  *
- * It carries NO `content_removed_at`: §2.4's editorial removal is about a
- * PERSON's regalia (`experts`); a sponsoring organization has no personal data
- * to remove, and retire/restore already expresses "off the site".
+ * It carries NO `content_removed_at`: the 012 editorial removal is about a
+ * PERSON's regalia (`experts`); an organisation has no personal data to
+ * remove, and retire/restore already expresses "off the site".
  */
-export const partners = pgTable(
-  "partners",
+export const organisations = pgTable(
+  "organisations",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     /** The permanent public identity. Editable only while `first_published_at IS NULL`. */
@@ -522,6 +524,12 @@ export const partners = pgTable(
     logoRef: text("logo_ref"),
     /** Optional absolute HTTPS site — the only outbound link a partner carries. */
     websiteUrl: text("website_url"),
+    /** 032 EARS-1 — optional plain-text description, trimmed 0–1000. */
+    description: text("description"),
+    /** 032 EARS-1 — «Показывать название публично»; on by default. */
+    publicNameVisible: boolean("public_name_visible").notNull().default(true),
+    /** 032 EARS-1 — «Показывать логотип публично»; on by default. */
+    publicLogoVisible: boolean("public_logo_visible").notNull().default(true),
     /** Set once by the first publish transaction; trigger-pinned thereafter. */
     firstPublishedAt: timestamp("first_published_at", { withTimezone: true }),
     status: taxonomyStatus("status").notNull().default("draft"),
@@ -539,46 +547,142 @@ export const partners = pgTable(
     // Spans EVERY retained row (012-design §2.1): a retired partner keeps
     // holding its slug, so a bookmarked partner URL can never later resolve to a
     // different organization. Deliberately NOT a partial index.
-    uniqueIndex("partners_slug_key").on(t.slug),
+    uniqueIndex("organisations_slug_key").on(t.slug),
     check(
-      "partners_retired_iff_deleted",
+      "organisations_retired_iff_deleted",
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
     check(
-      "partners_slug_pattern",
+      "organisations_slug_pattern",
       sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`,
     ),
     check(
-      "partners_slug_not_uuid",
+      "organisations_slug_not_uuid",
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
     ),
     check(
-      "partners_slug_bounds",
+      "organisations_slug_bounds",
       sql`char_length(${t.slug}) BETWEEN 1 AND ${sql.raw(String(TAXONOMY_SLUG_MAX))}`,
     ),
     check(
-      "partners_title_bounds",
-      sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(PARTNER_TITLE_MAX))}`,
+      "organisations_title_bounds",
+      sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(ORGANISATION_TITLE_MAX))}`,
     ),
     check(
-      "partners_website_url_bounds",
-      sql`${t.websiteUrl} IS NULL OR char_length(${t.websiteUrl}) BETWEEN 1 AND ${sql.raw(String(PARTNER_WEBSITE_URL_MAX))}`,
+      "organisations_website_url_bounds",
+      sql`${t.websiteUrl} IS NULL OR char_length(${t.websiteUrl}) BETWEEN 1 AND ${sql.raw(String(ORGANISATION_WEBSITE_URL_MAX))}`,
     ),
     // Absolute HTTPS or nothing — see `HTTPS_URL_PATTERN`.
     check(
-      "partners_website_url_https",
+      "organisations_website_url_https",
       sql`${t.websiteUrl} IS NULL OR ${t.websiteUrl} ~ ${sql.raw(`'${HTTPS_URL_PATTERN}'`)}`,
     ),
-    check("partners_version_positive", sql`${t.version} >= 1`),
     check(
-      "partners_published_has_first_published_at",
+      "organisations_description_bounds",
+      sql`${t.description} IS NULL OR char_length(${t.description}) <= ${sql.raw(String(ORGANISATION_DESCRIPTION_MAX))}`,
+    ),
+    check("organisations_version_positive", sql`${t.version} >= 1`),
+    check(
+      "organisations_published_has_first_published_at",
       sql`${t.status} <> 'published' OR ${t.firstPublishedAt} IS NOT NULL`,
     ),
   ],
 );
 
-export type Partner = typeof partners.$inferSelect;
-export type NewPartner = typeof partners.$inferInsert;
+export type Organisation = typeof organisations.$inferSelect;
+export type NewOrganisation = typeof organisations.$inferInsert;
+
+/** 032 EARS-3 / EARS-4 — an organisation role is `active` or `retired`. */
+export const organisationRoleStatus = pgEnum("organisation_role_status", [
+  "active",
+  "retired",
+]);
+
+/**
+ * `organisation_roles` — the operator-extensible role reference book (032
+ * EARS-3). A reference table rather than a Postgres enum because an operator
+ * adds a role without a migration (Q-40 / US-3). Seeded by migration 0054 with
+ * exactly `investor`, `clinical-base` and `educational-licensee`.
+ *
+ * Title uniqueness is among ACTIVE roles only and case-insensitive: a partial
+ * unique index on `lower(title)`; a retired role keeps its title for history.
+ */
+export const organisationRoles = pgTable(
+  "organisation_roles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** System-generated, permanent. */
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    status: organisationRoleStatus("status").notNull().default("active"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the admin ETag. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("organisation_roles_slug_key").on(t.slug),
+    uniqueIndex("organisation_roles_active_title_key")
+      .on(sql`lower(${t.title})`)
+      .where(sql`${t.status} = 'active'`),
+    check(
+      "organisation_roles_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check(
+      "organisation_roles_slug_pattern",
+      sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`,
+    ),
+    check(
+      "organisation_roles_slug_bounds",
+      sql`char_length(${t.slug}) BETWEEN 1 AND ${sql.raw(String(TAXONOMY_SLUG_MAX))}`,
+    ),
+    check(
+      "organisation_roles_title_bounds",
+      sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(ORGANISATION_ROLE_TITLE_MAX))}`,
+    ),
+    check("organisation_roles_version_positive", sql`${t.version} >= 1`),
+  ],
+);
+
+export type OrganisationRole = typeof organisationRoles.$inferSelect;
+export type NewOrganisationRole = typeof organisationRoles.$inferInsert;
+
+/**
+ * `organisation_role_assignments` — the role SET of one organisation (032
+ * EARS-2). Primary key `(organisation_id, role_id)`; replacing the set is
+ * delete-missing + insert-new inside the organisation's version-checked
+ * transaction, so `organisations.version` stays the one ETag of the form. A
+ * retired role's rows are kept (EARS-4).
+ */
+export const organisationRoleAssignments = pgTable(
+  "organisation_role_assignments",
+  {
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "restrict" }),
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => organisationRoles.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organisationId, t.roleId] }),
+    index("organisation_role_assignments_role_id_idx").on(t.roleId),
+  ],
+);
+
+export type OrganisationRoleAssignment =
+  typeof organisationRoleAssignments.$inferSelect;
+export type NewOrganisationRoleAssignment =
+  typeof organisationRoleAssignments.$inferInsert;
 
 /**
  * The shared two-state JOIN lifecycle (012-design §2.1, §3 `JoinLifecycle`).
@@ -880,8 +984,9 @@ export type ProjectExpert = typeof projectExperts.$inferSelect;
 export type NewProjectExpert = typeof projectExperts.$inferInsert;
 
 /**
- * `project_partners` — the retained project↔partner relationship (012 EARS-10,
- * #1292).
+ * `project_organisations` — the retained project↔organisation relationship
+ * (012 EARS-10, #1292), the former `project_partners` renamed in place by
+ * migration 0054 (032 EARS-11) with every id, flag and status kept.
  *
  * Its one attribute is `is_primary`. A project may list many partners; at most
  * ONE of them is the primary, and that one is what `PublicProjectSummary
@@ -897,16 +1002,16 @@ export type NewProjectExpert = typeof projectExperts.$inferInsert;
  * is entirely within one project's rows, so the project row lock plus the index
  * is the whole argument.
  */
-export const projectPartners = pgTable(
-  "project_partners",
+export const projectOrganisations = pgTable(
+  "project_organisations",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "restrict" }),
-    partnerId: uuid("partner_id")
+    organisationId: uuid("organisation_id")
       .notNull()
-      .references(() => partners.id, { onDelete: "restrict" }),
+      .references(() => organisations.id, { onDelete: "restrict" }),
     /** At most one ACTIVE true per project — the index below is the backstop. */
     isPrimary: boolean("is_primary").notNull().default(false),
     status: relationshipStatus("status").notNull().default("active"),
@@ -921,21 +1026,24 @@ export const projectPartners = pgTable(
       .defaultNow(),
   },
   (t) => [
-    uniqueIndex("project_partners_pair_key").on(t.projectId, t.partnerId),
-    uniqueIndex("project_partners_project_primary_active_uniq")
+    uniqueIndex("project_organisations_pair_key").on(
+      t.projectId,
+      t.organisationId,
+    ),
+    uniqueIndex("project_organisations_project_primary_active_uniq")
       .on(t.projectId)
       .where(sql`${t.status} = 'active' AND ${t.isPrimary}`),
     check(
-      "project_partners_retired_iff_deleted",
+      "project_organisations_retired_iff_deleted",
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
-    check("project_partners_version_positive", sql`${t.version} >= 1`),
-    index("project_partners_partner_id_idx").on(t.partnerId),
+    check("project_organisations_version_positive", sql`${t.version} >= 1`),
+    index("project_organisations_organisation_id_idx").on(t.organisationId),
   ],
 );
 
-export type ProjectPartner = typeof projectPartners.$inferSelect;
-export type NewProjectPartner = typeof projectPartners.$inferInsert;
+export type ProjectOrganisation = typeof projectOrganisations.$inferSelect;
+export type NewProjectOrganisation = typeof projectOrganisations.$inferInsert;
 
 // ── ADR-0016 §2.8 / §5 — the direction reference relations ──────────────────
 //
@@ -1128,3 +1236,27 @@ export const directionAdjacency = pgTable(
 
 export type DirectionAdjacency = typeof directionAdjacency.$inferSelect;
 export type NewDirectionAdjacency = typeof directionAdjacency.$inferInsert;
+
+/**
+ * 032 EARS-3 — the three roles migration 0054 seeds, under fixed ids so the
+ * golden seed and fixtures can name them. Ordinary rows thereafter: an operator
+ * may rename or retire any of them. There is no «Работодатель», «Спонсор» or
+ * «Рекламодатель» seed role.
+ */
+export const SEED_ORGANISATION_ROLES = Object.freeze({
+  investor: {
+    id: "03200000-0000-4000-8000-000000000001",
+    slug: "investor",
+    title: "Инвестор",
+  },
+  clinicalBase: {
+    id: "03200000-0000-4000-8000-000000000002",
+    slug: "clinical-base",
+    title: "Клиническая площадка",
+  },
+  educationalLicensee: {
+    id: "03200000-0000-4000-8000-000000000003",
+    slug: "educational-licensee",
+    title: "Образовательный лицензиат",
+  },
+} as const);

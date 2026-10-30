@@ -46,10 +46,10 @@ import type {
   NewEventExpert,
   NewEventProject,
   NewExpert,
-  NewPartner,
+  NewOrganisation,
   NewProject,
   NewProjectExpert,
-  NewProjectPartner,
+  NewProjectOrganisation,
 } from "../../schema/taxonomy.js";
 import type { NewUser } from "../../schema/users.js";
 import { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
@@ -137,12 +137,12 @@ export interface GoldenVolume {
   consentRecords: NewConsentRecord[];
   doctorSpecialties: GoldenDoctorSpecialtyLink[];
   directions: NewDirection[];
-  partners: NewPartner[];
+  partners: NewOrganisation[];
   directionSpecialties: GoldenDirectionSpecialtyLink[];
   directionAdjacency: NewDirectionAdjacency[];
   eventDirections: NewEventDirection[];
   projectExperts: NewProjectExpert[];
-  projectPartners: NewProjectPartner[];
+  projectPartners: NewProjectOrganisation[];
 }
 
 const MS_MINUTE = 60_000;
@@ -1228,9 +1228,9 @@ function buildDirections(at: At): NewDirection[] {
   });
 }
 
-function buildPartners(at: At): NewPartner[] {
+function buildPartners(at: At): NewOrganisation[] {
   return GOLDEN_PARTNERS.map((spec, i) => {
-    const row: NewPartner = {
+    const row: NewOrganisation = {
       id: goldenPartnerId(i),
       slug: spec.slug,
       title: spec.title,
@@ -1500,8 +1500,8 @@ function buildProjectExperts(at: At): NewProjectExpert[] {
  * only the first row of a project is ever primary, and a retired row is never
  * the primary one.
  */
-function buildProjectPartners(at: At): NewProjectPartner[] {
-  const rows: NewProjectPartner[] = [];
+function buildProjectPartners(at: At): NewProjectOrganisation[] {
+  const rows: NewProjectOrganisation[] = [];
   const partners = GOLDEN_PARTNERS.length;
   let ordinal = GOLDEN_VOLUME_ORDINAL_BASE;
 
@@ -1522,10 +1522,10 @@ function buildProjectPartners(at: At): NewProjectPartner[] {
     for (const [position, slot] of slots.entries()) {
       const retired = position === retiredAt;
       const createdAt = at({ days: -285 - j * 3 - position });
-      const row: NewProjectPartner = {
+      const row: NewProjectOrganisation = {
         id: goldenUuid(GOLDEN_GROUP.projectPartners, ordinal),
         projectId,
-        partnerId: goldenPartnerId(slot),
+        organisationId: goldenPartnerId(slot),
         isPrimary: position === 0,
         status: retired ? "retired" : "active",
         version: 1,

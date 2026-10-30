@@ -54,13 +54,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       event_projects: [],
       event_directions: [],
       project_experts: [],
-      project_partners: [],
+      project_organisations: [],
     };
     const createdEntities: Record<string, string[]> = {
       events: [],
       projects: [],
       experts: [],
-      partners: [],
+      organisations: [],
       directions: [],
     };
 
@@ -173,14 +173,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       status: Lifecycle = "published",
     ): Promise<string> {
       return insert(
-        "partners",
+        "organisations",
         {
           slug: `pt-1294-${randomUUID()}`,
           title,
           website_url: "https://partner.example",
           ...lifecycleColumns(status),
         },
-        createdEntities.partners!,
+        createdEntities.organisations!,
       );
     }
 
@@ -255,14 +255,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       retired = false,
     ): Promise<string> {
       return insert(
-        "project_partners",
+        "project_organisations",
         {
           project_id: projectId,
-          partner_id: partnerId,
+          organisation_id: partnerId,
           is_primary: isPrimary,
           ...joinState(retired),
         },
-        createdJoins.project_partners!,
+        createdJoins.project_organisations!,
       );
     }
 

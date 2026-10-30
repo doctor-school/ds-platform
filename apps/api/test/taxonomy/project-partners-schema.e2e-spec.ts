@@ -10,11 +10,11 @@ import pg from "pg";
 // primary-partner seat has an upper bound and NO lower bound. A published
 // project with no primary partner is legal and reports `primaryPartner: null`,
 // so the entire invariant is expressible as one partial unique index —
-// `project_partners_project_primary_active_uniq` — and there is nothing here
+// `project_organisations_project_primary_active_uniq` — and there is nothing here
 // that a cross-table service check has to add.
 
 describe.skipIf(!process.env.DATABASE_URL)(
-  "012 EARS-10 — project_partners schema, retained identity and audit capture (e2e)",
+  "012 EARS-10 — project_organisations schema, retained identity and audit capture (e2e)",
   () => {
     let pool: pg.Pool;
     const createdProjects: string[] = [];
@@ -26,16 +26,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const id of createdProjects.splice(0)) {
-        await pool.query("DELETE FROM project_partners WHERE project_id = $1", [
-          id,
-        ]);
+        await pool.query(
+          "DELETE FROM project_organisations WHERE project_id = $1",
+          [id],
+        );
         await pool.query("DELETE FROM projects WHERE id = $1", [id]);
       }
       for (const id of createdPartners.splice(0)) {
-        await pool.query("DELETE FROM project_partners WHERE partner_id = $1", [
-          id,
-        ]);
-        await pool.query("DELETE FROM partners WHERE id = $1", [id]);
+        await pool.query(
+          "DELETE FROM project_organisations WHERE organisation_id = $1",
+          [id],
+        );
+        await pool.query("DELETE FROM organisations WHERE id = $1", [id]);
       }
     });
 
@@ -55,7 +57,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     async function insertPartner(): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO partners (slug, title) VALUES ($1, $2) RETURNING id`,
+        `INSERT INTO organisations (slug, title) VALUES ($1, $2) RETURNING id`,
         [`pt-1292-${randomUUID()}`, "Фарма 1292"],
       );
       createdPartners.push(rows[0]!.id);
@@ -68,7 +70,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       isPrimary = false,
     ): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO project_partners (project_id, partner_id, is_primary)
+        `INSERT INTO project_organisations (project_id, organisation_id, is_primary)
          VALUES ($1, $2, $3) RETURNING id`,
         [projectId, partnerId, isPrimary],
       );
@@ -79,7 +81,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const id = await relate(await insertProject(), await insertPartner());
       const { rows } = await pool.query(
         `SELECT is_primary, status, version, deleted_at
-           FROM project_partners WHERE id = $1`,
+           FROM project_organisations WHERE id = $1`,
         [id],
       );
       expect(rows[0]).toMatchObject({
@@ -96,16 +98,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const id = await relate(projectId, partnerId);
 
       await expect(relate(projectId, partnerId)).rejects.toThrow(
-        /project_partners_pair_key|duplicate key/i,
+        /project_organisations_pair_key|duplicate key/i,
       );
 
       await pool.query(
-        `UPDATE project_partners SET status = 'retired', deleted_at = now()
+        `UPDATE project_organisations SET status = 'retired', deleted_at = now()
           WHERE id = $1`,
         [id],
       );
       await expect(relate(projectId, partnerId)).rejects.toThrow(
-        /project_partners_pair_key|duplicate key/i,
+        /project_organisations_pair_key|duplicate key/i,
       );
     });
 
@@ -116,7 +118,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await expect(
         relate(projectId, await insertPartner(), true),
       ).rejects.toThrow(
-        /project_partners_project_primary_active_uniq|duplicate key/i,
+        /project_organisations_project_primary_active_uniq|duplicate key/i,
       );
 
       // Non-primary co-sponsors are unbounded — the index is partial on the flag.
@@ -125,7 +127,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       ).resolves.toBeTypeOf("string");
 
       await pool.query(
-        `UPDATE project_partners SET status = 'retired', deleted_at = now()
+        `UPDATE project_organisations SET status = 'retired', deleted_at = now()
           WHERE id = $1`,
         [first],
       );
@@ -144,17 +146,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       await expect(
         pool.query(
-          `UPDATE project_partners SET status = 'retired' WHERE id = $1`,
+          `UPDATE project_organisations SET status = 'retired' WHERE id = $1`,
           [id],
         ),
-      ).rejects.toThrow(/project_partners_retired_iff_deleted/i);
+      ).rejects.toThrow(/project_organisations_retired_iff_deleted/i);
 
       await expect(
         pool.query(
-          `UPDATE project_partners SET deleted_at = now() WHERE id = $1`,
+          `UPDATE project_organisations SET deleted_at = now() WHERE id = $1`,
           [id],
         ),
-      ).rejects.toThrow(/project_partners_retired_iff_deleted/i);
+      ).rejects.toThrow(/project_organisations_retired_iff_deleted/i);
     });
 
     it("012 EARS-10: the system shall refuse an endpoint delete while a relation still points at it", async () => {
@@ -166,14 +168,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
         pool.query("DELETE FROM projects WHERE id = $1", [projectId]),
       ).rejects.toThrow(/violates foreign key constraint/i);
       await expect(
-        pool.query("DELETE FROM partners WHERE id = $1", [partnerId]),
+        pool.query("DELETE FROM organisations WHERE id = $1", [partnerId]),
       ).rejects.toThrow(/violates foreign key constraint/i);
     });
 
     it("012 EARS-10: moving the primary flag shall land in the same-transaction audit ledger as a plain diff", async () => {
       const id = await relate(await insertProject(), await insertPartner());
       await pool.query(
-        `UPDATE project_partners SET is_primary = true, version = version + 1
+        `UPDATE project_organisations SET is_primary = true, version = version + 1
           WHERE id = $1`,
         [id],
       );
@@ -189,8 +191,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
         [id],
       );
       expect(rows.map((r) => r.event_type)).toEqual([
-        "data.project_partners.insert",
-        "data.project_partners.update",
+        "data.project_organisations.insert",
+        "data.project_organisations.update",
       ]);
       expect(rows[1]!.metadata.diff.is_primary).toEqual({
         old: false,

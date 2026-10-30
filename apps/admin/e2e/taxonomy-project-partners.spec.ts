@@ -102,14 +102,14 @@ async function createPartner(
   page: Page,
   title: string,
 ): Promise<{ title: string; url: string }> {
-  await page.goto("/partners/create");
-  await page.getByTestId("partner-title").fill(title);
-  await page.getByTestId("submit-partner").click();
-  await page.waitForURL(/\/partners\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+  await page.goto("/organisations/create");
+  await page.getByTestId("organisation-title").fill(title);
+  await page.getByTestId("submit-organisation").click();
+  await page.waitForURL(/\/organisations\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   return { title, url: page.url() };
 }
 
-/** Open the «Партнёры» tab of a project detail and wait for the panel. */
+/** Open the «Организации» tab of a project detail and wait for the panel. */
 async function openPartnersTab(page: Page, projectUrl: string): Promise<void> {
   await page.goto(projectUrl);
   await page.getByTestId("tab-partners").click();
@@ -138,7 +138,7 @@ async function linkPartner(
   }
   await page.getByTestId("project-partner-link-submit").click();
   await expect(page.getByTestId("project-partners-notice")).toContainText(
-    "Партнёр добавлен к проекту.",
+    "Организация добавлена к проекту.",
   );
 }
 
@@ -172,7 +172,7 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
     await page.getByTestId("project-partner-link-submit").click();
 
     await expect(page.getByTestId("project-partners-notice")).toContainText(
-      "Партнёр добавлен к проекту.",
+      "Организация добавлена к проекту.",
     );
     await expect(page.getByTestId("project-partners-panel")).toContainText(
       project.title,
@@ -211,7 +211,7 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
     );
     await page.getByTestId("project-partner-link-submit").click();
     await expect(page.getByTestId("project-partners-notice")).toContainText(
-      "Партнёр добавлен к проекту.",
+      "Организация добавлена к проекту.",
     );
     const reverseRow = page
       .getByTestId("project-partners-panel")
@@ -286,7 +286,7 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
       .getByTestId("project-partners-panel")
       .locator('[data-testid^="project-partner-row-"]')
       .filter({ hasText: first.title });
-    await expect(firstRow).toContainText("Основной");
+    await expect(firstRow).toContainText("Основная");
 
     // ── The flag is now taken: the create form withholds it entirely ───────
     // The hint names the way through («сначала снимите отметку»), so the operator
@@ -325,7 +325,7 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
       .getByTestId(`project-partner-primary-toggle-${secondId}`)
       .click();
     await expect(page.getByTestId("project-partners-notice")).toContainText(
-      "Партнёр отмечен основным.",
+      "Организация отмечена основной.",
     );
     await expect(
       secondRow.getByTestId(`project-partner-primary-${secondId}`),

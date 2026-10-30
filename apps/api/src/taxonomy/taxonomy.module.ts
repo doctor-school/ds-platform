@@ -30,9 +30,12 @@ import { LifecycleImpactService } from "./lifecycle-impact.service.js";
 import { MediaCleanupService } from "./media/media-cleanup.service.js";
 import { StillImageNormalizer } from "./media/still-image-normalizer.js";
 import { UploadReconcileService } from "./media/upload-reconcile.service.js";
-import { PartnersAdminController } from "./partners.admin.controller.js";
-import { PartnersRepository } from "./partners.repository.js";
-import { PartnersService } from "./partners.service.js";
+import { OrganisationRolesAdminController } from "./organisation-roles.admin.controller.js";
+import { OrganisationRolesRepository } from "./organisation-roles.repository.js";
+import { OrganisationRolesService } from "./organisation-roles.service.js";
+import { OrganisationsAdminController } from "./organisations.admin.controller.js";
+import { OrganisationsRepository } from "./organisations.repository.js";
+import { OrganisationsService } from "./organisations.service.js";
 import {
   ProjectCuratorAdminController,
   ProjectExpertsAdminController,
@@ -95,7 +98,8 @@ import { EventKindsService } from "./event-kinds.service.js";
     DirectionsAdminController,
     // 012 EARS-25…28 (#2509) — the event-kind dictionary.
     EventKindsAdminController,
-    PartnersAdminController,
+    OrganisationsAdminController,
+    OrganisationRolesAdminController,
     // #1289 EARS-7 — the expert↔event JOIN surface. It lives in this module
     // rather than in `events` because its whole contract (retained lifecycle,
     // idempotency record, RFC 7807 filter) is the taxonomy one; the event side
@@ -148,8 +152,10 @@ import { EventKindsService } from "./event-kinds.service.js";
     DirectionsService,
     EventKindsRepository,
     EventKindsService,
-    PartnersRepository,
-    PartnersService,
+    OrganisationsRepository,
+    OrganisationsService,
+    OrganisationRolesRepository,
+    OrganisationRolesService,
     EventExpertsRepository,
     EventExpertsService,
     EventProjectsRepository,

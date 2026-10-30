@@ -35,6 +35,23 @@ export function narrowRefusal(error: unknown): NarrowRefusal | null {
   return { total, events, more: Math.max(0, total - events.length) };
 }
 
+/**
+ * The form fields a `VALIDATION_FAILED` refusal addresses (032 EARS-1, EARS-3),
+ * folded to the top-level field (`roleIds.0` → `roleIds`) and listed once each
+ * in the server's order — so the form marks the field the operator must fix
+ * instead of only a page-level sentence. Any other refusal addresses none.
+ */
+export function refusedFields(error: unknown): string[] {
+  const refusal = error as TaxonomyHttpError | undefined;
+  if (refusal?.errorCode !== "VALIDATION_FAILED") return [];
+  const fields: string[] = [];
+  for (const entry of refusal.fieldErrors ?? []) {
+    const field = entry.path.split(".")[0];
+    if (field && !fields.includes(field)) fields.push(field);
+  }
+  return fields;
+}
+
 export interface TaxonomyErrorContext {
   /** The command disambiguates a shared wire code without changing fallback truth. */
   action?: "restore-curator" | "restore-primary";
@@ -269,9 +286,9 @@ export function taxonomyErrorKey(
   // - `CONTENT_REMOVED` — an editorially removed expert is never publishable.
   //
   // `PUBLISH_REQUIREMENTS_NOT_MET` keeps the shared tail mapping: the field-set
-  // sentence is already per-kind there, and partners have no completeness
+  // sentence is already per-kind there, and organisations have no completeness
   // branch at all (§5.2 — title alone is a complete public projection).
-  if (ns === "projects" || ns === "experts" || ns === "partners") {
+  if (ns === "projects" || ns === "experts" || ns === "organisations") {
     switch (code) {
       case "PUBLISHED_PROJECT_REQUIRES_CURATOR":
         return "projects.errors.curatorRequired";

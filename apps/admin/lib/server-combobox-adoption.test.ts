@@ -17,7 +17,8 @@ const source = (relativePath: string): string =>
 const LIST_PAGES = [
   "../app/projects/page.tsx",
   "../app/experts/page.tsx",
-  "../app/partners/page.tsx",
+  "../app/organisations/page.tsx",
+  "../app/organisation-roles/page.tsx",
   "../app/directions/page.tsx",
   "../app/specialties/page.tsx",
   "../app/direction-specialties/page.tsx",

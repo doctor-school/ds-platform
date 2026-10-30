@@ -91,7 +91,7 @@ export class EventProjectsService {
     private readonly impact: LifecycleImpactService,
     // The ONE `PublicProjectSummary` mapper (#1292). This vertical used to build
     // the DTO itself with a hardcoded `primaryPartner: null`; now that
-    // `project_partners` exists, three routes emit that DTO and a per-vertical
+    // `project_organisations` exists, three routes emit that DTO and a per-vertical
     // copy is exactly how one of them would silently keep returning `null`.
     @Inject(PublicProjectSummaryService)
     private readonly summaries: PublicProjectSummaryService,

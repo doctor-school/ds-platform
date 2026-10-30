@@ -11,7 +11,8 @@ export type TaxonomySlugKind =
   | "project"
   | "partner"
   | "expert"
-  | "event-kind";
+  | "event-kind"
+  | "organisation-role";
 
 /** Derive a valid base while keeping even non-transliterable input authorable. */
 export function taxonomySlugBase(

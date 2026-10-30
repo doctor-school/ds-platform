@@ -43,7 +43,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       } as Record<string, unknown>;
       const cols = Object.keys(row);
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO partners (${cols.map((c) => `"${c}"`).join(", ")})
+        `INSERT INTO organisations (${cols.map((c) => `"${c}"`).join(", ")})
          VALUES (${cols.map((_, i) => `$${i + 1}`).join(", ")})
          RETURNING id`,
         cols.map((c) => row[c]),
@@ -57,7 +57,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const { rows } = await pool.query(
         `SELECT slug, title, status, version, deleted_at, first_published_at,
                 logo_ref, website_url
-           FROM partners WHERE id = $1`,
+           FROM organisations WHERE id = $1`,
         [id],
       );
       expect(rows[0]).toMatchObject({
@@ -76,7 +76,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const s = slug();
       await insertPartner({ slug: s });
       await expect(insertPartner({ slug: s })).rejects.toThrow(
-        /partners_slug_key/,
+        /organisations_slug_key/,
       );
       // …including against a RETIRED holder: retirement never releases identity.
       const retiredSlug = slug();
@@ -86,49 +86,49 @@ describe.skipIf(!process.env.DATABASE_URL)(
         deleted_at: new Date(),
       });
       await expect(insertPartner({ slug: retiredSlug })).rejects.toThrow(
-        /partners_slug_key/,
+        /organisations_slug_key/,
       );
     });
 
     it("012 EARS-4: when an authored slug is not lowercase-hyphen ASCII or is canonical UUID text, the system shall reject it", async () => {
       for (const bad of ["Not valid", "trailing-", "double--hyphen", "UPPER"]) {
         await expect(insertPartner({ slug: bad })).rejects.toThrow(
-          /partners_slug_pattern/,
+          /organisations_slug_pattern/,
         );
       }
       await expect(insertPartner({ slug: UUID_TEXT })).rejects.toThrow(
-        /partners_slug_not_uuid/,
+        /organisations_slug_not_uuid/,
       );
     });
 
     it("EARS-20: the database shall reject partner slugs longer than 80 characters", async () => {
       await expect(insertPartner({ slug: "a".repeat(81) })).rejects.toThrow(
-        /partners_slug_bounds/,
+        /organisations_slug_bounds/,
       );
       const id = await insertPartner();
       await expect(
-        pool.query("UPDATE partners SET slug = $1 WHERE id = $2", [
+        pool.query("UPDATE organisations SET slug = $1 WHERE id = $2", [
           "a".repeat(81),
           id,
         ]),
-      ).rejects.toThrow(/partners_slug_bounds/);
+      ).rejects.toThrow(/organisations_slug_bounds/);
     });
 
     it("012 EARS-4: when status and deleted_at disagree, the system shall reject the row so retired ⇔ deleted_at holds", async () => {
       await expect(insertPartner({ status: "retired" })).rejects.toThrow(
-        /partners_retired_iff_deleted/,
+        /organisations_retired_iff_deleted/,
       );
       await expect(
         insertPartner({ status: "draft", deleted_at: new Date() }),
-      ).rejects.toThrow(/partners_retired_iff_deleted/);
+      ).rejects.toThrow(/organisations_retired_iff_deleted/);
     });
 
     it("012 EARS-4: when the title or the website URL exceeds the §2.2 authoring matrix, the system shall reject the row", async () => {
       await expect(insertPartner({ title: "x".repeat(161) })).rejects.toThrow(
-        /partners_title_bounds/,
+        /organisations_title_bounds/,
       );
       await expect(insertPartner({ title: "" })).rejects.toThrow(
-        /partners_title_bounds/,
+        /organisations_title_bounds/,
       );
       await expect(insertPartner({ title: null })).rejects.toThrow(
         /null value in column "title"|not-null/i,
@@ -137,7 +137,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         insertPartner({
           website_url: `https://p.example/${"x".repeat(2048)}`,
         }),
-      ).rejects.toThrow(/partners_website_url_bounds/);
+      ).rejects.toThrow(/organisations_website_url_bounds/);
     });
 
     it("012 EARS-4: when a website URL is not an absolute https link, the system shall reject the row", async () => {
@@ -151,14 +151,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
         "https:// partner.example",
       ]) {
         await expect(insertPartner({ website_url: bad })).rejects.toThrow(
-          /partners_website_url_https/,
+          /organisations_website_url_https/,
         );
       }
       // The accept side of the same guard — stored verbatim, no normalization.
       const url = "https://partner.example/ru/about?ref=ds#team";
       const id = await insertPartner({ website_url: url });
       const { rows } = await pool.query<{ website_url: string }>(
-        `SELECT website_url FROM partners WHERE id = $1`,
+        `SELECT website_url FROM organisations WHERE id = $1`,
         [id],
       );
       expect(rows[0]!.website_url).toBe(url);
@@ -172,24 +172,24 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       await expect(
         pool.query(
-          `UPDATE partners SET first_published_at = NULL WHERE id = $1`,
+          `UPDATE organisations SET first_published_at = NULL WHERE id = $1`,
           [id],
         ),
       ).rejects.toThrow(/set once/);
       await expect(
         pool.query(
-          `UPDATE partners SET first_published_at = now() WHERE id = $1`,
+          `UPDATE organisations SET first_published_at = now() WHERE id = $1`,
           [id],
         ),
       ).rejects.toThrow(/set once/);
       // Re-writing the SAME instant is not a change: an ordinary full-row UPDATE
       // of an already-published partner still works.
       await pool.query(
-        `UPDATE partners SET title = $2, first_published_at = $3 WHERE id = $1`,
+        `UPDATE organisations SET title = $2, first_published_at = $3 WHERE id = $1`,
         [id, "Партнёр 1286 (правка)", published],
       );
       const { rows } = await pool.query(
-        `SELECT first_published_at FROM partners WHERE id = $1`,
+        `SELECT first_published_at FROM organisations WHERE id = $1`,
         [id],
       );
       expect(rows[0]!.first_published_at).toEqual(published);
@@ -197,16 +197,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("012 EARS-4: when a partner row is published, the system shall require its publication instant", async () => {
       await expect(insertPartner({ status: "published" })).rejects.toThrow(
-        /partners_published_has_first_published_at/,
+        /organisations_published_has_first_published_at/,
       );
     });
 
     it("012 EARS-4: when a partner row changes, feature 010's audit trigger shall record it", async () => {
       const { rows } = await pool.query<{ tgname: string }>(
         `SELECT tgname FROM pg_trigger
-          WHERE tgrelid = 'partners'::regclass AND NOT tgisinternal`,
+          WHERE tgrelid = 'organisations'::regclass AND NOT tgisinternal`,
       );
-      expect(rows.map((r) => r.tgname)).toContain("partners_audit");
+      expect(rows.map((r) => r.tgname)).toContain("organisations_audit");
 
       const id = await insertPartner();
       const { rows: ledger } = await pool.query<{ event_type: string }>(
@@ -214,7 +214,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
           WHERE metadata->'pk'->>'id' = $1 ORDER BY created_at`,
         [id],
       );
-      expect(ledger.map((r) => r.event_type)).toContain("data.partners.insert");
+      expect(ledger.map((r) => r.event_type)).toContain(
+        "data.organisations.insert",
+      );
     });
 
     it("012 EARS-4: admin title search shall be served by a trigram index rather than a full-roster scan", async () => {
@@ -226,13 +228,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
         indexname: string;
         indexdef: string;
       }>(
-        `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'partners'`,
+        `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'organisations'`,
       );
       const byName = new Map(rows.map((r) => [r.indexname, r.indexdef]));
-      expect(byName.get("partners_title_trgm_idx")).toMatch(
+      expect(byName.get("organisations_title_trgm_idx")).toMatch(
         /USING gin \(title gin_trgm_ops\)/,
       );
-      expect(byName.get("partners_slug_trgm_idx")).toMatch(
+      expect(byName.get("organisations_slug_trgm_idx")).toMatch(
         /USING gin \(slug gin_trgm_ops\)/,
       );
       const { rows: ext } = await pool.query(
@@ -247,7 +249,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         confdeltype: string;
       }>(
         `SELECT conname, confdeltype FROM pg_constraint
-          WHERE contype = 'f' AND conrelid = 'partners'::regclass`,
+          WHERE contype = 'f' AND conrelid = 'organisations'::regclass`,
       );
       for (const fk of rows) {
         expect(fk.confdeltype, `${fk.conname} must not cascade`).not.toBe("c");

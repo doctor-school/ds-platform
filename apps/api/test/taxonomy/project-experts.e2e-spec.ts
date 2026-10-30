@@ -322,9 +322,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await pool.query("DELETE FROM project_experts WHERE project_id = $1", [
           id,
         ]);
-        await pool.query("DELETE FROM project_partners WHERE project_id = $1", [
-          id,
-        ]);
+        await pool.query(
+          "DELETE FROM project_organisations WHERE project_id = $1",
+          [id],
+        );
         await pool.query("DELETE FROM projects WHERE id = $1", [id]);
       }
       for (const id of createdExpertIds.splice(0)) {

@@ -11,12 +11,12 @@ import {
   EligibleExpertUserListSchema,
   EligibleExpertUserQuerySchema,
   CreateDirectionRequestSchema,
-  CreatePartnerRequestSchema,
-  PartnerAdminDetailSchema,
-  PartnerAdminListItemSchema,
-  PARTNER_TITLE_MAX,
-  PARTNER_WEBSITE_URL_MAX,
-  UpdatePartnerRequestSchema,
+  CreateOrganisationRequestSchema,
+  OrganisationAdminDetailSchema,
+  OrganisationAdminListItemSchema,
+  ORGANISATION_TITLE_MAX,
+  ORGANISATION_WEBSITE_URL_MAX,
+  UpdateOrganisationRequestSchema,
   isCanonicalIdempotencyKey,
   parseIfMatchVersion,
   slugifyTaxonomyTitle,
@@ -61,7 +61,7 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
       ProjectAdminDetailSchema.shape.slug,
       ExpertAdminDetailSchema.shape.slug,
       DirectionAdminDetailSchema.shape.slug,
-      PartnerAdminDetailSchema.shape.slug,
+      OrganisationAdminDetailSchema.shape.slug,
       PublicProjectSummarySchema.shape.slug,
       PublicPartnerSummarySchema.shape.slug,
     ]) {
@@ -241,16 +241,14 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
 
   it("EARS-22: the project-partner admin query shall strictly filter the primary flag", () => {
     expect(
-      ProjectPartnerAdminListQuerySchema.parse({ isPrimary: "true" })
-        .isPrimary,
+      ProjectPartnerAdminListQuerySchema.parse({ isPrimary: "true" }).isPrimary,
     ).toBe(true);
     expect(
       ProjectPartnerAdminListQuerySchema.parse({ isPrimary: "false" })
         .isPrimary,
     ).toBe(false);
     expect(
-      ProjectPartnerAdminListQuerySchema.safeParse({ isPrimary: "1" })
-        .success,
+      ProjectPartnerAdminListQuerySchema.safeParse({ isPrimary: "1" }).success,
     ).toBe(false);
     expect(
       ProjectPartnerAdminListQuerySchema.safeParse({ isPrimary: "yes" })
@@ -623,10 +621,10 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
 describe("012 taxonomy — partner authoring contract (SSOT)", () => {
   it("012 EARS-4: when a partner create carries a title, the system shall accept it with an optional website", () => {
     expect(
-      CreatePartnerRequestSchema.parse({ title: "  Фармкомпания  " }),
+      CreateOrganisationRequestSchema.parse({ title: "  Фармкомпания  " }),
     ).toEqual({ title: "Фармкомпания" });
     expect(
-      CreatePartnerRequestSchema.parse({
+      CreateOrganisationRequestSchema.parse({
         title: "Фармкомпания",
         websiteUrl: "https://example.org/ru/about?x=1#top",
       }).websiteUrl,
@@ -637,13 +635,13 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
 
   it("EARS-20: when partner create or update carries a slug, the schema shall reject the client-owned identity", () => {
     expect(
-      CreatePartnerRequestSchema.safeParse({
+      CreateOrganisationRequestSchema.safeParse({
         title: "System-owned address",
         slug: "client-owned-address",
       }).success,
     ).toBe(false);
     expect(
-      UpdatePartnerRequestSchema.safeParse({
+      UpdateOrganisationRequestSchema.safeParse({
         slug: "client-owned-address",
       }).success,
     ).toBe(false);
@@ -661,7 +659,7 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
       "",
     ]) {
       expect(
-        CreatePartnerRequestSchema.safeParse({
+        CreateOrganisationRequestSchema.safeParse({
           title: "Партнёр",
           websiteUrl: bad,
         }).success,
@@ -669,40 +667,40 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
       ).toBe(false);
     }
     expect(
-      CreatePartnerRequestSchema.safeParse({
+      CreateOrganisationRequestSchema.safeParse({
         title: "Партнёр",
-        websiteUrl: `https://example.org/${"x".repeat(PARTNER_WEBSITE_URL_MAX)}`,
+        websiteUrl: `https://example.org/${"x".repeat(ORGANISATION_WEBSITE_URL_MAX)}`,
       }).success,
     ).toBe(false);
   });
 
   it("012 EARS-4: when the title is empty or over the matrix bound, the system shall reject it", () => {
-    expect(CreatePartnerRequestSchema.safeParse({ title: "   " }).success).toBe(
-      false,
-    );
     expect(
-      CreatePartnerRequestSchema.safeParse({
-        title: "x".repeat(PARTNER_TITLE_MAX + 1),
+      CreateOrganisationRequestSchema.safeParse({ title: "   " }).success,
+    ).toBe(false);
+    expect(
+      CreateOrganisationRequestSchema.safeParse({
+        title: "x".repeat(ORGANISATION_TITLE_MAX + 1),
       }).success,
     ).toBe(false);
   });
 
   it("012 EARS-16: when client JSON supplies a storage reference or mediaAction on create, the system shall reject the request", () => {
     expect(
-      CreatePartnerRequestSchema.safeParse({
+      CreateOrganisationRequestSchema.safeParse({
         title: "Партнёр",
         logoRef: "taxonomy/partners/logos/x.webp",
       }).success,
     ).toBe(false);
     expect(
-      CreatePartnerRequestSchema.safeParse({
+      CreateOrganisationRequestSchema.safeParse({
         title: "Партнёр",
         logoUrl: "https://cdn.example.org/x.webp",
       }).success,
     ).toBe(false);
     // `mediaAction` is a PATCH-only verb — there is nothing to clear on create.
     expect(
-      CreatePartnerRequestSchema.safeParse({
+      CreateOrganisationRequestSchema.safeParse({
         title: "Партнёр",
         mediaAction: "clear",
       }).success,
@@ -710,18 +708,22 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
   });
 
   it("012 EARS-4: when a partner PATCH clears the website, the system shall accept null there but never for the title", () => {
-    expect(UpdatePartnerRequestSchema.parse({ websiteUrl: null })).toEqual({
-      websiteUrl: null,
-    });
-    expect(UpdatePartnerRequestSchema.parse({})).toEqual({});
-    expect(
-      UpdatePartnerRequestSchema.parse({ mediaAction: "clear" }).mediaAction,
-    ).toBe("clear");
-    expect(UpdatePartnerRequestSchema.safeParse({ title: null }).success).toBe(
-      false,
+    expect(UpdateOrganisationRequestSchema.parse({ websiteUrl: null })).toEqual(
+      {
+        websiteUrl: null,
+      },
     );
+    expect(UpdateOrganisationRequestSchema.parse({})).toEqual({});
     expect(
-      UpdatePartnerRequestSchema.safeParse({ mediaAction: "replace" }).success,
+      UpdateOrganisationRequestSchema.parse({ mediaAction: "clear" })
+        .mediaAction,
+    ).toBe("clear");
+    expect(
+      UpdateOrganisationRequestSchema.safeParse({ title: null }).success,
+    ).toBe(false);
+    expect(
+      UpdateOrganisationRequestSchema.safeParse({ mediaAction: "replace" })
+        .success,
     ).toBe(false);
   });
 
@@ -732,16 +734,20 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
       title: "Фармкомпания",
       logoUrl: "https://cdn.example.org/taxonomy/partners/logos/a.webp",
       websiteUrl: null,
+      description: null,
+      publicNameVisible: true,
+      publicLogoVisible: true,
+      roles: [],
       status: "draft" as const,
       firstPublishedAt: null,
       version: 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    const parsed = PartnerAdminDetailSchema.parse(detail);
+    const parsed = OrganisationAdminDetailSchema.parse(detail);
     expect(parsed).not.toHaveProperty("logoRef");
     expect(parsed).not.toHaveProperty("slugEditable");
-    expect(PartnerAdminListItemSchema.parse(detail)).not.toHaveProperty(
+    expect(OrganisationAdminListItemSchema.parse(detail)).not.toHaveProperty(
       "logoUrl",
     );
   });
@@ -976,16 +982,22 @@ describe("012 EARS-25 / EARS-28 — event-kind dictionary contract (SSOT)", () =
       ).toBe(false);
     }
     expect(
-      UpdateEventKindRequestSchema.safeParse({ allowedFormats: ["offline", "hybrid"] })
-        .success,
+      UpdateEventKindRequestSchema.safeParse({
+        allowedFormats: ["offline", "hybrid"],
+      }).success,
     ).toBe(true);
   });
 
   it("012 EARS-28: PublicEventKind is exactly { id, slug, title }", () => {
-    const kind = { id: "55555555-5555-4555-8555-555555555555", slug: "efir", title: "Эфир" };
+    const kind = {
+      id: "55555555-5555-4555-8555-555555555555",
+      slug: "efir",
+      title: "Эфир",
+    };
     expect(PublicEventKindSchema.parse(kind)).toEqual(kind);
     expect(
-      PublicEventKindSchema.safeParse({ ...kind, allowedFormats: ["online"] }).success,
+      PublicEventKindSchema.safeParse({ ...kind, allowedFormats: ["online"] })
+        .success,
     ).toBe(false);
     expect(
       PublicEventKindSchema.safeParse({ ...kind, status: "published" }).success,

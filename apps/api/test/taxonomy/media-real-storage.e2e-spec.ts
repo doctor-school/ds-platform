@@ -165,7 +165,7 @@ describe.skipIf(!hasLiveDependencies)(
     }
 
     async function proveRefusalThenRecovery(input: {
-      table: "projects" | "experts" | "partners";
+      table: "projects" | "experts" | "organisations";
       path: string;
       field: "cover" | "photo" | "logo";
       refColumn: "cover_ref" | "photo_ref" | "logo_ref";
@@ -343,8 +343,8 @@ describe.skipIf(!hasLiveDependencies)(
 
     it("EARS-21: a real provider refusal leaves Partner logo unchanged and a new valid retry succeeds", async () => {
       await proveRefusalThenRecovery({
-        table: "partners",
-        path: "/v1/admin/partners",
+        table: "organisations",
+        path: "/v1/admin/organisations",
         field: "logo",
         refColumn: "logo_ref",
         payload: {

@@ -5,7 +5,7 @@ type BoundingBox = { x: number; y: number; width: number; height: number };
 import { signInAsAdmin } from "@ds/e2e/admin-events";
 
 /**
- * #1674 — the admin expert / project / partner detail screens at a phone width
+ * #1674 — the admin expert / project / organisation detail screens at a phone width
  * (390px).
  *
  * `/events/[id]` was fixed in #1399; the other three detail screens kept the
@@ -69,7 +69,7 @@ const BROKEN_DETAIL_HEADER_CLASS = "mb-6 flex items-center gap-3";
 const SCREENS = [
   { name: "expert", list: "/experts", detail: "/experts" },
   { name: "project", list: "/projects", detail: "/projects" },
-  { name: "partner", list: "/partners", detail: "/partners" },
+  { name: "organisation", list: "/organisations", detail: "/organisations" },
 ] as const;
 
 /**
@@ -122,14 +122,16 @@ async function createSubject(page: Page, name: string): Promise<string> {
       await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/, { timeout: 20_000 });
       return idFromDetailUrl(page);
     }
-    case "partner": {
-      await page.goto("/partners/create");
-      await page.getByTestId("partner-form").waitFor({ state: "visible" });
+    case "organisation": {
+      await page.goto("/organisations/create");
+      await page.getByTestId("organisation-form").waitFor({ state: "visible" });
       await page
         .locator("#title")
         .fill(`Национальная ассоциация специалистов ${stamp()}`);
-      await page.getByTestId("submit-partner").click();
-      await page.waitForURL(/\/partners\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+      await page.getByTestId("submit-organisation").click();
+      await page.waitForURL(/\/organisations\/[0-9a-f-]{36}$/, {
+        timeout: 20_000,
+      });
       return idFromDetailUrl(page);
     }
     default:
@@ -308,7 +310,7 @@ test.describe("#1674 admin detail screens at 390px", () => {
   // sign-in and the api rate-limits registration per IP, so a test-per-screen
   // spends three registrations on one identical session. The loop keeps every
   // screen individually named in the failure message instead.
-  test("expert / project / partner detail: the header stacks at a phone width, no tab side-scrolls, and the desktop row is unchanged", async ({
+  test("expert / project / organisation detail: the header stacks at a phone width, no tab side-scrolls, and the desktop row is unchanged", async ({
     page,
   }) => {
     test.setTimeout(180_000);

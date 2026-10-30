@@ -11,14 +11,20 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import type { DrizzleHandle, Partner, Project, ProjectPartner } from "@ds/db";
-import { partners, projectPartners, projects } from "@ds/db";
+import type {
+  DrizzleHandle,
+  Organisation,
+  Project,
+  ProjectOrganisation,
+} from "@ds/db";
+import { organisations, projectOrganisations, projects } from "@ds/db";
 import type { ProjectPartnerAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { withRelationConflictMapping } from "./taxonomy.errors.js";
 
-// 012 EARS-10 (#1292) — Drizzle data access for the `project_partners` join.
+// 012 EARS-10 (#1292) — Drizzle data access for the `project_organisations` join
+// (the 012 `project_partners` table, renamed by 032 migration 0054).
 //
 // The write protocol here is deliberately SHORTER than the `project_experts`
 // one, and the difference is a property of the invariant rather than a shortcut:
@@ -51,7 +57,7 @@ export interface PartnerLifecycle {
 
 /** One relation plus both endpoints' display forms — the admin projection input. */
 export interface ProjectPartnerRow {
-  relation: ProjectPartner;
+  relation: ProjectOrganisation;
   project: { id: string; slug: string; title: string };
   partner: { id: string; slug: string; title: string };
 }
@@ -66,7 +72,7 @@ export interface ProjectPartnerPatch {
 /** One §5.2 partner item of a project, before its logo URL is signed. */
 export interface PublicProjectPartnerRow {
   isPrimary: boolean;
-  partner: Partner;
+  partner: Organisation;
 }
 
 /** One §5.2 project item of a partner, before its summary is built. */
@@ -109,12 +115,12 @@ export class ProjectPartnersRepository {
   async lockRelationsOfProject(
     tx: Tx,
     projectId: string,
-  ): Promise<ProjectPartner[]> {
+  ): Promise<ProjectOrganisation[]> {
     return tx
       .select()
-      .from(projectPartners)
-      .where(eq(projectPartners.projectId, projectId))
-      .orderBy(asc(projectPartners.id))
+      .from(projectOrganisations)
+      .where(eq(projectOrganisations.projectId, projectId))
+      .orderBy(asc(projectOrganisations.id))
       .for("update");
   }
 
@@ -127,31 +133,38 @@ export class ProjectPartnersRepository {
   async partnerLifecycle(tx: Tx, id: string): Promise<PartnerLifecycle | null> {
     const [row] = await tx
       .select({
-        id: partners.id,
-        status: partners.status,
-        deletedAt: partners.deletedAt,
+        id: organisations.id,
+        status: organisations.status,
+        deletedAt: organisations.deletedAt,
       })
-      .from(partners)
-      .where(eq(partners.id, id));
+      .from(organisations)
+      .where(eq(organisations.id, id));
     return row ?? null;
   }
 
   async insert(
     tx: Tx,
     values: { projectId: string; partnerId: string; isPrimary: boolean },
-  ): Promise<ProjectPartner> {
+  ): Promise<ProjectOrganisation> {
     return withRelationConflictMapping(async () => {
-      const [row] = await tx.insert(projectPartners).values(values).returning();
+      const [row] = await tx
+        .insert(projectOrganisations)
+        .values({
+          projectId: values.projectId,
+          organisationId: values.partnerId,
+          isPrimary: values.isPrimary,
+        })
+        .returning();
       if (!row) throw new Error("project_partner insert returned no row");
       return row;
     });
   }
 
-  async findById(id: string): Promise<ProjectPartner | null> {
+  async findById(id: string): Promise<ProjectOrganisation | null> {
     const [row] = await this.db
       .select()
-      .from(projectPartners)
-      .where(eq(projectPartners.id, id));
+      .from(projectOrganisations)
+      .where(eq(projectOrganisations.id, id));
     return row ?? null;
   }
 
@@ -167,13 +180,13 @@ export class ProjectPartnersRepository {
     exceptId?: string,
   ): Promise<boolean> {
     const base = [
-      eq(projectPartners.projectId, projectId),
-      eq(projectPartners.partnerId, partnerId),
+      eq(projectOrganisations.projectId, projectId),
+      eq(projectOrganisations.organisationId, partnerId),
     ];
-    if (exceptId) base.push(ne(projectPartners.id, exceptId));
+    if (exceptId) base.push(ne(projectOrganisations.id, exceptId));
     const [row] = await tx
-      .select({ id: projectPartners.id })
-      .from(projectPartners)
+      .select({ id: projectOrganisations.id })
+      .from(projectOrganisations)
       .where(and(...base))
       .limit(1);
     return Boolean(row);
@@ -188,22 +201,22 @@ export class ProjectPartnersRepository {
     id: string,
     expectedVersion: number,
     patch: ProjectPartnerPatch,
-  ): Promise<ProjectPartner | null> {
+  ): Promise<ProjectOrganisation | null> {
     // Wrapped for the same §6 reason as `insert`: a patch that raises
     // `isPrimary` races the project's partial primary-slot index, and the
     // pre-check cannot serialize two callers claiming the slot at once.
     return withRelationConflictMapping(async () => {
       const [row] = await tx
-        .update(projectPartners)
+        .update(projectOrganisations)
         .set({
           ...patch,
-          version: sql`${projectPartners.version} + 1`,
+          version: sql`${projectOrganisations.version} + 1`,
           updatedAt: new Date(),
         })
         .where(
           and(
-            eq(projectPartners.id, id),
-            eq(projectPartners.version, expectedVersion),
+            eq(projectOrganisations.id, id),
+            eq(projectOrganisations.version, expectedVersion),
           ),
         )
         .returning();
@@ -213,7 +226,9 @@ export class ProjectPartnersRepository {
 
   /** Hydrate one relation with both endpoints' display forms (admin detail). */
   async hydrate(tx: Tx | Db, id: string): Promise<ProjectPartnerRow | null> {
-    const [row] = await this.selectRows(tx).where(eq(projectPartners.id, id));
+    const [row] = await this.selectRows(tx).where(
+      eq(projectOrganisations.id, id),
+    );
     return row ? shape(row) : null;
   }
 
@@ -233,30 +248,30 @@ export class ProjectPartnersRepository {
   ): Promise<{ rows: ProjectPartnerRow[]; total: number }> {
     const filters = [];
     if (query.projectId) {
-      filters.push(eq(projectPartners.projectId, query.projectId));
+      filters.push(eq(projectOrganisations.projectId, query.projectId));
     }
     if (query.partnerId) {
-      filters.push(eq(projectPartners.partnerId, query.partnerId));
+      filters.push(eq(projectOrganisations.organisationId, query.partnerId));
     }
     if (query.isPrimary !== undefined) {
-      filters.push(eq(projectPartners.isPrimary, query.isPrimary));
+      filters.push(eq(projectOrganisations.isPrimary, query.isPrimary));
     }
     if (query.status) {
-      filters.push(eq(projectPartners.status, query.status));
+      filters.push(eq(projectOrganisations.status, query.status));
     } else if (!query.includeRetired) {
-      filters.push(isNull(projectPartners.deletedAt));
+      filters.push(isNull(projectOrganisations.deletedAt));
     }
     const where = filters.length > 0 ? and(...filters) : undefined;
 
     const rows = await this.selectRows(this.db)
       .where(where)
-      .orderBy(asc(projects.title), asc(projectPartners.id))
+      .orderBy(asc(projects.title), asc(projectOrganisations.id))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
 
     const [totals] = await this.db
       .select({ value: count() })
-      .from(projectPartners)
+      .from(projectOrganisations)
       .where(where);
 
     return { rows: rows.map(shape), total: Number(totals?.value ?? 0) };
@@ -278,11 +293,11 @@ export class ProjectPartnersRepository {
   async findPublicPartner(key: {
     id?: string;
     slug?: string;
-  }): Promise<Partner | null> {
+  }): Promise<Organisation | null> {
     const where = key.id
-      ? eq(partners.id, key.id)
-      : eq(partners.slug, key.slug!);
-    const [row] = await this.db.select().from(partners).where(where);
+      ? eq(organisations.id, key.id)
+      : eq(organisations.slug, key.slug!);
+    const [row] = await this.db.select().from(organisations).where(where);
     return row ?? null;
   }
 
@@ -300,26 +315,35 @@ export class ProjectPartnersRepository {
     after: { title: string; id: string } | null,
   ): Promise<PublicProjectPartnerRow[]> {
     const filters = [
-      eq(projectPartners.projectId, projectId),
-      eq(projectPartners.status, "active"),
-      isNull(projectPartners.deletedAt),
-      eq(partners.status, "published"),
-      isNull(partners.deletedAt),
+      eq(projectOrganisations.projectId, projectId),
+      eq(projectOrganisations.status, "active"),
+      isNull(projectOrganisations.deletedAt),
+      eq(organisations.status, "published"),
+      isNull(organisations.deletedAt),
     ];
     if (after) {
       filters.push(
         or(
-          gt(partners.title, after.title),
-          and(eq(partners.title, after.title), gt(partners.id, after.id)),
+          gt(organisations.title, after.title),
+          and(
+            eq(organisations.title, after.title),
+            gt(organisations.id, after.id),
+          ),
         )!,
       );
     }
     const rows = await this.db
-      .select({ isPrimary: projectPartners.isPrimary, partner: partners })
-      .from(projectPartners)
-      .innerJoin(partners, eq(partners.id, projectPartners.partnerId))
+      .select({
+        isPrimary: projectOrganisations.isPrimary,
+        partner: organisations,
+      })
+      .from(projectOrganisations)
+      .innerJoin(
+        organisations,
+        eq(organisations.id, projectOrganisations.organisationId),
+      )
       .where(and(...filters))
-      .orderBy(asc(partners.title), asc(partners.id))
+      .orderBy(asc(organisations.title), asc(organisations.id))
       .limit(limit);
     return rows.map((row) => ({
       isPrimary: row.isPrimary,
@@ -338,9 +362,9 @@ export class ProjectPartnersRepository {
     after: { title: string; id: string } | null,
   ): Promise<PublicPartnerProjectRow[]> {
     const filters = [
-      eq(projectPartners.partnerId, partnerId),
-      eq(projectPartners.status, "active"),
-      isNull(projectPartners.deletedAt),
+      eq(projectOrganisations.organisationId, partnerId),
+      eq(projectOrganisations.status, "active"),
+      isNull(projectOrganisations.deletedAt),
       eq(projects.status, "published"),
       isNull(projects.deletedAt),
     ];
@@ -353,9 +377,9 @@ export class ProjectPartnersRepository {
       );
     }
     const rows = await this.db
-      .select({ isPrimary: projectPartners.isPrimary, project: projects })
-      .from(projectPartners)
-      .innerJoin(projects, eq(projects.id, projectPartners.projectId))
+      .select({ isPrimary: projectOrganisations.isPrimary, project: projects })
+      .from(projectOrganisations)
+      .innerJoin(projects, eq(projects.id, projectOrganisations.projectId))
       .where(and(...filters))
       .orderBy(asc(projects.title), asc(projects.id))
       .limit(limit);
@@ -369,22 +393,25 @@ export class ProjectPartnersRepository {
   private selectRows(handle: Tx | Db) {
     return handle
       .select({
-        relation: projectPartners,
+        relation: projectOrganisations,
         projectId: projects.id,
         projectSlug: projects.slug,
         projectTitle: projects.title,
-        partnerId: partners.id,
-        partnerSlug: partners.slug,
-        partnerTitle: partners.title,
+        partnerId: organisations.id,
+        partnerSlug: organisations.slug,
+        partnerTitle: organisations.title,
       })
-      .from(projectPartners)
-      .innerJoin(projects, eq(projects.id, projectPartners.projectId))
-      .innerJoin(partners, eq(partners.id, projectPartners.partnerId));
+      .from(projectOrganisations)
+      .innerJoin(projects, eq(projects.id, projectOrganisations.projectId))
+      .innerJoin(
+        organisations,
+        eq(organisations.id, projectOrganisations.organisationId),
+      );
   }
 }
 
 function shape(row: {
-  relation: ProjectPartner;
+  relation: ProjectOrganisation;
   projectId: string;
   projectSlug: string;
   projectTitle: string;

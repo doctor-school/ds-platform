@@ -42,8 +42,8 @@ export function PublishAction({
   publishUrl,
   onPublished,
 }: {
-  /** The message + error namespace: `projects` | `experts` | `partners`. */
-  namespace: "projects" | "experts" | "partners";
+  /** The message + error namespace: `projects` | `experts` | `organisations`. */
+  namespace: "projects" | "experts" | "organisations";
   id: string;
   status: TaxonomyStatus;
   version: number;

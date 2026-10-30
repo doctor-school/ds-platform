@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { z } from "zod";
-import type { ProjectPartner } from "@ds/db";
+import type { ProjectOrganisation } from "@ds/db";
 import {
   type CreateProjectPartnerRequest,
   type ProjectPartnerAdminDetail,
@@ -409,7 +409,7 @@ export class ProjectPartnersService {
  * unique index never has to fire.
  */
 function assertPrimaryFree(
-  relations: readonly ProjectPartner[],
+  relations: readonly ProjectOrganisation[],
   exceptId?: string,
 ): void {
   const held = relations.some(
@@ -424,7 +424,7 @@ function assertPrimaryFree(
   }
 }
 
-function assertVersion(row: ProjectPartner, expected: number): void {
+function assertVersion(row: ProjectOrganisation, expected: number): void {
   if (row.version !== expected) throw stale();
 }
 

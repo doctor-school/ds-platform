@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createTranslator } from "next-intl";
-import { narrowRefusal, taxonomyErrorKey } from "./taxonomy-errors";
+import {
+  narrowRefusal,
+  refusedFields,
+  taxonomyErrorKey,
+} from "./taxonomy-errors";
 
 /**
  * Drift guard for the 012 EARS-6 relationship surface (#1288).
@@ -120,7 +124,9 @@ describe("taxonomyErrorKey — 012 EARS-6 relationship codes (#1288)", () => {
       expect(key, `${errorCode} fell back to the generic sentence`).not.toBe(
         fallback,
       );
-      expect(typeof lookup(key), `${key} is missing from ru.json`).toBe("string");
+      expect(typeof lookup(key), `${key} is missing from ru.json`).toBe(
+        "string",
+      );
       resolved.add(key);
     }
 
@@ -175,11 +181,17 @@ describe("taxonomyErrorKey — 012 EARS-6 relationship codes (#1288)", () => {
           typeof lookup(`eventProjects.confirm.${transition}${suffix}`),
         ).toBe("string");
       }
-      expect(typeof lookup(`eventProjects.action.${transition}`)).toBe("string");
-      expect(typeof lookup(`eventProjects.toast.${transition}d`)).toBe("string");
+      expect(typeof lookup(`eventProjects.action.${transition}`)).toBe(
+        "string",
+      );
+      expect(typeof lookup(`eventProjects.toast.${transition}d`)).toBe(
+        "string",
+      );
     }
     for (const status of ["published", "retired", "active"] as const) {
-      expect(typeof lookup(`eventProjects.rowStatuses.${status}`)).toBe("string");
+      expect(typeof lookup(`eventProjects.rowStatuses.${status}`)).toBe(
+        "string",
+      );
     }
     for (const mode of ["event", "project"] as const) {
       expect(typeof lookup(`eventProjects.description.${mode}`)).toBe("string");
@@ -274,7 +286,47 @@ describe("narrowRefusal — 012 EARS-25 bounded narrowing refusal (#2509)", () =
       "Нельзя убрать формат: его используют 25 мероприятий этого типа.",
     );
     expect(
-      t("eventKinds.errors.narrowRefusedMore" as never, { count: 217 } as never),
+      t(
+        "eventKinds.errors.narrowRefusedMore" as never,
+        { count: 217 } as never,
+      ),
     ).toBe("и ещё 217");
+  });
+});
+
+describe("refusedFields — field-addressed refusals (032 EARS-1, EARS-3)", () => {
+  it("032 EARS-3: a duplicate active role title addresses the title field", () => {
+    expect(
+      refusedFields({
+        message: "x",
+        statusCode: 400,
+        errorCode: "VALIDATION_FAILED",
+        fieldErrors: [
+          { path: "title", message: "an active role already has this title" },
+        ],
+      }),
+    ).toEqual(["title"]);
+  });
+
+  it("032 EARS-1: nested paths fold to their top-level field, once each", () => {
+    expect(
+      refusedFields({
+        message: "x",
+        statusCode: 400,
+        errorCode: "VALIDATION_FAILED",
+        fieldErrors: [
+          { path: "roleIds.0", message: "unknown role" },
+          { path: "roleIds.1", message: "retired role" },
+          { path: "description", message: "too long" },
+        ],
+      }),
+    ).toEqual(["roleIds", "description"]);
+  });
+
+  it("032 EARS-1: any other refusal addresses no field", () => {
+    expect(
+      refusedFields({ message: "x", statusCode: 412, errorCode: "STALE" }),
+    ).toEqual([]);
+    expect(refusedFields(new Error("network"))).toEqual([]);
   });
 });

@@ -43,7 +43,7 @@ import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 // There is deliberately NO `PATCH` route, for exactly the reason `event_projects`
 // has none: `event_directions` carries no mutable attribute (012-design §2 ER: the
 // row is exactly the pair plus its lifecycle envelope), unlike `project_experts`
-// (`role`) or `project_partners` (`is_primary`). §5.1's "PATCH attributes with
+// (`role`) or `project_organisations` (`is_primary`). §5.1's "PATCH attributes with
 // the join ETag" is a generic statement over the five joins and is vacuous for
 // this one — a PATCH here could only accept an empty body and bump a version.
 // The ETag / If-Match contract still applies in full: it rides the two lifecycle

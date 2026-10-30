@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { DrizzleHandle, Project } from "@ds/db";
-import { partners, projectPartners } from "@ds/db";
+import { organisations, projectOrganisations } from "@ds/db";
 import type { PublicPartnerSummary, PublicProjectSummary } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
@@ -62,7 +62,7 @@ export class PublicProjectSummaryService {
   /**
    * The publicly eligible primary partner of each named project, keyed by
    * project id. At most one row per project can qualify: the partial unique
-   * index `project_partners_project_primary_active_uniq` is the guarantee, so
+   * index `project_organisations_project_primary_active_uniq` is the guarantee, so
    * this map never silently drops a second candidate.
    */
   private async primaryPartnersOf(
@@ -71,23 +71,26 @@ export class PublicProjectSummaryService {
     const unique = [...new Set(projectIds)];
     const rows = await this.db
       .select({
-        projectId: projectPartners.projectId,
-        id: partners.id,
-        slug: partners.slug,
-        title: partners.title,
-        logoRef: partners.logoRef,
-        websiteUrl: partners.websiteUrl,
+        projectId: projectOrganisations.projectId,
+        id: organisations.id,
+        slug: organisations.slug,
+        title: organisations.title,
+        logoRef: organisations.logoRef,
+        websiteUrl: organisations.websiteUrl,
       })
-      .from(projectPartners)
-      .innerJoin(partners, eq(partners.id, projectPartners.partnerId))
+      .from(projectOrganisations)
+      .innerJoin(
+        organisations,
+        eq(organisations.id, projectOrganisations.organisationId),
+      )
       .where(
         and(
-          inArray(projectPartners.projectId, unique),
-          eq(projectPartners.status, "active"),
-          isNull(projectPartners.deletedAt),
-          eq(projectPartners.isPrimary, true),
-          eq(partners.status, "published"),
-          isNull(partners.deletedAt),
+          inArray(projectOrganisations.projectId, unique),
+          eq(projectOrganisations.status, "active"),
+          isNull(projectOrganisations.deletedAt),
+          eq(projectOrganisations.isPrimary, true),
+          eq(organisations.status, "published"),
+          isNull(organisations.deletedAt),
         ),
       );
 

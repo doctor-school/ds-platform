@@ -282,34 +282,84 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
   // colour/naming states an existing green certifies nothing about, so the partner
   // surfaces are enumerated the way the project (#1283) and expert (#1284) scans
   // are rather than inheriting theirs.
-  test("the partner list + create + detail surfaces pass WCAG 2 A/AA (light)", async ({
+  //
+  // 032 EARS-14 (#3492) — the vertical is now the organisation registry: its form
+  // adds a description counter, the role checkboxes and the two display rules,
+  // and the role book is a list + add/rename form of its own, so each is scanned
+  // (with the refused role title — a server-addressed field error — as a state).
+  test("032 EARS-14: the organisation list + create + detail surfaces pass WCAG 2 A/AA (light)", async ({
     page,
   }) => {
     await loginAsAdmin(page);
-    await page.goto("/partners");
-    await page.getByTestId("partners-filters").waitFor({ state: "visible" });
+    await page.goto("/organisations");
+    await page
+      .getByTestId("organisations-filters")
+      .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
-    await page.goto("/partners/create");
-    await page.getByTestId("partner-form").waitFor({ state: "visible" });
+    await page.goto("/organisations/create");
+    await page.getByTestId("organisation-form").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
     // The REJECTED website field — a destructive inline message plus the field's
     // invalid border, its own colour state and its own accessible-name wiring.
-    await page.getByTestId("partner-website-url").fill("example.com");
-    await page.getByTestId("submit-partner").click();
-    await expect(page.getByTestId("partner-form")).toBeVisible();
+    await page.getByTestId("organisation-website-url").fill("example.com");
+    await page.getByTestId("submit-organisation").click();
+    await expect(page.getByTestId("organisation-form")).toBeVisible();
     for (const theme of THEMES) await scan(page, theme);
 
     // A real created row, so the detail scan covers the tab bar and the dropzone's
     // EMPTY slot — the state that has no avatar behind it.
-    await page.getByTestId("partner-website-url").fill("https://example.com");
     await page
-      .getByTestId("partner-title")
-      .fill(`Axe-скан партнёр ${Date.now()}`);
-    await page.getByTestId("submit-partner").click();
-    await page.waitForURL(/\/partners\/[0-9a-f-]{36}$/);
-    await page.getByTestId("partner-form").waitFor({ state: "visible" });
+      .getByTestId("organisation-website-url")
+      .fill("https://example.com");
+    await page
+      .getByTestId("organisation-title")
+      .fill(`Axe-скан организация ${Date.now()}`);
+    await page
+      .getByTestId("organisation-role-investor")
+      .locator("xpath=ancestor::label[1]")
+      .click();
+    await page.getByTestId("submit-organisation").click();
+    await page.waitForURL(/\/organisations\/[0-9a-f-]{36}$/);
+    await page.getByTestId("organisation-form").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  test("032 EARS-14: the organisation-role list + add + rename surfaces pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto("/organisation-roles");
+    await page
+      .getByTestId("organisation-roles-table")
+      .getByRole("link", { name: "Инвестор", exact: true })
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.goto("/organisation-roles/create");
+    await page
+      .getByTestId("organisation-role-form")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The server-refused duplicate title — the field-addressed error state.
+    await page.getByTestId("organisation-role-title").fill("Инвестор");
+    await page.getByTestId("submit-organisation-role").click();
+    await page
+      .locator('[data-testid="organisation-role-title"][aria-invalid="true"]')
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.goto("/organisation-roles");
+    await page
+      .getByTestId("organisation-roles-table")
+      .getByRole("link", { name: "Инвестор", exact: true })
+      .click();
+    await page.waitForURL(/\/organisation-roles\/[0-9a-f-]{36}$/);
+    await page
+      .getByTestId("organisation-role-form")
+      .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
 

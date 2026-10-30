@@ -4,7 +4,8 @@ import {
   CreateEventExpertRequestSchema,
   CreateEventRequestSchema,
   CreateExpertRequestSchema,
-  CreatePartnerRequestSchema,
+  CreateOrganisationRequestSchema,
+  CreateOrganisationRoleRequestSchema,
   CreateProjectRequestSchema,
   CreateDirectionRequestSchema,
   CreateDirectionSpecialtyRequestSchema,
@@ -18,8 +19,10 @@ import {
   EXPERT_BIO_MAX,
   EXPERT_CREDENTIALS_MAX,
   EXPERT_PROFESSIONAL_ROLE_MAX,
-  PARTNER_WEBSITE_URL_MAX,
-  PartnerWebsiteUrlSchema,
+  ORGANISATION_WEBSITE_URL_MAX,
+  OrganisationWebsiteUrlSchema,
+  OrganisationDescriptionSchema,
+  OrganisationRoleIdsSchema,
   POSTER_REF_MAX,
   PosterRefSchema,
   type ProjectKind,
@@ -392,25 +395,25 @@ export interface DirectionFormFields {
 }
 
 /**
- * The 012 partner create/edit form (#1286, EARS-4). Same derivation rule as the
+ * The organisation create/edit form (012 #1286 partner, 032 EARS-1/EARS-2 #3492). Same derivation rule as the
  * sibling taxonomy forms: `title` reuses the SSOT create-schema validator
- * verbatim, and the website box folds the SSOT `PartnerWebsiteUrlSchema` back in
+ * verbatim, and the website box folds the SSOT `OrganisationWebsiteUrlSchema` back in
  * rather than re-typing the https rule — that regex is the exact twin of the DB
  * CHECK `partners_website_url_https`, so the sentence the operator reads before
  * submit is the rule the column enforces.
  *
- * A partner is a descriptive card: a required display title, an optional site
- * link and an optional logo. `websiteUrl` is therefore OPTIONAL in the form (the
+ * An organisation is a descriptive card: a required display title, an optional site
+ * link, an optional logo and description, a role set and two public display rules. `websiteUrl` is therefore OPTIONAL in the form (the
  * API takes a draft partner carrying nothing but a title) and a non-empty value
  * is the only thing checked — an empty box means «сайта нет», not «invalid».
  */
-const partnerCreate = CreatePartnerRequestSchema.shape;
+const organisationCreate = CreateOrganisationRequestSchema.shape;
 
-export const PartnerFormSchema = z.object({
-  title: partnerCreate.title,
+export const OrganisationFormSchema = z.object({
+  title: organisationCreate.title,
   websiteUrl: z.string().superRefine((value, ctx) => {
     if (value.trim().length === 0) return; // empty ⇒ the partner has no site
-    const result = PartnerWebsiteUrlSchema.safeParse(value.trim());
+    const result = OrganisationWebsiteUrlSchema.safeParse(value.trim());
     if (result.success) return;
     for (const issue of result.error.issues) {
       // Keep the DISTINCTION the SSOT makes: over the length cap is its own
@@ -421,18 +424,41 @@ export const PartnerFormSchema = z.object({
           ? {
               code: "too_big",
               origin: "string",
-              maximum: PARTNER_WEBSITE_URL_MAX,
+              maximum: ORGANISATION_WEBSITE_URL_MAX,
               inclusive: true,
             }
           : { code: "invalid_format", format: "regex" },
       );
     }
   }),
+  // 032 EARS-1 — the SSOT description bound (trimmed 0–1000); empty ⇒ none.
+  description: OrganisationDescriptionSchema,
+  // 032 EARS-2 — the role set; zero roles is a legal draft (EARS-6 gates publish).
+  roleIds: OrganisationRoleIdsSchema,
+  publicNameVisible: z.boolean(),
+  publicLogoVisible: z.boolean(),
 });
 
-export interface PartnerFormFields {
+export interface OrganisationFormFields {
   title: string;
   websiteUrl: string;
+  description: string;
+  roleIds: string[];
+  publicNameVisible: boolean;
+  publicLogoVisible: boolean;
+}
+
+/**
+ * The 032 organisation-role add / rename form (EARS-3): the title reuses the SSOT
+ * create-schema validator verbatim (trimmed 1–80). Uniqueness among active roles
+ * is the server's answer (400 VALIDATION_FAILED on `title`), shown on the field.
+ */
+export const OrganisationRoleFormSchema = z.object({
+  title: CreateOrganisationRoleRequestSchema.shape.title,
+});
+
+export interface OrganisationRoleFormFields {
+  title: string;
 }
 
 /**

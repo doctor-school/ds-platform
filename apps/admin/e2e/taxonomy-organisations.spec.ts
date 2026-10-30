@@ -21,7 +21,7 @@ import { ADMIN_ORIGIN, signInAsAdmin } from "@ds/e2e/admin-events";
  *
  *   E2E_ADMIN_URL=http://localhost:3201 ACADEMY_PUBLIC_ORIGIN=http://localhost:3001 \
  *   IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
- *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test e2e/taxonomy-partners.spec.ts \
+ *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test e2e/taxonomy-organisations.spec.ts \
  *     --config=playwright.flows.config.ts
  */
 
@@ -41,20 +41,20 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await signInAsAdmin(page);
 
     // ── Reach the resource through the chrome, not by typing a URL ─────────
-    await page.getByTestId("nav-partners").click();
-    await page.waitForURL(/\/partners$/, { timeout: 20_000 });
-    await expect(page.getByTestId("partners-filters")).toBeVisible();
+    await page.getByTestId("nav-organisations").click();
+    await page.waitForURL(/\/organisations$/, { timeout: 20_000 });
+    await expect(page.getByTestId("organisations-filters")).toBeVisible();
     // The retired-rows toggle is OFF by default (Stage-A answer 4).
     await expect(
-      page.getByTestId("partners-include-retired"),
+      page.getByTestId("organisations-include-retired"),
     ).not.toBeChecked();
 
     // ── Reject branch: garbage input never leaves the browser ──────────────
-    await page.getByTestId("partners-create").click();
-    await page.waitForURL(/\/partners\/create$/, { timeout: 20_000 });
-    await page.getByTestId("partner-title").fill("x".repeat(161));
-    await page.getByTestId("partner-website-url").fill("example.ru");
-    await page.getByTestId("submit-partner").click();
+    await page.getByTestId("organisations-create").click();
+    await page.waitForURL(/\/organisations\/create$/, { timeout: 20_000 });
+    await page.getByTestId("organisation-title").fill("x".repeat(161));
+    await page.getByTestId("organisation-website-url").fill("example.ru");
+    await page.getByTestId("submit-organisation").click();
     // RU inline errors — one per field kind — and we are still on the create screen.
     await expect(
       page.getByText("Слишком длинное значение", { exact: false }),
@@ -62,35 +62,45 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await expect(
       page.getByText("должен начинаться с https://", { exact: false }),
     ).toBeVisible();
-    await expect(page.getByTestId("partner-slug")).toHaveCount(0);
-    expect(page.url()).toMatch(/\/partners\/create$/);
+    await expect(page.getByTestId("organisation-slug")).toHaveCount(0);
+    expect(page.url()).toMatch(/\/organisations\/create$/);
 
     // An http:// address is the same refusal as a bare domain — the rule is
     // «absolute https», not «looks like a URL».
-    await page.getByTestId("partner-website-url").fill("http://example.ru");
-    await page.getByTestId("submit-partner").click();
+    await page
+      .getByTestId("organisation-website-url")
+      .fill("http://example.ru");
+    await page.getByTestId("submit-organisation").click();
     await expect(
       page.getByText("должен начинаться с https://", { exact: false }),
     ).toBeVisible();
-    expect(page.url()).toMatch(/\/partners\/create$/);
+    expect(page.url()).toMatch(/\/organisations\/create$/);
 
     // ── Accept branch: the server-owned public address ─────────────────────
     // A draft partner is legally allowed to carry only a title; the site is
     // filled here because the arc under test is the complete card.
     const title = `Фарма Лаб ${Date.now()}`;
-    await page.getByTestId("partner-title").fill(title);
-    await expect(page.getByTestId("partner-public-link-note")).toContainText(
-      "Адрес сгенерирует сервер",
-    );
-    await page.getByTestId("partner-website-url").fill("https://example.ru");
-    await page.getByTestId("submit-partner").click();
+    await page.getByTestId("organisation-title").fill(title);
+    await expect(
+      page.getByTestId("organisation-public-link-note"),
+    ).toContainText("Адрес сгенерирует сервер");
+    await page
+      .getByTestId("organisation-website-url")
+      .fill("https://example.ru");
+    await page.getByTestId("submit-organisation").click();
 
     // ── The created row renders on its own detail page ─────────────────────
-    await page.waitForURL(/\/partners\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    await page.waitForURL(/\/organisations\/[0-9a-f-]{36}$/, {
+      timeout: 20_000,
+    });
     const detailUrl = page.url();
-    await expect(page.getByTestId("partner-heading")).toHaveText(title);
-    await expect(page.getByTestId("partner-status")).toHaveText("Черновик");
-    const publicUrl = await page.getByTestId("partner-public-link").innerText();
+    await expect(page.getByTestId("organisation-heading")).toHaveText(title);
+    await expect(page.getByTestId("organisation-status")).toHaveText(
+      "Черновик",
+    );
+    const publicUrl = await page
+      .getByTestId("organisation-public-link")
+      .innerText();
     expect(
       publicUrl.startsWith(academyPublicLinkPrefix("partners", "farma-lab")),
       `${publicUrl} points at the partner on the configured Academy origin`,
@@ -98,8 +108,8 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"], {
       origin: ADMIN_ORIGIN,
     });
-    await page.getByTestId("partner-copy-public-link").click();
-    await expect(page.getByTestId("partner-copy-public-link")).toHaveText(
+    await page.getByTestId("organisation-copy-public-link").click();
+    await expect(page.getByTestId("organisation-copy-public-link")).toHaveText(
       "Ссылка скопирована",
     );
     await expect
@@ -113,43 +123,45 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await expect(page.getByRole("tab")).toHaveCount(3);
     // No logo yet ⇒ an EMPTY slot. Unlike an expert, an organisation has no
     // initials fallback anywhere on the platform, so nothing stands in for it.
-    await expect(page.getByAltText("Логотип партнёра")).toHaveCount(0);
+    await expect(page.getByAltText("Логотип организации")).toHaveCount(0);
 
     // ── The block-tier list finds it by search, with no «Применить» ────────
     await page.getByTestId("back-to-list").click();
-    await page.waitForURL(/\/partners$/, { timeout: 20_000 });
+    await page.waitForURL(/\/organisations$/, { timeout: 20_000 });
     // EARS-23: typing is the whole gesture — no Enter, no Apply control.
     await page.getByRole("searchbox", { name: "Поиск" }).fill(title);
     await expect(
       page.getByRole("button", { name: "Применить", exact: true }),
     ).toHaveCount(0);
-    await expect(page.getByTestId("partners-table")).toContainText(title);
+    await expect(page.getByTestId("organisations-table")).toContainText(title);
     // The list column carries the address the operator typed.
-    await expect(page.getByTestId("partners-table")).toContainText(
+    await expect(page.getByTestId("organisations-table")).toContainText(
       "https://example.ru",
     );
     // EARS-23: the applied set is a removable chip; one control clears all.
     await expect(page.getByText("Выбрано:", { exact: false })).toBeVisible();
 
     // ── EARS-23: the state facet applies on change, with no submit ─────────
-    await page.getByTestId("partners-status").selectOption("published");
+    await page.getByTestId("organisations-status").selectOption("published");
     // A draft partner leaves the result set the moment the facet moves.
-    await expect(page.getByTestId("partners-table")).not.toContainText(title);
+    await expect(page.getByTestId("organisations-table")).not.toContainText(
+      title,
+    );
     // Scoped to the toolbar: when the facet empties the result set the empty
     // state offers the SAME reset action as its own way out, so an unscoped
     // role query legitimately matches two controls.
     await page
-      .getByTestId("partners-filters")
+      .getByTestId("organisations-filters")
       .getByRole("button", { name: "Сбросить всё" })
       .click();
     await expect(page.getByText("Выбрано:", { exact: false })).toHaveCount(0);
-    await expect(page.getByTestId("partners-status")).toHaveValue("");
+    await expect(page.getByTestId("organisations-status")).toHaveValue("");
 
     // ── EARS-16: single-action list ⇒ the ROW is the action ────────────────
     await expect(
       page.getByRole("columnheader", { name: "Действия" }),
     ).toHaveCount(0);
-    await expect(page.getByTestId("partners-total")).toBeVisible();
+    await expect(page.getByTestId("organisations-total")).toBeVisible();
     // EARS-23: no dead-end pager — the DS `Pagination` block omits «Назад» on
     // the first page and the whole pager on a single page, rather than
     // rendering a focusable disabled control.
@@ -160,20 +172,20 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     // ── Edit the same row (If-Match round-trip) ────────────────────────────
     await page.goto(detailUrl);
     const editedUrl = "https://example.ru/about";
-    await page.getByTestId("partner-website-url").fill(editedUrl);
-    await page.getByTestId("submit-partner").click();
+    await page.getByTestId("organisation-website-url").fill(editedUrl);
+    await page.getByTestId("submit-organisation").click();
     await expect(page.getByTestId("update-saved")).toBeVisible();
     await page.reload();
-    await expect(page.getByTestId("partner-website-url")).toHaveValue(
+    await expect(page.getByTestId("organisation-website-url")).toHaveValue(
       editedUrl,
     );
 
     // ── Emptying the website box CLEARS it (explicit null, not «unchanged») ─
-    await page.getByTestId("partner-website-url").fill("");
-    await page.getByTestId("submit-partner").click();
+    await page.getByTestId("organisation-website-url").fill("");
+    await page.getByTestId("submit-organisation").click();
     await expect(page.getByTestId("update-saved")).toBeVisible();
     await page.reload();
-    await expect(page.getByTestId("partner-website-url")).toHaveValue("");
+    await expect(page.getByTestId("organisation-website-url")).toHaveValue("");
 
     // ── Logo: upload, see the preview, replace it, then clear it ───────────
     await page.setInputFiles("#logo", {
@@ -181,12 +193,12 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
       mimeType: "image/png",
       buffer: PNG_1x1,
     });
-    await expect(page.getByAltText("Логотип партнёра")).toBeVisible();
-    await page.getByTestId("submit-partner").click();
+    await expect(page.getByAltText("Логотип организации")).toBeVisible();
+    await page.getByTestId("submit-organisation").click();
     await expect(page.getByTestId("update-saved")).toBeVisible();
     await page.reload();
     // The stored (normalized WebP) logo comes back from the server.
-    await expect(page.getByAltText("Логотип партнёра")).toBeVisible();
+    await expect(page.getByAltText("Логотип организации")).toBeVisible();
 
     // Replace: a second upload over a stored logo is the `replace` cleanup path.
     await page.setInputFiles("#logo", {
@@ -194,19 +206,19 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
       mimeType: "image/png",
       buffer: PNG_1x1,
     });
-    await page.getByTestId("submit-partner").click();
+    await page.getByTestId("submit-organisation").click();
     await expect(page.getByTestId("update-saved")).toBeVisible();
     await page.reload();
-    await expect(page.getByAltText("Логотип партнёра")).toBeVisible();
+    await expect(page.getByAltText("Логотип организации")).toBeVisible();
 
     // Clear: `mediaAction: "clear"` — and the slot stays empty after a reload,
     // so the removal is stored state, not a first-render trick.
     await page.getByRole("button", { name: "убрать" }).click();
-    await expect(page.getByAltText("Логотип партнёра")).toHaveCount(0);
-    await page.getByTestId("submit-partner").click();
+    await expect(page.getByAltText("Логотип организации")).toHaveCount(0);
+    await page.getByTestId("submit-organisation").click();
     await expect(page.getByTestId("update-saved")).toBeVisible();
     await page.reload();
-    await expect(page.getByAltText("Логотип партнёра")).toHaveCount(0);
+    await expect(page.getByAltText("Логотип организации")).toHaveCount(0);
 
     // ── Preflight refusal: a non-image is refused in the browser ───────────
     await page.setInputFiles("#logo", {
@@ -214,10 +226,12 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
       mimeType: "text/plain",
       buffer: Buffer.from("not an image"),
     });
-    await expect(page.getByTestId("partner-logo-error")).toBeVisible();
+    await expect(page.getByTestId("organisation-logo-error")).toBeVisible();
 
-    await expect(page.getByTestId("partner-slug")).toHaveCount(0);
-    await expect(page.getByTestId("partner-public-link")).toHaveText(publicUrl);
+    await expect(page.getByTestId("organisation-slug")).toHaveCount(0);
+    await expect(page.getByTestId("organisation-public-link")).toHaveText(
+      publicUrl,
+    );
     //
     // Retire/restore is a different story from publish: 012 exposes NO
     // retire/restore route on the partners controller (they arrive with
@@ -248,36 +262,44 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await signInAsAdmin(page);
 
     const title = `Клиника Согласие ${Date.now()}`;
-    await page.goto("/partners/create");
-    await page.getByTestId("partner-title").fill(title);
-    await page.getByTestId("submit-partner").click();
-    await page.waitForURL(/\/partners\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    await page.goto("/organisations/create");
+    await page.getByTestId("organisation-title").fill(title);
+    await page.getByTestId("submit-organisation").click();
+    await page.waitForURL(/\/organisations\/[0-9a-f-]{36}$/, {
+      timeout: 20_000,
+    });
     const detailUrl = page.url();
-    await expect(page.getByTestId("partner-status")).toHaveText("Черновик");
+    await expect(page.getByTestId("organisation-status")).toHaveText(
+      "Черновик",
+    );
 
     // The action lives behind «Публикация», not on the list and not on «Основное».
     await page.getByTestId("tab-publish").click();
-    await expect(page.getByTestId("partners-publish-panel")).toBeVisible();
-    await expect(page.getByTestId("partners-publish")).toBeVisible();
+    await expect(page.getByTestId("organisations-publish-panel")).toBeVisible();
+    await expect(page.getByTestId("organisations-publish")).toBeVisible();
 
-    await page.getByTestId("partners-publish").click();
+    await page.getByTestId("organisations-publish").click();
     await expect(page.getByTestId("publish-notice")).toBeVisible();
-    await expect(page.getByTestId("partner-status")).toHaveText("Опубликован");
+    await expect(page.getByTestId("organisation-status")).toHaveText(
+      "Опубликована",
+    );
     // A published partner has no further move on offer here: retire/restore are
     // #1295/#1296, so the panel says the state and stops.
-    await expect(page.getByTestId("partners-publish")).toHaveCount(0);
+    await expect(page.getByTestId("organisations-publish")).toHaveCount(0);
     // The row is the SAME row — publishing is not a re-creation.
     expect(page.url()).toBe(detailUrl);
 
     await page.reload();
-    await expect(page.getByTestId("partner-status")).toHaveText("Опубликован");
+    await expect(page.getByTestId("organisation-status")).toHaveText(
+      "Опубликована",
+    );
     await page.getByTestId("tab-publish").click();
-    await expect(page.getByTestId("partners-publish")).toHaveCount(0);
+    await expect(page.getByTestId("organisations-publish")).toHaveCount(0);
 
     // 017 EARS-16: the action is on the record, so the list keeps its single row
     // action and never grows an «Действия» column for it.
     await page.getByTestId("back-to-list").click();
-    await page.waitForURL(/\/partners$/, { timeout: 20_000 });
+    await page.waitForURL(/\/organisations$/, { timeout: 20_000 });
     await expect(
       page.getByRole("columnheader", { name: "Действия" }),
     ).toHaveCount(0);

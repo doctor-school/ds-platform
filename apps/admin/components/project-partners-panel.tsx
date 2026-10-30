@@ -652,7 +652,7 @@ function LinkForm({
   const { mutate, mutation } = useCustomMutation();
 
   const picker = useRelationshipCombobox({
-    resource: "partners",
+    resource: "organisations",
     excludedIds: linkedPartnerIds,
     value: partnerId,
   });

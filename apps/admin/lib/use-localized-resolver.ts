@@ -32,7 +32,8 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
     | "login.validation"
     | "projects.validation"
     | "experts.validation"
-    | "partners.validation"
+    | "organisations.validation"
+    | "organisationRoles.validation"
     | "directions.validation"
     | "eventKinds.validation"
     | "directionSpecialties.validation"
@@ -116,7 +117,7 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   }
   if (has("kind")) return t("kind");
 
-  // 012 partner authoring (#1286, EARS-4). The website box is an ABSOLUTE https
+  // 012 partner / 032 organisation authoring (#1286, #3492). The website box is an ABSOLUTE https
   // address (the SSOT regex — the exact twin of the DB CHECK), so a malformed
   // value arrives as `invalid_format` and would otherwise reach `fallback`
   // («проверьте значение») — a sentence that does not tell the operator the one

@@ -13,6 +13,7 @@ import { PDFDocument } from "pdf-lib";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
+import { SEED_ORGANISATION_ROLES } from "../../schema/taxonomy.js";
 import {
   buildGoldenDataset,
   GOLDEN_CONSENT_PURPOSES,
@@ -753,6 +754,34 @@ describe("#2063 golden step execution", () => {
     expect(Object.keys(calls[0]!.config.set).sort()).toEqual(
       [...step.updateKeys].sort(),
     );
+  });
+
+  it("re-runs a key-only step (an organisation's role link) as a no-op on its conflict target", async () => {
+    // `organisation_role_assignments` rows carry nothing but their composite
+    // key, so there is no column to refresh: an empty `ON CONFLICT DO UPDATE
+    // SET` is not valid SQL, and the re-run must leave the held link alone.
+    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const step = plan.find((s) => s.name === "organisation_role_assignments")!;
+    expect(step.rows.length).toBeGreaterThan(0);
+    expect(step.updateKeys).toEqual([]);
+    const nothing: { target: unknown[] }[] = [];
+    const tx = {
+      insert: () => ({
+        values: () => ({
+          onConflictDoUpdate: () => {
+            throw new Error("No values to set");
+          },
+          onConflictDoNothing: (config: { target: unknown[] }) => {
+            nothing.push(config);
+            return Promise.resolve();
+          },
+        }),
+      }),
+    };
+
+    await expect(applyGoldenStep(tx, step)).resolves.toBe(step.rows.length);
+    expect(nothing).toHaveLength(1);
+    expect(nothing[0]!.target).toHaveLength(2);
   });
 
   it("refuses a plan key that is not a column of the table", async () => {
@@ -1568,21 +1597,38 @@ describe("#2213 golden taxonomy and targeting", () => {
       ["direction_adjacency", dataset.directionAdjacency],
       ["event_directions", dataset.eventDirections],
       ["project_experts", dataset.projectExperts],
-      ["project_partners", dataset.projectPartners],
+      ["project_organisations", dataset.projectPartners],
     ] as const) {
       expect(statuses(rows), family).toEqual(new Set(["active", "retired"]));
+    }
+  });
+
+  it("032 EARS-11: every golden organisation holds the «Инвестор» role, as the absorbing migration gives every former partner", () => {
+    const held = new Map(
+      dataset.organisationRoleAssignments.map((a) => [
+        a.organisationId,
+        a.roleId,
+      ]),
+    );
+    expect(dataset.organisationRoleAssignments).toHaveLength(
+      dataset.partners.length,
+    );
+    for (const org of dataset.partners) {
+      expect(held.get(org.id as string)).toBe(
+        SEED_ORGANISATION_ROLES.investor.id,
+      );
     }
   });
 
   it("#2213: satisfies the retired-iff-deleted check on every new row", () => {
     const families = [
       ["directions", dataset.directions],
-      ["partners", dataset.partners],
+      ["organisations", dataset.partners],
       ["direction_specialties", dataset.directionSpecialties],
       ["direction_adjacency", dataset.directionAdjacency],
       ["event_directions", dataset.eventDirections],
       ["project_experts", dataset.projectExperts],
-      ["project_partners", dataset.projectPartners],
+      ["project_organisations", dataset.projectPartners],
     ] as const;
     for (const [family, rows] of families) {
       for (const row of rows) {
@@ -1974,7 +2020,7 @@ describe("#2213 golden taxonomy and targeting", () => {
         [
           row.projectId,
           (row as { expertId?: unknown }).expertId,
-          (row as { partnerId?: unknown }).partnerId,
+          (row as { organisationId?: unknown }).organisationId,
         ]
           .filter((part) => part != null)
           .join("|"),
@@ -1984,7 +2030,7 @@ describe("#2213 golden taxonomy and targeting", () => {
     // A partner that only ever appears on one project is not a partner list.
     const perPartner = new Map<string, number>();
     for (const link of dataset.projectPartners) {
-      const id = link.partnerId as string;
+      const id = link.organisationId as string;
       perPartner.set(id, (perPartner.get(id) ?? 0) + 1);
     }
     expect(
@@ -2017,7 +2063,7 @@ describe("#2213 golden taxonomy and targeting", () => {
     }
     for (const row of dataset.projectPartners) {
       expect(projectIds).toContain(row.projectId as string);
-      expect(partnerIds).toContain(row.partnerId as string);
+      expect(partnerIds).toContain(row.organisationId as string);
     }
     // Slugs are unique across EVERY retained row (`*_slug_key` is not partial).
     for (const rows of [dataset.directions, dataset.partners]) {
@@ -2040,11 +2086,14 @@ describe("#2213 golden taxonomy and targeting", () => {
     expect(at("directions")).toBeLessThan(at("direction_adjacency"));
     expect(at("directions")).toBeLessThan(at("event_directions"));
     expect(at("events")).toBeLessThan(at("event_directions"));
-    expect(at("partners")).toBeLessThan(at("project_partners"));
-    expect(at("projects")).toBeLessThan(at("project_partners"));
+    expect(at("organisations")).toBeLessThan(at("project_organisations"));
+    expect(at("organisations")).toBeLessThan(
+      at("organisation_role_assignments"),
+    );
+    expect(at("projects")).toBeLessThan(at("project_organisations"));
     expect(at("experts")).toBeLessThan(at("project_experts"));
     expect(order).toEqual([...GOLDEN_SEED_ORDER]);
-    for (const name of ["directions", "partners"]) {
+    for (const name of ["directions", "organisations"]) {
       const step = plan.find((s) => s.name === name)!;
       expect(step.updateKeys).not.toContain("firstPublishedAt");
       expect(step.updateKeys).toContain("updatedAt");

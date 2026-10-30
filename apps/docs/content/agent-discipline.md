@@ -63,13 +63,13 @@ TDD: meaningful RED before production/guard logic, then GREEN; prose needs no ne
 
 Hooks are configured, trusted and observed separately: `tools/hooks/README.md` (`pnpm agent:doctor`, owner review/trust, then `pnpm agent:smoke --project`). Fixtures and synthetic logs prove neither live execution nor persisted trust.
 
-## Memory and wrap
+## Memory
 
-An owner-requested standalone retro authorizes analysis only; explicit `/wrap` starts the full procedure. Neither authorizes memory writes or unapproved instruction edits. Retro uses verified task/session identity and the correct adapter (`tools/retro/README.md`); unavailable logs are evidence gaps, not zero findings.
+An owner-requested retro authorizes analysis only, never memory writes or unapproved instruction edits; unavailable logs are evidence gaps, not zero findings.
 
-Codex memory requires a direct owner request to update memory; `/wrap` alone authorizes proposals. Once requested, write one `<timestamp>-<slug>.md` note under `C:/Users/sidor/.codex/memories/extensions/ad_hoc/notes/`, leaving existing MEMORY.md, topics and rollouts untouched. Claude auto-memory follows its overlay. Product approvals belong in tracker/spec artifacts.
+Codex memory requires a direct owner request to update memory. Once requested, write one `<timestamp>-<slug>.md` note under `C:/Users/sidor/.codex/memories/extensions/ad_hoc/notes/`, leaving existing MEMORY.md, topics and rollouts untouched. Claude auto-memory follows its overlay. Product approvals belong in tracker/spec artifacts.
 
-Approved repo instruction edits use worktree/PR; personal memory notes stay outside git. `run-wrap` presents concrete edits and retains pending approval; existing explicit approval covers only that subset.
+Approved repo instruction edits use worktree/PR; personal memory notes stay outside git. Existing explicit approval covers only the approved subset of proposed edits.
 
 ## Instruction budget scope
 

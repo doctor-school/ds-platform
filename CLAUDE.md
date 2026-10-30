@@ -8,7 +8,7 @@ Shared rules: AGENTS.md + [portable agent discipline](apps/docs/content/agent-di
 
 `.claude/settings.json` supplies `pnpm bootstrap` via SessionStart `additionalContext`; it is a derived snapshot, not board ground truth.
 
-`/wrap` is owner-entered only. Claude `context-budget` advisory and `lead-context-budget` dispatch tiers are 250K/400K; at 400K only `ds-reviewer`/`ds-lander` dispatch. The owner-only `.claude/lead-budget-override` is removed by wrap. Child hooks ROTATE at 250K and deny non-git tools at 350K; rotate before rework once lagging notification usage hits 250K. Claude-only constants; Codex uses observed effective input/window bands in portable discipline.
+Claude `context-budget` advisory and `lead-context-budget` dispatch tiers are 250K/400K; at 400K only `ds-reviewer`/`ds-lander` dispatch. The owner creates and removes the owner-only `.claude/lead-budget-override`. Child hooks ROTATE at 250K and deny non-git tools at 350K; rotate before rework once lagging notification usage hits 250K. Claude-only constants; Codex uses observed effective input/window bands in portable discipline.
 
 ## Dispatch
 
@@ -18,4 +18,4 @@ Claude judgment/implementation: `ds-implementer` / `ds-reviewer` with Opus; scou
 
 ## Auto-memory
 
-Claude uses `~/.claude/projects/<project>/memory/`: MEMORY.md is an English index (first 200 lines /25 KB loaded), topics on demand; RU only for verbatim artifacts. Promote hard rules to the repo. Apply active memory permissions and the approved wrap subset; never route Codex memory here.
+Claude uses `~/.claude/projects/<project>/memory/`: MEMORY.md is an English index (first 200 lines /25 KB loaded), topics on demand; RU only for verbatim artifacts. Promote hard rules to the repo. Apply active memory permissions and only the explicitly approved subset of proposed edits; never route Codex memory here.

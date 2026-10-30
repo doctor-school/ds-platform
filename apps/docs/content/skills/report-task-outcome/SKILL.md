@@ -15,7 +15,7 @@ mode: inline
 
 ## When this applies
 
-Any owner-facing summary: the end of a task (a merged PR, a completed engineering-task, a closed Issue), the end of a session (with or without `/wrap`), an orchestration-wave closeout, and the `## Progress so far` section of a [handoff-prompt](../handoff-prompt/SKILL.md) handoff. `AGENTS.md` §6 «PR lifecycle runs to completion» makes the report the closing step of every PR lifecycle. Reuse the **context line** (§4) and the **visual-delivery recipe** for any mid-task decision request too.
+Any owner-facing summary: the end of a task (a merged PR, a completed engineering-task, a closed Issue), the end of a session, an orchestration-wave closeout, and the `## Progress so far` section of a [handoff-prompt](../handoff-prompt/SKILL.md) handoff. `AGENTS.md` §6 «PR lifecycle runs to completion» makes the report the closing step of every PR lifecycle. Reuse the **context line** (§4) and the **visual-delivery recipe** for any mid-task decision request too.
 
 **Read this file at report time.** A summary written from memory of the shape is the recorded failure mode below: it degrades into a list of PR, migration and EARS numbers.
 

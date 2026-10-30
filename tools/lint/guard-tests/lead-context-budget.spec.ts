@@ -180,7 +180,7 @@ describe("lead-context-budget messages", () => {
     const msg = softMessage(300_000);
     expect(msg).toContain("300K");
     expect(msg).toContain("250K");
-    expect(msg).toContain("/wrap");
+    expect(msg).toContain("handoff");
   });
 
   it("the deny message names the size, the cap and the override hatch", () => {
@@ -243,7 +243,9 @@ describe("lead-context-budget end-to-end (real hook process)", () => {
       ),
     );
     expect(json.hookSpecificOutput.permissionDecision).toBe("deny");
-    expect(json.hookSpecificOutput.permissionDecisionReason).toContain("/wrap");
+    expect(json.hookSpecificOutput.permissionDecisionReason).toContain(
+      "handoff",
+    );
     expect(json.systemMessage).toContain("420K");
   });
 

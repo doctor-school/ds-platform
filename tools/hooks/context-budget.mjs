@@ -3,7 +3,7 @@
  * (owner decision 2026-09-25, #2373). Codex
  * uses current request input / effective model window at 70%/85%, with cache
  * counted once. Missing/stale telemetry is explicit and never a zero reading.
- * No additionalContext: the owner decides when to /wrap. */
+ * No additionalContext: the owner decides when to start a new session. */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,7 +74,7 @@ export function codexBudgetMessage(reading, action) {
     (action === "deny"
       ? "85% cap: no new dispatch; checkpoint and rotate after receiving running agents and completing recovery/PR tails."
       : "70% warning: finish the current wave and prepare a checkpoint; start no new wave.") +
-    " Headroom is project policy, not a vendor guarantee. /wrap remains owner-only."
+    " Headroom is project policy, not a vendor guarantee."
   );
 }
 
@@ -107,14 +107,14 @@ function main() {
       const k = Math.round(context / 1000);
       process.stdout.write(
         JSON.stringify({
-          systemMessage: `⚠ Контекст лида ≈ ${k}K (порог ${Math.round(WRAP_THRESHOLD / 1000)}K). Волна легла → /wrap + handoff → новая сессия; новую волну здесь не начинать.`,
+          systemMessage: `⚠ Контекст лида ≈ ${k}K (порог ${Math.round(WRAP_THRESHOLD / 1000)}K). Волна легла → handoff → новая сессия; новую волну здесь не начинать.`,
         }),
       );
     } else if (context >= WARN_THRESHOLD) {
       const k = Math.round(context / 1000);
       process.stdout.write(
         JSON.stringify({
-          systemMessage: `⚠ Контекст лида ≈ ${k}K — после текущей волны /wrap + handoff, не новая волна.`,
+          systemMessage: `⚠ Контекст лида ≈ ${k}K — после текущей волны handoff, не новая волна.`,
         }),
       );
     }

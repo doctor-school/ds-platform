@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 
 // Pure seams exported from the Mattermost delivery script (Issue #654). Importing
 // them does NOT fire the script's `main()` — it is guarded behind an entry-point
-// check, the same idiom as tools/retro/extract.mjs. Issue #657 adds the mandatory
+// check. Issue #657 adds the mandatory
 // DEV/prod environment footer, covered here (the #655 delivery-seam NIT).
 import {
   buildPayload,

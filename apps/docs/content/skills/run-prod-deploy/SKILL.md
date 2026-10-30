@@ -157,6 +157,5 @@ The pre-flight refuses a target that is not a strict descendant of the LIVE depl
 ## Related skills
 
 - [../merge-when-green/SKILL.md](../merge-when-green/SKILL.md) — land the PR before it can be released.
-- [../run-wrap/SKILL.md](../run-wrap/SKILL.md) — stage 4 checks the merged-not-deployed delta at session end.
 
 Detail: `tools/deploy/README.md` (Release from Actions, Rollback mode, break-glass `pnpm deploy:prod`, `deploy:smoke` / `deploy:release-notes`); ADR-0012 (2-VPS topology; A1 = the release-pipeline direction); release-pipeline tech spec `specs/tech/2026-10-16-release-pipeline-off-workstation-en.md`; release-cycle spec §10 (D+B trigger policy); `infra/deploy/README.md` §5–§10 (operational SSOT).

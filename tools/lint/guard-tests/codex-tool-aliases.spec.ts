@@ -45,14 +45,6 @@ writeFileSync(
     },
   }),
 );
-const authorized = join(dir, "owner.jsonl");
-writeFileSync(
-  authorized,
-  JSON.stringify({
-    type: "event_msg",
-    payload: { type: "user_message", message: "/wrap" },
-  }),
-);
 
 function registered(guard: string, tool: string) {
   return registrations.some(
@@ -132,37 +124,11 @@ describe("Codex observed tool aliases #1919", () => {
       ).toBe(0);
     },
   );
-  it.each([...spawns, ...followups])(
-    "EARS-3: registered %s wrap requires owner evidence and accepts it",
-    (tool) => {
-      const tool_input = {
-        message: "Run run-session-retro for this session",
-        prompt: "Run run-session-retro for this session",
-      };
-      expect(
-        routed("wrap-owner-only", tool, {
-          tool_input,
-          transcript_path: join(dir, "missing.jsonl"),
-        }).hookSpecificOutput.permissionDecision,
-      ).toBe("deny");
-      expect(
-        routed("wrap-owner-only", tool, {
-          tool_input,
-          transcript_path: authorized,
-        }),
-      ).toEqual({});
-    },
-  );
   it.each(followups)(
-    "EARS-4: ordinary %s rework remains allowed and does not reset dispatch accounting",
+    "EARS-3: ordinary %s rework remains allowed and does not reset dispatch accounting",
     (tool) => {
       expect(registered("lead-context-budget", tool)).toBe(false);
       expect(invoke("lead-context-budget", tool)).toEqual({});
-      expect(
-        routed("wrap-owner-only", tool, {
-          tool_input: { message: "Finish the existing PR review" },
-        }),
-      ).toEqual({});
       invoke("dispatch-guard", "Edit", { session_id: tool });
       invoke("dispatch-guard", tool);
       expect(
@@ -179,16 +145,14 @@ describe("Codex observed tool aliases #1919", () => {
     },
   );
   it.each(messages)(
-    "EARS-5: %s is not classified as a new dispatch or wrap initiation",
+    "EARS-4: %s is not classified as a new dispatch",
     (tool) => {
-      for (const guard of [
-        "dispatch-guard",
-        "lead-context-budget",
-        "wrap-owner-only",
-      ]) {
+      for (const guard of ["dispatch-guard", "lead-context-budget"]) {
         expect(registered(guard, tool)).toBe(false);
         expect(
-          invoke(guard, tool, { tool_input: { message: "run-session-retro" } }),
+          invoke(guard, tool, {
+            tool_input: { message: "Finish the existing PR review" },
+          }),
         ).toEqual({});
       }
     },

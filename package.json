@@ -81,7 +81,6 @@
     "lint:action-pin": "tsx tools/lint/action-pin-lint.ts",
     "lint:oxlint": "oxlint -c .oxlintrc.json --disable-unicorn-plugin --disable-oxc-plugin --disable-typescript-plugin -A all apps packages",
     "lint:stylelint": "stylelint \"apps/**/*.css\" \"packages/**/*.css\"",
-    "retro:tokens": "node tools/retro/token-ledger.mjs",
     "generate:glossary": "tsx packages/glossary/scripts/generate.ts",
     "generate:openapi": "pnpm generate:api-client",
     "generate:sdk": "pnpm generate:api-client",

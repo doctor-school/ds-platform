@@ -83,8 +83,8 @@ describe("dispatch-brief-check extractPathTokens()", () => {
   });
 
   it("strips surrounding backticks and trailing punctuation", () => {
-    expect(extractPathTokens("edit `apps/docs/content/skills/run-wrap/SKILL.md`.")).toEqual([
-      "apps/docs/content/skills/run-wrap/SKILL.md",
+    expect(extractPathTokens("edit `apps/docs/content/skills/handoff-prompt/SKILL.md`.")).toEqual([
+      "apps/docs/content/skills/handoff-prompt/SKILL.md",
     ]);
   });
 
@@ -196,20 +196,20 @@ describe("dispatch-brief-check formatSkillRow()", () => {
 });
 
 describe("dispatch-brief-check verifyBrief() with an injected gh runner", () => {
-  it("reproduces retro F1: AC names run-wrap SKILL.md, brief names only wrap.md → MISSING", () => {
+  it("reproduces retro F1: AC names the catalog SKILL.md, brief names only the command shim → MISSING", () => {
     const body = [
       "## Acceptance criteria",
-      "- update the catalog skill `apps/docs/content/skills/run-wrap/SKILL.md`",
+      "- update the catalog skill `apps/docs/content/skills/handoff-prompt/SKILL.md`",
     ].join("\n");
     const runner = fakeRunner({ 757: body });
     const { rows, missing } = verifyBrief({
       issueNumber: 757,
-      briefText: "edit `.claude/commands/wrap.md` with the new step",
+      briefText: "edit `.claude/commands/handoff.md` with the new step",
       runner,
     });
     expect(missing).toBeGreaterThanOrEqual(1);
     expect(rows).toContainEqual({
-      path: "apps/docs/content/skills/run-wrap/SKILL.md",
+      path: "apps/docs/content/skills/handoff-prompt/SKILL.md",
       covered: false,
     });
   });

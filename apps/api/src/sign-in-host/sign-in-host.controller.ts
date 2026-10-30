@@ -184,8 +184,8 @@ export class SignInHostController {
       throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
     }
     this.loginChallenge.reset(ip);
-    this.rateLimit.reset({ ip, identifier: dto.identifier });
-    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
+    await this.rateLimit.reset({ ip, identifier: dto.identifier });
+    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     setCookies(reply, result.setCookies);
     return { status: "redirect", url: result.url };
   }
@@ -244,7 +244,7 @@ export class SignInHostController {
       return { status: "handoff_refused" };
     }
     const email = resolution.identifier;
-    if (!this.rateLimit.tryConsumeUser(email)) {
+    if (!(await this.rateLimit.tryConsumeUser(email))) {
       throw new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);
     }
     await this.auth.requestLoginOtp(
@@ -280,8 +280,8 @@ export class SignInHostController {
       this.host.acceptInto(form, hostRequest(h, ip), RECORD_COOKIE_NAME),
     );
     if (!result) throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
-    this.rateLimit.reset({ ip, identifier: dto.identifier });
-    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
+    await this.rateLimit.reset({ ip, identifier: dto.identifier });
+    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     setCookies(reply, result.setCookies);
     return { status: "redirect", url: result.url };
   }
@@ -387,8 +387,8 @@ export class SignInHostController {
       warmProof(this.host.warmRegistration(form, dto.email)),
     );
     await this.host.spendRegistration(form);
-    this.rateLimit.reset({ ip, identifier: dto.email });
-    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
+    await this.rateLimit.reset({ ip, identifier: dto.email });
+    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     setCookies(reply, result.setCookies);
     return { status: "redirect", url: result.url };
   }
@@ -425,8 +425,8 @@ export class SignInHostController {
       warmProof(this.host.warmRegistration(form, dto.email)),
     );
     await this.host.spendRegistration(form);
-    this.rateLimit.reset({ ip, identifier: dto.email });
-    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
+    await this.rateLimit.reset({ ip, identifier: dto.email });
+    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     setCookies(reply, result.setCookies);
     return { status: "redirect", url: result.url };
   }
@@ -508,8 +508,8 @@ export class SignInHostController {
       dto.newPassword,
       this.host.acceptInto(form, hostRequest(h, ip), RECORD_COOKIE_NAME),
     );
-    this.rateLimit.reset({ ip, identifier: dto.identifier });
-    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
+    await this.rateLimit.reset({ ip, identifier: dto.identifier });
+    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     setCookies(reply, result.setCookies);
     return { status: "redirect", url: result.url };
   }

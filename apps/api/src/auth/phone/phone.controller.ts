@@ -93,8 +93,8 @@ export class PhoneController {
     const result = await this.phones.confirm(sub, dto.code);
     // EARS-13: a success forgives the account's per-user window and (#2684)
     // gives back this verification door's own per-IP unit.
-    this.rateLimit.reset({ ip, identifier: phoneAccountLimitKey(sub) });
-    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
+    await this.rateLimit.reset({ ip, identifier: phoneAccountLimitKey(sub) });
+    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     return result;
   }
 }

@@ -71,7 +71,7 @@ export class RateLimitGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<GuardRequest>();
     const identifier = this.extractIdentifier(request);
-    const decision = this.limiter.consume({
+    const decision = await this.limiter.consume({
       ip: request.ip ?? "",
       identifier,
       asn: this.extractAsn(request),

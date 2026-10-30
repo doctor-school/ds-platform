@@ -37,6 +37,10 @@ import {
   type RateLimitThresholds,
 } from "../../src/auth/rate-limit/rate-limit.types.js";
 import { eventClassificationSql } from "../setup/event-classification.js";
+// A fresh in-memory window store per app: these boundary suites count from
+// zero, whatever store REDIS_URL would bind (#3539).
+import { InMemoryRateLimitStore } from "../../src/auth/rate-limit/rate-limit.store.fake.js";
+import { RATE_LIMIT_STORE } from "../../src/auth/rate-limit/rate-limit.store.js";
 
 /**
  * 044 V-4 / V-22 — the abuse surface of the public congress intake.
@@ -106,6 +110,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         // fake relay keeps this suite off the network for 60+ submissions.
         .overrideProvider(MAILER)
         .useValue(new FakeMailer())
+        .overrideProvider(RATE_LIMIT_STORE)
+        .useValue(new InMemoryRateLimitStore())
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(thresholds)
         .overrideProvider(CONGRESS_SIGN_UP_CLOCK)
@@ -261,6 +267,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         // fake relay keeps this suite off the network for 60+ submissions.
         .overrideProvider(MAILER)
         .useValue(new FakeMailer())
+        .overrideProvider(RATE_LIMIT_STORE)
+        .useValue(new InMemoryRateLimitStore())
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(RELAXED_RATE_LIMIT)
         .overrideProvider(BOT_PROTECTION)

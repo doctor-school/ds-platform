@@ -96,7 +96,7 @@ export class PhoneConfirmationService {
     typed: string,
     ctx: PhoneRequestContext,
   ): Promise<RequestPhoneCodeResponse> {
-    if (!this.rateLimit.tryConsumeUser(phoneAccountLimitKey(sub))) {
+    if (!(await this.rateLimit.tryConsumeUser(phoneAccountLimitKey(sub)))) {
       throw throttled();
     }
     const phone = normalisePhoneEntry(typed);
@@ -204,7 +204,7 @@ export class PhoneConfirmationService {
   /** EARS-48: confirm the code; on success write the confirmed phone. */
   async confirm(sub: string, code: string): Promise<ConfirmPhoneResponse> {
     const key = phoneAccountLimitKey(sub);
-    if (!this.rateLimit.tryConsumeUser(key)) throw throttled();
+    if (!(await this.rateLimit.tryConsumeUser(key))) throw throttled();
 
     const submitted = issuedCode(code);
     if (submitted === null) throw new BadRequestException(GENERIC_FAILURE);

@@ -32,6 +32,10 @@ import type {
   BotProtectionResult,
 } from "../../src/bot-protection/index.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+// A fresh in-memory window store per app: these boundary suites count from
+// zero, whatever store REDIS_URL would bind (#3539).
+import { InMemoryRateLimitStore } from "../../src/auth/rate-limit/rate-limit.store.fake.js";
+import { RATE_LIMIT_STORE } from "../../src/auth/rate-limit/rate-limit.store.js";
 
 const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
 
@@ -80,6 +84,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
       app = await bootApp((b) =>
         b
           // Tight per-user window so the boundary is reached in a few requests.
+          .overrideProvider(RATE_LIMIT_STORE)
+          .useValue(new InMemoryRateLimitStore())
           .overrideProvider(RATE_LIMIT_THRESHOLDS)
           .useValue({
             perUserPer15Min: 3,
@@ -129,6 +135,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
           // Per-user ceiling of 3 (per-IP wide open) so the boundary is quick.
           // The `register` below consumes ONE per-user slot for `email` (the body
           // field the guard keys on), so the in-test budget is the remaining two.
+          .overrideProvider(RATE_LIMIT_STORE)
+          .useValue(new InMemoryRateLimitStore())
           .overrideProvider(RATE_LIMIT_THRESHOLDS)
           .useValue({
             perUserPer15Min: 3,
@@ -214,7 +222,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
       expect(verified.statusCode).toBe(200);
       // Arrange an empty per-user window for the code sign-in under test: the
       // setup above spent slots on the same identifier.
-      app.get(RateLimitService).reset({ ip: "", identifier: otpEmail });
+      await app.get(RateLimitService).reset({ ip: "", identifier: otpEmail });
 
       // Slot 1: request the code; slot 2: the code sign-in SUCCEEDS and forgives.
       expect(
@@ -356,11 +364,15 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
     /** A fresh app (fresh limiter) with one verified account to sign in. */
     async function bootWithDoctor(): Promise<void> {
       app = await bootApp((b) =>
-        b.overrideProvider(RATE_LIMIT_THRESHOLDS).useValue({
-          ...DEFAULT_RATE_LIMIT_THRESHOLDS,
-          perUserPer15Min: 1_000_000,
-          perAsnPerHour: 1_000_000,
-        }),
+        b
+          .overrideProvider(RATE_LIMIT_STORE)
+          .useValue(new InMemoryRateLimitStore())
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue({
+            ...DEFAULT_RATE_LIMIT_THRESHOLDS,
+            perUserPer15Min: 1_000_000,
+            perAsnPerHour: 1_000_000,
+          }),
       );
       // Sending window: 1 (register). Verification window: the successful
       // verify gives its unit back, so it stays at 0.
@@ -443,6 +455,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
     beforeAll(async () => {
       app = await bootApp((b) =>
         b
+          .overrideProvider(RATE_LIMIT_STORE)
+          .useValue(new InMemoryRateLimitStore())
           .overrideProvider(RATE_LIMIT_THRESHOLDS)
           .useValue({
             perUserPer15Min: DEFAULT_RATE_LIMIT_THRESHOLDS.perUserPer15Min,
@@ -524,7 +538,11 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
     let app: NestFastifyApplication;
     beforeAll(async () => {
       app = await bootApp((b) =>
-        b.overrideProvider(RATE_LIMIT_THRESHOLDS).useValue(RELAXED_RATE_LIMIT),
+        b
+          .overrideProvider(RATE_LIMIT_STORE)
+          .useValue(new InMemoryRateLimitStore())
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
       );
     });
     afterAll(() => cleanup(app, ["timing-known@ds.test"]));
@@ -582,6 +600,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
     beforeAll(async () => {
       app = await bootApp((b) =>
         b
+          .overrideProvider(RATE_LIMIT_STORE)
+          .useValue(new InMemoryRateLimitStore())
           .overrideProvider(RATE_LIMIT_THRESHOLDS)
           .useValue(RELAXED_RATE_LIMIT)
           .overrideProvider(BOT_PROTECTION)

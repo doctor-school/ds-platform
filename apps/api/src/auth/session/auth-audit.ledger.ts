@@ -446,7 +446,7 @@ export class DrizzleAuthAuditLog implements AuthAuditLog {
  * fixed test pepper under VITEST; throws otherwise so a misconfigured non-test
  * runtime never masks with a missing secret.
  */
-function resolveAuditPepper(): string {
+export function resolveAuditPepper(): string {
   const pepper = loadEnv().AUDIT_IDENTIFIER_PEPPER;
   if (pepper) return pepper;
   if (process.env.VITEST) return TEST_FALLBACK_PEPPER;

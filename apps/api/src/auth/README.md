@@ -482,6 +482,11 @@ consumedIpWindow)` beside `reset(...)`. The guard leaves a receipt on the
   no credential) is neither door: it is scoped
   (`LOGIN_HANDOFF_OWNERSHIP_RATE_LIMIT_SCOPE`) so a `/login` page view never
   spends an EARS-13 auth window, while its own bucket still bounds probing.
+  **Where the windows live** (#3539): every window sits behind
+  `RATE_LIMIT_STORE` — `RedisRateLimitStore` when `REDIS_URL` is set (one Lua
+  check-then-take per attempt; keys HMAC'd with the audit pepper; kept across
+  restarts and shared by replicas), `InMemoryRateLimitStore` otherwise. A Redis
+  error fails the attempt; nothing is admitted uncounted.
   **What the windows do in the deployed system** (#1655) — the per-IP window is
   keyed on `request.ip`, which resolves to the REAL client: the Fastify adapter is
   constructed with `trustProxy` set to the trusted proxy addresses

@@ -105,6 +105,7 @@ describe.skipIf(!LIVE_OIDC)(
       // … and the correct password signs in.
       const again = await client.passwordLogin(email, password);
       expect(again.outcome).toBe("authenticated");
-    });
+      // 15 sequential round trips to a live IdP: past vitest's 5 s default.
+    }, 60_000);
   },
 );

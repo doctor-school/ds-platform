@@ -174,10 +174,10 @@ export class SignInHostService {
     // as a guest render, never an error.
     if (
       request.prompt.includes("none") &&
-      !this.limiter.tryConsume({
+      !(await this.limiter.tryConsume({
         ip: req.ip,
         scope: STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
-      })
+      }))
     ) {
       const url = await this.hostIdp.finaliseWithError(
         request.id,
@@ -220,8 +220,7 @@ export class SignInHostService {
     // (`prompt=create` or login) — off `/login` its path fixes it anyway — so a
     // kept event target never turns a hop back to `/login` into the reset door.
     const door: SignInHostDoor =
-      fresh?.door ??
-      (request.prompt.includes("create") ? "register" : "login");
+      fresh?.door ?? (request.prompt.includes("create") ? "register" : "login");
     // A form-only entry — registration, reset — and the EARS-68
     // fresh-credential asks all render the form even with a record.
     const recordMayAnswer =

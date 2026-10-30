@@ -1876,7 +1876,10 @@ jobs:
           E2E_TAXONOMY_DOCTORS_EVENT_SLUG: seed-044-congress
           E2E_TAXONOMY_EXPERTS_EVENT_SLUG: seed-005-upcoming
           E2E_TAXONOMY_EMPTY_EVENT_SLUG: seed-005-upcoming
-        run: pnpm --filter @ds/admin test:e2e --project taxonomy --grep 'standalone Expert retains|project roster keeps exactly one curator|Expert-side authoring creates one retained member relationship|retired project Expert relationship returns|retired curator relationship stays retired|@public-read-boundaries'
+          E2E_CANONICAL_EXPERT_FIXTURE: owned
+          E2E_CANONICAL_EXPERT_DATABASE: ds_admin_e2e
+          E2E_CANONICAL_EXPERT_LOG: ${{ runner.temp }}/canonical-expert-stand-ops.jsonl
+        run: pnpm --filter @ds/admin test:e2e --project taxonomy --grep 'standalone Expert retains|project roster keeps exactly one curator|Expert-side authoring creates one retained member relationship|retired project Expert relationship returns|retired curator relationship stays retired|@public-read-boundaries|@canonical-expert-reads'
       - name: Admin axe sweep
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
         run: pnpm --filter @ds/admin test:axe

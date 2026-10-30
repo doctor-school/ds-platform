@@ -234,6 +234,7 @@
         "apps/admin/app/organisation-roles/",
         "apps/admin/app/partners/",
         "apps/admin/app/providers.tsx",
+        "apps/admin/components/admin-data-list.tsx",
         "apps/admin/components/organisation-form.tsx",
         "apps/admin/components/organisation-role-form.tsx",
         "apps/admin/components/partner-form.tsx",

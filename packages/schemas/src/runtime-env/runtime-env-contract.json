@@ -30,8 +30,8 @@
     },
     {
       "name": "DOCTOR_PUBLIC_ORIGIN",
-      "containers": ["portal"],
-      "ref": "#3147"
+      "containers": ["api", "portal"],
+      "ref": "#3147, #3503"
     }
   ]
 }

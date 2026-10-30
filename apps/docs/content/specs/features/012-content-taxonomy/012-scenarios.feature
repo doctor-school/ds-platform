@@ -309,9 +309,10 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       And the problem identifies <required_field>
       And the entity remains draft with first_published_at null
 
+      # A project's full publish requirement set (title, description, at least one result,
+      # the stage note of a soon project, the curator) is owned by 030 EARS-6.
       Examples:
         | kind    | required_field    |
-        | project | kind              |
         | project | description       |
         | expert  | professional role |
         | expert  | credentials       |
@@ -327,9 +328,9 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       And the stored value and version remain unchanged
       And no domain audit row is written
 
+      # The edit-of-a-published-project refusal for every project requirement is owned by 030 EARS-6.
       Examples:
         | kind    | required_field    |
-        | project | kind              |
         | project | description       |
         | expert  | professional role |
         | expert  | credentials       |
@@ -343,9 +344,10 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       Then publication succeeds and the public detail is available without authentication
       And no missing relationship, media or website value is fabricated
 
+      # A project publishes only with at least one result (030 EARS-6).
       Examples:
-        | kind    | empty_or_optional_state                                      |
-        | project | one eligible curator but zero events, partners and no cover   |
+        | kind    | empty_or_optional_state                                                 |
+        | project | one eligible curator and one result but zero events, partners and no cover |
         | expert  | zero events and projects and no photo                         |
         | topic   | zero events                                                    |
         | partner | zero projects and no logo or website                           |
@@ -354,7 +356,8 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Scenario Outline: A project without one eligible curator cannot publish
       Given a complete draft project with <curator_state>
       When the operator attempts to publish the project
-      Then the request is refused with 409 PUBLISHED_PROJECT_REQUIRES_CURATOR Problem Details
+      Then the request is refused with 409 PUBLISH_REQUIREMENTS_NOT_MET Problem Details
+      And the problem identifies the curator field, as 030 EARS-6 reports every publish blocker together
       And the project remains draft
 
       Examples:
@@ -533,8 +536,9 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Scenario: Base project and expert DTOs carry the exact reusable card fields
       Given published eligible project expert and primary-partner rows
       When zero-auth callers read project and expert base list detail and relationship routes
-      Then PublicProject is exactly id slug kind title description coverUrl and nullable primaryPartner
-      And PublicProjectSummary is exactly id slug kind title description coverUrl and nullable primaryPartner
+      Then PublicProject is exactly id slug title description coverUrl and nullable primaryPartner
+      And PublicProjectSummary is exactly id slug title description coverUrl and nullable primaryPartner
+      And no project read carries a kind, because a project's outputs are its 030 results
       And PublicExpert is exactly id slug name professionalRole credentials affiliation bio photoUrl and initials
       And PublicExpertSummary is exactly id slug name professionalRole credentials affiliation and photoUrl
       And optional URLs are present with null while lifecycle storage and admin fields are absent

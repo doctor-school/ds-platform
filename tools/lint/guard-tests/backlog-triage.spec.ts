@@ -13,13 +13,14 @@ import {
   findWaitForReuse,
   formatLikelyDone,
   formatOrphans,
-  formatReleaseRotation,
+  formatTrackActivity,
   formatStalled,
   formatWaitForReuse,
   parseCapabilityRegistry,
   parseReuseField,
   parseStalledDays,
-  releaseRotation,
+  trackActivity,
+  trackOf,
   type OrphanInput,
   type StalledIssue,
   classifyPrBoardRows,
@@ -35,9 +36,7 @@ import {
   mentionsIssue,
   missingFields,
   parseProseBlockers,
-  queueAnnotationFor,
   subsystemName,
-  trackQueueHeads,
   type ClaimComment,
   type DepRef,
   type IssueInput,
@@ -888,142 +887,18 @@ describe("backlog-triage formatReport() — IN-FLIGHT-ELSEWHERE rows (#811)", ()
   });
 });
 
-describe("backlog-triage queue grouping (#1855)", () => {
-  const MILESTONES = [
-    { title: "Витрина R1 — MVP витрины", due_on: "2026-09-06T00:00:00Z", state: "open" },
-    { title: "Витрина R3 — Эфиры", due_on: "2026-09-21T00:00:00Z", state: "open" },
-    { title: "Витрина · Позже", due_on: null, state: "open" },
-    { title: "Академия R1 — Каталог", due_on: "2026-10-07T00:00:00Z", state: "open" },
-    { title: "Platform ops & hardening", due_on: null, state: "open" },
-  ];
-
-  it("queueAnnotationFor maps each rule outcome onto the report's position tag", () => {
-    expect(
-      queueAnnotationFor(
-        { title: "форма", labels: ["track:doctor"], milestone: "Витрина R1 — MVP витрины" },
-        MILESTONES,
-      ),
-    ).toEqual({ position: "QUEUE-HEAD", head: "Витрина R1 — MVP витрины" });
-
-    expect(
-      queueAnnotationFor(
-        { title: "города", labels: ["track:doctor"], milestone: "Витрина R3 — Эфиры" },
-        MILESTONES,
-      ),
-    ).toEqual({ position: "AHEAD-OF-QUEUE", head: "Витрина R1 — MVP витрины" });
-
-    expect(
-      queueAnnotationFor(
-        {
-          title: "tooling: guard",
-          labels: ["track:platform"],
-          milestone: "Platform ops & hardening",
-        },
-        MILESTONES,
-      ).position,
-    ).toBe("PLATFORM");
-
-    expect(
-      queueAnnotationFor(
-        { title: "epic: two-site IA", labels: ["track:doctor"], milestone: null },
-        MILESTONES,
-      ).position,
-    ).toBe("EPIC");
-  });
-
-  it("trackQueueHeads reports the current release milestone of each product track", () => {
-    expect(trackQueueHeads(MILESTONES)).toEqual([
-      { track: "track:doctor", head: "Витрина R1 — MVP витрины" },
-      { track: "track:academy", head: "Академия R1 — Каталог" },
+describe("backlog-triage carries no release-queue grouping (#3560)", () => {
+  it("lists takeable rows by number with no queue tag, head summary or litmus", () => {
+    const report = formatReport([
+      classify(issue(900, ["tooling"], "форма регистрации"), []),
+      classify(issue(800, ["tooling"], "справочник городов"), []),
     ]);
-  });
-
-  it("queue heads and annotation read the #3375 Cyrillic letters alongside legacy R", () => {
-    const renamed = [
-      { title: "Витрина В3 — Переезд аудитории", due_on: "2026-11-10T00:00:00Z", state: "open" },
-      { title: "Витрина R4 — Эфиры", due_on: "2026-12-01T00:00:00Z", state: "open" },
-      { title: "Витрина · Позже", due_on: null, state: "open" },
-      { title: "Академия А3 — Каталоги", due_on: "2026-11-20T00:00:00Z", state: "open" },
-      { title: "Platform ops & hardening", due_on: null, state: "open" },
-    ];
-    expect(trackQueueHeads(renamed)).toEqual([
-      { track: "track:doctor", head: "Витрина В3 — Переезд аудитории" },
-      { track: "track:academy", head: "Академия А3 — Каталоги" },
-    ]);
-    expect(
-      queueAnnotationFor(
-        { title: "форма", labels: ["track:doctor"], milestone: "Витрина R4 — Эфиры" },
-        renamed,
-      ),
-    ).toEqual({ position: "AHEAD-OF-QUEUE", head: "Витрина В3 — Переезд аудитории" });
-    expect(
-      queueAnnotationFor(
-        { title: "каталог", labels: ["track:academy"], milestone: "Академия А3 — Каталоги" },
-        renamed,
-      ),
-    ).toEqual({ position: "QUEUE-HEAD", head: "Академия А3 — Каталоги" });
-  });
-
-  it("formatReport prints QUEUE-HEAD rows before AHEAD-OF-QUEUE ones, tagged with the head", () => {
-    const head = classify(issue(900, ["tooling"], "форма регистрации"), []);
-    head.queue = { position: "QUEUE-HEAD", head: "Витрина R1 — MVP витрины" };
-    const ahead = classify(issue(800, ["tooling"], "справочник городов"), []);
-    ahead.queue = { position: "AHEAD-OF-QUEUE", head: "Витрина R1 — MVP витрины" };
-
-    const report = formatReport([ahead, head], trackQueueHeads(MILESTONES));
-
-    expect(report).toContain("- #900 [QUEUE-HEAD] форма регистрации");
-    expect(report).toContain(
-      "- #800 [AHEAD-OF-QUEUE (head: Витрина R1 — MVP витрины)] справочник городов",
-    );
-    // ordering: the queue head is listed above the row that jumps it
-    expect(report.indexOf("- #900")).toBeLessThan(report.indexOf("- #800"));
-    // the ahead-of-queue row is TAGGED, never hidden
-    expect(report).toContain("## Takeable (2)");
-    // per-track head summary + the litmus line
-    expect(report).toContain("queue head: track:doctor → Витрина R1 — MVP витрины");
-    expect(report).toContain("queue head: track:academy → Академия R1 — Каталог");
-    expect(report).toContain("блокирует ли это регистрацию врача");
-  });
-
-  it("no milestones (gh failure) ⇒ no queue summary and the report still renders", () => {
-    const report = formatReport([classify(issue(700, [], "free task"), [])]);
-    expect(report).not.toContain("queue head:");
-    expect(report).toContain("- #700 free task");
-  });
-
-  it("no milestones ⇒ NO annotation at all, never a blanket AHEAD-OF-QUEUE (#1857)", () => {
-    // The `gh api milestones` read is best-effort and degrades to []; tagging
-    // every takeable row `[AHEAD-OF-QUEUE (head: none)]` would report a verdict
-    // the tool never computed.
-    expect(
-      queueAnnotationFor(
-        { title: "форма", labels: ["track:doctor"], milestone: "Витрина R1 — MVP витрины" },
-        [],
-      ),
-    ).toBeNull();
-    expect(
-      queueAnnotationFor({ title: "города", labels: ["track:doctor"], milestone: null }, []),
-    ).toBeNull();
-  });
-
-  it("a track with no open release milestone gets no annotation either (#1857)", () => {
-    const academyOnly = [
-      { title: "Академия R1 — Каталог", due_on: "2026-10-07T00:00:00Z", state: "open" },
-    ];
-    expect(
-      queueAnnotationFor(
-        { title: "города", labels: ["track:doctor"], milestone: "Витрина R3 — Эфиры" },
-        academyOnly,
-      ),
-    ).toBeNull();
-  });
-
-  it("an un-annotated row renders bare — no tag, no [AHEAD-OF-QUEUE] (#1857)", () => {
-    const bare = classify(issue(700, ["tooling"], "справочник городов"), []);
-    const report = formatReport([bare], []);
-    expect(report).toContain("- #700 справочник городов");
+    expect(report).toContain("- #800 справочник городов");
+    expect(report).toContain("- #900 форма регистрации");
+    expect(report.indexOf("- #800")).toBeLessThan(report.indexOf("- #900"));
+    expect(report).not.toContain("QUEUE-HEAD");
     expect(report).not.toContain("AHEAD-OF-QUEUE");
+    expect(report).not.toContain("queue head:");
   });
 });
 
@@ -1296,7 +1171,6 @@ describe("grooming sections (#1873)", () => {
     it("lists a WAIT-FOR-REUSE row in its own section and NOT under Takeable", () => {
       const out = formatReport(
         [triage(1900), triage(1901)],
-        [],
         [
           {
             number: 1900,
@@ -1324,53 +1198,37 @@ describe("grooming sections (#1873)", () => {
       expect(formatOrphans([])).toContain("\nnone");
       expect(formatStalled([])).toContain("\nnone");
       expect(formatLikelyDone([])).toContain("\nnone");
-      expect(formatReleaseRotation([])).toContain("\nnone");
     });
   });
 
   describe("findOrphans", () => {
-    const heads = [
-      { track: "track:academy", head: "Академия R1 — Архив записей" },
-      { track: "track:doctor", head: "Витрина R1 — MVP витрины" },
-    ];
     const row = (over: Partial<OrphanInput> = {}): OrphanInput => ({
       number: 1900,
       title: "Some work",
       labels: ["track:academy", "feature"],
-      milestone: "Академия R3 — Города",
       hasNativeBlockedBy: false,
       hasParent: false,
       ...over,
     });
 
-    it("flags an unattached off-head Issue with all three reason tokens", () => {
-      const out = findOrphans([row()], heads);
+    it("flags an unattached Issue with both reason tokens, whatever its milestone", () => {
+      const out = findOrphans([row()]);
       expect(out).toHaveLength(1);
-      expect(out[0]!.reasons).toEqual([
-        "no-blocker",
-        "no-parent",
-        "off-head (Академия R3 — Города)",
-      ]);
+      expect(out[0]!.reasons).toEqual(["no-blocker", "no-parent"]);
       expect(formatOrphans(out)).toContain("### track:academy (1)");
     });
 
-    it("never flags an attached, head-milestoned, epic/gate or headless-track Issue", () => {
-      expect(findOrphans([row({ hasNativeBlockedBy: true })], heads)).toEqual(
-        [],
-      );
-      expect(findOrphans([row({ hasParent: true })], heads)).toEqual([]);
-      expect(
-        findOrphans([row({ milestone: "Академия R1 — Архив записей" })], heads),
-      ).toEqual([]);
-      expect(findOrphans([row({ title: "epic: academy" })], heads)).toEqual([]);
-      expect(findOrphans([row({ title: "gate: design" })], heads)).toEqual([]);
-      expect(findOrphans([row()], [])).toEqual([]);
+    it("never flags an attached or epic/gate Issue", () => {
+      expect(findOrphans([row({ hasNativeBlockedBy: true })])).toEqual([]);
+      expect(findOrphans([row({ hasParent: true })])).toEqual([]);
+      expect(findOrphans([row({ title: "epic: academy" })])).toEqual([]);
+      expect(findOrphans([row({ title: "gate: design" })])).toEqual([]);
     });
 
     it("degrades to ONE skipped line when the board scan (the parent probe) failed", () => {
       // Without the board scan `hasParent` is false for every Issue, so the
       // section would tell the lead to re-link ~114 already-parented Issues.
-      const out = findOrphans([row()], heads);
+      const out = findOrphans([row()]);
       const degraded = formatOrphans(out, false);
       expect(degraded).toContain("## Orphans (skipped)");
       expect(degraded).toContain("skipped — board scan failed (see Warnings)");
@@ -1640,73 +1498,44 @@ describe("grooming sections (#1873)", () => {
     });
   });
 
-  describe("releaseRotation", () => {
-    const milestones = [
-      {
-        title: "Витрина R1 — MVP витрины",
-        due_on: "2026-09-10T00:00:00Z",
-        state: "open",
-      },
-      {
-        title: "Витрина R2 — Профиль",
-        due_on: "2026-09-24T00:00:00Z",
-        state: "open",
-      },
-      {
-        title: "Витрина R0 — Прошлый",
-        due_on: "2026-08-01T00:00:00Z",
-        state: "open",
-      },
-      { title: "Витрина · Позже", due_on: null, state: "open" },
-    ];
-    const now = Date.parse("2026-09-05T00:00:00Z");
-
-    it("orders a track's milestones and flags EMPTY-NEXT / ALL-CLOSED-STILL-OPEN / POZHE", () => {
-      const doctor = releaseRotation(
-        milestones,
-        [
-          { milestone: "Витрина R2 — Профиль" },
-          { milestone: "Витрина · Позже" },
-          { milestone: "Витрина · Позже" },
-        ],
-        now,
-      ).find((t) => t.track === "track:doctor")!;
-      expect(doctor.head).toBe("Витрина R0 — Прошлый");
-      expect(doctor.rows.map((r) => r.title)).toEqual([
-        "Витрина R0 — Прошлый",
-        "Витрина R1 — MVP витрины",
-        "Витрина R2 — Профиль",
-        "Витрина · Позже",
-      ]);
-      expect(doctor.rows[0]!.flags).toEqual([
-        "QUEUE-HEAD",
-        "ALL-CLOSED-STILL-OPEN",
-      ]);
-      expect(doctor.rows[1]!.flags).toEqual(["EMPTY-NEXT"]);
-      expect(doctor.rows[2]!.flags).toEqual([]);
-      expect(doctor.rows[3]!.flags).toEqual(["POZHE: 2"]);
-      const out = formatReleaseRotation([doctor]);
-      expect(out).toContain("### track:doctor (head: Витрина R0 — Прошлый)");
-      expect(out).toContain("[EMPTY-NEXT]");
+  describe("trackActivity", () => {
+    const claim = { source: "start-comment" as const, ageMs: 7_200_000, session: "ds-platform-d5" };
+    const row = (number: number, track: string | null, claimed: boolean) => ({
+      number,
+      title: `Issue ${number}`,
+      track,
+      readiness: "takeable" as const,
+      ...(claimed ? { claim } : {}),
     });
 
-    it("does not flag EMPTY-NEXT when the next release is filled", () => {
-      const doctor = releaseRotation(
-        milestones,
-        [{ milestone: "Витрина R1 — MVP витрины" }],
-        now,
-      ).find((t) => t.track === "track:doctor")!;
-      expect(doctor.rows[1]!.flags).toEqual([]);
+    it("per product track: active (claimed) Issues and the takeable count", () => {
+      const tracks = trackActivity([
+        row(1, "track:doctor", true),
+        row(2, "track:doctor", false),
+        row(3, "track:academy", false),
+        row(4, "track:platform", true),
+      ]);
+      expect(tracks.map((t) => [t.track, t.active.length, t.takeable])).toEqual([
+        ["track:academy", 0, 1],
+        ["track:doctor", 1, 1],
+      ]);
+      const out = formatTrackActivity(tracks);
+      expect(out).toContain("### track:doctor — 1 active, 1 takeable");
+      expect(out).toContain("- #1 IN-FLIGHT-ELSEWHERE (start-comment ds-platform-d5, age 2h)");
+      expect(out).not.toContain("[MORE-THAN-ONE-ACTIVE]");
     });
 
-    it("buckets a non-track milestone under track:platform", () => {
-      expect(
-        releaseRotation(
-          [{ title: "Platform ops & hardening", due_on: null, state: "open" }],
-          [],
-          now,
-        ).map((t) => t.track),
-      ).toEqual(["track:platform"]);
+    it("flags a track running more than one active task", () => {
+      const out = formatTrackActivity(
+        trackActivity([row(1, "track:academy", true), row(2, "track:academy", true)]),
+      );
+      expect(out).toContain("### track:academy [MORE-THAN-ONE-ACTIVE] — 2 active, 0 takeable");
+    });
+
+    it("trackOf picks the track label independent of label order", () => {
+      expect(trackOf(["kind:tooling", "track:doctor"])).toBe("track:doctor");
+      expect(trackOf(["track:doctor", "track:academy"])).toBe(trackOf(["track:academy", "track:doctor"]));
+      expect(trackOf(["kind:chore"])).toBeNull();
     });
   });
 

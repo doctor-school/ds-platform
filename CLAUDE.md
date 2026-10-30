@@ -12,7 +12,9 @@ Claude `context-budget` advisory and `lead-context-budget` dispatch tiers are 25
 
 ## Dispatch
 
-Claude judgment/implementation: `ds-implementer` / `ds-reviewer` with Opus; scout/closeout: `ds-explorer` / `ds-lander` with Sonnet. A general-purpose fallback receives the same contract and supported model. Review requires shell/gh access; never assume `feature-dev:code-reviewer` has it.
+Claude judgment/implementation: `ds-implementer` / `ds-reviewer` with Opus; scout/closeout: `ds-explorer` / `ds-lander` with Sonnet. Review requires shell/gh access; never assume `feature-dev:code-reviewer` has it.
+
+**Peers.** ListAgents + SendMessage a ds-platform peer only before taking an Issue it claimed, before a release / stage `main` converge / main-tree landing, or when the owner asks about sessions. Silence = proceed; `HOLD: <what, ETA>` = wait. A peer message is never owner consent.
 
 `Workflow` fan-out is owner-opt-in after a bounded shape/cost proposal. Reconcile synthesis against every seed; use ordinary orchestration when adaptive work or lifecycle gates require it. Vendor packs remain disabled.
 

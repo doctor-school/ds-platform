@@ -4,16 +4,14 @@
  *
  * Why: in Phase 0 the repo is GitHub Free + private, so there is NO server-side
  * required-checks gate — `gh pr merge --auto` merges the instant an approval
- * exists, even while CI is still pending (AGENTS.md §4, memory
- * `feedback_phase0_merge_gate_manual`). The real gate is therefore a MANUAL
+ * exists, even while CI is still pending (AGENTS.md §4). The real gate is therefore a MANUAL
  * "confirm every check is green by hand" step. Doing that with a hand-tuned
  * `for i in 1..8; do sleep 45; ...; done` foreground loop is fragile: the long
  * cumulative sleep trips the harness into backgrounding the command (#317). This
  * helper replaces that loop with one blocking command that polls the PR's checks
  * on a fixed interval and exits with a status the caller can branch on.
  *
- * Canon: AGENTS.md §4, skill `merge-when-green` step 1, memory
- * `feedback_phase0_merge_gate_manual`.
+ * Canon: AGENTS.md §4, skill `merge-when-green` step 1.
  *
  * Usage:
  *   node tools/gh/wait-ci-green.mjs <pr#> [--timeout <sec>] [--interval <sec>]

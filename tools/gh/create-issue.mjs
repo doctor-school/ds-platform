@@ -14,7 +14,8 @@
  *
  * Canon: AGENTS.md §2 + §6 (Issue conventions / board honesty),
  * .claude/rules/repo-conventions.md (Issue conventions); the in-session board
- * auto-add is unreliable, hence this helper. Board ids: lib/projects-v2.mjs. Sibling helpers: set-board-status.mjs, wait-ci-green.mjs.
+ * auto-add is unreliable, hence this helper. Board ids: `KNOWN` below.
+ * Sibling helpers: set-board-status.mjs, wait-ci-green.mjs.
  *
  * Usage (thin passthrough — everything after the control flags is forwarded to
  * `gh issue create` verbatim; do not reimplement its flags). Fail-closed field

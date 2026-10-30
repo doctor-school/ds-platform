@@ -3,7 +3,6 @@ import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
-  type APIRequestContext,
   type Browser,
   type BrowserContext,
   type BrowserContextOptions,
@@ -28,7 +27,12 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
-import { browserOf, closeOwnedLoginWindow } from "../lib/host-sign-in.js";
+import {
+  browserOf,
+  closeOwnedLoginWindow,
+  genericRefusal,
+  replayOnHostForm,
+} from "../lib/host-sign-in.js";
 
 const SESSION = "__Host-ds_session";
 interface SmsResetReuse {
@@ -40,7 +44,6 @@ interface SmsResetReuse {
   acceptedPassword: string;
   rejectedPassword: string;
   contexts: BrowserContext[];
-  closures: APIRequestContext[];
   httpCredentials: BrowserContextOptions["httpCredentials"];
   recovered?: Page;
   code?: string;
@@ -205,7 +208,6 @@ Given(
       acceptedPassword: `Accepted-${randomUUID()}-aA1!`,
       rejectedPassword: `Replayed-${randomUUID()}-aA1!`,
       contexts: [],
-      closures: [],
       httpCredentials,
     };
     journeys.set(page, state);
@@ -348,40 +350,32 @@ When(
       "different policy-conforming replay proposal",
     ).toBe(true);
     const guest = await privatePage(browser, state, world.hostBaseUrl);
-    // #3172 — the storefront `/reset` is now an entry to the sign-in host,
-    // whose origin has no storefront session or profile to observe. The replay
-    // targets the storefront's own reset BFF (still served) from a storefront
-    // page, where the same tab reads its session and profile.
+    // #3565 — the replay goes where a reset code is entered now: the sign-in
+    // host's reset-complete step, as a host form post of the guest's own auth
+    // request; the guest is then back on the storefront, whose session and
+    // profile the replay must not have granted.
     await guest.goto(`${world.hostBaseUrl}/`, { waitUntil: "load" });
     await guest.waitForLoadState("networkidle");
     await noPrivateAccess(guest);
     // 003 EARS-12/53: the replay must exercise the consumed challenge.
-    const pending = captureResponse(guest, "/v1/auth/password/reset/complete");
-    const evidence = await guest.evaluate(
-      async ({ identifier, code, newPassword }) => {
-        const response = await fetch("/v1/auth/password/reset/complete", {
-          method: "POST",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ identifier, code, newPassword }),
-        });
-        const body = await response.json().catch(() => ({}));
-        return {
-          status: response.status,
-          generic:
-            Object.keys(body).length === 3 &&
-            body.statusCode === 400 &&
-            body.message === "the request could not be completed" &&
-            body.error === "Bad Request",
-        };
-      },
+    const refused = await replayOnHostForm(
+      guest,
+      world.hostBaseUrl,
+      signInHostApiPath("/v1/auth/password/reset/complete"),
       {
         identifier: state.phone,
         code: state.code,
         newPassword: state.rejectedPassword,
       },
     );
-    const refused = await pending;
+    const evidence = {
+      status: refused.response.status(),
+      generic: genericRefusal(
+        refused.body,
+        400,
+        "the request could not be completed",
+      ),
+    };
     expect(evidence, "consumed reset code is refused generically").toEqual({
       status: 400,
       generic: true,
@@ -524,31 +518,6 @@ After("@reset-sms-code-reuse", async ({ page, world }) => {
             }),
           );
         });
-      }
-    }
-    for (const closure of state.closures) {
-      try {
-        const logout = await closure.post(
-          `${world.hostBaseUrl}/v1/auth/logout`,
-        );
-        const session = await closure.get(
-          `${world.hostBaseUrl}/v1/auth/session`,
-        );
-        const profile = await closure.get(`${world.hostBaseUrl}/v1/me/profile`);
-        expect(
-          {
-            logout: logout.status(),
-            session: session.status(),
-            profile: profile.status(),
-          },
-          "owned closing session revoked",
-        ).toEqual({ logout: 200, session: 401, profile: 401 });
-      } catch {
-        failures.push("owned-closing-session-revocation");
-      } finally {
-        await closure
-          .dispose()
-          .catch(() => failures.push("closing-context-disposal"));
       }
     }
   } finally {

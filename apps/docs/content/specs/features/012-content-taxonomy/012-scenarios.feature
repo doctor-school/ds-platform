@@ -394,14 +394,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
         | a negative position   |
         | a fractional position |
 
-    @EARS-8 @happy
-    Scenario: Canonical speaker ordering is deterministic
-      Given active event_experts include published and draft Experts
-      When the public speaker projection is read repeatedly
-      Then only published non-retired Experts render
-      And rows sort by position and stable relation id
-      And repeated reads return the same order
-
     @EARS-5 @EARS-7 @EARS-8 @EARS-13 @EARS-16 @EARS-17 @failure
     Scenario Outline: Every speaker-visibility mutation shares the event serialization boundary
       Given an event whose current visible speaker slots are valid
@@ -538,14 +530,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       And PublicExpert is exactly id slug name professionalRole credentials affiliation bio photoUrl and initials
       And PublicExpertSummary is exactly id slug name professionalRole credentials affiliation and photoUrl
       And optional URLs are present with null while lifecycle storage and admin fields are absent
-
-    @EARS-8 @EARS-12 @happy
-    Scenario: One canonical event-expert resolver feeds the event endpoint page and upcoming card
-      Given an eligible event has ordered event_experts
-      When its speakers endpoint, PublicEventPage and UpcomingBroadcastCard are read
-      Then the endpoint and page return the same ordered Expert projection
-      And the card returns the same order mapped to exactly name-only items
-      And no surface reads legacy speakers or runs a second projection policy
 
     @EARS-12 @failure
     Scenario Outline: A non-public endpoint or retired join cannot leak through traversal
@@ -940,14 +924,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       And no action with no possible effect is enabled
 
     @EARS-24 @happy
-    Scenario: The canonical resolver returns only event_experts after the cutover
-      Given the cutover release is deployed
-      When any public or admin surface reads the speaker projection of an event
-      Then the canonical resolver returns only eligible event_experts ordered by position and stable relation id
-      And it consults no legacy free-text speaker row and no legacy fallback
-      And it infers no identity from a name
-
-    @EARS-24 @happy
     Scenario: The Tech Lead re-creates a legacy row by hand and it appears in the public projection
       Given the cutover release is deployed and the Tech Lead works from the mapping table approved by the Product Lead
       When the Tech Lead executes direct SQL statements via psql on data-prod that insert the missing Expert with family given and patronymic names and credentials taken from the fullest legacy regalia variant and an explicitly authored canonical slug that is unique across experts and status published with a non null first published at and one event_experts row with the per-event role and position
@@ -1116,3 +1092,32 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       When the doctor storefront and the Academy read their events
       Then the doctors-audience event is read only by the doctor storefront
       And the experts-audience event is read only by the Academy
+
+  Rule: Public canonical Expert projections
+
+    @canonical-expert-reads
+    @EARS-8 @happy
+    Scenario: Canonical speaker ordering is deterministic
+      Given active event_experts include published and draft Experts
+      When the public speaker projection is read repeatedly
+      Then only published non-retired Experts render
+      And rows sort by position and stable relation id
+      And repeated reads return the same order
+
+    @canonical-expert-reads
+    @EARS-8 @EARS-12 @happy
+    Scenario: One canonical event-expert resolver feeds the event endpoint page and upcoming card
+      Given an eligible event has ordered event_experts
+      When its speakers endpoint, PublicEventPage and UpcomingBroadcastCard are read
+      Then the endpoint and page return the same ordered Expert projection
+      And the card returns the same order mapped to exactly name-only items
+      And no surface reads legacy speakers or runs a second projection policy
+
+    @canonical-expert-reads
+    @EARS-24 @happy
+    Scenario: The canonical resolver returns only event_experts after the cutover
+      Given the cutover release is deployed
+      When any public or admin surface reads the speaker projection of an event
+      Then the canonical resolver returns only eligible event_experts ordered by position and stable relation id
+      And it consults no legacy free-text speaker row and no legacy fallback
+      And it infers no identity from a name

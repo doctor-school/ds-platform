@@ -129,9 +129,9 @@ export const STOREFRONT_ENTRY_PER_IP_15MIN = 1200;
  * budget. The ceiling is the storefront entry's NAT sizing
  * ({@link STOREFRONT_ENTRY_PER_IP_15MIN}): every interactive storefront entry
  * lands on one host form, and tens of browsers behind one clinic, hospital or
- * congress-hall address open it, never the password limiter's 20. The
- * `prompt=none` host entry counts in
- * {@link STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE}, never here.
+ * congress-hall address open it, never the password limiter's 20. Every
+ * entry counts here, interactive or silent; a `prompt=none` entry also counts
+ * in {@link STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE}.
  */
 export const SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE = "sign-in-host:entry";
 export const SIGN_IN_HOST_ENTRY_PER_IP_15MIN = 1200;

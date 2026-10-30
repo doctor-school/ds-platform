@@ -28,7 +28,6 @@ import {
   type EventAudience,
   MAX_IMAGE_BYTES,
   PROJECT_DESCRIPTION_MAX,
-  PROJECT_KINDS,
   type ProjectAdminDetail,
 } from "@ds/schemas";
 import { ProjectFormSchema, type ProjectFormFields } from "@/lib/form-schemas";
@@ -48,7 +47,6 @@ import { useAcademyPublicUrl } from "@/components/academy-origin-provider";
  *    `MEDIA_INPUT_CONFLICT`.
  */
 export interface ProjectFormValues {
-  kind: ProjectFormFields["kind"];
   title: string;
   description: string;
   /** 012 EARS-30 (#2509) — prefills the audience of the project's new events. */
@@ -60,7 +58,6 @@ export interface ProjectFormValues {
 
 function defaults(detail?: ProjectAdminDetail): ProjectFormFields {
   return {
-    kind: detail?.kind ?? "school",
     title: detail?.title ?? "",
     description: detail?.description ?? "",
     // No preselected audience on create: the editor chooses it (required).
@@ -106,7 +103,6 @@ export function ProjectForm({
         onSubmit={form.handleSubmit((fields) => {
           if (coverError) return;
           onSubmit({
-            kind: fields.kind,
             title: fields.title,
             description: fields.description,
             defaultAudience: fields.defaultAudience as EventAudience,
@@ -115,26 +111,6 @@ export function ProjectForm({
           });
         })}
       >
-        <FormField
-          control={form.control}
-          name="kind"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel htmlFor="kind">{t("projects.fields.kind")}</FormLabel>
-              <FormControl>
-                <NativeSelect id="kind" data-testid="project-kind" {...field}>
-                  {PROJECT_KINDS.map((kind) => (
-                    <option key={kind} value={kind}>
-                      {t(`projects.kinds.${kind}`)}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
         {/* 012 EARS-30 (#2509) — the audience the project's NEW events start
             from. Required; changing it later rewrites no existing event. */}
         <FormField

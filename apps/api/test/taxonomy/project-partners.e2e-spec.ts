@@ -103,7 +103,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     ): Promise<string> {
       const row = {
         slug: `p-1292-${randomUUID()}`,
-        kind: "school",
+        stage: "running",
         // 012 EARS-30 (#2509): every project carries a default audience.
         default_audience: "doctors",
         title: `Школа ${Math.random().toString(36).slice(2, 8)}`,
@@ -851,7 +851,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const item = page(res).data[0]!;
       expect(item).toMatchObject({
         id: projectId,
-        kind: "school",
         isPrimary: true,
         primaryPartner: {
           id: partnerId,
@@ -865,7 +864,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "description",
         "id",
         "isPrimary",
-        "kind",
         "primaryPartner",
         "slug",
         "title",

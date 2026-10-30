@@ -39,7 +39,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     ): Promise<string> {
       const row = {
         slug: slug(),
-        kind: "school",
+        stage: "running",
         // 012 EARS-30 (#2509): every project carries a default audience.
         default_audience: "doctors",
         title: "Проект 1283",
@@ -59,13 +59,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const s = slug();
       const id = await insertProject({ slug: s });
       const { rows } = await pool.query(
-        `SELECT slug, kind, status, version, deleted_at, first_published_at, cover_ref, description
+        `SELECT slug, stage, status, version, deleted_at, first_published_at, cover_ref, description
            FROM projects WHERE id = $1`,
         [id],
       );
       expect(rows[0]).toMatchObject({
         slug: s,
-        kind: "school",
+        stage: "running",
         status: "draft",
         version: 1,
         deleted_at: null,

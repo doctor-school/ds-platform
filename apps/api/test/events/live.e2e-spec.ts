@@ -178,7 +178,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // one project carries the first experts эфир, the idle one carries none.
       for (const slug of [projectSlug, idleProjectSlug]) {
         const project = await pool.query<{ id: string }>(
-          "INSERT INTO projects (slug, kind, title, description, default_audience, status, first_published_at) VALUES ($1, 'school', $2, 'Идёт сейчас', 'experts', 'published', now()) RETURNING id",
+          "INSERT INTO projects (slug, stage, title, description, default_audience, status, first_published_at) VALUES ($1, 'running', $2, 'Идёт сейчас', 'experts', 'published', now()) RETURNING id",
           [slug, `Проект ${slug}`],
         );
         projectIds.push(project.rows[0]!.id);

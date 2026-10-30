@@ -396,6 +396,9 @@ jobs:
       SIGN_IN_ACADEMY_LOGIN_URL: http://localhost:3001/login
       SIGN_IN_DOCTOR_LOGIN_URL: http://localhost:3004/login
       SIGN_IN_RECORD_KEY: Y2ktb25seS1zaWduLWluLXJlY29yZC1rZXktMzJieXQ=
+      # 030 EARS-2: a project result's storefront link must sit on the doctor
+      # storefront origin; the dev-stand port, as in the browser jobs.
+      DOCTOR_PUBLIC_ORIGIN: http://localhost:3004
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10

@@ -47,13 +47,6 @@ export default function ProjectsListPage() {
 
   const columns: DataTableColumn<ProjectAdminListItem>[] = [
     {
-      key: "kind",
-      header: t("projects.columns.kind"),
-      width: "16%",
-      overflow: "wrap",
-      render: (row) => t(`projects.kinds.${row.kind}`),
-    },
-    {
       key: "slug",
       header: t("projects.columns.slug"),
       width: "22%",

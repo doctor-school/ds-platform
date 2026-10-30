@@ -139,7 +139,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "projects",
         {
           slug: `p-1294-${randomUUID()}`,
-          kind: "school",
+          stage: "running",
           default_audience: "doctors",
           title,
           description: "Описание проекта",
@@ -260,6 +260,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           project_id: projectId,
           organisation_id: partnerId,
           is_primary: isPrimary,
+          // 030 EARS-17: every link holds a role; the 032 investor seed role.
+          role_id: "03200000-0000-4000-8000-000000000001",
           ...joinState(retired),
         },
         createdJoins.project_organisations!,
@@ -442,7 +444,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       "coverUrl",
       "description",
       "id",
-      "kind",
       "primaryPartner",
       "slug",
       "title",

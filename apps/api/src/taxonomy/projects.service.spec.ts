@@ -47,6 +47,8 @@ function draftProject(): Project {
     slug: "a-project",
     title: "A project",
     description: "A complete description.",
+    stage: "running",
+    stageNote: null,
     status: "draft",
     version: 3,
     firstPublishedAt: null,
@@ -59,7 +61,11 @@ function draftProject(): Project {
  * is consumed in call order, so the first entry is the optimistic step-1 read
  * and the second is the post-lock step-4 re-check.
  */
-function serviceWith(discoveries: string[][]) {
+function serviceWith(
+  discoveries: string[][],
+  options: { project?: Project; resultCount?: number } = {},
+) {
+  const project = options.project ?? draftProject();
   const transitionVersioned = vi.fn();
   const relations = {
     activeCuratorExpertIds: vi
@@ -68,8 +74,9 @@ function serviceWith(discoveries: string[][]) {
     lockExperts: vi.fn().mockResolvedValue([]),
   } as unknown as ProjectExpertsRepository;
   const repo = {
-    findById: vi.fn().mockResolvedValue(draftProject()),
-    lockById: vi.fn().mockResolvedValue(draftProject()),
+    findById: vi.fn().mockResolvedValue(project),
+    lockById: vi.fn().mockResolvedValue(project),
+    resultCount: vi.fn().mockResolvedValue(options.resultCount ?? 1),
     transaction: vi
       .fn()
       .mockImplementation((run: (tx: unknown) => Promise<unknown>) =>
@@ -143,8 +150,42 @@ describe("012 EARS-5 — project publish, the post-lock curator re-check", () =>
     await expect(
       service.publish({ id: PROJECT_ID, expectedVersion: 3, lease: LEASE }),
     ).rejects.toMatchObject({
-      errorCode: "PUBLISHED_PROJECT_REQUIRES_CURATOR",
+      errorCode: "PUBLISH_REQUIREMENTS_NOT_MET",
+      fieldErrors: [expect.objectContaining({ path: "curator" })],
     });
+    expect(transitionVersioned).not.toHaveBeenCalled();
+  });
+});
+
+describe("030 EARS-6 — project publish rule", () => {
+  it("030 EARS-6: when a draft lacking its description, every result, the stage note of a `soon` stage and an active curator is published, system shall refuse with 409 PUBLISH_REQUIREMENTS_NOT_MET listing every missing item together and write nothing", async () => {
+    const incomplete = {
+      ...draftProject(),
+      description: null,
+      stage: "soon",
+      stageNote: null,
+    } as unknown as Project;
+    const { service, transitionVersioned } = serviceWith([[], []], {
+      project: incomplete,
+      resultCount: 0,
+    });
+
+    const refusal = await service
+      .publish({ id: PROJECT_ID, expectedVersion: 3, lease: LEASE })
+      .then(
+        () => {
+          throw new Error("publish resolved — an incomplete draft must refuse");
+        },
+        (err: unknown) => err,
+      );
+
+    expect(refusal).toBeInstanceOf(TaxonomyError);
+    const error = refusal as TaxonomyError;
+    expect(error.errorCode).toBe("PUBLISH_REQUIREMENTS_NOT_MET");
+    expect(error.getStatus()).toBe(409);
+    expect(error.fieldErrors?.map((e) => e.path).sort()).toEqual(
+      ["curator", "description", "results", "stageNote"].sort(),
+    );
     expect(transitionVersioned).not.toHaveBeenCalled();
   });
 });

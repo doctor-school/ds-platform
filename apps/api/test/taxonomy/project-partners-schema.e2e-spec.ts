@@ -47,8 +47,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     async function insertProject(): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO projects (slug, kind, title, default_audience)
-         VALUES ($1, 'school', 'Школа 1292', 'doctors') RETURNING id`,
+        `INSERT INTO projects (slug, stage, title, default_audience)
+         VALUES ($1, 'running', 'Школа 1292', 'doctors') RETURNING id`,
         [`p-1292-${randomUUID()}`],
       );
       createdProjects.push(rows[0]!.id);
@@ -70,8 +70,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       isPrimary = false,
     ): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO project_organisations (project_id, organisation_id, is_primary)
-         VALUES ($1, $2, $3) RETURNING id`,
+        // 030 EARS-17: every link holds a role; the 032 investor seed role.
+        `INSERT INTO project_organisations (project_id, organisation_id, is_primary, role_id)
+         VALUES ($1, $2, $3, '03200000-0000-4000-8000-000000000001') RETURNING id`,
         [projectId, partnerId, isPrimary],
       );
       return rows[0]!.id;

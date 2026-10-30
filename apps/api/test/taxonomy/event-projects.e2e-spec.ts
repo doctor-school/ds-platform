@@ -189,7 +189,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "idempotency-key": key(),
         },
         payload: {
-          kind: "school",
+          stage: "running",
           defaultAudience: "doctors",
           title,
           description: "Программа для практикующих кардиологов.",
@@ -524,7 +524,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
             "coverUrl",
             "description",
             "id",
-            "kind",
             "primaryPartner",
             "slug",
             "title",
@@ -534,7 +533,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           id: project.id,
           slug: project.slug,
           title: project.title,
-          kind: "school",
           // `project_partners` (#1291) does not exist yet, so no project HAS a
           // partner — null is the truthful value, not a placeholder.
           primaryPartner: null,

@@ -17,7 +17,7 @@ import type {
   LegacyBroadcastCreateBody,
   CreateExpertRequest,
   CreateOrganisationRequest,
-  CreateProjectRequest,
+  CreateProjectRequestInput,
   EventAdminDetail,
   EventAdminListItem,
   ExpertAdminDetail,
@@ -141,7 +141,7 @@ function isTaxonomyResource(resource: string): resource is TaxonomyResource {
 }
 
 /** Project create variables: the authored fields plus an optional cover file. */
-export type CreateProjectVars = CreateProjectRequest & { cover?: File | null };
+export type CreateProjectVars = CreateProjectRequestInput & { cover?: File | null };
 /**
  * Project edit variables. `cover` sets/replaces; `mediaAction: "clear"` removes;
  * supplying both is refused by the API with `MEDIA_INPUT_CONFLICT`, so the form

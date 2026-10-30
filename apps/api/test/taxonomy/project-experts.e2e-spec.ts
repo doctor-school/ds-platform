@@ -101,7 +101,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     ): Promise<string> {
       const row = {
         slug: `p-1291-${randomUUID()}`,
-        kind: "school",
+        stage: "running",
         // 012 EARS-30 (#2509): every project carries a default audience.
         default_audience: "doctors",
         title: `Школа ${Math.random().toString(36).slice(2, 8)}`,
@@ -870,7 +870,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       };
       expect(page.data[0]).toMatchObject({
         id: projectId,
-        kind: "school",
         role: "curator",
         // Populated by the ONE shared summary mapper; null until #1292's
         // relation makes it non-null.
@@ -880,7 +879,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "coverUrl",
         "description",
         "id",
-        "kind",
         "primaryPartner",
         "role",
         "slug",

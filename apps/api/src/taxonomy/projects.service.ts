@@ -522,9 +522,9 @@ export class ProjectsService {
 }
 
 /**
- * Which publish-required fields the patch would leave empty (012-design §2.2 —
- * project publication requires `kind` and `description`; the curator requirement
- * is #1287's, one lock protocol later). Returned as field-addressed errors so
+ * Which publish-required fields the patch would leave empty (030 EARS-6 —
+ * title, description and the stage note of a `soon` project; ≥1 result and
+ * the curator are checked by the publish command under its locks). Returned as field-addressed errors so
  * the form can point at the offending input instead of showing a generic banner.
  */
 function publishRequirementBlockers(
@@ -547,6 +547,16 @@ function publishRequirementBlockers(
       message: "a published project requires a description",
     });
   }
+  // 030 EARS-6 — a `soon` project publishes only with its stage note.
+  const stage = patch.stage !== undefined ? patch.stage : current.stage;
+  const stageNote =
+    patch.stageNote !== undefined ? patch.stageNote : current.stageNote;
+  if (stage === "soon" && !stageNote) {
+    blockers.push({
+      path: "stageNote",
+      message: "a published project of stage «soon» requires a stage note",
+    });
+  }
   return blockers;
 }
 
@@ -555,11 +565,10 @@ function publishRequirementBlockers(
  * pointing at an expert that is itself publicly visible — `published`, not
  * retired, not editorially removed.
  *
- * A separate error code from `PUBLISH_REQUIREMENTS_NOT_MET` on purpose: the
- * field matrix is answered by typing into this form, while this one is answered
- * on a different screen (the project's expert links, or the curator's own
- * record). Collapsing them would send the operator to fix a field that is not
- * the problem.
+ * Reported under the same `PUBLISH_REQUIREMENTS_NOT_MET` as the field
+ * blockers (030 EARS-6: every missing item together), addressed to the
+ * `curator` path so the form points the operator at the project's expert
+ * links rather than at a field it does not own.
  *
  * `lockedExperts` is the FOR-UPDATE read of exactly `curatorIds`, so an expert
  * missing from it is one that vanished between discovery and the lock — treated

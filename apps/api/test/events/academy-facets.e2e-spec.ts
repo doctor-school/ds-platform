@@ -176,13 +176,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
       year = month.slice(0, 4);
 
       const project = await pool.query<{ id: string }>(
-        "INSERT INTO projects (slug, kind, title, description, default_audience, status, first_published_at) VALUES ($1, 'school', $2, 'Фасеты', 'experts', 'published', now()) RETURNING id",
+        "INSERT INTO projects (slug, stage, title, description, default_audience, status, first_published_at) VALUES ($1, 'running', $2, 'Фасеты', 'experts', 'published', now()) RETURNING id",
         [projectSlug, `Проект ${tag}`],
       );
       projectId = project.rows[0]!.id;
       taxonomyRows.push({ table: "projects", id: projectId });
       const idle = await pool.query<{ id: string }>(
-        "INSERT INTO projects (slug, kind, title, description, default_audience, status, first_published_at) VALUES ($1, 'school', $2, 'Фасеты', 'experts', 'published', now()) RETURNING id",
+        "INSERT INTO projects (slug, stage, title, description, default_audience, status, first_published_at) VALUES ($1, 'running', $2, 'Фасеты', 'experts', 'published', now()) RETURNING id",
         [idleProjectSlug, `Пустой проект ${tag}`],
       );
       taxonomyRows.push({ table: "projects", id: idle.rows[0]!.id });

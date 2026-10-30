@@ -177,7 +177,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     function validPayload(overrides: Record<string, unknown> = {}) {
       return {
-        kind: "school",
+        stage: "running",
         defaultAudience: "doctors",
         title: `Школа кардиологии ${Math.random().toString(36).slice(2, 8)}`,
         description: "Программа для практикующих кардиологов.",
@@ -263,7 +263,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode).toBe(201);
       const body = await created(res);
       expect(body).toMatchObject({
-        kind: "school",
+        stage: "running",
         title: uniqueTitle,
         status: "draft",
         version: 1,

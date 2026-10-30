@@ -25,7 +25,6 @@ import {
   OrganisationRoleIdsSchema,
   POSTER_REF_MAX,
   PosterRefSchema,
-  type ProjectKind,
   RECORDING_DURATION_SEC_MAX,
   type RecordingKind,
   RecordingKindSchema,
@@ -296,7 +295,6 @@ export { parseSpecialties };
 const projectCreate = CreateProjectRequestSchema.shape;
 
 export const ProjectFormSchema = z.object({
-  kind: projectCreate.kind,
   title: projectCreate.title,
   description: z.string().trim().min(1).max(2000),
   // 012 EARS-30 (#2509) — required; "" (nothing chosen yet) is the
@@ -305,7 +303,6 @@ export const ProjectFormSchema = z.object({
 });
 
 export interface ProjectFormFields {
-  kind: ProjectKind;
   title: string;
   description: string;
   defaultAudience: EventAudience | "";

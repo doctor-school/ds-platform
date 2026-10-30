@@ -44,7 +44,6 @@ export default function CreateProjectPage() {
           onSubmit={(values) => {
             setErrorKey(null);
             const vars: CreateProjectVars = {
-              kind: values.kind,
               title: values.title,
               description: values.description,
               defaultAudience: values.defaultAudience,

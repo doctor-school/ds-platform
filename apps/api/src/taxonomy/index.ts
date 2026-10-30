@@ -21,6 +21,11 @@ export {
 } from "./media/still-image-normalizer.js";
 export { MediaCleanupService } from "./media/media-cleanup.service.js";
 export {
+  MediaSlotRegistry,
+  TAXONOMY_MEDIA_SLOT_COLUMNS,
+  mediaSlotName,
+} from "./media/media-slot.registry.js";
+export {
   UploadReconcileService,
   UPLOAD_QUIESCENCE_GRACE_MS,
 } from "./media/upload-reconcile.service.js";

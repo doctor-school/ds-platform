@@ -32,6 +32,7 @@ const NOT_MEDIA_SLOTS: Readonly<Record<string, string>> = {
     "object key written by EventsService.storeProgramPdf, which notes no upload locator and enqueues no cleanup job — neither sweep is ever handed it",
 };
 
+// Sees only tables re-exported from `@ds/db`; a table added to packages/db/src/schema/ but not exported from its index is invisible to this scan.
 function schemaRefColumns(): string[] {
   const names = new Set<string>();
   for (const value of Object.values(dbSchema)) {

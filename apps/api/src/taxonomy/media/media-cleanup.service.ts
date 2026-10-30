@@ -163,12 +163,7 @@ export class MediaCleanupService {
       // delete but still serves the object is exactly the case that would leave
       // a "removed" cover publicly reachable.
       if (await this.storage.exists(objectKey)) {
-        await this.recordFailure(
-          id,
-          nextEpoch,
-          owner,
-          "object_storage_unavailable",
-        );
+        await this.recordFailure(id, nextEpoch, owner, "object_storage_unavailable");
         return false;
       }
     } catch (err) {
@@ -177,12 +172,7 @@ export class MediaCleanupService {
           err instanceof Error ? err.message : String(err)
         }`,
       );
-      await this.recordFailure(
-        id,
-        nextEpoch,
-        owner,
-        "object_storage_unavailable",
-      );
+      await this.recordFailure(id, nextEpoch, owner, "object_storage_unavailable");
       return false;
     }
 
@@ -242,8 +232,7 @@ export class MediaCleanupService {
     id: string,
     epoch: number,
     owner: string,
-    error:
-      "object_storage_unavailable" | "cdn_unavailable" | "still_referenced",
+    error: "object_storage_unavailable" | "cdn_unavailable" | "still_referenced",
   ): Promise<void> {
     await this.db
       .update(mediaCleanupJobs)

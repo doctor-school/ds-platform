@@ -15,6 +15,7 @@ import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { FakeMailer } from "../../src/mailer/mailer.fake.js";
 import { MAILER } from "../../src/mailer/mailer.types.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import { CONGRESS_SIGN_UP_CLOCK } from "../../src/congress/congress-signup.tokens.js";
 import { RegistrationService } from "../../src/registration/registration.service.js";
 import {
@@ -124,16 +125,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: { email, password, consent },
       });
       expect(reg.statusCode).toBe(200);
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password },
-      });
-      expect(res.statusCode).toBe(200);
-      const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
-      expect(cookie).toBeDefined();
-      return cookie!.value;
+      return signIn(app, email, password, { device });
     }
 
     /** The signed-in platform registration (EARS-16): no answers payload. */
@@ -158,7 +150,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     /** The roster of the congress event, indexed by the registrant user id. */
     async function markers(): Promise<Map<string, boolean>> {
-      const roster = await service.eventRoster(eventId, { excludeStaff: false });
+      const roster = await service.eventRoster(eventId, {
+        excludeStaff: false,
+      });
       // The canonical contract validates and round-trips on every read.
       expect(EventRosterSchema.parse(roster)).toEqual(roster);
       return new Map(roster.map((e) => [e.userId, e.possibleDuplicate]));
@@ -168,21 +162,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       process.env.CONGRESS_SIGNUP_EVENT_ID = eventId;
       process.env.CONGRESS_SIGNUP_CONSENT_VERSION = CONSENT_VERSION;
 
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        // 044 EARS-11: the intake dispatches a confirmation email after
-        // every acceptance. Without this the suite would make a real relay
-        // attempt per submission and record `failed` on rows it never reads.
-        .overrideProvider(MAILER)
-        .useValue(mailer)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .overrideProvider(CONGRESS_SIGN_UP_CLOCK)
-        .useValue(() => now)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake)
+          // 044 EARS-11: the intake dispatches a confirmation email after
+          // every acceptance. Without this the suite would make a real relay
+          // attempt per submission and record `failed` on rows it never reads.
+          .overrideProvider(MAILER)
+          .useValue(mailer)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT)
+          .overrideProvider(CONGRESS_SIGN_UP_CLOCK)
+          .useValue(() => now),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),

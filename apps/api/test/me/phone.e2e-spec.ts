@@ -16,6 +16,7 @@ import {
   phoneCode,
   type LiveHarness,
 } from "../support/live-phone.js";
+import { hostLogin, Jar } from "../setup/storefront-harness.js";
 
 // 003 EARS-47/48/49/51/52/57 (#2449): confirming a phone from `/account`
 // against the dev-stand Zitadel, its SMS provider chain into `sms-sink`, and
@@ -279,12 +280,13 @@ describe.skipIf(!LIVE_PHONE)("003 phone confirmation (live e2e)", () => {
     expect(r1.statusCode).toBe(r2.statusCode);
     expect(r1.body).toBe(r2.body);
     const wrong = (identifier: string) =>
-      h.app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        payload: { identifier, password: "Wrong-password-1!" },
-        headers: { "user-agent": "Test/1.0" },
-      });
+      hostLogin(
+        h.app,
+        new Jar(),
+        identifier,
+        { password: "Wrong-password-1!" },
+        { device: { "user-agent": "Test/1.0" } },
+      );
     const [w1, w2] = [await wrong(phone), await wrong(unknown)];
     expect(w1.statusCode).toBe(w2.statusCode);
     expect(w1.body).toBe(w2.body);

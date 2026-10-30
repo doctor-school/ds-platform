@@ -23,6 +23,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -113,20 +114,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: { email, password, consent },
       });
       expect(reg.statusCode).toBe(200);
-      const login = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password },
-      });
-      expect(login.statusCode).toBe(200);
-      const cookie = login.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
+      const sid = await signIn(app, email, password, { device });
       const res = await app.inject({
         method: "POST",
         url: `/v1/events/${slug}/registration`,
         headers: {
           ...device,
-          cookie: `${SESSION_COOKIE_NAME}=${cookie!.value}`,
+          cookie: `${SESSION_COOKIE_NAME}=${sid}`,
         },
       });
       expect(res.statusCode).toBe(200);
@@ -152,14 +146,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     ): UpcomingBroadcastCard | undefined => data.find((c) => c.id === id);
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
@@ -183,7 +178,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       // 019 EARS-19 (#2913) — an event whose operator hid the registrant
       // count, upcoming (with real sign-ups behind it) and past.
-      hiddenCount = await makeEvent({ offsetMs: 4 * DAY, hideSignUpCount: true });
+      hiddenCount = await makeEvent({
+        offsetMs: 4 * DAY,
+        hideSignUpCount: true,
+      });
       hiddenPast = await makeEvent({
         offsetMs: -4 * DAY,
         state: "ended",

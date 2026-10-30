@@ -14,6 +14,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import { RegistrationService } from "../../src/registration/registration.service.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -111,16 +112,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: { email, password, consent },
       });
       expect(reg.statusCode).toBe(200);
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password },
-      });
-      expect(res.statusCode).toBe(200);
-      const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
-      expect(cookie).toBeDefined();
-      return cookie!.value;
+      return signIn(app, email, password, { device });
     }
 
     function cookieHeader(cookie: string): Record<string, string> {
@@ -138,14 +130,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
@@ -181,7 +174,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const roster = await service.eventRoster(slug, { excludeStaff: false });
       expect(roster).toHaveLength(2);
       // A second, independent read returns the same persisted set (durability).
-      const rereadById = await service.eventRoster(eventId, { excludeStaff: false });
+      const rereadById = await service.eventRoster(eventId, {
+        excludeStaff: false,
+      });
       expect(rereadById).toHaveLength(2);
       expect(new Set(rereadById.map((e) => e.registeredAt))).toEqual(
         new Set(roster.map((e) => e.registeredAt)),
@@ -234,7 +229,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const roster = await service.eventRoster(slug, { excludeStaff: false });
       expect(roster).toHaveLength(1);
       // The registration is still current on a subsequent read — durable.
-      expect(await service.eventRoster(slug, { excludeStaff: false })).toHaveLength(1);
+      expect(
+        await service.eventRoster(slug, { excludeStaff: false }),
+      ).toHaveLength(1);
     });
 
     it("EARS-8/10: no registrant PII appears on any public 004 endpoint — the public projection stays content-identical for guest and principal", async () => {
@@ -244,7 +241,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await register(slug, cookie);
 
       // The roster HAS the registrant server-side …
-      expect(await service.eventRoster(slug, { excludeStaff: false })).toHaveLength(1);
+      expect(
+        await service.eventRoster(slug, { excludeStaff: false }),
+      ).toHaveLength(1);
 
       // … but neither public 004 route surfaces any of it. Drive the real routes.
       const guestPage = await app.inject({

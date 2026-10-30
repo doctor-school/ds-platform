@@ -1,4 +1,5 @@
-import { hostCommand,
+import {
+  hostCommand,
   isAuthCommandPath,
   isSignInHostForm,
   signInHostApiPath,
@@ -17,6 +18,7 @@ import {
   captureResponse,
   type CapturedResponse,
 } from "../lib/captured-response.js";
+import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
 import {
   captureAddressedMailCheckpoint,
   fetchRecoveryMail,
@@ -599,7 +601,7 @@ Then(
     state.priorCookies = (await state.page.context().cookies())
       .filter((cookie) => cookie.name === SESSION)
       .map((cookie) => cookie.value);
-    const pending = captureResponse(state.page, "/v1/auth/logout");
+    const pending = captureResponse(state.page, STOREFRONT_SIGN_OUT_PATH);
     await state.page.getByTestId("logout").click();
     const loggedOut = await pending;
     expect(

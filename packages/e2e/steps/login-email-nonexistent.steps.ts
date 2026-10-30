@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
+import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
 import {
   assertNoAddressedMail,
   captureAddressedMailCheckpoint,
@@ -103,7 +104,9 @@ async function requestThroughAcademy(
     emailChannel: false,
   };
   try {
-    const submitted: unknown = hostCommand(captured.response.request().postDataJSON());
+    const submitted: unknown = hostCommand(
+      captured.response.request().postDataJSON(),
+    );
     if (
       submitted !== null &&
       typeof submitted === "object" &&
@@ -257,7 +260,7 @@ Given(
       sameAccount: true,
       emailVerified: true,
     });
-    const logout = captureResponse(owned, "/v1/auth/logout");
+    const logout = captureResponse(owned, STOREFRONT_SIGN_OUT_PATH);
     await owned.getByTestId("logout").click();
     expect((await logout).response.status(), "owned session revoked").toBe(200);
     await owned.waitForURL(

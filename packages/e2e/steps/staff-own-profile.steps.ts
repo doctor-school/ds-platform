@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
+import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
 import {
   inputSecret,
   registerOwnedCredentials,
@@ -361,7 +362,7 @@ When(
       roleVisible: false,
       labelVisible: false,
     });
-    const out = captureResponse(owner.page, "/v1/auth/logout");
+    const out = captureResponse(owner.page, STOREFRONT_SIGN_OUT_PATH);
     await owner.page.getByTestId("logout").click();
     expect((await out).response.status()).toBe(200);
     expect(
@@ -435,7 +436,7 @@ Then(
     await ownProfile(owner, owner.initialName);
     await expect(owner.page.getByTestId("profile-name-edit")).toBeVisible();
     await expect(owner.page.getByTestId("logout")).toBeEnabled();
-    const out = captureResponse(owner.page, "/v1/auth/logout");
+    const out = captureResponse(owner.page, STOREFRONT_SIGN_OUT_PATH);
     await owner.page.getByTestId("logout").click();
     expect((await out).response.status()).toBe(200);
     expect(

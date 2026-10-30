@@ -17,6 +17,7 @@ import {
   registerOwnedCredentials,
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
+import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
 import { installCaptchaStub } from "../lib/captcha-stub.js";
 import {
   captureResponse,
@@ -421,7 +422,7 @@ When(
   async ({ page, world }) => {
     const state = recovery(page);
     const reset = state.recovered!;
-    const loggedOut = post(reset, "/v1/auth/logout");
+    const loggedOut = post(reset, STOREFRONT_SIGN_OUT_PATH);
     await reset.getByTestId("logout").click();
     expect((await loggedOut).status()).toBe(200);
     await reset.waitForURL((url) => url.pathname === "/");

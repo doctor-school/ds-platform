@@ -9,6 +9,7 @@ import {
 } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
+import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
 import {
   captureAddressedMailCheckpoint,
   fetchRecoveryCode,
@@ -121,11 +122,7 @@ Given(
       "/account",
     );
     expect(
-      registrationEvidence(
-        response.request().postData() ?? "",
-        body,
-        state,
-      ),
+      registrationEvidence(response.request().postData() ?? "", body, state),
     ).toEqual({
       credentialsMatch: true,
       consentMatches: true,
@@ -168,7 +165,7 @@ Given(
       .filter((cookie) => cookie.name === SESSION)
       .map((cookie) => cookie.value);
 
-    const loggedOut = captureResponse(owned, "/v1/auth/logout");
+    const loggedOut = captureResponse(owned, STOREFRONT_SIGN_OUT_PATH);
     await owned.getByTestId("logout").click();
     const logout = await loggedOut;
     expect(

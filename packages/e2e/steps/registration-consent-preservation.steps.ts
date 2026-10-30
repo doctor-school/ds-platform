@@ -16,6 +16,7 @@ import {
 } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
+import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
 import {
   captureAddressedMailCheckpoint,
   fetchRecoveryMail,
@@ -236,7 +237,7 @@ Given(
     state.priorCookies = (await context.cookies())
       .filter((cookie) => cookie.name === SESSION)
       .map((cookie) => cookie.value);
-    const pendingLogout = captureResponse(owned, "/v1/auth/logout");
+    const pendingLogout = captureResponse(owned, STOREFRONT_SIGN_OUT_PATH);
     await owned.getByTestId("logout").click();
     const loggedOut = await pendingLogout;
     expect(loggedOut.response.status(), "ordinary owned account logout").toBe(

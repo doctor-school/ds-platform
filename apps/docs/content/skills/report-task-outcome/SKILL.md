@@ -1,6 +1,6 @@
 ---
 title: "report-task-outcome"
-description: "Procedural skill (inline): the fixed end-of-task report shape — product-first impact, a MANDATORY 'visual to check' line (a rendered before/after DELIVERED to the user, or an explicit 'nothing visual + how to verify'), mandatory tracker task ratios and a separate evidenced requested-outcome status, a 'why this surfaced' context line, and a collapsed technical appendix. Carries the reusable render-and-deliver-a-visual recipe."
+description: "Procedural skill (inline): the fixed owner-facing report — what changed for a doctor/admin/sponsor in their words, what I need from you (or «ничего»), what is next, and a collapsed technical appendix that is the only place for ids and paths."
 name: report-task-outcome
 mode: inline
 ---
@@ -9,82 +9,37 @@ mode: inline
 
 **Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
 
-**Kind:** procedural · **Mode:** inline (the lead agent runs this when reporting a finished task).
-
-**Why:** engineering-jargon-first completion reports buried whether the user had anything to check — the user repeatedly had to ask "is there something visual I can verify?" and "where do I look?". This skill makes the report **product-first** and makes the visual proof a **delivered, non-optional** element.
+**Kind:** procedural · **Mode:** inline (the lead runs it when reporting to the owner).
 
 ## When this applies
 
-Any owner-facing summary: the end of a task (a merged PR, a completed engineering-task, a closed Issue), the end of a session, an orchestration-wave closeout, and the `## Progress so far` section of a [handoff-prompt](../handoff-prompt/SKILL.md) handoff. `AGENTS.md` §6 «PR lifecycle runs to completion» makes the report the closing step of every PR lifecycle. Reuse the **context line** (§4) and the **visual-delivery recipe** for any mid-task decision request too.
+Every owner-facing text: the end of a task or session, a wave closeout, an interim status, a mid-task question, and the `## Progress so far` section of a [handoff-prompt](../handoff-prompt/SKILL.md). `AGENTS.md` §6 «Finish the PR tail» makes it the closing step of every PR. Read this file at report time; a report written from memory of the shape degrades into a list of numbers.
 
-**Read this file at report time.** A summary written from memory of the shape is the recorded failure mode below: it degrades into a list of PR, migration and EARS numbers.
+## Words
 
-## The report shape (fixed)
+Use only words the owner used and product nouns (врач, админ, спонсор, вебинар, регистрация, форма события). No internal term, even glossed: no process names, tool or library names, guard names, `#N`, PR, SHA, EARS, branch or path outside the appendix. A vendor the owner must act on is named once with who it is to us. Owner-facing steps get the plain phrase: «скриншоты», «ссылка на тестовый стенд», «одобрение».
 
-1. **#N — requested outcome and actual state.** Begin with what the owner asked to obtain, what is demonstrably complete, and the remaining gap. Name merge and production states separately; a release claim carries the release tag/deployed SHA evidence. Preparation, merged tooling and closed child Issues do not establish a completed production upgrade. Reuse valid release authorization within its recorded scope.
-2. **Для пользователя (plain language):** the product / user-visible impact in 1–3 sentences, no jargon — what a person would actually notice. **Name the product entity explicitly** — the webinar, the doctor's registration, the admin's event form — never a bare mechanism («серверный гард жизненного цикла», "read endpoint with an allow-list projection"): «жизненный цикл/страница/гард ЧЕГО?» must be answerable from the sentence itself. Layer/mechanism vocabulary belongs only in the collapsed appendix (§6). **This paragraph is the release note — mirror it verbatim into the PR body's `## Product note (RU)` section** (`.github/PULL_REQUEST_TEMPLATE.md`), the single source of truth the merge-time Mattermost delivery renders (Issue #654): the session report and the team's release note are the **same text**, authored once. Write `none` in that section only for an internal-only PR (chore/CI/refactor/deps) — the `product-note` guard fails `none` on a `feature`/`bug`-labeled PR. **This product-first plain-RU discipline governs EVERY owner-facing status — interim checkpoints AND the final report, not only merged-PR notes.** Every tool / library / code token (a CTA, `playwright-bdd`, BDD, Zitadel, an env-flag name) is **glossed in plain RU on first use or dropped** — an owner who cannot parse the report is a failed report, however green the work (precedent: #584, 2026-07-09, a jargon status table the owner could not read).
+## The report (four parts, fixed order)
 
-   **One-line rule (governs every «Что сделано» line).** Each line OPENS with the product entity and what a person — doctor, admin, sponsor — can now do; PR #, migration #, route counts and EARS ids trail in parentheses or move to the collapsed «▸ Технически» appendix (§8). A line that is only identifiers is a failed line: «PR #1815, миграция 0042, 3 роута, EARS-23…27» is a set of numbers with no fact about the product in it.
+1. **Что изменилось.** For each landed unit, one line that opens with the product entity and what a doctor, admin or sponsor can now do or will notice — 1–3 sentences in total. Merged and live on the site are stated separately; «на сайте» only with release evidence in the appendix. A claim that something does not exist yet is made only after searching `apps/portal`, `apps/doctor`, `packages/` and the capability registry (`apps/docs/content/specs/product/two-site-ia/capability-ownership.md`); the appendix names what was searched. For a visible change, deliver the before/after or the stand link per [visual-delivery](./visual-delivery.md); with no visible change say «смотреть глазами нечего» and how it is checked — never PR links in its place.
 
-3. **🖼 Проверить глазами — MANDATORY, always exactly one of:**
-   - `ДА → <path / URL>` with a rendered **before/after** (for ANY task that changed visible UI — always, don't wait to be asked), **delivered to a user-visible location** (see recipe). For UI/DS-visual work whose tier hands the owner a stand (an Ask visible difference) the value is a **LIVE URL** you boot yourself from fresh `main` BEFORE reporting (showcase `/blocks` for DS units, the portal page for screens); a Show change points at its PR captures; a Ship change has no PR captures and cites the owner's chat decision; a screenshots folder / before-after images are a supplement to the URL, never its substitute (memory `feedback_live_url_not_screenshots`), or
-   - `НЕТ — backend/infra/agent-internal; проверяемо так: <test / behaviour / command>`. For a **hook-driven / agent-internal** deliverable (runs automatically in SessionStart, a guard, etc.) name the **observed automatic trigger and trust state**; never claim an untrusted/unobserved hook runs automatically. Once verified, phrase the line as the automatic trigger — "работает само при старте сессии, тебе делать ничего не нужно" — never "запусти X" (the user reads a bare command as a new per-session chore). **The section means a real rendered UI — never repurpose it.** When the work has no visual surface (tooling, hooks, CI gates, backend seams), the honest form is «проверять глазами нечего — чисто техническая часть, визуально нигде не отражена»; substituting PR/repo/code links to "fill" the mandatory section is banned — the owner reads that as faking a check that doesn't exist (2026-07-13: «Не надо подгонять то, чего нет»). PR links live in the technical appendix.
+   **This paragraph is the release note — mirror it verbatim into the PR body's `## Product note (RU)` section** (`.github/PULL_REQUEST_TEMPLATE.md`), which the merge-time Mattermost delivery renders: the report and the team's release note are the same text, authored once. Write `none` there only for an internal-only PR (chore/CI/refactor/deps); the `product-note` guard fails `none` on a `feature`/`bug` PR.
 
-   A live-URL handoff (only where a stand is handed over at all — the change tier decides, `.claude/rules/change-tiers.md` → Stage-B and stands) carries two more MANDATORY fields (2026-07-08 retro): **(a) креды входа** — логин/пароль или одношаговый способ их получить; URL, в который ревьюер не может войти первым же кликом, — не handoff (прецедент: владелец заблокирован на `/login` админки, PR #660); **(b) plain-language глосс процессных терминов** — «Stage-B», «Mode-a», «batched gate» и т.п. не появляются в owner-facing строке без однострочной расшифровки, что это и что требуется от владельца (прецедент: «Что значит "Stage-B гейт ваш"?»).
+2. **Что нужно от тебя** — or «ничего». Ask only what the owner decides (AGENTS.md §7) and what the agent cannot check itself. One question per message, self-contained: what happened, why I ask, what the answer changes, where to look (a stand link or a concrete page, never «see the Issue»), the options and my recommendation. A stand handed over carries a login that works on the first click.
 
-4. **📐 Отличия от утверждённого макета — MANDATORY when the shipped slice is a PARTIAL cut of a canvas-approved surface** (a vendored `design-source/*.dc.html` exists and the delivered render is not yet the full canvas). Before the owner opens the visual, list what is **intentionally absent vs. the canvas** and where each piece lands — element → Issue # / wave (e.g. «карточки без спикеров/тегов/CTA → #557; фасеты, календарная лента, поиск → wave-2; финальная сверка с канвасом → Stage-B гейт #559»). The owner compares every screenshot against the approved mockup — a spec-sanctioned staged slice with no delta line reads as an unexplained design regression (2026-07-07: «почему всё выглядит совсем не так, как было спроектировано?» on the wave-1 `/webinars` listing). Skip only when the render IS the full canvas or the surface has no canvas.
-5. **Откуда всплыло / где в очереди:** one line of task-chain context (which epic/issue, why now) — on the report AND on any mid-thread decision request.
-6. **Progress against plan:** retain tracker-derived closed/total ratios for the session, feature and epic where applicable, with the denominator and scope named. Label these as task counts, not a percentage of delivered product or migration readiness. Report the requested outcome separately as achieved / partial / not achieved, with evidence and the remaining acceptance conditions. Do not combine preparation and production activation into a single readiness percentage.
-7. **Трекер:** PR #, Issue #, board Status, what was unblocked/closed.
-8. **▸ Технически (collapsed appendix, at the END):** files, tokens, changeset, CI — full detail on request only. The report reads as a product report, not a diff.
-9. **Дальше / отложено:** next queue item, deferred items + why.
-10. **«Этого ещё нет» — только со ссылкой на проверку.** Any claim that a capability is absent — «в Академии этого нет», «на витрине такого не было», «строим с нуля» — is stated ONLY after an actual search of `apps/portal`, `apps/doctor` and `packages/`, and the report names what was searched and what the registry row says (`apps/docs/content/specs/product/two-site-ia/capability-ownership.md`). Unverified, the sentence reads to the owner as «переписываем то, что уже работает» (session c2b60e06, 2026-09-03: two of three «нет в Академии» claims in one report were false). When it IS new, say so with the evidence: «искал в portal/doctor/packages — канонической реализации нет, строка реестра заведена».
+3. **Что дальше.** The next step and why, in product words; what is deferred and why.
 
-## Owner-question shape (mandatory gate)
-
-Any question you put to the owner — in the report **and** in the `⏸ ЖДУ ВАС: <одно действие>` handback line — first names what the owner must check that the agent could not (what the agent can verify itself is never asked), and renders as a self-contained block, four beats: **что случилось / почему спрашиваю / что изменит ответ / где посмотреть** (a live URL, or a concrete page — never "look at the diff"). **Banned:** jargon (token names, internal process terms) and any «см. Issue/отчёт» redirect that makes the owner go read something to parse the question — an Issue number is allowed only as a parenthetical aside. Before releasing the report, self-check **each** question against this form: an owner who has read nothing else must be able to answer it. Precedent: the 2026-07-06 checkpoint asked 4 questions in internal shorthand; the owner could not parse 3 of them, and the re-ask cost a full round-trip.
-
-## Owner-legibility pass (mandatory, last step before sending)
-
-Before releasing ANY owner-facing report or status — interim checkpoints included — scan your own drafted text for three token classes; each occurrence is either glossed or deleted, no third option:
-
-1. **Process nouns** (Stage-A, Stage-B, PRD, EARS, Mode-a, D-trigger, worktree, standalone-boot, …) — one plain-RU clause on first use saying what it is IN THIS report («Stage-A — утверждение дизайна владельцем до стройки»), or drop the term and say the plain thing directly.
-2. **Third-party vendor / product names** (Vercel, Zitadel, Dependabot, Renovate, …) — first use states who they are relative to this project («Vercel — авторы Next.js, библиотеки-каркаса наших сайтов; мы у них ничего не хостим»). A vendor name with no relation stated reads as a new mystery actor (precedent: «При чём тут вообще Vercel?», 2026-08-24).
-3. **File/spec paths and artifact references** — every «решения записаны в PRD» names the concrete repo path where the owner can look; a count of pending items («17 решений») never appears without the interactive-fork protocol (portable agent discipline → Session plan and authorization) taking over — the count is not an ask.
-
-The pass is a gate, not advice: a report that skips it is unreleased. Four recorded failures of the prose-only rule (#293, #753, #983, 2026-08-24) are why this is a discrete step. No Stop hook enforces it: the regex-based completion-report gate was retired in #1743 (seven false-fire tuning rounds; every `exit 2` re-ran the final turn on the full session context) — the skill text is the whole contract.
-
-## Visual-delivery recipe (reused by build-ui Stage-B supplements + mid-task decision visuals)
-
-A confirmation or report visual the user **cannot see** is worthless — an image-view tool may render only to the agent; check the active harness delivery channel. To produce and DELIVER one:
-
-1. **Build the artifact** — render the real surface, or a focused HTML mock of the change (real tokens + Inter), on a local server. When the active browser capability blocks `file://`, use `python -m http.server <port> --bind 127.0.0.1` and navigate to `http://127.0.0.1:<port>/`.
-2. **Screenshot** via Playwright (`browser_take_screenshot`, full page). Resolve the actual browser tool output location; with the Claude MCP guard it is `<repo>/.playwright-mcp/`. **Move preview artifacts out of git** and confirm the source file is gone (`git status` alone cannot see this ignored directory).
-3. **Deliver to the user** — copy to a local, user-visible folder OUTSIDE git (machine-specific path in memory `feedback_final_report_format`, e.g. `Pictures\<task-slug>\`) and **open it** (PowerShell `Start-Process -FilePath <path>` for the explicitly user-visible artifact). Never ask «подтверждаешь?» / "approve?" while the image is visible only inside your own CLI.
-4. For a change to visible UI, make it a **before/after** pair (old vs new, side by side), not only the final state.
-5. Tear down the local preview server (free the port) when done.
-
-## Output
-
-- A report in the fixed shape above, with the «🖼 Проверить глазами» line never omitted.
-- For a visible-UI task: a before/after image delivered to a user-visible folder and opened.
+4. **▸ Технически** (collapsed, at the end) — the only place for `#N`, PR, SHA, EARS, migrations, paths and CI. It holds: requested outcome vs actual state (achieved / partial / not achieved, with evidence and the remaining acceptance conditions; merge and production separately, a release claim with its tag or deployed SHA); tracker counts as closed/total tasks with the scope named, never a percentage of product readiness; for a partial cut of a canvas-approved screen, each element still absent and where it lands, also said in one plain sentence in part 1; files, changeset, CI.
 
 ## Failure modes
 
-- **A closeout report built out of artefact identifiers** — PR #, migration #, route counts, EARS ids as the content of the «Что сделано» lines instead of the product entity and what a person can now do. Owner verdict on the #1741 slice-1 closeout (2026-09-03): «Это набор цифр и ни одного факта про продукт. Как нам сделать его именно продуктовым, а не номерным?» The identifiers belong in trailing parentheses or the §8 appendix, never as the line itself.
-- **An unverified «этого ещё нет» claim** — reporting a capability as absent from Academy / the doctor storefront without having searched `apps/portal`, `apps/doctor`, `packages/` and the capability-ownership registry. Two of three such claims in one report were false (session c2b60e06, 2026-09-03), and the owner reads the pattern as «переписываем то, что уже работает». The absence claim carries its evidence or it does not appear.
-- **Asking for visual confirmation while the screenshot is only in the agent's CLI** — the user cannot see `Read` images; deliver to a folder and open it.
-- **Missing or misleading progress** — retain tracker-derived session/feature/epic closed/total task counts with scope and denominator. They are not product completion or migration readiness. Separately state the requested outcome and remaining acceptance conditions; closed preparation Issues do not prove a production upgrade.
-- **Engineering-jargon-first report** with no product framing and no explicit visual-to-check line — including a **wave/orchestration closeout summary**: the shape applies to every user-facing completion report (multi-Issue wave summaries too), and a mechanism-named deliverable with no product entity («гард жизненного цикла» — чего?) is this failure even when everything merged green (session 35991795).
-- **Omitting the before/after** for a visible-UI change, or showing only the "after".
-- **Shipping a partial slice of a canvas-approved surface with no «📐 Отличия от макета» line** — burying the deferrals in the collapsed appendix guarantees the owner's "this isn't the mockup" reaction (2026-07-07 `/webinars` wave-1).
-- **A `feature`/`bug` PR whose body's `## Product note (RU)` section is left `none` or unfilled** — the «Для пользователя» paragraph is the release note; not mirroring it into the PR body fails the `product-note` guard and starves the team's Mattermost channel (Issue #654).
-- **Opening a decision request mid-thread with no "why this surfaced" context.**
-- **An owner question in internal shorthand** — jargon, a token name, or a «см. Issue/отчёт» redirect instead of the self-contained что-случилось / почему / что-изменит / где-посмотреть block.
-- **Skipping the owner-legibility pass** — an unglossed process noun, vendor name, or pathless artifact reference in the released text; or a pending-decision COUNT presented as a status line instead of entering the one-fork-per-message interactive protocol.
-- **Leaving preview PNGs in `<repo>/.playwright-mcp/`** — move them out and confirm the ignored source files are gone.
+- A line built from identifiers instead of a product fact.
+- An internal term in parts 1–3, glossed or not.
+- A question the agent could have answered itself, or a lead decision (anything off the AGENTS.md §7 owner list) pushed to the owner.
+- A visual the owner cannot see (shown only inside the agent's CLI), or PR links offered as the thing to look at.
+- A `feature`/`bug` PR with `## Product note (RU)` empty or `none`.
 
 ## Related
 
-- [build-ui-from-design-system](../build-ui-from-design-system/SKILL.md) — Stage-B supplement screenshots (the live URL stays the primary deliverable) reuse this visual-delivery recipe; the Stage-A look pick lives in claude.ai/design, not here.
-- memory `feedback_final_report_format` — the machine-specific artifact path + render recipe + pointer back here.
+- [visual-delivery](./visual-delivery.md) — render, capture and deliver a before/after the owner can open.
+- [build-ui-from-design-system](../build-ui-from-design-system/SKILL.md) — the Stage-A look pick and the per-tier owner check.

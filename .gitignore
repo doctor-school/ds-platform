@@ -29,7 +29,7 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# Retro-audit scratch (epic #247; tooling graduates to tools/retro/ under #248)
+# Retro-audit scratch (epic #247)
 .audit-tmp/
 
 # Logs
@@ -71,7 +71,7 @@ test-results/
 
 # Owner-only escape hatch for the lead context budget (#1693): its presence lifts
 # the 250K/400K dispatch tiers for the CURRENT session — live marker, never a
-# committed setting (created on an explicit owner instruction, removed by /wrap)
+# committed setting (created and removed by the owner)
 .claude/lead-budget-override
 
 # Brand book raw staging — the ~142 MB presentation PDF plus raw logo sources

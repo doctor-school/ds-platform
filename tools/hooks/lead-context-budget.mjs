@@ -59,7 +59,7 @@ export function softMessage(contextTokens) {
   const soft = Math.round(SOFT_THRESHOLD / 1000);
   return (
     `⚠ Контекст лида ≈${k}K ≥ ${soft}K — текущую волну довести, новую НЕ ` +
-    `начинать; волна легла → handoff (skill handoff-prompt); /wrap — только по команде владельца.`
+    `начинать; волна легла → handoff (skill handoff-prompt).`
   );
 }
 
@@ -69,7 +69,7 @@ export function hardMessage(contextTokens) {
   return (
     `⛔ Контекст лида ≈${k}K ≥ ${hard}K — новый диспатч заблокирован. Прими ` +
     `результаты уже запущенных агентов, доведи хвосты PR руками → handoff ` +
-    `(skill handoff-prompt; /wrap — только владелец); продолжение — в новой ` +
+    `(skill handoff-prompt); продолжение — в новой ` +
     `сессии. Override — только по явному ` +
     `указанию владельца: файл ${OVERRIDE_REL}.`
   );
@@ -91,7 +91,7 @@ export function overrideMessage(contextTokens) {
   return (
     `⚠ Контекст лида ≈${k}K ≥ ${soft}K, но действует OVERRIDE (${OVERRIDE_REL}) ` +
     `— бюджет диспатчей снят по указанию владельца. Держи волну минимальной; ` +
-    `файл снимается на /wrap.`
+    `файл снимает владелец.`
   );
 }
 

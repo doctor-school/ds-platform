@@ -70,17 +70,6 @@
             "timeout": 10
           }
         ]
-      },
-      {
-        "matcher": "^((collaboration\\.?)?(spawn_agent|followup_task)|Agent|Task|Read|Skill|Bash|exec_command)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/run-project-hook.mjs\" wrap-owner-only",
-            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/run-project-hook.mjs') wrap-owner-only\"",
-            "timeout": 10
-          }
-        ]
       }
     ],
     "UserPromptSubmit": [

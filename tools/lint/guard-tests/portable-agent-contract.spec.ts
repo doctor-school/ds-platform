@@ -74,8 +74,9 @@ describe("portable agent procedure regressions (#1918)", () => {
   it("keeps owner UI gates and Codex direct-request memory routing in lifecycle recipes", () => {
     expect(skill("run-task-lifecycle")).not.toContain("The **only** human-gated path is **Mode (c)**");
     expect(skill("run-task-lifecycle")).toContain("Stage B");
-    expect(skill("run-wrap")).toContain("direct owner request");
-    expect(skill("run-wrap")).toContain("extensions/ad_hoc/notes/");
+    const discipline = read("apps/docs/content/agent-discipline.md");
+    expect(discipline).toContain("direct owner request");
+    expect(discipline).toContain("extensions/ad_hoc/notes/");
     expect(skill("report-task-outcome")).not.toContain("A prod deploy is its own owner-gated step");
   });
 });

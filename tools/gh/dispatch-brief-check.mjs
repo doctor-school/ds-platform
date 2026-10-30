@@ -5,9 +5,9 @@
  *
  * Why: a dispatch brief that names a different file surface than the Issue's
  * Acceptance-criteria block calls out costs a follow-up round-trip. Retro
- * e31ab7c7 F1: the #743 brief pointed at `.claude/commands/wrap.md` (from the
+ * e31ab7c7 F1: the #743 brief pointed at a `.claude/commands/` shim (from the
  * lead's own recon) while the AC named the catalog
- * `apps/docs/content/skills/run-wrap/SKILL.md` — the mismatch surfaced only
+ * `apps/docs/content/skills/<name>/SKILL.md` — the mismatch surfaced only
  * after the subagent returned. This script makes the check deterministic: for
  * every repo-path-like surface the Issue's `## Acceptance criteria` block
  * names, it asserts the brief text names that same path.
@@ -91,7 +91,7 @@ export function extractAcSection(body) {
  * `(?:seg/)+seg`; each is stripped of surrounding backticks / parens / angle
  * brackets and trailing punctuation, then KEPT only if "meaningful": the final
  * segment has a file extension (`/\.[A-Za-z0-9]+$/`) OR the token contains ≥2
- * `/` separators. This keeps `apps/docs/content/skills/run-wrap/SKILL.md`,
+ * `/` separators. This keeps `apps/docs/content/skills/handoff-prompt/SKILL.md`,
  * `tools/gh/dispatch-probe.mjs`, and `tools/lint/guard-tests` while dropping
  * prose like `and/or` or a bare `tools/`.
  * @param {string} text

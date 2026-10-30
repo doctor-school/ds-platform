@@ -953,7 +953,7 @@ Output-direction PII filter — **v3 concern**. До v3 — operational mitigati
 
 AGENTS.md задаёт универсальную конституцию и read-before-action index. Portable agent discipline — обязательный startup context обоих harness: session plan, bootstrap fallback, реальные capabilities, наследуемые поддерживаемые модели Codex, dispatch/checkpoints, shell evidence, сохранение owner authorization и memory policy. Общие инструкции сохраняют SDD/TDD, независимое review, Stage A до UI-кода, Stage B до merge, destructive-infra и release gates. `pnpm issue:create` владеет созданием tracker artifacts; `pnpm pr:land <N>` — каноническим closeout из main-tree после всех применимых gates.
 
-Effective root startup sets включают этот обязательный reference. `pnpm lint:instruction-budget` проверяет каждый harness отдельно; scoped rules и role profiles загружаются по необходимости. Context telemetry специфична для harness: Codex использует observed current input/window bands, Claude — пороги overlay; отсутствующие или stale значения считаются unavailable. Hook configuration, runtime trust и observed enforcement — разные состояния. Диагностика: `tools/hooks/README.md`; session/ledger adapters: `tools/retro/README.md`.
+Effective root startup sets включают этот обязательный reference. `pnpm lint:instruction-budget` проверяет каждый harness отдельно; scoped rules и role profiles загружаются по необходимости. Context telemetry специфична для harness: Codex использует observed current input/window bands, Claude — пороги overlay; отсутствующие или stale значения считаются unavailable. Hook configuration, runtime trust и observed enforcement — разные состояния. Диагностика: `tools/hooks/README.md`.
 
 ### 10.2 CLAUDE.md (Claude-only overlay)
 

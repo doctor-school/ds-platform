@@ -17,7 +17,6 @@ try {
     "context-budget",
     "lead-context-budget",
     "subagent-context-budget",
-    "wrap-owner-only",
     "screenshot-path-guard",
   ]);
   const env = {

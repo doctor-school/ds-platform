@@ -16,10 +16,6 @@ import {
   codexBudgetDecision,
 } from "../../hooks/context-budget.mjs";
 import {
-  isWrapInitiation,
-  ownerRequestedWrap,
-} from "../../hooks/wrap-owner-only.mjs";
-import {
   isAllowedUnderHardCap,
   checkpointPath,
 } from "../../hooks/subagent-context-budget.mjs";
@@ -98,57 +94,6 @@ describe("Codex hook regression #1919", () => {
     expect(contextTokensFromJsonl("")).toBeNull();
     expect(contextTokensFromJsonl(token(-1))).toBeNull();
     expect(contextTokensFromJsonl(token(160000))).toBe(160000);
-  });
-  it("matches Codex workflow dispatch, excludes documentation reads and tool output authorization", () => {
-    expect(
-      isWrapInitiation("spawn_agent", {
-        message: "Run run-session-retro for this session",
-      }),
-    ).toBe(true);
-    expect(
-      isWrapInitiation("Bash", {
-        command: "Get-Content apps/docs/content/skills/run-wrap/SKILL.md",
-      }),
-    ).toBe(false);
-    expect(
-      ownerRequestedWrap(
-        JSON.stringify({
-          type: "event_msg",
-          payload: { type: "user_message", message: "/wrap" },
-        }),
-      ),
-    ).toBe(true);
-    expect(
-      ownerRequestedWrap(
-        JSON.stringify({
-          type: "response_item",
-          payload: { type: "function_call_output", output: "/wrap" },
-        }),
-      ),
-    ).toBe(false);
-  });
-  it("gates wrap on followup_task while ordinary child completion remains allowed", () => {
-    expect(
-      isWrapInitiation("followup_task", { message: "Run run-session-retro" }),
-    ).toBe(true);
-    expect(
-      isWrapInitiation("followup_task", {
-        message: "Finish the existing PR review",
-      }),
-    ).toBe(false);
-  });
-  it("denies relevant wrap if the transcript is missing or unreadable", () => {
-    for (const transcript_path of [undefined, join(dir, "missing.jsonl")]) {
-      const result = run("wrap-owner-only", {
-        cwd: dir,
-        tool_name: "spawn_agent",
-        tool_input: { message: "run-session-retro" },
-        transcript_path,
-      });
-      expect(
-        JSON.parse(result.stdout).hookSpecificOutput.permissionDecision,
-      ).toBe("deny");
-    }
   });
   it("does not treat the parent transcript as a Codex child context", () => {
     const path = join(dir, "parent.jsonl");

@@ -954,7 +954,7 @@ The executable instruction contract lives in root AGENTS.md, [portable agent dis
 
 AGENTS.md provides the universal constitution and read-before-action index. Portable agent discipline is mandatory startup context for both harnesses: session plan, bootstrap fallback, actual capabilities, inherited supported Codex models, dispatch/checkpoints, shell evidence, persistent owner authorization and memory policy. Shared instructions retain SDD/TDD, independent review, Stage A before UI code, Stage B before merge, destructive-infra and release gates. `pnpm issue:create` owns tracker creation; `pnpm pr:land <N>` owns the canonical main-tree closeout after all applicable gates.
 
-The effective root startup sets include this mandatory reference. `pnpm lint:instruction-budget` checks each harness separately; scoped rules and role profiles are loaded on demand. Context telemetry is harness-specific: Codex uses observed current input/window bands, Claude its overlay thresholds; missing or stale values are unavailable. Hook configuration, runtime trust and observed enforcement are distinct states. Diagnostics: `tools/hooks/README.md`; session/ledger adapters: `tools/retro/README.md`.
+The effective root startup sets include this mandatory reference. `pnpm lint:instruction-budget` checks each harness separately; scoped rules and role profiles are loaded on demand. Context telemetry is harness-specific: Codex uses observed current input/window bands, Claude its overlay thresholds; missing or stale values are unavailable. Hook configuration, runtime trust and observed enforcement are distinct states. Diagnostics: `tools/hooks/README.md`.
 
 ### 10.2 CLAUDE.md (Claude-only overlay)
 

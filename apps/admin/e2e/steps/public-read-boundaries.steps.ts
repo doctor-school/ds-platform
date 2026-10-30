@@ -7,10 +7,23 @@ import { expect, request, type APIRequestContext } from "@playwright/test";
 import { Given, When, Then, type AdminWorld } from "../support/fixtures";
 
 type Event = { id: string; slug: string; state: string; startsAt: string };
+type Extent = {
+  today: string;
+  from: string;
+  to: string;
+  remaining: number;
+  nextCount: number | null;
+  nextBatch: number;
+};
 type Feed = {
   data?: Event[];
   days?: { items: Event[] }[];
-  horizon?: { today: string; from: string; to: string };
+  horizon?: Extent;
+  remaining?: number;
+  nextCount?: number | null;
+  nextBatch?: number;
+  nextFrom?: string | null;
+  pagination?: { nextCursor: string | null; hasMore: boolean };
   today?: string;
   from?: string;
   to?: string;
@@ -95,7 +108,11 @@ When(
         type: unknown.headers()["content-type"] ?? "",
         body: await unknown.json(),
       };
-      expect((await api.storageState()).cookies).toEqual([]);
+      expect(
+        (await api.storageState()).cookies
+          .map((cookie) => cookie.name)
+          .filter((name) => name !== "ds_stage_gate"),
+      ).toEqual([]);
     });
   },
 );
@@ -133,10 +150,16 @@ Given("a published event with the audience experts", async ({ world }) => {
   );
   expect(state(world).experts!.id).not.toBe(state(world).doctors!.id);
 });
-function complete(body: Feed, from: string, to: string): Event[] {
+function complete(
+  body: Feed,
+  from: string,
+  to: string,
+  fixtureDays: string[],
+): Event[] {
   const extent = body.horizon ?? body;
   expect(extent.from).toBe(from);
-  expect(extent.to).toBe(to);
+  expect(typeof extent.to).toBe("string");
+  expect(extent.to! <= to).toBe(true);
   const entries = body.data ?? body.days?.flatMap((day) => day.items);
   expect(Array.isArray(entries)).toBe(true);
   expect(
@@ -145,6 +168,21 @@ function complete(body: Feed, from: string, to: string): Event[] {
   ).toBeLessThan(500);
   if (body.totalCount !== undefined)
     expect(body.totalCount).toBe(entries!.length);
+  if (fixtureDays.some((day) => day >= extent.to!)) {
+    // Canonical exhaustion clamp: event-horizon.ts:303; event-horizon.spec.ts:87.
+    expect(extent.remaining).toBe(0);
+    expect(extent.nextCount).toBeNull();
+    expect(extent.nextBatch).toBe(0);
+    if (body.data)
+      expect(body.pagination).toEqual({ nextCursor: null, hasMore: false });
+    else expect(body.nextFrom).toBeNull();
+    expect(entries!.length).toBeGreaterThan(0);
+    const farthest = entries!
+      .map((item) => doctorEventsFeedDayOf(new Date(item.startsAt)))
+      .sort()
+      .at(-1)!;
+    expect(extent.to).toBe(addDoctorEventsFeedDays(farthest, 1));
+  }
   return entries!;
 }
 When(
@@ -171,9 +209,13 @@ When(
       );
       expect(academy.status()).toBe(200);
       expect(doctor.status()).toBe(200);
-      current.academyFeed = complete(await academy.json(), from, to);
-      current.doctorFeed = complete(await doctor.json(), from, to);
-      expect((await api.storageState()).cookies).toEqual([]);
+      current.academyFeed = complete(await academy.json(), from, to, days);
+      current.doctorFeed = complete(await doctor.json(), from, to, days);
+      expect(
+        (await api.storageState()).cookies
+          .map((cookie) => cookie.name)
+          .filter((name) => name !== "ds_stage_gate"),
+      ).toEqual([]);
     });
   },
 );

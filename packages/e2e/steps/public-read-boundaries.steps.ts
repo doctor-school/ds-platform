@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -97,10 +98,13 @@ Then(
         .replaceAll(baseUrlFor(HOSTS.doctor), "<origin>")
         .replaceAll(baseUrlFor(HOSTS.academy), "<origin>")
         .replaceAll("/webinars", "/events")
+        .replaceAll("%2Fwebinars", "%2Fevents")
         .replaceAll("Эфиры", "События");
     for (let index = 0; index < slugs.length; index++) {
-      expect(canonical(state.doctor[index]!.html)).toBe(
-        canonical(state.academy[index]!.html),
+      const digest = (html: string) =>
+        createHash("sha256").update(canonical(html)).digest("hex");
+      expect(digest(state.doctor[index]!.html)).toBe(
+        digest(state.academy[index]!.html),
       );
     }
   },

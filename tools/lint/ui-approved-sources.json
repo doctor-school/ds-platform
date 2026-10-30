@@ -227,6 +227,31 @@
         "https://github.com/doctor-school/ds-platform/issues/2913#issuecomment-6192506522"
       ]
     },
+    "feature-030-project-container-admin-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/projects/",
+        "apps/admin/app/project-output-kinds/",
+        "apps/admin/app/providers.tsx",
+        "apps/admin/components/project-form.tsx",
+        "apps/admin/components/project-output-kind-form.tsx",
+        "apps/admin/components/project-results-panel.tsx",
+        "apps/admin/components/publish-action.tsx",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": [
+        "project-nav",
+        "project-form",
+        "project-results",
+        "project-list-flags",
+        "project-lifecycle",
+        "output-kinds"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/1578#issuecomment-5435209906",
+        "https://github.com/doctor-school/ds-platform/issues/3503#issuecomment-6521347774"
+      ]
+    },
     "feature-032-organisation-registry-v1": {
       "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [
@@ -389,6 +414,28 @@
         "https://github.com/doctor-school/ds-platform/issues/2901#issuecomment-6141610486",
         "https://github.com/doctor-school/ds-platform/issues/2901#issuecomment-6143413707",
         "https://github.com/doctor-school/ds-platform/issues/2901#issuecomment-6192341323"
+      ]
+    },
+    "feature-048-materials-admin-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/materials/",
+        "apps/admin/app/providers.tsx",
+        "apps/admin/components/admin-data-list.tsx",
+        "apps/admin/components/material-form.tsx",
+        "apps/admin/components/material-lifecycle-actions.tsx",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": [
+        "material-nav",
+        "material-list",
+        "material-form",
+        "material-lifecycle",
+        "material-conflict"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/1578#issuecomment-5435209906",
+        "https://github.com/doctor-school/ds-platform/issues/3512#issuecomment-6521348323"
       ]
     },
     "admin-sign-in-v1": {

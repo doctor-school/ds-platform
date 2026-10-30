@@ -45,7 +45,7 @@ describe("ACADEMY_AUTH_FLOW.routes", () => {
 /**
  * #2027 PR 1.6 — what the Academy STATES to the shared sign-up door.
  *
- * `/register` is a mount of `@ds/auth-flow/register/route` now; the door's
+ * `/register` is a sign-in host door (`@ds/auth-flow/sign-in-host/route`); the door's
  * behaviour is proved once in `packages/auth-flow/src/register/…`, over this
  * host's fixture too. What only this tier can prove is the STATEMENT: the door
  * renders exactly what is stated here, so an absent key is a rendered absence

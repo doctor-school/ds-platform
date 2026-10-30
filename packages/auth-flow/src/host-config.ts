@@ -442,7 +442,9 @@ export type AuthFlowApiConfig = {
   /**
    * The code step's submit after the registration form (003 EARS-41/23):
    * `/v1/auth/verify` on the Academy, `/v1/storefront/doctor/verify` on the
-   * doctor host — each takes the host's own `registration` values.
+   * doctor host — each takes the host's own `registration` values. Like every
+   * path here it is the storefront's name for the command; `signInHostConfig`
+   * projects it onto `/v1/sign-in-host/*`, the only route that answers it.
    */
   readonly verifyPath: string;
   /**

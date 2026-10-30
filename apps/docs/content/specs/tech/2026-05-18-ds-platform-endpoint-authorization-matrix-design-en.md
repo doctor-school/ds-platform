@@ -194,7 +194,7 @@ The aggregated table is **generated** from the Layer-1 metadata (the same `Disco
 
 | endpoint                | access        | required_roles | auth_check | object_attrs               | step_up | audit       | test_coverage   |
 | ----------------------- | ------------- | -------------- | ---------- | -------------------------- | ------- | ----------- | --------------- |
-| POST /v1/auth/login     | public        | —              | none       | —                          | false   | high-stakes | EARS-5          |
+| POST /v1/auth/register  | public        | —              | none       | —                          | false   | high-stakes | EARS-1          |
 | DELETE /v1/auth/session | authenticated | doctor_guest   | fast-path  | —                          | false   | low-stakes  | EARS-10         |
 | PATCH /v1/courses/:id   | authenticated | doctor_guest   | policy     | course.author_id==actor.id | false   | high-stakes | EARS-N (future) |
 ```
@@ -243,9 +243,9 @@ The planned 003 authentication endpoints, classified as worked examples. Paths a
 | endpoint                         | access | required_roles | auth_check | object_attrs | step_up | audit       | test_coverage                    |
 | -------------------------------- | ------ | -------------- | ---------- | ------------ | ------- | ----------- | -------------------------------- |
 | `POST /v1/auth/register`         | public | —              | none       | —            | false   | high-stakes | EARS-1, EARS-2, EARS-19, EARS-20 |
-| `POST /v1/auth/login`            | public | —              | none       | —            | false   | high-stakes | EARS-5 (+ EARS-6/7 OTP variants) |
+| `POST /v1/sign-in-host/login`    | public | —              | none       | —            | false   | high-stakes | EARS-5 (+ EARS-6/7 OTP variants) |
 | `POST /v1/auth/password-reset/*` | public | —              | none       | —            | false   | high-stakes | EARS-11, EARS-12                 |
-| `POST /v1/auth/verify`           | public | —              | none       | —            | false   | high-stakes | EARS-6 (verify step)             |
+| `POST /v1/sign-in-host/verify`   | public | —              | none       | —            | false   | high-stakes | EARS-6 (verify step)             |
 
 These are protected by the rate-limit and bot-protection guards (003-design §10.1, EARS-13/17), which are orthogonal to authz and not matrix columns; the matrix records that authorization is intentionally `none` here, and that the events are `high-stakes`-audited.
 

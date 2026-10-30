@@ -1526,7 +1526,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And Academy returns to its account page with Y's own verified private profile
     # Academy projection uses its real /account return route. The broader
     # Doctor /account/congress scenario above remains unchanged.
-    # Retain apps/api/test/auth/login-handoff.e2e-spec.ts:381: native session
+    # Retain apps/api/test/auth/login-handoff.e2e-spec.ts «signed in as ANOTHER account»: native session
     # replacement remains complementary to this independent-cookie browser proof.
 
   @EARS-44 @EARS-16 @failure
@@ -1539,7 +1539,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the three responses are identical in status, body and timing within 50 ms
 
   # Narrow Academy projection (#3026); retain the broader native case above.
-  # Native expiry/exhaustion/statistical timing: apps/api/test/auth/login-handoff.e2e-spec.ts:257/278/286.
+  # Native expiry/exhaustion/statistical timing: apps/api/test/auth/login-handoff.e2e-spec.ts EARS-44 «past its 24 h», «the 4th gets the fallback», «one identical response».
   # Native fallback and malformed zero-call contract: packages/auth-flow/src/login/login-door.handoff.test.tsx:145/181.
   @EARS-44 @EARS-16 @failure @handoff-unusable
   Scenario: Academy falls back silently for unknown, malformed and exhausted handoff references

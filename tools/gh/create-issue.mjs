@@ -13,9 +13,8 @@
  * has a read-lag on a just-added item).
  *
  * Canon: AGENTS.md §2 + §6 (Issue conventions / board honesty),
- * .claude/rules/repo-conventions.md (Issue conventions), memory
- * `reference_gh_issue_board_autoadd_delay` + `feedback_project_status_done_on_merge`
- * (board ids). Sibling helpers: set-board-status.mjs, wait-ci-green.mjs.
+ * .claude/rules/repo-conventions.md (Issue conventions); the in-session board
+ * auto-add is unreliable, hence this helper. Board ids: lib/projects-v2.mjs. Sibling helpers: set-board-status.mjs, wait-ci-green.mjs.
  *
  * Usage (thin passthrough — everything after the control flags is forwarded to
  * `gh issue create` verbatim; do not reimplement its flags). Fail-closed field
@@ -86,8 +85,7 @@ const OWNER = "doctor-school";
 const PROJECT_NUMBER = "1";
 const REPO = "doctor-school/ds-platform";
 
-// Known board ids (memory `reference_gh_issue_board_autoadd_delay` +
-// `feedback_project_status_done_on_merge`) — the item-add step returns the
+// Known board ids (doctor-school Projects v2 board #1) — the item-add step returns the
 // authoritative item id; these drive the Status mutation + the confirmation.
 const KNOWN = {
   projectId: "PVT_kwDOEQZdbM4BYYrZ",

@@ -17,7 +17,7 @@
  * SHARED across all sessions; no full-board scan exists anywhere on this path.
  *
  * Canon: AGENTS.md §2 + §6 ("set board Status = Done"), .claude/rules/repo-conventions.md
- * (Issue conventions), memory `feedback_project_status_done_on_merge` (board ids).
+ * (Issue conventions); `Closes #N` does not move the board column (board ids below).
  *
  * Usage:
  *   node tools/gh/set-board-status.mjs <issue#> <Todo|In Progress|Review|Done>
@@ -50,7 +50,7 @@ export { pickProjectItem };
 const STATUS_FIELD = "Status";
 export const VALID_STATUS = ["Todo", "In Progress", "Review", "Done"];
 
-// Known ids (memory `feedback_project_status_done_on_merge`) — used only as a
+// Known ids (doctor-school Projects v2 board #1) — used only as a
 // post-resolution cross-check, never as the value we mutate against.
 export const KNOWN = {
   projectId: "PVT_kwDOEQZdbM4BYYrZ",

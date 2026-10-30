@@ -104,4 +104,4 @@ New Issues use the `.github/ISSUE_TEMPLATE/default.md` skeleton. Opening an Issu
 
 **§6 threshold scope + handoff provenance.** The AGENTS.md §6 significance threshold routes newly surfaced debt at surfacing time only; already-filed Issues are re-graded or closed only on explicit owner request (a drainage directive means implement, not prune). A handoff's «owner-directed»/«owner-approved» claim needs a verbatim owner quote and a completeness claim («backlog empty») a fresh `pnpm backlog:triage`, otherwise both are unconfirmed and surfaced before execution.
 
-**On merge, set the board Status to Done by hand** — `Closes #N` closes the Issue but does NOT move the Projects v2 board column (board ids: memory `feedback_project_status_done_on_merge`).
+**On merge, set the board Status to Done by hand** — `Closes #N` closes the Issue but does NOT move the Projects v2 board column (board ids: `tools/gh/lib/projects-v2.mjs`).

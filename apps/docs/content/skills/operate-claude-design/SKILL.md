@@ -11,6 +11,8 @@ mode: inline
 
 **Kind:** procedural · **Mode:** inline (the lead writes the prompt, hands it to the owner and posts it on the drawing Issue; the owner draws in Claude Design).
 
+**What the lead does itself.** Canvas text, hiding or showing existing blocks, and a page built only from existing units are the lead's own edit, pushed to the project with DesignSync and re-vendored; a prompt is only for new geometry or composition, and the lead never draws options itself (#2843, #3432, #3379).
+
 ## When to read
 
 Read this skill in full **before** any of: writing a Claude Design prompt; asking the owner for a new or changed canvas; reviewing a canvas against a spec or the code; vendoring a canvas into `design-source/`. It is the only place these rules live — `design-source/README.md`, [`design-approval.md`](../build-ui-from-design-system/design-approval.md) and [`author-design-mockup`](../author-design-mockup/SKILL.md) point here. Never start from an old prompt: none is stored in the repository (see **Provenance**), and copying one inherits its defects.

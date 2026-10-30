@@ -77,6 +77,7 @@ describe("044 EARS-20 admin access projection", () => {
     expect(ADMIN_SECTION_NAV.map((item) => item.href)).toEqual([
       "/events",
       "/projects",
+      "/project-output-kinds",
       "/experts",
       "/organisations",
       "/organisation-roles",

@@ -9,7 +9,7 @@ import type { ProjectAdminDetail } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { ProjectForm } from "@/components/project-form";
-import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
+import { refusedFields, taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import type { CreateProjectVars } from "@/providers/data-provider";
 
 /**
@@ -23,6 +23,7 @@ export default function CreateProjectPage() {
   const router = useRouter();
   const { mutate: create, mutation } = useCreate();
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [refused, setRefused] = useState<string[]>([]);
 
   return (
     <Authenticated key="projects-create" redirectOnFail="/login">
@@ -41,13 +42,16 @@ export default function CreateProjectPage() {
         <ProjectForm
           submitLabel={t("common.save")}
           submitting={mutation.isPending}
+          refused={refused}
           onSubmit={(values) => {
             setErrorKey(null);
+            setRefused([]);
             const vars: CreateProjectVars = {
-              kind: values.kind,
               title: values.title,
               description: values.description,
               defaultAudience: values.defaultAudience,
+              stage: values.stage,
+              ...(values.stageNote ? { stageNote: values.stageNote } : {}),
               cover: values.cover,
             };
             create(
@@ -57,10 +61,14 @@ export default function CreateProjectPage() {
                   const created = data.data as unknown as ProjectAdminDetail;
                   router.push(`/projects/${created.id}`);
                 },
-                onError: (error) =>
+                onError: (error) => {
+                  // 030 EARS-1 — a refusal is shown at its fields; the banner
+                  // still says the write changed nothing.
+                  setRefused(refusedFields(error));
                   setErrorKey(
                     taxonomyErrorKey(error, "projects.errors.createFailed"),
-                  ),
+                  );
+                },
               },
             );
           }}

@@ -611,6 +611,49 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/organisation-roles/${ABSENT_ID}`,
     payload: {},
   },
+  // 030 EARS-2/EARS-3/EARS-18 (#3503) — a project's result set and the
+  // output-kind reference book. Same floor as the project entity: refused
+  // before validation, idempotency or If-Match.
+  {
+    endpoint: "GET /v1/admin/projects/:id/results",
+    method: "GET",
+    url: `/v1/admin/projects/${ABSENT_ID}/results`,
+  },
+  {
+    endpoint: "PUT /v1/admin/projects/:id/results",
+    method: "PUT",
+    url: `/v1/admin/projects/${ABSENT_ID}/results`,
+    payload: {},
+  },
+  {
+    endpoint: "GET /v1/admin/project-output-kinds",
+    method: "GET",
+    url: "/v1/admin/project-output-kinds",
+  },
+  {
+    endpoint: "POST /v1/admin/project-output-kinds",
+    method: "POST",
+    url: "/v1/admin/project-output-kinds",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/project-output-kinds/:id",
+    method: "PATCH",
+    url: `/v1/admin/project-output-kinds/${ABSENT_ID}`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/project-output-kinds/:id/retire",
+    method: "POST",
+    url: `/v1/admin/project-output-kinds/${ABSENT_ID}/retire`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/project-output-kinds/:id/restore",
+    method: "POST",
+    url: `/v1/admin/project-output-kinds/${ABSENT_ID}/restore`,
+    payload: {},
+  },
   // 012 EARS-7/EARS-16 (#1289) — the explicit expert↔event link. A JOIN leaks
   // MORE than an entity if its floor is soft: an anonymous 404-vs-409 difference
   // would disclose which legacy speaker of which event is already matched. The

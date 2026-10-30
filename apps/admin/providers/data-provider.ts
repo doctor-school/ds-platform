@@ -17,7 +17,7 @@ import type {
   LegacyBroadcastCreateBody,
   CreateExpertRequest,
   CreateOrganisationRequest,
-  CreateProjectRequest,
+  CreateProjectRequestInput,
   EventAdminDetail,
   EventAdminListItem,
   ExpertAdminDetail,
@@ -141,7 +141,7 @@ function isTaxonomyResource(resource: string): resource is TaxonomyResource {
 }
 
 /** Project create variables: the authored fields plus an optional cover file. */
-export type CreateProjectVars = CreateProjectRequest & { cover?: File | null };
+export type CreateProjectVars = CreateProjectRequestInput & { cover?: File | null };
 /**
  * Project edit variables. `cover` sets/replaces; `mediaAction: "clear"` removes;
  * supplying both is refused by the API with `MEDIA_INPUT_CONFLICT`, so the form
@@ -1093,6 +1093,27 @@ export async function putCongressAttendance(
  */
 export const projectsUrl = {
   publish: (id: string) => `${ADMIN_BASE}/projects/${id}/publish`,
+  /**
+   * 030 EARS-2 — the project's ordered results: `GET` reads the set and the
+   * project version, `PUT` replaces the whole set under that version.
+   */
+  results: (id: string) => `${ADMIN_BASE}/projects/${id}/results`,
+};
+
+/**
+ * 030 EARS-3 — the output-kind reference book («Виды результатов»). Like the
+ * organisation-role book its list is the whole book (only an optional
+ * `status`) and there is no `GET :id`, so it rides the `custom` transport,
+ * which owns the Idempotency-Key, If-Match and CSRF headers every write owes.
+ * Retire and restore are plain commands under `If-Match`: a retire withdraws
+ * nothing public (a held kind is refused, `409 OUTPUT_KIND_IN_USE`).
+ */
+export const projectOutputKindsUrl = {
+  collection: (status?: "active") =>
+    `${ADMIN_BASE}/project-output-kinds${status ? `?status=${status}` : ""}`,
+  row: (id: string) => `${ADMIN_BASE}/project-output-kinds/${id}`,
+  transition: (id: string, verb: "retire" | "restore") =>
+    `${ADMIN_BASE}/project-output-kinds/${id}/${verb}`,
 };
 
 export const expertsUrl = {

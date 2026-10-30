@@ -8021,6 +8021,91 @@
         "tags": ["ProjectExpertsAdmin"]
       }
     },
+    "/v1/admin/project-output-kinds": {
+      "get": {
+        "operationId": "ProjectOutputKindsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectOutputKindsAdmin"]
+      },
+      "post": {
+        "operationId": "ProjectOutputKindsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectOutputKindsAdmin"]
+      }
+    },
+    "/v1/admin/project-output-kinds/{id}": {
+      "patch": {
+        "operationId": "ProjectOutputKindsAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectOutputKindsAdmin"]
+      }
+    },
+    "/v1/admin/project-output-kinds/{id}/restore": {
+      "post": {
+        "operationId": "ProjectOutputKindsAdminController_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectOutputKindsAdmin"]
+      }
+    },
+    "/v1/admin/project-output-kinds/{id}/retire": {
+      "post": {
+        "operationId": "ProjectOutputKindsAdminController_retire",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectOutputKindsAdmin"]
+      }
+    },
     "/v1/admin/project-partners": {
       "get": {
         "operationId": "ProjectPartnersAdminController_list",
@@ -8227,6 +8312,46 @@
           }
         },
         "tags": ["ProjectCuratorAdmin"]
+      }
+    },
+    "/v1/admin/projects/{id}/results": {
+      "get": {
+        "operationId": "ProjectsAdminController_results",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectsAdmin"]
+      },
+      "put": {
+        "operationId": "ProjectsAdminController_replaceResults",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectsAdmin"]
       }
     },
     "/v1/admin/staff-access": {

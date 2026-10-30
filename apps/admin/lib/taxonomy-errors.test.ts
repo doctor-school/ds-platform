@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { createTranslator } from "next-intl";
 import {
   narrowRefusal,
+  outputKindHolders,
+  publishBlockers,
   refusedFields,
   taxonomyErrorKey,
 } from "./taxonomy-errors";
@@ -328,5 +330,80 @@ describe("refusedFields — field-addressed refusals (032 EARS-1, EARS-3)", () =
       refusedFields({ message: "x", statusCode: 412, errorCode: "STALE" }),
     ).toEqual([]);
     expect(refusedFields(new Error("network"))).toEqual([]);
+  });
+});
+
+describe("030 project container refusals", () => {
+  it("030 EARS-6: a refused publish names each missing item, in the server's order, once", () => {
+    const error = {
+      message: "x",
+      statusCode: 409,
+      errorCode: "PUBLISH_REQUIREMENTS_NOT_MET",
+      fieldErrors: [
+        { path: "description", message: "required" },
+        { path: "results", message: "at least one result" },
+        { path: "stageNote", message: "required for soon" },
+        { path: "curator", message: "none" },
+        { path: "curator", message: "duplicate" },
+      ],
+    };
+    expect(publishBlockers(error)).toEqual([
+      "description",
+      "results",
+      "stageNote",
+      "curator",
+    ]);
+    expect(taxonomyErrorKey(error, "projects.errors.publishFailed")).toBe(
+      "projects.errors.publishRequirements",
+    );
+    for (const path of publishBlockers(error)) {
+      expect(lookup(`projects.publish.blockers.${path}`)).toEqual(
+        expect.any(String),
+      );
+      // The tab that fixes the item is its own short control, so a narrow
+      // screen wraps the item text instead of side-scrolling (EARS-20).
+      expect(lookup(`projects.publish.blockerTabs.${path}`)).toEqual(
+        expect.any(String),
+      );
+    }
+    expect(
+      publishBlockers({ message: "x", statusCode: 412, errorCode: "STALE" }),
+    ).toEqual([]);
+  });
+
+  it("030 EARS-3: a refused retire lists the holding projects by id and title", () => {
+    const error = {
+      message: "x",
+      statusCode: 409,
+      errorCode: "OUTPUT_KIND_IN_USE",
+      fieldErrors: [
+        { path: "projects.p-1", message: "Школа кардиологии" },
+        { path: "projects.p-2", message: "Клуб ревматологов" },
+      ],
+    };
+    expect(outputKindHolders(error)).toEqual([
+      { id: "p-1", title: "Школа кардиологии" },
+      { id: "p-2", title: "Клуб ревматологов" },
+    ]);
+    const key = taxonomyErrorKey(error, "projectOutputKinds.errors.retireFailed");
+    expect(key).toBe("projectOutputKinds.errors.inUse");
+    expect(lookup(key)).toEqual(expect.any(String));
+    expect(outputKindHolders(new Error("network"))).toEqual([]);
+  });
+
+  it("030 EARS-3: every output-kind code reaches a shipped sentence", () => {
+    for (const code of [
+      "INVALID_TRANSITION",
+      "RESOURCE_NOT_FOUND",
+      "PRECONDITION_FAILED",
+      "IDEMPOTENCY_KEY_REUSED",
+      "IDEMPOTENCY_REQUEST_IN_PROGRESS",
+    ]) {
+      const key = taxonomyErrorKey(
+        { message: "x", statusCode: 409, errorCode: code },
+        "projectOutputKinds.errors.updateFailed",
+      );
+      expect(lookup(key), `${code} → ${key}`).toEqual(expect.any(String));
+    }
   });
 });

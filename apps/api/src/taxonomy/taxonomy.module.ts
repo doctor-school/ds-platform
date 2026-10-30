@@ -35,6 +35,11 @@ import { OrganisationRolesAdminController } from "./organisation-roles.admin.con
 import { OrganisationRolesRepository } from "./organisation-roles.repository.js";
 import { OrganisationRolesService } from "./organisation-roles.service.js";
 import { OrganisationsAdminController } from "./organisations.admin.controller.js";
+import { ProjectOutputKindsAdminController } from "./project-output-kinds.admin.controller.js";
+import { ProjectOutputKindsRepository } from "./project-output-kinds.repository.js";
+import { ProjectOutputKindsService } from "./project-output-kinds.service.js";
+import { ProjectResultsRepository } from "./project-results.repository.js";
+import { ProjectResultsService } from "./project-results.service.js";
 import { OrganisationsRepository } from "./organisations.repository.js";
 import { OrganisationsService } from "./organisations.service.js";
 import {
@@ -101,6 +106,8 @@ import { EventKindsService } from "./event-kinds.service.js";
     EventKindsAdminController,
     OrganisationsAdminController,
     OrganisationRolesAdminController,
+    // 030 EARS-3 (#3503) — the «Виды результатов» reference book.
+    ProjectOutputKindsAdminController,
     // #1289 EARS-7 — the expert↔event JOIN surface. It lives in this module
     // rather than in `events` because its whole contract (retained lifecycle,
     // idempotency record, RFC 7807 filter) is the taxonomy one; the event side
@@ -158,6 +165,10 @@ import { EventKindsService } from "./event-kinds.service.js";
     OrganisationsService,
     OrganisationRolesRepository,
     OrganisationRolesService,
+    ProjectOutputKindsRepository,
+    ProjectOutputKindsService,
+    ProjectResultsRepository,
+    ProjectResultsService,
     EventExpertsRepository,
     EventExpertsService,
     EventProjectsRepository,

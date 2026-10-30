@@ -6,7 +6,13 @@ import {
   CreateExpertRequestSchema,
   CreateOrganisationRequestSchema,
   CreateOrganisationRoleRequestSchema,
+  CreateProjectOutputKindRequestSchema,
   CreateProjectRequestSchema,
+  PROJECT_RESULT_DESCRIPTION_MAX,
+  PROJECT_STAGE_NOTE_MAX,
+  ProjectResultInputSchema,
+  type ProjectStage,
+  ProjectStageSchema,
   CreateDirectionRequestSchema,
   CreateDirectionSpecialtyRequestSchema,
   type DirectionAdjacencyKind,
@@ -25,7 +31,6 @@ import {
   OrganisationRoleIdsSchema,
   POSTER_REF_MAX,
   PosterRefSchema,
-  type ProjectKind,
   RECORDING_DURATION_SEC_MAX,
   type RecordingKind,
   RecordingKindSchema,
@@ -295,20 +300,66 @@ export { parseSpecialties };
  */
 const projectCreate = CreateProjectRequestSchema.shape;
 
-export const ProjectFormSchema = z.object({
-  kind: projectCreate.kind,
-  title: projectCreate.title,
-  description: z.string().trim().min(1).max(2000),
-  // 012 EARS-30 (#2509) — required; "" (nothing chosen yet) is the
-  // «Обязательное поле.» refusal rather than an unknown-value one.
-  defaultAudience: z.string().min(1),
-});
+export const ProjectFormSchema = z
+  .object({
+    title: projectCreate.title,
+    description: z.string().trim().min(1).max(2000),
+    // 012 EARS-30 (#2509) — required; "" (nothing chosen yet) is the
+    // «Обязательное поле.» refusal rather than an unknown-value one.
+    defaultAudience: z.string().min(1),
+    // 030 EARS-1 — «Проект идёт» / «Скоро» / «Завершён».
+    stage: ProjectStageSchema,
+    // Bounded here; required only for «Скоро» (the refinement below), and the
+    // form sends nothing for another stage, which the server stores empty.
+    stageNote: z.string().trim().max(PROJECT_STAGE_NOTE_MAX),
+  })
+  .superRefine((value, ctx) => {
+    // No `message`: an explicit issue message outranks the resolver's error
+    // map, so the operator would read the SSOT English text instead of the
+    // RU catalog's `stageNote` (the event form's `school` / `venue` precedent).
+    if (value.stage === "soon" && value.stageNote.length === 0) {
+      ctx.addIssue({ code: "custom", path: ["stageNote"] });
+    }
+  });
 
 export interface ProjectFormFields {
-  kind: ProjectKind;
   title: string;
   description: string;
   defaultAudience: EventAudience | "";
+  stage: ProjectStage;
+  stageNote: string;
+}
+
+/**
+ * One row of the «Результаты» editor (030 EARS-2), DERIVED from the SSOT result
+ * input: the same bounds and the same absolute-https link shape. The kind box
+ * is a select, so «nothing chosen» is its own refusal; whether the link sits on
+ * the doctor-storefront origin is the server's answer (it holds the origin).
+ */
+const resultInput = ProjectResultInputSchema.shape;
+
+export const ProjectResultRowFormSchema = z.object({
+  outputKindId: z.string().min(1),
+  title: resultInput.title,
+  description: z.string().trim().max(PROJECT_RESULT_DESCRIPTION_MAX),
+  // The SSOT link rule, folded in with each issue stripped of its resolved
+  // `message`: the schema's English refine text would otherwise outrank the
+  // localized per-parse error map (#200 precedent).
+  storefrontUrl: z.string().superRefine((value, ctx) => {
+    const result = resultInput.storefrontUrl.safeParse(value);
+    if (result.success) return;
+    for (const issue of result.error.issues) {
+      const { message: _resolved, path: _path, ...rest } = issue;
+      ctx.addIssue(rest as never);
+    }
+  }),
+});
+
+export interface ProjectResultRowFormFields {
+  outputKindId: string;
+  title: string;
+  description: string;
+  storefrontUrl: string;
 }
 
 /**
@@ -458,6 +509,15 @@ export const OrganisationRoleFormSchema = z.object({
 });
 
 export interface OrganisationRoleFormFields {
+  title: string;
+}
+
+/** The 030 EARS-3 output-kind add / rename form: the title, trimmed 1–60 by the SSOT. */
+export const ProjectOutputKindFormSchema = z.object({
+  title: CreateProjectOutputKindRequestSchema.shape.title,
+});
+
+export interface ProjectOutputKindFormFields {
   title: string;
 }
 

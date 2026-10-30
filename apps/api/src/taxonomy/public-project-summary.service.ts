@@ -44,7 +44,6 @@ export class PublicProjectSummaryService {
       rows.map(async (row) => ({
         id: row.id,
         slug: row.slug,
-        kind: row.kind,
         title: row.title,
         description: row.description,
         coverUrl: row.coverRef ? await this.storage.urlFor(row.coverRef) : null,

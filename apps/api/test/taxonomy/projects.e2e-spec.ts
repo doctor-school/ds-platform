@@ -177,7 +177,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     function validPayload(overrides: Record<string, unknown> = {}) {
       return {
-        kind: "school",
+        stage: "running",
         defaultAudience: "doctors",
         title: `Школа кардиологии ${Math.random().toString(36).slice(2, 8)}`,
         description: "Программа для практикующих кардиологов.",
@@ -237,6 +237,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "DELETE FROM media_cleanup_jobs WHERE entity_id = $1",
           [id],
         );
+        await pool.query("DELETE FROM project_results WHERE project_id = $1", [
+          id,
+        ]);
         await pool.query("DELETE FROM projects WHERE id = $1", [id]);
       }
       for (const k of usedKeys.splice(0)) {
@@ -263,7 +266,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode).toBe(201);
       const body = await created(res);
       expect(body).toMatchObject({
-        kind: "school",
+        stage: "running",
         title: uniqueTitle,
         status: "draft",
         version: 1,
@@ -352,13 +355,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "idempotency-key": key(),
           "if-match": 'W/"1"',
         },
-        payload: { title: "Школа кардиологии — 2027", kind: "program" },
+        payload: { title: "Школа кардиологии — 2027", stage: "completed" },
       });
       expect(res.statusCode).toBe(200);
       expect(JSON.parse(res.payload)).toMatchObject({
         id: body.id,
         title: "Школа кардиологии — 2027",
-        kind: "program",
+        stage: "completed",
         version: 2,
       });
       expect(res.headers.etag).toBe('W/"2"');
@@ -1038,10 +1041,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     // ── 012 EARS-5: publish completeness + the curator invariant (#1287) ──
     //
     // §2.3 splits the gate in two on purpose, and these cases keep it split: the
-    // FIELD matrix (`PUBLISH_REQUIREMENTS_NOT_MET`, answered by typing into this
-    // form) and the STRUCTURAL invariant (`PUBLISHED_PROJECT_REQUIRES_CURATOR`,
-    // answered on a different screen). Collapsing them would send an operator to
-    // fix a field that is not the problem.
+    // 030 EARS-6 reports every missing item together under
+    // `PUBLISH_REQUIREMENTS_NOT_MET`: the field matrix and the curator invariant
+    // (path `curator`, answered on the expert-links screen), each addressed so
+    // the operator is pointed at the right place.
 
     /** A real expert row; PUBLISHED and visible unless overridden. */
     async function insertExpert(
@@ -1128,9 +1131,23 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return Number(rows[0]!.count);
     }
 
-    /** A complete draft project with exactly one publicly visible curator. */
+    /**
+     * One result of the seed kind «Школа», written as SQL so the project's
+     * version (and so the tests' If-Match) is unchanged (030 EARS-6: a project
+     * publishes only with at least one result).
+     */
+    async function addResult(projectId: string): Promise<void> {
+      await pool.query(
+        `INSERT INTO project_results (project_id, output_kind_id, position, title)
+           VALUES ($1, '03000000-0000-4000-8000-000000000001', 0, 'Школа')`,
+        [projectId],
+      );
+    }
+
+    /** A complete draft project with one result and exactly one publicly visible curator. */
     async function publishableProject() {
       const body = await created(await createJson({ payload: validPayload() }));
+      await addResult(body.id);
       const curatorId = await insertExpert();
       await linkExpert(body.id, curatorId);
       return { body, curatorId };
@@ -1164,6 +1181,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await createJson({ payload: validPayload({ description: "Кратко." }) }),
       );
       expect(body.coverUrl).toBeNull();
+      await addResult(body.id);
       await linkExpert(body.id, await insertExpert());
 
       const res = await publishProject(body.id, 1);
@@ -1207,24 +1225,25 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     });
 
-    it("012 EARS-5.6: when a project has no active curator, the system shall refuse with PUBLISHED_PROJECT_REQUIRES_CURATOR rather than a field error", async () => {
+    it("030 EARS-6 / 012 EARS-5.6: when a project has no active curator, the system shall refuse with PUBLISH_REQUIREMENTS_NOT_MET and only the curator field error", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
+      await addResult(body.id);
       // A MEMBER link is not a curator: the invariant is about the curator slot,
       // not about having some expert attached.
       await linkExpert(body.id, await insertExpert(), "member");
 
       const res = await publishProject(body.id, 1);
       expect(res.statusCode).toBe(409);
-      expect(problem(res).errorCode).toBe("PUBLISHED_PROJECT_REQUIRES_CURATOR");
-      // The complete field matrix must NOT be reported as the blocker.
-      expect(problem(res).errors ?? []).toHaveLength(0);
+      expect(problem(res).errorCode).toBe("PUBLISH_REQUIREMENTS_NOT_MET");
+      // The complete fields are NOT reported: the curator is the one blocker.
+      expect(problem(res).errors?.map((e) => e.path)).toEqual(["curator"]);
       expect(await projectRow(body.id)).toMatchObject({
         status: "draft",
         version: 1,
       });
     });
 
-    it("012 EARS-5.7: when the curator is not itself publicly visible, the system shall refuse with PUBLISHED_PROJECT_REQUIRES_CURATOR", async () => {
+    it("030 EARS-6 / 012 EARS-5.7: when the curator is not itself publicly visible, the system shall refuse with PUBLISH_REQUIREMENTS_NOT_MET and the curator field error", async () => {
       for (const lifecycle of [
         { status: "draft", first_published_at: null },
         { status: "retired", deleted_at: new Date(), first_published_at: null },
@@ -1242,13 +1261,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         const body = await created(
           await createJson({ payload: validPayload() }),
         );
+        await addResult(body.id);
         await linkExpert(body.id, await insertExpert(lifecycle));
 
         const res = await publishProject(body.id, 1);
         expect(res.statusCode).toBe(409);
-        expect(problem(res).errorCode).toBe(
-          "PUBLISHED_PROJECT_REQUIRES_CURATOR",
-        );
+        expect(problem(res).errorCode).toBe("PUBLISH_REQUIREMENTS_NOT_MET");
+        expect(problem(res).errors?.map((e) => e.path)).toEqual(["curator"]);
         expect(await projectRow(body.id)).toMatchObject({ status: "draft" });
       }
     });
@@ -1266,7 +1285,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // With the link gone the set is empty at BOTH the unlocked and the locked
       // read, so the invariant — not the staleness check — is what answers.
       expect(res.statusCode).toBe(409);
-      expect(problem(res).errorCode).toBe("PUBLISHED_PROJECT_REQUIRES_CURATOR");
+      expect(problem(res).errorCode).toBe("PUBLISH_REQUIREMENTS_NOT_MET");
+      expect(problem(res).errors?.map((e) => e.path)).toEqual(["curator"]);
       expect(await projectRow(body.id)).toMatchObject({
         status: "draft",
         version: 1,
@@ -1341,6 +1361,319 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // The SAME address answers once published — so the 404 above was the
       // visibility allow-list, not a missing route.
       expect(visible.statusCode).toBe(200);
+    });
+
+    // ── 030 EARS-1/2/6 (#3503): stage, the results set, the publish rule ──
+
+    const SHKOLA = "03000000-0000-4000-8000-000000000001";
+    const KURS = "03000000-0000-4000-8000-000000000002";
+    const createdKindIds: string[] = [];
+
+    afterEach(async () => {
+      // Registered after the suite's own afterEach, so it runs first: the
+      // results go before their kind, the projects after.
+      for (const id of createdKindIds.splice(0)) {
+        await pool.query(
+          "DELETE FROM project_results WHERE output_kind_id = $1",
+          [id],
+        );
+        await pool.query("DELETE FROM project_output_kinds WHERE id = $1", [
+          id,
+        ]);
+      }
+    });
+
+    /** The configured doctor-storefront origin (CI: the api-e2e job env). */
+    function storefront(path: string): string {
+      const origin = process.env.DOCTOR_PUBLIC_ORIGIN;
+      if (!origin) throw new Error("DOCTOR_PUBLIC_ORIGIN must be set");
+      return new URL(path, origin).toString();
+    }
+
+    async function retiredKind(): Promise<string> {
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO project_output_kinds (slug, title, status, deleted_at)
+           VALUES ($1, $2, 'retired', now()) RETURNING id`,
+        [`e2e-retired-${randomUUID().slice(0, 8)}`, `Снятый ${randomUUID()}`],
+      );
+      createdKindIds.push(rows[0]!.id);
+      return rows[0]!.id;
+    }
+
+    async function putResults(
+      id: string,
+      version: number,
+      results: Record<string, unknown>[],
+    ) {
+      return app.inject({
+        method: "PUT",
+        url: `/v1/admin/projects/${id}/results`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": `W/"${version}"`,
+        },
+        payload: { results },
+      });
+    }
+
+    async function getResults(id: string) {
+      const res = await app.inject({
+        method: "GET",
+        url: `/v1/admin/projects/${id}/results`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      expect(res.statusCode, res.payload).toBe(200);
+      return JSON.parse(res.payload) as {
+        version: number;
+        data: {
+          position: number;
+          title: string;
+          description: string | null;
+          storefrontUrl: string | null;
+          outputKind: { id: string; status: string };
+        }[];
+      };
+    }
+
+    async function patchProject(
+      id: string,
+      version: number,
+      payload: Record<string, unknown>,
+    ) {
+      return app.inject({
+        method: "PATCH",
+        url: `/v1/admin/projects/${id}`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": `W/"${version}"`,
+        },
+        payload,
+      });
+    }
+
+    it("030 EARS-1: when a project is created without a stage, the system shall give it «Скоро» and require «Что происходит сейчас»", async () => {
+      const before = await projectCount();
+      const { stage: _stage, ...noStage } = validPayload();
+      const missing = await createJson({ payload: noStage });
+      expect(missing.statusCode).toBe(400);
+      expect(problem(missing).errors?.map((e) => e.path)).toContain(
+        "stageNote",
+      );
+      expect(await projectCount()).toBe(before);
+
+      const res = await createJson({
+        payload: { ...noStage, stageNote: "  Набираем первую группу  " },
+      });
+      expect(res.statusCode, res.payload).toBe(201);
+      expect(await created(res)).toMatchObject({
+        stage: "soon",
+        stageNote: "Набираем первую группу",
+        legacyKind: null,
+        resultCount: 0,
+      });
+    });
+
+    it("030 EARS-1: when a stage other than «Скоро» is saved, the system shall store the stage note empty", async () => {
+      const body = await created(
+        await createJson({
+          payload: validPayload({ stage: "completed", stageNote: "Лишнее" }),
+        }),
+      );
+      expect(body).toMatchObject({ stage: "completed", stageNote: null });
+
+      const toSoon = await patchProject(body.id, 1, { stage: "soon" });
+      expect(toSoon.statusCode).toBe(400);
+      expect(problem(toSoon).errors?.map((e) => e.path)).toContain(
+        "stageNote",
+      );
+      const soon = await patchProject(body.id, 1, {
+        stage: "soon",
+        stageNote: "Скоро старт",
+      });
+      expect(soon.statusCode, soon.payload).toBe(200);
+      expect(JSON.parse(soon.payload)).toMatchObject({
+        stage: "soon",
+        stageNote: "Скоро старт",
+        version: 2,
+      });
+      const running = await patchProject(body.id, 2, { stage: "running" });
+      expect(running.statusCode, running.payload).toBe(200);
+      expect(JSON.parse(running.payload)).toMatchObject({
+        stage: "running",
+        stageNote: null,
+      });
+    });
+
+    it("030 EARS-2: when the results are saved, reordered and replaced, the system shall store them as one ordered set under the project's If-Match version", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const first = await putResults(body.id, 1, [
+        {
+          outputKindId: SHKOLA,
+          title: "  Школа  ",
+          description: "  ",
+          storefrontUrl: storefront("/schools/cardio"),
+        },
+        { outputKindId: KURS, title: "Курс", description: "Шесть недель" },
+      ]);
+      expect(first.statusCode, first.payload).toBe(200);
+      expect(first.headers.etag).toBe('W/"2"');
+      const saved = await getResults(body.id);
+      expect(saved.version).toBe(2);
+      expect(
+        saved.data.map((r) => [r.position, r.title, r.description]),
+      ).toEqual([
+        [0, "Школа", null],
+        [1, "Курс", "Шесть недель"],
+      ]);
+      expect(saved.data[0]!.storefrontUrl).toBe(storefront("/schools/cardio"));
+
+      const reordered = await putResults(body.id, 2, [
+        { outputKindId: KURS, title: "Курс" },
+        { outputKindId: SHKOLA, title: "Школа" },
+      ]);
+      expect(reordered.statusCode, reordered.payload).toBe(200);
+      expect((await getResults(body.id)).data.map((r) => r.title)).toEqual([
+        "Курс",
+        "Школа",
+      ]);
+      const stale = await putResults(body.id, 2, []);
+      expect(stale.statusCode).toBe(412);
+      const emptied = await putResults(body.id, 3, []);
+      expect(emptied.statusCode, emptied.payload).toBe(200);
+      expect((await getResults(body.id)).data).toEqual([]);
+    });
+
+    it("030 EARS-2: when a result breaks a bound, links off the doctor storefront or names an unknown or retired kind, the system shall refuse with field errors and change nothing", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const retired = await retiredKind();
+      const too_many = Array.from({ length: 21 }, (_, i) => ({
+        outputKindId: SHKOLA,
+        title: `Итог ${i}`,
+      }));
+      expect((await putResults(body.id, 1, too_many)).statusCode).toBe(400);
+      expect(
+        (await putResults(body.id, 1, [
+          { outputKindId: SHKOLA, title: "т".repeat(121) },
+        ])).statusCode,
+      ).toBe(400);
+      expect(
+        (await putResults(body.id, 1, [
+          { outputKindId: SHKOLA, title: "Т", description: "о".repeat(301) },
+        ])).statusCode,
+      ).toBe(400);
+      const refused = await putResults(body.id, 1, [
+        {
+          outputKindId: SHKOLA,
+          title: "Чужой",
+          storefrontUrl: "https://elsewhere.example/x",
+        },
+        { outputKindId: randomUUID(), title: "Неизвестный" },
+        { outputKindId: retired, title: "Снятый" },
+        { outputKindId: SHKOLA, title: "Не https", storefrontUrl: "http://x" },
+      ]);
+      expect(refused.statusCode).toBe(400);
+      expect(problem(refused).errorCode).toBe("VALIDATION_FAILED");
+      const plain = await putResults(body.id, 1, [
+        {
+          outputKindId: SHKOLA,
+          title: "Чужой",
+          storefrontUrl: "https://elsewhere.example/x",
+        },
+        { outputKindId: randomUUID(), title: "Неизвестный" },
+        { outputKindId: retired, title: "Снятый" },
+      ]);
+      expect(plain.statusCode).toBe(400);
+      expect(problem(plain).errors?.map((e) => e.path).sort()).toEqual(
+        [
+          "results.0.storefrontUrl",
+          "results.1.outputKindId",
+          "results.2.outputKindId",
+        ].sort(),
+      );
+      expect((await getResults(body.id)).data).toEqual([]);
+      expect((await projectRow(body.id)).version).toBe(1);
+    });
+
+    it("030 EARS-2: when a result already holds a kind that is since retired, the system shall keep it on a later save, shown with the retired kind", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const kind = await retiredKind();
+      await pool.query(
+        `INSERT INTO project_results (project_id, output_kind_id, position, title)
+           VALUES ($1, $2, 0, 'Держит снятый')`,
+        [body.id, kind],
+      );
+      const res = await putResults(body.id, 1, [
+        { outputKindId: kind, title: "Держит снятый" },
+        { outputKindId: SHKOLA, title: "Новый" },
+      ]);
+      expect(res.statusCode, res.payload).toBe(200);
+      const saved = await getResults(body.id);
+      expect(saved.data.map((r) => [r.title, r.outputKind.status])).toEqual([
+        ["Держит снятый", "retired"],
+        ["Новый", "active"],
+      ]);
+    });
+
+    it("030 EARS-6: when a draft missing its description, every result and an active curator is published, the system shall refuse with every missing item together and change nothing", async () => {
+      // A «Скоро» project without its note is unrepresentable (the
+      // `projects_stage_note_iff_soon` CHECK), so that item is refused at write
+      // time — see the EARS-1 cases — and is not part of this matrix.
+      const body = await created(
+        await createJson({ payload: validPayload({ description: null }) }),
+      );
+      const res = await publishProject(body.id, 1);
+      expect(res.statusCode).toBe(409);
+      expect(problem(res).errorCode).toBe("PUBLISH_REQUIREMENTS_NOT_MET");
+      expect(problem(res).errors?.map((e) => e.path).sort()).toEqual(
+        ["curator", "description", "results"].sort(),
+      );
+      expect(await projectRow(body.id)).toMatchObject({
+        status: "draft",
+        version: 1,
+        first_published_at: null,
+      });
+    });
+
+    it("030 EARS-6: when the results of a published project would be emptied, the system shall refuse with PUBLISH_REQUIREMENTS_NOT_MET and keep them", async () => {
+      const { body } = await publishableProject();
+      expect((await publishProject(body.id, 1)).statusCode).toBe(200);
+      const res = await putResults(body.id, 2, []);
+      expect(res.statusCode).toBe(409);
+      expect(problem(res).errorCode).toBe("PUBLISH_REQUIREMENTS_NOT_MET");
+      expect(problem(res).errors?.map((e) => e.path)).toEqual(["results"]);
+      expect((await getResults(body.id)).data).toHaveLength(1);
+    });
+
+    it("030 EARS-18: a results save leaves 010 audit rows attributed to the acting administrator", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const res = await putResults(body.id, 1, [
+        { outputKindId: SHKOLA, title: "Аудит" },
+      ]);
+      expect(res.statusCode, res.payload).toBe(200);
+      const { rows: stored } = await pool.query<{ id: string }>(
+        "SELECT id FROM project_results WHERE project_id = $1",
+        [body.id],
+      );
+      const { rows } = await pool.query<{
+        event_type: string;
+        subject_id: string | null;
+      }>(
+        `SELECT event_type, subject_id FROM audit_ledger
+          WHERE (metadata->>'table' = 'project_results' AND metadata->'pk'->>'id' = $2)
+             OR (metadata->>'table' = 'projects' AND metadata->'pk'->>'id' = $1 AND event_type = 'data.projects.update')`,
+        [body.id, stored[0]!.id],
+      );
+      expect(rows.map((r) => r.event_type).sort()).toEqual([
+        "data.project_results.insert",
+        "data.projects.update",
+      ]);
+      expect(rows.every((r) => r.subject_id !== null)).toBe(true);
     });
 
     // ── helpers ───────────────────────────────────────────────────────────

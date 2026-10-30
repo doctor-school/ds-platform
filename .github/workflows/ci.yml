@@ -396,6 +396,10 @@ jobs:
       SIGN_IN_ACADEMY_LOGIN_URL: http://localhost:3001/login
       SIGN_IN_DOCTOR_LOGIN_URL: http://localhost:3004/login
       SIGN_IN_RECORD_KEY: Y2ktb25seS1zaWduLWluLXJlY29yZC1rZXktMzJieXQ=
+      # 030 EARS-2: a project result's storefront link must sit on the doctor
+      # storefront origin. HTTPS, because the link itself must be absolute HTTPS;
+      # a test-only host (no request is ever made to it).
+      DOCTOR_PUBLIC_ORIGIN: https://doctor.ds.test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -1810,6 +1814,10 @@ jobs:
           # here and are never reused off this runner.
           AUDIT_IDENTIFIER_PEPPER: ci-admin-e2e-audit-pepper
           LIFECYCLE_IMPACT_TOKEN_SECRET: ci-admin-e2e-lifecycle-secret
+          # 030 EARS-2 — a project result's storefront link must sit on the
+          # configured doctor-storefront origin (HTTPS); the admin flows tier
+          # saves one (`e2e/projects-catalog.spec.ts`, whose default matches).
+          DOCTOR_PUBLIC_ORIGIN: https://doctor.ds.test
           # The #1076 ops-window ceilings: the MFA arc spends several auth calls
           # from ONE loopback address, which the production ceilings would
           # throttle into a false red.

@@ -50,6 +50,7 @@ function headerLinks(page: Page) {
 const ADMIN_SECTIONS = [
   "nav-events",
   "nav-projects",
+  "nav-project-output-kinds",
   "nav-experts",
   "nav-organisations",
   "nav-organisation-roles",

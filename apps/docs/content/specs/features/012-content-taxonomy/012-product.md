@@ -41,7 +41,7 @@ Two consequences the downstream EARS spec inherits:
 
 ## User stories
 
-- **US-1** — As a **content operator**, I create a project once — kind (`school | media | program`), title, description, optional cover and curator — and reuse it across every event that belongs to it, instead of re-typing its name per broadcast.
+- **US-1** — As a **content operator**, I create a project once — title, description, optional cover and curator, with its stage and results owned by 030 — and reuse it across every event that belongs to it, instead of re-typing its name per broadcast.
 - **US-2** — As a **content operator**, I maintain an Expert with separate family, given and optional patronymic names plus professional details and optional photo, so one derived display name/card appears consistently everywhere.
 - **US-3** — As a **content operator**, I attach several experts to an event and state **each one's role on that event** (speaker, moderator, …), because the same person is a speaker at one broadcast and a moderator at the next.
 - **US-4** — As a **content operator**, I link an event to one or more projects, because a broadcast genuinely can belong to two programs at once.
@@ -96,7 +96,7 @@ Two consequences the downstream EARS spec inherits:
 ## Product acceptance criteria
 
 - `projects`, `experts`, `topics` and `partners` exist as **first-class entities with their own identity and their own admin screens** — never as string tags on an event.
-- The authoring contract is explicit: Project has kind/title/description/optional cover; Expert has family/given/optional patronymic names, professional fields, optional User and photo; Topic and Partner have titles plus Partner optional logo/HTTPS website. Every slug is generated, never authored.
+- The authoring contract is explicit: Project has title/description/optional cover (its stage and results are 030's); Expert has family/given/optional patronymic names, professional fields, optional User and photo; Topic and Partner have titles plus Partner optional logo/HTTPS website. Every slug is generated, never authored.
 - Slugs are generated and owned by the system. No create/edit form or API accepts an operator-authored slug; admin detail provides **Copy public link**.
 - The relationships are **m2m joins**: `event_projects`, `event_experts` (with per-event role and ordering), `project_experts` (with `curator | member` role), `project_partners` (many links, at most one active primary display partner per project), and `event_topics`.
 - An event can belong to **several** projects, and an expert to **many** events — both directions are queryable.
@@ -107,7 +107,7 @@ Two consequences the downstream EARS spec inherits:
 - Every admin list is paginated; text search and all filters apply immediately, active values render as chips, one Reset all clears them, and a no-op action is disabled or absent.
 - Every entity has complete lifecycle management in the `admin` app: create, read, list with search and pagination, edit, retire, and restore. There is **no hard-delete action** and no cascade; retire and restore each surface the affected current public projections, and confirmation must be refreshed if that footprint changes before the transition commits.
 - Every top-level taxonomy row carries `status: draft | published | retired` plus nullable `deleted_at`; every relationship that can be retired carries `status: active | retired` plus nullable `deleted_at`. Restoring an ordinarily retired entity returns it to `draft`, so public re-publication is always deliberate. A separately approved legal PD-erasure process is irreversible and leaves the retained row non-restorable; it is not an ordinary lifecycle transition.
-- Publication validates the kind-specific required fields. Only a project has a relationship prerequisite: exactly one active curator whose expert is published and non-retired. Projects need no events or partners; experts, topics and partners need no relationships. Optional media and partner website never block publication, and an expert without a photo uses an initials fallback.
+- Publication validates the kind-specific required fields. Only a project has a relationship prerequisite: exactly one active curator whose expert is published and non-retired; a project also needs at least one result (030 EARS-6). Projects need no events or partners; experts, topics and partners need no relationships. Optional media and partner website never block publication, and an expert without a photo uses an initials fallback.
 - A published project always retains exactly one eligible curator. Replacing that curator is one atomic operation; retiring the curator expert or retiring/demoting the sole curator link is refused until a replacement is committed or the project itself is retired.
 - The admin screens are built from the design system and the Refine conventions established by feature 007 — no bespoke admin styling, no hand-assembled controls.
 - A **public read API** exposes the taxonomy and its links to the portal, serving **published content only**; internal partner detail (commercial terms, contacts) is never on the public read path.

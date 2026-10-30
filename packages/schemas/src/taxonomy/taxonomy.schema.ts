@@ -23,7 +23,10 @@ export const TAXONOMY_STATUSES = ["draft", "published", "retired"] as const;
 export const TaxonomyStatusSchema = z.enum(TAXONOMY_STATUSES);
 export type TaxonomyStatus = z.infer<typeof TaxonomyStatusSchema>;
 
-/** The closed project-kind set (012-design §2.1). */
+/**
+ * The former closed 012 project-kind set. Since 030 EARS-17 it types only the
+ * read-only `legacyKind` hint of the admin detail — no form offers it.
+ */
 export const PROJECT_KINDS = ["school", "media", "program"] as const;
 export const ProjectKindSchema = z.enum(PROJECT_KINDS);
 export type ProjectKind = z.infer<typeof ProjectKindSchema>;
@@ -95,6 +98,25 @@ export const PROJECT_TITLE_MIN = 1;
 export const PROJECT_TITLE_MAX = 160;
 export const PROJECT_DESCRIPTION_MIN = 1;
 export const PROJECT_DESCRIPTION_MAX = 2000;
+export const PROJECT_STAGE_NOTE_MIN = 1;
+export const PROJECT_STAGE_NOTE_MAX = 80;
+
+/** 030 EARS-1 — «Проект идёт» / «Скоро» / «Завершён». */
+export const PROJECT_STAGES = ["running", "soon", "completed"] as const;
+export const ProjectStageSchema = z.enum(PROJECT_STAGES);
+export type ProjectStage = z.infer<typeof ProjectStageSchema>;
+/** A new project starts «Скоро» (030 EARS-1). */
+export const DEFAULT_PROJECT_STAGE: ProjectStage = "soon";
+
+const ProjectStageNoteSchema = z
+  .string()
+  .trim()
+  .min(PROJECT_STAGE_NOTE_MIN)
+  .max(PROJECT_STAGE_NOTE_MAX);
+
+/** The field error a `soon` project without «Что происходит сейчас» carries. */
+export const STAGE_NOTE_REQUIRED_MESSAGE =
+  "a project in the «Скоро» stage requires «Что происходит сейчас»";
 
 const ProjectTitleSchema = z
   .string()
@@ -116,35 +138,52 @@ const ProjectDescriptionSchema = z
  * instead of an ignored field. `mediaAction` is likewise absent here — it is a
  * PATCH-only verb.
  *
- * `title` and `kind` are the required display identity; `description` is
- * publish-required and may stay null on a draft. Slug is always server-owned.
+ * `title` is the required display identity; `description` is publish-required
+ * and may stay null on a draft. Slug is always server-owned. 030 EARS-1: no
+ * project kind; the stage defaults to `soon`, whose stage note is then required
+ * (a note sent with another stage is stored empty).
  */
 export const CreateProjectRequestSchema = z
   .object({
-    kind: ProjectKindSchema,
     title: ProjectTitleSchema,
     description: ProjectDescriptionSchema.nullish(),
+    stage: ProjectStageSchema.default(DEFAULT_PROJECT_STAGE),
+    stageNote: ProjectStageNoteSchema.nullish(),
     /**
      * 012 EARS-30 (#2509) — required: the audience that prefills a new event
      * linked to this project (the event may override it).
      */
     defaultAudience: EventAudienceSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.stage === "soon" && !value.stageNote) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["stageNote"],
+        message: STAGE_NOTE_REQUIRED_MESSAGE,
+      });
+    }
+  });
 export type CreateProjectRequest = z.infer<typeof CreateProjectRequestSchema>;
+export type CreateProjectRequestInput = z.input<
+  typeof CreateProjectRequestSchema
+>;
 
 /**
  * `PATCH /v1/admin/projects/:id` — edit the same row.
  *
  * Omission means unchanged; an explicit `null` clears an optional or
  * still-incomplete draft field (012-design §2.2). Slug is absent because its
- * stable public identity is generated and retained by the server.
+ * stable public identity is generated and retained by the server. The stage
+ * note rule spans the stored row, so the service checks it (030 EARS-1).
  */
 export const UpdateProjectRequestSchema = z
   .object({
-    kind: ProjectKindSchema.optional(),
     title: ProjectTitleSchema.optional(),
     description: ProjectDescriptionSchema.nullish(),
+    stage: ProjectStageSchema.optional(),
+    stageNote: ProjectStageNoteSchema.nullish(),
     /**
      * 012 EARS-30 — never clearable. Changing it rewrites no existing event's
      * audience; it only prefills the project's next new events.
@@ -163,10 +202,20 @@ export type UpdateProjectRequest = z.infer<typeof UpdateProjectRequestSchema>;
 export const ProjectAdminDetailSchema = z.object({
   id: z.string(),
   slug: SlugSchema,
-  kind: ProjectKindSchema,
   title: z.string(),
   description: z.string().nullable(),
   coverUrl: z.string().nullable(),
+  /** 030 EARS-1 */
+  stage: ProjectStageSchema,
+  /** 030 EARS-1 — present iff the stage is `soon`. */
+  stageNote: z.string().nullable(),
+  /**
+   * 030 EARS-17 — the former 012 kind, a read-only hint («Прежний тип (012)»);
+   * null on every project created since.
+   */
+  legacyKind: ProjectKindSchema.nullable(),
+  /** 030 EARS-17 — how many results the project declares (0 ⇒ off every public read). */
+  resultCount: z.number().int().nonnegative(),
   /** 012 EARS-30 — prefills the audience of the project's new events. */
   defaultAudience: EventAudienceSchema,
   status: TaxonomyStatusSchema,
@@ -182,7 +231,8 @@ export type ProjectAdminDetail = z.infer<typeof ProjectAdminDetailSchema>;
 export const ProjectAdminListItemSchema = ProjectAdminDetailSchema.pick({
   id: true,
   slug: true,
-  kind: true,
+  stage: true,
+  resultCount: true,
   title: true,
   defaultAudience: true,
   status: true,
@@ -840,7 +890,6 @@ export const PublicProjectSummarySchema = z
   .object({
     id: z.string(),
     slug: SlugSchema,
-    kind: ProjectKindSchema,
     title: z.string(),
     description: z.string().nullable(),
     coverUrl: z.string().nullable(),
@@ -1630,6 +1679,8 @@ export const TAXONOMY_ERROR_CODES = [
   "PUBLISH_REQUIREMENTS_NOT_MET",
   "PUBLISHED_PROJECT_REQUIRES_CURATOR",
   "INVALID_TRANSITION",
+  // 409 — 030 EARS-3: an output kind still held by a draft/published project
+  "OUTPUT_KIND_IN_USE",
   "SPEAKER_POSITION_OCCUPIED",
   "CONTENT_REMOVED",
   // 409 — 014 recordings (014-design §3/§11)

@@ -12,3 +12,20 @@ export async function chooseProjectDefaultAudience(
 ): Promise<void> {
   await page.getByTestId("project-default-audience").selectOption(audience);
 }
+
+/**
+ * 030 EARS-1 — a new project starts «Скоро», whose «Что происходит сейчас» is
+ * then required. Flow specs that only need *a* project pick «Проект идёт», which
+ * owes no stage note.
+ */
+export async function chooseProjectStage(
+  page: Page,
+  stage: "running" | "completed" = "running",
+): Promise<void> {
+  // The radio input is `sr-only` behind its painted circle, so the wrapping
+  // label is the click target, as a mouse uses it.
+  await page
+    .getByTestId(`project-stage-${stage}`)
+    .locator("xpath=ancestor::label[1]")
+    .click();
+}

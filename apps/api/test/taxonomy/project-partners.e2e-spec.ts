@@ -103,7 +103,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     ): Promise<string> {
       const row = {
         slug: `p-1292-${randomUUID()}`,
-        kind: "school",
+        stage: "running",
         // 012 EARS-30 (#2509): every project carries a default audience.
         default_audience: "doctors",
         title: `Школа ${Math.random().toString(36).slice(2, 8)}`,
@@ -740,24 +740,26 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           insertPartner({ title: `Partner ${String(index).padStart(3, "0")}` }),
         ),
       );
+      // 030 EARS-17: every link holds a role; the 032 investor seed role.
+      const investorRoleId = "03200000-0000-4000-8000-000000000001";
       await pool.query(
-        `INSERT INTO project_organisations (project_id, organisation_id, is_primary)
-         SELECT $1, organisation_id, false
+        `INSERT INTO project_organisations (project_id, organisation_id, is_primary, role_id)
+         SELECT $1, organisation_id, false, $3
            FROM unnest($2::uuid[]) AS organisation_id`,
-        [projectId, partnerIds.slice(0, 101)],
+        [projectId, partnerIds.slice(0, 101), investorRoleId],
       );
       await pool.query(
         `INSERT INTO project_organisations
-           (project_id, organisation_id, is_primary, status, deleted_at)
-         SELECT $1, organisation_id, false, 'retired', now()
+           (project_id, organisation_id, is_primary, status, deleted_at, role_id)
+         SELECT $1, organisation_id, false, 'retired', now(), $3
            FROM unnest($2::uuid[]) AS organisation_id`,
-        [projectId, partnerIds.slice(101, 104)],
+        [projectId, partnerIds.slice(101, 104), investorRoleId],
       );
       await pool.query(
         `INSERT INTO project_organisations
-           (project_id, organisation_id, is_primary, status, deleted_at)
-         VALUES ($1, $2, true, 'retired', now())`,
-        [projectId, partnerIds[104]],
+           (project_id, organisation_id, is_primary, status, deleted_at, role_id)
+         VALUES ($1, $2, true, 'retired', now(), $3)`,
+        [projectId, partnerIds[104], investorRoleId],
       );
 
       const selected = await adminList(
@@ -851,7 +853,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const item = page(res).data[0]!;
       expect(item).toMatchObject({
         id: projectId,
-        kind: "school",
         isPrimary: true,
         primaryPartner: {
           id: partnerId,
@@ -865,7 +866,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "description",
         "id",
         "isPrimary",
-        "kind",
         "primaryPartner",
         "slug",
         "title",

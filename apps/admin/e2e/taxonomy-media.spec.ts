@@ -1,4 +1,7 @@
-import { chooseProjectDefaultAudience } from "./support/event-classification";
+import {
+  chooseProjectDefaultAudience,
+  chooseProjectStage,
+} from "./support/event-classification";
 import {
   expect,
   test,
@@ -189,6 +192,7 @@ test.describe("012 EARS-21 — reversible taxonomy entity media", () => {
       .fill("Практическая образовательная программа для врачей-кардиологов.");
     await expectNoStorageReferenceAuthoring(page, "project-slug");
     await chooseProjectDefaultAudience(page);
+    await chooseProjectStage(page);
     await page.getByTestId("submit-project").click();
     await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/, { timeout: 20_000 });
 

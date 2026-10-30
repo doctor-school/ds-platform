@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
+import { rewindToPre0055 } from "./rewind-0055.js";
+
 // 032 EARS-11 / EARS-3 (Issue #3492, V-1) — the forward migration 0054 that
 // absorbs the feature-012 partners into the organisation registry.
 //
@@ -190,6 +192,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const c = await pool.connect();
       try {
         await c.query("BEGIN");
+        await rewindToPre0055(c);
         await rewindToPre0054(c);
         await body(c);
       } finally {

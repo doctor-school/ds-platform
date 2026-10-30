@@ -266,7 +266,8 @@ export function buildGoldenDataset(
     {
       id: golden.projects.publishedSchool.id,
       slug: golden.projects.publishedSchool.slug,
-      kind: "school",
+      legacyKind: "school",
+      stage: "running",
       title: "Школа кардиолога (эталон)",
       defaultAudience: "doctors",
       description:
@@ -280,7 +281,8 @@ export function buildGoldenDataset(
     {
       id: golden.projects.draft.id,
       slug: golden.projects.draft.slug,
-      kind: "media",
+      legacyKind: "media",
+      stage: "running",
       title: "Медиапроект в черновике (эталон)",
       defaultAudience: "experts",
       status: "draft",
@@ -752,6 +754,7 @@ export function buildGoldenDataset(
       id: goldenUuid(GOLDEN_GROUP.projectPartners, 1),
       projectId: golden.projects.publishedSchool.id,
       organisationId: goldenPartnerId(0),
+      roleId: SEED_ORGANISATION_ROLES.investor.id,
       isPrimary: true,
       status: "active",
       version: 1,
@@ -762,6 +765,7 @@ export function buildGoldenDataset(
       id: goldenUuid(GOLDEN_GROUP.projectPartners, 2),
       projectId: golden.projects.publishedSchool.id,
       organisationId: goldenPartnerId(11),
+      roleId: SEED_ORGANISATION_ROLES.investor.id,
       isPrimary: false,
       status: "active",
       version: 1,
@@ -772,6 +776,7 @@ export function buildGoldenDataset(
       id: goldenUuid(GOLDEN_GROUP.projectPartners, 3),
       projectId: golden.projects.draft.id,
       organisationId: goldenPartnerId(1),
+      roleId: SEED_ORGANISATION_ROLES.investor.id,
       isPrimary: true,
       status: "active",
       version: 1,

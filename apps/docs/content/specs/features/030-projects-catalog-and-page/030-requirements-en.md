@@ -2,7 +2,7 @@
 title: "030 — Projects: the container, its admin, the «Все проекты» catalog and the project page (Requirements, slice 1)"
 description: "Requirements for slice 1 of feature 030: the project as the single container of Academy work (ADR-0016 §4) — it declares the results it produces from an operator-maintained list of output kinds and carries a public stage (running, «Скоро», «Завершён»), with no project kind; its admin form, results editor, organisations panel over the 032 registry, display order and publish rule; the public «Все проекты» catalog on academy.doctor.school with a computed scale line and one shared project card that also feeds the Academy home block; the project page without its dashboard, team, backstage block or project number — hero, results, organisations and the «Войти в проект» entries to 033 and 034; the absorption of the feature-012 project records; platform-administrator-only access with the second factor and the 010 change audit."
 slug: 030-projects-catalog-and-page
-status: Draft
+status: In dev
 issues: [3503, 3504, 3505, 3506, 3507, 3508]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/issues/1800

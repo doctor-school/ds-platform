@@ -52,7 +52,7 @@ describe("AuthzGuard (runtime mirror, fail-closed)", () => {
       } as unknown as ExecutionContext;
     };
     expect(guard.canActivate(at("/v1/internal/oidc/transaction"))).toBe(true);
-    expect(() => guard.canActivate(at("/v1/auth/login"))).toThrow(
+    expect(() => guard.canActivate(at("/v1/sign-in-host/login"))).toThrow(
       ForbiddenException,
     );
     expect(() => guard.canActivate(at("/v1/internalx/a"))).toThrow(

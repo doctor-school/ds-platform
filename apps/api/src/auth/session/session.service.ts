@@ -1,11 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type { SessionClaims } from "@ds/schemas";
-import {
-  IDP_CLIENT,
-  type IdpClient,
-  type IdpSession,
-} from "../idp/idp.types.js";
+import { IDP_CLIENT, type IdpClient } from "../idp/idp.types.js";
 import {
   AUTH_AUDIT,
   type AuthAuditLog,
@@ -43,10 +39,11 @@ export type RefreshOutcome =
 export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 /**
- * Owns BFF session establishment and lookup (design §3, EARS-8). The single
- * place the OIDC exchange is turned into a server-side session + `__Host-`
- * cookie, so the cookie/token logic exists exactly once for every login variant
- * (password F2, email/SMS-OTP F3 converge here — design §6).
+ * Owns BFF session minting and lookup (design §3, EARS-8). The single place a
+ * server-side storefront session + `__Host-` cookie comes to be — only from the
+ * storefront callback's linked redeem — so the cookie/token logic exists exactly
+ * once for every sign-in-host credential step (password, email/SMS code, reset,
+ * registration code — design §6).
  */
 @Injectable()
 export class SessionService {
@@ -61,7 +58,7 @@ export class SessionService {
   ) {}
 
   /**
-   * 003 EARS-8 (amended) — the ONLY other path that mints a storefront
+   * 003 EARS-8 (amended) — the ONLY path that mints a storefront
    * session: the storefront callback's redeem, after the code's ID token
    * proved its `sid` is the Zitadel session of a live sign-in-host record.
    * A fresh `sid` every time (no presented id is ever adopted), linked to that
@@ -122,48 +119,6 @@ export class SessionService {
         ...(reason === "logout" ? {} : { reason }),
       });
     }
-  }
-
-  /**
-   * EARS-8: complete the OIDC exchange for a checked Zitadel session, persist the
-   * tokens + fingerprint server-side under a fresh `sid`, and return the
-   * `__Host-` cookie to set plus the principal claims to surface. No token is
-   * returned to the caller's body — it goes only into the server-side record.
-   *
-   * Takes the whole checked {@link IdpSession} handle (#143). The exchange needs
-   * the session's single-use `sessionToken` (proof-of-check) — it now arrives on
-   * the handle rather than a hidden per-adapter cache — and this method is the
-   * ONLY caller of `exchangeSessionForTokens`, always invoked synchronously in the
-   * same request as the login. The token is consumed here in the exchange and is
-   * deliberately NOT persisted onto the {@link SessionRecord}: only the opaque
-   * `zitadelSessionId` is stored (the durable binding), because a spent
-   * single-use secret in the record would be dead, sensitive data.
-   */
-  async establish(
-    session: IdpSession,
-    fingerprint: string,
-  ): Promise<{ cookie: string; claims: SessionClaims }> {
-    const tokens = await this.idp.exchangeSessionForTokens(session);
-    const sid = randomUUID();
-    const record: SessionRecord = {
-      sid,
-      zitadelSessionId: session.zitadelSessionId,
-      sub: tokens.claims.sub,
-      roles: tokens.claims.roles,
-      mfa: tokens.claims.mfa,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      fingerprint,
-      expiresAtMs: Date.now() + SESSION_TTL_SECONDS * 1000,
-    };
-    await this.store.create(record);
-
-    return {
-      cookie: serializeSessionCookie(sid, {
-        maxAgeSeconds: SESSION_TTL_SECONDS,
-      }),
-      claims: { sub: record.sub, roles: record.roles, mfa: record.mfa },
-    };
   }
 
   /** Resolve a session by its cookie `sid` (used by the auth middleware). */

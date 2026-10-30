@@ -362,7 +362,7 @@ async function prepareActor(
   );
   if (!cookie) {
     throw new BehaviorSetupError(
-      `${label} could not log in through /v1/auth/login; refresh LOADTEST_MANIFEST with \`pnpm loadtest:provision\``,
+      `${label} could not sign in through the sign-in host; refresh LOADTEST_MANIFEST with \`pnpm loadtest:provision\``,
     );
   }
 

@@ -7,6 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { performance } from "node:perf_hooks";
+import { hostSignIn } from "./host-sign-in.mjs";
 import { optEnv, sleep, timedFetch } from "./lib.mjs";
 
 const ROOM_HARNESS_USER_AGENT = "ds-room-harness/1";
@@ -49,27 +50,17 @@ export function loadManifestCredentials() {
   return manifestCredentials(manifest);
 }
 
-/** Extract the cookie pairs a BFF session needs from a Node fetch response. */
-function responseCookie(headers) {
-  const setCookies = headers.getSetCookie?.() ?? [];
-  if (setCookies.length > 0) {
-    return setCookies.map((value) => value.split(";", 1)[0]).join("; ");
-  }
-  const fallback = headers.get("set-cookie");
-  return fallback ? fallback.split(";", 1)[0] : null;
-}
-
-/** BFF login; returns the replayable Cookie header or null on refusal/failure. */
+/**
+ * A storefront session through the sign-in host and the storefront callback;
+ * returns the replayable Cookie header or null on refusal/failure.
+ */
 export async function loginCookie(origin, email, password) {
-  const response = await timedFetch(`${origin}/v1/auth/login`, {
-    method: "POST",
-    headers: roomSessionHeaders(undefined, {
-      "content-type": "application/json",
-    }),
-    body: JSON.stringify({ identifier: email, password }),
+  const { cookie } = await hostSignIn(origin, {
+    email,
+    password,
+    headers: roomSessionHeaders(undefined),
   });
-  if (!response.ok) return null;
-  return responseCookie(response.headers);
+  return cookie;
 }
 
 /** Read the gate-scoped room grant through the authenticated BFF session. */

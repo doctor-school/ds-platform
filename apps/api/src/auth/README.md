@@ -435,7 +435,7 @@ process exits mid-send. `test/auth/email-timing.e2e-spec.ts` exercises the real
 controller/service/adapter/mailer chain with stalled local SMTP, delayed fallback
 and invalid configuration; only Zitadel's native API responses are simulated.
 
-`POST /v1/auth/verify` uses the same interceptor with its own per-request reader
+The sign-in host's Academy code step (`POST /v1/sign-in-host/verify`) uses the same interceptor with its own per-request reader
 (`verify-timing.ts`, EARS-41/16). Its production default is 1000 ms because the
 real unverified-account branch performs sequential IdP calls that exceed the
 global 40 ms default. `AUTH_VERIFY_TIMING_FLOOR_MS` accepts whole milliseconds

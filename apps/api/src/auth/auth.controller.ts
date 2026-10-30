@@ -16,51 +16,36 @@ import type { FastifyReply } from "fastify";
 import type {
   LoginHandoffOwnershipResponse,
   LoginHandoffResponse,
-  LoginResponse,
   LogoutResponse,
   OtpRequestResponse,
-  PasswordResetCompleteResponse,
   PasswordResetResponse,
   RefreshResponse,
   RegisterResponse,
   SessionClaims,
   VerifyResendResponse,
-  VerifyResponse,
   ZitadelWebhookResponse,
 } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
 import { BotProtected } from "../bot-protection/index.js";
 import {
-  ConsumedIpWindow,
   LOGIN_HANDOFF_OWNERSHIP_RATE_LIMIT_SCOPE,
-  PasswordLoginDoor,
   RateLimited,
   RateLimitService,
 } from "./rate-limit/index.js";
 import { TimingEqualized } from "./timing/index.js";
-import { readAuthVerifyTimingFloorMs } from "./verify-timing.js";
-import {
-  LoginChallenged,
-  LoginChallengePolicy,
-} from "./login-challenge/index.js";
 import { AuthService, GENERIC_THROTTLED } from "./auth.service.js";
 import {
   LoginHandoffOwnershipRequestDto,
   LoginHandoffRequestDto,
-  LoginRequestDto,
   OtpRequestDto,
-  OtpVerifyDto,
-  PasswordResetCompleteRequestDto,
   PasswordResetRequestDto,
   RegisterRequestDto,
-  VerifyRequestDto,
   VerifyResendRequestDto,
   ZitadelWebhookDto,
 } from "./auth.dto.js";
 import { WEBHOOK_SECRET_HEADER } from "./auth.tokens.js";
 import {
   clearSessionCookie,
-  computeFingerprint,
   parseCookies,
   SESSION_COOKIE_NAME,
 } from "./session/session.cookie.js";
@@ -90,10 +75,7 @@ export class AuthController {
   // `@Inject` one) does not apply — see the class doc above.
   constructor(
     private readonly auth: AuthService,
-    private readonly loginChallenge: LoginChallengePolicy,
-    // #222: forgive-on-success — clear the EARS-13 per-user window when a login or
-    // a reset-complete succeeds (the guard consumed a unit before the outcome was
-    // known; a success means the user is legitimate, so do not strand them).
+    // The hand-off redemption spends the EARS-13 per-user window itself.
     private readonly rateLimit: RateLimitService,
   ) {}
 
@@ -119,64 +101,6 @@ export class AuthController {
   })
   register(@Body() dto: RegisterRequestDto): Promise<RegisterResponse> {
     return this.auth.register(dto);
-  }
-
-  /**
-   * EARS-5 + EARS-8. Public (unauthenticated entry point that mints a session).
-   * On success it sets the `__Host-` cookie and returns a token-free body; every
-   * failure is the same generic 401 (EARS-16). The fingerprint is derived here —
-   * the controller is the only layer with the request — and bound into the
-   * session by the service. The login captcha-after-N-failures policy (EARS-17)
-   * is enforced by `LoginChallengeGuard` via `@LoginChallenged()`: a normal first
-   * login is unburdened, but once this origin has failed N times the guard
-   * requires a bot-protection token. The controller feeds the policy the outcome
-   * (the guard runs before the result is known) — a failure tallies, a success
-   * clears the window.
-   */
-  @Post("login")
-  @Public()
-  @RateLimited()
-  @PasswordLoginDoor()
-  @TimingEqualized()
-  @LoginChallenged()
-  @HttpCode(200)
-  @Authz({
-    access: "public",
-    check: "none",
-    audit: "high-stakes",
-    tests: ["EARS-5", "EARS-8", "EARS-17"],
-  })
-  async login(
-    @Body() dto: LoginRequestDto,
-    @Headers("user-agent") userAgent: string | undefined,
-    @Headers("accept-language") acceptLanguage: string | undefined,
-    @Ip() ip: string,
-    @ConsumedIpWindow() consumedIpWindow: number | undefined,
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<LoginResponse> {
-    const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
-    const result = await this.auth.loginWithPassword(
-      dto.identifier,
-      dto.password,
-      fingerprint,
-    );
-    if (!result) {
-      // EARS-17: tally the failure for this origin; the N+1-th attempt is then
-      // challenged by the guard. (The generic 401 is unchanged — EARS-16.)
-      this.loginChallenge.recordFailure(ip);
-      throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
-    }
-
-    // A successful login clears the origin's failure window (no lingering challenge)
-    // and forgives the EARS-13 per-user rate-limit window for this identifier
-    // (#222) — only the per-user window, keyed identically to how the guard keyed
-    // it. The per-IP window gets back only this request's own unit (#2684), so
-    // it counts failed verifications; the per-ASN window is left intact.
-    this.loginChallenge.reset(ip);
-    await this.rateLimit.reset({ ip, identifier: dto.identifier });
-    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
-    reply.header("set-cookie", result.cookie);
-    return { status: "authenticated" };
   }
 
   /**
@@ -306,54 +230,6 @@ export class AuthController {
   }
 
   /**
-   * EARS-6/7 step 2 + EARS-8: submit a passwordless login code. Public (the code
-   * is the authenticator; the user holds no session yet). On success it sets the
-   * `__Host-` cookie and returns a token-free body — the identical convergence
-   * point as password login (design §6); every failure is the same generic 401
-   * (EARS-16). The fingerprint is derived here (the only layer with the request)
-   * and bound into the session by the service.
-   */
-  @Post("login/otp")
-  @Public()
-  @RateLimited()
-  @TimingEqualized()
-  @HttpCode(200)
-  @Authz({
-    access: "public",
-    check: "none",
-    audit: "high-stakes",
-    tests: ["EARS-6", "EARS-7", "EARS-8", "EARS-41"],
-  })
-  async loginWithOtp(
-    @Body() dto: OtpVerifyDto,
-    @Headers("user-agent") userAgent: string | undefined,
-    @Headers("accept-language") acceptLanguage: string | undefined,
-    @Headers("cookie") cookieHeader: string | undefined,
-    @Ip() ip: string,
-    @ConsumedIpWindow() consumedIpWindow: number | undefined,
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<LoginResponse> {
-    const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
-    const result = await this.auth.loginWithOtp(dto, fingerprint);
-    if (!result) throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
-
-    // #2659 — a code sign-in over a session the browser already held (another
-    // account's, reached through a hand-off link) REPLACES it: the new cookie
-    // overwrites the old one in the browser, and the old session is revoked
-    // server-side so it is signed out, not orphaned (EARS-10 revocation).
-    const priorSid = parseCookies(cookieHeader)[SESSION_COOKIE_NAME];
-    if (priorSid) await this.auth.logout(priorSid);
-
-    // A code sign-in is a successful login (EARS-13, #2614): forgive the per-user
-    // window for this identifier exactly as the password login does.
-    await this.rateLimit.reset({ ip, identifier: dto.identifier });
-    // #2684: a successful verification gives back its own per-IP unit.
-    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
-    reply.header("set-cookie", result.cookie);
-    return { status: "authenticated" };
-  }
-
-  /**
    * EARS-8 read side: the authenticated principal (`sub, roles[], mfa`). This is a
    * session-self operation — its semantic requirement is "any authenticated
    * principal", not "a doctor" — so it admits either baseline role (`doctor_guest`
@@ -442,45 +318,6 @@ export class AuthController {
   }
 
   /**
-   * 003 EARS-3/41: submit the registration code step. Public (the code is the
-   * authenticator). On success it sets the `__Host-` cookie — the session comes
-   * from the code — and returns a token-free body; every failure is the same
-   * generic 400 (EARS-16). `@TimingEqualized` — the unknown, verified and
-   * unverified branches make different IdP round-trips, so the latency floor
-   * keeps a wrong code from disclosing existence or state (EARS-41, ≤50 ms).
-   */
-  @Post("verify")
-  @Public()
-  @RateLimited()
-  @TimingEqualized({ floorMs: readAuthVerifyTimingFloorMs })
-  @HttpCode(200)
-  @Authz({
-    access: "public",
-    check: "none",
-    audit: "high-stakes",
-    tests: ["EARS-3", "EARS-4", "EARS-41"],
-  })
-  async verify(
-    @Body() dto: VerifyRequestDto,
-    @Headers("user-agent") userAgent: string | undefined,
-    @Headers("accept-language") acceptLanguage: string | undefined,
-    @Ip() ip: string,
-    @ConsumedIpWindow() consumedIpWindow: number | undefined,
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<VerifyResponse> {
-    const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
-    // `verify` throws the generic failure on a wrong code, so reaching the next
-    // line means the code signed the user in — a successful login that forgives
-    // the per-user window keyed on `email`, as the guard keyed it (EARS-13, #2614).
-    const { cookie, body } = await this.auth.verify(dto, fingerprint);
-    await this.rateLimit.reset({ ip, identifier: dto.email });
-    // #2684: a successful verification gives back its own per-IP unit.
-    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
-    reply.header("set-cookie", cookie);
-    return body;
-  }
-
-  /**
    * 003 EARS-25 (amended): resend from the registration code step (#319).
    * Public (unauthenticated entry point — the code step calls it without the
    * held values). The decorators mirror the other
@@ -538,53 +375,6 @@ export class AuthController {
     // 003 EARS-53: a phone-identifier reset texts the code, so it carries the
     // EARS-14 budget dimensions (IP, edge-supplied ASN) as SMS sign-in does.
     return this.auth.requestPasswordReset(dto.identifier, { ip, asn });
-  }
-
-  /**
-   * EARS-12: complete a password reset and auto-log-in (#221). Public — the reset
-   * code is the authenticator, not a session (the user has none yet). On success
-   * the IdP sets the new password; the BFF revokes every PRIOR session of that
-   * subject (global force-logout) and records `PasswordResetCompleted`, then mints
-   * a FRESH authenticated session and sets the `__Host-` cookie — the identical
-   * convergence point as login (design §6), returning a token-free body (EARS-8).
-   * The fingerprint is derived here (the controller is the only layer with the
-   * request), exactly as `login` does. A successful complete also forgives the
-   * EARS-13 per-user rate-limit window (#222), so a forgot-password → reset flow is
-   * not throttled. A bad/expired code is the same generic 400 (EARS-16), thrown by
-   * the service.
-   */
-  @Post("password/reset/complete")
-  @Public()
-  @RateLimited()
-  @HttpCode(200)
-  @Authz({
-    access: "public",
-    check: "none",
-    audit: "high-stakes",
-    tests: ["EARS-12", "EARS-35"],
-  })
-  async completePasswordReset(
-    @Body() dto: PasswordResetCompleteRequestDto,
-    @Headers("user-agent") userAgent: string | undefined,
-    @Headers("accept-language") acceptLanguage: string | undefined,
-    @Ip() ip: string,
-    @ConsumedIpWindow() consumedIpWindow: number | undefined,
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<PasswordResetCompleteResponse> {
-    const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
-    const { cookie, body } = await this.auth.completePasswordReset(
-      dto.identifier,
-      dto.code,
-      dto.newPassword,
-      fingerprint,
-    );
-    // Forgive the EARS-13 per-user window on success (#222), keyed identically to
-    // the guard; mint the fresh session by setting its __Host- cookie.
-    await this.rateLimit.reset({ ip, identifier: dto.identifier });
-    // #2684: a successful verification gives back its own per-IP unit.
-    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
-    reply.header("set-cookie", cookie);
-    return body;
   }
 
   @Post("zitadel/webhook")

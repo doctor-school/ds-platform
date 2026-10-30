@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { FakeIdpClient } from "../idp/idp.fake.js";
+import type { IdpSession } from "../idp/idp.types.js";
 import { InMemorySessionStore } from "./session-store.fake.js";
 import { InMemoryAuthAuditLog } from "./auth-audit.fake.js";
 import { SessionService } from "./session.service.js";
@@ -17,10 +19,36 @@ import { parseCookies, SESSION_COOKIE_NAME } from "./session.cookie.js";
 // server-side, so a *client* can never replay it — reuse is a store/IdP
 // invariant (a BFF that re-presents an already-consumed token, e.g. a
 // persist-after-rotate crash window), which is exactly what this exercises.
+/**
+ * A storefront session minted the production way — the linked redeem over the
+ * checked Zitadel session's OIDC tokens; its `sid` and claims.
+ */
+async function mintFor(
+  svc: SessionService,
+  idp: FakeIdpClient,
+  session: IdpSession,
+  fingerprint: string,
+): Promise<{ sid: string; sub: string }> {
+  const tokens = await idp.exchangeSessionForTokens(session);
+  const { cookie, claims } = await svc.mintLinked({
+    zitadelSessionId: session.zitadelSessionId,
+    client: "academy",
+    claims: tokens.claims,
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    fingerprint,
+    expiresAtMs: Date.now() + 3600_000,
+  });
+  return {
+    sid: parseCookies(cookie)[SESSION_COOKIE_NAME] as string,
+    sub: claims.sub,
+  };
+}
+
 describe("SessionService — refresh rotation + logout", () => {
   const FP = "fp-device-1";
 
-  /** A fresh service over fakes, plus a freshly-established session's `sid`. */
+  /** A fresh service over fakes, plus a pre-linked-redeem session's `sid`. */
   async function establishedSession(): Promise<{
     svc: SessionService;
     store: InMemorySessionStore;
@@ -37,9 +65,22 @@ describe("SessionService — refresh rotation + logout", () => {
     const audit = new InMemoryAuthAuditLog();
     const svc = new SessionService(idp, store, audit);
 
-    const { cookie, claims } = await svc.establish(login.session, FP);
-    const sid = parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
-    return { svc, store, audit, sid, sub: claims.sub };
+    // A session from before the linked redeem (no `oidcClient`) still rotates
+    // through the BFF client until it expires, so the store holds one here.
+    const tokens = await idp.exchangeSessionForTokens(login.session);
+    const sid = randomUUID();
+    await store.create({
+      sid,
+      zitadelSessionId: login.session.zitadelSessionId,
+      sub: tokens.claims.sub,
+      roles: tokens.claims.roles,
+      mfa: tokens.claims.mfa,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      fingerprint: FP,
+      expiresAtMs: Date.now() + 3600_000,
+    });
+    return { svc, store, audit, sid, sub: tokens.claims.sub };
   }
 
   it("EARS-9: when a session's access token is refreshed, the system shall rotate the refresh token single-use and issue a new access token", async () => {
@@ -110,8 +151,7 @@ describe("SessionService — refresh rotation + logout", () => {
     async function establishFor(email: string): Promise<string> {
       const s = await idp.passwordLogin(email, "pw-12345678");
       if (s.outcome !== "authenticated") throw new Error("login setup failed");
-      const { cookie } = await svc.establish(s.session, FP);
-      return parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
+      return (await mintFor(svc, idp, s.session, FP)).sid;
     }
 
     const sidA = await establishFor("victim@ds.test");
@@ -270,5 +310,15 @@ describe("SessionService — subject revocation hook", () => {
       sid: academy,
       reason: "force",
     });
+  });
+});
+
+// 003 EARS-8 (amended) / EARS-69 — the storefront callback's linked redeem is
+// the one way a storefront session comes to be: the service keeps no second
+// minting path that would hand out a session no sign-in-host record backs.
+describe("SessionService — one minting path", () => {
+  it("003 EARS-69: SessionService has no establish; every storefront session is minted through the linked redeem path", () => {
+    expect("establish" in SessionService.prototype).toBe(false);
+    expect(typeof SessionService.prototype.mintLinked).toBe("function");
   });
 });

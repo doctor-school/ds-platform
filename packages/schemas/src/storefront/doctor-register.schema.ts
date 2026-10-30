@@ -262,7 +262,7 @@ export type DoctorRegisterResponse = z.infer<
 
 /**
  * 003 EARS-23/41 on the doctor storefront — the in-tab registration values the
- * one code step carries to `POST /v1/storefront/doctor/verify`. The same
+ * one code step carries to the sign-in host's doctor code step. The same
  * fields, with the same rules, as {@link DoctorRegisterRequestSchema}: the
  * declaration is a literal `true`, presence of a purpose in `consent` is its
  * grant, and every version is stamped by the server — the one this door's

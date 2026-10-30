@@ -51,14 +51,26 @@ it("EARS-35: verifies a proven reset before an OIDC exchange that refuses an unv
     emailVerified: false,
   });
   await idp.requestPasswordReset(email);
-  const completed = await service.completePasswordReset(
+  // The sign-in host's acceptor, ended the way the storefront callback ends
+  // it: the checked session's OIDC exchange, then the linked redeem's mint.
+  const completed = await service.resetCompleteStep(
     email,
     FAKE_VALID_CODE,
     "New-password1!",
-    "reset-browser",
+    async (session) => {
+      const tokens = await idp.exchangeSessionForTokens(session);
+      return sessions.mintLinked({
+        zitadelSessionId: session.zitadelSessionId,
+        client: "academy",
+        claims: tokens.claims,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        fingerprint: "reset-browser",
+        expiresAtMs: Date.now() + 3600_000,
+      });
+    },
   );
 
-  expect(completed.body).toEqual({ status: "reset_completed" });
   expect(completed.cookie.startsWith("__Host-ds_session=")).toBe(true);
   expect(checkedExchange).toHaveBeenCalledTimes(1);
   expect(mirrorFlip).toHaveBeenCalledExactlyOnceWith(sub);

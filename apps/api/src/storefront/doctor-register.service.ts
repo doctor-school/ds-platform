@@ -8,7 +8,6 @@ import type {
   DoctorRegisterRequest,
   DoctorRegisterResponse,
   DoctorVerifyRequest,
-  VerifyResponse,
 } from "@ds/schemas";
 import {
   DOCTOR_REGISTER_CONSENT_PURPOSES,
@@ -133,24 +132,13 @@ export class DoctorRegisterService {
   }
 
   /**
-   * 003 EARS-23/41 — the doctor host's one code step. The in-tab registration
-   * values go through the SAME refusal and server-stamping as {@link register}
-   * (so a re-registration consent recorded after the code carries the wording
-   * version this door rendered, never a client claim), then the 003 engine
-   * checks the code, establishes the session and records only the purposes the
-   * account does not hold yet.
-   */
-  async verify(
-    req: DoctorVerifyRequest,
-    fingerprint: string,
-  ): Promise<{ cookie: string; body: VerifyResponse }> {
-    return this.auth.verify(this.toVerifyRequest(req), fingerprint);
-  }
-
-  /**
-   * The same code step, handing the checked session to `accept` instead of a
-   * storefront session — the sign-in host's door (003 EARS-24 amended: the
-   * doctor form's own verification endpoint, its own consent stamping).
+   * 003 EARS-23/41 — the doctor host's one code step (003 EARS-24 amended: the
+   * doctor form's own verification endpoint, its own consent stamping). The
+   * in-tab registration values go through the SAME refusal and server-stamping
+   * as {@link register} (so a re-registration consent recorded after the code
+   * carries the wording version this door rendered, never a client claim), then
+   * the 003 engine checks the code, hands the checked session to `accept` and
+   * records only the purposes the account does not hold yet.
    */
   async verifyStep<T>(
     req: DoctorVerifyRequest,

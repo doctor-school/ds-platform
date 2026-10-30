@@ -1444,38 +1444,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/auth/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["AuthController_login"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/login/otp": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["AuthController_loginWithOtp"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/auth/login/otp/handoff": {
         parameters: {
             query?: never;
@@ -1556,22 +1524,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/auth/password/reset/complete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["AuthController_completePasswordReset"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/auth/refresh": {
         parameters: {
             query?: never;
@@ -1614,22 +1566,6 @@ export interface paths {
         get: operations["AuthController_session"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/verify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["AuthController_verify"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2628,22 +2564,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/storefront/doctor/verify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["DoctorRegisterPublicController_verify"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3237,21 +3157,6 @@ export interface components {
             medicalWorkerDeclaration: true;
             password: string;
         };
-        DoctorVerifyRequestDto: {
-            code: string;
-            /** Format: email */
-            email: string;
-            registration?: {
-                /** @default [] */
-                consent: {
-                    purpose: string;
-                    version: string;
-                }[];
-                /** @constant */
-                medicalWorkerDeclaration: true;
-                password: string;
-            };
-        };
         EligibleExpertUserListDto: {
             data: {
                 displayName: string | null;
@@ -3435,11 +3340,6 @@ export interface components {
         LoginHandoffRequestDto: {
             ref?: string;
         };
-        LoginRequestDto: {
-            captchaToken?: string;
-            identifier: string;
-            password: string;
-        };
         MonthBroadcastListDto: {
             /** Format: uuid */
             id: string;
@@ -3463,12 +3363,6 @@ export interface components {
             channel: "email" | "sms";
             identifier: string;
         };
-        OtpVerifyDto: {
-            /** @enum {string} */
-            channel: "email" | "sms";
-            code: string;
-            identifier: string;
-        };
         ParticipationCtaDto: {
             /** @enum {string} */
             action: "register" | "registered" | "enter-room" | "switch-to-online" | "sold-out" | "unavailable";
@@ -3476,11 +3370,6 @@ export interface components {
             label: string;
             presenceCount: number | null;
             reason: string | null;
-        };
-        PasswordResetCompleteRequestDto: {
-            code: string;
-            identifier: string;
-            newPassword: string;
         };
         PasswordResetRequestDto: {
             captchaToken?: string;
@@ -3778,19 +3667,6 @@ export interface components {
             patronymic?: string | null;
             professionalRole?: string | null;
             userId?: string | null;
-        };
-        VerifyRequestDto: {
-            code: string;
-            /** Format: email */
-            email: string;
-            registration?: {
-                /** @default [] */
-                consent: {
-                    purpose: string;
-                    version: string;
-                }[];
-                password: string;
-            };
         };
         VerifyResendRequestDto: {
             captchaToken?: string;
@@ -6088,48 +5964,6 @@ export interface operations {
             };
         };
     };
-    AuthController_login: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoginRequestDto"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    AuthController_loginWithOtp: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OtpVerifyDto"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     AuthController_redeemLoginHandoff: {
         parameters: {
             query?: never;
@@ -6231,27 +6065,6 @@ export interface operations {
             };
         };
     };
-    AuthController_completePasswordReset: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PasswordResetCompleteRequestDto"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     AuthController_refresh: {
         parameters: {
             query?: never;
@@ -6298,27 +6111,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    AuthController_verify: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VerifyRequestDto"];
-            };
-        };
         responses: {
             200: {
                 headers: {
@@ -7777,27 +7569,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["DoctorRegisterRequestDto"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    DoctorRegisterPublicController_verify: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DoctorVerifyRequestDto"];
             };
         };
         responses: {

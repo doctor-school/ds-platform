@@ -5,15 +5,16 @@ import {
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { AuthService } from "./auth.service.js";
+import { AuthService, type SessionAcceptor } from "./auth.service.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "./idp/idp.fake.js";
 import {
   IdpInvalidArgumentError,
   IdpPasswordPolicyError,
   IdpUnavailableError,
   type IdpClient,
+  type IdpSession,
 } from "./idp/idp.types.js";
-import type { RegisterRequest } from "@ds/schemas";
+import type { RegisterRequest, SessionClaims } from "@ds/schemas";
 import { consentRecords, users } from "@ds/db";
 import { InMemoryAuthAuditLog } from "./session/auth-audit.fake.js";
 import { InMemorySessionStore } from "./session/session-store.fake.js";
@@ -214,6 +215,36 @@ function makeStubDb() {
 /** The request-coupled EARS-14 budget dimensions of a reset request. */
 const RESET_CTX = { ip: "203.0.113.7" };
 
+type Minted = { cookie: string; claims: SessionClaims };
+
+/**
+ * A step's acceptor ended the way the storefront callback ends the sign-in
+ * host's record: the checked session's OIDC exchange, then the linked
+ * redeem's mint — the one way a storefront session comes to be (003 EARS-8).
+ */
+function redeemInto(
+  idp: IdpClient,
+  sessions: SessionService,
+  fingerprint: string,
+): SessionAcceptor<Minted> {
+  return async (session: IdpSession) => {
+    const tokens = await idp.exchangeSessionForTokens(session);
+    return sessions.mintLinked({
+      zitadelSessionId: session.zitadelSessionId,
+      client: "academy",
+      claims: tokens.claims,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      fingerprint,
+      expiresAtMs: Date.now() + 3600_000,
+    });
+  };
+}
+
+/** The acceptor of a step that must refuse: reaching it fails the test. */
+const unreached: SessionAcceptor<never> = () =>
+  Promise.reject(new Error("a refused step reached its acceptor"));
+
 /** Let the fire-and-forget notice chain settle (it runs off the response path). */
 function flushMicrotasks(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
@@ -378,7 +409,7 @@ describe("AuthService.register — re-registration code mail (003 EARS-23)", () 
 // body, EARS-8). A bad/expired code or unknown identifier stays the same generic
 // failure (no existence oracle, EARS-16). Exercised at the service altitude over
 // the fake IdP + in-memory store + audit (no Postgres, no HTTP).
-describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () => {
+describe("AuthService.resetCompleteStep — auto-login (#221, EARS-12)", () => {
   const email = "reset-victim@ds.test";
   const oldPassword = "Aa1!old-sufficiently-long";
   const newPassword = "Aa1!new-sufficiently-long";
@@ -389,6 +420,8 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     service: AuthService;
     idp: FakeIdpClient;
     store: InMemorySessionStore;
+    sessions: SessionService;
+    accept: SessionAcceptor<Minted>;
     audit: InMemoryAuthAuditLog;
     sub: string;
   }> {
@@ -411,10 +444,18 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
       sessions,
       {} as never, // smsBudget — unused on the reset path
     );
-    return { service, idp, store, audit, sub: created.sub };
+    return {
+      service,
+      idp,
+      store,
+      sessions,
+      accept: redeemInto(idp, sessions, fingerprint),
+      audit,
+      sub: created.sub,
+    };
   }
 
-  /** Establish a live session for the subject via the password-login path. */
+  /** A live storefront session for the subject, minted through the linked redeem. */
   async function establishExisting(
     idp: FakeIdpClient,
     sessions: SessionService,
@@ -422,24 +463,26 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     const login = await idp.passwordLogin(email, oldPassword);
     if (login.outcome !== "authenticated")
       throw new Error("login setup failed");
-    const { cookie } = await sessions.establish(login.session, fingerprint);
+    const { cookie } = await redeemInto(
+      idp,
+      sessions,
+      fingerprint,
+    )(login.session);
     return parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
   }
 
   it("EARS-12: when a reset completes, the system shall mint a fresh session and return its __Host- cookie", async () => {
-    const { service, store } = await buildResetService();
+    const { service, store, accept } = await buildResetService();
 
     await service.requestPasswordReset(email, RESET_CTX);
-    const result = await service.completePasswordReset(
+    const result = await service.resetCompleteStep(
       email,
       FAKE_VALID_CODE,
       newPassword,
-      fingerprint,
+      accept,
     );
 
-    // Token-free body (EARS-8) — the status is unchanged…
-    expect(result.body).toEqual({ status: "reset_completed" });
-    // …and a real __Host- session cookie is returned to set.
+    // A real __Host- session cookie comes from the checked session.
     expect(result.cookie).toContain(`${SESSION_COOKIE_NAME}=`);
     expect(result.cookie).toContain("__Host-");
     // The cookie's sid resolves to a live, authenticated server-side session.
@@ -449,14 +492,14 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
   });
 
   it("EARS-12: the minted session emits a session-created LoginSucceeded row alongside PasswordResetCompleted", async () => {
-    const { service, audit, sub } = await buildResetService();
+    const { service, audit, sub, accept } = await buildResetService();
 
     await service.requestPasswordReset(email, RESET_CTX);
-    await service.completePasswordReset(
+    await service.resetCompleteStep(
       email,
       FAKE_VALID_CODE,
       newPassword,
-      fingerprint,
+      accept,
     );
 
     // Force-logout audit is preserved…
@@ -473,8 +516,7 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
   });
 
   it("EARS-12: prior sessions are still globally revoked before the fresh one is minted", async () => {
-    const { service, idp, store } = await buildResetService();
-    const sessions = new SessionService(idp, store, new InMemoryAuthAuditLog());
+    const { service, idp, store, sessions, accept } = await buildResetService();
     // Two live sessions for the subject (two devices).
     const sidA = await establishExisting(idp, sessions);
     const sidB = await establishExisting(idp, sessions);
@@ -482,11 +524,11 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     expect(await store.get(sidB)).toBeDefined();
 
     await service.requestPasswordReset(email, RESET_CTX);
-    const result = await service.completePasswordReset(
+    const result = await service.resetCompleteStep(
       email,
       FAKE_VALID_CODE,
       newPassword,
-      fingerprint,
+      accept,
     );
 
     // Both prior sessions are gone (global force-logout)…
@@ -502,7 +544,7 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     await service.requestPasswordReset(email, RESET_CTX);
 
     const err = await service
-      .completePasswordReset(email, "000000", newPassword, fingerprint)
+      .resetCompleteStep(email, "000000", newPassword, unreached)
       .catch((e: unknown) => e);
     // The generic 400 fires before any session-establishment, so no cookie and
     // no session can leak on the failure path (EARS-16 unchanged).
@@ -518,7 +560,7 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     const spy = vi.spyOn(idp, "completePasswordReset");
 
     await service
-      .completePasswordReset(email, "  482916  ", newPassword, fingerprint)
+      .resetCompleteStep(email, "  482916  ", newPassword, unreached)
       .catch(() => undefined);
 
     expect(spy).toHaveBeenCalledWith(email, "482916", newPassword);
@@ -530,7 +572,7 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
 
     for (const code of ["GX5AVU", "pvdc3r", "48291", "4829160"]) {
       const err = await service
-        .completePasswordReset(email, code, newPassword, fingerprint)
+        .resetCompleteStep(email, code, newPassword, unreached)
         .catch((e: unknown) => e);
       expect(err).toBeInstanceOf(BadRequestException);
     }
@@ -764,7 +806,7 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
     const service = buildFailObsService(idp as unknown as IdpClient, {}, audit);
 
     const err = await service
-      .verify({ email: "ghost@ds.test", code: FAKE_VALID_CODE }, "fp")
+      .verifyStep({ email: "ghost@ds.test", code: FAKE_VALID_CODE }, unreached)
       .catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(BadRequestException);
@@ -785,7 +827,7 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
     const code = "ZZZZZZ";
 
     const err = await service
-      .verify({ email: "u@ds.test", code }, "fp")
+      .verifyStep({ email: "u@ds.test", code }, unreached)
       .catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(BadRequestException);
@@ -796,7 +838,7 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
     expect(JSON.stringify(audit.events)).not.toContain(code);
   });
 
-  it("#1112: a completePasswordReset with a bad/expired code records one PasswordResetFailed(invalid) — never the code (EARS-30) — and returns the generic 400", async () => {
+  it("#1112: a reset completion with a bad/expired code records one PasswordResetFailed(invalid) — never the code (EARS-30) — and returns the generic 400", async () => {
     const idp = new FakeIdpClient();
     await idp.createUser({
       email: "reset@ds.test",
@@ -814,11 +856,11 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
     const code = "BADCODE9";
 
     const err = await service
-      .completePasswordReset(
+      .resetCompleteStep(
         "reset@ds.test",
         code,
         "Aa1!new-sufficiently-long",
-        "fp",
+        unreached,
       )
       .catch((e: unknown) => e);
 
@@ -867,7 +909,7 @@ describe("AuthService code submission — six-digit codes (#1109, #2636, EARS-3/
     // Outcome is a generic 400 (unknown address); we assert the TRIMMED
     // argument the IdP port receives.
     await service
-      .verify({ email: "u@ds.test", code: "  482916  " }, "fp")
+      .verifyStep({ email: "u@ds.test", code: "  482916  " }, unreached)
       .catch(() => undefined);
 
     expect(spy).toHaveBeenCalledWith("u@ds.test", "482916", undefined);
@@ -879,13 +921,13 @@ describe("AuthService code submission — six-digit codes (#1109, #2636, EARS-3/
     const service = buildVerifyService(idp as unknown as IdpClient, {});
 
     const err = await service
-      .verify({ email: "u@ds.test", code: "GX5AVU" }, "fp")
+      .verifyStep({ email: "u@ds.test", code: "GX5AVU" }, unreached)
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BadRequestException);
     expect(
-      await service.loginWithOtp(
+      await service.otpStep(
         { identifier: "u@ds.test", code: "gx5avu", channel: "email" },
-        "fp",
+        unreached,
       ),
     ).toBeNull();
     expect(spy).not.toHaveBeenCalled();
@@ -897,9 +939,9 @@ describe("AuthService code submission — six-digit codes (#1109, #2636, EARS-3/
     const service = buildVerifyService(idp as unknown as IdpClient, {});
 
     expect(
-      await service.loginWithOtp(
+      await service.otpStep(
         { identifier: "+79990000000", code: "GX5AVU", channel: "sms" },
-        "fp",
+        unreached,
       ),
     ).toBeNull();
     expect(spy).not.toHaveBeenCalled();
@@ -1110,7 +1152,7 @@ describe("FakeIdpClient.requestEmailLoginCode — parity with real adapter (003 
 // The flip is idempotent (an already-verified account → no-op, no duplicate row).
 // Exercised at the service altitude over the fake IdP + real SessionService over
 // fakes + a mirror spy (no DB, no HTTP).
-describe("AuthService.completePasswordReset — proof-of-mailbox email verify (003 EARS-35, #1131)", () => {
+describe("AuthService.resetCompleteStep — proof-of-mailbox email verify (003 EARS-35, #1131)", () => {
   const email = "stuck-unverified@ds.test";
   const oldPassword = "Aa1!old-sufficiently-long";
   const newPassword = "Aa1!new-sufficiently-long";
@@ -1121,6 +1163,7 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
     idp: FakeIdpClient;
     store: InMemorySessionStore;
     sessions: SessionService;
+    accept: SessionAcceptor<Minted>;
     audit: InMemoryAuthAuditLog;
     mirrorFlips: string[];
     sub: string;
@@ -1155,6 +1198,7 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
       idp,
       store,
       sessions,
+      accept: redeemInto(idp, sessions, fingerprint),
       audit,
       mirrorFlips,
       sub: created.sub,
@@ -1162,15 +1206,15 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
   }
 
   it("003 EARS-35: a completed reset on an UNVERIFIED account flips email_verified at the IdP + mirror and appends one auth.account.verified (channel email) row", async () => {
-    const { service, idp, audit, mirrorFlips, sub } =
+    const { service, idp, audit, mirrorFlips, sub, accept } =
       await buildFlipService(false);
 
     await service.requestPasswordReset(email, RESET_CTX);
-    await service.completePasswordReset(
+    await service.resetCompleteStep(
       email,
       FAKE_VALID_CODE,
       newPassword,
-      fingerprint,
+      accept,
     );
 
     await expect(idp.getUser(sub)).resolves.toMatchObject({
@@ -1185,14 +1229,15 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
   });
 
   it("003 EARS-35: idempotent — a completed reset on an ALREADY-VERIFIED account performs no flip and appends NO auth.account.verified row", async () => {
-    const { service, audit, mirrorFlips, sub } = await buildFlipService(true);
+    const { service, audit, mirrorFlips, sub, accept } =
+      await buildFlipService(true);
 
     await service.requestPasswordReset(email, RESET_CTX);
-    await service.completePasswordReset(
+    await service.resetCompleteStep(
       email,
       FAKE_VALID_CODE,
       newPassword,
-      fingerprint,
+      accept,
     );
 
     // No flip (already verified) and no duplicate verified row.
@@ -1209,20 +1254,24 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
       await buildFlipService(false);
     const login = await idp.passwordLogin(email, oldPassword);
     if (login.outcome !== "authenticated") throw new Error("seed login failed");
-    const existing = await sessions.establish(login.session, fingerprint);
+    const existing = await redeemInto(
+      idp,
+      sessions,
+      fingerprint,
+    )(login.session);
     const sid = parseCookies(existing.cookie)[SESSION_COOKIE_NAME] as string;
     const before = structuredClone(await store.get(sid));
     expect(before).toBeDefined();
     await service.requestPasswordReset(email, RESET_CTX);
     const auditStart = audit.events.length;
     const revoke = vi.spyOn(sessions, "revokeAllForSub");
-    const establish = vi.spyOn(sessions, "establish");
+    const mint = vi.spyOn(sessions, "mintLinked");
     const verify = vi.spyOn(idp, "markEmailVerified");
     const code = "000000";
     expect(code).not.toBe(FAKE_VALID_CODE);
 
     const err = await service
-      .completePasswordReset(email, code, newPassword, fingerprint)
+      .resetCompleteStep(email, code, newPassword, unreached)
       .catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(BadRequestException);
@@ -1236,7 +1285,7 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
     expect(verify).not.toHaveBeenCalled();
     expect(mirrorFlips).toEqual([]);
     expect(revoke).not.toHaveBeenCalled();
-    expect(establish).not.toHaveBeenCalled();
+    expect(mint).not.toHaveBeenCalled();
     await expect(store.get(sid)).resolves.toEqual(before);
     expect((await idp.passwordLogin(email, oldPassword)).outcome).toBe(
       "authenticated",
@@ -1347,28 +1396,42 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
       sessions,
       {} as never,
     );
-    return { idp, audit, store, sessions, flips, inserted, service, mailer };
+    const accept = redeemInto(idp as unknown as IdpClient, sessions, "fp");
+    return {
+      idp,
+      audit,
+      store,
+      sessions,
+      accept,
+      flips,
+      inserted,
+      service,
+      mailer,
+    };
   }
 
   async function signInByCode(
-    service: AuthService,
+    {
+      service,
+      accept,
+    }: { service: AuthService; accept: SessionAcceptor<Minted> },
     email: string,
   ): Promise<{ cookie: string } | null> {
     await service.requestLoginOtp({ identifier: email, channel: "email" }, ctx);
-    return service.loginWithOtp(
+    return service.otpStep(
       { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
-      "fp",
+      accept,
     );
   }
 
   it("003 EARS-41: an unverified account signs in with the code from the sign-in mail — verified, one auth.account.verified row, a session", async () => {
-    const { idp, audit, flips, service } = build();
+    const { idp, audit, flips, service, accept } = build();
     const created = await idp.createUser({
       email: "late@ds.test",
       password: first,
     });
 
-    const result = await signInByCode(service, "late@ds.test");
+    const result = await signInByCode({ service, accept }, "late@ds.test");
 
     expect(result?.cookie).toContain(SESSION_COOKIE_NAME);
     expect(flips).toEqual([created.sub]);
@@ -1379,10 +1442,10 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
   });
 
   it("003 EARS-41: login by code on an unverified account invalidates the pre-verification password", async () => {
-    const { idp, service } = build();
+    const { idp, service, accept } = build();
     await idp.createUser({ email: "victim@ds.test", password: first });
 
-    await signInByCode(service, "victim@ds.test");
+    await signInByCode({ service, accept }, "victim@ds.test");
 
     await expect(idp.passwordLogin("victim@ds.test", first)).resolves.toEqual({
       outcome: "rejected",
@@ -1390,46 +1453,49 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
   });
 
   it("003 EARS-41: a credential-less account stays credential-less after its first code (044 EARS-14)", async () => {
-    const { idp, service } = build();
+    const { idp, service, accept } = build();
     const created = await idp.createUser({
       email: "guest@ds.test",
       credential: "none",
       profile: { givenName: "Г", familyName: "Гость" },
     });
 
-    const result = await signInByCode(service, "guest@ds.test");
+    const result = await signInByCode({ service, accept }, "guest@ds.test");
 
     expect(result).not.toBeNull();
     expect(idp.hasCredential(created.sub)).toBe(false);
   });
 
   it("003 EARS-41: every session the account held before the first accepted code is revoked", async () => {
-    const { idp, store, sessions, service } = build();
+    const { idp, store, sessions, service, accept } = build();
     await idp.createUser({ email: "squat@ds.test", password: first });
     const squatter = await idp.passwordLogin("squat@ds.test", first);
     if (squatter.outcome !== "authenticated") throw new Error("seed login");
-    const before = await sessions.establish(squatter.session, "fp-attacker");
+    const before = await redeemInto(
+      idp,
+      sessions,
+      "fp-attacker",
+    )(squatter.session);
     const sid = parseCookies(before.cookie)[SESSION_COOKIE_NAME] as string;
 
-    await signInByCode(service, "squat@ds.test");
+    await signInByCode({ service, accept }, "squat@ds.test");
 
     await expect(store.get(sid)).resolves.toBeUndefined();
   });
 
   it("003 EARS-41/23: the registration step's password replaces a pre-verification password", async () => {
-    const { idp, service } = build();
+    const { idp, service, accept } = build();
     await idp.createUser({ email: "again@ds.test", password: first });
 
-    const res = await service.verify(
+    const res = await service.verifyStep(
       {
         email: "again@ds.test",
         code: FAKE_VALID_CODE,
         registration: { password: second, consent: [] },
       },
-      "fp",
+      accept,
     );
 
-    expect(res.body).toEqual({ status: "verified" });
     expect(res.cookie).toContain(SESSION_COOKIE_NAME);
     expect((await idp.passwordLogin("again@ds.test", second)).outcome).toBe(
       "authenticated",
@@ -1440,7 +1506,7 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
   });
 
   it("003 EARS-23: a verified password holder who re-registers keeps the password; the submitted one is ignored", async () => {
-    const { idp, flips, service } = build();
+    const { idp, flips, service, accept } = build();
     const created = await idp.createUser({
       email: "owner@ds.test",
       password: first,
@@ -1448,13 +1514,13 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
     await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
     await idp.requestEmailLoginCode("owner@ds.test", "re-registration");
 
-    await service.verify(
+    await service.verifyStep(
       {
         email: "owner@ds.test",
         code: FAKE_VALID_CODE,
         registration: { password: second, consent: [] },
       },
-      "fp",
+      accept,
     );
 
     expect(flips).toEqual([]); // already verified: no flip, no verified row
@@ -1467,7 +1533,7 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
   });
 
   it("003 EARS-23: a verified account without a password gets the submitted one after the code", async () => {
-    const { idp, service } = build();
+    const { idp, service, accept } = build();
     const created = await idp.createUser({
       email: "pwless@ds.test",
       credential: "none",
@@ -1476,13 +1542,13 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
     await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
     await idp.requestEmailLoginCode("pwless@ds.test", "re-registration");
 
-    await service.verify(
+    await service.verifyStep(
       {
         email: "pwless@ds.test",
         code: FAKE_VALID_CODE,
         registration: { password: second, consent: [] },
       },
-      "fp",
+      accept,
     );
 
     expect((await idp.passwordLogin("pwless@ds.test", second)).outcome).toBe(
@@ -1491,14 +1557,17 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
   });
 
   it("003 EARS-23: the form consent is recorded after the code only for purposes the account does not hold", async () => {
-    const { idp, inserted, service } = build(["congress-personal-data", "tos"]);
+    const { idp, inserted, service, accept } = build([
+      "congress-personal-data",
+      "tos",
+    ]);
     await idp.createUser({
       email: "congress@ds.test",
       credential: "none",
       profile: { givenName: "Г", familyName: "Гость" },
     });
 
-    await service.verify(
+    await service.verifyStep(
       {
         email: "congress@ds.test",
         code: FAKE_VALID_CODE,
@@ -1510,7 +1579,7 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
           ],
         },
       },
-      "fp",
+      accept,
     );
 
     expect(inserted).toEqual([
@@ -1527,7 +1596,7 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
     await idp.createUser({ email: "wrong@ds.test", password: first });
 
     const err = await service
-      .verify(
+      .verifyStep(
         {
           email: "wrong@ds.test",
           code: "ZZZZZZ",
@@ -1536,7 +1605,7 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
             consent: [{ purpose: "tos", version: "2026-10" }],
           },
         },
-        "fp",
+        unreached,
       )
       .catch((e: unknown) => e);
 
@@ -1552,13 +1621,13 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
     const { idp, service } = build();
     await idp.createUser({ email: "known@ds.test", password: first });
 
-    const unknown = await service.loginWithOtp(
+    const unknown = await service.otpStep(
       { identifier: "nobody@ds.test", code: FAKE_VALID_CODE, channel: "email" },
-      "fp",
+      unreached,
     );
-    const wrong = await service.loginWithOtp(
+    const wrong = await service.otpStep(
       { identifier: "known@ds.test", code: "ZZZZZZ", channel: "email" },
-      "fp",
+      unreached,
     );
 
     expect(unknown).toBeNull();

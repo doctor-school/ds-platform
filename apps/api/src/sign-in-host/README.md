@@ -3,11 +3,13 @@
 The sign-in host (`login.doctor.school`, the Next app of S2 dispatch B) renders the
 originating storefront's forms for a Zitadel v2 auth request and reaches these
 routes through its own same-origin `/v1` rewrite, so every cookie set here is
-host-only on the sign-in host. Every credential step runs the **same**
-`AuthService` / `DoctorRegisterService` code, under the same guards, as its
-storefront twin; the only difference is where the checked session goes — into
-the shared browser-session record and the auth request's finalisation, never
-into a storefront session (that is the storefront callback's redeem, below).
+host-only on the sign-in host. Every step runs the `AuthService` /
+`DoctorRegisterService` code under the guards of the storefront door it
+mirrors. The credential and code steps that check a session (password, code
+sign-in, both verifications, reset completion) exist only here: the checked
+session goes into the shared browser-session record and the auth request's
+finalisation, never into a storefront session (that is the storefront
+callback's redeem, below).
 
 ## What's here
 
@@ -34,18 +36,18 @@ internal routes: `packages/schemas/src/auth/storefront-oidc.schema.ts`.
 
 ## Routes
 
-| Route                                 | Does                                                      | Storefront twin (same guards)             |
+| Route                                 | Does                                                      | Storefront door (same guards)             |
 | ------------------------------------- | --------------------------------------------------------- | ----------------------------------------- |
 | `GET entry?authRequest=`              | render / redirect decision; sets the form-state cookie    | — (own per-IP scope `sign-in-host:entry`) |
-| `POST login`                          | password step → record + finalise                         | `POST /v1/auth/login`                     |
-| `POST login/otp/request`, `login/otp` | code request / code step → record + finalise              | `POST /v1/auth/login/otp[/request]`       |
+| `POST login`                          | password step → record + finalise                         | — (host-only)                             |
+| `POST login/otp/request`, `login/otp` | code request / code step → record + finalise              | `POST /v1/auth/login/otp/request`         |
 | `POST login/otp/handoff`              | redeems the reference the spent intent carried            | `POST /v1/auth/login/otp/handoff`         |
 | `POST register`                       | Academy registration (Academy form only)                  | `POST /v1/auth/register`                  |
-| `POST verify`                         | Academy code step → record + finalise (Academy form only) | `POST /v1/auth/verify`                    |
+| `POST verify`                         | Academy code step → record + finalise (Academy form only) | — (host-only)                             |
 | `POST verify/resend`                  | re-issues the registration code (either form)             | `POST /v1/auth/verify/resend`             |
 | `POST storefront/doctor/register`     | doctor registration (doctor form only)                    | `POST /v1/storefront/doctor/register`     |
-| `POST storefront/doctor/verify`       | doctor code step → record + finalise (doctor form only)   | `POST /v1/storefront/doctor/verify`       |
-| `POST password/reset[/complete]`      | reset request / completion → record + finalise            | `POST /v1/auth/password/reset[/complete]` |
+| `POST storefront/doctor/verify`       | doctor code step → record + finalise (doctor form only)   | — (host-only)                             |
+| `POST password/reset[/complete]`      | reset request / completion → record + finalise            | `POST /v1/auth/password/reset`            |
 
 Every `POST` is refused with one `403` unless `Origin` is the host's own origin,
 `Sec-Fetch-Site` (when sent) is `same-origin`, and the CSRF token equals the one

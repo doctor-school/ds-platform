@@ -16,9 +16,18 @@ import {
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import {
+  Jar,
+  hostLogin,
+  hostRegister,
+  lastHostSession,
+  storefrontRedeem,
+  withSignInHost,
+} from "../setup/storefront-harness.js";
 
-// Password login (EARS-5). Success establishes a BFF session (EARS-8) — a
-// `__Host-` cookie, no token in the body; failure is an enumeration-resistant
+// Password login (EARS-5) on the sign-in host's password step. Success puts
+// the checked session in the host record and the storefront's callback
+// establishes a BFF session (EARS-8) — a `__Host-` cookie, no token in a body; failure is an enumeration-resistant
 // generic error and the credential check is delegated to the IdP port; a
 // failed check is throttled, never locked (EARS-15). Runs against a
 // real Postgres with the IdP bound to the in-memory fake (design §2); the fake
@@ -38,12 +47,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Login with password (e2e)", () => {
   }
 
   async function register(email: string): Promise<void> {
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/register",
-      payload: { email, password, consent },
-    });
-    expect(res.statusCode).toBe(200);
+    await hostRegister(app, new Jar(), email, { password, consent });
   }
 
   function setCookie(res: { headers: Record<string, unknown> }): string {
@@ -53,14 +57,15 @@ describe.skipIf(!process.env.DATABASE_URL)("Login with password (e2e)", () => {
 
   beforeAll(async () => {
     idp = new FakeIdpClient();
-    const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(IDP_CLIENT)
-      .useValue(idp)
-      .overrideProvider(RATE_LIMIT_THRESHOLDS)
-      .useValue(RELAXED_RATE_LIMIT)
-      .compile();
+    const moduleRef: TestingModule = await withSignInHost(
+      Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(idp)
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT),
+    ).compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),
@@ -84,18 +89,20 @@ describe.skipIf(!process.env.DATABASE_URL)("Login with password (e2e)", () => {
     const email = uniqueEmail("ok");
     await register(email);
 
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/login",
-      payload: { identifier: email, password },
-    });
+    const res = await hostLogin(app, new Jar(), email, { password });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ status: "authenticated" });
+    expect(res.json()).toMatchObject({ status: "redirect" });
     // No token may appear in the response body (BFF pattern, EARS-8).
     expect(JSON.stringify(res.json())).not.toMatch(/token/i);
-    // The session is carried only by the __Host- cookie.
-    expect(setCookie(res)).toContain(`${SESSION_COOKIE_NAME}=`);
+    // The storefront's callback establishes the session, carried only by the
+    // __Host- cookie.
+    const { setCookie: minted } = await storefrontRedeem(
+      app,
+      lastHostSession(app),
+    );
+    expect(minted).toMatch(new RegExp(`^${SESSION_COOKIE_NAME}=`));
+    expect(SESSION_COOKIE_NAME.startsWith("__Host-")).toBe(true);
   });
 
   it("EARS-5: when a user submits a wrong password, the system shall return a generic error, set no session cookie, and have delegated the (lockout-counted) check to the IdP", async () => {
@@ -103,10 +110,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Login with password (e2e)", () => {
     await register(email);
     const before = idp.failedAttempts(email);
 
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/login",
-      payload: { identifier: email, password: "wrong-password" },
+    const res = await hostLogin(app, new Jar(), email, {
+      password: "wrong-password",
     });
 
     expect(res.statusCode).toBe(401);
@@ -118,11 +123,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Login with password (e2e)", () => {
 
   it("EARS-5: an unknown identifier is indistinguishable from a wrong password (enumeration-resistant, EARS-16)", async () => {
     const unknown = `ears5-nobody-${Date.now()}@ds.test`;
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/login",
-      payload: { identifier: unknown, password },
-    });
+    const res = await hostLogin(app, new Jar(), unknown, { password });
 
     expect(res.statusCode).toBe(401);
     expect(setCookie(res)).not.toContain(SESSION_COOKIE_NAME);

@@ -13,12 +13,17 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
-import {
-  FakeIdpClient,
-  FAKE_VALID_CODE,
-} from "../../src/auth/idp/idp.fake.js";
+import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import {
+  Jar,
+  hostLogin,
+  openHostForm,
+  postHostForm,
+  signIn,
+  withSignInHost,
+} from "../setup/storefront-harness.js";
 
 // EARS-18 (audit_ledger writer), over
 // HTTP into the real durable ledger. Every state-changing auth command must
@@ -68,14 +73,15 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
   }
 
   beforeAll(async () => {
-    const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(IDP_CLIENT)
-      .useValue(new FakeIdpClient())
-      .overrideProvider(RATE_LIMIT_THRESHOLDS)
-      .useValue(RELAXED_RATE_LIMIT)
-      .compile();
+    const moduleRef: TestingModule = await withSignInHost(
+      Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(new FakeIdpClient())
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT),
+    ).compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),
@@ -125,11 +131,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
     await register(email);
     const sub = await subjectForEmail(email);
 
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/verify",
-      payload: { email, code: FAKE_VALID_CODE },
-    });
+    const res = await hostVerify(email, FAKE_VALID_CODE);
     expect(res.statusCode).toBe(200);
 
     const ledger = await rowsFor("subject_id = $1", sub);
@@ -149,11 +151,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
     await register(email);
     const sub = await subjectForEmail(email);
 
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/verify",
-      payload: { email, code: "000000" },
-    });
+    const res = await hostVerify(email, "000000");
     expect(res.statusCode).toBe(400);
 
     const ledger = await rowsFor("subject_id = $1", sub);
@@ -181,12 +179,13 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
   it("EARS-18: when a login succeeds, the system shall append auth.login.success with the method", async () => {
     const email = uniqueEmail("ok");
     await register(email);
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/login",
-      headers: device,
-      payload: { identifier: email, password },
-    });
+    const res = await hostLogin(
+      app,
+      new Jar(),
+      email,
+      { password },
+      { device },
+    );
     expect(res.statusCode).toBe(200);
 
     const sub = await subjectForEmail(email);
@@ -199,12 +198,13 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
   it("EARS-18: when a login fails, the system shall append auth.login.failure with a hashed identifier and no subject", async () => {
     const email = uniqueEmail("bad");
     await register(email);
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/login",
-      headers: device,
-      payload: { identifier: email, password: "wrong-password-here" },
-    });
+    const res = await hostLogin(
+      app,
+      new Jar(),
+      email,
+      { password: "wrong-password-here" },
+      { device },
+    );
     expect(res.statusCode).toBe(401);
 
     const failures = await rowsFor("event_type = $1", "auth.login.failure");
@@ -220,15 +220,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
   it("EARS-18: when an authenticated user logs out, the system shall append auth.session.terminated (reason logout)", async () => {
     const email = uniqueEmail("out");
     await register(email);
-    const login = await app.inject({
-      method: "POST",
-      url: "/v1/auth/login",
-      headers: device,
-      payload: { identifier: email, password },
-    });
-    const cookieValue = login.cookies.find(
-      (c) => c.name === SESSION_COOKIE_NAME,
-    )!.value;
+    const cookieValue = await signIn(app, email, password, { device });
     const cookie = `${SESSION_COOKIE_NAME}=${cookieValue}`;
 
     await app.inject({
@@ -265,6 +257,13 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
       requested.some((r) => typeof r.metadata.identifier_hash === "string"),
     ).toBe(true);
   });
+
+  /** The sign-in host's Academy code step (`verifyStep`) on a fresh form. */
+  async function hostVerify(email: string, code: string) {
+    const jar = new Jar();
+    const form = await openHostForm(app, jar, { device });
+    return postHostForm(app, jar, "verify", { email, code, ...form }, device);
+  }
 
   /** The Zitadel `sub` for a registered email — the FK from the mirror row to its session/audit. */
   async function subjectForEmail(email: string): Promise<string> {

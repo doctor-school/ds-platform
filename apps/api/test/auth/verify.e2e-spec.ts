@@ -6,7 +6,6 @@ import {
 import { VersioningType } from "@nestjs/common";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
-import { VerifyResponseSchema } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
@@ -22,6 +21,14 @@ import {
   medianSpread,
   sampleInterleaved,
 } from "../support/timing-oracle.js";
+import {
+  Jar,
+  lastHostSession,
+  openHostForm,
+  postHostForm,
+  storefrontSession,
+  withSignInHost,
+} from "../setup/storefront-harness.js";
 
 // Verification (EARS-3, email-only per #202): a correct email OTP code flips
 // `email_verified` via Zitadel; an invalid/expired code returns a generic failure
@@ -29,7 +36,8 @@ import {
 // phone verification at registration (EARS-4): a phone is confirmed only after
 // registration, from a session, through the confirmed-phone path (EARS-47/48),
 // and the two channels never confirm each other. Real Postgres + fake IdP (the
-// fake treats FAKE_VALID_CODE as the only correct code).
+// fake treats FAKE_VALID_CODE as the only correct code). The code step runs on
+// the sign-in host's Academy registration code command (`verifyStep`).
 describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
   let app: NestFastifyApplication;
   let pool: pg.Pool;
@@ -50,6 +58,27 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     expect(res.statusCode).toBe(200);
   }
 
+  /** The host's Academy code step on a fresh form (or `form` in `jar`). */
+  async function verify(
+    email: string,
+    code: string,
+    opts: {
+      device?: Record<string, string>;
+      jar?: Jar;
+      form?: { authRequest: string; csrf: string };
+    } = {},
+  ) {
+    const jar = opts.jar ?? new Jar();
+    const form = opts.form ?? (await openHostForm(app, jar, opts));
+    return postHostForm(
+      app,
+      jar,
+      "verify",
+      { email, code, ...form },
+      opts.device,
+    );
+  }
+
   /** Current DB clock — a per-test lower bound for ledger-delta assertions. */
   async function dbNow(): Promise<string> {
     return (await pool.query<{ now: string }>("SELECT now() AS now")).rows[0]!
@@ -67,14 +96,15 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
   }
 
   beforeAll(async () => {
-    const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(IDP_CLIENT)
-      .useValue(fake)
-      .overrideProvider(RATE_LIMIT_THRESHOLDS)
-      .useValue(RELAXED_RATE_LIMIT)
-      .compile();
+    const moduleRef: TestingModule = await withSignInHost(
+      Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(fake)
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT),
+    ).compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),
@@ -99,14 +129,10 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     createdEmails.push(email);
     await register({ email });
 
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/verify",
-      payload: { email, code: FAKE_VALID_CODE },
-    });
+    const res = await verify(email, FAKE_VALID_CODE);
 
     expect(res.statusCode).toBe(200);
-    expect(VerifyResponseSchema.parse(res.json()).status).toBe("verified");
+    expect(res.json()).toMatchObject({ status: "redirect" });
 
     const { rows } = await pool.query(
       "SELECT email_verified FROM users WHERE email = $1",
@@ -120,11 +146,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     createdEmails.push(email);
     await register({ email });
 
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/verify",
-      payload: { email, code: "000000" },
-    });
+    const res = await verify(email, "000000");
 
     expect(res.statusCode).toBe(400);
     const { rows } = await pool.query(
@@ -174,12 +196,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     // The IdP holds a number on the registrant, unverified (as a console-added
     // phone would be). The email code verifies the email and never that phone.
     await fake.setPhone(sub, phone, "none");
-    const verifyRes = await app.inject({
-      method: "POST",
-      url: "/v1/auth/verify",
-      headers: device,
-      payload: { email, code: FAKE_VALID_CODE },
-    });
+    const verifyRes = await verify(email, FAKE_VALID_CODE, { device });
     expect(verifyRes.statusCode).toBe(200);
     expect(await fake.getUser(sub)).toMatchObject({
       emailVerified: true,
@@ -191,15 +208,18 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
       phone_verified: false,
     });
 
-    // After registration, from the session, the phone is confirmed only through
-    // the confirmed-phone path — which writes the phone and nothing else.
-    const session = verifyRes.cookies.find(
-      (c) => c.name === SESSION_COOKIE_NAME,
+    // After registration, from the storefront session the code step's record
+    // redeems, the phone is confirmed only through the confirmed-phone path —
+    // which writes the phone and nothing else.
+    const sid = await storefrontSession(
+      app,
+      lastHostSession(app),
+      "academy",
+      device,
     );
-    expect(session).toBeDefined();
     const headers = {
       ...device,
-      cookie: `${SESSION_COOKIE_NAME}=${session!.value}`,
+      cookie: `${SESSION_COOKIE_NAME}=${sid}`,
     };
     const since = await dbNow();
     const request = await app.inject({
@@ -293,12 +313,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     createdEmails.push(email);
     await register({ email });
     // Complete EARS-3 verification first → the registrant is now verified.
-    const verify = await app.inject({
-      method: "POST",
-      url: "/v1/auth/verify",
-      payload: { email, code: FAKE_VALID_CODE },
-    });
-    expect(verify.statusCode).toBe(200);
+    const verified = await verify(email, FAKE_VALID_CODE);
+    expect(verified.statusCode).toBe(200);
 
     const marker = await dbNow();
     const res = await resend(email);
@@ -309,11 +325,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     // code — one issue, one row; the code step's resend is never a dead end.
     expect(await otpSentCountSince(marker)).toBe(1);
     // The fresh code signs in through the same code submission.
-    const signIn = await app.inject({
-      method: "POST",
-      url: "/v1/auth/verify",
-      payload: { email, code: FAKE_VALID_CODE },
-    });
+    const signIn = await verify(email, FAKE_VALID_CODE);
     expect(signIn.statusCode).toBe(200);
   });
 
@@ -328,24 +340,25 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     createdEmails.push(unverified, verified);
     await register({ email: unverified });
     await register({ email: verified });
-    const flip = await app.inject({
-      method: "POST",
-      url: "/v1/auth/verify",
-      payload: { email: verified, code: FAKE_VALID_CODE },
-    });
+    const flip = await verify(verified, FAKE_VALID_CODE);
     expect(flip.statusCode).toBe(200);
 
     // A well-formed code that is not the issued one: it passes the format
     // check and reaches the account-state check, so every class walks its
     // own existence branch (a malformed code is refused before any lookup).
     const WRONG_CODE = "000000";
+    // One open host form per class; only the code post is timed.
+    const forms = new Map<
+      string,
+      { jar: Jar; form: { authRequest: string; csrf: string } }
+    >();
+    for (const email of [unknown, verified, unverified]) {
+      const jar = new Jar();
+      forms.set(email, { jar, form: await openHostForm(app, jar) });
+    }
     async function wrongCode(email: string) {
       const t0 = performance.now();
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/verify",
-        payload: { email, code: WRONG_CODE },
-      });
+      const res = await verify(email, WRONG_CODE, forms.get(email));
       const ms = performance.now() - t0;
       return { status: res.statusCode, body: res.json(), ms };
     }

@@ -16,6 +16,12 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import {
+  Jar,
+  openHostForm,
+  postHostForm,
+  withSignInHost,
+} from "../setup/storefront-harness.js";
 import { NOTIFICATION_SUBJECTS } from "../support/notification-subjects.js";
 
 /**
@@ -28,7 +34,7 @@ import { NOTIFICATION_SUBJECTS } from "../support/notification-subjects.js";
  * the real Zitadel adapter (`IdpModule` factory, live `IDP_ISSUER`) → the code
  * Zitadel generated and returned → the BFF mailer → Mailpit; the delivered code
  * is aged through the IdP's own `SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE`
- * lifetime in real time, then submitted unchanged to `/v1/auth/verify`.
+ * lifetime in real time, then submitted unchanged to the sign-in host's Academy code step.
  * Nothing is fabricated: no clock moves, no stored code is rewritten, no wrong
  * code stands in for the expired one.
  *
@@ -178,12 +184,11 @@ describe.skipIf(!LIVE)("Email verification code expiry (live IdP)", () => {
     return rows[0]!.email_verified;
   }
 
-  function verify(email: string, code: string) {
-    return app.inject({
-      method: "POST",
-      url: "/v1/auth/verify",
-      payload: { email, code },
-    });
+  /** The sign-in host's Academy code step (`verifyStep`) on a fresh form. */
+  async function verify(email: string, code: string) {
+    const jar = new Jar();
+    const form = await openHostForm(app, jar);
+    return postHostForm(app, jar, "verify", { email, code, ...form });
   }
 
   beforeAll(async () => {
@@ -195,25 +200,26 @@ describe.skipIf(!LIVE)("Email verification code expiry (live IdP)", () => {
     expect(ttlSeconds).toBeGreaterThan(0);
     expect(ttlSeconds).toBeLessThanOrEqual(MAX_SHORT_TTL_S);
 
-    const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      // The production IdP factory builds the real Zitadel adapter from the
-      // live IDP_* env; only the mail transport is pointed at Mailpit.
-      .overrideProvider(MAILER)
-      .useValue(
-        new SmtpMailer({
-          intercept: {
-            host:
-              process.env.MAILER_SMTP_HOST ?? new URL(MAILPIT_BASE).hostname,
-            port: Number(process.env.MAILER_SMTP_PORT ?? 1025),
-          },
-          isEnabled: () => false,
-        }),
-      )
-      .overrideProvider(RATE_LIMIT_THRESHOLDS)
-      .useValue(RELAXED_RATE_LIMIT)
-      .compile();
+    const moduleRef: TestingModule = await withSignInHost(
+      Test.createTestingModule({
+        imports: [AppModule],
+      })
+        // The production IdP factory builds the real Zitadel adapter from the
+        // live IDP_* env; only the mail transport is pointed at Mailpit.
+        .overrideProvider(MAILER)
+        .useValue(
+          new SmtpMailer({
+            intercept: {
+              host:
+                process.env.MAILER_SMTP_HOST ?? new URL(MAILPIT_BASE).hostname,
+              port: Number(process.env.MAILER_SMTP_PORT ?? 1025),
+            },
+            isEnabled: () => false,
+          }),
+        )
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT),
+    ).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),
     );

@@ -33,6 +33,16 @@ import {
 import type { RateLimitThresholds } from "../../src/auth/rate-limit/rate-limit.types.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 import {
+  DEVICE,
+  Jar,
+  hostLogin,
+  openHostForm,
+  postHostForm,
+  signIn as storefrontSignIn,
+  withSignInHost,
+} from "../setup/storefront-harness.js";
+import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import {
   describeTiming,
   medianSpread,
   sampleInterleaved,
@@ -77,22 +87,23 @@ async function boot(thresholds: RateLimitThresholds): Promise<Harness> {
   const mailer = new FakeMailer();
   let t = Date.now();
   const store = new InMemoryLoginHandoffStore(() => t);
-  const moduleRef: TestingModule = await Test.createTestingModule({
-    imports: [AppModule],
-  })
-    .overrideProvider(IDP_CLIENT)
-    .useValue(new FakeIdpClient(mailer))
-    .overrideProvider(MAILER)
-    .useValue(mailer)
-    .overrideProvider(BOT_PROTECTION)
-    .useValue(new StubBotProtection())
-    .overrideProvider(LOGIN_HANDOFF_STORE)
-    .useValue(store)
-    .overrideProvider(RATE_LIMIT_STORE)
-    .useValue(new InMemoryRateLimitStore())
-    .overrideProvider(RATE_LIMIT_THRESHOLDS)
-    .useValue(thresholds)
-    .compile();
+  const moduleRef: TestingModule = await withSignInHost(
+    Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(IDP_CLIENT)
+      .useValue(new FakeIdpClient(mailer))
+      .overrideProvider(MAILER)
+      .useValue(mailer)
+      .overrideProvider(BOT_PROTECTION)
+      .useValue(new StubBotProtection())
+      .overrideProvider(LOGIN_HANDOFF_STORE)
+      .useValue(store)
+      .overrideProvider(RATE_LIMIT_STORE)
+      .useValue(new InMemoryRateLimitStore())
+      .overrideProvider(RATE_LIMIT_THRESHOLDS)
+      .useValue(thresholds),
+  ).compile();
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter(),
   );
@@ -139,13 +150,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       expect(reg.statusCode).toBe(200);
       if (verified) {
-        const v = await h.app.inject({
-          method: "POST",
-          url: "/v1/auth/verify",
-          headers: CAPTCHA,
-          payload: { email, code: FAKE_VALID_CODE },
+        const jar = new Jar();
+        const form = await openHostForm(h.app, jar);
+        const v = await postHostForm(h.app, jar, "verify", {
+          email,
+          code: FAKE_VALID_CODE,
+          ...form,
         });
-        expect(v.statusCode).toBe(200);
+        expect(v.statusCode, v.body).toBe(200);
       }
       const { rows } = await h.pool.query<{ id: string }>(
         "SELECT id FROM users WHERE email = $1",
@@ -172,7 +184,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         method: "POST",
         url: "/v1/auth/login/otp/handoff",
         payload: ref === undefined ? {} : { ref },
-        ...(cookie ? { headers: { cookie } } : {}),
+        ...(cookie ? { headers: { ...DEVICE, cookie } } : {}),
       });
       return {
         status: res.statusCode,
@@ -181,8 +193,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
       };
     }
 
-    /** Sign `email` in with its code; returns the session cookie pair (`name=value`). */
-    async function signIn(email: string, cookie?: string): Promise<string> {
+    /**
+     * Sign `email` in with its code on the sign-in host in `browser`, then the
+     * storefront callback; returns the storefront session cookie pair
+     * (`name=value`).
+     */
+    async function signIn(
+      email: string,
+      browser: Jar = new Jar(),
+      prompt?: string[],
+    ): Promise<string> {
       const request = await h.app.inject({
         method: "POST",
         url: "/v1/auth/login/otp/request",
@@ -190,16 +210,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
         payload: { identifier: email, channel: "email" },
       });
       expect(request.statusCode).toBe(200);
-      const res = await h.app.inject({
-        method: "POST",
-        url: "/v1/auth/login/otp",
-        payload: { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
-        ...(cookie ? { headers: { cookie } } : {}),
-      });
-      expect(res.statusCode).toBe(200);
-      const setCookie = res.headers["set-cookie"];
-      const raw = Array.isArray(setCookie) ? setCookie[0] : setCookie;
-      return String(raw).split(";")[0]!;
+      const sid = await storefrontSignIn(
+        h.app,
+        email,
+        { code: FAKE_VALID_CODE, channel: "email" },
+        { jar: browser, ...(prompt ? { prompt } : {}) },
+      );
+      return `${SESSION_COOKIE_NAME}=${sid}`;
     }
 
     /** The session subject `cookie` resolves to, or the status when it does not. */
@@ -207,7 +224,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const res = await h.app.inject({
         method: "GET",
         url: "/v1/auth/session",
-        headers: { cookie },
+        headers: { ...DEVICE, cookie },
       });
       return res.statusCode === 200
         ? (res.json() as { sub: string }).sub
@@ -241,13 +258,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(h.mailer.loginCodeEmails.map((m) => m.to)).toEqual([email]);
       expect(h.mailer.verificationCodeEmails).toEqual([]);
       // The code that was sent signs the account in (EARS-6 convergence).
-      const login = await h.app.inject({
-        method: "POST",
-        url: "/v1/auth/login/otp",
-        payload: { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
+      const login = await hostLogin(h.app, new Jar(), email, {
+        code: FAKE_VALID_CODE,
+        channel: "email",
       });
       expect(login.statusCode).toBe(200);
-      expect(login.json()).toEqual({ status: "authenticated" });
+      expect(login.json()).toMatchObject({ status: "redirect" });
     });
 
     it("003 EARS-44: a live reference for an UNVERIFIED account sends the verification code in the sign-in mail (EARS-34)", async () => {
@@ -390,7 +406,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("003 EARS-44: signed in as ANOTHER account, the code goes to the reference's account and its sign-in replaces the other session (#2659)", async () => {
       const other = await accountWithReference("other-x", true);
       const owner = await accountWithReference("owner-y", true);
-      const otherCookie = await signIn(other.email);
+      const browser = new Jar();
+      const otherCookie = await signIn(other.email, browser);
       const otherSub = await sessionSub(otherCookie);
       clearMail();
 
@@ -400,11 +417,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       expect(h.mailer.loginCodeEmails.map((m) => m.to)).toEqual([owner.email]);
 
-      const ownerCookie = await signIn(owner.email, otherCookie);
+      // The browser's live record answers the next authorize at once, so the
+      // storefront asks for a fresh credential (prompt=login, EARS-68); the
+      // code entered there replaces the record.
+      const ownerCookie = await signIn(owner.email, browser, ["login"]);
       const ownerSub = await sessionSub(ownerCookie);
       expect(typeof ownerSub).toBe("string");
       expect(ownerSub).not.toBe(otherSub);
-      // The session the browser held before the code is gone, not orphaned.
+      // The session the browser held before the code is gone, not orphaned:
+      // replacing the record revokes the storefront sessions linked to it.
       expect(await sessionSub(otherCookie)).toBe(401);
     });
 
@@ -438,7 +459,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         method: "POST",
         url: "/v1/auth/login/otp/handoff/own",
         payload: ref === undefined ? {} : { ref },
-        ...(cookie ? { headers: { cookie } } : {}),
+        ...(cookie ? { headers: { ...DEVICE, cookie } } : {}),
       });
       return { status: res.statusCode, body: res.json() };
     }

@@ -13,22 +13,27 @@
 //   GITHUB_STEP_SUMMARY optional; the plan and the result are appended to it
 //
 // Execution prerequisite: registry-retention.yml holds the shared registry-images
-// workflow lock from BEFORE the snapshot through the final DELETE, excluding all
-// runtime-images.yml publishers. Listing before the GitHub keep-set lookup alone
-// cannot protect a digest that gains a fresh alias after the snapshot (#3144).
-// Every registry writer must participate in that same lock; never run standalone.
+// workflow lock from BEFORE the snapshot through the final DELETE, excluding every
+// runtime-images.yml run on `main`, `hotfix/*` and workflow_dispatch. Listing before
+// the GitHub keep-set lookup alone cannot protect a digest that gains a fresh alias
+// after the snapshot (#3144). Every registry writer that can re-tag an existing
+// digest must participate in that same lock; never run standalone. `pull_request`
+// runs stay outside it (#3561): their `pr/*` images carry the head SHA as the
+// `org.opencontainers.image.revision` label, so each PR digest belongs to one head
+// and no later push can alias a digest this run is deleting.
 //
 // Any failure exits non-zero. Before the first DELETE that is a delete of nothing;
 // a refused DELETE (e.g. 405 UNSUPPORTED — the registry does not allow deletion)
 // stops the run at once and is reported, never skipped.
 
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync } from "node:fs";
+import { promisify } from "node:util";
 
 import {
   ghLines,
   latestProductionSha,
-  mainHistory,
   stageSuiteState,
 } from "./lib/github-release-facts.mjs";
 import { IMAGE_REGISTRY } from "./lib/registry.mjs";
@@ -218,6 +223,22 @@ async function listHotfixHeads(repo) {
     "--jq",
     ".[].object.sha",
   ]);
+}
+
+/** First-parent `main` history, newest first. CI-only: registry-retention.yml checks
+ *  out `main` as a `filter: tree:0` partial clone, so this filtered fetch refreshes
+ *  FETCH_HEAD and changes no clone config there. On a full workstation clone the same
+ *  fetch would register the remote as a promisor in `.git/config` — workstation
+ *  readers use `mainHistoryFromApi` (`lib/github-release-facts.mjs`) instead. */
+async function mainHistory() {
+  const run = promisify(execFile);
+  await run("git", ["fetch", "--quiet", "--filter=tree:0", "origin", "main"]);
+  const { stdout } = await run(
+    "git",
+    ["rev-list", "--first-parent", "FETCH_HEAD"],
+    { maxBuffer: 64 * 1024 * 1024 },
+  );
+  return stdout.split("\n").filter(Boolean);
 }
 
 function summarize(text) {

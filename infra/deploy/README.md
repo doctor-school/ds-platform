@@ -347,7 +347,8 @@ covers the entire image build/publish/verify/manifest run and the entire retenti
 snapshot/plan/delete run. Matrix builds remain parallel inside one run. A digest
 can be reused by a fresh tag, so a snapshot followed by another keep-set read is
 insufficient while a publisher can still add aliases. These are the only workflows
-holding `REGISTRY_PUSH_TOKEN`; any new writer must join the same lock. The retention
+holding `REGISTRY_PUSH_TOKEN`; any new writer that can re-tag an existing digest must
+join the same lock — the one exception is the `pull_request` run below. The retention
 runner must never be run standalone, and out-of-workflow registry writes are outside
 this coordination boundary.
 

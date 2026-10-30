@@ -20,6 +20,7 @@ import { MeModule } from "./me/me.module.js";
 import { AuditModule } from "./audit/audit.module.js";
 import { TaxonomyModule } from "./taxonomy/taxonomy.module.js";
 import { RecordingsModule } from "./recordings/recordings.module.js";
+import { MaterialsModule } from "./materials/materials.module.js";
 import { StorefrontModule } from "./storefront/storefront.module.js";
 import { SignInHostModule } from "./sign-in-host/sign-in-host.module.js";
 import { CongressModule } from "./congress/congress.module.js";
@@ -67,6 +68,10 @@ import { StaffAccessModule } from "./staff-access/staff-access.module.js";
     // (#1339 EARS-1/EARS-2). After TaxonomyModule: it consumes that module's
     // exported IdempotencyService and RFC 7807 filter (EARS-17).
     RecordingsModule,
+    // 048 materials feed — the «Материалы» admin authoring surface and the
+    // feed-entry store (#3512). After TaxonomyModule: it consumes that module's
+    // exported IdempotencyService and RFC 7807 filter.
+    MaterialsModule,
     // 017 doctor storefront — the closed Минздрав specialty reference book, its
     // public read and the membership mechanism (#1479 EARS-3). After
     // DatabaseModule: its boot-time seed upserts the book through that handle.

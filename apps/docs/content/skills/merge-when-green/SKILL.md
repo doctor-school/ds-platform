@@ -57,7 +57,7 @@ Exit `0` = the PR touches no user-facing render surface, OR it carries a recorde
 
 **2.0 — return to the main tree FIRST.** If you are inside a worktree, leave it before the merge command (`ExitWorktree action:keep`, or `cd` to the primary tree). This is an ordered pre-merge step, not a preference: `--delete-branch`'s local cleanup fails from inside the worktree (it recurred on BOTH PRs of one session, 2026-07-12, and again on #1301), and the gate now refuses a `.claude/worktrees/*` cwd or a PR branch checked out in a registered worktree mechanically (exit `4`, remedy `pnpm worktree:teardown <N>`).
 
-**2.1 — the command: `pnpm pr:land <N>` (#1026).** From the main tree, the complete closeout tail — the AGENTS.md §6 "PR lifecycle runs to completion" steps — runs as one command:
+**2.1 — the command: `pnpm pr:land <N>` (#1026).** From the main tree, the complete closeout tail — the AGENTS.md §6 "Finish the PR tail" steps — runs as one command:
 
 ```bash
 pnpm pr:land <N>   # node tools/gh/pr-land.mjs <N> — gate → squash-merge → board Done → worktree teardown → re-sweep

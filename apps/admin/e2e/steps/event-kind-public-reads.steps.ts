@@ -3,6 +3,7 @@ import { appendFileSync } from "node:fs";
 
 import { bootstrapAdminSession, signInAsAdmin } from "@ds/e2e/admin-events";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+import { PublicEventKindListSchema } from "@ds/schemas";
 import { expect, request, type Page } from "@playwright/test";
 import { createBdd } from "playwright-bdd";
 import { Pool } from "pg";
@@ -243,9 +244,8 @@ When("the public kind list is read", async ({ world }) => {
     operation("GET anonymous /v1/public/event-kinds");
     const response = await api.get("/v1/public/event-kinds");
     expect(response.status()).toBe(200);
-    const rows = await response.json();
-    expect(Array.isArray(rows)).toBe(true);
-    state(world).publicKinds = rows;
+    const body = PublicEventKindListSchema.parse(await response.json());
+    state(world).publicKinds = body.data;
     expect(
       (await api.storageState()).cookies
         .map((cookie) => cookie.name)

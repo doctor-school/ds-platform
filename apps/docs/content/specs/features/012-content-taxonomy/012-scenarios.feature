@@ -951,14 +951,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       And legacy_speaker_id is absent from the event-expert admin contract
       And the deploy rollback floor guard and its deploy hook and the migration fence suite are gone from the tree
 
-  @EARS-25 @happy
-  Scenario: An editor adds an event kind in the admin
-    Given a platform_admin signed in to the admin
-    When the admin creates the event kind «Круглый стол» allowing the formats online and hybrid and publishes it
-    Then one retained event_kinds row exists with a system-generated slug and the allowed formats online and hybrid
-    And the row carries no storefront attribute
-    And the same row renders on the event-kind list and detail
-
   @EARS-25 @failure
   Scenario: A kind slug cannot be authored
     When the admin submits an event-kind mutation carrying a slug
@@ -1010,12 +1002,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | Мастер-класс  | offline, hybrid         |
     And every existing event references exactly one kind
 
-  @EARS-28 @happy
-  Scenario: A new kind reaches the public reads with no code change
-    Given the admin publishes a new event kind
-    When the public kind list is read
-    Then the new kind is listed as id, slug and title
-
   # Read under «Amendment — 2026-10-13 — a retired kind stays a storefront filter value».
   @EARS-28 @EARS-26 @edge
   Scenario: A retired kind stays in the public kind list and leaves only the event form
@@ -1024,12 +1010,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then the public kind list still names the retired kind as id, slug and title
     And the event-form kind selector no longer offers it
     And the events that carry it keep their kind reference
-
-  @EARS-28 @failure
-  Scenario: A draft kind never reaches the public kind list
-    Given the admin creates an event kind and leaves it a draft
-    When the public kind list is read
-    Then the draft kind is not listed
 
   @EARS-29 @failure
   Scenario: An event without a valid audience is refused
@@ -1121,3 +1101,28 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       Then the canonical resolver returns only eligible event_experts ordered by position and stable relation id
       And it consults no legacy free-text speaker row and no legacy fallback
       And it infers no identity from a name
+
+  Rule: Event-kind authoring and public reads
+
+    @event-kind-public-reads
+    @EARS-25 @happy
+    Scenario: An editor adds an event kind in the admin
+      Given a platform_admin signed in to the admin
+      When the admin creates the event kind «Круглый стол» allowing the formats online and hybrid and publishes it
+      Then one retained event_kinds row exists with a system-generated slug and the allowed formats online and hybrid
+      And the row carries no storefront attribute
+      And the same row renders on the event-kind list and detail
+
+    @event-kind-public-reads
+    @EARS-28 @happy
+    Scenario: A new kind reaches the public reads with no code change
+      Given the admin publishes a new event kind
+      When the public kind list is read
+      Then the new kind is listed as id, slug and title
+
+    @event-kind-public-reads
+    @EARS-28 @failure
+    Scenario: A draft kind never reaches the public kind list
+      Given the admin creates an event kind and leaves it a draft
+      When the public kind list is read
+      Then the draft kind is not listed

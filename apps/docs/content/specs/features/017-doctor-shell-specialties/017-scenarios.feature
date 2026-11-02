@@ -243,7 +243,7 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
 
       Examples:
         | state    | render                                                          |
-        | обычно   | the nearest event cards, the compact month calendar and «Все события» |
+        | обычно   | the nearest event cards and «Все события»                       |
         | загрузка | the card skeletons                                              |
         | пусто    | an explicit empty statement pointing at adjacent areas          |
         | ошибка   | an explicit Russian error message with a retry control          |
@@ -316,7 +316,7 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
         | the header and its action cluster           |
         | the catalog search field and expand control |
         | the collapsed specialty row                 |
-        | the events block and its compact calendar   |
+        | the nearest-events block                    |
 
     @EARS-14 @happy
     Scenario: Every storefront surface meets the accessibility bar

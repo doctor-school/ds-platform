@@ -3,7 +3,6 @@ import {
   expect,
   test,
   type APIRequestContext,
-  type BrowserContext,
   type Page,
 } from "@playwright/test";
 
@@ -13,8 +12,10 @@ import {
  * route with the doctor host config. The upstream is the events tier's fixed
  * stand-in `e2e/support/doctor-events-api.mjs`; `POST /__e2e/feed` fails,
  * empties or holds the feed read. Targeting itself is proven against the real
- * database in the api e2e spec; here the relayed specialty cookie only has to
- * leave the block rendering the read it answers.
+ * database in the api e2e spec; here the relayed specialty cookie leaves the
+ * block rendering the read it answers, under the eyebrow that read's
+ * targeting earns (the canvas: «События» before a choice, «По вашей
+ * специальности и смежным областям» after it).
  *
  * With `HOME_EVENTS_EVIDENCE_DIR` set, each state is also captured there (the
  * PR's ui-parity evidence) in the theme `HOME_EVENTS_THEME` names (`light` by
@@ -31,19 +32,15 @@ async function feedControl(
   await request.post(`${API}/__e2e/feed`, { data: control });
 }
 
-async function rememberSpecialty(context: BrowserContext) {
-  await context.addCookies([
-    {
-      name: "__Host-ds_specialty",
-      value: "00000000-0000-4000-8000-000000000001",
-      domain: "127.0.0.1",
-      path: "/",
-      httpOnly: true,
-      secure: true,
-      sameSite: "Lax",
-    },
-  ]);
-}
+/**
+ * The `__Host-` prefix is https-only in Chromium and this tier serves http, so
+ * the remembered specialty and the session ride a request HEADER — exactly
+ * what the route reads and relays (the events-live spec's idiom). The two are
+ * driven apart: with both, the doctor proxy first adopts the guest choice into
+ * the profile (017 EARS-7), which this tier's stand-in does not answer.
+ */
+const SPECIALTY_COOKIE =
+  "__Host-ds_specialty=00000000-0000-4000-8000-000000000001";
 
 async function capture(page: Page, name: string) {
   if (!EVIDENCE) return;
@@ -85,7 +82,7 @@ for (const viewport of [
   test.describe(`017 EARS-9 at ${viewport.width} px`, () => {
     test.use({ viewport });
 
-    test("017 EARS-9: a guest's home shows the first three upcoming feed cards under «Ближайшие события», and «Все события →» lands on /events", async ({
+    test("017 EARS-9: a guest's home shows the first three upcoming feed cards under «События» / «Ближайшие события», and «Все события →» lands on /events", async ({
       page,
     }) => {
       await page.goto("/");
@@ -114,27 +111,31 @@ for (const viewport of [
       await expect(page.getByTestId("events-feed")).toBeVisible();
     });
 
-    test("017 EARS-9: with a remembered specialty and a session the block renders the read the relayed cookie answers, the registered cards marked", async ({
+    test("017 EARS-9: a guest with a remembered specialty gets the targeted read the relayed cookie answers, under «По вашей специальности и смежным областям»", async ({
       page,
-      context,
     }) => {
-      await rememberSpecialty(context);
-      await context.addCookies([
-        {
-          name: "__Host-ds_session",
-          value: "e2e-doctor",
-          domain: "127.0.0.1",
-          path: "/",
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-        },
-      ]);
+      await page.setExtraHTTPHeaders({ cookie: SPECIALTY_COOKIE });
+      await page.goto("/");
+      await expect(block(page).getByTestId("home-events-eyebrow")).toHaveText(
+        "По вашей специальности и смежным областям",
+      );
+      await expect(
+        block(page).getByRole("heading", { level: 2, name: "Ближайшие события" }),
+      ).toBeVisible();
+      const cards = block(page).getByTestId("home-events-cards");
+      await expect(cards.locator("[data-webinar-card]")).toHaveCount(3);
+      await expectRestUsable(page);
+      await capture(page, `home-events-specialty-${viewport.width}`);
+    });
+
+    test("017 EARS-9: a signed-in doctor's block marks the cards the doctor is registered for", async ({
+      page,
+    }) => {
+      await page.setExtraHTTPHeaders({ cookie: "__Host-ds_session=e2e-doctor" });
       await page.goto("/");
       const cards = block(page).getByTestId("home-events-cards");
       await expect(cards.locator("[data-webinar-card]")).toHaveCount(3);
       await expect(cards).toContainText("Вы записаны");
-      await capture(page, `home-events-specialty-${viewport.width}`);
     });
 
     test("017 EARS-9: no upcoming event — the block states the empty copy with its pointer into /events", async ({

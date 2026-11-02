@@ -358,6 +358,31 @@ let feedEmpty = false;
 let feedDelayMs = 0;
 
 /**
+ * 017 EARS-9 (#1485) — what the «Будущие» read reports it was targeted on.
+ * The route relays the remembered `__Host-ds_specialty` cookie; with it the
+ * real service targets the read on that specialty and its adjacent areas
+ * (`mode: "targeted"`), without it the read is general. This double only
+ * reports that mode — the cards stay the fixture's, the targeting arithmetic
+ * is the api e2e spec's — so the home block's eyebrow can be driven by it.
+ */
+function upcomingTargeting(cookie) {
+  const specialty = /(?:^|;\s*)__Host-ds_specialty=([^;]+)/.exec(cookie)?.[1];
+  return specialty
+    ? {
+        mode: "targeted",
+        specialtyReference: decodeURIComponent(specialty),
+        directionIds: ["e2e-direction"],
+        adjacentDirectionIds: [],
+      }
+    : {
+        mode: "general",
+        specialtyReference: null,
+        directionIds: [],
+        adjacentDirectionIds: [],
+      };
+}
+
+/**
  * 019 EARS-11 as amended 2026-10-05 (gate row 46) — the doctor's «Мои события»
  * read `GET /v1/storefront/doctor/me/events`. No `__Host-ds_session` ⇒ 401 (a
  * guest). The session value `e2e-doctor-empty` is a doctor with no
@@ -638,12 +663,7 @@ const server = createServer((request, response) => {
       remaining,
       // N: exactly what the next step adds.
       nextBatch,
-      targeting: {
-        mode: "general",
-        specialtyReference: null,
-        directionIds: [],
-        adjacentDirectionIds: [],
-      },
+      targeting: upcomingTargeting(request.headers.cookie ?? ""),
     });
   }
 

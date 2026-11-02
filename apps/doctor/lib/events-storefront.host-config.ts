@@ -48,12 +48,16 @@ export const DOCTOR_EVENTS_STOREFRONT = {
 
 /**
  * The doctor home's nearest-events block (017 EARS-9, #1485) — the canvas
- * `design-source/doctor-home.dc.html` «d-home · события»: its eyebrow, heading,
+ * `design-source/doctor-home.dc.html` «d-home · события»: its eyebrow (general,
+ * and targeted once the read is targeted on the chosen specialty), heading,
  * «Все события →» right of the heading, three cards and the empty copy with its
  * pointer into `/events`. DATA only; the block reads `DOCTOR_EVENTS_STOREFRONT`.
  */
 export const DOCTOR_HOME_EVENTS = {
-  eyebrow: "События",
+  eyebrow: {
+    general: "События",
+    targeted: "По вашей специальности и смежным областям",
+  },
   title: "Ближайшие события",
   allLink: { label: "Все события →", placement: "head" },
   cardCap: 3,

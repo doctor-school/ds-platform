@@ -83,8 +83,13 @@ export type EventsStorefrontHostConfig = {
  * routes are the events page's own.
  */
 export type HomeEventsHostConfig = {
-  /** The eyebrow above the heading («События» / «Эфиры»). */
-  eyebrow: string;
+  /**
+   * The eyebrow above the heading: `general` for a read that is not targeted
+   * («События» / «Эфиры»), `targeted` for a read targeted on the viewer's
+   * specialty (the doctor's «По вашей специальности и смежным областям»). A
+   * host whose read has no targeting states `general` only.
+   */
+  eyebrow: { general: string; targeted?: string };
   /** The heading («Ближайшие события» / «Ближайшие эфиры»). */
   title: string;
   /** The link into the full feed: its label, and whether it sits right of the heading or below the cards. */

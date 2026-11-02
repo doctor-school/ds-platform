@@ -14,7 +14,7 @@ import type { BlockRead, EventsFeedPage } from "../model/feed";
 import { type ReadRequest, fetchEventsFeed, readRequestFrom } from "../server";
 import { BlockError } from "./block-error";
 import { BlockRetry } from "./block-retry";
-import { FeedSkeletonCard, readMyEvents } from "./feed-sections";
+import { FeedSkeletonCard, SkeletonSlot, readMyEvents } from "./feed-sections";
 import { HomeEventCards } from "./home-event-cards";
 
 /**
@@ -58,23 +58,51 @@ function AllLink({
   );
 }
 
-/** The block head: eyebrow, heading and — on a `head` host — the link. */
-export function HomeEventsHead({
+/**
+ * The eyebrow the read earns (017 EARS-9; the canvas switches it once a
+ * specialty is chosen): the host's targeted eyebrow exactly when the feed read
+ * reports it was targeted on the viewer's specialty — the same targeting the
+ * cards come from — the general one otherwise, a failed read included.
+ */
+export function homeEventsEyebrow(
+  home: HomeEventsHostConfig,
+  read: BlockRead<EventsFeedPage>,
+): string {
+  const targeted = read.ok && read.value.targetingMode === "targeted";
+  return targeted && home.eyebrow.targeted
+    ? home.eyebrow.targeted
+    : home.eyebrow.general;
+}
+
+/**
+ * The block head: eyebrow, heading and — on a `head` host — the link. While
+ * the read is in flight (`eyebrow: null`) the eyebrow line is a placeholder:
+ * the targeting it states is the read's, not yet known.
+ */
+function HomeEventsHead({
   config,
   home,
+  eyebrow,
 }: {
   config: EventsStorefrontHostConfig;
   home: HomeEventsHostConfig;
+  eyebrow: string | null;
 }) {
   return (
     <div className="mb-4.5 flex flex-wrap items-end justify-between gap-4.5 layout:mb-7.5">
       <div>
-        <p
-          className="mb-2.5 text-xs font-extrabold uppercase tracking-micro text-primary-action"
-          data-testid="home-events-eyebrow"
-        >
-          {home.eyebrow}
-        </p>
+        {eyebrow === null ? (
+          <div aria-hidden="true">
+            <SkeletonSlot className="mb-2.5 h-3 w-24" />
+          </div>
+        ) : (
+          <p
+            className="mb-2.5 text-xs font-extrabold uppercase tracking-micro text-primary-action"
+            data-testid="home-events-eyebrow"
+          >
+            {eyebrow}
+          </p>
+        )}
         <h2
           className="text-2xl font-extrabold leading-none tracking-tight text-foreground layout:text-4xl"
           id="home-events-title"
@@ -89,23 +117,36 @@ export function HomeEventsHead({
   );
 }
 
-/** `cardCap` card skeletons while the read is in flight (017 design §6 `загрузка`). */
-export function HomeEventsSkeleton({ home }: { home: HomeEventsHostConfig }) {
+/**
+ * The block while the read is in flight (017 design §6 `загрузка`): the head
+ * with its eyebrow held, and `cardCap` card skeletons.
+ */
+export function HomeEventsSkeleton({
+  config,
+  home,
+}: {
+  config: EventsStorefrontHostConfig;
+  home: HomeEventsHostConfig;
+}) {
   return (
-    <div
-      aria-busy="true"
-      className="flex flex-col gap-4.5 layout:gap-7"
-      data-testid="home-events-skeleton"
-    >
-      {Array.from({ length: home.cardCap }, (_, i) => (
-        <FeedSkeletonCard key={i} />
-      ))}
-    </div>
+    <>
+      <HomeEventsHead config={config} eyebrow={null} home={home} />
+      <div
+        aria-busy="true"
+        className="flex flex-col gap-4.5 layout:gap-7"
+        data-testid="home-events-skeleton"
+      >
+        {Array.from({ length: home.cardCap }, (_, i) => (
+          <FeedSkeletonCard key={i} />
+        ))}
+      </div>
+    </>
   );
 }
 
 /**
- * The block's one render per read: the first `cardCap` cards of the feed, the
+ * The block's one render per read — its head, whose eyebrow states the read's
+ * targeting, then the first `cardCap` cards of the feed, the
  * host's honest empty with its pointer into the feed, or the cause with
  * «Обновить» — whose retry re-runs this one read and replaces this block
  * alone (the {@link BlockRetry} contract of the events page, 019 EARS-9).
@@ -123,9 +164,17 @@ export async function HomeEventsBody({
   registeredSlugs: readonly string[];
   retry: HomeEventsRetryAction;
 }) {
+  const head = (
+    <HomeEventsHead
+      config={config}
+      eyebrow={homeEventsEyebrow(home, read)}
+      home={home}
+    />
+  );
   if (!read.ok) {
     return (
       <BlockRetry retry={retry}>
+        {head}
         <BlockError
           retryLabel={HOME_EVENTS_COPY.retry}
           testId="home-events-error"
@@ -138,44 +187,53 @@ export async function HomeEventsBody({
   if (cards.length === 0) {
     const { pointer } = home.empty;
     return (
-      <div
-        className="border-2 border-dashed border-border"
-        data-testid="home-events-empty"
-      >
-        <EmptyState
-          variant="no-records"
-          title={home.empty.title}
-          {...(pointer
-            ? {
-                description: (
-                  <>
-                    {pointer.text}
-                    {pointer.linkLabel ? (
-                      <DsLink asChild variant="inline">
-                        <Link href={config.routes.listing}>
-                          {pointer.linkLabel}
-                        </Link>
-                      </DsLink>
-                    ) : null}
-                  </>
-                ),
-              }
-            : {})}
-        />
-      </div>
+      <>
+        {head}
+        <div
+          className="border-2 border-dashed border-border"
+          data-testid="home-events-empty"
+        >
+          <EmptyState
+            variant="no-records"
+            title={home.empty.title}
+            {...(pointer
+              ? {
+                  description: (
+                    <>
+                      {pointer.text}
+                      {pointer.linkLabel ? (
+                        <DsLink asChild variant="inline">
+                          <Link href={config.routes.listing}>
+                            {pointer.linkLabel}
+                          </Link>
+                        </DsLink>
+                      ) : null}
+                    </>
+                  ),
+                }
+              : {})}
+          />
+        </div>
+      </>
     );
   }
   return (
-    <div className="flex flex-col gap-4.5 layout:gap-7" data-testid="home-events-cards">
-      <HomeEventCards
-        cards={cards}
-        registeredSlugs={registeredSlugs}
-        routes={config.routes}
-      />
-      {home.allLink.placement === "foot" ? (
-        <AllLink className="self-start" config={config} home={home} />
-      ) : null}
-    </div>
+    <>
+      {head}
+      <div
+        className="flex flex-col gap-4.5 layout:gap-7"
+        data-testid="home-events-cards"
+      >
+        <HomeEventCards
+          cards={cards}
+          registeredSlugs={registeredSlugs}
+          routes={config.routes}
+        />
+        {home.allLink.placement === "foot" ? (
+          <AllLink className="self-start" config={config} home={home} />
+        ) : null}
+      </div>
+    </>
   );
 }
 
@@ -218,7 +276,10 @@ export async function renderHomeEventsBlock(
   home: HomeEventsHostConfig,
   retry: HomeEventsRetryAction,
 ): Promise<ReactNode> {
-  const { read, registeredSlugs } = await readHomeBlock(config, await headers());
+  const { read, registeredSlugs } = await readHomeBlock(
+    config,
+    await headers(),
+  );
   return HomeEventsBody({ config, home, read, registeredSlugs, retry });
 }
 
@@ -249,8 +310,7 @@ export function HomeEvents({
       data-testid="home-events"
     >
       <div className="mx-auto w-full max-w-content">
-        <HomeEventsHead config={config} home={home} />
-        <Suspense fallback={<HomeEventsSkeleton home={home} />}>
+        <Suspense fallback={<HomeEventsSkeleton config={config} home={home} />}>
           <HomeEventsStream config={config} home={home} retry={retry} />
         </Suspense>
       </div>

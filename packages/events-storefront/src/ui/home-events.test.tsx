@@ -5,7 +5,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { adaptDoctorEventsFeed } from "../adapters";
-import type { EventsStorefrontHostConfig, HomeEventsHostConfig } from "../host-config";
+import type {
+  EventsStorefrontHostConfig,
+  HomeEventsHostConfig,
+} from "../host-config";
 import type { EventsFeedCard, EventsFeedPage } from "../model/feed";
 
 /**
@@ -41,8 +44,8 @@ vi.mock("../server", async (importOriginal) => ({
 import { BlockRetry } from "./block-retry";
 import {
   HomeEventsBody,
-  HomeEventsHead,
   HomeEventsSkeleton,
+  homeEventsEyebrow,
   renderHomeEventsBlock,
 } from "./home-events";
 
@@ -68,13 +71,19 @@ const DOCTOR: EventsStorefrontHostConfig = {
 };
 
 const HOME: HomeEventsHostConfig = {
-  eyebrow: "События",
+  eyebrow: {
+    general: "События",
+    targeted: "По вашей специальности и смежным областям",
+  },
   title: "Ближайшие события",
   allLink: { label: "Все события →", placement: "head" },
   cardCap: 3,
   empty: {
     title: "Пока ничего не запланировано по вашей специальности",
-    pointer: { text: "Посмотрите события смежных областей — ", linkLabel: "все события →" },
+    pointer: {
+      text: "Посмотрите события смежных областей — ",
+      linkLabel: "все события →",
+    },
   },
 };
 
@@ -94,11 +103,20 @@ function card(n: number): EventsFeedCard {
   };
 }
 
-function page(cards: EventsFeedCard[]): EventsFeedPage {
+function page(
+  cards: EventsFeedCard[],
+  targetingMode?: EventsFeedPage["targetingMode"],
+): EventsFeedPage {
   return {
+    ...(targetingMode ? { targetingMode } : {}),
     today: "2026-09-01",
     cards,
-    horizon: { from: "2026-09-01", to: "2026-09-30", nextCount: null, nextFrom: null },
+    horizon: {
+      from: "2026-09-01",
+      to: "2026-09-30",
+      nextCount: null,
+      nextFrom: null,
+    },
     remaining: 0,
     nextBatch: 0,
     facetOptions: {},
@@ -116,15 +134,57 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("017 EARS-9 — home nearest-events block", () => {
-  it("EARS-9: when the home page renders, the block shall head with the host's eyebrow, title and a «Все события» link into the events feed", () => {
-    render(<HomeEventsHead config={DOCTOR} home={HOME} />);
-    expect(screen.getByTestId("home-events-eyebrow").textContent).toBe("События");
+  it("EARS-9: when the home page renders, the block shall head with the host's eyebrow, title and a «Все события» link into the events feed", async () => {
+    render(
+      await HomeEventsBody({
+        config: DOCTOR,
+        home: HOME,
+        read: { ok: true, value: page([card(1)], "general") },
+        registeredSlugs: [],
+        retry: noRetry,
+      }),
+    );
+    expect(screen.getByTestId("home-events-eyebrow").textContent).toBe(
+      "События",
+    );
     expect(
       screen.getByRole("heading", { level: 2, name: "Ближайшие события" }),
     ).toBeTruthy();
     const all = screen.getByTestId("home-events-all");
     expect(all.textContent).toBe("Все события →");
     expect(all.getAttribute("href")).toBe("/events");
+  });
+
+  it("EARS-9: when the feed read is targeted on the doctor's specialty, the eyebrow shall be the host's targeted eyebrow", async () => {
+    render(
+      await HomeEventsBody({
+        config: DOCTOR,
+        home: HOME,
+        read: { ok: true, value: page([card(1)], "targeted") },
+        registeredSlugs: [],
+        retry: noRetry,
+      }),
+    );
+    expect(screen.getByTestId("home-events-eyebrow").textContent).toBe(
+      "По вашей специальности и смежным областям",
+    );
+  });
+
+  it("EARS-9: when the feed read is not targeted (general, all, or a host with no targeting), the eyebrow shall be the host's general one", () => {
+    for (const mode of ["general", "all", undefined] as const) {
+      expect(homeEventsEyebrow(HOME, { ok: true, value: page([], mode) })).toBe(
+        "События",
+      );
+    }
+    // A failed read states no targeting it does not know.
+    expect(homeEventsEyebrow(HOME, { ok: false })).toBe("События");
+    // A host with one eyebrow keeps it on a targeted read.
+    expect(
+      homeEventsEyebrow(
+        { ...HOME, eyebrow: { general: "Эфиры" } },
+        { ok: true, value: page([], "targeted") },
+      ),
+    ).toBe("Эфиры");
   });
 
   it("EARS-9: when the feed read answers, the block shall show only the first cardCap cards of the upcoming feed as the feed's card unit", async () => {
@@ -168,7 +228,10 @@ describe("017 EARS-9 — home nearest-events block", () => {
   });
 
   it("EARS-9: when the feed read fails, the block shall state «Не удалось загрузить события.» and «Обновить» shall re-run the read and replace the block with its cards", async () => {
-    mocks.fetchEventsFeed.mockResolvedValue({ ok: true, value: page([card(1)]) });
+    mocks.fetchEventsFeed.mockResolvedValue({
+      ok: true,
+      value: page([card(1)]),
+    });
     const retry = vi.fn(() => renderHomeEventsBlock(DOCTOR, HOME, retry));
     render(
       <BlockRetry retry={retry}>
@@ -183,10 +246,17 @@ describe("017 EARS-9 — home nearest-events block", () => {
     );
     const error = screen.getByTestId("home-events-error");
     expect(error.textContent).toContain("Не удалось загрузить события.");
-    await userEvent.click(within(error).getByRole("button", { name: "Обновить" }));
+    expect(screen.getByTestId("home-events-eyebrow").textContent).toBe(
+      "События",
+    );
+    await userEvent.click(
+      within(error).getByRole("button", { name: "Обновить" }),
+    );
 
     expect(await screen.findByTestId("home-events-cards")).toBeTruthy();
     expect(screen.queryByTestId("home-events-error")).toBeNull();
+    // The retried block replaces the failed one whole: one head, not two.
+    expect(screen.getAllByTestId("home-events-eyebrow")).toHaveLength(1);
     expect(mocks.fetchEventsFeed).toHaveBeenCalledTimes(1);
     const [config, raw, request] = mocks.fetchEventsFeed.mock.calls[0]!;
     expect(config).toBe(DOCTOR);
@@ -196,7 +266,12 @@ describe("017 EARS-9 — home nearest-events block", () => {
   });
 
   it("EARS-9: while the read is in flight, the block shall render cardCap card skeletons", () => {
-    render(<HomeEventsSkeleton home={HOME} />);
+    render(<HomeEventsSkeleton config={DOCTOR} home={HOME} />);
+    // The targeting is the read's, still unknown: no eyebrow is claimed yet.
+    expect(screen.queryByTestId("home-events-eyebrow")).toBeNull();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Ближайшие события" }),
+    ).toBeTruthy();
     const skeleton = screen.getByTestId("home-events-skeleton");
     expect(skeleton.getAttribute("aria-busy")).toBe("true");
     expect(skeleton.children).toHaveLength(3);
@@ -208,9 +283,6 @@ describe("017 EARS-9 — home nearest-events block", () => {
       cardCap: 2,
       allLink: { label: "Все события и эфиры →", placement: "foot" },
     };
-    render(<HomeEventsHead config={DOCTOR} home={foot} />);
-    expect(screen.queryByTestId("home-events-all")).toBeNull();
-    cleanup();
     render(
       await HomeEventsBody({
         config: DOCTOR,
@@ -223,6 +295,7 @@ describe("017 EARS-9 — home nearest-events block", () => {
     expect(
       within(screen.getByTestId("home-events-cards")).getAllByRole("listitem"),
     ).toHaveLength(2);
+    expect(screen.getAllByTestId("home-events-all")).toHaveLength(1);
     expect(screen.getByTestId("home-events-all").textContent).toBe(
       "Все события и эфиры →",
     );

@@ -111,6 +111,14 @@ export interface EventsFeedPage {
    * scope the URL names: this visitor's default scope is «Все специальности».
    */
   readonly defaultScopeEmpty?: boolean;
+  /**
+   * What the read was targeted on, as the host's api reports it (doctor host:
+   * `targeted` — the doctor's specialty and its adjacent areas; `general` —
+   * the «Другое» fallback; `all` — every specialty). Absent on a host whose
+   * read has no specialty targeting. The home block's eyebrow states it
+   * (017 EARS-9).
+   */
+  readonly targetingMode?: "targeted" | "general" | "all";
 }
 
 /** One facet option: the URL value, its title and its count under the other facets. */

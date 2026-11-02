@@ -972,24 +972,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the admin saves an event of kind «Конгресс» with the format online
     Then the event contract rejects the write with a field error on the format
 
-  @EARS-25 @failure
-  Scenario: Narrowing a kind is refused while one of its events carries a removed format
-    Given an event of kind «Встреча клуба» with the format online
-    When the admin narrows «Встреча клуба» to allow only the formats offline and hybrid
-    Then the kind edit is rejected with a field error on the allowed formats that states one conflicting event and names it
-    And «Встреча клуба» still allows the formats online, offline and hybrid
-    When the admin changes the event's format to offline and saves
-    And the admin narrows «Встреча клуба» to allow only the formats offline and hybrid
-    Then the kind is stored with the formats offline and hybrid
-
-  @EARS-25 @edge
-  Scenario: A narrowing refused by many events states their count and names only five
-    Given seven events of kind «Встреча клуба» with the format hybrid
-    When the admin narrows «Встреча клуба» to allow only the formats online and offline
-    Then the kind edit is rejected with a field error on the allowed formats that states seven conflicting events
-    And the refusal names five of those events, each linking to its admin event page
-    And the refusal says two more events conflict
-
   @EARS-27 @happy
   Scenario: The dictionary starts with the five seed kinds
     When the forward migration introducing event kinds has run
@@ -1042,12 +1024,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then the event form shows the audience experts
     When the admin changes the audience to doctors and saves
     Then the event is stored with the audience doctors
-
-  @EARS-30 @failure
-  Scenario: A changed project default does not rewrite existing events
-    Given an event with the audience doctors linked to a project with the default audience doctors
-    When the admin changes the project default audience to experts
-    Then the event keeps the audience doctors
 
   @EARS-30 @failure
   Scenario: A project without a default audience is refused
@@ -1126,3 +1102,35 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       Given the admin creates an event kind and leaves it a draft
       When the public kind list is read
       Then the draft kind is not listed
+
+  Rule: Event-kind constraints and retained project audience
+
+    Background:
+      Given a platform_admin signed in to the admin
+
+    @event-kind-constraints
+    @EARS-25 @failure
+    Scenario: Narrowing a kind is refused while one of its events carries a removed format
+      Given an event of kind «Встреча клуба» with the format online
+      When the admin narrows «Встреча клуба» to allow only the formats offline and hybrid
+      Then the kind edit is rejected with a field error on the allowed formats that states one conflicting event and names it
+      And «Встреча клуба» still allows the formats online, offline and hybrid
+      When the admin changes the event's format to offline and saves
+      And the admin narrows «Встреча клуба» to allow only the formats offline and hybrid
+      Then the kind is stored with the formats offline and hybrid
+
+    @event-kind-constraints
+    @EARS-25 @edge
+    Scenario: A narrowing refused by many events states their count and names only five
+      Given seven events of kind «Встреча клуба» with the format hybrid
+      When the admin narrows «Встреча клуба» to allow only the formats online and offline
+      Then the kind edit is rejected with a field error on the allowed formats that states seven conflicting events
+      And the refusal names five of those events, each linking to its admin event page
+      And the refusal says two more events conflict
+
+    @event-kind-constraints
+    @EARS-30 @failure
+    Scenario: A changed project default does not rewrite existing events
+      Given an event with the audience doctors linked to a project with the default audience doctors
+      When the admin changes the project default audience to experts
+      Then the event keeps the audience doctors

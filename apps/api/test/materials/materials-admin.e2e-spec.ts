@@ -273,9 +273,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of materialIds.splice(0)) {
-        await pool.query("DELETE FROM media_cleanup_jobs WHERE entity_id = $1", [
-          id,
-        ]);
+        await pool.query(
+          "DELETE FROM media_cleanup_jobs WHERE entity_id = $1",
+          [id],
+        );
         await pool.query("DELETE FROM feed_entries WHERE material_id = $1", [
           id,
         ]);
@@ -949,7 +950,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("048 EARS-10: the feed entry shall hold at most one image reference, and an own-material card never an absolute URL", async () => {
       const { detail, ref } = await createWithCover();
-      expect(json(await publish(detail))).toMatchObject({ status: "published" });
+      expect(json(await publish(detail))).toMatchObject({
+        status: "published",
+      });
       const violation = (sql: string, params: unknown[]) =>
         pool.query(sql, params).then(
           () => null,
@@ -983,7 +986,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "UPDATE feed_entries SET image_ref = NULL, image_url = $2 WHERE source_ref = $1",
           [detail.id, "https://cdn.example.test/a.webp"],
         ),
-      ).toEqual({ code: "23514", constraint: "feed_entries_academy_image_is_ref" });
+      ).toEqual({
+        code: "23514",
+        constraint: "feed_entries_academy_image_is_ref",
+      });
       // Neither set: a card without a cover is allowed.
       expect(
         await violation(

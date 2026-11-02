@@ -27,10 +27,7 @@ export class OwnMaterialsFeedSource {
   ) {}
 
   /** Write (or rewrite) the card of a published material. */
-  async write(
-    tx: MaterialsTx,
-    material: Material,
-  ): Promise<void> {
+  async write(tx: MaterialsTx, material: Material): Promise<void> {
     if (material.status !== "published" || !material.firstPublishedAt) {
       throw new Error("only a published material has a feed entry");
     }

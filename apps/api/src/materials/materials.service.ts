@@ -488,7 +488,9 @@ export class MaterialsService {
       });
     } catch (err) {
       if (err instanceof ObjectAlreadyExistsError) {
-        this.logger.log(`cover object ${key} already present — resumed request`);
+        this.logger.log(
+          `cover object ${key} already present — resumed request`,
+        );
         return key;
       }
       this.logger.error(
@@ -540,7 +542,6 @@ export class MaterialsService {
     };
   }
 }
-
 
 function validation(errors: FieldError[]): TaxonomyError {
   return new TaxonomyError(

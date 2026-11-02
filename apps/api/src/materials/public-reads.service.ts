@@ -60,7 +60,24 @@ function decodeFeedCursor(cursor?: string): FeedCursorPosition | null {
   }
 }
 
-function toCard(row: PublicFeedRow): FeedCard {
+/**
+ * The card's image (EARS-10): an own card stores the 012 media key
+ * (`image_ref`), signed fresh at every read like the material cover — a
+ * signed URL is short-lived, so it is never stored; a network card stores its
+ * source platform's absolute URL (`image_url`), passed through unchanged.
+ */
+async function feedCardImage(
+  row: PublicFeedRow,
+  storage: ObjectStorage,
+): Promise<FeedCard["image"]> {
+  if (row.imageRef) return { url: await storage.urlFor(row.imageRef) };
+  return row.imageUrl ? { url: row.imageUrl } : null;
+}
+
+export async function toFeedCard(
+  row: PublicFeedRow,
+  storage: ObjectStorage,
+): Promise<FeedCard> {
   const name =
     row.sourceName ??
     expertShortName({
@@ -79,7 +96,7 @@ function toCard(row: PublicFeedRow): FeedCard {
     kind: row.kind,
     title: row.title,
     publishedAt: row.publishedAt.toISOString(),
-    image: row.imageUrl ? { url: row.imageUrl } : null,
+    image: await feedCardImage(row, storage),
     source: { platform: row.sourcePlatform, name },
     partner: row.partnerTitle ? { name: row.partnerTitle } : null,
     href: row.href,
@@ -103,7 +120,7 @@ export class MaterialsPublicReadsService {
     const page = rows.slice(0, query.limit);
     const last = page.at(-1);
     return {
-      data: page.map(toCard),
+      data: await Promise.all(page.map((row) => toFeedCard(row, this.storage))),
       nextCursor:
         rows.length > query.limit && last ? encodeFeedCursor(last) : null,
     };

@@ -68,6 +68,7 @@ export function publicFeedPageQuery(
       id: feedEntries.id,
       kind: feedEntries.kind,
       title: feedEntries.title,
+      imageRef: feedEntries.imageRef,
       imageUrl: feedEntries.imageUrl,
       sourcePlatform: feedEntries.sourcePlatform,
       sourceName: feedEntries.sourceName,

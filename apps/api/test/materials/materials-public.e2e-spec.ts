@@ -129,7 +129,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         return { id, slug, entryId: null };
       }
       const entry = await pool.query<{ id: string }>(
-        `INSERT INTO feed_entries (source_platform, source_ref, material_id, kind, title, image_url,
+        `INSERT INTO feed_entries (source_platform, source_ref, material_id, kind, title, image_ref,
                                    source_name, author_expert_id, partner_organisation_id, href, published_at)
          VALUES ('academy', $1::text, $1::text::uuid, $2::feed_entry_kind, $3, $4, $5, $6, $7, $8, $9::timestamptz)
          RETURNING id`,
@@ -137,7 +137,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
           id,
           kind,
           `Материал ${slug}`,
-          seed.coverRef ? `https://cdn.example/${seed.coverRef}` : null,
+          seed.coverRef ?? null,
           kind === "news" ? "Академия" : null,
           kind === "column" ? (seed.expertId ?? null) : null,
           seed.partnerId ?? null,
@@ -371,8 +371,20 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
       expect(await card(news.entryId!)).toMatchObject({
         title: `Материал ${news.slug}`,
-        image: { url: "https://cdn.example/cover-a.webp" },
+        image: { url: await storage.urlFor("cover-a.webp") },
       });
+    });
+
+    it("048 EARS-10: an own card's image is the entry's media key signed at the read — never the stored key", async () => {
+      const news = await material({
+        publishedAt: at(510),
+        coverRef: "materials/covers/card-key.webp",
+      });
+      const got = (await card(news.entryId!)) as
+        { image: { url: string } | null } | undefined;
+      const url = got?.image?.url;
+      expect(url).toBe(await storage.urlFor("materials/covers/card-key.webp"));
+      expect(url).not.toBe("materials/covers/card-key.webp");
     });
 
     // ── V-4: the partner (EARS-19) ───────────────────────────────────────

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   handoffCommandWithoutReference,
   hostCommand,
+  isAuthCommandPath,
   isSignInHostForm, signInHostApiPath } from "./sign-in-host-api.js";
 
 describe("signInHostApiPath", () => {
@@ -83,5 +84,16 @@ describe("handoffCommandWithoutReference", () => {
     null,
   ])("refuses a body that names the reference or is no form post %#", (body) => {
     expect(handoffCommandWithoutReference(body, "ref-1")).toBe(false);
+  });
+});
+
+describe("isAuthCommandPath", () => {
+  it("EARS-10: records the storefront sign-out the account «Выйти» posts (#3588)", () => {
+    expect(isAuthCommandPath("/auth/sign-out")).toBe(true);
+    expect(isAuthCommandPath("/v1/auth/logout")).toBe(true);
+    expect(isAuthCommandPath("/v1/sign-in-host/register")).toBe(true);
+    expect(isAuthCommandPath("/auth/sign-out/extra")).toBe(false);
+    expect(isAuthCommandPath("/auth/callback")).toBe(false);
+    expect(isAuthCommandPath("/v1/storefront/consents")).toBe(false);
   });
 });

@@ -12,7 +12,10 @@ import {
 
 import { installCaptchaStub } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
-import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
+import {
+  clearsCookie,
+  STOREFRONT_SIGN_OUT_PATH,
+} from "../lib/storefront-sign-out.js";
 import { goldenDoctorPassword } from "../lib/golden.js";
 import {
   captureAddressedMailCheckpoint,
@@ -387,11 +390,11 @@ Then(
   async ({ page }) => {
     const response = logoutResponses.get(page);
     expect(response, "logout response was captured").toBeDefined();
-    const setCookie = await response!.headerValue("set-cookie");
-    expect(setCookie, "BFF sends an expired session cookie").toContain(
-      `${SESSION_COOKIE}=`,
-    );
-    expect(setCookie).toMatch(/(?:^|;)\s*Max-Age=0(?:;|$)/i);
+    const setCookie = await response!.headerValues("set-cookie");
+    expect(
+      clearsCookie(setCookie, SESSION_COOKIE),
+      "the storefront sign-out relays the expired session cookie",
+    ).toBe(true);
     expect(
       (await page.context().cookies()).some(
         (cookie) => cookie.name === SESSION_COOKIE,

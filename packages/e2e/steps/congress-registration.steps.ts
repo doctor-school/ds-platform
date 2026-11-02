@@ -18,7 +18,10 @@ import {
   captureResponse,
   type CapturedResponse,
 } from "../lib/captured-response.js";
-import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
+import {
+  clearsCookie,
+  STOREFRONT_SIGN_OUT_PATH,
+} from "../lib/storefront-sign-out.js";
 import {
   captureAddressedMailCheckpoint,
   fetchRecoveryMail,
@@ -608,10 +611,9 @@ Then(
       loggedOut.response.status(),
       "ordinary explicit congress-account logout",
     ).toBe(200);
-    const cleared = (await loggedOut.response.headerValue("set-cookie")) ?? "";
+    const cleared = await loggedOut.response.headerValues("set-cookie");
     expect(
-      cleared.includes(`${SESSION}=`) &&
-        /(?:^|;)\s*Max-Age=0(?:;|$)/i.test(cleared),
+      clearsCookie(cleared, SESSION),
       "logout expires code session",
     ).toBe(true);
     await state.page.waitForURL(

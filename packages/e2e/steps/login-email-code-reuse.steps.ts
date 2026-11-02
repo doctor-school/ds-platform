@@ -9,7 +9,10 @@ import {
 } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
-import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
+import {
+  clearsCookie,
+  STOREFRONT_SIGN_OUT_PATH,
+} from "../lib/storefront-sign-out.js";
 import {
   captureAddressedMailCheckpoint,
   fetchRecoveryCode,
@@ -172,13 +175,9 @@ Given(
       logout.response.status(),
       "ordinary account sign-out succeeded",
     ).toBe(200);
-    const cleared = (await logout.response.headerValue("set-cookie")) ?? "";
+    const cleared = await logout.response.headerValues("set-cookie");
     expect(
-      cleared.includes(`${SESSION}=`),
-      "sign-out clears private session cookie",
-    ).toBe(true);
-    expect(
-      /(?:^|;)\s*Max-Age=0(?:;|$)/i.test(cleared),
+      clearsCookie(cleared, SESSION),
       "sign-out expires private session cookie",
     ).toBe(true);
     await owned.waitForURL(

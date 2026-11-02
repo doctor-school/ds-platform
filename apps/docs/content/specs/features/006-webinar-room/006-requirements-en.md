@@ -4,6 +4,7 @@ description: "Requirements: the server-side-gated webinar room in the portal app
 slug: 006-webinar-room
 status: Shipped
 surface: user-facing
+storefronts: both
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471
 issues:

@@ -5,6 +5,8 @@ slug: 048-materials-feed
 status: Draft
 issues: [3511, 3512, 3513, 3514, 3516, 3517]
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "The materials rail on the Academy home and the reading pages on academy.doctor.school; the spec decides that the doctor storefront shows nothing of the feed."
 tracker: https://github.com/doctor-school/ds-platform/issues/3403
 prior_decisions:
   - "ADR-0016 §4 — проект — единственный контейнер; привязка материала к проекту — поздний срез 030 «Закулисье», не срез 1 фичи 048"

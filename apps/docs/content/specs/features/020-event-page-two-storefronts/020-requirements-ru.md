@@ -4,6 +4,7 @@ description: "Требования к `#d-event` / `#a-event` — одной с�
 slug: 020-event-page-two-storefronts-ru
 status: In dev
 surface: user-facing
+storefronts: both
 tracker: https://github.com/doctor-school/ds-platform/milestone/17
 issues:
   [

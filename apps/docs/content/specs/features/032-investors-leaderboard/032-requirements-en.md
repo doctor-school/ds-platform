@@ -5,6 +5,8 @@ slug: 032-organization-registry
 status: In dev
 issues: [3492, 3493, 3494, 3495, 3496]
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "The Academy is the registry's only storefront consumer (the home partner count); the doctor storefront shows no leaderboard and no organisation cabinet (REQ-51) and reads no organisation data in this slice."
 tracker: https://github.com/doctor-school/ds-platform/issues/1823
 prior_decisions:
   - "ADR-0016 §2 — the organisation is a first-class entity; its kinds are an open, extensible set, starting with investor, clinical base and licensee / educational organisation; one organisation may hold several kinds; «employer» is not a kind"

@@ -4,6 +4,8 @@ description: "Требования к экрану возвращения вра
 slug: 018-specialty-feed-ru
 status: Draft
 surface: user-facing
+storefronts: doctor-only
+storefronts_reason: "The doctor audience's specialty-targeted return screen; the spec keeps Academy content and projects out of it (EARS-5, EARS-14), and the Academy, which serves the expert audience, specifies no specialty feed."
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
 issues:
   [

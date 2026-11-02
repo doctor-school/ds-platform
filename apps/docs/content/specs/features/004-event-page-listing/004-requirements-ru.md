@@ -4,6 +4,7 @@ description: "Требования: публично читаемая стран
 slug: 004-event-page-listing-ru
 status: In dev
 surface: user-facing
+storefronts: both
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471
 issues:

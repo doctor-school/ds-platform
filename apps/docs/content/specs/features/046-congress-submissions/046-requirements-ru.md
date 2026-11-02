@@ -5,6 +5,8 @@ slug: 046-congress-submissions
 status: Shipped
 issues: [2379, 2385, 2432, 2433, 2434, 2435, 2437, 2439, 2557, 2675]
 surface: user-facing
+storefronts: doctor-only
+storefronts_reason: "The congress submissions cabinet is a doctor-audience section of the doctor storefront account (/account/congress); the Academy has no congress cabinet."
 tracker: https://github.com/doctor-school/ds-platform/issues/2379
 prior_decisions:
   - "ADR-0006 §4 — плоская нумерация EARS, состав триплета"

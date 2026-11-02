@@ -4,6 +4,7 @@ description: "Требования к retained-таксономии, опцио�
 slug: 012-content-taxonomy-ru
 status: In dev
 surface: user-facing
+storefronts: both
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1280
 issues:

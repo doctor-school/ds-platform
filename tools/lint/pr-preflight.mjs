@@ -159,6 +159,9 @@ export const STATIC_GUARDS = [
   { name: "action-pin", file: "action-pin-lint.ts" },
   { name: "retained-data", file: "retained-data-lint.ts" },
   { name: "host-allowlist", file: "host-allowlist-lint.ts" },
+  // Storefronts scope (#3604): every user-facing spec declares
+  // `storefronts:` and a reason for any single-host value — BLOCK.
+  { name: "storefronts", file: "storefronts-lint.ts" },
   { name: "route-mount", file: "route-mount-lint.ts" },
   // Vendored-canvas provenance (#2389): every design-source/**/*.dc.html
   // matches its design-source/manifest.json sha256 — BLOCK.

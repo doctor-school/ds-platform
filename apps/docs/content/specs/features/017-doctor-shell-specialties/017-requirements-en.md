@@ -4,6 +4,8 @@ description: "Requirements for the doctor storefront shell (header by sign-in st
 slug: 017-doctor-shell-specialties
 status: In dev
 surface: user-facing
+storefronts: doctor-only
+storefronts_reason: "The doctor storefront shell and home only; the Academy shell is feature 008 and the Academy home feature 013 (rebuilt under #1799). The nearest-events home block is re-scoped to one shared block for both homes under #1485 (paused), within the one-code epic #2020."
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
 issues:
   [

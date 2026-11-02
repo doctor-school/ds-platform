@@ -5,6 +5,8 @@ slug: 045-education-index-demo
 status: In dev
 issues: [2360]
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "Two temporary demo pages on academy.doctor.school with fictional data, deleted once features 032 and 035 ship; the doctor storefront has no investor or partner-cabinet surface."
 tracker: https://github.com/doctor-school/ds-platform/milestone/25
 prior_decisions:
   - "ADR-0006 §4 — плоская нумерация EARS, макет триплета"

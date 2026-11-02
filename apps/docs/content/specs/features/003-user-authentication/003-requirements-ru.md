@@ -4,6 +4,7 @@ description: "Требования: самостоятельная веб-аут
 slug: 003-user-authentication
 status: In dev
 surface: user-facing
+storefronts: both
 tracker: https://github.com/doctor-school/ds-platform/milestone/3
 parent_issue: https://github.com/doctor-school/ds-platform/issues/80
 issues:

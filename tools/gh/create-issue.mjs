@@ -432,6 +432,48 @@ export function reuseFieldError(args, body) {
 }
 
 /**
+ * The `Storefronts:` field of the Issue body (`.github/ISSUE_TEMPLATE/*.md`):
+ * `both`, or `academy-only` / `doctor-only` / `none` followed by `: <reason>`.
+ * Same bold/list tolerance as `REUSE_FIELD_RE`.
+ */
+const STOREFRONTS_FIELD_RE =
+  /^[ \t>*-]*(?:\*\*)?storefronts(?:\*\*)?[ \t]*:[ \t]*(?:\*\*)?[ \t]*(?:(both)\b[ \t\r]*$|(academy-only|doctor-only|none)[ \t]*:[ \t]*(.*\S)[ \t\r]*$)/gim;
+const STOREFRONTS_PLACEHOLDER_RE = /^(?:n\/?a|tbd|todo|none|-+|\?+|<[^>]*>)$/i;
+
+/**
+ * Validate the storefronts scope answer (#3604): the two storefronts — the
+ * Academy (`apps/portal`) and the doctor storefront (`apps/doctor`) — run on one
+ * schema and one database, and work kept diverging because an Issue was
+ * written for ONE host without saying what the other does. `Reuse:` answers
+ * «which code»; this answers «which storefronts». The Issue follows its spec's
+ * frontmatter `storefronts:` (enforced on specs by `pnpm lint:storefronts`);
+ * a single-host child under a `both` spec names its sibling Issue for the
+ * other storefront or the reason there is none. Epics are exempt like `Reuse:`.
+ * @param {string[]} args  the gh passthrough
+ * @param {string} body    the resolved Issue body
+ * @returns {string|null}
+ */
+export function storefrontsFieldError(args, body) {
+  const found = collectTrackLabels(args);
+  if (!found.some((l) => TRACK_LABELS.includes(l))) return null;
+  if (isEpicTitle(titleValue(args))) return null;
+  for (const m of (body ?? "").matchAll(STOREFRONTS_FIELD_RE)) {
+    if (m[1]) return null;
+    if (m[3] && !STOREFRONTS_PLACEHOLDER_RE.test(m[3].trim())) return null;
+  }
+  return (
+    `every Issue (${found.join(" / ")}) must say which storefronts it covers in its body ` +
+    `before it is opened (AGENTS.md §6, #3604). Add ONE line, one of:\n` +
+    `    Storefronts: both\n` +
+    `    Storefronts: academy-only: <why the doctor storefront is out — its sibling Issue #N, or why none>\n` +
+    `    Storefronts: doctor-only: <why the Academy is out — its sibling Issue #N, or why none>\n` +
+    `    Storefronts: none: <why no storefront page — admin / staff / sign-in host / tooling>\n` +
+    `  A spec-bound Issue follows its spec's \`storefronts:\` frontmatter ` +
+    `(apps/docs/content/specs/features/NNN-<slug>/NNN-requirements*.md).`
+  );
+}
+
+/**
  * Detect a milestone flag (`--milestone` / `--milestone=` / `-m`) in the gh
  * passthrough (#1137). Every new Issue is homed under its track release
  * milestone; «Platform ops & hardening» is the standing fallback.
@@ -771,6 +813,8 @@ function main() {
         `  track (a release or «· Позже»); only track:platform may use the fallback «${FALLBACK_MILESTONE}».\n` +
         "  Every tracked Issue (#1821, ADR-0013 §A1) additionally needs a body `Reuse:` line —\n" +
         "  `canon: <path>` | `extract-from: <path> (#N)` | `new: <reason>`; check the capability-ownership registry first.\n" +
+        "  It also needs a body `Storefronts:` line (#3604) — `both` | `academy-only: <reason>` |\n" +
+        "  `doctor-only: <reason>` | `none: <reason>`; a spec-bound Issue follows its spec's `storefronts:` frontmatter.\n" +
         "  Issue Type is auto-derived from the kind label; assignee defaults to @me (both overridable via --type/--assignee).\n" +
         `  The \`${ROADMAP_LABEL}\` label (#1806, spec §3.4) — the ONE attribute the board's Roadmap view filters on —\n` +
         "  is added automatically to a feature Issue or a release gate and REJECTED on any other level; never pass it by hand.\n",
@@ -805,6 +849,13 @@ function main() {
   //     names what it reuses in the body's `Reuse:` field before it is opened.
   const reuseError = reuseFieldError(passthrough, bodyText(passthrough));
   if (reuseError) die(reuseError);
+  //   • the storefronts scope answer (#3604): every tracked (non-epic) Issue
+  //     says which storefronts it covers in the body's `Storefronts:` field.
+  const storefrontsError = storefrontsFieldError(
+    passthrough,
+    bodyText(passthrough),
+  );
+  if (storefrontsError) die(storefrontsError);
   //   • roadmap taxonomy (#1729, spec §7.1): EARS tasks need a parent, epics
   //     reject a milestone, everything else still needs one (a --parent'ed
   //     sub-issue inherits it, resolved below).

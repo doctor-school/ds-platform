@@ -76,6 +76,33 @@ describe("storefronts-lint", () => {
     expect(stderr).toContain("207-requirements-ru.md");
   });
 
+  it("3604: red — a requirements file without `surface:` fails closed → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-no-surface"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("208-requirements.md");
+    expect(stderr).toContain("no `surface:`");
+  });
+
+  it("3604: red — a `surface:` value outside the two forms (typo) fails closed → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-bad-surface"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("`surface: user facing`");
+    expect(stderr).toContain("backend-only | user-facing");
+  });
+
+  it("3604: red — a YAML block-scalar reason is refused → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-block-scalar"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("210-requirements.md");
+    expect(stderr).toContain("block scalar");
+  });
+
   it("3604: red — `both` with a reason is a contradiction → exit 1", () => {
     const { code, stderr } = runGuard(GUARD, dir("red-both-with-reason"), {
       env: TREE_ONLY,

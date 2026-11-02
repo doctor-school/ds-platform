@@ -23,6 +23,10 @@
  *   - for `both`, NO `storefronts_reason:` (a reason there is a contradiction).
  * The `-en` and `-ru` halves SHALL carry identical values. A folder with no
  * requirements file, and a `surface: backend-only` spec, are not targets.
+ * Targeting fails closed: every requirements file SHALL declare
+ * `surface: backend-only | user-facing` (skill author-ears-spec) — a missing
+ * or misspelt `surface:` is a finding, never a silent skip. A reason is one
+ * YAML line; a block scalar (`|` / `>`) is refused rather than half-read.
  *
  * Pure tree scan — no PR context; exits 0 cleanly anywhere the tree is clean.
  * Seam: `LINT_FIXTURE_ROOT` (spec tree). Run: `pnpm lint:storefronts`.
@@ -40,6 +44,8 @@ const FEATURES_REL = "apps/docs/content/specs/features";
 
 const VALUES = ["both", "academy-only", "doctor-only", "none"] as const;
 const FORMS = VALUES.join(" | ");
+const SURFACES = ["backend-only", "user-facing"] as const;
+const BLOCK_SCALAR_RE = /^[|>][+-]?\d*$/;
 const PLACEHOLDER_RE = /^(?:n\/?a|tbd|todo|none|-+|\?+|<[^>]*>)$/i;
 
 interface Declared {
@@ -103,6 +109,10 @@ function checkOne(rel: string, d: Declared): string[] {
     out.push(
       `${rel}: \`storefronts: ${d.storefronts}\` needs \`storefronts_reason:\` — say what the other storefront does instead (which spec covers it, or which open Issue re-scopes it).`,
     );
+  } else if (BLOCK_SCALAR_RE.test(d.reason)) {
+    out.push(
+      `${rel}: \`storefronts_reason: ${d.reason}\` is a YAML block scalar — write the reason as one quoted line.`,
+    );
   } else if (PLACEHOLDER_RE.test(d.reason)) {
     out.push(
       `${rel}: \`storefronts_reason: ${d.reason}\` is a placeholder — write the real reason.`,
@@ -136,6 +146,21 @@ function main(): void {
       rel: `${FEATURES_REL}/${folder}/${f}`,
       d: readDeclared(join(featuresDir, folder, f)),
     }));
+    let surfaceBad = false;
+    for (const { rel, d } of declared) {
+      if (d.surface === null || d.surface === "") {
+        surfaceBad = true;
+        failures.push(
+          `${rel}: no \`surface:\` — every requirements file declares \`surface: ${SURFACES.join(" | ")}\` (skill author-ears-spec).`,
+        );
+      } else if (!(SURFACES as readonly string[]).includes(d.surface)) {
+        surfaceBad = true;
+        failures.push(
+          `${rel}: \`surface: ${d.surface}\` is not one of \`${SURFACES.join(" | ")}\`.`,
+        );
+      }
+    }
+    if (surfaceBad) continue;
     if (!declared.some(({ d }) => d.surface === "user-facing")) continue;
     targets += 1;
     for (const { rel, d } of declared) failures.push(...checkOne(rel, d));

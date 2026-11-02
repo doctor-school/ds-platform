@@ -6,7 +6,7 @@ status: In dev
 issues: [3492, 3493, 3494, 3495, 3496]
 surface: user-facing
 storefronts: academy-only
-storefronts_reason: "The Academy is the registry's only storefront consumer (the home partner count); the doctor storefront shows no leaderboard and no organisation cabinet (REQ-51) and reads no organisation data in this slice."
+storefronts_reason: "This slice specifies the Academy and admin surfaces of the one organisation registry; the doctor storefront reads the same registry for the doctor-registration partner attribution (021 EARS-8, tracked by the open #1544) and shows no leaderboard and no organisation cabinet (REQ-51)."
 tracker: https://github.com/doctor-school/ds-platform/issues/1823
 prior_decisions:
   - "ADR-0016 §2 — организация — самостоятельная сущность; её виды — открытый расширяемый набор, стартовые — инвестор, клиническая площадка и лицензиат / образовательная организация; у одной организации может быть несколько видов; «работодатель» — не вид"

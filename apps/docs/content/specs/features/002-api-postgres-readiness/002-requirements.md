@@ -3,6 +3,7 @@ title: "002 — apps/api Postgres wiring + GET /v1/ready"
 description: "Requirements: wire apps/api to Postgres via Drizzle, graduate packages/db from stub, ship first migration (pgvector + idempotency_keys), expose GET /v1/ready with Postgres + pgvector probes and a cached object-storage probe."
 slug: 002-api-postgres-readiness
 status: Shipped
+surface: backend-only
 tracker: https://github.com/doctor-school/ds-platform/milestone/2
 parent_issue: https://github.com/doctor-school/ds-platform/issues/29
 prior_decisions:

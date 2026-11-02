@@ -5,7 +5,7 @@ slug: 008-portal-shell
 status: In dev
 surface: user-facing
 storefronts: academy-only
-storefronts_reason: "The Academy (apps/portal) shell and front door only; the doctor storefront shell is specified by feature 017 from the same ds-shell canvas, and moving the shell into one shared core is tracked under the one-code epic #2020."
+storefronts_reason: "The Academy (apps/portal) mount of the shared storefront-shell package (packages/storefront-shell, landed by #2180) with its host: academy config; the doctor storefront mounts the same package with host: doctor under feature 017."
 tracker: "https://github.com/doctor-school/ds-platform/milestone/9"
 issues: [982, 983]
 prior_decisions:

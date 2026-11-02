@@ -17,10 +17,12 @@ import {
  * leave the block rendering the read it answers.
  *
  * With `HOME_EVENTS_EVIDENCE_DIR` set, each state is also captured there (the
- * PR's ui-parity evidence); the assertions run either way.
+ * PR's ui-parity evidence) in the theme `HOME_EVENTS_THEME` names (`light` by
+ * default); the assertions run either way.
  */
 const API = `http://127.0.0.1:${process.env.DOCTOR_EVENTS_FAKE_API_PORT ?? 3214}`;
 const EVIDENCE = process.env.HOME_EVENTS_EVIDENCE_DIR;
+const THEME = process.env.HOME_EVENTS_THEME === "dark" ? "dark" : "light";
 
 async function feedControl(
   request: APIRequestContext,
@@ -46,7 +48,10 @@ async function rememberSpecialty(context: BrowserContext) {
 async function capture(page: Page, name: string) {
   if (!EVIDENCE) return;
   await block(page).scrollIntoViewIfNeeded();
-  await page.screenshot({ path: `${EVIDENCE}/${name}.png`, fullPage: true });
+  await page.screenshot({
+    path: `${EVIDENCE}/${name}-${THEME}.png`,
+    fullPage: true,
+  });
 }
 
 function block(page: Page) {
@@ -61,6 +66,13 @@ async function expectRestUsable(page: Page) {
   await expect(field).toHaveValue("Кардио");
   await field.fill("");
 }
+
+test.beforeEach(async ({ page }) => {
+  // The FOUC guard reads the stored theme before paint.
+  await page.addInitScript((value) => {
+    window.localStorage.setItem("ds-theme", value);
+  }, THEME);
+});
 
 test.afterEach(async ({ request }) => {
   await feedControl(request, {});

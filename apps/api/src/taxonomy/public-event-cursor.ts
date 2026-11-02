@@ -1,4 +1,4 @@
-import { sql, type SQL } from "drizzle-orm";
+import { type AnyColumn, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { type Event, events } from "@ds/db";
 
@@ -33,7 +33,16 @@ import { type Event, events } from "@ds/db";
  * so `Date.parse` still accepts it (it truncates the extra digits) while
  * Postgres reads it back at full precision.
  */
-export const eventCursorInstant = sql<string>`to_char(${events.startsAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+export const eventCursorInstant = exactCursorInstant(events.startsAt);
+
+/**
+ * The same microsecond-exact rendering for ANY `timestamptz` keyset column —
+ * 048's feed pages `(feed_entries.published_at, id)` (#3513) on this rule, so
+ * the exactness requirement above has one implementation.
+ */
+export function exactCursorInstant(column: AnyColumn): SQL<string> {
+  return sql<string>`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+}
 
 /** An event row plus the exact cursor token of its position in the order tuple. */
 export type PublicEventRow = Event & {
@@ -64,9 +73,25 @@ export function beforeEventCursor(before: {
   startsAt: string;
   id: string;
 }): SQL {
-  return sql`(${events.startsAt} < ${before.startsAt}::timestamptz
-    OR (${events.startsAt} = ${before.startsAt}::timestamptz
-        AND ${events.id} < ${before.id}::uuid))`;
+  return beforeKeysetCursor(events.startsAt, events.id, {
+    instant: before.startsAt,
+    id: before.id,
+  });
+}
+
+/**
+ * The descending keyset comparison of {@link beforeEventCursor} over any
+ * `(timestamptz, uuid)` order tuple — 048's newest-first feed (#3513) pages on
+ * it, so the casting discipline cannot drift between the two reads.
+ */
+export function beforeKeysetCursor(
+  instantColumn: AnyColumn,
+  idColumn: AnyColumn,
+  before: { instant: string; id: string },
+): SQL {
+  return sql`(${instantColumn} < ${before.instant}::timestamptz
+    OR (${instantColumn} = ${before.instant}::timestamptz
+        AND ${idColumn} < ${before.id}::uuid))`;
 }
 
 /**
@@ -100,7 +125,7 @@ const EVENT_CURSOR_INSTANT =
  * True only for a string this API's encoder could have produced: the exact
  * grammar, and a date the calendar actually has.
  */
-function isEventCursorInstant(value: string): boolean {
+export function isEventCursorInstant(value: string): boolean {
   if (!EVENT_CURSOR_INSTANT.test(value)) return false;
   const instant = new Date(value);
   if (Number.isNaN(instant.getTime())) return false;

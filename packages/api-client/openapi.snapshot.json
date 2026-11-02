@@ -9847,6 +9847,39 @@
         "tags": ["ExpertProjectsPublic"]
       }
     },
+    "/v1/public/feed": {
+      "get": {
+        "operationId": "PublicFeedController_feed",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PublicFeed"]
+      }
+    },
+    "/v1/public/materials/{slug}": {
+      "get": {
+        "operationId": "PublicMaterialsController_material",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PublicMaterials"]
+      }
+    },
     "/v1/public/organisations/count": {
       "get": {
         "operationId": "OrganisationCountPublicController_count",

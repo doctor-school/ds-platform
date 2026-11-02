@@ -19,7 +19,10 @@ export interface FeedEntryWrite {
   materialId: string | null;
   kind: "news" | "column";
   title: string;
-  imageUrl: string | null;
+  /** The durable media key of the card image (an own material's cover). */
+  imageRef: string | null;
+  /** Never set by the `academy` source (CHECK `feed_entries_academy_image_is_ref`). */
+  imageUrl: null;
   sourceName: string | null;
   authorExpertId: string | null;
   partnerOrganisationId: string | null;

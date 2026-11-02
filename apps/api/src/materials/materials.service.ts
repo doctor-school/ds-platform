@@ -263,7 +263,7 @@ export class MaterialsService {
         });
       }
       if (updated.status === "published") {
-        await this.feed.write(tx, updated, await this.coverUrlOf(updated));
+        await this.feed.write(tx, updated);
       }
       return this.complete(tx, input.lease, updated, 200);
     });
@@ -312,7 +312,7 @@ export class MaterialsService {
         },
       );
       if (!moved) throw new TaxonomyError("PRECONDITION_FAILED", STALE);
-      await this.feed.write(tx, moved, await this.coverUrlOf(moved));
+      await this.feed.write(tx, moved);
       return this.complete(tx, input.lease, moved, 200);
     });
   }

@@ -1,5 +1,5 @@
 import { Inject, Module, type OnModuleInit } from "@nestjs/common";
-import { materials } from "@ds/db";
+import { feedEntries, materials } from "@ds/db";
 import { MediaSlotRegistry } from "../taxonomy/index.js";
 import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
 import { FeedEntriesRepository } from "./feed-entries.repository.js";
@@ -35,11 +35,13 @@ export class MaterialsModule implements OnModuleInit {
   ) {}
 
   /**
-   * `materials.cover_ref` is a media slot of both 012 sweeps: registered before
-   * any cron runs (crons start after every `onModuleInit`), so neither the
-   * cleanup worker nor the upload reconciler ever deletes a live cover (#3572).
+   * `materials.cover_ref` and `feed_entries.image_ref` (the card's copy of the
+   * same cover key) are media slots of both 012 sweeps: registered before any
+   * cron runs (crons start after every `onModuleInit`), so neither the cleanup
+   * worker nor the upload reconciler ever deletes a cover a row still
+   * references (#3572).
    */
   onModuleInit(): void {
-    this.slots.register(materials.coverRef);
+    this.slots.register(materials.coverRef, feedEntries.imageRef);
   }
 }

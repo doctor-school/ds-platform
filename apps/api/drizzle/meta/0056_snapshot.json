@@ -4647,6 +4647,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "image_ref": {
+          "name": "image_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "image_url": {
           "name": "image_url",
           "type": "text",
@@ -4831,6 +4837,14 @@
         "feed_entries_academy_has_material": {
           "name": "feed_entries_academy_has_material",
           "value": "\"feed_entries\".\"source_platform\" <> 'academy' OR \"feed_entries\".\"material_id\" IS NOT NULL"
+        },
+        "feed_entries_one_image": {
+          "name": "feed_entries_one_image",
+          "value": "\"feed_entries\".\"image_ref\" IS NULL OR \"feed_entries\".\"image_url\" IS NULL"
+        },
+        "feed_entries_academy_image_is_ref": {
+          "name": "feed_entries_academy_image_is_ref",
+          "value": "\"feed_entries\".\"source_platform\" <> 'academy' OR \"feed_entries\".\"image_url\" IS NULL"
         }
       },
       "isRLSEnabled": false

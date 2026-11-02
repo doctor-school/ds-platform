@@ -9,7 +9,10 @@ import type { MaterialsTx } from "./materials.repository.js";
 // material, or an unpublish, so the card and its material never disagree.
 //
 // The card is denormalized on purpose (048-design §Data model): title, image,
-// source name and href are written here; what 012 and 032 own — the expert's
+// source name and href are written here. The image is the cover's durable 012
+// media key (`image_ref`), never a URL: object storage signs a short-lived GET
+// for a private bucket, so a stored URL would break once it expires — the
+// public read signs the key at read time. what 012 and 032 own — the expert's
 // name and status, the organisation's title, status and name rule — is only
 // referenced by id and judged at the read.
 
@@ -27,7 +30,6 @@ export class OwnMaterialsFeedSource {
   async write(
     tx: MaterialsTx,
     material: Material,
-    coverUrl: string | null,
   ): Promise<void> {
     if (material.status !== "published" || !material.firstPublishedAt) {
       throw new Error("only a published material has a feed entry");
@@ -38,7 +40,8 @@ export class OwnMaterialsFeedSource {
       materialId: material.id,
       kind: material.kind,
       title: material.title,
-      imageUrl: coverUrl,
+      imageRef: material.coverRef,
+      imageUrl: null,
       sourceName: material.kind === "news" ? ACADEMY_SOURCE_NAME : null,
       authorExpertId: material.kind === "column" ? material.expertId : null,
       partnerOrganisationId: material.partnerOrganisationId,

@@ -220,6 +220,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         author_expert_id: string | null;
         partner_organisation_id: string | null;
         href: string;
+        image_ref: string | null;
+        image_url: string | null;
         published_at: Date;
       }>(
         "SELECT * FROM feed_entries WHERE source_platform = 'academy' AND source_ref = $1",
@@ -925,16 +927,76 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     it("048 EARS-1: when a published material's cover changes, the system shall rewrite the feed entry's image", async () => {
-      const { detail } = await createWithCover();
+      const { detail, ref } = await createWithCover();
       const published = json(await publish(detail)) as Detail & {
         coverUrl: string | null;
       };
+      // The card stores the durable media key, never the signed URL the
+      // detail projects: a presigned GET expires (048-design §Data model).
+      expect(published.coverUrl).toBe(await storage.urlFor(ref));
+      expect(published.coverUrl).not.toBe(ref);
       expect((await entries(detail.id))[0]).toMatchObject({
-        image_url: published.coverUrl,
+        image_ref: ref,
+        image_url: null,
       });
       const cleared = await patch(published, { mediaAction: "clear" });
       expect(cleared.statusCode, cleared.payload).toBe(200);
-      expect((await entries(detail.id))[0]).toMatchObject({ image_url: null });
+      expect((await entries(detail.id))[0]).toMatchObject({
+        image_ref: null,
+        image_url: null,
+      });
+    });
+
+    it("048 EARS-10: the feed entry shall hold at most one image reference, and an own-material card never an absolute URL", async () => {
+      const { detail, ref } = await createWithCover();
+      expect(json(await publish(detail))).toMatchObject({ status: "published" });
+      const violation = (sql: string, params: unknown[]) =>
+        pool.query(sql, params).then(
+          () => null,
+          (e: { code?: string; constraint?: string }) => ({
+            code: e.code,
+            constraint: e.constraint,
+          }),
+        );
+      // Both set: refused. Postgres checks constraints in name order, so an
+      // academy row trips the academy rule first; the at-most-one rule is the
+      // one that also binds a network row, and must exist alongside it.
+      expect(
+        await violation(
+          "UPDATE feed_entries SET image_url = $2 WHERE source_ref = $1",
+          [detail.id, "https://cdn.example.test/a.webp"],
+        ),
+      ).toMatchObject({ code: "23514" });
+      const { rows: checks } = await pool.query<{ conname: string }>(
+        `SELECT conname FROM pg_constraint
+          WHERE conrelid = 'feed_entries'::regclass AND contype = 'c'
+            AND conname IN ('feed_entries_one_image', 'feed_entries_academy_image_is_ref')
+          ORDER BY conname`,
+      );
+      expect(checks.map((c) => c.conname)).toEqual([
+        "feed_entries_academy_image_is_ref",
+        "feed_entries_one_image",
+      ]);
+      // An own-material card with an absolute URL instead of the key: refused.
+      expect(
+        await violation(
+          "UPDATE feed_entries SET image_ref = NULL, image_url = $2 WHERE source_ref = $1",
+          [detail.id, "https://cdn.example.test/a.webp"],
+        ),
+      ).toEqual({ code: "23514", constraint: "feed_entries_academy_image_is_ref" });
+      // Neither set: a card without a cover is allowed.
+      expect(
+        await violation(
+          "UPDATE feed_entries SET image_ref = NULL WHERE source_ref = $1",
+          [detail.id],
+        ),
+      ).toBeNull();
+      expect(
+        await violation(
+          "UPDATE feed_entries SET image_ref = $2 WHERE source_ref = $1",
+          [detail.id, ref],
+        ),
+      ).toBeNull();
     });
 
     it("048 EARS-1: when the cover is not a still image, rides a clear or uses the wrong part name, the system shall refuse it and change nothing", async () => {

@@ -143,6 +143,13 @@ export const feedEntries = pgTable(
     }),
     kind: feedEntryKind("kind").notNull(),
     title: text("title").notNull(),
+    /**
+     * The card image as a durable 012 media key (an own material's
+     * `cover_ref`), signed into a URL at the read — never a stored signed URL,
+     * which expires (048-design §Data model).
+     */
+    imageRef: text("image_ref"),
+    /** A network card's absolute image URL; always null on an `academy` card. */
     imageUrl: text("image_url"),
     /** «Академия» for a news item; null when the name comes from the author expert. */
     sourceName: text("source_name"),
@@ -187,6 +194,14 @@ export const feedEntries = pgTable(
     check(
       "feed_entries_academy_has_material",
       sql`${t.sourcePlatform} <> 'academy' OR ${t.materialId} IS NOT NULL`,
+    ),
+    check(
+      "feed_entries_one_image",
+      sql`${t.imageRef} IS NULL OR ${t.imageUrl} IS NULL`,
+    ),
+    check(
+      "feed_entries_academy_image_is_ref",
+      sql`${t.sourcePlatform} <> 'academy' OR ${t.imageUrl} IS NULL`,
     ),
   ],
 );

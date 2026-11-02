@@ -13,6 +13,7 @@ CREATE TABLE "feed_entries" (
 	"material_id" uuid,
 	"kind" "feed_entry_kind" NOT NULL,
 	"title" text NOT NULL,
+	"image_ref" text,
 	"image_url" text,
 	"source_name" text,
 	"author_expert_id" uuid,
@@ -23,7 +24,9 @@ CREATE TABLE "feed_entries" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "feed_entries_title_bounds" CHECK (char_length("feed_entries"."title") BETWEEN 1 AND 160),
 	CONSTRAINT "feed_entries_href_bounds" CHECK (char_length("feed_entries"."href") BETWEEN 1 AND 2048),
-	CONSTRAINT "feed_entries_academy_has_material" CHECK ("feed_entries"."source_platform" <> 'academy' OR "feed_entries"."material_id" IS NOT NULL)
+	CONSTRAINT "feed_entries_academy_has_material" CHECK ("feed_entries"."source_platform" <> 'academy' OR "feed_entries"."material_id" IS NOT NULL),
+	CONSTRAINT "feed_entries_one_image" CHECK ("feed_entries"."image_ref" IS NULL OR "feed_entries"."image_url" IS NULL),
+	CONSTRAINT "feed_entries_academy_image_is_ref" CHECK ("feed_entries"."source_platform" <> 'academy' OR "feed_entries"."image_url" IS NULL)
 );
 --> statement-breakpoint
 CREATE TABLE "materials" (

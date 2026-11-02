@@ -13,7 +13,9 @@ EARS-19); the public feed and material reads follow (#3513).
 - `feed_entries` — THE feed (Lead decision 8). `FeedEntriesRepository` is its
   only reader and writer; `OwnMaterialsFeedSource` writes an own material's card
   inside the transaction of its publish or published edit and removes it on
-  unpublish. No admin endpoint writes the table directly.
+  unpublish. No admin endpoint writes the table directly. The card image is
+  the cover's durable media key (`image_ref`, a registered media slot), signed
+  at the public read — never a stored signed URL, which expires.
 
 ## Properties worth stating
 

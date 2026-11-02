@@ -4,6 +4,8 @@ description: "Требования к полной публичной главн
 slug: 013-academy-home
 status: In dev
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "The Academy home at / only; the doctor storefront home is specified by feature 017. The Academy home is being rebuilt whole under #1799, which mounts the shared nearest-events block of #1485."
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1357
 issues: [1358, 1359, 1360, 1361, 1362, 1363, 1364, 1365, 1366, 1367, 1368]

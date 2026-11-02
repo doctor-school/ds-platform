@@ -5,6 +5,7 @@ slug: 028-legal-pages
 status: In dev
 issues: [1965, 1966, 1967, 1968, 1969, 1970]
 surface: user-facing
+storefronts: both
 tracker: https://github.com/doctor-school/ds-platform/milestone/17
 prior_decisions:
   - "ADR-0013 — канвасы `design-source/doctor-docs.dc.html` / `academy-docs.dc.html` — источник истины этапа A для обеих страниц"

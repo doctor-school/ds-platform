@@ -52,6 +52,8 @@ issues:
     3175,
   ]
 surface: user-facing
+storefronts: none
+storefronts_reason: "This feature's own screens are the apps/admin roster and registration desk; the intake form is hosted on the congress site and the code sign-in runs on the shared sign-in host of feature 003."
 tracker: https://github.com/doctor-school/ds-platform/milestone/19
 prior_decisions:
   - "ADR-0006 §4 — flat EARS numbering, triplet layout"

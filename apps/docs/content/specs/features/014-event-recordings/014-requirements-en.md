@@ -4,6 +4,7 @@ description: "Requirements for retained event_recordings with kinds edited and r
 slug: 014-event-recordings
 status: In dev
 surface: user-facing
+storefronts: both
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1336
 issues:

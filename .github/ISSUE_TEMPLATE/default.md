@@ -38,6 +38,16 @@ Reuse: <!-- exactly one of:
      closed without it). Answer key: apps/docs/content/specs/product/two-site-ia/capability-ownership.md
      — and grep apps/portal, apps/doctor, packages/ before writing `new:`. -->
 
+## Storefronts
+
+Storefronts: <!-- exactly one of:
+     both
+     academy-only: <why the doctor storefront is out — its sibling Issue #N, or why none>
+     doctor-only: <why the Academy is out — its sibling Issue #N, or why none>
+     none: <why no storefront page — admin / staff / sign-in host / tooling>
+     MANDATORY on every Issue (`pnpm issue:create` fails closed without it, #3604).
+     A spec-bound Issue follows its spec's `storefronts:` frontmatter. -->
+
 ## Acceptance criteria
 
 - [ ] <!-- observable, checkable -->

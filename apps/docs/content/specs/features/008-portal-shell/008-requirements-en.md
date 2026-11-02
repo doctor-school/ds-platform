@@ -4,6 +4,8 @@ description: "Requirements: the persistent portal app-shell header (logo→/, to
 slug: 008-portal-shell
 status: In dev
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "The Academy (apps/portal) mount of the shared storefront-shell package (packages/storefront-shell, landed by #2180) with its host: academy config; the doctor storefront mounts the same package with host: doctor under feature 017."
 tracker: "https://github.com/doctor-school/ds-platform/milestone/9"
 issues: [982, 983]
 prior_decisions:

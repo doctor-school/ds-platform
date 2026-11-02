@@ -4,6 +4,8 @@ description: "Requirements for `#d-register`, the doctor storefront's registrati
 slug: 021-doctor-registration
 status: In dev
 surface: user-facing
+storefronts: doctor-only
+storefronts_reason: "The registration route is a route of apps/doctor; one account and one sign-up serve both storefronts (REQ-95, ADR-0015 §4), so the Academy has no registration surface of its own."
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; Stage A precedes user-facing implementation; the vendored canvas is the composition source of truth)

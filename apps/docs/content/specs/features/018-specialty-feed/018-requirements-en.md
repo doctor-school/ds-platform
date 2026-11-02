@@ -4,6 +4,8 @@ description: "Requirements for the doctor's return screen on doctor.school: one 
 slug: 018-specialty-feed
 status: Draft
 surface: user-facing
+storefronts: doctor-only
+storefronts_reason: "The doctor audience's specialty-targeted return screen; the spec keeps Academy content and projects out of it (EARS-5, EARS-14), and the Academy, which serves the expert audience, specifies no specialty feed. Its cross-front blocks are the shared content card unit (#1497, built under #3516) and the platform leaderboard (#1504)."
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
 issues:
   [

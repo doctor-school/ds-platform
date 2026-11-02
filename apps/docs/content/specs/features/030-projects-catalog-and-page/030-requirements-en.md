@@ -5,6 +5,8 @@ slug: 030-projects-catalog-and-page
 status: Draft
 issues: [3503, 3504, 3505, 3506, 3507, 3508]
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "Projects, their results and the catalog belong to the Academy (ADR-0016 §8); the doctor storefront serves no projects catalog or project page (EARS-19)."
 tracker: https://github.com/doctor-school/ds-platform/issues/1800
 prior_decisions:
   - "ADR-0016 §4 — the project is the single traceable container; a school, course, podcast, event or congress is its output, never a project kind"

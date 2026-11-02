@@ -4,6 +4,8 @@ description: "Requirements: the minimal operator/director tooling in the admin a
 slug: 007-event-admin-minimal
 status: Shipped
 surface: user-facing
+storefronts: none
+storefronts_reason: "Only the apps/admin operator and director tooling; the storefront event page and room it feeds are specified by features 004, 006 and 020."
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471
 issues: [587, 588, 589, 590, 591, 592, 593, 594, 595, 2913]

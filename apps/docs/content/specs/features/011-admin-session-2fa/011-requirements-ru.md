@@ -4,6 +4,8 @@ description: "Требования: пред-пилотный уровень а�
 slug: 011-admin-session-2fa
 status: In dev
 surface: user-facing
+storefronts: none
+storefronts_reason: "Only the apps/admin session tier and its mandatory second factor; no storefront page."
 tracker: https://github.com/doctor-school/ds-platform/milestone/11
 parent_issue: https://github.com/doctor-school/ds-platform/issues/718
 issues: [1189, 1190, 1191, 1192, 1193, 1194, 1195]

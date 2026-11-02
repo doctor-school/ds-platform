@@ -36,6 +36,7 @@ import {
   buildSubIssueLinkArgs,
   bodyText,
   reuseFieldError,
+  storefrontsFieldError,
   productTrackMilestoneError,
 } from "./create-issue.mjs";
 import { EARS_KIND_LABEL, ROADMAP_LABEL } from "./lib/roadmap-taxonomy.mjs";
@@ -184,6 +185,77 @@ test("reuseFieldError refuses a track:platform Issue without Reuse: and exempts 
   assert.equal(reuseFieldError(["--title", "x"], "no field"), null);
   assert.equal(
     reuseFieldError(["--label", "track:doctor", "--title", "epic: doctor storefront"], "no field"),
+    null,
+  );
+});
+
+// ── storefronts (#3604) ─────────────────────────────────────────────────────
+test("storefrontsFieldError requires a Storefronts: line on every track", () => {
+  for (const track of TRACK_LABELS) {
+    const args = ["--label", track, "--title", "[Витрина][019] events feed"];
+    assert.match(
+      storefrontsFieldError(args, "Reuse: new: x\n"),
+      /Storefronts: both/,
+    );
+    // Each sanctioned form satisfies it, bold or plain, list-marked or not.
+    assert.equal(storefrontsFieldError(args, "Storefronts: both\n"), null);
+    assert.equal(storefrontsFieldError(args, "**Storefronts:** both\n"), null);
+    assert.equal(
+      storefrontsFieldError(
+        args,
+        "- **Storefronts:** academy-only: projects are Academy entities (ADR-0016 §8)\n",
+      ),
+      null,
+    );
+    assert.equal(
+      storefrontsFieldError(
+        args,
+        "Storefronts: doctor-only: the Academy side is #1799\n",
+      ),
+      null,
+    );
+    assert.equal(
+      storefrontsFieldError(args, "Storefronts: none: CI guard, no page\n"),
+      null,
+    );
+    // A field with no value, an unknown form, or a single-host value without a reason is not an answer.
+    assert.match(
+      storefrontsFieldError(args, "Storefronts:\n"),
+      /Storefronts: both/,
+    );
+    assert.match(
+      storefrontsFieldError(args, "Storefronts: portal\n"),
+      /Storefronts: both/,
+    );
+    assert.match(
+      storefrontsFieldError(args, "Storefronts: doctor-only\n"),
+      /Storefronts: both/,
+    );
+    assert.match(
+      storefrontsFieldError(args, "Storefronts: doctor-only:\n"),
+      /Storefronts: both/,
+    );
+    assert.match(
+      storefrontsFieldError(args, "Storefronts: none: <reason>\n"),
+      /Storefronts: both/,
+    );
+    assert.match(
+      storefrontsFieldError(args, "Storefronts: academy-only: tbd\n"),
+      /Storefronts: both/,
+    );
+  }
+});
+
+test("storefrontsFieldError points at the spec field and exempts epics and untracked calls", () => {
+  const args = ["--label", "track:academy", "--title", "[Академия][013] home"];
+  assert.match(storefrontsFieldError(args, "no field"), /storefronts:/);
+  assert.match(storefrontsFieldError(args, "no field"), /requirements/);
+  assert.equal(storefrontsFieldError(["--title", "x"], "no field"), null);
+  assert.equal(
+    storefrontsFieldError(
+      ["--label", "track:doctor", "--title", "epic: doctor storefront"],
+      "no field",
+    ),
     null,
   );
 });

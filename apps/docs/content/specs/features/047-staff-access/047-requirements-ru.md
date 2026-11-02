@@ -5,6 +5,8 @@ slug: 047-staff-access
 status: Shipped
 issues: [2378, 2901, 2902]
 surface: user-facing
+storefronts: none
+storefronts_reason: "Only the apps/admin «Доступы» section; no storefront page."
 tracker: https://github.com/doctor-school/ds-platform/issues/2378
 prior_decisions:
   - "ADR-0001 §1 (гибридный RBAC: грубая роль в гранте IdP, привязка к мероприятию в данных платформы), §4 (TOTP для ролей сотрудников), §8 (IdP = Zitadel; публичная саморегистрация выключена, учётные записи сотрудников создаёт оператор)"

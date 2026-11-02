@@ -33,7 +33,7 @@ You are authoring the product layer for a DS Platform product epic/feature. This
    - Sections: Problem / Jobs-to-be-done / Cross-cutting information architecture (how the epic's surfaces compose into one LK) / Feature decomposition / Success metrics / **Prior art — source system** (the mined Bubble domain model + workflows; _reference, not a template_).
    - One brief per epic. It is **revisable throughout discovery** (ADR-0014 §3) — a changed decomposition re-flows into the feature PRDs.
 2. **Write each feature `NNN-product.md`** (co-located in `specs/features/NNN-<slug>/`):
-   - Frontmatter: `epic:` (back-link to the brief), `status: Draft`, **`surface:` (`backend-only` | `user-facing`)** — the same F-22 classification the EARS spec will carry.
+   - Frontmatter: `epic:` (back-link to the brief), `status: Draft`, **`surface:` (`backend-only` | `user-facing`)** — the same F-22 classification the EARS spec will carry — and for a `user-facing` feature **`storefronts:` (`both` | `academy-only` | `doctor-only` | `none`)** with a `storefronts_reason:` for any value but `both`: the stories answer «what does the other storefront do?» before the EARS spec inherits the value (#3604).
    - Sections: Feature summary / **User stories** (each with a stable `US-N` id) / Flows (happy + key branches) / **Product acceptance criteria** (outcome language — the draft the EARS clauses will formalize) / Out of scope / Open questions.
    - For a `user-facing` feature: an **approved-mockup reference** slot (filled by `author-design-mockup` at Stage A).
    - **Capability owner.** One capability — one package: its owner is the row in `apps/docs/content/specs/product/two-site-ia/capability-ownership.md`; a host adds only a route file + host-config fields (ADR-0013 §A1). A capability another host already ships is decomposed as that package's host projection, not as new stories.
@@ -53,4 +53,5 @@ You are authoring the product layer for a DS Platform product epic/feature. This
 - **A fat brief** (all stories in the epic doc) — depth lives in the feature PRD; the brief stays thin.
 - **Unstable `US-N` ids** (silent renumber on edit) — breaks `realizes:` backlinks; retire-and-add instead.
 - **`surface:` missing or inconsistent** with the feature's outcomes — the same F-22 control the EARS spec enforces.
+- **`storefronts:` missing, or a single-host value with no true reason** — a story set written for one storefront without saying what the other does (#3604).
 - **Reproducing the Bubble schema** as the data model — it is mined reference, designed fresh.

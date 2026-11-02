@@ -801,6 +801,15 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: pnpm lint:host-allowlist
 
+      # storefronts: every `surface: user-facing` feature-spec requirements file
+      # (both -en/-ru halves) declares `storefronts: both | academy-only |
+      # doctor-only | none`, and any value but `both` carries a real
+      # `storefronts_reason:` — so no spec is authored for one storefront without
+      # saying what the other one does (#3604). POSTURE: BLOCK, a plain step — a
+      # deterministic tree scan with no exception file.
+      - name: storefronts
+        run: pnpm lint:storefronts
+
       # route-mount: every apps/{portal,doctor}/app/**/{page,layout}.tsx must carry an
       # EXACT-path row in the checked-in answer key (capability-ownership.md → «Route-file
       # registry»), and a route whose row says `mounted` must BE a thin projection —

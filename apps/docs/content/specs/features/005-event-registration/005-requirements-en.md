@@ -4,6 +4,7 @@ description: "Requirements: registration for a webinar built on the shipped auth
 slug: 005-event-registration
 status: Shipped
 surface: user-facing
+storefronts: both
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471
 issues: [564, 565, 566, 567, 568, 569, 570, 571, 572, 573, 574, 2541, 2545]

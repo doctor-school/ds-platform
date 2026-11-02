@@ -4,6 +4,8 @@ description: "Требования к `#d-events` — собственной п�
 slug: 019-doctor-events-feed-ru
 status: In dev
 surface: user-facing
+storefronts: doctor-only
+storefronts_reason: "The doctor storefront's events surface; the Academy runs the same events-feed module at its Academy host value, specified by feature 004 (Amendment 2026-10-01, #2509)."
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
 issues:
   [

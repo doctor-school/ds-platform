@@ -252,7 +252,12 @@ Given(
     await createEvent(page, world, "online", title);
     await page.reload();
     await expect(page.getByTestId("event-audience")).toHaveValue("doctors");
-    await expect(page.locator("#event-project-combobox")).toContainText(title);
+    await page.getByTestId("tab-projects").click();
+    const projects = page.getByTestId("event-projects-panel");
+    await expect(projects.getByText(title, { exact: true })).toBeVisible();
+    await expect(
+      projects.locator('[data-testid^="event-project-row-"]'),
+    ).toHaveCount(1);
   },
 );
 When(

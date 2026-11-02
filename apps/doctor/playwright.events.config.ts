@@ -41,7 +41,7 @@ const DOUBLE_TOKEN = "storefront-double-token";
 export default defineConfig({
   testDir: "./e2e",
   testMatch:
-    /events-(feed|url-state|month-beside-feed|guest|live|mobile|page|purity)\.spec\.ts/,
+    /(events-(feed|url-state|month-beside-feed|guest|live|mobile|page|purity)|home-events)\.spec\.ts/,
   fullyParallel: false,
   // Files share one mutable upstream live scenario; do not race its controls.
   workers: 1,

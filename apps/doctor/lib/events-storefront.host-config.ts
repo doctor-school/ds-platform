@@ -1,5 +1,8 @@
 import { adaptDoctorEventsFeed } from "@ds/events-storefront/adapters";
-import type { EventsStorefrontHostConfig } from "@ds/events-storefront/host-config";
+import type {
+  EventsStorefrontHostConfig,
+  HomeEventsHostConfig,
+} from "@ds/events-storefront/host-config";
 import type { EventPageHostConfig } from "@ds/event-page/host-config";
 import type { RoomPageHostConfig } from "@ds/room-page/host-config";
 
@@ -42,6 +45,26 @@ export const DOCTOR_EVENTS_STOREFRONT = {
     accountEvents: "/account/events",
   },
 } satisfies EventsStorefrontHostConfig;
+
+/**
+ * The doctor home's nearest-events block (017 EARS-9, #1485) — the canvas
+ * `design-source/doctor-home.dc.html` «d-home · события»: its eyebrow, heading,
+ * «Все события →» right of the heading, three cards and the empty copy with its
+ * pointer into `/events`. DATA only; the block reads `DOCTOR_EVENTS_STOREFRONT`.
+ */
+export const DOCTOR_HOME_EVENTS = {
+  eyebrow: "События",
+  title: "Ближайшие события",
+  allLink: { label: "Все события →", placement: "head" },
+  cardCap: 3,
+  empty: {
+    title: "Пока ничего не запланировано по вашей специальности",
+    pointer: {
+      text: "Посмотрите события смежных областей — ",
+      linkLabel: "все события →",
+    },
+  },
+} satisfies HomeEventsHostConfig;
 
 /**
  * What the doctor storefront states about itself so the ONE event page

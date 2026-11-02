@@ -348,6 +348,14 @@ function liveBody(cookie) {
  */
 let feedFailing = false;
 let monthFailing = false;
+/**
+ * 017 EARS-9 (#1485) — the home nearest-events block's other renders: the same
+ * control may also empty the upcoming read (`"empty": true` — no matching
+ * event) or hold it (`"delayMs": N`) so a spec sees the block's skeletons while
+ * the rest of the home page is already usable.
+ */
+let feedEmpty = false;
+let feedDelayMs = 0;
 
 /**
  * 019 EARS-11 as amended 2026-10-05 (gate row 46) — the doctor's «Мои события»
@@ -402,11 +410,16 @@ const server = createServer((request, response) => {
     request.on("data", (chunk) => (body += chunk));
     request.on("end", () => {
       try {
-        feedFailing = JSON.parse(body || "{}").failing === true;
+        const control = JSON.parse(body || "{}");
+        feedFailing = control.failing === true;
+        feedEmpty = control.empty === true;
+        feedDelayMs = Number.isInteger(control.delayMs) ? control.delayMs : 0;
       } catch {
         feedFailing = false;
+        feedEmpty = false;
+        feedDelayMs = 0;
       }
-      json(response, 200, { failing: feedFailing });
+      json(response, 200, { failing: feedFailing, empty: feedEmpty, delayMs: feedDelayMs });
     });
     return undefined;
   }
@@ -497,6 +510,12 @@ const server = createServer((request, response) => {
   }
 
   if (url.pathname === "/v1/storefront/doctor/events") {
+    if (feedDelayMs > 0 && !request.heldOnce) {
+      // Answer the same request once the hold is over, through this handler.
+      request.heldOnce = true;
+      setTimeout(() => server.emit("request", request, response), feedDelayMs);
+      return undefined;
+    }
     if (feedFailing) return json(response, 500, { status: 500 });
     if (url.searchParams.get("tense") === "past") {
       // «Прошедшие» widens BACKWARD by a count step: `from` moves, `to` stays
@@ -547,7 +566,9 @@ const server = createServer((request, response) => {
     // (`feedWhere`).
     const matched = ALL_DAYS.map((group) => ({
       ...group,
-      items: group.items.filter((item) => matchesFacets(item, url)),
+      items: group.items.filter(
+        (item) => !feedEmpty && matchesFacets(item, url),
+      ),
     }));
     const from = url.searchParams.get("from") ?? DEFAULT_FROM;
     // Every matching event from `from` on, soonest first, with its day group.

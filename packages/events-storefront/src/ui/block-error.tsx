@@ -18,11 +18,15 @@ export function BlockError({
   description,
   testId,
   onRetry,
+  retryLabel = FEED_COPY.retry,
 }: {
   title: string;
-  description: string;
+  /** The line under the cause; a block whose canvas draws the cause alone states none. */
+  description?: string;
   testId: string;
   onRetry?: () => void;
+  /** The control's label — «Повторить» by default, «Обновить» on the home block (017 EARS-9). */
+  retryLabel?: string;
 }) {
   const boundary = useBlockRetry();
   const retry = onRetry ?? boundary?.retry;
@@ -42,7 +46,7 @@ export function BlockError({
       <EmptyState
         variant="error"
         title={title}
-        description={description}
+        {...(description ? { description } : {})}
         action={
           <Button
             variant="outline"
@@ -50,7 +54,7 @@ export function BlockError({
             aria-disabled={pending || undefined}
             onClick={pending ? undefined : retry}
           >
-            {FEED_COPY.retry}
+            {retryLabel}
           </Button>
         }
       />

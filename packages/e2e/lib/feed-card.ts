@@ -1,3 +1,4 @@
+import { waitForClientReady } from "./page-ready.js";
 import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
@@ -7,15 +8,13 @@ import { expect, type Locator, type Page } from "@playwright/test";
  * card's position depends on the seed instant (a slot's golden season is
  * relative to its own pin), so a spec never assumes it is on the first screen
  * (#3229). Returns the one `[data-webinar-card]` holding `link`. Every call
- * first waits for `load` + `networkidle`, so a second call on an already
- * settled page pays that wait again.
+ * first waits for the loaded, hydrated document ({@link waitForClientReady}).
  */
 export async function reachFeedCard(page: Page, link: Locator) {
   // Generic navigation stops at DOMContentLoaded. The server-rendered feed link
   // is already live then, before its client handler exists (archive trace #2253).
   // Match the shared sign-in helper's initial client-readiness wait before clicks.
-  await page.waitForLoadState("load");
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   // The loop reads the feed card, not the bare link: a signed-in viewer's
   // «Мои события» rail links the same event outside the feed (#3229).
   const card = page.locator("[data-webinar-card]", { has: link });

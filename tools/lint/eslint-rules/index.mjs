@@ -14,6 +14,7 @@ import glossaryCanonicalIds from "./glossary-canonical-ids.mjs";
 import packageImportBoundary from "./package-import-boundary.mjs";
 import hostConfigBoundary from "./host-config-boundary.mjs";
 import noPrimitiveStyleOverride from "./no-primitive-style-override.mjs";
+import noNetworkidleWait from "./no-networkidle-wait.mjs";
 
 /** @type {import('eslint').ESLint.Plugin} */
 const plugin = {
@@ -37,6 +38,8 @@ const plugin = {
     // (ADR-0013 §6): geometry/typography/colour/borders live in the DS
     // primitive, hosts pass variant/size/tone. BLOCK severity.
     "no-primitive-style-override": noPrimitiveStyleOverride,
+    // #3465 — e2e steps never wait for `networkidle` (SmartCaptcha beacon hang).
+    "no-networkidle-wait": noNetworkidleWait,
   },
 };
 

@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import {
   isSignInHostForm,
@@ -176,7 +177,7 @@ async function passwordSignIn(
   await page.goto(`${base}/login?method=password&returnTo=%2Faccount`, {
     waitUntil: "load",
   });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   await inputSecret(
     page.locator('input[autocomplete="username"]'),
     state.email,
@@ -279,7 +280,7 @@ Given(
       200,
     );
     await owner.waitForURL((url) => url.pathname === "/account");
-    await owner.waitForLoadState("networkidle");
+    await waitForClientReady(owner);
     await assertSecureSession(owner, verified.response, world.hostBaseUrl);
     await confirmOwnedPhone(owner, { phone: state.phone, sink });
     await sameOwner(owner, state);
@@ -308,7 +309,7 @@ When(
     await reset.goto(`${world.hostBaseUrl}/reset?returnTo=%2Faccount`, {
       waitUntil: "load",
     });
-    await reset.waitForLoadState("networkidle");
+    await waitForClientReady(reset);
     await inputSecret(
       reset.locator('input[autocomplete="username"]'),
       state.phone,
@@ -518,7 +519,7 @@ Then(
     const fresh = await privatePage(browser, state, world.hostBaseUrl);
     await passwordSignIn(fresh, state, world.hostBaseUrl, state.newPassword);
     await fresh.reload({ waitUntil: "load" });
-    await fresh.waitForLoadState("networkidle");
+    await waitForClientReady(fresh);
     await sameOwner(fresh, state);
     expect(
       state.resetPosts,

@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   hostCommand,
   isAuthCommandPath,
@@ -138,7 +139,7 @@ Given(
               acknowledgementMatches: true,
             });
             await visitor.page.waitForURL((url) => url.pathname === "/account");
-            await visitor.page.waitForLoadState("networkidle");
+            await waitForClientReady(visitor.page);
             await assertSecureSession(
               visitor.page,
               accepted.response,
@@ -195,7 +196,7 @@ Given(
           visitor.email,
           "/account",
         );
-        await visitor.page.waitForLoadState("networkidle");
+        await waitForClientReady(visitor.page);
         const card = visitor.page.getByTestId("verify-card");
         await expect(card).toBeVisible();
         expect(

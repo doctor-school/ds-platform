@@ -1,4 +1,5 @@
 ﻿import { golden, isGoldenUuid } from "@ds/db/seed/golden";
+import { waitForClientReady } from "../lib/page-ready.js";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 import { redirectsBesidesSilentCheck } from "../lib/silent-check.js";
@@ -449,8 +450,9 @@ Given(
     const event = await readEvent(request, candidate!.slug);
     remember(world, event);
     await page.goto(`${host.eventsPath}?tab=past`, {
-      waitUntil: "networkidle",
+      waitUntil: "load",
     });
+    await waitForClientReady(page);
     await expect(
       page
         .getByTestId("events-tense-tabs")

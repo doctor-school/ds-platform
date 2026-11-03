@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   AUTH_REQUEST_PARAM,
   isAuthCommandPath,
@@ -57,7 +58,7 @@ Given(
     const link = new URL(world.host.loginPath, world.hostBaseUrl);
     link.searchParams.set("returnTo", RETURN_TO);
     await page.goto(link.toString(), { waitUntil: "load" });
-    await page.waitForLoadState("networkidle");
+    await waitForClientReady(page);
     await expect(page.getByTestId("login-method-password")).toHaveAttribute(
       "aria-selected",
       "true",

@@ -1,3 +1,4 @@
+import { settleClientTurn, waitForClientReady } from "../lib/page-ready.js";
 import {
   expect,
   type Locator,
@@ -73,8 +74,7 @@ function params(page: Page): URLSearchParams {
 
 /** Server-rendered links are live before their client handlers (#2253). */
 async function settle(page: Page): Promise<void> {
-  await page.waitForLoadState("load");
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
 }
 
 async function openFeed(page: Page, path: string): Promise<void> {
@@ -1561,6 +1561,10 @@ async function retryBlock(
     const url = new URL(request.url());
     if (request.method() === "POST" && headers["next-action"] !== undefined) {
       seen.actions += 1;
+    } else if (headers["next-router-prefetch"] !== undefined) {
+      // A viewport link prefetch is neither a route refresh nor a reload; it
+      // may start any time after hydration, so it is not a page re-read.
+      return;
     } else if (
       request.resourceType() === "document" ||
       headers["rsc"] === "1" ||
@@ -1594,12 +1598,19 @@ async function retryBlock(
   };
   await page.route("**/*", onAction);
   try {
-    await page
+    const retryControl = page
       .getByTestId(FAILED_BLOCK[block])
-      .getByRole("button", { name: "Повторить", exact: true })
-      .click();
+      .getByRole("button", { name: "Повторить", exact: true });
+    await retryControl.click();
     await answered;
-    await settle(page);
+    // The block decodes the answer over several client tasks and only then
+    // puts it in place; its «Повторить» stays `aria-busy` until that commit.
+    // Anything the answer caused — a route refresh included — has been sent
+    // once the busy mark is gone; the next client turn reports it here.
+    await expect(
+      page.locator(`[data-testid="${FAILED_BLOCK[block]}"] [aria-busy="true"]`),
+    ).toHaveCount(0);
+    await settleClientTurn(page);
   } finally {
     await page.unroute("**/*", onAction);
     page.off("request", onRequest);

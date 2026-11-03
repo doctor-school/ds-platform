@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -116,7 +117,7 @@ Given(
       200,
     );
     await state.page.waitForURL((url) => url.pathname === "/account");
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertSecureSession(state.page, verified.response, world.hostBaseUrl);
     const before = await identity(state);
     const { subject, ...evidence } = before;

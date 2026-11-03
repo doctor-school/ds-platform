@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { randomUUID } from "node:crypto";
 
 import { golden } from "@ds/db/seed/golden";
@@ -98,8 +99,7 @@ function ownedAccount(id: HostId): OwnedCredentials {
 }
 
 async function settled(page: Page) {
-  await page.waitForLoadState("load");
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
 }
 
 /** Put a consent into the ticked state through its label (idempotent). */

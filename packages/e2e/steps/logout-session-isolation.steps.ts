@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
@@ -151,7 +152,7 @@ async function passwordLogin(state: IsolationJourney, owned: OwnedSession) {
   login.searchParams.set("method", "password");
   login.searchParams.set("returnTo", "/account");
   await owned.page.goto(login.toString(), { waitUntil: "load" });
-  await owned.page.waitForLoadState("networkidle");
+  await waitForClientReady(owned.page);
   expect(
     (await owned.context.cookies()).some((cookie) => cookie.name === SESSION),
     "independent login begins without a session cookie",
@@ -173,12 +174,15 @@ async function passwordLogin(state: IsolationJourney, owned: OwnedSession) {
   expect(
     {
       status: accepted.response.status(),
-      acknowledgement: storefrontCallbackAcknowledgement(accepted.body, state.base),
+      acknowledgement: storefrontCallbackAcknowledgement(
+        accepted.body,
+        state.base,
+      ),
     },
     "actual independent password login accepted",
   ).toEqual({ status: 200, acknowledgement: true });
   await owned.page.waitForURL((url) => url.pathname === "/account");
-  await owned.page.waitForLoadState("networkidle");
+  await waitForClientReady(owned.page);
   await assertSecureSession(owned.page, accepted.response, state.base);
   const cookie = (await owned.context.cookies()).find(
     (item) => item.name === SESSION,
@@ -306,7 +310,7 @@ Then(
     if (!second) throw new Error("Owned second session prerequisite missing");
     await privateOwner(state, second);
     await second.page.reload({ waitUntil: "load" });
-    await second.page.waitForLoadState("networkidle");
+    await waitForClientReady(second.page);
     await privateOwner(state, second);
     expect(
       await second.page

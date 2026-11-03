@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
@@ -192,7 +193,7 @@ Given(
     await owned.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
       waitUntil: "load",
     });
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await expect
       .poll(async () => (await observations(owned)).renders)
       .toBeGreaterThan(0);
@@ -309,7 +310,7 @@ Then(
       acknowledgement: true,
     });
     await state.page.waitForURL((url) => url.pathname === "/account");
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     expect(
       state.posts,
       "duplicate provider success did not replay the original action",

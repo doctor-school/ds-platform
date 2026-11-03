@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   hostCommand,
   isAuthCommandPath,
@@ -180,7 +181,7 @@ Given(
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
     await owned.goto(registrationUrl(world.hostBaseUrl), { waitUntil: "load" });
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     const email = owned.locator('input[autocomplete="email"]');
     await expect(email).toBeVisible();
     await expect(email).toHaveAttribute("type", "email");

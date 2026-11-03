@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   hostCommand,
   isAuthCommandPath,
@@ -126,7 +127,7 @@ async function passwordProbe(
   accepted: boolean,
 ): Promise<void> {
   await page.goto(`${base}/login?returnTo=%2Faccount`, { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   await inputSecret(
     page.locator('input[autocomplete="username"]'),
     state.email,
@@ -158,7 +159,7 @@ async function passwordProbe(
       (url) =>
         url.origin === new URL(base).origin && url.pathname === "/account",
     );
-    await page.waitForLoadState("networkidle");
+    await waitForClientReady(page);
     await assertSecureSession(
       page,
       submitted.response,
@@ -230,7 +231,7 @@ Given(
     await owned.goto(registrationUrl(world.hostBaseUrl, "/account"), {
       waitUntil: "load",
     });
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     const captchaToken =
       new URL(world.hostBaseUrl).protocol === "http:" &&
       process.env.BOT_PROTECTION_ENABLED === "false"
@@ -323,7 +324,7 @@ When(
     await owned.goto(registrationUrl(world.hostBaseUrl, "/account"), {
       waitUntil: "load",
     });
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await inputSecret(
       owned.locator('input[autocomplete="email"]'),
       state.email,
@@ -371,7 +372,7 @@ When(
     await owned.waitForURL(
       (url) => isSignInHostForm(url) && url.pathname === "/verify",
     );
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     expectEnteredThrough(owned, world.hostBaseUrl, {
       pathname: "/register",
       returnTo: "/account",
@@ -533,7 +534,7 @@ Then(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertSecureSession(
       state.page,
       state.accepted.response,
@@ -612,10 +613,9 @@ Then(
       "ordinary explicit congress-account logout",
     ).toBe(200);
     const cleared = await loggedOut.response.headerValues("set-cookie");
-    expect(
-      clearsCookie(cleared, SESSION),
-      "logout expires code session",
-    ).toBe(true);
+    expect(clearsCookie(cleared, SESSION), "logout expires code session").toBe(
+      true,
+    );
     await state.page.waitForURL(
       (url) =>
         url.origin === new URL(world.hostBaseUrl).origin &&

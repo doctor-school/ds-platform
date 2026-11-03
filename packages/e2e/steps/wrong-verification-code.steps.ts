@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -165,7 +166,7 @@ Given(
             ),
           ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
           await owned.waitForURL((url) => url.pathname === "/account");
-          await owned.waitForLoadState("networkidle");
+          await waitForClientReady(owned);
           await assertSecureSession(
             owned,
             accepted.response,
@@ -183,7 +184,7 @@ Given(
       // A fresh document drops held registration credentials: every class submits the same code-only contract.
       // #3172 — the code step is the sign-in host's /verify door.
       await openHostCodeStep(owned, world.hostBaseUrl, probe.email, "/account");
-      await owned.waitForLoadState("networkidle");
+      await waitForClientReady(owned);
       await expect(
         owned.locator('input[autocomplete="one-time-code"]'),
       ).toBeVisible();

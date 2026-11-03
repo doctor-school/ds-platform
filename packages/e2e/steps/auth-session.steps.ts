@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   isSignInHostForm,
   signInHostApiPath,
@@ -103,7 +104,7 @@ When(
     await page.goto(`${world.hostBaseUrl}${world.host.loginPath}`, {
       waitUntil: "load",
     });
-    await page.waitForLoadState("networkidle");
+    await waitForClientReady(page);
     await page.getByTestId("login-method-otp").click();
     await page.getByTestId("otp-channel-email").click();
     await submitDeliveredEmailCode(page, request, world);
@@ -119,7 +120,7 @@ Given(
     link.searchParams.set("method", "code");
     link.searchParams.set("returnTo", "/account");
     await page.goto(link.toString(), { waitUntil: "load" });
-    await page.waitForLoadState("networkidle");
+    await waitForClientReady(page);
   },
 );
 
@@ -282,7 +283,7 @@ When(
     await page.goto(`${world.hostBaseUrl}${world.host.loginPath}`, {
       waitUntil: "load",
     });
-    await page.waitForLoadState("networkidle");
+    await waitForClientReady(page);
     await page.locator('input[autocomplete="username"]').fill(doctor.email);
     await page
       .locator('input[autocomplete="current-password"]')

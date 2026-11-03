@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   isAuthCommandPath,
   isSignInHostForm,
@@ -234,7 +235,7 @@ Given(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await assertSecureSession(owned, accepted.response, world.hostBaseUrl);
     await privateIdentity(state);
     state.priorCookies = (await context.cookies())
@@ -287,7 +288,7 @@ When(
     await state.page.goto(registrationUrl(world.hostBaseUrl, "/account"), {
       waitUntil: "load",
     });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await inputSecret(
       state.page.locator('input[autocomplete="email"]'),
       state.typedEmail,
@@ -333,7 +334,7 @@ When(
     await state.page.waitForURL(
       (url) => isSignInHostForm(url) && url.pathname === "/verify",
     );
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     expect(
       new URL(state.page.url()).searchParams.get("email") === state.typedEmail,
       "code step preserves mixed-case submitted email",
@@ -439,7 +440,7 @@ Then(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertSecureSession(
       state.page,
       state.accepted,

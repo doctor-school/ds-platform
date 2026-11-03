@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { randomUUID } from "node:crypto";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
@@ -103,7 +104,7 @@ async function passwordAttempt(
   await state.page.goto(`${base}/login?returnTo=%2Faccount`, {
     waitUntil: "load",
   });
-  await state.page.waitForLoadState("networkidle");
+  await waitForClientReady(state.page);
   await inputSecret(
     state.page.locator('input[autocomplete="username"]'),
     state.email,
@@ -150,7 +151,7 @@ async function prepareVerifiedOwner(
   const verified = await pending;
   expect(verified.response.status()).toBe(200);
   await state.page.waitForURL((url) => url.pathname === "/account");
-  await state.page.waitForLoadState("networkidle");
+  await waitForClientReady(state.page);
   await assertSecureSession(state.page, verified.response, base);
   const { subject, ...evidence } = await identity(state);
   expect(evidence).toEqual({
@@ -249,7 +250,7 @@ When(
               "distinct owned control login closes only the IP challenge after target proof",
             ).toBe(200);
             await control.page.waitForURL((url) => url.pathname === "/account");
-            await control.page.waitForLoadState("networkidle");
+            await waitForClientReady(control.page);
             const { subject: _subject, ...evidence } = await identity(control);
             expect(evidence).toEqual({
               profile: 200,
@@ -317,7 +318,7 @@ When(
             `${world.hostBaseUrl}/reset?returnTo=%2Faccount`,
             { waitUntil: "load" },
           );
-          await state.page.waitForLoadState("networkidle");
+          await waitForClientReady(state.page);
           await inputSecret(
             state.page.locator('input[autocomplete="username"]'),
             state.email,
@@ -369,7 +370,9 @@ When(
           const accepted = await completing;
           let exactCompletion = false;
           try {
-            const command = hostCommand(accepted.response.request().postDataJSON());
+            const command = hostCommand(
+              accepted.response.request().postDataJSON(),
+            );
             exactCompletion =
               command.identifier === state.email &&
               command.code === delivery.code &&
@@ -395,7 +398,7 @@ When(
             true,
           );
           await state.page.waitForURL((url) => url.pathname === "/account");
-          await state.page.waitForLoadState("networkidle");
+          await waitForClientReady(state.page);
           await assertSecureSession(
             state.page,
             accepted.response,
@@ -443,7 +446,7 @@ async function proveAdmissions(state: ResetForgivenessJourney, base: string) {
     await state.page.goto(`${base}/reset`, {
       waitUntil: "load",
     });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await inputSecret(
       state.page.locator('input[autocomplete="username"]'),
       state.email,

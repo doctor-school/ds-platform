@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -38,8 +39,9 @@ async function readHost(browser: Browser, world: StepWorld, id: HostId) {
       const page = await context.newPage();
       const document = await page.goto(
         `${origin}${HOSTS[id].eventsPath}/${slug}`,
-        { waitUntil: "networkidle" },
+        { waitUntil: "load" },
       );
+      await waitForClientReady(page);
       expect(document?.status()).toBe(200);
       await expect(
         page.getByRole("heading", { name: body.title, exact: true, level: 1 }),

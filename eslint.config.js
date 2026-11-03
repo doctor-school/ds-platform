@@ -383,5 +383,15 @@ export default [
       ],
     },
   },
+  {
+    // #3465 — shared e2e steps never wait for Playwright `networkidle`: the real
+    // SmartCaptcha widget's Metrika beacon never settles, so the wait hangs to
+    // the test timeout. Severity ERROR = BLOCK (rides `pnpm lint`).
+    files: ["packages/e2e/**/*.{ts,tsx,mts,cts,js,mjs}"],
+    plugins: { local: localRules },
+    rules: {
+      "local/no-networkidle-wait": "error",
+    },
+  },
   prettier,
 ];

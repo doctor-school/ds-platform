@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import {
   isSignInHostForm,
@@ -64,7 +65,7 @@ async function privatePage(browser: Browser, state: Recovery): Promise<Page> {
 }
 async function open(page: Page, url: string): Promise<void> {
   await page.goto(url, { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
 }
 function post(page: Page, pathname: string): Promise<Response> {
   return page.waitForResponse(

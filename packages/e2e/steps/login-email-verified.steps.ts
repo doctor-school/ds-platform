@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
@@ -161,7 +162,7 @@ Given(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await assertSecureSession(owned, accepted.response, world.hostBaseUrl);
     await assertOwnedVerifiedIdentity(state);
     state.priorCookies = (await context.cookies())
@@ -196,7 +197,7 @@ When(
     const target = new URL(world.host.loginPath, world.hostBaseUrl);
     target.searchParams.set("returnTo", "/account");
     await state.page.goto(target.toString(), { waitUntil: "load" });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await state.page.getByTestId("login-method-otp").click();
     await state.page.getByTestId("otp-channel-email").click();
     await inputSecret(state.page.getByTestId("otp-identifier"), state.email);
@@ -362,7 +363,7 @@ Then(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertSecureSession(
       state.page,
       state.accepted!.response,

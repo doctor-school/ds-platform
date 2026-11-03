@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   isAuthCommandPath,
   signInHostApiPath,
@@ -248,7 +249,7 @@ Then(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await guest.page.waitForLoadState("networkidle");
+    await waitForClientReady(guest.page);
     await assertSecureSession(guest.page, response, world.hostBaseUrl);
     await identity(second, guest.page, false);
     const revoked = await guest.page.evaluate(async () => {
@@ -281,7 +282,7 @@ Then(
 
 async function passwordLogin(page: Page, owner: Registrant, base: string) {
   await page.goto(`${base}/login?returnTo=%2Faccount`, { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   await inputSecret(
     page.locator('input[autocomplete="username"]'),
     owner.email,
@@ -340,7 +341,7 @@ When(
           url.origin === new URL(world.hostBaseUrl).origin &&
           url.pathname === "/account",
       );
-      await owner.page.waitForLoadState("networkidle");
+      await waitForClientReady(owner.page);
       await assertSecureSession(
         owner.page,
         accepted.response,
@@ -383,7 +384,7 @@ Then(
     ).toBe(true);
     for (const owner of value.owners) {
       await owner.page.reload({ waitUntil: "load" });
-      await owner.page.waitForLoadState("networkidle");
+      await waitForClientReady(owner.page);
       await identity(owner);
       expect(
         (await owner.context.cookies()).find(
@@ -407,7 +408,7 @@ Then(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await guest.page.waitForLoadState("networkidle");
+    await waitForClientReady(guest.page);
     await assertSecureSession(guest.page, response, world.hostBaseUrl, [
       second.cookie!,
     ]);

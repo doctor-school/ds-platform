@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import {
   isAuthCommandPath,
@@ -39,7 +40,8 @@ interface Prefill {
   phoneWrites: string[];
   authPosts: string[];
   observeEditing: boolean;
-  editingRequests: number;
+  /** `METHOD url` of every page fetch/xhr sent while editing is observed. */
+  editingRequests: string[];
 }
 const prefills = new WeakMap<Page, Prefill>();
 function prefill(key: Page): Prefill {
@@ -109,7 +111,7 @@ Given(
       phoneWrites: [],
       authPosts: [],
       observeEditing: false,
-      editingRequests: 0,
+      editingRequests: [],
     };
     prefills.set(page, state);
     owned.on("request", (request) => {
@@ -118,11 +120,16 @@ Given(
         state.phoneWrites.push(path);
       if (request.method() === "POST" && isAuthCommandPath(path))
         state.authPosts.push(path);
+      // A router prefetch of a link in view (`next-router-prefetch`) is the
+      // router warming a navigation, not a read or write of this page: it is
+      // sent whenever a link enters the viewport after hydration, so it can
+      // land inside the editing window and says nothing about editing.
       if (
         state.observeEditing &&
-        ["fetch", "xhr"].includes(request.resourceType())
+        ["fetch", "xhr"].includes(request.resourceType()) &&
+        request.headers()["next-router-prefetch"] === undefined
       )
-        state.editingRequests++;
+        state.editingRequests.push(`${request.method()} ${request.url()}`);
     });
     await prepareCaptchaForJourney(
       context,
@@ -150,7 +157,7 @@ Given(
       returnTo: "/account",
     }).toString();
     await owned.goto(url.toString(), { waitUntil: "load" });
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await owned.getByTestId("otp-channel-email").click();
     await inputSecret(owned.getByTestId("otp-identifier"), state.email);
     const mailbox =
@@ -236,7 +243,7 @@ When(
   "the participant opens the suggested phone editor, changes its masked value and cancels without requesting a code",
   async ({ page }) => {
     const state = prefill(page);
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     state.observeEditing = true;
     await state.page.getByTestId("profile-phone-action").click();
     const field = state.page.getByTestId("profile-phone-input");
@@ -281,9 +288,10 @@ Then(
       if (sample < 40) await new Promise((resolve) => setTimeout(resolve, 500));
     }
     state.observeEditing = false;
-    expect(state.editingRequests, "editing and canceling are local-only").toBe(
-      0,
-    );
+    expect(
+      state.editingRequests,
+      "editing and canceling are local-only",
+    ).toEqual([]);
     expect(
       state.phoneWrites,
       "no automatic phone request or confirmation",

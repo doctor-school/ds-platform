@@ -1,5 +1,7 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
-import { hostCommand,
+import {
+  hostCommand,
   isAuthCommandPath,
   signInHostApiPath,
 } from "../lib/sign-in-host-api.js";
@@ -121,7 +123,7 @@ When(
     url.searchParams.set("method", "code");
     url.searchParams.set("returnTo", "/account");
     await state.page.goto(url.toString(), { waitUntil: "load" });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await expect(state.page.getByTestId("login-method-otp")).toHaveAttribute(
       "aria-selected",
       "true",
@@ -147,7 +149,9 @@ Then(
   async ({ page }) => {
     const state = login(page);
     const requested = state.requested!;
-    const request = hostCommand(parsedObject(requested.response.request().postData() ?? ""));
+    const request = hostCommand(
+      parsedObject(requested.response.request().postData() ?? ""),
+    );
     expect(
       request.identifier === state.email && request.channel === "email",
       "code request belongs to the owned email",
@@ -248,9 +252,9 @@ When(
       state.code!,
     );
     state.accepted = await accepted;
-    const request = hostCommand(parsedObject(
-      state.accepted.response.request().postData() ?? "",
-    ));
+    const request = hostCommand(
+      parsedObject(state.accepted.response.request().postData() ?? ""),
+    );
     expect(
       state.accepted.response.status(),
       "fresh sign-in code accepted",

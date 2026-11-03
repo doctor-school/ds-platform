@@ -1,3 +1,4 @@
+import { waitForClientReady } from "./page-ready.js";
 import {
   expect,
   request as playwrightRequest,
@@ -81,7 +82,7 @@ const newPassword = (tag: string): string => `Acc-${tag}-${Date.now()}-aA1!`;
 /** Wait until the hydrated page can no longer submit natively (#2067). */
 async function openSettled(page: Page, url: string): Promise<void> {
   await page.goto(url, { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
 }
 
 /**
@@ -136,7 +137,7 @@ export function defineAccountAuthPathTests(bound: AccountAuthPathsHost): void {
     page: Page,
     account: { email: string; password: string },
   ): Promise<void> {
-    await page.waitForLoadState("networkidle");
+    await waitForClientReady(page);
     await page.locator('input[autocomplete="username"]').fill(account.email);
     await page
       .locator('input[autocomplete="current-password"]')
@@ -281,7 +282,7 @@ export function defineAccountAuthPathTests(bound: AccountAuthPathsHost): void {
       // door is proven by what renders, not by the path.
       await expect(page).toHaveURL((url) => isSignInHostForm(url));
       await expect(page.getByTestId("reset-request-submit")).toBeVisible();
-      await page.waitForLoadState("networkidle");
+      await waitForClientReady(page);
 
       const before = await captureAddressedMailCheckpoint(
         mail,

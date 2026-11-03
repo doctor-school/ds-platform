@@ -1,3 +1,4 @@
+import { settleClientTurn } from "../lib/page-ready.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -163,7 +164,7 @@ Given(
       200,
     );
     await originalProfile(state);
-    await state.page.waitForLoadState("networkidle");
+    await settleClientTurn(state.page);
     state.page.on("request", (request) => {
       if (
         request.method() === "PUT" &&

@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
@@ -105,7 +106,7 @@ Given(
     const response = await verified;
     expect(response.status(), "registration code accepted").toBe(200);
     await account.waitForURL((url) => url.pathname === "/account");
-    await account.waitForLoadState("networkidle");
+    await waitForClientReady(account);
     await assertSecureSession(account, response, world.hostBaseUrl);
     expect(
       await account.evaluate(async (email) => {
@@ -154,7 +155,7 @@ When(
   async ({ page, world }) => {
     const state = stateFor(page);
     await state.guest.goto(`${world.hostBaseUrl}/reset`, { waitUntil: "load" });
-    await state.guest.waitForLoadState("networkidle");
+    await waitForClientReady(state.guest);
     expect(
       (await state.guest.context().cookies()).some(
         (cookie) => cookie.name === "__Host-ds_session",

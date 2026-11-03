@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   isSignInHostForm,
   signInHostApiPath,
@@ -54,7 +55,7 @@ async function submitDuplicate(
 ): Promise<RegistrationObservation> {
   const page = state.page;
   await page.goto(registrationUrl(base), { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   await inputSecret(page.locator('input[autocomplete="email"]'), state.email);
   await inputSecret(
     page.locator('input[autocomplete="new-password"]'),
@@ -85,7 +86,7 @@ async function submitDuplicate(
   await page.waitForURL(
     (url) => isSignInHostForm(url) && url.pathname === "/verify",
   );
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   expect(
     new URL(page.url()).searchParams.get("email") === state.email,
     "code step retains the submitted mailbox",

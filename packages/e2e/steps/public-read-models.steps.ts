@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { golden } from "@ds/db/seed/golden";
 import {
   expect,
@@ -118,7 +119,7 @@ When("the public specialty book is read", async ({ request, world, page }) => {
   state(world).book = await read<Book>(request, "/v1/public/specialties");
   const response = await page.goto("/");
   expect(response?.status()).toBe(200);
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   await expect(page.getByTestId("specialty-catalog")).toHaveAttribute(
     "data-state",
     "open",
@@ -243,7 +244,7 @@ When(
         exact: true,
       }),
     ).toBeVisible();
-    await page.waitForLoadState("networkidle");
+    await waitForClientReady(page);
   },
 );
 Then(

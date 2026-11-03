@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -220,7 +221,7 @@ Given(
     const verified = await verifying;
     expect(verified.response.status(), "owned email verified").toBe(200);
     await state.page.waitForURL((url) => url.pathname === "/account");
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertSecureSession(state.page, verified.response, world.hostBaseUrl);
     await assertIdentity(state, world.hostBaseUrl);
     await state.page.clock.install();
@@ -339,7 +340,7 @@ Then(
     ).toBeVisible();
     await assertIdentity(state, world.hostBaseUrl, true);
     await state.page.reload({ waitUntil: "load" });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertIdentity(state, world.hostBaseUrl, true);
     expect(state.requests, "exactly initial request and real resend").toBe(2);
   },

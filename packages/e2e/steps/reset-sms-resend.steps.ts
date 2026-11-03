@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { randomUUID } from "node:crypto";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
@@ -82,7 +83,7 @@ async function privatePage(browser: Browser, state: ResendReset, base: string) {
 }
 async function open(page: Page, url: string) {
   await page.goto(url, { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
 }
 async function sameOwner(page: Page, state: ResendReset) {
   const result = await page.evaluate(
@@ -195,11 +196,7 @@ Given(
       "/account",
     );
     expect(
-      registrationEvidence(
-        response.request().postData() ?? "",
-        body,
-        state,
-      ),
+      registrationEvidence(response.request().postData() ?? "", body, state),
     ).toEqual({
       credentialsMatch: true,
       consentMatches: true,
@@ -233,7 +230,7 @@ Given(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await owner.waitForLoadState("networkidle");
+    await waitForClientReady(owner);
     await assertSecureSession(owner, verified.response, world.hostBaseUrl);
     await confirmOwnedPhone(owner, { phone: state.phone, sink });
     await sameOwner(owner, state);
@@ -352,7 +349,7 @@ Then(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await reset.waitForLoadState("networkidle");
+    await waitForClientReady(reset);
     await assertSecureSession(reset, completed.response, world.hostBaseUrl, [
       state.cookie!,
     ]);
@@ -375,7 +372,7 @@ Then(
       "reset revoked the original owner session",
     ).toEqual({ session: 401, profile: 401 });
     await reset.reload({ waitUntil: "load" });
-    await reset.waitForLoadState("networkidle");
+    await waitForClientReady(reset);
     await sameOwner(reset, state);
     const login = async (password: string) => {
       const target = await privatePage(browser, state, world.hostBaseUrl);
@@ -408,7 +405,7 @@ Then(
             await accepted.target.waitForURL(
               (url) => url.pathname === "/account",
             );
-            await accepted.target.waitForLoadState("networkidle");
+            await waitForClientReady(accepted.target);
             await assertSecureSession(
               accepted.target,
               accepted.result.response,
@@ -417,7 +414,7 @@ Then(
             );
             await sameOwner(accepted.target, state);
             await accepted.target.reload({ waitUntil: "load" });
-            await accepted.target.waitForLoadState("networkidle");
+            await waitForClientReady(accepted.target);
             await sameOwner(accepted.target, state);
           } catch {
             if (!attemptFailed)

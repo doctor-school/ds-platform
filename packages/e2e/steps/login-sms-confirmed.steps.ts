@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
@@ -125,7 +126,7 @@ Given(
       200,
     );
     await owned.waitForURL((url) => url.pathname === "/account");
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await assertSecureSession(owned, verified.response, world.hostBaseUrl);
     await confirmOwnedPhone(owned, { phone: state.phone, sink });
     const before = await identity(owned);
@@ -172,7 +173,7 @@ When(
       ).toString(),
       { waitUntil: "load" },
     );
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     const guest = await identity(state.page);
     expect({
       profile: guest.profileStatus,
@@ -261,8 +262,10 @@ When(
         request.code === state.code &&
         request.identifier === state.phone &&
         request.channel === "sms";
-      noTokenBody =
-        storefrontCallbackAcknowledgement(signedIn.body, world.hostBaseUrl);
+      noTokenBody = storefrontCallbackAcknowledgement(
+        signedIn.body,
+        world.hostBaseUrl,
+      );
     } catch {
       /* Assertions project only booleans. */
     }
@@ -272,7 +275,7 @@ When(
       noTokenBody,
     }).toEqual({ status: 200, matches: true, noTokenBody: true });
     await state.page.waitForURL((url) => url.pathname === "/account");
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertSecureSession(
       state.page,
       signedIn.response,

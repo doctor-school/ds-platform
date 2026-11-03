@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import {
   isSignInHostForm,
@@ -107,7 +108,7 @@ async function passwordSignIn(
   password: string,
 ): Promise<CapturedResponse> {
   await page.goto(`${base}/login?returnTo=%2Faccount`, { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   await inputSecret(
     page.locator('input[autocomplete="username"]'),
     state.email,
@@ -192,7 +193,7 @@ When(
     await reset.goto(`${world.hostBaseUrl}/reset?returnTo=%2Faccount`, {
       waitUntil: "load",
     });
-    await reset.waitForLoadState("networkidle");
+    await waitForClientReady(reset);
     // #3172 — the reset form is the sign-in host's; the account return path
     // rode the storefront's reset entry into the transaction.
     expect(isSignInHostForm(reset.url())).toBe(true);

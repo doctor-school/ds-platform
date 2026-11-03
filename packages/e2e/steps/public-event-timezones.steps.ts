@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { golden, isGoldenUuid } from "@ds/db/seed/golden";
 import {
   expect,
@@ -305,7 +306,7 @@ async function hydrate(world: StepWorld, viewerTime: boolean) {
   if (!s.release || !s.baseline || !s.zone)
     throw new Error("004 SSR observation incomplete");
   s.release();
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   // A real interaction proves the client actually mounted even in Moscow,
   // where the expected time text deliberately remains identical to the SSR.
   const toggle = page.getByTestId("theme-toggle");

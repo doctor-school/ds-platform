@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -113,7 +114,7 @@ Given(
       "owned email verification accepted",
     ).toBe(200);
     await state.owner.waitForURL((url) => url.pathname === "/account");
-    await state.owner.waitForLoadState("networkidle");
+    await waitForClientReady(state.owner);
     await assertSecureSession(
       state.owner,
       verified.response,
@@ -151,7 +152,7 @@ Then(
     // #3172: `/login` is an entry that leaves for the sign-in host now; the
     // copied cookie is replayed from an ordinary public storefront page.
     await copied.goto(`${world.hostBaseUrl}/`, { waitUntil: "load" });
-    await copied.waitForLoadState("networkidle");
+    await waitForClientReady(copied);
     await state.copiedContext.addCookies([state.cookie]);
     const fingerprint = await copied.evaluate(() => ({
       agent: navigator.userAgent,

@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -83,7 +84,7 @@ async function login(
     pathname: "/login",
     returnTo: "/account",
   });
-  await owner.page.waitForLoadState("networkidle");
+  await waitForClientReady(owner.page);
   let response;
   if (method === "password") {
     await inputSecret(

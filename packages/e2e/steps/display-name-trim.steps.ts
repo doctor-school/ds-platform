@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -145,7 +146,7 @@ Given(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await assertSecureSession(owned, accepted.response, world.hostBaseUrl);
     await assertOwnedProfile(state, false);
     await expect(owned.getByTestId("profile-name-edit")).toBeVisible();
@@ -227,7 +228,7 @@ Then(
   async ({ page, world }) => {
     const state = edit(page);
     await assertOwnedProfile(state, true);
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     const freshRead = state.page.waitForResponse(
       (response) =>
         response.request().method() === "GET" &&

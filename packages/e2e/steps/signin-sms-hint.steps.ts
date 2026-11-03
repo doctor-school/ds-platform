@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomInt, randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
@@ -112,7 +113,7 @@ Given(
     );
     watchStorefrontEntries(page, world.hostBaseUrl);
     await page.goto(target.toString(), { waitUntil: "load" });
-    await page.waitForLoadState("networkidle");
+    await waitForClientReady(page);
     expectEnteredThrough(page, world.hostBaseUrl, {
       pathname: "/login",
       method: "code",

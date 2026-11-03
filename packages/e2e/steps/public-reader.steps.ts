@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { expect, type Page } from "@playwright/test";
 
 import { baseUrlFor, hostById } from "../hosts.js";
@@ -5,8 +6,7 @@ import { Given, Then, When } from "./support/fixtures.js";
 
 async function hydrated(page: Page): Promise<void> {
   // 008 EARS-3: the server-rendered control precedes its client handler.
-  await page.waitForLoadState("load");
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
 }
 
 function toggle(page: Page) {

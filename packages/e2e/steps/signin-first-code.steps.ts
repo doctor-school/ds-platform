@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import {
   hostCommand,
@@ -128,7 +129,7 @@ When(
     url.searchParams.set("method", "code");
     url.searchParams.set("returnTo", "/account");
     await state.page.goto(url.toString(), { waitUntil: "load" });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await expect(state.page.getByTestId("login-method-otp")).toHaveAttribute(
       "aria-selected",
       "true",
@@ -358,7 +359,7 @@ When(
     await guest.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
       waitUntil: "load",
     });
-    await guest.waitForLoadState("networkidle");
+    await waitForClientReady(guest);
     await assertNoPrivateRegistrationAccess(guest, "", state);
     await inputSecret(
       guest.locator('input[autocomplete="username"]'),

@@ -1,3 +1,4 @@
+import { waitForClientReady, settleClientTurn } from "../lib/page-ready.js";
 import {
   isSignInHostForm,
   signInHostApiPath,
@@ -126,7 +127,7 @@ Given(
     await owned.goto(registrationUrl(world.hostBaseUrl, RETURN_TO), {
       waitUntil: "load",
     });
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     state.landing = await owned
       .getByTestId("registration-form")
       .getAttribute("data-registration-landing");
@@ -154,7 +155,7 @@ When(
     await expectLengthRefusal(state);
     await state.page.getByTestId("register-submit").click();
     await expectLengthRefusal(state);
-    await state.page.waitForLoadState("networkidle");
+    await settleClientTurn(state.page);
   },
 );
 
@@ -200,7 +201,7 @@ Then(
     ).toHaveCount(0);
     await expect(state.page.getByTestId("register-submit")).toBeEnabled();
     await expectSameContext(state, world.hostBaseUrl);
-    await state.page.waitForLoadState("networkidle");
+    await settleClientTurn(state.page);
     expect(
       state.registrationRequests,
       "no account-creation command was sent",

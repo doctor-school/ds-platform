@@ -1,4 +1,6 @@
-import { hostCommand,
+import { waitForClientReady } from "../lib/page-ready.js";
+import {
+  hostCommand,
   isAuthCommandPath,
   signInHostApiPath,
 } from "../lib/sign-in-host-api.js";
@@ -183,7 +185,7 @@ Given(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await assertSecureSession(owned, accepted.response, world.hostBaseUrl);
     await assertIdentity(value);
     value.cookie = (await context.cookies()).find(
@@ -217,7 +219,7 @@ When(
     ).toBe(false);
     // #3172 — the code step is the sign-in host's /verify door.
     await openHostCodeStep(visitor, world.hostBaseUrl, value.email, "/account");
-    await visitor.waitForLoadState("networkidle");
+    await waitForClientReady(visitor);
     await assertNoPrivateRegistrationAccess(visitor, "", value);
     value.beforeReplay = await captureAddressedMailCheckpoint(
       nativeRecoveryMail(),
@@ -312,7 +314,7 @@ Then(
   async ({ page }) => {
     const value = state(page);
     await value.page.reload({ waitUntil: "load" });
-    await value.page.waitForLoadState("networkidle");
+    await waitForClientReady(value.page);
     await assertIdentity(value);
     expect(
       (await value.context.cookies()).find((cookie) => cookie.name === SESSION)
@@ -335,7 +337,7 @@ Then(
     await guest.page.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
       waitUntil: "load",
     });
-    await guest.page.waitForLoadState("networkidle");
+    await waitForClientReady(guest.page);
     await inputSecret(
       guest.page.locator('input[autocomplete="username"]'),
       value.email,
@@ -369,7 +371,7 @@ Then(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await guest.page.waitForLoadState("networkidle");
+    await waitForClientReady(guest.page);
     await assertSecureSession(
       guest.page,
       loggedIn.response,

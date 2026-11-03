@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
@@ -80,7 +81,7 @@ async function requestThroughAcademy(
   door.searchParams.set("method", "code");
   door.searchParams.set("returnTo", "/account");
   await page.goto(door.toString(), { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   await expect(page.getByTestId("login-method-otp")).toHaveAttribute(
     "aria-selected",
     "true",

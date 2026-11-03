@@ -6,6 +6,7 @@ import {
   type CDPSession,
   type Locator,
   type Page,
+  type Request,
 } from "@playwright/test";
 
 import {
@@ -37,8 +38,9 @@ interface RevealReload extends OwnedCredentials {
   page: Page;
   observer: CDPSession;
   document: string;
+  storefrontOrigin: string;
   effects?: RevealEffects & {
-    requests: number;
+    requests: string[];
     logs: number;
     storageEvents: number;
     sameCookies: boolean;
@@ -110,6 +112,7 @@ Given(
       page: owned,
       observer: await context.newCDPSession(owned),
       document: randomUUID(),
+      storefrontOrigin: new URL(world.hostBaseUrl).origin,
       email: `reveal-reload-2905-${randomUUID()}@example.test`,
       password: `Unsubmitted-${randomUUID()}-aA1!`,
     };
@@ -145,11 +148,27 @@ When(
   "the ready guest reveals that password during a bounded side-effect observation",
   async ({ page }) => {
     const state = visitor(page);
-    let requests = 0;
+    const requests: string[] = [];
     let logs = 0;
     let storageEvents = 0;
-    const request = () => {
-      requests += 1;
+    // A reveal can only cause a request of this document: its own frame, to
+    // its own origin (the sign-in host and its API root) or the storefront.
+    // The sign-in host keeps background traffic of its own going after
+    // hydration — the SmartCaptcha widget and its frame talk to their own
+    // origin, Metrika beacons, and the router prefetches a link entering the
+    // viewport (`next-router-prefetch`, as in 003 @congress-phone-prefill) —
+    // which may land inside the window and says nothing about the reveal.
+    const firstParty = new Set([
+      new URL(state.page.url()).origin,
+      state.storefrontOrigin,
+    ]);
+    const request = (sent: Request) => {
+      if (
+        sent.frame() === state.page.mainFrame() &&
+        firstParty.has(new URL(sent.url()).origin) &&
+        sent.headers()["next-router-prefetch"] === undefined
+      )
+        requests.push(`${sent.method()} ${sent.url()}`);
     };
     const log = () => {
       logs += 1;
@@ -333,7 +352,7 @@ Then(
       historyWrites: 0,
       sameStores: true,
       sameHistory: true,
-      requests: 0,
+      requests: [],
       logs: 0,
       storageEvents: 0,
       sameCookies: true,

@@ -14,7 +14,7 @@
     "./host-config": "./src/host-config.ts",
     "./server": "./src/server/index.ts",
     "./retry": "./src/ui/events-block-retry.tsx",
-    "./home": "./src/ui/home-events.tsx"
+    "./feed": "./src/ui/events-feed.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

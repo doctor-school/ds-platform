@@ -1,8 +1,5 @@
 import { adaptDoctorEventsFeed } from "@ds/events-storefront/adapters";
-import type {
-  EventsStorefrontHostConfig,
-  HomeEventsHostConfig,
-} from "@ds/events-storefront/host-config";
+import type { EventsStorefrontHostConfig } from "@ds/events-storefront/host-config";
 import type { EventPageHostConfig } from "@ds/event-page/host-config";
 import type { RoomPageHostConfig } from "@ds/room-page/host-config";
 
@@ -47,28 +44,11 @@ export const DOCTOR_EVENTS_STOREFRONT = {
 } satisfies EventsStorefrontHostConfig;
 
 /**
- * The doctor home's nearest-events block (017 EARS-9, #1485) — the canvas
- * `design-source/doctor-home.dc.html` «d-home · события»: its eyebrow (general,
- * and targeted once the read is targeted on the chosen specialty), heading,
- * «Все события →» right of the heading, three cards and the empty copy with its
- * pointer into `/events`. DATA only; the block reads `DOCTOR_EVENTS_STOREFRONT`.
+ * How many cards the doctor home's nearest events show (017 EARS-9, #1485):
+ * the home mounts the events page's own feed block (`@ds/events-storefront/feed`)
+ * over `DOCTOR_EVENTS_STOREFRONT`, capped to this many.
  */
-export const DOCTOR_HOME_EVENTS = {
-  eyebrow: {
-    general: "События",
-    targeted: "По вашей специальности и смежным областям",
-  },
-  title: "Ближайшие события",
-  allLink: { label: "Все события →", placement: "head" },
-  cardCap: 3,
-  empty: {
-    title: "Пока ничего не запланировано по вашей специальности",
-    pointer: {
-      text: "Посмотрите события смежных областей — ",
-      linkLabel: "все события →",
-    },
-  },
-} satisfies HomeEventsHostConfig;
+export const DOCTOR_HOME_FEED_LIMIT = 3;
 
 /**
  * What the doctor storefront states about itself so the ONE event page

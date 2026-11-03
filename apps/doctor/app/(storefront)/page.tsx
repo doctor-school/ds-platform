@@ -1,13 +1,14 @@
 import { headers } from "next/headers";
-import { HomeEvents } from "@ds/events-storefront/home";
+import { EventsFeed } from "@ds/events-storefront/feed";
+import { SectionHeading } from "@/components/section-heading";
 import { SpecialtyCatalog } from "@/components/specialty-catalog";
 import { StorefrontHero } from "@/components/storefront-hero";
 import {
   DOCTOR_EVENTS_STOREFRONT,
-  DOCTOR_HOME_EVENTS,
+  DOCTOR_HOME_FEED_LIMIT,
 } from "@/lib/events-storefront.host-config";
 import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
-import { retryDoctorHomeEvents } from "./home-events-retry-action";
+import { retryDoctorEventsBlock } from "./events/retry-block-action";
 
 /**
  * Doctor storefront root (`doctor.school/`, ADR-0015 §2) — a PAGE inside the 017
@@ -19,10 +20,12 @@ import { retryDoctorHomeEvents } from "./home-events-retry-action";
  * the four scale counters bound to one computed read, LD-3), then the specialty
  * catalog (EARS-4/EARS-5 — Stage-A variant Б: search field, frequent set,
  * «Показать весь список — N») or, once a specialty is remembered, its collapsed
- * targeted row (EARS-6/EARS-7), then the nearest events (EARS-9, #1485) — the
- * shared `@ds/events-storefront` preview of the upcoming feed, mounted with the
- * doctor's events config and home values; it reads the same feed with the
- * relayed specialty cookie, so it is general before a choice and targeted after.
+ * targeted row (EARS-6/EARS-7), then the nearest events (EARS-9, #1485): the
+ * events page's own day feed block (`@ds/events-storefront/feed`, 019
+ * EARS-3/EARS-9) capped to `DOCTOR_HOME_FEED_LIMIT` cards with «Все события»,
+ * retried through the events page's own block-retry action. It reads the same
+ * feed with the relayed specialty cookie, so it is general before a choice and
+ * targeted after.
  *
  * The catalog is a SIBLING in ordinary page flow, not a wrapper and not a gate.
  * That placement is the requirement, not a layout preference: EARS-4 forbids a
@@ -52,6 +55,9 @@ import { retryDoctorHomeEvents } from "./home-events-retry-action";
  * The page owns the exactly-one-non-empty-`h1` the axe gate asserts: it lives in
  * the hero, and the shell — which wraps many routes — carries none.
  */
+/** The canvas heading of the home's events section (`doctor-home.dc.html` «d-home · события»). */
+const EVENTS_HEADING = "Ближайшие события";
+
 export default async function DoctorHomePage() {
   const remembered = await resolveRememberedSpecialty(await headers());
 
@@ -62,11 +68,20 @@ export default async function DoctorHomePage() {
         actor={remembered.actor}
         initialChoice={remembered.choice}
       />
-      <HomeEvents
-        config={DOCTOR_EVENTS_STOREFRONT}
-        home={DOCTOR_HOME_EVENTS}
-        retry={retryDoctorHomeEvents}
-      />
+      <section
+        aria-labelledby="home-events-heading"
+        className="mt-11 px-4 layout:mt-20 layout:px-12"
+        data-testid="home-events"
+      >
+        <div className="mx-auto w-full max-w-content">
+          <SectionHeading id="home-events-heading">{EVENTS_HEADING}</SectionHeading>
+          <EventsFeed
+            config={DOCTOR_EVENTS_STOREFRONT}
+            limit={DOCTOR_HOME_FEED_LIMIT}
+            retry={retryDoctorEventsBlock}
+          />
+        </div>
+      </section>
     </>
   );
 }

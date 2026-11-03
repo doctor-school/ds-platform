@@ -282,8 +282,6 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
     expect(page.today).toBe("2026-10-08");
     expect(page.remaining).toBe(7);
     expect(page.nextBatch).toBe(4);
-    // 017 EARS-9: the read's targeting mode reaches the model (the home eyebrow).
-    expect(page.targetingMode).toBe("all");
   });
 
   it("NEW: the doctor facet options reach the page model (row 58, D9)", () => {

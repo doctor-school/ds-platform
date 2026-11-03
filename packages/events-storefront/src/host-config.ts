@@ -72,41 +72,6 @@ export type EventsStorefrontHostConfig = {
 };
 
 /**
- * What a storefront's home page states about its nearest-events block (017
- * EARS-9, #1485): a short preview of the upcoming feed — the host's one feed
- * read, the feed's card unit, the first `cardCap` cards — and a link into the
- * full feed. DATA only, the copy and placement each home canvas draws
- * (`design-source/doctor-home.dc.html` «d-home · события»,
- * `design-source/academy-home.dc.html` «Ближайшие эфиры»); the reads, the
- * states and the retry are the package's. The block reads through the host's
- * {@link EventsStorefrontHostConfig}, so the feed, the relay cookie and the
- * routes are the events page's own.
- */
-export type HomeEventsHostConfig = {
-  /**
-   * The eyebrow above the heading: `general` for a read that is not targeted
-   * («События» / «Эфиры»), `targeted` for a read targeted on the viewer's
-   * specialty (the doctor's «По вашей специальности и смежным областям»). A
-   * host whose read has no targeting states `general` only.
-   */
-  eyebrow: { general: string; targeted?: string };
-  /** The heading («Ближайшие события» / «Ближайшие эфиры»). */
-  title: string;
-  /** The link into the full feed: its label, and whether it sits right of the heading or below the cards. */
-  allLink: { label: string; placement: "head" | "foot" };
-  /** How many of the feed's first cards the block shows. */
-  cardCap: number;
-  /**
-   * The empty render: the cause, and a pointer line that may end in a link
-   * into the full feed (the doctor's «все события →»).
-   */
-  empty: {
-    title: string;
-    pointer?: { text: string; linkLabel?: string };
-  };
-};
-
-/**
  * The part of the host config the «Мои события» page reads (gate rows 24–27): a
  * host that mounts only that page states only these fields; the page head and
  * the copy overrides belong to the listing.

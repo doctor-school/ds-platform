@@ -349,38 +349,17 @@ function liveBody(cookie) {
 let feedFailing = false;
 let monthFailing = false;
 /**
- * 017 EARS-9 (#1485) — the home nearest-events block's other renders: the same
- * control may also empty the upcoming read (`"empty": true` — no matching
- * event) or hold it (`"delayMs": N`) so a spec sees the block's skeletons while
- * the rest of the home page is already usable.
+ * 017 EARS-9 (#1485) — the same control may also empty the upcoming read
+ * (`"empty": true` — no matching event), so a spec sees the capped feed block
+ * on the home state its empty render.
  */
 let feedEmpty = false;
-let feedDelayMs = 0;
-
 /**
- * 017 EARS-9 (#1485) — what the «Будущие» read reports it was targeted on.
- * The route relays the remembered `__Host-ds_specialty` cookie; with it the
- * real service targets the read on that specialty and its adjacent areas
- * (`mode: "targeted"`), without it the read is general. This double only
- * reports that mode — the cards stay the fixture's, the targeting arithmetic
- * is the api e2e spec's — so the home block's eyebrow can be driven by it.
+ * The cookie header the last upcoming feed read carried (`GET /__e2e/feed`):
+ * the route relays the remembered `__Host-ds_specialty`, which the real
+ * service targets on (proven against the real database in the api e2e spec).
  */
-function upcomingTargeting(cookie) {
-  const specialty = /(?:^|;\s*)__Host-ds_specialty=([^;]+)/.exec(cookie)?.[1];
-  return specialty
-    ? {
-        mode: "targeted",
-        specialtyReference: decodeURIComponent(specialty),
-        directionIds: ["e2e-direction"],
-        adjacentDirectionIds: [],
-      }
-    : {
-        mode: "general",
-        specialtyReference: null,
-        directionIds: [],
-        adjacentDirectionIds: [],
-      };
-}
+let lastFeedCookie = null;
 
 /**
  * 019 EARS-11 as amended 2026-10-05 (gate row 46) — the doctor's «Мои события»
@@ -430,6 +409,9 @@ const server = createServer((request, response) => {
 
   // Test-only control: flip the live scenario mid-run so a spec can prove the
   // block clears itself on the next read rather than on a reload.
+  if (url.pathname === "/__e2e/feed" && request.method === "GET") {
+    return json(response, 200, { lastCookie: lastFeedCookie });
+  }
   if (url.pathname === "/__e2e/feed" && request.method === "POST") {
     let body = "";
     request.on("data", (chunk) => (body += chunk));
@@ -438,13 +420,11 @@ const server = createServer((request, response) => {
         const control = JSON.parse(body || "{}");
         feedFailing = control.failing === true;
         feedEmpty = control.empty === true;
-        feedDelayMs = Number.isInteger(control.delayMs) ? control.delayMs : 0;
       } catch {
         feedFailing = false;
         feedEmpty = false;
-        feedDelayMs = 0;
       }
-      json(response, 200, { failing: feedFailing, empty: feedEmpty, delayMs: feedDelayMs });
+      json(response, 200, { failing: feedFailing, empty: feedEmpty });
     });
     return undefined;
   }
@@ -535,11 +515,8 @@ const server = createServer((request, response) => {
   }
 
   if (url.pathname === "/v1/storefront/doctor/events") {
-    if (feedDelayMs > 0 && !request.heldOnce) {
-      // Answer the same request once the hold is over, through this handler.
-      request.heldOnce = true;
-      setTimeout(() => server.emit("request", request, response), feedDelayMs);
-      return undefined;
+    if (url.searchParams.get("tense") !== "past") {
+      lastFeedCookie = request.headers.cookie ?? "";
     }
     if (feedFailing) return json(response, 500, { status: 500 });
     if (url.searchParams.get("tense") === "past") {
@@ -663,7 +640,12 @@ const server = createServer((request, response) => {
       remaining,
       // N: exactly what the next step adds.
       nextBatch,
-      targeting: upcomingTargeting(request.headers.cookie ?? ""),
+      targeting: {
+        mode: "general",
+        specialtyReference: null,
+        directionIds: [],
+        adjacentDirectionIds: [],
+      },
     });
   }
 

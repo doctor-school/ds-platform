@@ -53,6 +53,7 @@ const EventsBlockRetryInputSchema = z.discriminatedUnion("block", [
     block: z.literal("feed"),
     raw: RawQuerySchema,
     registeredSlugs: z.array(z.string()),
+    limit: z.number().int().positive().optional(),
   }),
   z.object({ block: z.literal("my-events") }),
 ]);
@@ -72,6 +73,8 @@ export type EventsBlockRetryInput =
       readonly block: "feed";
       readonly raw: Record<string, string | string[] | undefined>;
       readonly registeredSlugs: string[];
+      /** A capped feed's cap (017 EARS-9): the recovered block stays capped. */
+      readonly limit?: number;
     }
   | { readonly block: "my-events" };
 
@@ -146,6 +149,7 @@ export async function renderEventsBlock(
         kinds,
         request,
         retry,
+        ...(parsed.limit === undefined ? {} : { limit: parsed.limit }),
       });
       if (!read.ok) return block;
       return (

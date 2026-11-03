@@ -7,15 +7,14 @@ import {
 } from "@playwright/test";
 
 /**
- * 017 EARS-9 (#1485) — the doctor home's nearest-events block: the shared
- * `@ds/events-storefront` preview of the upcoming feed mounted by the home
- * route with the doctor host config. The upstream is the events tier's fixed
- * stand-in `e2e/support/doctor-events-api.mjs`; `POST /__e2e/feed` fails,
- * empties or holds the feed read. Targeting itself is proven against the real
- * database in the api e2e spec; here the relayed specialty cookie leaves the
- * block rendering the read it answers, under the eyebrow that read's
- * targeting earns (the canvas: «События» before a choice, «По вашей
- * специальности и смежным областям» after it).
+ * 017 EARS-9 (#1485) — the doctor home's nearest events ARE the events page's
+ * day feed block (019 EARS-3/EARS-9, `@ds/events-storefront/feed`), capped to
+ * three cards with «Все события». The upstream is the events tier's fixed
+ * stand-in `e2e/support/doctor-events-api.mjs`; `POST /__e2e/feed` fails or
+ * empties the feed read and `GET /__e2e/feed` reports the cookie the last
+ * upcoming read relayed. Targeting itself is the service's, proven against the
+ * real database in the api e2e spec; here the home relays the remembered
+ * specialty and renders the read it answers.
  *
  * With `HOME_EVENTS_EVIDENCE_DIR` set, each state is also captured there (the
  * PR's ui-parity evidence) in the theme `HOME_EVENTS_THEME` names (`light` by
@@ -24,12 +23,18 @@ import {
 const API = `http://127.0.0.1:${process.env.DOCTOR_EVENTS_FAKE_API_PORT ?? 3214}`;
 const EVIDENCE = process.env.HOME_EVENTS_EVIDENCE_DIR;
 const THEME = process.env.HOME_EVENTS_THEME === "dark" ? "dark" : "light";
+const CAP = 3;
 
 async function feedControl(
   request: APIRequestContext,
-  control: { failing?: boolean; empty?: boolean; delayMs?: number },
+  control: { failing?: boolean; empty?: boolean },
 ) {
   await request.post(`${API}/__e2e/feed`, { data: control });
+}
+
+async function lastFeedCookie(request: APIRequestContext): Promise<string> {
+  const answer = await request.get(`${API}/__e2e/feed`);
+  return ((await answer.json()) as { lastCookie: string | null }).lastCookie ?? "";
 }
 
 /**
@@ -42,6 +47,14 @@ async function feedControl(
 const SPECIALTY_COOKIE =
   "__Host-ds_specialty=00000000-0000-4000-8000-000000000001";
 
+function block(page: Page) {
+  return page.getByTestId("home-events");
+}
+
+function cards(page: Page) {
+  return block(page).getByTestId("events-feed").locator("[data-webinar-card]");
+}
+
 async function capture(page: Page, name: string) {
   if (!EVIDENCE) return;
   await block(page).scrollIntoViewIfNeeded();
@@ -49,10 +62,6 @@ async function capture(page: Page, name: string) {
     path: `${EVIDENCE}/${name}-${THEME}.png`,
     fullPage: true,
   });
-}
-
-function block(page: Page) {
-  return page.getByTestId("home-events");
 }
 
 /** The hero and the catalog render and answer input whatever the block shows. */
@@ -82,22 +91,19 @@ for (const viewport of [
   test.describe(`017 EARS-9 at ${viewport.width} px`, () => {
     test.use({ viewport });
 
-    test("017 EARS-9: a guest's home shows the first three upcoming feed cards under «События» / «Ближайшие события», and «Все события →» lands on /events", async ({
+    test("017 EARS-9: a guest's home shows the events feed block capped to three cards under «Ближайшие события», and «Все события» lands on /events", async ({
       page,
+      request,
     }) => {
       await page.goto("/");
-      await expect(block(page).getByTestId("home-events-eyebrow")).toHaveText(
-        "События",
-      );
       await expect(
         block(page).getByRole("heading", { level: 2, name: "Ближайшие события" }),
       ).toBeVisible();
-      const cards = block(page).getByTestId("home-events-cards");
-      await expect(cards.locator("[data-webinar-card]")).toHaveCount(3);
-      await expect(cards.locator('a[href="/events/evt-1"]').first()).toBeVisible();
-      // A preview, not the feed: no day groups, no «Показать ещё», no calendar.
-      await expect(block(page).locator('section[id^="day-"]')).toHaveCount(0);
-      await expect(block(page).getByTestId("events-feed-show-more")).toHaveCount(0);
+      await expect(cards(page)).toHaveCount(CAP);
+      expect(await lastFeedCookie(request)).not.toContain("__Host-ds_specialty=");
+      const all = block(page).getByTestId("events-feed-show-more");
+      await expect(all).toHaveText("Все события");
+      await expect(all).toHaveAttribute("href", "/events");
       await expectRestUsable(page);
       await capture(page, `home-events-guest-${viewport.width}`);
 
@@ -106,93 +112,70 @@ for (const viewport of [
         .analyze();
       expect(axe.violations).toEqual([]);
 
-      await block(page).getByTestId("home-events-all").click();
+      await all.click();
       await expect(page).toHaveURL(/\/events$/);
       await expect(page.getByTestId("events-feed")).toBeVisible();
     });
 
-    test("017 EARS-9: a guest with a remembered specialty gets the targeted read the relayed cookie answers, under «По вашей специальности и смежным областям»", async ({
+    test("017 EARS-9: with a remembered specialty the home's feed read relays it, so the capped block shows the targeted read", async ({
       page,
+      request,
     }) => {
       await page.setExtraHTTPHeaders({ cookie: SPECIALTY_COOKIE });
       await page.goto("/");
-      await expect(block(page).getByTestId("home-events-eyebrow")).toHaveText(
-        "По вашей специальности и смежным областям",
+      await expect(cards(page)).toHaveCount(CAP);
+      expect(await lastFeedCookie(request)).toContain(SPECIALTY_COOKIE);
+      await expect(block(page).getByTestId("events-feed-show-more")).toHaveText(
+        "Все события",
       );
-      await expect(
-        block(page).getByRole("heading", { level: 2, name: "Ближайшие события" }),
-      ).toBeVisible();
-      const cards = block(page).getByTestId("home-events-cards");
-      await expect(cards.locator("[data-webinar-card]")).toHaveCount(3);
       await expectRestUsable(page);
       await capture(page, `home-events-specialty-${viewport.width}`);
     });
 
-    test("017 EARS-9: a signed-in doctor's block marks the cards the doctor is registered for", async ({
+    test("017 EARS-9: a signed-in doctor's capped block marks the cards the doctor is registered for", async ({
       page,
     }) => {
       await page.setExtraHTTPHeaders({ cookie: "__Host-ds_session=e2e-doctor" });
       await page.goto("/");
-      const cards = block(page).getByTestId("home-events-cards");
-      await expect(cards.locator("[data-webinar-card]")).toHaveCount(3);
-      await expect(cards).toContainText("Вы записаны");
+      await expect(cards(page)).toHaveCount(CAP);
+      await expect(block(page).getByTestId("events-feed")).toContainText(
+        "Вы записаны",
+      );
     });
 
-    test("017 EARS-9: no upcoming event — the block states the empty copy with its pointer into /events", async ({
+    test("017 EARS-9: no upcoming event — the capped block states the feed's empty render (019 EARS-9)", async ({
       page,
       request,
     }) => {
       await feedControl(request, { empty: true });
       await page.goto("/");
-      const empty = block(page).getByTestId("home-events-empty");
-      await expect(empty).toContainText(
-        "Пока ничего не запланировано по вашей специальности",
-      );
-      await expect(empty).toContainText("Посмотрите события смежных областей");
-      await expect(empty.getByRole("link", { name: "все события →" })).toHaveAttribute(
-        "href",
-        "/events",
-      );
+      await expect(block(page).getByTestId("events-feed-empty")).toBeVisible();
+      await expect(cards(page)).toHaveCount(0);
       await expectRestUsable(page);
       await capture(page, `home-events-empty-${viewport.width}`);
     });
 
-    test("017 EARS-9: a failed read states «Не удалось загрузить события.», the page stays usable, and «Обновить» recovers the cards in place", async ({
+    test("017 EARS-9: a failed read states the feed's cause, the page stays usable, and «Повторить» recovers the capped block in place", async ({
       page,
       request,
     }) => {
       await feedControl(request, { failing: true });
       await page.goto("/");
-      const error = block(page).getByTestId("home-events-error");
-      await expect(error).toContainText("Не удалось загрузить события.");
+      const error = block(page).getByTestId("events-feed-error");
+      await expect(error).toContainText("Не удалось загрузить ленту событий");
       await expectRestUsable(page);
       await capture(page, `home-events-error-${viewport.width}`);
 
       await feedControl(request, {});
       const url = page.url();
-      await error.getByRole("button", { name: "Обновить" }).click();
-      await expect(
-        block(page).getByTestId("home-events-cards").locator("[data-webinar-card]"),
-      ).toHaveCount(3);
-      await expect(block(page).getByTestId("home-events-error")).toHaveCount(0);
+      await error.getByRole("button", { name: "Повторить" }).click();
+      await expect(cards(page)).toHaveCount(CAP);
+      await expect(block(page).getByTestId("events-feed-show-more")).toHaveText(
+        "Все события",
+      );
+      await expect(block(page).getByTestId("events-feed-error")).toHaveCount(0);
       // Replaced in place: no navigation, no route refresh of the page.
       expect(page.url()).toBe(url);
-    });
-
-    test("017 EARS-9: while the read is in flight the block shows three card skeletons and the rest of the page is already usable", async ({
-      page,
-      request,
-    }) => {
-      await feedControl(request, { delayMs: 4000 });
-      await page.goto("/", { waitUntil: "commit" });
-      const skeleton = block(page).getByTestId("home-events-skeleton");
-      await expect(skeleton).toBeVisible();
-      await expect(skeleton.locator(":scope > *")).toHaveCount(3);
-      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-      await capture(page, `home-events-loading-${viewport.width}`);
-      await expect(
-        block(page).getByTestId("home-events-cards").locator("[data-webinar-card]"),
-      ).toHaveCount(3, { timeout: 15_000 });
     });
   });
 }

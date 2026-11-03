@@ -24,7 +24,7 @@ The first is the **shell** — the header (logo, search, and **one of two by sig
 
 The second is the **specialty catalog as the doctor's first action** (REQ-101). The Минздрав list — every entry of the nomenclature order in force plus «Другое» — is presented so that a doctor can both _find_ the one they already know and _see_ what exists, with search over the list because a list that long cannot be scrolled. Picking a specialty is what turns the site from a brochure into a product: from that moment the content is targeted to that specialty and its adjacent areas (REQ-1), where adjacency is a **managed reference table, not a similarity of names** (OWD-11). The choice is remembered — in the profile for a signed-in doctor, in the anonymous session for a guest — so the second visit opens straight into the targeted view.
 
-Around those two, the home page carries what makes the site credible and alive: the **scale statistics** the legacy site proved worked («с нами уже N врачей · M специальностей · …», every number computed from the live read, REQ-116), the **nearest events** — a short preview of the upcoming events feed — and the link «Все события» (REQ-2, REQ-75), a «Что исследовать» showcase of the formats, and the **platform leaderboard** — in which a doctor appears **only by separate consent to public display** (REQ-34), the default being not to publish.
+Around those two, the home page carries what makes the site credible and alive: the **scale statistics** the legacy site proved worked («с нами уже N врачей · M специальностей · …», every number computed from the live read, REQ-116), the **nearest events** — the events feed of `/events` itself, cut to its first few cards — and the link «Все события» (REQ-2, REQ-75), a «Что исследовать» showcase of the formats, and the **platform leaderboard** — in which a doctor appears **only by separate consent to public display** (REQ-34), the default being not to publish.
 
 017 also owns the **marketing routes that move out of `apps/promo` into `apps/doctor`** (ADR-0015 §2 — one host owns one information architecture). Taking `apps/promo` out of service after the move is a **separate engineering deliverable of wave 1**, not part of this PRD.
 
@@ -76,7 +76,7 @@ Around those two, the home page carries what makes the site credible and alive: 
 
 - **«Другое» chosen** → the doctor is not left without content: the storefront falls back to general (non-targeted) selections and says so, rather than showing an empty targeted feed.
 - **Announcements fail to load** → that block states the reason and offers a retry; the rest of the page stays usable.
-- **No upcoming events for the chosen specialty** → the nearest-events block shows its honest empty state and points at adjacent areas.
+- **No upcoming events for the chosen specialty** → the nearest events behave exactly as the events feed does for that specialty: the same empty statement and the same widening of the scope.
 - **Leaderboard empty, or the doctor never consented** → the block renders with a calm explanation instead of a missing or fabricated row.
 
 ## Product acceptance criteria
@@ -89,7 +89,7 @@ Around those two, the home page carries what makes the site credible and alive: 
 - The chosen specialty is the **primary axis of content targeting**, and adjacency is read from a **managed reference table** (ADR-0016 §5, OWD-11) — never derived from name similarity, and never presented to the doctor as their own specialty.
 - Specialties (Минздрав), educational directions and schools are **three distinct things**, never merged into one on-screen list and never labelled with one word.
 - The home page carries the **scale statistics** (doctors, specialties, lessons, events) and the **evolutionary goal verbatim**, with no gloss and no «готовится» marker beside it.
-- The home page shows the **nearest events** — the first cards of the upcoming events feed — and a link to the full events feed; before a specialty is chosen these are general, after it they are targeted.
+- The home page shows the **nearest events** — the events feed of `/events`, the same block cut to its first few cards — and a link «Все события» to the full feed; before a specialty is chosen these are general, after it they are targeted.
 - The **leaderboard** renders only doctors who gave **separate consent to public display**; the default is not to publish, and the voluntary nature is visible next to the block. The leaderboard requirement is **REQ-117**, which is cross-cutting by its own text: 017 owns the **platform-wide** board on the storefront, and the specialty-filtered board is 018's — one requirement split across two features by authoring decision, not two requirements (REQ-34, REQ-117).
 - The storefront carries **no Academy content** — no project cards, no Academy podcasts, no partner news — and **exactly one** Academy link **on this surface**, in the footer — the single REQ-24 exit has a second placement, «Стать экспертом» in the doctor's cabinet, which is not part of 017.
 - The interface **never states who finances the doctor's learning**; it says only that learning is free for the doctor.

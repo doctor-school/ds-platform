@@ -235,24 +235,24 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
     # ------------------------------------------------------ the other blocks
 
     @EARS-9 @happy
-    Scenario Outline: The events block renders honestly in every data state
-      Given the home events read is in state <state>
+    Scenario Outline: The events block is the events feed block capped, in every data state
+      Given the events feed read is in state <state>
       When any visitor opens the storefront home page
       Then the events block renders <render>
       And the rest of the page stays usable
 
       Examples:
-        | state    | render                                                          |
-        | обычно   | the nearest event cards and «Все события»                       |
-        | загрузка | the card skeletons                                              |
-        | пусто    | an explicit empty statement pointing at adjacent areas          |
-        | ошибка   | an explicit Russian error message with a retry control          |
+        | state    | render                                                             |
+        | обычно   | the first N cards of the events feed and «Все события» to /events  |
+        | загрузка | the events feed skeleton                                           |
+        | пусто    | the events feed's empty render                                     |
+        | ошибка   | the events feed's Russian error message with «Повторить»           |
 
     @EARS-9 @happy
-    Scenario: Retrying a failed events read recovers the block
+    Scenario: Retrying a failed events read recovers the block still capped
       Given the events block rendered its error state
-      When the visitor activates the retry control and the read succeeds
-      Then the block renders the nearest events
+      When the visitor activates «Повторить» and the read succeeds
+      Then the block renders the first N cards of the events feed
       And no page reload was required
 
     @EARS-9 @happy

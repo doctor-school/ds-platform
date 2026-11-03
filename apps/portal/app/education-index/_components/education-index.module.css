@@ -1184,8 +1184,10 @@
     grid-template-columns: 1fr;
     gap: var(--space-3);
   }
+  /* `1fr` keeps a min-content floor, so an unbreakable row pushed the card
+     past a 360/320 phone column (#3597); `minmax(0, 1fr)` lets it shrink. */
   .twoUp {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 16px;
   }
 }

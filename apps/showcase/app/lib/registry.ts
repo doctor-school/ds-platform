@@ -120,6 +120,10 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   // `./account-profile-card` subpath export beside the barrel).
   { id: "account-profile-card", section: "blocks" },
   { id: "AccountProfileCard", section: "blocks" },
+  // 018 EARS-2 (#1497) — the ONE content card unit (`./content-card` subpath),
+  // catalogued by its doctor variant.
+  { id: "content-card", section: "blocks" },
+  { id: "DoctorContentCard", section: "blocks" },
   { id: "AuthCard", section: "blocks" },
   { id: "AuthLayout", section: "blocks" },
   { id: "AuthShell", section: "blocks" },

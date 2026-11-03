@@ -345,3 +345,14 @@ export type {
   RegistrationSuccessAction,
   RegistrationSuccessCardProps,
 } from "./registration-success-card";
+
+// 018 EARS-2 (#1497) — the ONE content card unit; today its doctor variant
+// (Stage-A «Б — типографская»). The 048 feed card and the 030 project card join
+// the same module as variants. Viewer/publication states arrive server-resolved.
+export { DoctorContentCard } from "./content-card";
+export type {
+  DoctorContentCardProps,
+  DoctorContentCardState,
+  DoctorContentCardMeta,
+  DoctorContentKind,
+} from "./content-card";

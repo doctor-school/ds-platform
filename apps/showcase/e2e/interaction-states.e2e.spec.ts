@@ -218,3 +218,41 @@ test("014 EARS-10: EventList is rendered as a controlled, fetch-free showcase bl
   ).toHaveAttribute("href", "/webinars/clinical-cases");
   expect(apiRequests).toEqual([]);
 });
+
+test("018 EARS-2: DoctorContentCard lifts on hover and rings its one link on keyboard focus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/blocks");
+
+  const specimen = page.getByTestId("content-card-showcase");
+  const card = specimen.locator("[data-content-card]").first();
+  const link = card.getByRole("link");
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("link")).toHaveCount(1);
+
+  // Hover: a real pointer hover presses the card toward its shadow.
+  await page.mouse.move(0, 0);
+  const restTranslate = await cssProp(card, "translate");
+  const restShadow = await cssProp(card, "box-shadow");
+  await card.hover();
+  await expect
+    .poll(async () => cssProp(card, "translate"))
+    .not.toBe(restTranslate);
+  expect(await cssProp(card, "box-shadow")).not.toBe(restShadow);
+
+  // Focus: start sequential navigation at the section caption, then a REAL Tab
+  // lands on the preview card's link and paints the ring on its overlay.
+  await page.mouse.move(0, 0);
+  const ringBefore = await link.evaluate(
+    (el) => getComputedStyle(el, "::after").boxShadow,
+  );
+  await page.getByText(/DoctorContentCard, DoctorContentCardProps/).click();
+  await page.keyboard.press("Tab");
+  await expect(link).toBeFocused();
+  const ringAfter = await link.evaluate(
+    (el) => getComputedStyle(el, "::after").boxShadow,
+  );
+  expect(ringAfter).not.toBe(ringBefore);
+  expect(ringAfter).not.toBe("none");
+});

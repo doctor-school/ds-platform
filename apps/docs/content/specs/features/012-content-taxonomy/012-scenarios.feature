@@ -956,11 +956,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the admin submits an event-kind mutation carrying a slug
     Then the mutation is rejected
 
-  @EARS-26 @happy
-  Scenario: Every event carries exactly one kind
-    When the admin creates an event with the published kind «Вебинар» and the format online
-    Then the event references exactly that kind
-
   @EARS-26 @failure
   Scenario: An event without a valid kind is refused
     When the admin saves an event with no kind, an unknown kind or a retired kind
@@ -983,15 +978,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | Встреча клуба | online, offline, hybrid |
       | Мастер-класс  | offline, hybrid         |
     And every existing event references exactly one kind
-
-  # Read under «Amendment — 2026-10-13 — a retired kind stays a storefront filter value».
-  @EARS-28 @EARS-26 @edge
-  Scenario: A retired kind stays in the public kind list and leaves only the event form
-    Given the admin retires a kind through the signed lifecycle-impact preview
-    When the public kind list and the event-form kind selector are read
-    Then the public kind list still names the retired kind as id, slug and title
-    And the event-form kind selector no longer offers it
-    And the events that carry it keep their kind reference
 
   @EARS-29 @failure
   Scenario: An event without a valid audience is refused
@@ -1016,14 +1002,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the forward migration introducing the event kind and audience runs
     Then the migration aborts for explicit per-row review
     And no event or project is assigned a kind or an audience by inference
-
-  @EARS-30 @happy
-  Scenario: A project's default audience prefills a new event and stays overridable
-    Given a published project with the default audience experts
-    When the admin creates an event linked to that project
-    Then the event form shows the audience experts
-    When the admin changes the audience to doctors and saves
-    Then the event is stored with the audience doctors
 
   @EARS-30 @failure
   Scenario: A project without a default audience is refused
@@ -1134,3 +1112,33 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       Given an event with the audience doctors linked to a project with the default audience doctors
       When the admin changes the project default audience to experts
       Then the event keeps the audience doctors
+
+  Rule: Event classification and retained kind lifecycle
+
+    Background:
+      Given a platform_admin signed in to the admin
+
+    @event-classification-lifecycle
+    @EARS-26 @happy
+    Scenario: Every event carries exactly one kind
+      When the admin creates an event with the published kind «Вебинар» and the format online
+      Then the event references exactly that kind
+
+    @event-classification-lifecycle
+    # Read under «Amendment — 2026-10-13 — a retired kind stays a storefront filter value».
+    @EARS-28 @EARS-26 @edge
+    Scenario: A retired kind stays in the public kind list and leaves only the event form
+      Given the admin retires a kind through the signed lifecycle-impact preview
+      When the public kind list and the event-form kind selector are read
+      Then the public kind list still names the retired kind as id, slug and title
+      And the event-form kind selector no longer offers it
+      And the events that carry it keep their kind reference
+
+    @event-classification-lifecycle
+    @EARS-30 @happy
+    Scenario: A project's default audience prefills a new event and stays overridable
+      Given a published project with the default audience experts
+      When the admin creates an event linked to that project
+      Then the event form shows the audience experts
+      When the admin changes the audience to doctors and saves
+      Then the event is stored with the audience doctors

@@ -1888,7 +1888,7 @@ jobs:
           E2E_CANONICAL_EXPERT_FIXTURE: owned
           E2E_CANONICAL_EXPERT_DATABASE: ds_admin_e2e
           E2E_CANONICAL_EXPERT_LOG: ${{ runner.temp }}/canonical-expert-stand-ops.jsonl
-        run: pnpm --filter @ds/admin test:e2e --project taxonomy --grep 'standalone Expert retains|project roster keeps exactly one curator|Expert-side authoring creates one retained member relationship|retired project Expert relationship returns|retired curator relationship stays retired|@public-read-boundaries|@canonical-expert-reads|@event-kind-public-reads|@event-kind-constraints'
+        run: pnpm --filter @ds/admin test:e2e --project taxonomy --grep 'standalone Expert retains|project roster keeps exactly one curator|Expert-side authoring creates one retained member relationship|retired project Expert relationship returns|retired curator relationship stays retired|@public-read-boundaries|@canonical-expert-reads|@event-kind-public-reads|@event-kind-constraints|@event-classification-lifecycle'
       - name: Admin axe sweep
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
         run: pnpm --filter @ds/admin test:axe

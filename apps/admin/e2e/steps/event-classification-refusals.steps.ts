@@ -59,7 +59,13 @@ Before({ tags: "@event-classification-refusals" }, async ({ page }) => {
       const body = JSON.parse(init.body) as { email?: string };
       if (body.email) operation("owned account", { email: body.email });
     }
-    return originalFetch(input, init);
+    const response = await originalFetch(input, init);
+    operation("provider response", {
+      method: init?.method ?? "GET",
+      path: url.pathname,
+      status: response.status,
+    });
+    return response;
   };
   page.on("request", (request) => {
     const url = new URL(request.url());

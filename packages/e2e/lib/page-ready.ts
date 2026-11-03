@@ -62,11 +62,20 @@ export async function waitForClientReady(page: Page): Promise<void> {
  * sent exactly once) after an action it has already observed settle: one page
  * macrotask runs and its result returns over the protocol, so every request the
  * page had started by then has been reported to the test's `request` listeners.
- * It replaces a `networkidle` settle, which the SmartCaptcha beacon never lets
- * resolve (#3465).
+ * The turn is a `MessageChannel` message, not a timer, because a step may run
+ * under `page.clock`, which holds every timer. It replaces a `networkidle`
+ * settle, which the SmartCaptcha beacon never lets resolve (#3465).
  */
 export async function settleClientTurn(page: Page): Promise<void> {
   await page.evaluate(
-    () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
+    () =>
+      new Promise<void>((resolve) => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => {
+          channel.port1.close();
+          resolve();
+        };
+        channel.port2.postMessage(null);
+      }),
   );
 }

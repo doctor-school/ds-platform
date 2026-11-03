@@ -69,6 +69,8 @@ describe("settleClientTurn", () => {
     };
     await settleClientTurn(page as never);
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toContain("setTimeout");
+    // A message-channel turn, never a timer: a step may run under `page.clock`.
+    expect(calls[0]).toContain("MessageChannel");
+    expect(calls[0]).not.toContain("setTimeout");
   });
 });

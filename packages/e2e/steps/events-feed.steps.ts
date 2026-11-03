@@ -1,4 +1,4 @@
-import { waitForClientReady } from "../lib/page-ready.js";
+import { settleClientTurn, waitForClientReady } from "../lib/page-ready.js";
 import {
   expect,
   type Locator,
@@ -1561,6 +1561,10 @@ async function retryBlock(
     const url = new URL(request.url());
     if (request.method() === "POST" && headers["next-action"] !== undefined) {
       seen.actions += 1;
+    } else if (headers["next-router-prefetch"] !== undefined) {
+      // A viewport link prefetch is neither a route refresh nor a reload; it
+      // may start any time after hydration, so it is not a page re-read.
+      return;
     } else if (
       request.resourceType() === "document" ||
       headers["rsc"] === "1" ||
@@ -1594,12 +1598,21 @@ async function retryBlock(
   };
   await page.route("**/*", onAction);
   try {
+    // The browser has the whole action answer once its request finishes; a
+    // route refresh the answer caused would start within the next client turn.
+    const delivered = page.waitForEvent(
+      "requestfinished",
+      (request) =>
+        request.method() === "POST" &&
+        request.headers()["next-action"] !== undefined,
+    );
     await page
       .getByTestId(FAILED_BLOCK[block])
       .getByRole("button", { name: "Повторить", exact: true })
       .click();
     await answered;
-    await settle(page);
+    await delivered;
+    await settleClientTurn(page);
   } finally {
     await page.unroute("**/*", onAction);
     page.off("request", onRequest);

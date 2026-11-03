@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
+import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
 import {
   inputSecret,
   registerOwnedCredentials,
@@ -257,7 +258,7 @@ Then(
     const first = state.owners[0]!;
     const second = state.owners[1]!;
     for (const owned of [first, second]) {
-      const pending = captureResponse(owned.page, "/v1/auth/logout");
+      const pending = captureResponse(owned.page, STOREFRONT_SIGN_OUT_PATH);
       await owned.page.getByTestId("logout").click();
       const loggedOut = await pending;
       expect(loggedOut.response.status(), "owned UI logout accepted").toBe(200);

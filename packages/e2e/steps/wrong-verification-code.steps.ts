@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
+import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
 import type { OwnedAuthContour } from "../lib/owned-auth-observation.js";
 import {
   assertNoPrivateRegistrationAccess,
@@ -168,7 +169,7 @@ Given(
             accepted.response,
             world.hostBaseUrl,
           );
-          const logout = captureResponse(owned, "/v1/auth/logout");
+          const logout = captureResponse(owned, STOREFRONT_SIGN_OUT_PATH);
           await owned.getByTestId("logout").click();
           expect(
             (await logout).response.status(),
@@ -225,9 +226,9 @@ When(
       const captured = await pending;
       let codeOnly = false;
       try {
-        const request: unknown = hostCommand(JSON.parse(
-          captured.response.request().postData() ?? "",
-        ));
+        const request: unknown = hostCommand(
+          JSON.parse(captured.response.request().postData() ?? ""),
+        );
         codeOnly =
           request !== null &&
           typeof request === "object" &&

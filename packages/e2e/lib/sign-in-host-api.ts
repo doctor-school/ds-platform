@@ -1,3 +1,5 @@
+import { STOREFRONT_SIGN_OUT_PATH } from "./storefront-sign-out.js";
+
 /**
  * Where a sign-in form posts now that the forms live on the sign-in host
  * (ADR-0015 §4, 003 EARS-60/71, #3172).
@@ -40,14 +42,17 @@ export function isSignInHostForm(
 
 /**
  * True for a browser POST that is an auth COMMAND on either side of the switch:
- * the storefront's own `/v1/auth/*` (logout, session refresh — what a signed-in
- * storefront page still sends) or the sign-in host's `/v1/sign-in-host/*`
+ * the storefront's own `/v1/auth/*` (session refresh — what a signed-in
+ * storefront page still sends), its own sign-out route the account «Выйти»
+ * posts (`STOREFRONT_SIGN_OUT_PATH`, 003 EARS-10 amended, #3588) or the sign-in
+ * host's `/v1/sign-in-host/*`
  * (every form step). A step that records «which auth commands did the page
- * send» watches both, so a refusal that must send NOTHING is checked against
+ * send» watches them all, so a refusal that must send NOTHING is checked against
  * the host traffic too, never vacuously against a prefix nobody posts to.
  */
 export function isAuthCommandPath(pathname: string): boolean {
   return (
+    pathname === STOREFRONT_SIGN_OUT_PATH ||
     pathname.startsWith("/v1/auth/") ||
     pathname.startsWith(`${SIGN_IN_HOST_API_ROOT}/`)
   );

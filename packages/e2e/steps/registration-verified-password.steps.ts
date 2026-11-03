@@ -15,6 +15,10 @@ import {
   type CapturedResponse,
 } from "../lib/captured-response.js";
 import {
+  clearsCookie,
+  STOREFRONT_SIGN_OUT_PATH,
+} from "../lib/storefront-sign-out.js";
+import {
   captureAddressedMailCheckpoint,
   fetchRecoveryMail,
   mailpitUrlFor,
@@ -235,16 +239,15 @@ Given(
     state.priorCookies = (await context.cookies())
       .filter((cookie) => cookie.name === SESSION)
       .map((cookie) => cookie.value);
-    const pendingLogout = captureResponse(owned, "/v1/auth/logout");
+    const pendingLogout = captureResponse(owned, STOREFRONT_SIGN_OUT_PATH);
     await owned.getByTestId("logout").click();
     const loggedOut = await pendingLogout;
     expect(loggedOut.response.status(), "ordinary prerequisite logout").toBe(
       200,
     );
-    const cleared = (await loggedOut.response.headerValue("set-cookie")) ?? "";
+    const cleared = await loggedOut.response.headerValues("set-cookie");
     expect(
-      cleared.includes(`${SESSION}=`) &&
-        /(?:^|;)\s*Max-Age=0(?:;|$)/i.test(cleared),
+      clearsCookie(cleared, SESSION),
       "logout expires prerequisite session",
     ).toBe(true);
     await owned.waitForURL(

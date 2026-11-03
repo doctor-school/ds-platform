@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
+import { STOREFRONT_SIGN_OUT_PATH } from "../lib/storefront-sign-out.js";
 import {
   captureAddressedMailCheckpoint,
   fetchRecoveryCode,
@@ -131,11 +132,7 @@ Given(
       "/account",
     );
     expect(
-      registrationEvidence(
-        response.request().postData() ?? "",
-        body,
-        existing,
-      ),
+      registrationEvidence(response.request().postData() ?? "", body, existing),
       "existing visitor prerequisite uses the real registration command",
     ).toEqual({
       credentialsMatch: true,
@@ -182,7 +179,7 @@ Given(
       sameAccount: true,
       verified: true,
     });
-    const logout = captureResponse(owned, "/v1/auth/logout");
+    const logout = captureResponse(owned, STOREFRONT_SIGN_OUT_PATH);
     await owned.getByTestId("logout").click();
     expect(
       (await logout).response.status(),

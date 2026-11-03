@@ -4,6 +4,10 @@ import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
+import {
+  clearsCookie,
+  STOREFRONT_SIGN_OUT_PATH,
+} from "../lib/storefront-sign-out.js";
 import { confirmOwnedPhone } from "../lib/owned-phone-confirmation.js";
 import {
   captureSmsCheckpoint,
@@ -141,11 +145,7 @@ Given(
       "/account",
     );
     expect(
-      registrationEvidence(
-        response.request().postData() ?? "",
-        body,
-        state,
-      ),
+      registrationEvidence(response.request().postData() ?? "", body, state),
     ).toEqual({
       credentialsMatch: true,
       consentMatches: true,
@@ -189,20 +189,16 @@ Given(
       .filter((cookie) => cookie.name === SESSION)
       .map((cookie) => cookie.value);
 
-    const loggedOut = captureResponse(owned, "/v1/auth/logout");
+    const loggedOut = captureResponse(owned, STOREFRONT_SIGN_OUT_PATH);
     await owned.getByTestId("logout").click();
     const logout = await loggedOut;
     expect(
       logout.response.status(),
       "ordinary account sign-out succeeded",
     ).toBe(200);
-    const cleared = (await logout.response.headerValue("set-cookie")) ?? "";
+    const cleared = await logout.response.headerValues("set-cookie");
     expect(
-      cleared.includes(`${SESSION}=`),
-      "sign-out clears private session cookie",
-    ).toBe(true);
-    expect(
-      /(?:^|;)\s*Max-Age=0(?:;|$)/i.test(cleared),
+      clearsCookie(cleared, SESSION),
       "sign-out expires private session cookie",
     ).toBe(true);
     await owned.waitForURL(

@@ -374,7 +374,8 @@ function ResearchAndPlace() {
               wider-rendering engine pushed the page sideways (EARS-12, #3589). */}
           <Button asChild className="max-w-full whitespace-normal">
             <NextLink href="/education-index">
-              Открыть образовательный индекс →
+              {/* The arrow travels with its last word when the label wraps. */}
+              {"Открыть образовательный индекс →"}
             </NextLink>
           </Button>
         </div>

@@ -172,6 +172,8 @@ async function passwordLogin(
           { email: state.email, password: state.acceptedPassword },
           attemptFailed,
         ),
+      // An accepted password (the host's 200) cleared the window itself.
+      succeeded: (result) => result.response.status() === 200,
     },
     async () => {
       try {

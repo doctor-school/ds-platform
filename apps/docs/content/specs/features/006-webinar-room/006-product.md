@@ -5,6 +5,7 @@ slug: webinars-006-webinar-room-product
 epic: ../../product/webinars/brief.md
 status: In dev
 surface: user-facing
+storefronts: both
 lang: en
 ---
 

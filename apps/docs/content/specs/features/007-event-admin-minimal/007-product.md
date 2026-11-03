@@ -5,6 +5,8 @@ slug: webinars-007-event-admin-minimal-product
 epic: ../../product/webinars/brief.md
 status: Shipped
 surface: user-facing
+storefronts: none
+storefronts_reason: "Only the apps/admin operator and director tooling; the storefront event page and room it feeds are specified by features 004, 006 and 020."
 lang: en
 ---
 

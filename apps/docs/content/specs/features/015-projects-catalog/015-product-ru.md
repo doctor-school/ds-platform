@@ -5,6 +5,8 @@ slug: academy-public-015-projects-catalog-product-ru
 epic: ../../product/academy-public/brief-ru.md
 status: Draft
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "Projects, their catalog and the project page belong to the Academy (ADR-0016 §4: the doctor storefront shows outputs, never a project page); feature 030 re-specifies its catalog and project page."
 lang: ru
 ---
 

@@ -5,6 +5,8 @@ slug: two-site-ia-034-investment-marketplace-product-ru
 epic: ../../product/two-site-ia/brief-ru.md
 status: Draft
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "The investor page is an Academy page feeding the apps/admin queue of feature 033; the investor cabinets are on the Academy (ADR-0016 §4), and the doctor storefront has no investor surface."
 lang: ru
 ---
 

@@ -5,6 +5,9 @@
 // path literals.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   KIND_LABELS,
@@ -37,6 +40,7 @@ import {
   bodyText,
   reuseFieldError,
   storefrontsFieldError,
+  storefrontsSpecError,
   productTrackMilestoneError,
 } from "./create-issue.mjs";
 import { EARS_KIND_LABEL, ROADMAP_LABEL } from "./lib/roadmap-taxonomy.mjs";
@@ -258,6 +262,114 @@ test("storefrontsFieldError points at the spec field and exempts epics and untra
     ),
     null,
   );
+});
+
+// ── storefronts <-> spec consistency (#3610) ────────────────────────────────
+// A throwaway spec tree under the OS temp dir: 401 both (requirements), 402
+// academy-only (requirements), 403 doctor-only (product PRD only), 404 none,
+// 405 broken (no valid value).
+function specTree() {
+  const root = mkdtempSync(join(tmpdir(), "storefronts-"));
+  const put = (folder, file, fm) => {
+    mkdirSync(join(root, folder), { recursive: true });
+    writeFileSync(
+      join(root, folder, file),
+      ["---", "title: x", ...fm, "---", "", "# x", ""].join("\n"),
+    );
+  };
+  const reason = 'storefronts_reason: "x"';
+  put("401-a", "401-requirements-en.md", [
+    "surface: user-facing",
+    "storefronts: both",
+  ]);
+  put("402-b", "402-requirements.md", [
+    "surface: user-facing",
+    "storefronts: academy-only",
+    reason,
+  ]);
+  put("403-c", "403-product.md", [
+    "surface: user-facing",
+    "storefronts: doctor-only",
+    reason,
+  ]);
+  put("404-d", "404-requirements.md", [
+    "surface: user-facing",
+    "storefronts: none",
+    reason,
+  ]);
+  put("405-e", "405-requirements.md", [
+    "surface: user-facing",
+    "storefronts: portal",
+  ]);
+  return root;
+}
+
+test("storefrontsSpecError refuses an Issue that widens or crosses its spec's storefronts", () => {
+  const featuresDir = specTree();
+  const run = (feature, line) =>
+    storefrontsSpecError(
+      [
+        "--label",
+        "track:academy",
+        "--label",
+        `feature:${feature}`,
+        "--title",
+        "[x] EARS-1: y",
+      ],
+      ["Reuse: new: x", line, ""].join("\n"),
+      { featuresDir },
+    );
+  // spec none -> only none
+  assert.match(run("404-d", "Storefronts: both"), /storefronts: none/);
+  assert.match(
+    run("404-d", "Storefronts: academy-only: one host #12"),
+    /storefronts: none/,
+  );
+  assert.equal(run("404-d", "Storefronts: none: admin screen"), null);
+  // spec single-host -> never the other host; wider (`both`, a shared fix) is fine
+  assert.match(
+    run("402-b", "Storefronts: doctor-only: x"),
+    /names the other storefront only/,
+  );
+  assert.equal(run("402-b", "Storefronts: both"), null);
+  assert.equal(
+    run("402-b", "Storefronts: academy-only: the Academy catalog"),
+    null,
+  );
+  assert.equal(run("402-b", "Storefronts: none: admin half"), null);
+  // product-PRD-only folder is read when no requirements exist
+  assert.match(
+    run("403-c", "Storefronts: academy-only: x"),
+    /403-c\/403-product\.md/,
+  );
+  // spec both -> a single-host Issue names its sibling
+  assert.match(
+    run("401-a", "Storefronts: academy-only: the Academy half"),
+    /sibling Issue/,
+  );
+  assert.equal(
+    run("401-a", "Storefronts: academy-only: the doctor half is #3611"),
+    null,
+  );
+  assert.equal(run("401-a", "Storefronts: both"), null);
+});
+
+test("storefrontsSpecError adds no refusal without a spec, a valid spec value or a parseable line", () => {
+  const featuresDir = specTree();
+  const run = (labels, line, title = "[x] y") =>
+    storefrontsSpecError(
+      [...labels.flatMap((l) => ["--label", l]), "--title", title],
+      [line, ""].join("\n"),
+      { featuresDir },
+    );
+  assert.equal(run(["track:academy"], "Storefronts: doctor-only: x"), null);
+  assert.equal(
+    run(["feature:499-missing"], "Storefronts: doctor-only: x"),
+    null,
+  );
+  assert.equal(run(["feature:405-e"], "Storefronts: doctor-only: x"), null);
+  assert.equal(run(["feature:404-d"], "no field"), null);
+  assert.equal(run(["feature:404-d"], "Storefronts: both", "epic: x"), null);
 });
 
 // ── milestone (#1137) ───────────────────────────────────────────────────────

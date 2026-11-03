@@ -5,6 +5,8 @@ slug: academy-public-016-experts-catalog-product-ru
 epic: ../../product/academy-public/brief-ru.md
 status: Draft
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "The Academy expert bench (/experts, /experts/[slug] on academy.doctor.school); ADR-0016 §4 shows the public expert card on both storefronts, and the doctor storefront expert surface has no Issue yet — tracked under the one-code epic #2020."
 lang: ru
 ---
 

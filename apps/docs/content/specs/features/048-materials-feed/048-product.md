@@ -5,6 +5,8 @@ slug: two-site-ia-048-materials-feed-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "The materials rail on the Academy home and the reading pages on academy.doctor.school; the spec decides that the doctor storefront shows nothing of the feed."
 lang: en
 ---
 

@@ -5,6 +5,8 @@ slug: two-site-ia-044-congress-signup-product
 epic: ../../product/two-site-ia/brief.md
 status: Shipped
 surface: user-facing
+storefronts: none
+storefronts_reason: "This feature's own screens are the apps/admin roster and registration desk; the intake form is hosted on the congress site and the code sign-in runs on the shared sign-in host of feature 003."
 lang: en
 ---
 

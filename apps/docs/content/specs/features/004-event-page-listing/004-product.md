@@ -5,6 +5,7 @@ slug: webinars-004-event-page-listing-product
 epic: ../../product/webinars/brief.md
 status: Draft
 surface: user-facing
+storefronts: both
 lang: en
 ---
 

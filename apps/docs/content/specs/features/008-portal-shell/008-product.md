@@ -5,6 +5,8 @@ slug: portal-surface-ia-008-portal-shell-product
 epic: ../../product/portal-surface-ia/brief.md
 status: In dev
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "The Academy (apps/portal) mount of the shared storefront-shell package (packages/storefront-shell, landed by #2180) with its host: academy config; the doctor storefront mounts the same package with host: doctor under feature 017."
 lang: en
 ---
 

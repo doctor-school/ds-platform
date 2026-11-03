@@ -5,6 +5,8 @@ slug: two-site-ia-017-doctor-shell-specialties-product-ru
 epic: ../../product/two-site-ia/brief-ru.md
 status: In dev
 surface: user-facing
+storefronts: doctor-only
+storefronts_reason: "The doctor storefront home and its host: doctor mount of the shared storefront-shell package; the Academy shell is feature 008 and the Academy home feature 013 (rebuilt under #1799). Its cross-front blocks are the nearest-events block shared with the Academy home (#1485, paused) and the platform leaderboard extracted from the Academy education index (#1487), within the one-code epic #2020."
 lang: ru
 ---
 

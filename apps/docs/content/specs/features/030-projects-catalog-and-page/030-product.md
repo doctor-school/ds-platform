@@ -5,6 +5,8 @@ slug: two-site-ia-030-projects-catalog-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "Projects, their results and the catalog belong to the Academy (ADR-0016 §8); the doctor storefront serves no projects catalog or project page (EARS-19)."
 lang: en
 ---
 

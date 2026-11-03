@@ -5,6 +5,7 @@ slug: academy-public-014-event-recordings-product
 epic: ../../product/academy-public/brief.md
 status: In dev
 surface: user-facing
+storefronts: both
 lang: en
 ---
 

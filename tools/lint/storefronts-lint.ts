@@ -21,12 +21,17 @@
  *   - for any value but `both`, a `storefronts_reason:` that is non-empty and
  *     not a placeholder (`n/a`, `tbd`, `none`, `-`, `<…>`);
  *   - for `both`, NO `storefronts_reason:` (a reason there is a contradiction).
- * The `-en` and `-ru` halves SHALL carry identical values. A folder with no
- * requirements file, and a `surface: backend-only` spec, are not targets.
- * Targeting fails closed: every requirements file SHALL declare
- * `surface: backend-only | user-facing` (skill author-ears-spec) — a missing
- * or misspelt `surface:` is a finding, never a silent skip. A reason is one
- * YAML line; a block scalar (`|` / `>`) is refused rather than half-read.
+ * The `-en` and `-ru` halves SHALL carry identical values. The product PRD —
+ * `NNN-product.md` / `NNN-product-ru.md` (ADR-0014) — is gated the same way
+ * (#3610): its halves are identical, and where a folder carries both a PRD
+ * and requirements, their `storefronts:` values SHALL agree (the reasons may
+ * be worded differently). A `surface: backend-only` file group is not a
+ * target. Targeting fails closed: every requirements and product file SHALL
+ * declare `surface: backend-only | user-facing` (skill author-ears-spec) — a
+ * missing or misspelt `surface:` is a finding, never a silent skip. A reason
+ * is one YAML line; a block scalar (`|` / `>`) is refused rather than
+ * half-read. Vocabulary and messages: `tools/gh/lib/storefronts.mjs`, shared
+ * with the Issue gate and the backlog report.
  *
  * Pure tree scan — no PR context; exits 0 cleanly anywhere the tree is clean.
  * Seam: `LINT_FIXTURE_ROOT` (spec tree). Run: `pnpm lint:storefronts`.
@@ -36,17 +41,18 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  FEATURES_REL,
+  SURFACE_VALUES,
+  declaredFindings,
+  readSpecFields,
+} from "../gh/lib/storefronts.mjs";
+
 const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
   ? resolve(process.env.LINT_FIXTURE_ROOT)
   : resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TAG = "[storefronts]";
-const FEATURES_REL = "apps/docs/content/specs/features";
-
-const VALUES = ["both", "academy-only", "doctor-only", "none"] as const;
-const FORMS = VALUES.join(" | ");
-const SURFACES = ["backend-only", "user-facing"] as const;
-const BLOCK_SCALAR_RE = /^[|>][+-]?\d*$/;
-const PLACEHOLDER_RE = /^(?:n\/?a|tbd|todo|none|-+|\?+|<[^>]*>)$/i;
+const SURFACES = SURFACE_VALUES.join(" | ");
 
 interface Declared {
   surface: string | null;
@@ -54,71 +60,70 @@ interface Declared {
   reason: string | null;
 }
 
-function unquote(v: string): string {
-  return v
-    .trim()
-    .replace(/^(["'])([\s\S]*)\1$/, "$2")
-    .trim();
+/** One file group of a spec folder: the requirements or the product PRD. */
+const GROUPS = [
+  {
+    kind: "requirements",
+    re: (num: string) =>
+      new RegExp(`^${num}-requirements(?:-(?:en|ru))?\\.md$`),
+  },
+  {
+    kind: "product",
+    re: (num: string) => new RegExp(`^${num}-product(?:-(?:en|ru))?\\.md$`),
+  },
+] as const;
+
+interface GroupResult {
+  kind: string;
+  /** The agreed `storefronts:` value of a clean user-facing group, else null. */
+  value: string | null;
 }
 
-function readDeclared(absPath: string): Declared {
-  const text = readFileSync(absPath, "utf8").replace(/\r\n/g, "\n");
-  const fm = text.match(/^---\n([\s\S]*?)\n---/);
-  const scope = fm ? fm[1] : "";
-  const field = (name: string): string | null => {
-    const m = scope.match(new RegExp(`^${name}:[ \\t]*(.*)$`, "m"));
-    return m ? unquote(m[1]) : null;
-  };
-  return {
-    surface: field("surface"),
-    storefronts: field("storefronts"),
-    reason: field("storefronts_reason"),
-  };
-}
-
-/** The requirements files of one spec folder (plain, or the -en/-ru pair). */
-function requirementsFiles(folder: string, entries: string[]): string[] {
-  const num = folder.slice(0, 3);
-  const re = new RegExp(`^${num}-requirements(?:-(?:en|ru))?\\.md$`);
-  return entries.filter((e) => re.test(e)).sort();
-}
-
-function checkOne(rel: string, d: Declared): string[] {
-  const out: string[] = [];
-  if (d.storefronts === null || d.storefronts === "") {
-    out.push(
-      `${rel}: \`surface: user-facing\` but no \`storefronts:\` — declare \`storefronts: ${FORMS}\` (any value but \`both\` with a \`storefronts_reason:\`).`,
-    );
-    return out;
-  }
-  if (!(VALUES as readonly string[]).includes(d.storefronts)) {
-    out.push(
-      `${rel}: \`storefronts: ${d.storefronts}\` is not one of \`${FORMS}\`.`,
-    );
-    return out;
-  }
-  if (d.storefronts === "both") {
-    if (d.reason !== null && d.reason !== "") {
-      out.push(
-        `${rel}: \`storefronts: both\` with a \`storefronts_reason:\` is a contradiction — a reason records why ONE storefront (or none) is in scope; drop it or narrow the value.`,
+function checkGroup(
+  folder: string,
+  kind: string,
+  files: string[],
+  featuresDir: string,
+  failures: string[],
+): GroupResult | null {
+  const declared = files.map((f) => ({
+    rel: `${FEATURES_REL}/${folder}/${f}`,
+    d: readSpecFields(
+      readFileSync(join(featuresDir, folder, f), "utf8"),
+    ) as Declared,
+  }));
+  let surfaceBad = false;
+  for (const { rel, d } of declared) {
+    if (d.surface === null || d.surface === "") {
+      surfaceBad = true;
+      failures.push(
+        `${rel}: no \`surface:\` — every ${kind} file declares \`surface: ${SURFACES}\` (skill author-ears-spec).`,
+      );
+    } else if (!SURFACE_VALUES.includes(d.surface)) {
+      surfaceBad = true;
+      failures.push(
+        `${rel}: \`surface: ${d.surface}\` is not one of \`${SURFACES}\`.`,
       );
     }
-    return out;
   }
-  if (d.reason === null || d.reason === "") {
-    out.push(
-      `${rel}: \`storefronts: ${d.storefronts}\` needs \`storefronts_reason:\` — say what the other storefront does instead (which spec covers it, or which open Issue re-scopes it).`,
-    );
-  } else if (BLOCK_SCALAR_RE.test(d.reason)) {
-    out.push(
-      `${rel}: \`storefronts_reason: ${d.reason}\` is a YAML block scalar — write the reason as one quoted line.`,
-    );
-  } else if (PLACEHOLDER_RE.test(d.reason)) {
-    out.push(
-      `${rel}: \`storefronts_reason: ${d.reason}\` is a placeholder — write the real reason.`,
-    );
+  if (surfaceBad) return null;
+  if (!declared.some(({ d }) => d.surface === "user-facing")) return null;
+  const before = failures.length;
+  for (const { rel, d } of declared) failures.push(...declaredFindings(rel, d));
+  if (declared.length > 1) {
+    const sig = (d: Declared) =>
+      `${d.storefronts ?? ""}\u0000${d.reason ?? ""}`;
+    const first = sig(declared[0].d);
+    if (declared.some(({ d }) => sig(d) !== first)) {
+      failures.push(
+        `${FEATURES_REL}/${folder}: the ${files.join(" / ")} halves disagree on \`storefronts:\` / \`storefronts_reason:\` — both languages carry identical values.`,
+      );
+    }
   }
-  return out;
+  return {
+    kind,
+    value: failures.length === before ? declared[0].d.storefronts : null,
+  };
 }
 
 function main(): void {
@@ -130,61 +135,49 @@ function main(): void {
       .filter((f) => statSync(join(featuresDir, f)).isDirectory())
       .sort();
   } catch {
-    process.stdout.write(`${TAG} no ${FEATURES_REL} tree — nothing to check\n`);
+    process.stdout.write(`${TAG} no ${FEATURES_REL} tree — nothing to check
+`);
     process.exit(0);
   }
 
   const failures: string[] = [];
   let targets = 0;
   for (const folder of folders) {
-    const files = requirementsFiles(
-      folder,
-      readdirSync(join(featuresDir, folder)),
-    );
-    if (files.length === 0) continue;
-    const declared = files.map((f) => ({
-      rel: `${FEATURES_REL}/${folder}/${f}`,
-      d: readDeclared(join(featuresDir, folder, f)),
-    }));
-    let surfaceBad = false;
-    for (const { rel, d } of declared) {
-      if (d.surface === null || d.surface === "") {
-        surfaceBad = true;
-        failures.push(
-          `${rel}: no \`surface:\` — every requirements file declares \`surface: ${SURFACES.join(" | ")}\` (skill author-ears-spec).`,
-        );
-      } else if (!(SURFACES as readonly string[]).includes(d.surface)) {
-        surfaceBad = true;
-        failures.push(
-          `${rel}: \`surface: ${d.surface}\` is not one of \`${SURFACES.join(" | ")}\`.`,
-        );
+    const num = folder.slice(0, 3);
+    const entries = readdirSync(join(featuresDir, folder));
+    const results: GroupResult[] = [];
+    for (const g of GROUPS) {
+      const re = g.re(num);
+      const files = entries.filter((e) => re.test(e)).sort();
+      if (files.length === 0) continue;
+      const r = checkGroup(folder, g.kind, files, featuresDir, failures);
+      if (r) {
+        targets += 1;
+        results.push(r);
       }
     }
-    if (surfaceBad) continue;
-    if (!declared.some(({ d }) => d.surface === "user-facing")) continue;
-    targets += 1;
-    for (const { rel, d } of declared) failures.push(...checkOne(rel, d));
-    if (declared.length > 1) {
-      const sig = (d: Declared) =>
-        `${d.storefronts ?? ""}\u0000${d.reason ?? ""}`;
-      const first = sig(declared[0].d);
-      if (declared.some(({ d }) => sig(d) !== first)) {
-        failures.push(
-          `${FEATURES_REL}/${folder}: the ${files.join(" / ")} halves disagree on \`storefronts:\` / \`storefronts_reason:\` — both languages carry identical values.`,
-        );
-      }
+    const req = results.find((r) => r.kind === "requirements");
+    const prd = results.find((r) => r.kind === "product");
+    if (req?.value && prd?.value && req.value !== prd.value) {
+      failures.push(
+        `${FEATURES_REL}/${folder}: the product PRD says \`storefronts: ${prd.value}\` but the requirements say \`storefronts: ${req.value}\` — the two tiers of one feature declare the same storefronts.`,
+      );
     }
   }
 
   if (failures.length > 0) {
-    for (const f of failures) process.stderr.write(`${TAG} ${f}\n`);
+    for (const f of failures)
+      process.stderr.write(`${TAG} ${f}
+`);
     process.stderr.write(
-      `${TAG} FAIL — ${failures.length} finding(s). Every user-facing spec names both storefronts or records why one (#3604; skill author-ears-spec).\n`,
+      `${TAG} FAIL — ${failures.length} finding(s). Every user-facing spec names both storefronts or records why one (#3604; skill author-ears-spec).
+`,
     );
     process.exit(1);
   }
   process.stdout.write(
-    `${TAG} OK — ${targets} user-facing spec(s) declare their storefronts\n`,
+    `${TAG} OK — ${targets} user-facing spec file group(s) declare their storefronts
+`,
   );
 }
 

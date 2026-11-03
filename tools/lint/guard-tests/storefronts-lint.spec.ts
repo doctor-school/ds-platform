@@ -18,7 +18,7 @@ const dir = (name: string) => caseDir("storefronts", name);
 const TREE_ONLY = { GITHUB_EVENT_NAME: "push", PR_NUMBER: "" };
 
 describe("storefronts-lint", () => {
-  it("3604: green — both / academy-only + reason / none + reason; backend-only and requirements-less folders are not targets → exit 0", () => {
+  it("3604/3610: green — both / academy-only + reason / none + reason; backend-only folders are not targets; a product-only PRD and a PRD agreeing with its requirements in other words pass → exit 0", () => {
     const { code, stdout } = runGuard(GUARD, dir("green"), { env: TREE_ONLY });
     expect(code).toBe(0);
     expect(stdout).toContain("OK");
@@ -109,5 +109,49 @@ describe("storefronts-lint", () => {
     });
     expect(code).toBe(1);
     expect(stderr).toContain("contradiction");
+  });
+
+  it("3610: red — a user-facing product PRD without `storefronts:` → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-product-missing"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("301-product.md");
+    expect(stderr).toContain("no `storefronts:`");
+  });
+
+  it("3610: red — the product PRD -en and -ru halves disagree → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-product-en-ru-disagree"),
+      {
+        env: TREE_ONLY,
+      },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("302-product-ru.md / 302-product.md");
+    expect(stderr).toContain("disagree");
+  });
+
+  it("3610: red — the product PRD and the requirements of one folder declare different storefronts → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-product-requirements-disagree"),
+      {
+        env: TREE_ONLY,
+      },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("303-p");
+    expect(stderr).toContain("the product PRD says `storefronts: both`");
+  });
+
+  it("3610: red — a product PRD without `surface:` fails closed → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-product-no-surface"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("304-product.md");
+    expect(stderr).toContain("no `surface:`");
   });
 });

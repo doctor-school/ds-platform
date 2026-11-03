@@ -13,7 +13,8 @@
  *
  * Flags the literal `networkidle` passed to `waitForLoadState(...)` or as the
  * `waitUntil` option of a Playwright navigation (`goto`, `waitForURL`,
- * `waitForNavigation`, `reload`, `goBack`, `goForward`, `setContent`).
+ * `waitForNavigation`, `reload`, `goBack`, `goForward`, `setContent`) — also
+ * behind a TS `as const` / `satisfies` / `!`, or through a `const` binding of it.
  *
  * SCOPE: wired in `eslint.config.js` to the shared e2e package
  * (`packages/e2e/**`) at `error`.
@@ -28,8 +29,30 @@ const NAVIGATIONS = new Set([
   "setContent",
 ]);
 
-function literalValue(node) {
+const TS_WRAPPERS = new Set([
+  "TSAsExpression",
+  "TSSatisfiesExpression",
+  "TSNonNullExpression",
+]);
+
+function literalValue(node, context, seen = new Set()) {
   if (!node) return null;
+  if (TS_WRAPPERS.has(node.type))
+    return literalValue(node.expression, context, seen);
+  if (node.type === "Identifier" && context && !seen.has(node)) {
+    seen.add(node);
+    const def = context.sourceCode
+      .getScope(node)
+      .references.find((ref) => ref.identifier === node)
+      ?.resolved?.defs[0];
+    if (
+      def?.type === "Variable" &&
+      def.parent.kind === "const" &&
+      def.node.id.type === "Identifier"
+    )
+      return literalValue(def.node.init, context, seen);
+    return null;
+  }
   if (node.type === "Literal" && typeof node.value === "string")
     return node.value;
   if (
@@ -66,7 +89,7 @@ const rule = {
         const name = calleeName(node.callee);
         if (!name) return;
         if (name === "waitForLoadState") {
-          if (literalValue(node.arguments[0]) === "networkidle")
+          if (literalValue(node.arguments[0], context) === "networkidle")
             context.report({
               node: node.arguments[0],
               messageId: "networkidle",
@@ -83,7 +106,7 @@ const rule = {
               ((prop.key.type === "Identifier" &&
                 prop.key.name === "waitUntil") ||
                 literalValue(prop.key) === "waitUntil") &&
-              literalValue(prop.value) === "networkidle"
+              literalValue(prop.value, context) === "networkidle"
             )
               context.report({ node: prop.value, messageId: "networkidle" });
           }

@@ -32,6 +32,9 @@ describe("no-networkidle-wait", () => {
         // The word in prose or an unrelated call is not a wait.
         { code: `const note = "networkidle never settles";` },
         { code: `log({ waitUntil: "networkidle" });` },
+        {
+          code: `let state = "networkidle"; state = "load"; await page.waitForLoadState(state);`,
+        },
       ],
       invalid: [
         {
@@ -64,6 +67,18 @@ describe("no-networkidle-wait", () => {
         },
         {
           code: `await page.setContent(html, { waitUntil: "networkidle" });`,
+          errors: [{ messageId: "networkidle" }],
+        },
+        {
+          code: `await page.waitForLoadState("networkidle" as const);`,
+          errors: [{ messageId: "networkidle" }],
+        },
+        {
+          code: `const IDLE = "networkidle" as const; await page.goto(url, { waitUntil: IDLE });`,
+          errors: [{ messageId: "networkidle" }],
+        },
+        {
+          code: `const state = "networkidle"; await page.waitForLoadState(state);`,
           errors: [{ messageId: "networkidle" }],
         },
       ],

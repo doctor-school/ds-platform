@@ -1598,20 +1598,18 @@ async function retryBlock(
   };
   await page.route("**/*", onAction);
   try {
-    // The browser has the whole action answer once its request finishes; a
-    // route refresh the answer caused would start within the next client turn.
-    const delivered = page.waitForEvent(
-      "requestfinished",
-      (request) =>
-        request.method() === "POST" &&
-        request.headers()["next-action"] !== undefined,
-    );
-    await page
+    const retryControl = page
       .getByTestId(FAILED_BLOCK[block])
-      .getByRole("button", { name: "Повторить", exact: true })
-      .click();
+      .getByRole("button", { name: "Повторить", exact: true });
+    await retryControl.click();
     await answered;
-    await delivered;
+    // The block decodes the answer over several client tasks and only then
+    // puts it in place; its «Повторить» stays `aria-busy` until that commit.
+    // Anything the answer caused — a route refresh included — has been sent
+    // once the busy mark is gone; the next client turn reports it here.
+    await expect(
+      page.locator(`[data-testid="${FAILED_BLOCK[block]}"] [aria-busy="true"]`),
+    ).toHaveCount(0);
     await settleClientTurn(page);
   } finally {
     await page.unroute("**/*", onAction);

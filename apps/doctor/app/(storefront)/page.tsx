@@ -70,7 +70,7 @@ export default async function DoctorHomePage() {
       />
       <section
         aria-labelledby="home-events-heading"
-        className="mt-11 px-4 layout:mt-20 layout:px-12"
+        className="my-11 px-4 layout:my-20 layout:px-12"
         data-testid="home-events"
       >
         <div className="mx-auto w-full max-w-content">

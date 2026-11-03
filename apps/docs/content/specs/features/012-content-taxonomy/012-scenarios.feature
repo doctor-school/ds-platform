@@ -844,15 +844,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       And merge remains blocked until the product owner records the Stage-B confirmation
 
     @EARS-19 @happy
-    Scenario: Both Expert entry paths converge without duplicate User ownership
-      Given one existing User is unlinked
-      When CreateExpert is called without a User
-      Then one standalone Expert is created
-      When CreateExpert or LinkExpertUser is called with that unlinked User
-      Then one Expert references that User through the same command model
-      And a second ownership attempt is refused with 409 USER_EXPERT_CONFLICT
-
-    @EARS-19 @happy
     Scenario: Expert authoring reads only eligible User options
       Given active Users include unlinked rows and rows linked to other retained Experts
       And the current Expert already links one User
@@ -927,11 +918,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       And legacy_speaker_id is absent from the event-expert admin contract
       And the deploy rollback floor guard and its deploy hook and the migration fence suite are gone from the tree
 
-  @EARS-25 @failure
-  Scenario: A kind slug cannot be authored
-    When the admin submits an event-kind mutation carrying a slug
-    Then the mutation is rejected
-
   @EARS-27 @happy
   Scenario: The dictionary starts with the five seed kinds
     When the forward migration introducing event kinds has run
@@ -962,11 +948,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the forward migration introducing the event kind and audience runs
     Then the migration aborts for explicit per-row review
     And no event or project is assigned a kind or an audience by inference
-
-  @EARS-30 @failure
-  Scenario: A project without a default audience is refused
-    When the admin saves a project with no default audience
-    Then the project contract rejects the write
 
   Rule: Public relationship and audience reads
 
@@ -1154,3 +1135,28 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Scenario: An event without a valid audience is refused
       When the admin saves an event with no audience or an unknown audience
       Then the event contract rejects the write
+
+  @taxonomy-authoring-contracts
+  Rule: An operator authors taxonomy through the retained contract
+
+    Background:
+      Given a platform_admin signed in to the admin
+
+    @EARS-25 @failure
+    Scenario: A kind slug cannot be authored
+      When the admin submits an event-kind mutation carrying a slug
+      Then the mutation is rejected
+
+    @EARS-30 @failure
+    Scenario: A project without a default audience is refused
+      When the admin saves a project with no default audience
+      Then the project contract rejects the write
+
+    @EARS-19 @happy
+    Scenario: Both Expert entry paths converge without duplicate User ownership
+      Given one existing User is unlinked
+      When CreateExpert is called without a User
+      Then one standalone Expert is created
+      When CreateExpert or LinkExpertUser is called with that unlinked User
+      Then one Expert references that User through the same command model
+      And a second ownership attempt is refused with 409 USER_EXPERT_CONFLICT

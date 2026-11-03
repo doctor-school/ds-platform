@@ -117,11 +117,23 @@ function stepBound(
 function reachBeyond(
   horizon: EventHorizon,
   tense: "upcoming" | "past",
+  today: string,
 ): EventHorizonReach {
   const window = eventHorizonInstants(horizon);
   return tense === "past"
-    ? { fromInstant: null, toInstant: window.fromInstant }
-    : { fromInstant: window.toInstant, toInstant: servedEndInstant() };
+    ? { fromInstant: null, toInstant: window.fromInstant, running: false }
+    : eventHorizonUpcomingReach(horizon.to, today);
+}
+
+/**
+ * 004 EARS-9 (#3639) — whether the МСК days `[from, to)` hold `today`: a
+ * «Будущие» range that does holds every running (`live`) эфир, whatever day
+ * it started on; one that does not (a later `from`, the reach past a moving
+ * edge) holds only the эфиры that start inside it, so a running эфир is listed
+ * once and never counted again as lying beyond.
+ */
+function holdsToday(from: string, to: string, today: string): boolean {
+  return from <= today && today < to;
 }
 
 function servedEndInstant(): Date {
@@ -184,7 +196,7 @@ export async function resolveEventHorizonFromData(
   const fixed: EventHorizon = past
     ? { from: stated.to, to: stated.to }
     : { from: stated.from, to: stated.from };
-  const starts = await listStartsIn(reachBeyond(fixed, query.tense));
+  const starts = await listStartsIn(reachBeyond(fixed, query.tense, today));
   const take = past
     ? EVENT_HORIZON_STEP
     : query.count !== undefined
@@ -321,6 +333,23 @@ export function clampRequestedEdge(
   return to < horizon.to ? { from: horizon.from, to } : horizon;
 }
 
+/**
+ * The range a tense's read selects from a horizon: its half-open instants
+ * ({@link eventHorizonInstants}) plus, on «Будущие», whether it holds today and
+ * so every running эфир ({@link EventHorizonReach.running}, 004 EARS-9).
+ */
+export function eventHorizonWindow(
+  horizon: EventHorizon,
+  tense: "upcoming" | "past",
+  today: string,
+): EventHorizonReach & { fromInstant: Date } {
+  return {
+    ...eventHorizonInstants(horizon),
+    running:
+      tense === "upcoming" && holdsToday(horizon.from, horizon.to, today),
+  };
+}
+
 /** The half-open UTC instant range `[from 00:00 МСК, to 00:00 МСК)` of a horizon. */
 export function eventHorizonInstants(horizon: EventHorizon): {
   fromInstant: Date;
@@ -342,10 +371,15 @@ export function eventHorizonInstants(horizon: EventHorizon): {
 export function eventHorizonTenseReach(
   horizon: EventHorizon,
   tense: "upcoming" | "past",
+  today: string,
 ): EventHorizonReach {
   return tense === "past"
-    ? { fromInstant: null, toInstant: eventHorizonInstants(horizon).toInstant }
-    : eventHorizonUpcomingReach(horizon.from);
+    ? {
+        fromInstant: null,
+        toInstant: eventHorizonInstants(horizon).toInstant,
+        running: false,
+      }
+    : eventHorizonUpcomingReach(horizon.from, today);
 }
 
 /**
@@ -353,12 +387,17 @@ export function eventHorizonTenseReach(
  * 00:00 МСК to the end of the served years — the upcoming arm of
  * {@link eventHorizonTenseReach}. From today, it is what the default
  * «Будущие» feed can ever list (019 LD-9: the emptiness test of the
- * visitor's default scope).
+ * visitor's default scope). From today on it also holds every running эфир
+ * (004 EARS-9).
  */
-export function eventHorizonUpcomingReach(from: string): EventHorizonReach {
+export function eventHorizonUpcomingReach(
+  from: string,
+  today: string,
+): EventHorizonReach {
   return {
     fromInstant: eventHorizonInstants({ from, to: from }).fromInstant,
     toInstant: servedEndInstant(),
+    running: holdsToday(from, EVENT_HORIZON_SERVED_END, today),
   };
 }
 
@@ -371,6 +410,13 @@ export function eventHorizonUpcomingReach(from: string): EventHorizonReach {
 export interface EventHorizonReach {
   fromInstant: Date | null;
   toInstant: Date;
+  /**
+   * 004 EARS-9 (#3639) — the range holds today, so a running (`live`) эфир
+   * that started before `fromInstant` (before today's МСК midnight) is in it
+   * too: only `ended` / `archived` drop a card from «Будущие». Always `false`
+   * on «Прошедшие» and on a range that does not hold today.
+   */
+  running: boolean;
 }
 
 /**
@@ -420,8 +466,9 @@ export async function resolveEventHorizonBeyond(
   tense: "upcoming" | "past",
   listStartsIn: (range: EventHorizonReach) => Promise<readonly Date[]>,
   shown: { count: number; heldBack: number },
+  today: string,
 ): Promise<EventHorizonBeyond> {
-  const starts = await listStartsIn(reachBeyond(horizon, tense));
+  const starts = await listStartsIn(reachBeyond(horizon, tense, today));
   if (tense === "upcoming") {
     const remaining = starts.length + shown.heldBack;
     if (remaining === 0) {

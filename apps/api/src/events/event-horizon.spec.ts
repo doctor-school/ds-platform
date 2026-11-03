@@ -7,6 +7,9 @@ import {
   EVENT_HORIZON_ROW_CAP,
   eventHorizonReachingFirstMatch,
   eventHorizonInstants,
+  eventHorizonTenseReach,
+  eventHorizonUpcomingReach,
+  eventHorizonWindow,
   EVENT_HORIZON_LAST_STEP,
   EVENT_HORIZON_STEP,
   holdBackEventHorizonRows,
@@ -246,6 +249,7 @@ async function readHorizon(
     tense,
     listStartsIn,
     { count: shown.length, heldBack: requested.heldBack },
+    today,
   );
   return {
     ...clampRequestedEdge(bounded.horizon, tense, shown, query, beyond),
@@ -591,5 +595,50 @@ describe("019 LD-2 both tenses page by a count step of 10 events, not by days (#
     expect(page.nextBatch).toBe(10);
     expect(page.nextCount).toBe(13);
     expect(page.remaining).toBe(22);
+  });
+});
+
+describe("004 EARS-9 (#3639) — a range holds the running эфиры only when it holds today", () => {
+  const today = "2026-11-04";
+
+  it("EARS-9: the «Будущие» window from today holds every running эфир; a later window and «Прошедшие» do not", () => {
+    expect(
+      eventHorizonWindow({ from: today, to: "2026-11-05" }, "upcoming", today)
+        .running,
+    ).toBe(true);
+    expect(
+      eventHorizonWindow(
+        { from: "2026-11-05", to: "2026-11-09" },
+        "upcoming",
+        today,
+      ).running,
+    ).toBe(false);
+    expect(
+      eventHorizonWindow({ from: "2026-11-01", to: today }, "upcoming", today)
+        .running,
+    ).toBe(false);
+    expect(
+      eventHorizonWindow(
+        { from: "2026-11-01", to: "2026-11-05" },
+        "past",
+        today,
+      ).running,
+    ).toBe(false);
+  });
+
+  it("EARS-9: the reach from today holds the running эфиры; the reach past a moving edge never counts them again", () => {
+    expect(eventHorizonUpcomingReach(today, today).running).toBe(true);
+    expect(eventHorizonUpcomingReach("2026-11-05", today).running).toBe(false);
+    expect(
+      eventHorizonTenseReach(
+        { from: today, to: "2026-11-05" },
+        "upcoming",
+        today,
+      ).running,
+    ).toBe(true);
+    expect(
+      eventHorizonTenseReach({ from: today, to: "2026-11-05" }, "past", today)
+        .running,
+    ).toBe(false);
   });
 });

@@ -10,6 +10,7 @@ import {
   AuthShell,
   Combobox,
   DataTable,
+  DoctorContentCard,
   DayAgenda,
   EmailConfirmCard,
   EmptyState,
@@ -46,6 +47,7 @@ import {
   type AccountProfileCardCopy,
   type ComboboxOption,
   type DataTableColumn,
+  type DoctorContentCardProps,
   type DotGridCell,
   type EventListTab,
   type EmailConfirmCardCopy,
@@ -4453,6 +4455,149 @@ function AccountProfileCardSection() {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* DoctorContentCard (018 EARS-2, #1497)                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Neutral catalogue content — not product wording and not a real course; the
+ * section demonstrates the unit's anatomy and states, which the host resolves on
+ * the server and passes in.
+ */
+const CONTENT_CARD_SAMPLE: DoctorContentCardProps = {
+  kind: "course",
+  kicker: "Курс-сериал",
+  title: "Пример курса: клинические разборы по специальности",
+  meta: { value: "9", label: "серий" },
+  counter: "Уже записались 37 коллег",
+  state: "normal",
+  href: "#content-card-sample",
+};
+
+const CONTENT_CARD_PROPS: PropRow[] = [
+  {
+    name: "kind",
+    type: '"lesson" | "course" | "school"',
+    required: true,
+    description:
+      "The content kind; it does not change the anatomy — a course passes its series count through meta.",
+  },
+  {
+    name: "kicker",
+    type: "string",
+    required: true,
+    description: "The type line above the title.",
+  },
+  {
+    name: "title",
+    type: "string",
+    required: true,
+    description:
+      "The title — also the card's ONE link (its overlay covers the whole card).",
+  },
+  {
+    name: "meta",
+    type: "{ value: string; label: string }",
+    required: true,
+    description:
+      "The tint metric column of variant Б, e.g. «9 / серий»; server-composed data.",
+  },
+  {
+    name: "counter",
+    type: "string",
+    required: false,
+    description:
+      "Social-proof line; omitted when its source is unavailable — never a zero.",
+  },
+  {
+    name: "state",
+    type: '"normal" | "started" | "completed" | "gate" | "soon"',
+    required: true,
+    description:
+      "Server-resolved: started/completed/gate are viewer-dependent, soon follows the publication state. Hover and focus are element states, not values.",
+  },
+  {
+    name: "progress",
+    type: "number (0–100)",
+    required: false,
+    description: "Clamped; rendered only in started.",
+  },
+  {
+    name: "href",
+    type: "string",
+    required: true,
+    description: "Target of the one link.",
+  },
+];
+
+const CONTENT_CARD_STATES: {
+  state: DoctorContentCardProps["state"];
+  note: string;
+  progress?: number;
+}[] = [
+  { state: "normal", note: "CTA «Открыть →»" },
+  {
+    state: "started",
+    progress: 33,
+    note: "progress bar + «Вы прошли N%», CTA «Продолжить →»",
+  },
+  { state: "completed", note: "«✓ Завершено», CTA «Открыть снова →»" },
+  {
+    state: "gate",
+    note: "tint footer «Смотреть — нужна регистрация →» describes the link",
+  },
+  {
+    state: "soon",
+    note: "dashed frame, faint kicker, «Скоро», no CTA and no lift",
+  },
+];
+
+function DoctorContentCardSection() {
+  return (
+    <BlockSection
+      title="DoctorContentCard"
+      exportsLine="DoctorContentCard, DoctorContentCardProps — the doctor variant of the ONE content card unit (@ds/design-system/content-card, 018 EARS-2)"
+    >
+      <div data-testid="content-card-showcase" className="flex flex-col gap-5">
+        <SubRow label="Preview">
+          <WideCanvas>
+            <DoctorContentCard {...CONTENT_CARD_SAMPLE} />
+          </WideCanvas>
+        </SubRow>
+
+        <SubRow label="Slots / props">
+          <PropsTable rows={CONTENT_CARD_PROPS} />
+        </SubRow>
+
+        <SubRow label="State matrix">
+          <div className="grid gap-6">
+            <StateCase
+              label="hover / focus"
+              note="element states of the preview above: pointer hover presses the card toward its shadow (desktop), keyboard Tab rings the whole card"
+            >
+              <span className="text-xs text-muted-foreground">
+                Hover or Tab to the preview.
+              </span>
+            </StateCase>
+            {CONTENT_CARD_STATES.map(({ state, note, progress }) => (
+              <StateCase key={state} label={`state="${state}"`} note={note}>
+                <WideCanvas>
+                  <DoctorContentCard
+                    {...CONTENT_CARD_SAMPLE}
+                    state={state}
+                    progress={progress}
+                    href={`#content-card-${state}`}
+                  />
+                </WideCanvas>
+              </StateCase>
+            ))}
+          </div>
+        </SubRow>
+      </div>
+    </BlockSection>
+  );
+}
+
 export interface BlocksViewProps {
   /**
    * The REAL published legal document and its neighbours, loaded server-side in
@@ -4598,6 +4743,7 @@ export function BlocksView({ legalDocument, legalOthers }: BlocksViewProps) {
         legalOthers={legalOthers}
       />
       <AccountProfileCardSection />
+      <DoctorContentCardSection />
       <AuthCardSection />
       <AuthLayoutSection />
       <AuthShellSection />

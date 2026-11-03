@@ -369,7 +369,10 @@ function ResearchAndPlace() {
           </span>
         </div>
         <div className={styles.placeCta}>
-          <Button asChild>
+          {/* The canvas CTA is a plain link that wraps; the DS Button is
+              `whitespace-nowrap`, and at 390 this label leaves under 1px, so a
+              wider-rendering engine pushed the page sideways (EARS-12, #3589). */}
+          <Button asChild className="max-w-full whitespace-normal">
             <NextLink href="/education-index">
               Открыть образовательный индекс →
             </NextLink>

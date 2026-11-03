@@ -1569,14 +1569,15 @@ describe("backlog-triage findStorefrontsGaps() — Storefronts hygiene (#3610)",
     body: string,
     labels: string[] = [],
     title = `[x] ${number}`,
+    track: string | null = "track:platform",
   ) => ({
     number,
     title,
-    labels,
+    labels: track ? [track, ...labels] : labels,
     body,
   });
 
-  it("3610: lists a missing line and every spec contradiction; skips epics, Renovate-maintained Issues, wider (`both`) and `none` rows", () => {
+  it("3610: lists a missing line and every spec contradiction; skips untracked Issues, epics, Renovate-maintained Issues, wider (`both`) and `none` rows", () => {
     const gaps = findStorefrontsGaps(
       [
         issue(7, "Reuse: new: x"),
@@ -1598,6 +1599,9 @@ describe("backlog-triage findStorefrontsGaps() — Storefronts hygiene (#3610)",
         },
         { ...issue(12, "renovate body"), author: "app/doctor-school-renovate" },
         issue(13, "no field", [], "Dependency Dashboard"),
+        // Outside the `pnpm issue:create` scope: no `track:*` label.
+        issue(14, "no field", [], "[x] 14", null),
+        issue(15, "Storefronts: doctor-only: x", ["feature:402-b"], "[x] 15", null),
       ],
       lookup,
     );
@@ -1610,13 +1614,26 @@ describe("backlog-triage findStorefrontsGaps() — Storefronts hygiene (#3610)",
     expect(gaps.find((g) => g.number === 5)?.detail).toContain("sibling Issue");
   });
 
-  it("3610: the section is silent when clean and names the skill when not", () => {
+  it("3610: the section is silent when clean, groups rows by track and names the skill", () => {
     expect(formatStorefrontsHygiene([])).toBe("");
     const text = formatStorefrontsHygiene(
-      findStorefrontsGaps([issue(9, "nothing here")], lookup),
+      findStorefrontsGaps(
+        [
+          issue(9, "nothing here"),
+          issue(16, "nothing here", [], "[x] 16", "track:doctor"),
+        ],
+        lookup,
+      ),
     );
-    expect(text).toContain("## Storefronts hygiene (1)");
+    expect(text).toContain("## Storefronts hygiene (2)");
     expect(text).toContain("#9 MISSING");
     expect(text).toContain("groom-backlog");
+    expect(text).not.toContain("why there is none");
+    const doctor = text.indexOf("### track:doctor (1)");
+    const platform = text.indexOf("### track:platform (1)");
+    expect(doctor).toBeGreaterThan(-1);
+    expect(platform).toBeGreaterThan(doctor);
+    expect(text.indexOf("#16 MISSING")).toBeGreaterThan(doctor);
+    expect(text.indexOf("#16 MISSING")).toBeLessThan(platform);
   });
 });

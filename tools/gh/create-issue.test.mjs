@@ -3,9 +3,9 @@
 // `gh` is spawned: main() is guarded behind the direct-invocation check, so
 // importing the module runs no I/O. Platform-agnostic — no drive-letter or
 // path literals.
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -267,9 +267,14 @@ test("storefrontsFieldError points at the spec field and exempts epics and untra
 // ── storefronts <-> spec consistency (#3610) ────────────────────────────────
 // A throwaway spec tree under the OS temp dir: 401 both (requirements), 402
 // academy-only (requirements), 403 doctor-only (product PRD only), 404 none,
-// 405 broken (no valid value).
+// 405 broken (no valid value). Removed after the suite.
+const specTrees = [];
+after(() => {
+  for (const root of specTrees) rmSync(root, { recursive: true, force: true });
+});
 function specTree() {
   const root = mkdtempSync(join(tmpdir(), "storefronts-"));
+  specTrees.push(root);
   const put = (folder, file, fm) => {
     mkdirSync(join(root, folder), { recursive: true });
     writeFileSync(

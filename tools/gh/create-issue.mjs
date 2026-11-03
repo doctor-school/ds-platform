@@ -70,6 +70,7 @@ import {
   EARS_KIND_LABEL,
   FALLBACK_MILESTONE,
   ROADMAP_LABEL,
+  TRACK_LABELS,
   TRACK_MILESTONE_PREFIXES,
   classifyIssueTaxonomy,
   isEpicTitle,
@@ -81,6 +82,7 @@ import {
   FEATURES_REL,
   featureNumberFromLabels,
   parseIssueStorefronts,
+  requiresStorefrontsLine,
   specStorefronts,
   storefrontsConsistencyError,
 } from "./lib/storefronts.mjs";
@@ -241,13 +243,8 @@ export const KIND_LABELS = [
   "tooling",
 ];
 
-/**
- * The track-label taxonomy (#1583) — the permanent product-axis every new Issue
- * carries exactly one of. `track:academy` = academy.doctor.school surfaces;
- * `track:doctor` = the doctor showcase site `apps/doctor`; `track:platform` =
- * shared packages, backend, infra, process, or work serving both sites.
- */
-export const TRACK_LABELS = ["track:academy", "track:doctor", "track:platform"];
+// The track-label taxonomy (#1583) lives in `lib/roadmap-taxonomy.mjs`.
+export { TRACK_LABELS };
 
 /**
  * Collect every `--label` value out of the gh passthrough, across the forms gh
@@ -449,23 +446,29 @@ export function reuseFieldError(args, body) {
  * written for ONE host without saying what the other does. `Reuse:` answers
  * «which code»; this answers «which storefronts». The Issue follows its spec's
  * frontmatter `storefronts:` (enforced on specs by `pnpm lint:storefronts`);
- * a single-host child under a `both` spec names its sibling Issue for the
- * other storefront or the reason there is none. Epics are exempt like `Reuse:`.
+ * a single-host child under a `both` spec names its sibling Issue (`#N`) for
+ * the other storefront. Scope: `requiresStorefrontsLine` (shared with
+ * `pnpm backlog:triage`) — a tracked, non-epic Issue.
  * @param {string[]} args  the gh passthrough
  * @param {string} body    the resolved Issue body
  * @returns {string|null}
  */
 export function storefrontsFieldError(args, body) {
   const found = collectTrackLabels(args);
-  if (!found.some((l) => TRACK_LABELS.includes(l))) return null;
-  if (isEpicTitle(titleValue(args))) return null;
+  if (
+    !requiresStorefrontsLine({
+      labels: collectLabels(args),
+      title: titleValue(args),
+    })
+  )
+    return null;
   if (parseIssueStorefronts(body)) return null;
   return (
     `every Issue (${found.join(" / ")}) must say which storefronts it covers in its body ` +
     `before it is opened (AGENTS.md §6, #3604). Add ONE line, one of:\n` +
     `    Storefronts: both\n` +
-    `    Storefronts: academy-only: <why the doctor storefront is out — its sibling Issue #N, or why none>\n` +
-    `    Storefronts: doctor-only: <why the Academy is out — its sibling Issue #N, or why none>\n` +
+    `    Storefronts: academy-only: <why the doctor storefront is out; under a \`both\` spec, its sibling Issue #N>\n` +
+    `    Storefronts: doctor-only: <why the Academy is out; under a \`both\` spec, its sibling Issue #N>\n` +
     `    Storefronts: none: <why no storefront page — admin / staff / sign-in host / tooling>\n` +
     `  A spec-bound Issue follows its spec's \`storefronts:\` frontmatter ` +
     `(apps/docs/content/specs/features/NNN-<slug>/NNN-requirements*.md, else NNN-product.md).`

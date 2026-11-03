@@ -116,6 +116,7 @@ import {
   FEATURES_REL,
   featureNumberFromLabels,
   parseIssueStorefronts,
+  requiresStorefrontsLine,
   specStorefronts,
   storefrontsConsistencyError,
 } from "./gh/lib/storefronts.mjs";
@@ -288,6 +289,8 @@ export interface StorefrontsInput {
 export interface StorefrontsGap {
   number: number;
   title: string;
+  /** The Issue's `track:*` label (`trackOf`), for the per-track grouping. */
+  track: string | null;
   kind: "missing" | "inconsistent";
   detail: string;
 }
@@ -298,10 +301,11 @@ export type SpecStorefrontsLookup = (
 ) => { value: string; file: string } | null;
 
 /**
- * Open non-epic Issues with no valid `Storefronts:` line, and spec-bound ones
- * whose line contradicts the spec's `storefronts:` — the same rule
- * `pnpm issue:create` refuses at creation, so pre-gate Issues and later spec
- * re-scopes surface here.
+ * Open Issues in the `pnpm issue:create` scope (`requiresStorefrontsLine`: a
+ * tracked, non-epic, non-bot Issue) with no valid `Storefronts:` line, and
+ * spec-bound ones whose line contradicts the spec's `storefronts:` — the same
+ * rules `pnpm issue:create` refuses at creation, so pre-gate Issues and later
+ * spec re-scopes surface here.
  */
 export function findStorefrontsGaps(
   issues: StorefrontsInput[],
@@ -309,18 +313,14 @@ export function findStorefrontsGaps(
 ): StorefrontsGap[] {
   const out: StorefrontsGap[] = [];
   for (const i of issues) {
-    if (isEpicTitle(i.title)) continue;
-    // Renovate rewrites its Dependency Dashboard body on every run, so a line
-    // added by hand cannot persist — the bot Issue is not groomable.
-    const botMaintained =
-      /^app\/.*renovate/i.test(i.author ?? "") ||
-      i.title.trim() === "Dependency Dashboard";
-    if (botMaintained) continue;
+    if (!requiresStorefrontsLine(i)) continue;
     const line = parseIssueStorefronts(i.body);
+    const track = trackOf(i.labels);
     if (!line) {
       out.push({
         number: i.number,
         title: i.title,
+        track,
         kind: "missing",
         detail: "no valid `Storefronts:` line",
       });
@@ -334,6 +334,7 @@ export function findStorefrontsGaps(
       out.push({
         number: i.number,
         title: i.title,
+        track,
         kind: "inconsistent",
         detail: err,
       });
@@ -344,15 +345,14 @@ export function findStorefrontsGaps(
 /** Render `## Storefronts hygiene` — silent when every open Issue is compliant. */
 export function formatStorefrontsHygiene(rows: StorefrontsGap[]): string {
   if (rows.length === 0) return "";
-  const out = [
-    `## Storefronts hygiene (${rows.length})`,
-    "Open Issues whose `Storefronts:` line is missing or contradicts their spec's `storefronts:` (#3604, #3610). Fix the line; a single-host Issue under a `both` spec names its sibling Issue (open it, or record why there is none) — skill groom-backlog.",
-  ];
-  for (const r of rows)
-    out.push(
-      `- #${r.number} ${r.kind.toUpperCase()} — ${r.detail} — ${truncateTitle(r.title, 70)}`,
-    );
-  return out.join("\n");
+  return formatTrackSection(
+    "Storefronts hygiene",
+    "Open Issues whose `Storefronts:` line is missing or contradicts their spec's `storefronts:` (#3604, #3610). Fix the line; a single-host Issue under a `both` spec cites its sibling Issue `#N` (open it via `pnpm issue:create` first if none exists), or is re-scoped to `both`, or the spec's `storefronts:` is corrected in a spec PR — skill groom-backlog.",
+    rows.map((r) => ({
+      track: r.track,
+      line: `- #${r.number} ${r.kind.toUpperCase()} — ${r.detail} — ${truncateTitle(r.title, 70)}`,
+    })),
+  );
 }
 
 // ── PR board hygiene (#1140) — dead + under-fielded PR rows on the board ───────

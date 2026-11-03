@@ -13,6 +13,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { TRACK_LABELS, isEpicTitle } from "./roadmap-taxonomy.mjs";
+
 export const STOREFRONTS_VALUES = [
   "both",
   "academy-only",
@@ -124,6 +126,25 @@ export function parseIssueStorefronts(body) {
 }
 
 /**
+ * Is the Issue in scope of the `Storefronts:` line requirement? The ONE scope
+ * predicate shared by the creation gate (`pnpm issue:create`) and the grooming
+ * report (`pnpm backlog:triage`): a tracked (`track:*`) Issue that is not an
+ * `epic: …` container (its children carry the line) and not bot-maintained
+ * (Renovate rewrites its Dependency Dashboard body, so a hand-added line
+ * cannot persist).
+ * @param {{labels: string[], title: string, author?: string}} issue
+ * @returns {boolean}
+ */
+export function requiresStorefrontsLine({ labels, title, author }) {
+  if (!(labels ?? []).some((l) => TRACK_LABELS.includes(l.trim())))
+    return false;
+  if (isEpicTitle(title)) return false;
+  if (/^app\/.*renovate/i.test(author ?? "")) return false;
+  if ((title ?? "").trim() === "Dependency Dashboard") return false;
+  return true;
+}
+
+/**
  * The three-digit feature number of the first `feature:NNN-*` label.
  * @param {string[]} labels
  * @returns {string|null}
@@ -189,7 +210,13 @@ const OTHER_HOST = {
  *   - spec `none` → the Issue is `none` (a storefront value has no spec page);
  *   - spec single-host → the Issue does not name the OTHER single host;
  *   - spec `both` → a single-host Issue names its sibling Issue (`#N`) in the
- *     reason, so the other storefront's half is never silently dropped.
+ *     reason, so the other storefront's half is never silently dropped. The
+ *     check is lexical — any `#N` passes; whether it is an OPEN sibling for
+ *     the other storefront is the Mode (a) review's question
+ *     (`request-mode-a-review` Pass 2). There is no «why none» escape: if the
+ *     other storefront truly needs nothing, the Issue is re-scoped to `both`
+ *     (the shared change serves both) or the spec's `storefronts:` is
+ *     corrected in a spec PR.
  * @param {{value: string, file: string}} spec
  * @param {{value: string, reason: string|null}} issue
  * @returns {string|null}  the refusal, or null when consistent
@@ -204,7 +231,7 @@ export function storefrontsConsistencyError(spec, issue) {
     return `the spec (${spec.file}) declares \`storefronts: ${s}\` but the Issue says \`Storefronts: ${i}\` — the Issue names the other storefront only. Write \`Storefronts: ${s}: <reason>\` or \`Storefronts: both\` (a shared-package change), or re-scope the spec first.`;
   }
   if (s === "both" && OTHER_HOST[i] && !/#\d+/.test(issue.reason ?? "")) {
-    return `the spec (${spec.file}) declares \`storefronts: both\` and the Issue covers only one (\`Storefronts: ${i}\`) without naming the sibling Issue for the other storefront — cite it in the reason (\`#N\`), or open it first.`;
+    return `the spec (${spec.file}) declares \`storefronts: both\` and the Issue covers only one (\`Storefronts: ${i}\`) without naming the sibling Issue for the other storefront. Cite the existing sibling in the reason (\`#N\`); or open it (\`pnpm issue:create\`) and cite it; or, if the other storefront truly needs nothing, write \`Storefronts: both\` (the shared change serves both) or correct the spec's \`storefronts:\` in a spec PR.`;
   }
   return null;
 }

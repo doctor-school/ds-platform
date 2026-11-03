@@ -135,8 +135,7 @@ function main(): void {
       .filter((f) => statSync(join(featuresDir, f)).isDirectory())
       .sort();
   } catch {
-    process.stdout.write(`${TAG} no ${FEATURES_REL} tree — nothing to check
-`);
+    process.stdout.write(`${TAG} no ${FEATURES_REL} tree — nothing to check\n`);
     process.exit(0);
   }
 
@@ -166,18 +165,14 @@ function main(): void {
   }
 
   if (failures.length > 0) {
-    for (const f of failures)
-      process.stderr.write(`${TAG} ${f}
-`);
+    for (const f of failures) process.stderr.write(`${TAG} ${f}\n`);
     process.stderr.write(
-      `${TAG} FAIL — ${failures.length} finding(s). Every user-facing spec names both storefronts or records why one (#3604; skill author-ears-spec).
-`,
+      `${TAG} FAIL — ${failures.length} finding(s). Every user-facing spec names both storefronts or records why one (#3604; skill author-ears-spec).\n`,
     );
     process.exit(1);
   }
   process.stdout.write(
-    `${TAG} OK — ${targets} user-facing spec file group(s) declare their storefronts
-`,
+    `${TAG} OK — ${targets} user-facing spec file group(s) declare their storefronts\n`,
   );
 }
 

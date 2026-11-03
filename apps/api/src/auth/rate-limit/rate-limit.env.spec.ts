@@ -3,6 +3,7 @@ import {
   AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET,
   DEFAULT_RATE_LIMIT_THRESHOLDS,
   resolveRateLimitThresholds,
+  SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE,
   STOREFRONT_ENTRY_RATE_LIMIT_SCOPE,
   STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
   type RateLimitEnv,
@@ -181,6 +182,31 @@ describe("oidc:silent-check bucket (003 EARS-63, ADR-0015 §4 req. 9)", () => {
     expect(
       await svc.tryConsume({ ip, scope: STOREFRONT_ENTRY_RATE_LIMIT_SCOPE }),
     ).toBe(true);
+    expect(await svc.tryConsume({ ip })).toBe(true);
+  });
+});
+
+// 003 EARS-69, ADR-0015 §4 req. 9 (#3585): the sign-in host form entry takes
+// no identifier and has its OWN NAT-sized per-IP bucket — a page view never
+// spends the EARS-13 credential budget, and one hospital or congress-hall
+// address is not refused after 20 opens.
+describe("sign-in-host:entry bucket (003 EARS-69, ADR-0015 §4 req. 9)", () => {
+  it("003 EARS-69: the sign-in host entry scope is its own 1200 per 15 minutes per-IP bucket", () => {
+    expect(SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE).toBe("sign-in-host:entry");
+    expect(
+      DEFAULT_RATE_LIMIT_THRESHOLDS.scopedPerIpPer15Min[
+        SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE
+      ],
+    ).toBe(1200);
+  });
+
+  it("003 EARS-69: one IP opens the host entry past 20 times, is refused past 1200, and its credential budget stays untouched", async () => {
+    const svc = new RateLimitService(DEFAULT_RATE_LIMIT_THRESHOLDS, () => 0);
+    const ip = "198.51.100.9";
+    const entry = { ip, scope: SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE };
+    for (let i = 0; i < 1200; i++)
+      expect(await svc.tryConsume(entry)).toBe(true);
+    expect(await svc.tryConsume(entry)).toBe(false);
     expect(await svc.tryConsume({ ip })).toBe(true);
   });
 });

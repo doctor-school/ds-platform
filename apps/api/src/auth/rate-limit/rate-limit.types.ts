@@ -122,6 +122,21 @@ export const STOREFRONT_ENTRY_RATE_LIMIT_SCOPE = "oidc:entry";
 export const STOREFRONT_ENTRY_PER_IP_15MIN = 1200;
 
 /**
+ * 003 EARS-69, ADR-0015 §4 req. 9 — the sign-in host's form entry (`/login`,
+ * `/register`, `/reset` opened with an auth request) keys its per-IP window
+ * under its own bucket, on the client IP the sign-in host server forwards. It
+ * takes no identifier, so a page view never spends the EARS-13 credential
+ * budget. The ceiling is the storefront entry's NAT sizing
+ * ({@link STOREFRONT_ENTRY_PER_IP_15MIN}): every interactive storefront entry
+ * lands on one host form, and tens of browsers behind one clinic, hospital or
+ * congress-hall address open it, never the password limiter's 20. Every
+ * entry counts here, interactive or silent; a `prompt=none` entry also counts
+ * in {@link STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE}.
+ */
+export const SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE = "sign-in-host:entry";
+export const SIGN_IN_HOST_ENTRY_PER_IP_15MIN = 1200;
+
+/**
  * 003 EARS-63 (f), ADR-0015 §4 step 4 «Rate limits» / req. 9 — the silent
  * path's own per-IP bucket, separate from the password / code limiter and the
  * interactive entry: it counts each silent-check start, each sign-in-host
@@ -168,6 +183,7 @@ export const DEFAULT_RATE_LIMIT_THRESHOLDS: RateLimitThresholds = {
     [AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET]: AUTH_SENDING_DOOR_PER_IP_15MIN,
     [STOREFRONT_REDEEM_RATE_LIMIT_SCOPE]: STOREFRONT_REDEEM_PER_IP_15MIN,
     [STOREFRONT_ENTRY_RATE_LIMIT_SCOPE]: STOREFRONT_ENTRY_PER_IP_15MIN,
+    [SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE]: SIGN_IN_HOST_ENTRY_PER_IP_15MIN,
     [STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE]:
       STOREFRONT_SILENT_CHECK_PER_IP_15MIN,
     [BACK_CHANNEL_LOGOUT_RATE_LIMIT_SCOPE]: BACK_CHANNEL_LOGOUT_PER_IP_15MIN,

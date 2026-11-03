@@ -36,6 +36,7 @@ import {
   RateLimited,
   RateLimitService,
 } from "../auth/rate-limit/index.js";
+import { SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE } from "../auth/rate-limit/rate-limit.types.js";
 import {
   computeFingerprint,
   parseCookies,
@@ -70,12 +71,7 @@ import {
 /** The storefront's one generic login refusal (EARS-16), byte-identical here. */
 const GENERIC_LOGIN_FAILURE = "invalid credentials";
 
-/**
- * Scope of the entry route's own per-address bucket (EARS-69: the entry takes
- * no identifier and is rate-limited; a page view never spends the EARS-13
- * credential budget).
- */
-export const SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE = "sign-in-host:entry";
+export { SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE };
 
 /** The request facts every handler reads, taken from the browser's own request. */
 interface HostHeaders {

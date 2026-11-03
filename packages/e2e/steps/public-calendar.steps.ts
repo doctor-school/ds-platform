@@ -9,6 +9,7 @@ type CalendarRow = {
   slug: string;
   title: string;
   startsAt: string;
+  participationFormat: string;
   state: string;
 };
 type Count = { month: number; count: number };

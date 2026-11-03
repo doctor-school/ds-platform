@@ -51,6 +51,7 @@ export interface StepWorld {
       slug: string;
       title: string;
       startsAt: string;
+      participationFormat: string;
       state: string;
     }[];
   };

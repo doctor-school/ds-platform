@@ -343,12 +343,33 @@ Then(
     const pastEntries = pastDay
       ? selectedOverflow.entries
       : selectedOverflow.entries.filter(isEnded);
-    const expectInGroup = async (groupId: string, entries: Entry[]) => {
-      const group = page
-        .getByTestId("events-feed")
-        .locator(`section[id="day-${groupId}"]`);
-      await expect(group).toBeVisible();
+    // The month grid keys its cells by the МСК day (`dayOf`), but the feed
+    // groups a card under its day in the PAGE zone — the viewer's for an
+    // online/hybrid эфир, МСК for an offline one (004 «Amendment —
+    // 2026-10-02», `buildFeedItems`). Between МСК and viewer midnight
+    // (21:00–24:00Z for a UTC browser) an эфир of the overflow day therefore
+    // sits under the previous day's feed group (#3637).
+    const viewerZone = await page.evaluate(
+      () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
+    const feedGroupOf = (entry: Entry, past: boolean) => {
+      const day = new Intl.DateTimeFormat("en-CA", {
+        timeZone:
+          entry.participationFormat === "offline"
+            ? "Europe/Moscow"
+            : viewerZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date(entry.startsAt));
+      return past ? day.slice(0, 7) : day;
+    };
+    const expectInGroups = async (entries: Entry[], past: boolean) => {
       for (const entry of entries) {
+        const group = page
+          .getByTestId("events-feed")
+          .locator(`section[id="day-${feedGroupOf(entry, past)}"]`);
+        await expect(group).toBeVisible();
         await expect(
           group
             .getByRole("link", { name: entry.title, exact: true })
@@ -357,14 +378,14 @@ Then(
       }
     };
     if (pastDay) {
-      await expectInGroup(selectedOverflow.day.slice(0, 7), pastEntries);
+      await expectInGroups(pastEntries, true);
     } else {
-      await expectInGroup(selectedOverflow.day, upcoming);
+      await expectInGroups(upcoming, false);
       if (pastEntries.length > 0) {
         const pastFeed = new URL(selectedOverflow.href, page.url());
         pastFeed.searchParams.set("tense", "past");
         await open(page, `${pastFeed.pathname}${pastFeed.search}`);
-        await expectInGroup(selectedOverflow.day.slice(0, 7), pastEntries);
+        await expectInGroups(pastEntries, true);
       }
     }
     await open(page, original);

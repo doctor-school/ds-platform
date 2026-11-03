@@ -462,7 +462,8 @@ nothing writes the API-side keys: a slot's `api` binds the real Zitadel adapter 
 (`apps/api/src/auth/idp/idp.module.ts`); otherwise it boots the in-memory
 `FakeIdpClient` with no error — registration and login "work", the accounts live in
 that container's memory and vanish on the next `sync`, and the golden accounts
-`reset-identities` writes into Zitadel answer 401 on `POST /v1/auth/login`. That is how
+`reset-identities` writes into Zitadel are refused (401) at the sign-in host's password step
+(`POST /v1/sign-in-host/login`). That is how
 the stand ran from its bring-up until 2026-09-15. Fill the four keys in
 `/etc/ds-platform/stage.env` exactly as `api.env` on prod (`stage.env.example` → «API-side
 IdP credentials»: the bootstrap PAT as the service token, client id / project id from
@@ -481,7 +482,8 @@ for S in $(sudo ls /etc/ds-platform/slots | sed 's/\.env$//'); do
     up -d --no-deps --force-recreate api
 done
 # proof: golden.doctor.verified@example.test + DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED →
-# POST https://api-<slot>.<base>/v1/auth/login → 200 {"status":"authenticated"}
+# sign in at https://<slot storefront>/login → the sign-in host (id-<slot>.<base>) password step
+# answers 200 and the storefront callback lands signed in (the only credential path, #3565)
 ```
 
 Two standing rules come with the shared instance (spec §3 «Identity»):

@@ -24,7 +24,7 @@ const authedMeta: AuthzMeta = {
 
 describe("validateRow", () => {
   it("accepts a well-formed public row", () => {
-    expect(validateRow("POST /v1/auth/login", publicMeta)).toEqual([]);
+    expect(validateRow("POST /v1/sign-in-host/login", publicMeta)).toEqual([]);
   });
 
   it("accepts a well-formed authenticated fast-path row", () => {
@@ -49,19 +49,22 @@ describe("validateRow", () => {
   });
 
   it("§6.2: flags an empty tests array on every row regardless of access", () => {
-    const v = validateRow("POST /v1/auth/login", { ...publicMeta, tests: [] });
+    const v = validateRow("POST /v1/sign-in-host/login", {
+      ...publicMeta,
+      tests: [],
+    });
     expect(v.some((m) => /tests/i.test(m))).toBe(true);
   });
 
   it("§6.2: flags a missing audit field", () => {
     const { audit: _omit, ...rest } = publicMeta;
-    const v = validateRow("POST /v1/auth/login", rest as AuthzMeta);
+    const v = validateRow("POST /v1/sign-in-host/login", rest as AuthzMeta);
     expect(v.some((m) => /audit/i.test(m))).toBe(true);
   });
 
   // §3.1 interdependencies.
   it("§3.1: rejects access:public with a non-none auth_check", () => {
-    const v = validateRow("POST /v1/auth/login", {
+    const v = validateRow("POST /v1/sign-in-host/login", {
       ...publicMeta,
       check: "fast-path",
     });
@@ -69,7 +72,7 @@ describe("validateRow", () => {
   });
 
   it("§3.1: rejects access:public carrying required_roles", () => {
-    const v = validateRow("POST /v1/auth/login", {
+    const v = validateRow("POST /v1/sign-in-host/login", {
       ...publicMeta,
       roles: ["doctor_guest"],
     });
@@ -115,8 +118,10 @@ describe("validateRow", () => {
       audit: "none",
       tests: ["EARS-71"],
     };
-    expect(validateRow("POST /v1/internal/oidc/transaction", internal)).toEqual([]);
-    expect(validateRow("POST /v1/auth/login", internal).length).toBe(1);
+    expect(validateRow("POST /v1/internal/oidc/transaction", internal)).toEqual(
+      [],
+    );
+    expect(validateRow("POST /v1/sign-in-host/login", internal).length).toBe(1);
     expect(
       validateRow("POST /v1/internal/oidc/transaction", publicMeta).length,
     ).toBe(1);
@@ -147,16 +152,16 @@ describe("assembleEndpoint", () => {
   });
 
   it("defaults to v1 and normalizes stray slashes", () => {
-    expect(assembleEndpoint("POST", undefined, "/auth/", "/login/")).toBe(
-      "POST /v1/auth/login",
-    );
+    expect(
+      assembleEndpoint("POST", undefined, "/sign-in-host/", "/login/"),
+    ).toBe("POST /v1/sign-in-host/login");
   });
 });
 
 describe("renderMatrix", () => {
   const rows: MatrixRow[] = [
     { endpoint: "DELETE /v1/auth/session", meta: authedMeta },
-    { endpoint: "POST /v1/auth/login", meta: publicMeta },
+    { endpoint: "POST /v1/sign-in-host/login", meta: publicMeta },
   ];
 
   it("emits the do-not-edit banner", () => {
@@ -168,7 +173,7 @@ describe("renderMatrix", () => {
   it("sorts rows by endpoint", () => {
     const out = renderMatrix(rows);
     expect(out.indexOf("DELETE /v1/auth/session")).toBeLessThan(
-      out.indexOf("POST /v1/auth/login"),
+      out.indexOf("POST /v1/sign-in-host/login"),
     );
   });
 

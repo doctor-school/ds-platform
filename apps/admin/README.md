@@ -68,6 +68,8 @@ IDP_ISSUER=… IDP_SERVICE_TOKEN=… IDP_PROJECT_ID=… \
 pnpm --filter @ds/admin test:e2e     # bddgen && playwright test
 ```
 
+The steps that need a doctor's **storefront** session (the MFA cookie-separation scenario, the 044 roster and 046 submission seeds) mint it through the sign-in host's API, as a storefront server would (`e2e/support/storefront-session.ts` → `@ds/e2e/storefront-session-seed`): the api runs with the sign-in-host block and its storefront clients (`IDP_SIGN_IN_BASE_URI`, `SIGN_IN_*`, `IDP_{ACADEMY,DOCTOR}_CLIENT_{ID,KEY}`, `INTERNAL_API_TOKEN` — provision.sh step 3.bis), and the run gets `INTERNAL_API_URL`, `INTERNAL_API_TOKEN` and `IDP_SIGN_IN_BASE_URI`, as the CI `admin-e2e` job sets them.
+
 The suite pins a **non-Moscow** `timezoneId` for every scenario, so the МСК assertions (EARS-10) prove no operator-local drift.
 
 The `taxonomy` project reads the spec-owned

@@ -29,6 +29,16 @@ import {
   medianSpread,
   sampleInterleaved,
 } from "../support/timing-oracle.js";
+import {
+  Jar,
+  hostLogin,
+  lastHostSession,
+  openHostForm,
+  postHostForm,
+  signIn,
+  storefrontSession,
+  withSignInHost,
+} from "../setup/storefront-harness.js";
 
 /** Every EARS-14 window opened: the e2e cases send from one address. */
 const OPEN_SMS_BUDGET = {
@@ -38,6 +48,33 @@ const OPEN_SMS_BUDGET = {
   perAsnPerHour: 1_000_000,
   globalPerDay: 1_000_000,
 };
+
+/** EARS-12 on the sign-in host: the reset completion on a fresh form (`resetCompleteStep`). */
+async function hostResetComplete(
+  app: NestFastifyApplication,
+  identifier: string,
+  code: string,
+  newPassword: string,
+  device: Record<string, string>,
+) {
+  const jar = new Jar();
+  const form = await openHostForm(app, jar, { device });
+  return postHostForm(
+    app,
+    jar,
+    "password/reset/complete",
+    { identifier, code, newPassword, ...form },
+    device,
+  );
+}
+
+/** The storefront session the callback mints from the host step that just succeeded. */
+function redeemed(
+  app: NestFastifyApplication,
+  device: Record<string, string>,
+): Promise<string> {
+  return storefrontSession(app, lastHostSession(app), "academy", device);
+}
 
 // Password reset over HTTP (EARS-11 initiate, EARS-12 complete) — the controller
 // wiring on top of the IdP-port + session-layer logic. EARS-11's contract is an
@@ -70,18 +107,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Password reset (e2e)", () => {
     expect(reg.statusCode).toBe(200);
   }
 
-  /** Log in with a given password; return the session cookie value. */
-  async function login(email: string, pw: string): Promise<string> {
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/login",
-      headers: device,
-      payload: { identifier: email, password: pw },
-    });
-    expect(res.statusCode).toBe(200);
-    const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
-    expect(cookie).toBeDefined();
-    return cookie!.value;
+  /** Sign in with a given password through the host; return the storefront session id. */
+  function login(email: string, pw: string): Promise<string> {
+    return signIn(app, email, pw, { device });
   }
 
   /** Whether a session cookie still resolves to an authenticated principal. */
@@ -95,14 +123,15 @@ describe.skipIf(!process.env.DATABASE_URL)("Password reset (e2e)", () => {
   }
 
   beforeAll(async () => {
-    const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(IDP_CLIENT)
-      .useValue(new FakeIdpClient())
-      .overrideProvider(RATE_LIMIT_THRESHOLDS)
-      .useValue(RELAXED_RATE_LIMIT)
-      .compile();
+    const moduleRef: TestingModule = await withSignInHost(
+      Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(new FakeIdpClient())
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT),
+    ).compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),
@@ -166,35 +195,39 @@ describe.skipIf(!process.env.DATABASE_URL)("Password reset (e2e)", () => {
       payload: { identifier: email },
     });
     const newPassword = "Brand-new-password-9!";
-    const complete = await app.inject({
-      method: "POST",
-      url: "/v1/auth/password/reset/complete",
-      headers: device,
-      payload: { identifier: email, code: FAKE_VALID_CODE, newPassword },
-    });
+    const complete = await hostResetComplete(
+      app,
+      email,
+      FAKE_VALID_CODE,
+      newPassword,
+      device,
+    );
     expect(complete.statusCode).toBe(200);
-    // Token-free body invariant (EARS-8): the status is unchanged…
-    expect(complete.json()).toEqual({ status: "reset_completed" });
+    // Token-free body invariant (EARS-8): the host answers a redirect only…
+    expect(complete.json()).toMatchObject({ status: "redirect" });
+    expect(complete.cookies.map((c) => c.name)).not.toContain(
+      SESSION_COOKIE_NAME,
+    );
 
     // Every PRIOR session is revoked: neither earlier cookie still authenticates.
     expect(await authenticates(cookieA)).toBe(false);
     expect(await authenticates(cookieB)).toBe(false);
 
-    // #221 (EARS-12): the reset ALSO auto-logs-in — it sets a fresh __Host- session
-    // cookie that authenticates immediately (no detour through /login).
-    const minted = complete.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
-    expect(minted).toBeDefined();
-    expect(await authenticates(minted!.value)).toBe(true);
+    // #221 (EARS-12): the reset ALSO auto-logs-in — its record redeems a fresh
+    // __Host- session that authenticates immediately (no detour through /login).
+    const minted = await redeemed(app, device);
+    expect(await authenticates(minted)).toBe(true);
 
     // The new password was set at the IdP: it logs in; the old one no longer does.
     const fresh = await login(email, newPassword);
     expect(await authenticates(fresh)).toBe(true);
-    const stale = await app.inject({
-      method: "POST",
-      url: "/v1/auth/login",
-      headers: device,
-      payload: { identifier: email, password },
-    });
+    const stale = await hostLogin(
+      app,
+      new Jar(),
+      email,
+      { password },
+      { device },
+    );
     expect(stale.statusCode).toBe(401);
   });
 
@@ -208,18 +241,15 @@ describe.skipIf(!process.env.DATABASE_URL)("Password reset (e2e)", () => {
       payload: { identifier: email },
     });
 
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/password/reset/complete",
-      headers: device,
-      payload: {
-        identifier: email,
-        code: "000000",
-        // Policy-conforming (#147) so the DTO passes and the *bad code* is the
-        // rejection reason under test, not a password-complexity 400.
-        newPassword: "Another-pw-1!",
-      },
-    });
+    const res = await hostResetComplete(
+      app,
+      email,
+      "000000",
+      // Policy-conforming (#147) so the DTO passes and the *bad code* is the
+      // rejection reason under test, not a password-complexity 400.
+      "Another-pw-1!",
+      device,
+    );
     expect(res.statusCode).toBe(400);
   });
 });
@@ -280,12 +310,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
         headers: device,
         payload: { identifier: email },
       });
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/password/reset/complete",
-        headers: device,
-        payload: { identifier: email, code, newPassword: "Brand-new-pw-9!" },
-      });
+      const res = await hostResetComplete(
+        app,
+        email,
+        code,
+        "Brand-new-pw-9!",
+        device,
+      );
       return res.statusCode;
     }
 
@@ -306,16 +337,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(new FakeIdpClient(new FakeMailer()))
-        .overrideProvider(MAILER)
-        .useValue(new FakeMailer())
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(new FakeIdpClient(new FakeMailer()))
+          .overrideProvider(MAILER)
+          .useValue(new FakeMailer())
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
@@ -371,13 +403,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
         url: "/v1/auth/login/otp/request",
         payload: { identifier: email, channel: "email" },
       });
-      const loginRes = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login/otp",
-        payload: { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
-      });
+      const loginRes = await hostLogin(
+        app,
+        new Jar(),
+        email,
+        { code: FAKE_VALID_CODE, channel: "email" },
+        { device },
+      );
       expect(loginRes.statusCode).toBe(200);
-      expect(loginRes.json()).toEqual({ status: "authenticated" });
+      expect(loginRes.json()).toMatchObject({ status: "redirect" });
+      expect(await redeemed(app, device)).toBeTruthy();
     });
 
     it("EARS-35/16: a failed reset (bad code) mutates nothing — the email verification state is unchanged", async () => {
@@ -438,12 +473,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       expect(reg.statusCode).toBe(200);
       if (opts.verified) {
-        const v = await app.inject({
-          method: "POST",
-          url: "/v1/auth/verify",
-          payload: { email, code: FAKE_VALID_CODE },
+        const jar = new Jar();
+        const form = await openHostForm(app, jar);
+        const v = await postHostForm(app, jar, "verify", {
+          email,
+          code: FAKE_VALID_CODE,
+          ...form,
         });
-        expect(v.statusCode).toBe(200);
+        expect(v.statusCode, v.body).toBe(200);
       }
       const { rows } = await pool.query(
         "SELECT zitadel_sub FROM users WHERE email = $1",
@@ -506,20 +543,21 @@ describe.skipIf(!process.env.DATABASE_URL)(
     beforeAll(async () => {
       mailer = new FakeMailer();
       idp = new FakeIdpClient(mailer);
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(idp)
-        .overrideProvider(MAILER)
-        .useValue(mailer)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        // Every case sends from one address and the timing case repeats one
-        // number; the EARS-14 windows are opened (their refusal is unit-proven).
-        .overrideProvider(SMS_BUDGET_THRESHOLDS)
-        .useValue(OPEN_SMS_BUDGET)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(idp)
+          .overrideProvider(MAILER)
+          .useValue(mailer)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT)
+          // Every case sends from one address and the timing case repeats one
+          // number; the EARS-14 windows are opened (their refusal is unit-proven).
+          .overrideProvider(SMS_BUDGET_THRESHOLDS)
+          .useValue(OPEN_SMS_BUDGET),
+      ).compile();
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
       );
@@ -553,21 +591,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
         expect.objectContaining({ channel: "sms" }),
       ]);
 
-      const done = await app.inject({
-        method: "POST",
-        url: "/v1/auth/password/reset/complete",
-        headers: device,
-        payload: {
-          identifier: phone,
-          code: FAKE_VALID_CODE,
-          newPassword: "Brand-new-pw-9!",
-        },
-      });
+      const done = await hostResetComplete(
+        app,
+        phone,
+        FAKE_VALID_CODE,
+        "Brand-new-pw-9!",
+        device,
+      );
       expect(done.statusCode).toBe(200);
-      expect(done.json()).toEqual({ status: "reset_completed" });
-      expect(
-        done.cookies.find((c) => c.name === SESSION_COOKIE_NAME),
-      ).toBeDefined();
+      expect(done.json()).toMatchObject({ status: "redirect" });
+      // Signed in: the step's record redeems a storefront session.
+      expect(await redeemed(app, device)).toBeTruthy();
       expect(await emailVerified(a.email)).toBe(true);
     });
 
@@ -639,16 +673,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(await resetRows(phone)).toEqual([]);
 
       for (const identifier of [a.email, phone]) {
-        const done = await app.inject({
-          method: "POST",
-          url: "/v1/auth/password/reset/complete",
-          headers: device,
-          payload: {
-            identifier,
-            code: FAKE_VALID_CODE,
-            newPassword: "Brand-new-pw-9!",
-          },
-        });
+        const done = await hostResetComplete(
+          app,
+          identifier,
+          FAKE_VALID_CODE,
+          "Brand-new-pw-9!",
+          device,
+        );
         expect(done.statusCode).toBe(400);
       }
 

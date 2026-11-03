@@ -9,7 +9,9 @@ import { Test } from "@nestjs/testing";
 import type { FastifyReply } from "fastify";
 import { from, lastValueFrom } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AuthController } from "./auth.controller.js";
+import { SignInHostController } from "../sign-in-host/sign-in-host.controller.js";
+import type { SignInHostService } from "../sign-in-host/sign-in-host.service.js";
+import type { DoctorRegisterService } from "../storefront/doctor-register.service.js";
 import type { AuthService } from "./auth.service.js";
 import type { LoginChallengePolicy } from "./login-challenge/index.js";
 import type { RateLimitService } from "./rate-limit/index.js";
@@ -68,7 +70,7 @@ describe("003 EARS-41/16 verification response timing", () => {
     expect(readAuthVerifyTimingFloorMs()).toBe(1000);
   });
 
-  it("EARS-41: the actual verify route and production default equalize unequal IdP refusal branches within 50 ms", async () => {
+  it("EARS-41: the host's Academy code step and production default equalize unequal IdP refusal branches within 50 ms", async () => {
     vi.stubEnv("AUTH_VERIFY_TIMING_FLOOR_MS", undefined);
     const module = await Test.createTestingModule({
       imports: [TimingEqualizationModule],
@@ -79,17 +81,25 @@ describe("003 EARS-41/16 verification response timing", () => {
       new Reflector(),
     );
     const context = {
-      getHandler: () => AuthController.prototype.verify,
-      getClass: () => AuthController,
+      getHandler: () => SignInHostController.prototype.verify,
+      getClass: () => SignInHostController,
     } as unknown as ExecutionContext;
     vi.useFakeTimers();
     const timings: number[][] = [[], [], []];
     try {
       for (let round = 0; round < 5; round += 1) {
         for (const [index, delay] of [0, 60, 155].entries()) {
-          const controller = new AuthController(
+          // The host's Academy code step over a checked form; only the IdP
+          // refusal branch's latency differs between the three runs.
+          const controller = new SignInHostController(
             {
-              verify: async () => {
+              checkFormPost: () => Promise.resolve({}),
+              assertStorefront: () => undefined,
+              warmRegistration: () => undefined,
+              acceptInto: () => () => Promise.reject(new Error("unreached")),
+            } as unknown as SignInHostService,
+            {
+              verifyStep: async () => {
                 await new Promise<void>((resolve) =>
                   setTimeout(resolve, delay),
                 );
@@ -100,15 +110,20 @@ describe("003 EARS-41/16 verification response timing", () => {
             } as unknown as AuthService,
             {} as LoginChallengePolicy,
             {} as RateLimitService,
+            {} as DoctorRegisterService,
           );
           const header = vi.fn();
           const next: CallHandler = {
             handle: () =>
               from(
                 controller.verify(
-                  { email: "owned@unit.test", code: "654321" },
-                  undefined,
-                  undefined,
+                  {
+                    email: "owned@unit.test",
+                    code: "654321",
+                    authRequest: "auth-request-1",
+                    csrf: "csrf-1",
+                  },
+                  {},
                   "127.0.0.1",
                   undefined,
                   { header } as unknown as FastifyReply,

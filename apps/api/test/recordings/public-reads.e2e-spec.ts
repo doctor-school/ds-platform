@@ -13,6 +13,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import {
   BOT_PROTECTION,
   type BotProtection,
@@ -201,16 +202,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: { email, password, consent },
       });
       expect(reg.statusCode).toBe(200);
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password },
-      });
-      expect(res.statusCode).toBe(200);
-      const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
-      expect(cookie).toBeDefined();
-      return cookie!.value;
+      return signIn(app, email, password, { device });
     }
 
     function cookieHeader(cookie: string): Record<string, string> {
@@ -233,23 +225,24 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        // Hermetic: the register fixture path behind `doctorSession` must not
-        // depend on the recipe's bot-protection env/flag state (an enabled
-        // SmartCaptcha rejects the token-less test register with a 403
-        // BOT_PROTECTION_REQUIRED). Bot protection is not under test here.
-        .overrideProvider(BOT_PROTECTION)
-        .useValue({
-          verify: (): Promise<BotProtectionResult> =>
-            Promise.resolve({ ok: true }),
-        } satisfies BotProtection)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT)
+          // Hermetic: the register fixture path behind `doctorSession` must not
+          // depend on the recipe's bot-protection env/flag state (an enabled
+          // SmartCaptcha rejects the token-less test register with a 403
+          // BOT_PROTECTION_REQUIRED). Bot protection is not under test here.
+          .overrideProvider(BOT_PROTECTION)
+          .useValue({
+            verify: (): Promise<BotProtectionResult> =>
+              Promise.resolve({ ok: true }),
+          } satisfies BotProtection),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),

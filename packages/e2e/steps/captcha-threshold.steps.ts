@@ -1,12 +1,7 @@
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
-import {
-  expect,
-  request,
-  type BrowserContext,
-  type Page,
-} from "@playwright/test";
+import { expect, type BrowserContext, type Page } from "@playwright/test";
 import {
   captchaStubScript,
   captchaTestTokenFromEnv,
@@ -21,6 +16,7 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
+import { signInDetachedThroughHost } from "../lib/host-sign-in.js";
 
 interface CaptchaObservation {
   executes: number;
@@ -131,29 +127,13 @@ Given(
 
     // Hold the existing cross-worker gate across the Gherkin steps. Real owned
     // sign-ins establish/restore the baseline; no policy/counter is written here.
-    const close = async () => {
-      const api = await request.newContext({
-        baseURL: world.hostBaseUrl,
-        ...(httpCredentials ? { httpCredentials } : {}),
-      });
-      try {
-        const result = await api.post("/v1/auth/login", {
-          data: { identifier: state.email, password: state.password },
-          headers: { "x-smartcaptcha-token": token },
-        });
-        expect(
-          result.status(),
-          "owned successful sign-in restores failure baseline",
-        ).toBe(200);
-        expect(
-          (await api.post("/v1/auth/logout")).status(),
-          "owned closing session revoked",
-        ).toBe(200);
-        expect((await api.get("/v1/me/profile")).status()).toBe(401);
-      } finally {
-        await api.dispose();
-      }
-    };
+    const close = () =>
+      signInDetachedThroughHost(
+        browser,
+        world.hostBaseUrl,
+        { email: state.email, password: state.password },
+        { revoke: true },
+      );
     let entered!: () => void;
     const ready = new Promise<void>((resolve) => {
       entered = resolve;
@@ -317,7 +297,10 @@ Then(
       freshProof:
         accepted.response.request().headers()["x-smartcaptcha-token"] ===
         captchaTestTokenFromEnv(),
-      acknowledgement: storefrontCallbackAcknowledgement(accepted.body, world.hostBaseUrl),
+      acknowledgement: storefrontCallbackAcknowledgement(
+        accepted.body,
+        world.hostBaseUrl,
+      ),
     }).toEqual({
       status: 200,
       original: true,

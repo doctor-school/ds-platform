@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // DS Platform — `auth-burst` load scenario (#873 phase 1).
 //
-// Drives the BFF auth surface under concurrency: register → login loop
-// (recon — auth.controller.ts). Two modes, both env-driven:
-//   • default: register a fresh synthetic identity, then login.
-//   • LOADTEST_USE_PROVISIONED=1: skip register, login the accounts in the
-//     provision manifest (login is NOT bot-protected, recon fact 2) — the clean
-//     way to measure login capacity without tripping the register bot-gate.
+// Drives the BFF auth surface under concurrency: register → sign-in loop, the
+// sign-in being the storefront journey through the sign-in host
+// (`host-sign-in.mjs`). Two modes, both env-driven:
+//   • default: register a fresh synthetic identity, then sign in.
+//   • LOADTEST_USE_PROVISIONED=1: skip register, sign in the accounts in the
+//     provision manifest (the password step is NOT bot-protected, recon fact 2)
+//     — the clean way to measure sign-in capacity without tripping the
+//     register bot-gate.
 //
 // HARD PROD GUARD (fail-closed, tracked as #1068): this scenario REFUSES to run
 // against a prod host until `LOADTEST_SUPPRESSION_CONFIRMED=1` is set — because
@@ -29,11 +31,18 @@ import {
   runVUs,
   timedFetch,
 } from "./lib.mjs";
+import { hostSignIn } from "./host-sign-in.mjs";
 import { syntheticEmail } from "./zitadel.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const SUPPRESSION_ISSUE = "#1068";
+
+/** One stable browser fingerprint: the session binds to it (003 EARS-64). */
+const SIGN_IN_HEADERS = {
+  "user-agent": "ds-auth-burst/1",
+  "accept-language": "en-US",
+};
 
 /**
  * Fail-closed prod tripwire (exported for the guard test). Throws unless the
@@ -114,16 +123,20 @@ async function main() {
         isError: reg.status >= 500 || reg.status === 0,
       });
     }
-    const login = await timedFetch(`${origin}/v1/auth/login`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ identifier: email, password }),
+    // The sign-in the storefronts run: every step of the host journey is a
+    // sample (transaction, authorize, entry, password step, redeem).
+    const { steps } = await hostSignIn(origin, {
+      email,
+      password,
+      headers: SIGN_IN_HEADERS,
     });
-    samples.record({
-      status: login.status,
-      ms: login.ms,
-      isError: login.status >= 500 || login.status === 0,
-    });
+    for (const step of steps) {
+      samples.record({
+        status: step.status,
+        ms: step.ms,
+        isError: step.status >= 500 || step.status === 0,
+      });
+    }
   }, opts);
 
   console.log(

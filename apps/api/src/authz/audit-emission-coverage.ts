@@ -88,14 +88,6 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       coveredBy:
         "audit-ledger.e2e: EARS-18 register appends one auth.register row (emitted by the delegated 003 command site)",
     },
-    // 003 EARS-23/41 — the doctor host's code step. A thin projection like the
-    // register door above: it stamps the consent versions and delegates to
-    // `AuthService.verify`, which appends every row at its own command site.
-    "POST /v1/storefront/doctor/verify": {
-      emits: ["IdentifierVerified", "LoginSucceeded", "VerifyFailed"],
-      coveredBy:
-        "doctor-register-consents.e2e (003 EARS-23) drives the door; the rows are the delegated 003 verify command site's (auth.service.spec EARS-41)",
-    },
     // 044 EARS-1 (#2294) — the public congress intake. Like the 021 command
     // above it is a host projection: account creation is delegated to
     // `AuthService.createPasswordlessAccount`, which appends the one
@@ -138,19 +130,6 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
           spec: "044 EARS-34 (who/when is the 010 ledger's job; no author/time columns)",
         },
       },
-    "POST /v1/auth/login": {
-      // Success and the wrong_password failure emit in AuthService; a request
-      // the limiter refuses emits LoginFailed `throttled` in RateLimitGuard
-      // (EARS-15).
-      emits: ["LoginSucceeded", "LoginFailed"],
-      coveredBy:
-        "audit-ledger.e2e: EARS-18 login.success / login.failure; abuse-limits.e2e: EARS-15 login.failure reason throttled",
-    },
-    "POST /v1/auth/login/otp": {
-      emits: ["LoginSucceeded", "LoginFailed"],
-      coveredBy:
-        "login-otp.e2e (EARS-6/7/8); failure/success both record at the command site",
-    },
     "POST /v1/me/phone": {
       // 003 EARS-47/49/57: a code request records auth.phone.confirm.requested
       // and, when it displaces a confirmed phone, auth.phone.changed. The
@@ -202,25 +181,6 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       emits: ["PasswordResetRequested"],
       coveredBy:
         "audit-ledger.e2e: EARS-18 reset request appends auth.password.reset_requested",
-    },
-    "POST /v1/auth/password/reset/complete": {
-      // Success emits PasswordResetCompleted (+ a session-created LoginSucceeded);
-      // #1112 adds PasswordResetFailed on a rejected reset-complete (masked,
-      // reason-coded observability — no state change, the LoginFailed precedent).
-      emits: ["PasswordResetCompleted", "PasswordResetFailed"],
-      coveredBy:
-        "password-reset.e2e (EARS-12); completion records auth.password.changed (reset); auth.service.spec #1112 covers the auth.password.reset_failed row",
-    },
-    "POST /v1/auth/verify": {
-      // #164: EARS-3/4 verify emits its terminal row at the command site.
-      // #1112: a REJECTED verify (no mirror row → no-account, or a bad code →
-      // invalid) now emits a masked, reason-coded auth.account.verify_failed
-      // observability row — the state-changing success path is unchanged.
-      // 003 EARS-41: the accepted code also establishes the session, so the
-      // success path appends the email-otp auth.login.success row.
-      emits: ["IdentifierVerified", "LoginSucceeded", "VerifyFailed"],
-      coveredBy:
-        "audit-ledger.e2e: EARS-18 email verification appends one auth.account.verified row; auth.service.spec #1112 covers the auth.account.verify_failed row; auth.service.spec EARS-41 covers the auth.login.success row",
     },
     "POST /v1/admin/auth/login": {
       // 011 EARS-3: primary auth at the admin origin. Success emits the canonical
@@ -364,7 +324,7 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
     "POST /v1/sign-in-host/login": {
       emits: ["LoginSucceeded", "LoginFailed"],
       coveredBy:
-        "sign-in-host.e2e: EARS-18 the host password step appends auth.login.success, a wrong password auth.login.failure (AuthService.passwordStep, the POST /v1/auth/login command site)",
+        "sign-in-host.e2e: EARS-18 the host password step appends auth.login.success, a wrong password auth.login.failure (the AuthService.passwordStep command site)",
     },
     "POST /v1/sign-in-host/login/otp/request": {
       emits: ["OtpSent"],

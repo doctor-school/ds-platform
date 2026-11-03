@@ -69,8 +69,7 @@ export const DOCTOR_AUTH_FLOW = {
   routes: {
     login: "/login",
     register: "/register",
-    // 003 EARS-24 / EARS-61 — the storefront's registration entry
-    // (`app/(auth)/verify/route.ts`); the code step itself renders in place on
+    // 003 EARS-24 / EARS-61 — the registration code step renders in place on
     // the sign-in host, whose `/verify` (`apps/login/app/verify/page.tsx`) is
     // the address it settles on and the route a reload enters.
     verify: "/verify",

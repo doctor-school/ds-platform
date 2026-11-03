@@ -54,19 +54,22 @@ apps/doctor/
 
 ## Post-confirmation landing (021 EARS-10, amended 2026-09-29)
 
-Registration hands the doctor to this host's own `/verify` route
-(`app/(auth)/verify/page.tsx`, the thin mount of `@ds/auth-flow/verify/route`) —
+Registration hands the doctor to the sign-in host's `/verify` door
+(`apps/login/app/verify/page.tsx`, the `@ds/auth-flow/sign-in-host/route` mount
+of this storefront's verify step) —
 the same one code step the Academy serves (six cells, resend, «← Изменить
 почту»), carrying the address and the return target in the query (003 EARS-24 /
-EARS-42, 021 EARS-10). The step posts the code to this host's verify command,
-named by `api.verifyPath` in `lib/auth-flow.host-config.ts`:
-`POST /v1/storefront/doctor/verify`, the 003 `/verify` contract with this
+EARS-42, 021 EARS-10). The step posts the code to this storefront's verify command,
+named by `api.verifyPath` in `lib/auth-flow.host-config.ts` and projected onto
+the sign-in host API: `POST /v1/sign-in-host/storefront/doctor/verify`, the 003
+`/verify` contract with this
 door's medical-worker declaration and server-stamped consent versions.
 
 The doctor is then SIGNED IN (021 EARS-15) by the code itself (003 EARS-41):
 the registration door holds the just-entered values (password and consent) in
 the shared `pending-registration` slot (`@ds/design-system/blocks`), the step
-submits them WITH the code, and the accepted answer sets `__Host-ds_session` —
+submits them WITH the code, the accepted code finalises the sign-in, and this
+storefront's `/auth/callback` sets `__Host-ds_session` (003 EARS-8 amended) —
 there is no password replay. A cold step (a reload, a new tab, an expired
 hold) still signs in by the code but submits no password, so the account's
 pre-verification password is invalidated and a password is set later through

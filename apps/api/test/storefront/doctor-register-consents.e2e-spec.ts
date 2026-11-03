@@ -34,6 +34,14 @@ import {
   MEDICAL_WORKER_DECLARATION_VERSION,
   PARTNER_DATA_SHARING_VERSION,
 } from "../../src/storefront/doctor-register.service.js";
+import {
+  Jar,
+  lastHostSession,
+  openHostForm,
+  postHostForm,
+  storefrontRedeem,
+  withSignInHost,
+} from "../setup/storefront-harness.js";
 
 /**
  * 021 EARS-4 (#1540) — the mandatory medical-worker declaration on the doctor
@@ -74,6 +82,23 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return email;
     }
 
+    /**
+     * The doctor registration code step on the sign-in host (`verifyStep`) on
+     * a form the doctor client opened (fresh, or `form` in `jar`).
+     */
+    async function doctorVerify(
+      payload: Record<string, unknown>,
+      open?: { jar: Jar; form: { authRequest: string; csrf: string } },
+    ) {
+      const jar = open?.jar ?? new Jar();
+      const form =
+        open?.form ?? (await openHostForm(app, jar, { client: "doctor" }));
+      return postHostForm(app, jar, "storefront/doctor/verify", {
+        ...payload,
+        ...form,
+      });
+    }
+
     async function accountExists(email: string): Promise<boolean> {
       const { rows } = await pool.query(
         "SELECT 1 FROM users WHERE email = $1",
@@ -83,14 +108,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(new FakeIdpClient())
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(new FakeIdpClient())
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
@@ -597,30 +623,32 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       expect(registered.statusCode).toBe(200);
 
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/storefront/doctor/verify",
-        payload: {
-          email,
-          code: FAKE_VALID_CODE,
-          registration: {
-            password: PASSWORD,
-            medicalWorkerDeclaration: true,
-            consent: [
-              { purpose: PARTNER_DATA_SHARING_PURPOSE, version: "client-lie" },
-              {
-                purpose: MARKETING_COMMUNICATIONS_PURPOSE,
-                version: "client-lie",
-              },
-            ],
-          },
+      const res = await doctorVerify({
+        email,
+        code: FAKE_VALID_CODE,
+        registration: {
+          password: PASSWORD,
+          medicalWorkerDeclaration: true,
+          consent: [
+            { purpose: PARTNER_DATA_SHARING_PURPOSE, version: "client-lie" },
+            {
+              purpose: MARKETING_COMMUNICATIONS_PURPOSE,
+              version: "client-lie",
+            },
+          ],
         },
       });
 
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ status: "verified" });
-      // EARS-41: the session comes from the code.
-      expect(String(res.headers["set-cookie"] ?? "")).toMatch(/^__Host-/);
+      expect(res.json()).toMatchObject({ status: "redirect" });
+      // EARS-41: the session comes from the code — the doctor callback redeems
+      // the record the code step filled.
+      const { setCookie } = await storefrontRedeem(
+        app,
+        lastHostSession(app),
+        "doctor",
+      );
+      expect(setCookie).toMatch(/^__Host-/);
       const rows = (await consentRowsFor(email)).map((row) => ({
         purpose: row.purpose,
         version: row.version,
@@ -643,14 +671,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("003 EARS-41: the doctor verify door refuses a registration without the declaration before the code is checked", async () => {
       const email = uniqueEmail("verify-no-declaration");
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/storefront/doctor/verify",
-        payload: {
-          email,
-          code: FAKE_VALID_CODE,
-          registration: { password: PASSWORD, medicalWorkerDeclaration: false },
-        },
+      const res = await doctorVerify({
+        email,
+        code: FAKE_VALID_CODE,
+        registration: { password: PASSWORD, medicalWorkerDeclaration: false },
       });
       expect(res.statusCode).toBeGreaterThanOrEqual(400);
       expect(res.statusCode).toBeLessThan(500);
@@ -678,10 +702,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
         });
         expect(registered.statusCode).toBe(200);
       }
-      const flip = await app.inject({
-        method: "POST",
-        url: "/v1/storefront/doctor/verify",
-        payload: { email: verified, code: FAKE_VALID_CODE },
+      const flip = await doctorVerify({
+        email: verified,
+        code: FAKE_VALID_CODE,
       });
       expect(flip.statusCode).toBe(200);
 
@@ -689,13 +712,24 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // check and reaches the account-state check, so every class walks its
       // own existence branch (a malformed code is refused before any lookup).
       const WRONG_CODE = "000000";
+      // One open doctor form per class; only the code post is timed.
+      const forms = new Map<
+        string,
+        { jar: Jar; form: { authRequest: string; csrf: string } }
+      >();
+      for (const email of [unknown, verified, unverified]) {
+        const jar = new Jar();
+        forms.set(email, {
+          jar,
+          form: await openHostForm(app, jar, { client: "doctor" }),
+        });
+      }
       async function wrongCode(email: string) {
         const t0 = performance.now();
-        const res = await app.inject({
-          method: "POST",
-          url: "/v1/storefront/doctor/verify",
-          payload: { email, code: WRONG_CODE },
-        });
+        const res = await doctorVerify(
+          { email, code: WRONG_CODE },
+          forms.get(email),
+        );
         const ms = performance.now() - t0;
         return { status: res.statusCode, body: res.json(), ms };
       }

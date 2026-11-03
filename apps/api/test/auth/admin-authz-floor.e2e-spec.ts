@@ -10,6 +10,7 @@ import { beforeAll, afterAll, afterEach, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { CONGRESS_INTAKE_DEFAULTS } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
@@ -1070,14 +1071,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .overrideProvider(IDP_CLIENT)
-        .useValue(new FakeIdpClient())
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT)
+          .overrideProvider(IDP_CLIENT)
+          .useValue(new FakeIdpClient()),
+      ).compile();
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
       );
@@ -1154,16 +1156,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("EARS-11.5: a doctor_guest session and an anonymous caller are refused on every admin route", async () => {
       const { email: portalEmail } = await registerUser("doctor");
-      const portal = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: ADMIN_DEVICE,
-        payload: { identifier: portalEmail, password },
+      const portalSid = await signIn(app, portalEmail, password, {
+        device: ADMIN_DEVICE,
       });
-      expect(portal.statusCode).toBe(200);
-      const portalSid = portal.cookies.find(
-        (c) => c.name === SESSION_COOKIE_NAME,
-      )!.value;
       const portalHeaders = {
         ...ADMIN_DEVICE,
         cookie: `${SESSION_COOKIE_NAME}=${portalSid}`,

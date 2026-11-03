@@ -22,7 +22,7 @@ import {
   type SignInHostEntryResponse,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
-import { AuthService } from "../../src/auth/auth.service.js";
+import { AuthService, GENERIC_THROTTLED } from "../../src/auth/auth.service.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { hashIdentifier } from "../../src/auth/session/auth-audit.ledger.js";
@@ -217,19 +217,25 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
   async function account(tag: string): Promise<string> {
     const address = email(tag);
     await registerOnStorefront(address);
-    const v = await app.inject({
-      method: "POST",
-      url: "/v1/auth/verify",
-      headers: DEVICE,
-      // The registration values ride the code step, so the password the
-      // account signs in with afterwards is the one typed at sign-up (EARS-41).
-      payload: {
-        email: address,
-        code: FAKE_VALID_CODE,
-        registration: { password: PASSWORD, consent: CONSENT },
-      },
+    // The host's Academy code step in a browser of its own. The registration
+    // values ride the code step, so the password the account signs in with
+    // afterwards is the one typed at sign-up (EARS-41).
+    const registration = new Jar();
+    const form = await render(registration, ACADEMY);
+    const v = await post(registration, "verify", {
+      email: address,
+      code: FAKE_VALID_CODE,
+      registration: { password: PASSWORD, consent: CONSENT },
+      authRequest: form.authRequest,
+      csrf: form.csrf,
     });
-    expect(v.statusCode).toBe(200);
+    expect(v.statusCode, v.body).toBe(200);
+    // Each test starts from an account no browser holds a record for: that
+    // registration browser is never used again, so its record goes with it.
+    await pool.query(
+      "DELETE FROM sign_in_host_records WHERE subject = (SELECT zitadel_sub FROM users WHERE email = $1)",
+      [address],
+    );
     return address;
   }
 
@@ -331,19 +337,22 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     expect(res.statusCode).toBe(200);
   }
 
-  async function storefrontResetComplete(address: string) {
+  /**
+   * A reset completed in another browser: the EARS-12 completion every reset
+   * step runs (prior sessions and records revoked, the subject fenced). What
+   * that other browser keeps afterwards is not these tests' subject, so its
+   * acceptor keeps nothing.
+   */
+  async function resetCompletedElsewhere(address: string) {
     await requestReset(address);
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/password/reset/complete",
-      headers: DEVICE,
-      payload: {
-        identifier: address,
-        code: FAKE_VALID_CODE,
-        newPassword: "Bb2!another-long-pw",
-      },
-    });
-    expect(res.statusCode).toBe(200);
+    await app
+      .get(AuthService)
+      .resetCompleteStep(
+        address,
+        FAKE_VALID_CODE,
+        "Bb2!another-long-pw",
+        (session) => Promise.resolve(session),
+      );
   }
 
   it("EARS-60: the admin client and an unknown client get access_denied and no form", async () => {
@@ -5830,12 +5839,12 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
   });
 
   describe("revoking every session of a subject ends its sign-in-host records", () => {
-    it("EARS-12: a reset completed on a storefront deletes the host record and the next entry renders the form", async () => {
-      const address = await account("reset-storefront");
+    it("EARS-12: a reset completed in another browser deletes the host record and the next entry renders the form", async () => {
+      const address = await account("reset-elsewhere");
       const jar = new Jar();
       await signIn(jar, address);
       const terminate = vi.spyOn(idp, "terminateSession");
-      await storefrontResetComplete(address);
+      await resetCompletedElsewhere(address);
       expect(await recordRows(address)).toHaveLength(0);
       expect(terminate).toHaveBeenCalled();
       terminate.mockRestore();
@@ -6101,7 +6110,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
             firstAt,
           );
           recordNow = new Date(firstAt.getTime() + 1);
-          await storefrontResetComplete(address);
+          await resetCompletedElsewhere(address);
           expect(await state.subjectRevokedAt(record.session.sub)).toEqual(
             recordNow,
           );
@@ -6277,14 +6286,25 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       const jar = new Jar();
       await signIn(jar, address);
       expect(await recordRows(address)).toHaveLength(1);
-      const v = await app.inject({
-        method: "POST",
-        url: "/v1/auth/verify",
-        headers: DEVICE,
-        payload: { email: address, code: FAKE_VALID_CODE },
+      // The code is entered on the host in another browser.
+      const other = new Jar();
+      const form = await render(other, ACADEMY);
+      const v = await post(other, "verify", {
+        email: address,
+        code: FAKE_VALID_CODE,
+        authRequest: form.authRequest,
+        csrf: form.csrf,
       });
-      expect(v.statusCode).toBe(200);
-      expect(await recordRows(address)).toHaveLength(0);
+      expect(v.statusCode, v.body).toBe(200);
+      // Only the record the code step itself wrote is left; the earlier
+      // browser's record is gone and its next entry renders the form.
+      expect(await recordRows(address)).toHaveLength(1);
+      expect(other.values.has(RECORD_COOKIE_NAME)).toBe(true);
+      const { body } = await entry(
+        jar,
+        hostIdp.seedAuthRequest({ clientId: DOCTOR }),
+      );
+      expect(body.action).toBe("render");
     });
 
     it("EARS-12: a revocation landing between the credential check's start and the record insert leaves no record and refuses the step", async () => {
@@ -6298,7 +6318,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         .spyOn(idp, "passwordLogin")
         .mockImplementationOnce(async (identifier, password) => {
           const result = await original(identifier, password);
-          await storefrontResetComplete(address);
+          await resetCompletedElsewhere(address);
           return result;
         });
       const terminate = vi.spyOn(idp, "terminateSession");
@@ -6327,7 +6347,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
           sub: string;
         };
       };
-      await storefrontResetComplete(address);
+      await resetCompletedElsewhere(address);
       // A row a concurrent request wrote from a credential step before the
       // revocation (it raced the delete).
       const cookieId = randomBytes(32).toString("base64url");
@@ -6349,7 +6369,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     });
   });
 
-  describe("EARS-69: the host credential steps share the storefront's limits", () => {
+  describe("EARS-69: the host credential steps carry the storefront's limits", () => {
     let limited: Awaited<ReturnType<typeof compile>>;
     beforeAll(async () => {
       limited = await compile({
@@ -6361,7 +6381,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       await limited.app.close();
     });
 
-    it("EARS-69: storefront and host attempts from one address meet one per-IP ceiling, with the storefront's own 429", async () => {
+    it("EARS-69: the storefront password route is gone and the host step meets the per-IP ceiling with the shared 429", async () => {
       const jar = new Jar();
       const authRequest = limited.hostIdp.seedAuthRequest({
         clientId: ACADEMY,
@@ -6392,14 +6412,19 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
           },
           payload: { ...wrong, authRequest, csrf: form.csrf },
         });
-      expect((await storefront()).statusCode).toBe(401);
+      // The storefront's own password route is gone: it answers nothing and
+      // spends no unit, so the host step alone meets the per-IP ceiling.
+      expect((await storefront()).statusCode).toBe(404);
       expect((await host()).statusCode).toBe(401);
-      expect((await storefront()).statusCode).toBe(401);
+      expect((await host()).statusCode).toBe(401);
+      expect((await host()).statusCode).toBe(401);
       const hostThrottled = await host();
-      const storefrontThrottled = await storefront();
       expect(hostThrottled.statusCode).toBe(429);
-      expect(storefrontThrottled.statusCode).toBe(429);
-      expect(hostThrottled.json()).toEqual(storefrontThrottled.json());
+      expect(hostThrottled.json()).toMatchObject({
+        statusCode: 429,
+        message: GENERIC_THROTTLED,
+      });
+      expect((await storefront()).statusCode).toBe(404);
     });
   });
 

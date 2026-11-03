@@ -209,7 +209,7 @@ export function createAuthClient(api: AuthFlowApiConfig) {
 
   return {
     /**
-     * 003 EARS-5 password sign-in. `POST /v1/auth/login` is `@LoginChallenged()`
+     * 003 EARS-5 password sign-in. `POST /v1/sign-in-host/login` is `@LoginChallenged()`
      * — a captcha appears only after repeated failures — so the token is
      * optional here and simply absent on an ordinary first attempt (row 20).
      */
@@ -270,7 +270,7 @@ export function createAuthClient(api: AuthFlowApiConfig) {
      * 003 EARS-41/23 — submit the code of the step after the registration
      * form, with the in-tab `registration` values when they are still held;
      * the answer sets the session itself. The ROUTE is `api.verifyPath`: the
-     * Academy's `/v1/auth/verify` or the doctor storefront's own command, each
+     * Academy's `/v1/sign-in-host/verify` or the doctor's `/v1/sign-in-host/storefront/doctor/verify`, each
      * with its own `registration` contract. Deliberately takes NO token (row
      * 20): the code submit is not a bot-protected route.
      */

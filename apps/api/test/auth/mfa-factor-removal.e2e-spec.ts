@@ -7,6 +7,7 @@ import { VersioningType } from "@nestjs/common";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import {
   IDP_CLIENT,
@@ -276,14 +277,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .overrideProvider(IDP_CLIENT)
-        .useValue(new FactorRemovalOutageIdp())
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT)
+          .overrideProvider(IDP_CLIENT)
+          .useValue(new FactorRemovalOutageIdp()),
+      ).compile();
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
       );
@@ -439,20 +441,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
         payload: { email: portalEmail, password, consent },
       });
       expect(reg.statusCode).toBe(200);
-      const portal = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        payload: { identifier: portalEmail, password },
-      });
-      const portalSid = portal.cookies.find(
-        (c) => c.name === SESSION_COOKIE_NAME,
-      )?.value;
+      const portalSid = await signIn(app, portalEmail, password);
       const withPortalCookie = await app.inject({
         method: "DELETE",
         url: removalUrl(target.sub),
         headers: {
           ...ADMIN_DEVICE,
-          cookie: `${SESSION_COOKIE_NAME}=${portalSid ?? "none"}`,
+          cookie: `${SESSION_COOKIE_NAME}=${portalSid}`,
         },
         payload: { code: "000000" },
       });

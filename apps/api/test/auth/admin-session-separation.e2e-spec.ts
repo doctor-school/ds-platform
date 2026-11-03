@@ -7,6 +7,7 @@ import { VersioningType } from "@nestjs/common";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
@@ -114,14 +115,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     /** A live doctor-portal session for the same principal (the borrowed-cookie case). */
     async function portalSession(email: string): Promise<string> {
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: ADMIN_DEVICE,
-        payload: { identifier: email, password },
-      });
-      expect(res.statusCode).toBe(200);
-      return res.cookies.find((c) => c.name === SESSION_COOKIE_NAME)!.value;
+      return signIn(app, email, password, { device: ADMIN_DEVICE });
     }
 
     async function rejectionRows(
@@ -145,14 +139,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     beforeAll(async () => {
       fake = new FakeIdpClient();
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),

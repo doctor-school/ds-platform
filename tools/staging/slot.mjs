@@ -2996,7 +2996,8 @@ export function requiredOperatorPassword(env) {
  *
  * The api guard (`apps/api/src/bot-protection`) is enabled by `BOT_PROTECTION_ENABLED`
  * and rejects every bot-protected call that carries no token — the login journey's OTP
- * request, registration, verification resend, password reset (`POST /v1/auth/login`
+ * request, registration, verification resend, password reset (the host password step
+ * `POST /v1/sign-in-host/login`
  * itself is not decorated); the storefront only produces a
  * token when its container runs with a real `SMARTCAPTCHA_SITE_KEY` (the box env
  * `stage.env`, loaded as `env_file` and read per request — #2981). Half a pair therefore has ONE observable

@@ -16,7 +16,7 @@ import {
   vi,
 } from "vitest";
 import type { IdpSession } from "../../src/auth/idp/idp.types.js";
-import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
+import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { RateLimitService } from "../../src/auth/rate-limit/rate-limit.service.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
@@ -38,6 +38,7 @@ import {
   STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
 } from "../../src/sign-in-host/storefront-oidc.controller.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { hostRegister } from "../setup/storefront-harness.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -143,23 +144,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
     async function account(tag: string): Promise<string> {
       const address = `sfo-${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
       created.push(address);
-      const r = await app.inject({
-        method: "POST",
-        url: "/v1/auth/register",
-        payload: { email: address, password: PASSWORD, consent: CONSENT },
+      // Registered on the host's Academy form (its own browser holds the
+      // registration's record).
+      await hostRegister(app, new Jar(), address, {
+        password: PASSWORD,
+        consent: CONSENT,
       });
-      expect(r.statusCode, r.body).toBe(200);
-      const v = await app.inject({
-        method: "POST",
-        url: "/v1/auth/verify",
-        headers: DEVICE,
-        payload: {
-          email: address,
-          code: FAKE_VALID_CODE,
-          registration: { password: PASSWORD, consent: CONSENT },
-        },
-      });
-      expect(v.statusCode).toBe(200);
       return address;
     }
 

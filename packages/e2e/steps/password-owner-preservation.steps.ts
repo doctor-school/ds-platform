@@ -3,7 +3,6 @@ import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
-  request,
   type Browser,
   type BrowserContext,
   type BrowserContextOptions,
@@ -18,6 +17,7 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
+import { browserOf, closeOwnedLoginWindow } from "../lib/host-sign-in.js";
 
 const SESSION = "__Host-ds_session";
 interface PasswordOwner {
@@ -149,51 +149,14 @@ async function gated<T>(
   let failed = false;
   return runGatedLoginAttempt(
     {
-      close: async () => {
-        let closing: Awaited<ReturnType<typeof request.newContext>> | undefined;
-        let cleanupFailed = false;
-        try {
-          closing = await request.newContext({
-            baseURL: base,
-            ...(state.httpCredentials
-              ? { httpCredentials: state.httpCredentials }
-              : {}),
-          });
-          const accepted = await closing.post("/v1/auth/login", {
-            data: { identifier: state.email, password: state.password },
-          });
-          expect(
-            accepted.status(),
-            "owned successful sign-in closes failure window",
-          ).toBe(200);
-        } catch {
-          cleanupFailed = true;
-        } finally {
-          if (closing) {
-            try {
-              expect(
-                (await closing.post("/v1/auth/logout")).status(),
-                "exact owned closing session revoked",
-              ).toBe(200);
-            } catch {
-              cleanupFailed = true;
-            }
-            await closing.dispose().catch(() => {
-              cleanupFailed = true;
-            });
-          }
-        }
-        if (cleanupFailed) {
-          if (!failed)
-            throw new Error(
-              "Owned login closure or exact session cleanup failed",
-            );
-          test.info().annotations.push({
-            type: "cleanup-failed",
-            description:
-              "Owned successful-login closure failed; original attempt failure retained; inspect scoped fixture cleanup.",
-          });
-        }
+      close: () => {
+        if (!state.owner) throw new Error("Owned password owner page missing");
+        return closeOwnedLoginWindow(
+          browserOf(state.owner),
+          base,
+          { email: state.email, password: state.password },
+          failed,
+        );
       },
     },
     async () => {

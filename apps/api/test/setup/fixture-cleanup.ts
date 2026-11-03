@@ -85,11 +85,16 @@ export async function deleteUserFixture(
   by: "email" | "phone" | "zitadel_sub",
   value: string,
 ): Promise<void> {
-  const { rows } = await pool.query<{ id: string }>(
-    `SELECT id FROM users WHERE ${by} = $1`,
+  const { rows } = await pool.query<{ id: string; zitadel_sub: string }>(
+    `SELECT id, zitadel_sub FROM users WHERE ${by} = $1`,
     [value],
   );
   for (const row of rows) {
+    // 003 EARS-69 — every e2e sign-in goes through the sign-in host, whose
+    // records name the subject (no FK), so they go with the user.
+    await pool.query("DELETE FROM sign_in_host_records WHERE subject = $1", [
+      row.zitadel_sub,
+    ]);
     // 044 EARS-34 — a registration's attendance marks go before it does.
     await pool.query(
       `DELETE FROM registration_attendance WHERE registration_id IN

@@ -1,15 +1,11 @@
 import { randomUUID } from "node:crypto";
-import {
-  expect,
-  request as playwrightRequest,
-  type Page,
-} from "@playwright/test";
+import { expect, type Browser, type Page } from "@playwright/test";
 import pg from "pg";
-import { captchaTestTokenHeaders } from "@ds/e2e/captcha-stub";
 import {
-  standBasicAuthHeaders,
-  standHttpCredentials,
-} from "@ds/e2e/stand-http-credentials";
+  provisionConfirmedAccount,
+  signInPageThroughHost,
+} from "@ds/e2e/host-sign-in";
+import { standBasicAuthHeaders } from "@ds/e2e/stand-http-credentials";
 
 /**
  * 046 (#2433) — the live-stand fixtures the «Мои заявки на Конгресс» tier
@@ -17,12 +13,11 @@ import {
  *
  * What goes through the product and what goes through the database:
  *
- * - **Accounts** are provisioned through the doctor host's own commands
- *   (register → the Mailpit confirmation code → confirm), and every sign-in in
- *   the tier is a real one — the V-15 guest leg through the login door's
- *   emailed-code form, the rest through the same-origin BFF `POST
- *   /v1/auth/login` issued from the page (`doctor-session.ts` explains why
- *   in-page).
+ * - **Accounts** are provisioned through the doctor storefront's `/register`
+ *   door on the sign-in host (registration form → the Mailpit confirmation
+ *   code), and every sign-in in the tier is a real one — the V-15 guest leg
+ *   through the login door's emailed-code form, the rest through the sign-in
+ *   host's password form (`@ds/e2e/host-sign-in`).
  * - **The congress event, its intake settings and the registration** are rows
  *   written on the stand database (`DATABASE_URL` — the branch database). The
  *   intake settings screen is the S1 admin surface and the registration is the
@@ -102,75 +97,33 @@ export async function mailedCode(
   throw new Error(`no «${tail}» email reached Mailpit for ${email}`);
 }
 
-/** A confirmed doctor account, through the doctor host's own commands. */
-export async function provisionDoctor(tag: string): Promise<CongressDoctor> {
+/**
+ * A confirmed doctor account, registered through the doctor storefront's
+ * `/register` door on the sign-in host (`@ds/e2e/host-sign-in`, #3565).
+ */
+export async function provisionDoctor(
+  browser: Browser,
+  tag: string,
+): Promise<CongressDoctor> {
   const email = `e2e-2433-${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@ds.test`;
   const password = `Doc-${Date.now()}-aA1!`;
-  const api = await playwrightRequest.newContext({
-    baseURL: DOCTOR_URL,
-    httpCredentials: standHttpCredentials(),
+  await provisionConfirmedAccount(browser, "doctor", DOCTOR_URL, {
+    email,
+    password,
   });
-  try {
-    const sentAt = Date.now();
-    const reg = await api.post("/v1/storefront/doctor/register", {
-      headers: captchaTestTokenHeaders(),
-      data: {
-        email,
-        password,
-        medicalWorkerDeclaration: true,
-        consent: [{ purpose: "partner-data-sharing", version: "v1" }],
-      },
-    });
-    expect(reg.ok(), `register — ${reg.status()}: ${await reg.text()}`).toBe(
-      true,
-    );
-    const code = await mailedCode(email, "verify", sentAt);
-    // 003 EARS-23/41: the doctor door's code step carries the in-tab
-    // registration values; the bare 003 `/v1/auth/verify` leaves the account
-    // without its password (#2678).
-    const confirm = await api.post("/v1/storefront/doctor/verify", {
-      data: {
-        email,
-        code,
-        registration: {
-          password,
-          medicalWorkerDeclaration: true,
-          consent: [{ purpose: "partner-data-sharing", version: "v1" }],
-        },
-      },
-    });
-    expect(
-      confirm.ok(),
-      `confirm — ${confirm.status()}: ${await confirm.text()}`,
-    ).toBe(true);
-  } finally {
-    await api.dispose();
-  }
   return { email, password };
 }
 
 /**
- * Sign `page` in through the same-origin BFF, leaving it on the doctor origin
- * (the in-page call keeps the session fingerprint of the navigations after it).
+ * Sign `page` in through the sign-in host's password form, leaving it on the
+ * doctor origin (the browser that signed in keeps the session fingerprint of
+ * the navigations after it).
  */
 export async function signInInPage(
   page: Page,
   doctor: CongressDoctor,
 ): Promise<void> {
-  await page.goto(`${DOCTOR_URL}/`, { waitUntil: "domcontentloaded" });
-  const outcome = await page.evaluate(
-    async ([identifier, password]) => {
-      const response = await fetch("/v1/auth/login", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identifier, password }),
-      });
-      return { status: response.status, body: await response.text() };
-    },
-    [doctor.email, doctor.password] as const,
-  );
-  expect(outcome.status, `in-page sign-in — ${outcome.body}`).toBe(200);
+  await signInPageThroughHost(page, DOCTOR_URL, doctor);
 }
 
 /**

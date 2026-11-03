@@ -1,5 +1,7 @@
 import { expect, type Browser, type Page } from "@playwright/test";
-import { ADMIN_ORIGIN, bootstrapDoctorSession } from "@ds/e2e/admin-events";
+import { ADMIN_ORIGIN } from "@ds/e2e/admin-events";
+
+import { signInDoctorOnAdminOrigin } from "./storefront-session";
 
 /**
  * Seeding for the 044 roster specs, through the PRODUCTION writers only — no
@@ -22,27 +24,15 @@ export async function registerDoctorThroughPlatform(
   eventSlug: string,
   displayName: string,
 ): Promise<{ email: string }> {
-  const { email, password } = await bootstrapDoctorSession(
-    ADMIN_ORIGIN,
-    "roster",
-  );
   const context = await browser.newContext({ baseURL: ADMIN_ORIGIN });
+  let email = "";
   try {
     const page = await context.newPage();
     await page.goto("/login");
+    ({ email } = await signInDoctorOnAdminOrigin(page, "roster"));
     const outcome = await page.evaluate(
       async (input) => {
         const json = { "content-type": "application/json" };
-        const login = await fetch("/v1/auth/login", {
-          method: "POST",
-          credentials: "include",
-          headers: json,
-          body: JSON.stringify({
-            identifier: input.email,
-            password: input.password,
-          }),
-        });
-        if (!login.ok) return `login HTTP ${login.status}`;
         const named = await fetch("/v1/me/display-name", {
           method: "PUT",
           credentials: "include",
@@ -57,7 +47,7 @@ export async function registerDoctorThroughPlatform(
         if (!registered.ok) return `registration HTTP ${registered.status}`;
         return "ok";
       },
-      { email, password, displayName, eventSlug },
+      { displayName, eventSlug },
     );
     expect(outcome, `platform registration of ${email}`).toBe("ok");
   } finally {

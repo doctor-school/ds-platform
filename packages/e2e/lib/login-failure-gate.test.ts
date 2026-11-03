@@ -62,6 +62,53 @@ describe("runGatedLoginAttempt (#2956)", () => {
     expect(await exists(lockPath)).toBe(false);
   });
 
+  it("skips the closing sign-in when the attempt's own answer was a successful login", async () => {
+    let closed = false;
+    const result = await runGatedLoginAttempt(
+      {
+        lockPath,
+        close: async () => {
+          closed = true;
+        },
+        succeeded: (status: number) => status === 200,
+      },
+      async () => 200,
+    );
+    expect(result).toBe(200);
+    expect(closed).toBe(false);
+    expect(await exists(lockPath)).toBe(false);
+  });
+
+  it("still closes a refused attempt and a throwing one when a success predicate is given", async () => {
+    const closes: string[] = [];
+    await runGatedLoginAttempt(
+      {
+        lockPath,
+        close: async () => {
+          closes.push("refused");
+        },
+        succeeded: (status: number) => status === 200,
+      },
+      async () => 401,
+    );
+    await expect(
+      runGatedLoginAttempt(
+        {
+          lockPath,
+          close: async () => {
+            closes.push("threw");
+          },
+          succeeded: () => true,
+        },
+        async (): Promise<number> => {
+          throw new Error("assertion after a 200 answer");
+        },
+      ),
+    ).rejects.toThrow("assertion after a 200 answer");
+    expect(closes).toEqual(["refused", "threw"]);
+    expect(await exists(lockPath)).toBe(false);
+  });
+
   it("never lets two attempts overlap: the second waits until the first is closed", async () => {
     const events: string[] = [];
     let releaseFirst!: () => void;

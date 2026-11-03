@@ -116,7 +116,7 @@ async function passwordSignIn(
     page.locator('input[autocomplete="current-password"]'),
     password,
   );
-  return gatedPasswordLogin(page, async () => {
+  return gatedPasswordLogin(page, base, async () => {
     const pending = captureResponse(page, signInHostApiPath("/v1/auth/login"));
     await page.getByTestId("password-login-submit").click();
     return pending;
@@ -483,8 +483,10 @@ When(
     expect(
       {
         exactOwnedReset,
-        tokenFreeAcknowledgement:
-          storefrontCallbackAcknowledgement(state.completion.body, world.hostBaseUrl),
+        tokenFreeAcknowledgement: storefrontCallbackAcknowledgement(
+          state.completion.body,
+          world.hostBaseUrl,
+        ),
       },
       "delivered-code completion retains the owned command and safe acknowledgement",
     ).toEqual({ exactOwnedReset: true, tokenFreeAcknowledgement: true });

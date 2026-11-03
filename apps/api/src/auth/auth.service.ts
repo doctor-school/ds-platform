@@ -16,19 +16,16 @@ import type {
   OtpRequest,
   OtpRequestResponse,
   OtpVerify,
-  PasswordResetCompleteResponse,
   PasswordResetResponse,
   RegisterRequest,
   RegisterResponse,
   VerifyRegistration,
   VerifyRequest,
   VerifyResendResponse,
-  VerifyResponse,
   ZitadelWebhook,
   ZitadelWebhookResponse,
 } from "@ds/schemas";
 import { VERIFY_CODE_PATTERN } from "@ds/schemas";
-import type { SessionClaims } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import {
   withRequestAuditContext,
@@ -234,30 +231,11 @@ export class AuthService {
   private readonly unconfirmedPhones = new SmsUnconfirmedCounter();
 
   /**
-   * EARS-5: password login. Delegates the credential check to the IdP port
-   * and, on success, establishes the BFF session (EARS-8). Returns
-   * `null` for every failure — unknown identifier and wrong password are
-   * indistinguishable so the controller responds enumeration-resistantly
-   * (EARS-16). The `fingerprint` is computed by the controller from the request
-   * (the only request-coupled input) and bound into the session here.
-   */
-  loginWithPassword(
-    identifier: string,
-    password: string,
-    fingerprint: string,
-  ): Promise<{ cookie: string; claims: SessionClaims } | null> {
-    return this.passwordStep(identifier, password, (session) =>
-      this.sessions.establish(session, fingerprint),
-    );
-  }
-
-  /**
-   * The EARS-5 password check with every guarantee of {@link loginWithPassword}
-   * (the EARS-18 ledger rows, the one `null` for
-   * every failure), handing the checked session to `accept` instead of minting
-   * the storefront session itself. The storefront login accepts it into a BFF
-   * session; the sign-in host (003 EARS-5 amended, EARS-69) into its shared
-   * record — one credential path, no second weaker one.
+   * EARS-5: the password check. Delegates the credential check to the IdP
+   * port and hands the checked session to `accept` — the sign-in host (003
+   * EARS-5 amended, EARS-69) accepts it into its shared record. Returns `null`
+   * for every failure — unknown identifier and wrong password are
+   * indistinguishable (EARS-16) — with the EARS-18 ledger rows.
    */
   async passwordStep<T>(
     identifier: string,
@@ -425,25 +403,10 @@ export class AuthService {
   }
 
   /**
-   * EARS-6/7 step 2: verify a passwordless login code and, on success, establish
-   * the BFF session (EARS-8) — the identical convergence point as password login
-   * (design §6), so the cookie/token logic exists once. Returns `null` for every
-   * failure (unknown identifier, wrong/expired code) so the controller answers
-   * with the same generic 401 (EARS-16). The `fingerprint` is computed by the
-   * controller from the request and bound into the session here.
-   */
-  loginWithOtp(
-    req: OtpVerify,
-    fingerprint: string,
-  ): Promise<{ cookie: string; claims: SessionClaims } | null> {
-    return this.otpStep(req, (session) =>
-      this.sessions.establish(session, fingerprint),
-    );
-  }
-
-  /**
-   * The EARS-6/7 code check of {@link loginWithOtp}, handing the checked
-   * session to `accept` (see {@link passwordStep}).
+   * EARS-6/7 step 2: verify a passwordless login code, handing the checked
+   * session to `accept` (see {@link passwordStep}). `null` for every failure
+   * (unknown identifier, wrong/expired code), so the caller answers with the
+   * same generic 401 (EARS-16).
    */
   async otpStep<T>(
     req: OtpVerify,
@@ -590,8 +553,8 @@ export class AuthService {
 
   /**
    * EARS-9: rotate the BFF session's refresh token single-use (delegates to the
-   * session layer, which owns the IdP exchange + reuse handling). Thin pass-through
-   * mirroring `loginWithPassword` — the controller layer holds the cookie/HTTP.
+   * session layer, which owns the IdP exchange + reuse handling). Thin
+   * pass-through — the controller layer holds the cookie/HTTP.
    */
   refreshSession(sid: string): Promise<RefreshOutcome> {
     return this.sessions.refresh(sid);
@@ -672,40 +635,12 @@ export class AuthService {
   }
 
   /**
-   * EARS-12: complete a password reset and auto-log-in the subject (#221). The IdP
-   * sets the new password against the reset code and returns a checked session
-   * (design §2). On success the BFF (1) revokes every PRIOR session of that subject
-   * (global force-logout) and records `PasswordResetCompleted` — owned by the
-   * session layer — then (2) mints a FRESH authenticated session from the checked
-   * IdP session, exactly as the login path does (design §6 convergence: the same
-   * `sessions.establish` hop + the same session-created `LoginSucceeded` audit
-   * row). The response body stays token-free (EARS-8) — the new `__Host-` session
-   * cookie is returned for the controller to set. An invalid/expired code or
-   * unknown identifier is the same generic failure (EARS-16); the specific reason
-   * lives only in the audit ledger (F6). The `fingerprint` is computed by the
-   * controller from the request (the only request-coupled input) and bound into
-   * the new session here, mirroring `loginWithPassword`.
-   */
-  async completePasswordReset(
-    identifier: string,
-    code: string,
-    newPassword: string,
-    fingerprint: string,
-  ): Promise<{ cookie: string; body: PasswordResetCompleteResponse }> {
-    const established = await this.resetCompleteStep(
-      identifier,
-      code,
-      newPassword,
-      (session) => this.sessions.establish(session, fingerprint),
-    );
-    return { cookie: established.cookie, body: { status: "reset_completed" } };
-  }
-
-  /**
-   * The EARS-12 reset completion of {@link completePasswordReset} — prior
-   * sessions revoked, email flipped verified, the same ledger rows and the same
-   * generic 400 — handing the checked session to `accept` (see
-   * {@link passwordStep}).
+   * EARS-12: complete a password reset. The IdP sets the new password against
+   * the reset code and returns a checked session; every PRIOR session of the
+   * subject is revoked (global force-logout, `PasswordResetCompleted`), the
+   * email flipped verified, and the checked session handed to `accept` (see
+   * {@link passwordStep}). A bad/expired code or unknown identifier is the same
+   * generic 400 (EARS-16), its reason only in the ledger (F6).
    */
   async resetCompleteStep<T>(
     identifier: string,
@@ -1243,23 +1178,9 @@ export class AuthService {
    * 003 EARS-3/41: the registration code step. The code goes through the one
    * submission (`acceptEmailCode`) — for a new, abandoned or already-registered
    * address alike — with the in-tab registration values when the step still
-   * holds them. On success it returns the session cookie (EARS-8); every
-   * failure is the same generic 400, its reason only in the ledger (#1112).
-   */
-  async verify(
-    req: VerifyRequest,
-    fingerprint: string,
-  ): Promise<{ cookie: string; body: VerifyResponse }> {
-    const accepted = await this.verifyStep(req, (session) =>
-      this.sessions.establish(session, fingerprint),
-    );
-    return { cookie: accepted.cookie, body: { status: "verified" } };
-  }
-
-  /**
-   * The 003 EARS-3/41 registration code step of {@link verify}, handing the
-   * checked session to `accept` (see {@link passwordStep}); a rejected code is
-   * the same generic 400 with its `VerifyFailed` row.
+   * holds them, handing the checked session to `accept` (see
+   * {@link passwordStep}); a rejected code is the same generic 400 with its
+   * `VerifyFailed` row (#1112).
    */
   async verifyStep<T>(
     req: VerifyRequest,

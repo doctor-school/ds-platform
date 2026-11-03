@@ -2,13 +2,9 @@ import { createZodDto } from "nestjs-zod";
 import {
   LoginHandoffOwnershipRequestSchema,
   LoginHandoffRequestSchema,
-  LoginRequestSchema,
   OtpRequestSchema,
-  OtpVerifySchema,
-  PasswordResetCompleteRequestSchema,
   PasswordResetRequestSchema,
   RegisterRequestSchema,
-  VerifyRequestSchema,
   VerifyResendRequestSchema,
   ZitadelWebhookSchema,
 } from "@ds/schemas";
@@ -18,7 +14,6 @@ import {
 // `ZodValidationPipe` so a malformed request is a 400 before the handler runs.
 
 export class RegisterRequestDto extends createZodDto(RegisterRequestSchema) {}
-export class LoginRequestDto extends createZodDto(LoginRequestSchema) {}
 export class OtpRequestDto extends createZodDto(OtpRequestSchema) {}
 export class LoginHandoffRequestDto extends createZodDto(
   LoginHandoffRequestSchema,
@@ -26,15 +21,10 @@ export class LoginHandoffRequestDto extends createZodDto(
 export class LoginHandoffOwnershipRequestDto extends createZodDto(
   LoginHandoffOwnershipRequestSchema,
 ) {}
-export class OtpVerifyDto extends createZodDto(OtpVerifySchema) {}
-export class VerifyRequestDto extends createZodDto(VerifyRequestSchema) {}
 export class VerifyResendRequestDto extends createZodDto(
   VerifyResendRequestSchema,
 ) {}
 export class ZitadelWebhookDto extends createZodDto(ZitadelWebhookSchema) {}
 export class PasswordResetRequestDto extends createZodDto(
   PasswordResetRequestSchema,
-) {}
-export class PasswordResetCompleteRequestDto extends createZodDto(
-  PasswordResetCompleteRequestSchema,
 ) {}

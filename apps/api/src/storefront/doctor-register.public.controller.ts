@@ -1,29 +1,11 @@
-import {
-  Body,
-  Controller,
-  Headers,
-  HttpCode,
-  Inject,
-  Ip,
-  Post,
-  Res,
-} from "@nestjs/common";
-import type { FastifyReply } from "fastify";
-import type { DoctorRegisterResponse, VerifyResponse } from "@ds/schemas";
+import { Body, Controller, HttpCode, Inject, Post } from "@nestjs/common";
+import type { DoctorRegisterResponse } from "@ds/schemas";
 
 import { Authz, Public } from "../authz/index.js";
 import { BotProtected } from "../bot-protection/index.js";
-import {
-  ConsumedIpWindow,
-  RateLimited,
-  RateLimitService,
-} from "../auth/rate-limit/index.js";
+import { RateLimited } from "../auth/rate-limit/index.js";
 import { TimingEqualized } from "../auth/timing/index.js";
-import { computeFingerprint } from "../auth/session/session.cookie.js";
-import {
-  DoctorRegisterRequestDto,
-  DoctorVerifyRequestDto,
-} from "./doctor-register.dto.js";
+import { DoctorRegisterRequestDto } from "./doctor-register.dto.js";
 import { DoctorRegisterService } from "./doctor-register.service.js";
 
 /**
@@ -58,8 +40,6 @@ export class DoctorRegisterPublicController {
   constructor(
     @Inject(DoctorRegisterService)
     private readonly doctorRegister: DoctorRegisterService,
-    @Inject(RateLimitService)
-    private readonly rateLimit: RateLimitService,
   ) {}
 
   /** `POST /v1/storefront/doctor/register` — the 021 `RegisterDoctor` command. */
@@ -82,44 +62,5 @@ export class DoctorRegisterPublicController {
     @Body() dto: DoctorRegisterRequestDto,
   ): Promise<DoctorRegisterResponse> {
     return this.doctorRegister.register(dto);
-  }
-
-  /**
-   * `POST /v1/storefront/doctor/verify` — the doctor host's one code step
-   * (003 EARS-23/41). The 003 `/verify` contract — same guards, same generic
-   * 400 on every failure (EARS-16), the `__Host-` session cookie on success —
-   * with this door's registration values, whose consent versions are stamped
-   * exactly as {@link register} stamps them. `@TimingEqualized` as on the 003
-   * route: a wrong code discloses neither existence nor state (EARS-41).
-   */
-  @Post("verify")
-  @Public()
-  @RateLimited()
-  @TimingEqualized()
-  @HttpCode(200)
-  @Authz({
-    access: "public",
-    check: "none",
-    audit: "high-stakes",
-    tests: ["EARS-41"],
-  })
-  async verify(
-    @Body() dto: DoctorVerifyRequestDto,
-    @Headers("user-agent") userAgent: string | undefined,
-    @Headers("accept-language") acceptLanguage: string | undefined,
-    @Ip() ip: string,
-    @ConsumedIpWindow() consumedIpWindow: number | undefined,
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<VerifyResponse> {
-    const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
-    // A wrong code throws the generic failure; a success signs the user in and,
-    // like every successful login, forgives the per-user window keyed on
-    // `email` (003 EARS-13, #2614).
-    const { cookie, body } = await this.doctorRegister.verify(dto, fingerprint);
-    await this.rateLimit.reset({ ip, identifier: dto.email });
-    // #2684: a successful verification gives back its own per-IP unit.
-    await this.rateLimit.refundIpUnit(ip, consumedIpWindow);
-    reply.header("set-cookie", cookie);
-    return body;
   }
 }

@@ -2,15 +2,13 @@ import {
   expect,
   request as playwrightRequest,
   test,
-  type APIRequestContext,
+  type Browser,
   type Page,
 } from "@playwright/test";
 
 import type { HostConfig } from "../hosts.js";
-import {
-  CAPTCHA_TEST_TOKEN_ENV,
-  prepareCaptchaForJourney,
-} from "./captcha-stub.js";
+import { prepareCaptchaForJourney } from "./captcha-stub.js";
+import { provisionConfirmedAccount } from "./host-sign-in.js";
 import { standHttpCredentials } from "./stand-http-credentials.js";
 import { isSignInHostForm } from "./sign-in-host-api.js";
 import {
@@ -49,9 +47,9 @@ import {
  * its cookie. A cookie wipe would be the signed-out case, not expiry; the spec
  * asserts the cookie is still held before it opens `/account`.
  *
- * Accounts are provisioned per test through the host's own register + verify
- * commands with the Mailpit code (the verify carries the registration values:
- * the bare verify replaces the password, 003 EARS-41).
+ * Accounts are provisioned per test the way a doctor registers: the host's
+ * `/register` entry, the sign-in host's registration form and its code step
+ * with the Mailpit code (`host-sign-in.ts`, #3565).
  *
  * ENV SET (gated by each host binding with a literal `requireLiveStandEnv`, so
  * the stage inventory test sees it): the host URL variable, `MAILPIT_URL`. Bare CI → inert green; a
@@ -70,12 +68,6 @@ const ACCOUNT = "/account";
 /** What a host binds the shared body with. */
 export interface AccountAuthPathsHost {
   readonly host: HostConfig;
-  /** The host's register command (`AuthFlowHostConfig.api.registerPath`). */
-  readonly registerPath: string;
-  /** The host's verify command (`AuthFlowHostConfig.api.verifyPath`). */
-  readonly verifyPath: string;
-  /** The host's registration values besides email + password. */
-  readonly registration: Readonly<Record<string, unknown>>;
   /** The host's reset route (`AuthFlowHostConfig.routes.reset`). */
   readonly resetPath: string;
 }
@@ -84,33 +76,7 @@ const httpCredentials = standHttpCredentials();
 
 const newEmail = (hostId: string): string =>
   `e2e-3151-${hostId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
-const newPassword = (tag: string): string =>
-  `Acc-${tag}-${Date.now()}-aA1!`;
-
-/**
- * The bot-protection header a provisioning command carries on a stand that
- * enforces it (a slot: the operator's non-production test token, #2605); none
- * on a local stand that runs with bot protection off.
- */
-function provisioningHeaders(): Record<string, string> {
-  const token = process.env[CAPTCHA_TEST_TOKEN_ENV]?.trim();
-  return token ? { "x-smartcaptcha-token": token } : {};
-}
-
-async function expectOk(
-  api: APIRequestContext,
-  path: string,
-  data: unknown,
-): Promise<void> {
-  const response = await api.post(path, {
-    data,
-    headers: provisioningHeaders(),
-  });
-  expect(
-    response.ok(),
-    `POST ${path} should succeed — got ${response.status()}: ${await response.text()}`,
-  ).toBe(true);
-}
+const newPassword = (tag: string): string => `Acc-${tag}-${Date.now()}-aA1!`;
 
 /** Wait until the hydrated page can no longer submit natively (#2067). */
 async function openSettled(page: Page, url: string): Promise<void> {
@@ -131,7 +97,10 @@ function storefrontEntryOf(page: Page): {
 }
 
 /** The last storefront-origin navigation a page made into a sign-in entry. */
-const lastEntry = new WeakMap<Page, { pathname: string; returnTo: string | null }>();
+const lastEntry = new WeakMap<
+  Page,
+  { pathname: string; returnTo: string | null }
+>();
 
 function watchEntries(page: Page, base: string): void {
   page.on("request", (req) => {
@@ -153,40 +122,13 @@ export function defineAccountAuthPathTests(bound: AccountAuthPathsHost): void {
   const mailbox = (process.env.MAILPIT_URL ?? "").replace(/\/$/, "");
   const mail = nativeRecoveryMail();
 
-  /** A confirmed account, provisioned through the host's own commands. */
-  async function provisionAccount(): Promise<{
-    email: string;
-    password: string;
-  }> {
-    const email = newEmail(host.id);
-    const password = newPassword("old");
-    const api = await playwrightRequest.newContext({
-      baseURL: base,
-      ...(httpCredentials ? { httpCredentials } : {}),
-    });
-    try {
-      const before = await captureAddressedMailCheckpoint(mail, mailbox, email);
-      await expectOk(api, bound.registerPath, {
-        email,
-        password,
-        ...bound.registration,
-      });
-      const code = await fetchRecoveryCode(
-        mail,
-        mailbox,
-        email,
-        before,
-        "register",
-      );
-      await expectOk(api, bound.verifyPath, {
-        email,
-        code,
-        registration: { password, ...bound.registration },
-      });
-    } finally {
-      await api.dispose();
-    }
-    return { email, password };
+  /** A confirmed account, registered through the host's own door. */
+  async function provisionAccount(
+    browser: Browser,
+  ): Promise<{ email: string; password: string }> {
+    const account = { email: newEmail(host.id), password: newPassword("old") };
+    await provisionConfirmedAccount(browser, host.id, base, account);
+    return account;
   }
 
   /** Sign in through the host's own password form, as a doctor would. */
@@ -255,7 +197,9 @@ export function defineAccountAuthPathTests(bound: AccountAuthPathsHost): void {
         logout.status(),
         `server-side logout of the browser's sid — ${await logout.text()}`,
       ).toBe(200);
-      const session = await api.get("/v1/auth/session", { headers: sameDevice });
+      const session = await api.get("/v1/auth/session", {
+        headers: sameDevice,
+      });
       expect(session.status(), "the sid no longer resolves").toBe(401);
     } finally {
       await api.dispose();
@@ -286,9 +230,10 @@ export function defineAccountAuthPathTests(bound: AccountAuthPathsHost): void {
     });
 
     test(`#3151 (${host.id}): an expired session on /account bounces to login carrying returnTo=/account, and signing in returns to /account`, async ({
+      browser,
       page,
     }) => {
-      const account = await provisionAccount();
+      const account = await provisionAccount(browser);
       await signInToAccount(page, account);
 
       await expireSessionServerSide(page);
@@ -311,9 +256,10 @@ export function defineAccountAuthPathTests(bound: AccountAuthPathsHost): void {
     });
 
     test(`#3151 (${host.id}): «Сменить пароль» on /account hands off to reset with returnTo=%2Faccount, and the completed reset returns to /account`, async ({
+      browser,
       page,
     }) => {
-      const account = await provisionAccount();
+      const account = await provisionAccount(browser);
       await signInToAccount(page, account);
 
       const handoff = page.getByRole("link", { name: "Сменить пароль" });

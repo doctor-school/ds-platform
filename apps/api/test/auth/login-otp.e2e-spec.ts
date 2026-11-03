@@ -40,12 +40,54 @@ import {
   medianSpread,
   sampleInterleaved,
 } from "../support/timing-oracle.js";
+import {
+  Jar,
+  hostLogin,
+  lastHostSession,
+  openHostForm,
+  postHostForm,
+  storefrontRedeem,
+  withSignInHost,
+} from "../setup/storefront-harness.js";
+
+/** 003 EARS-3 on the sign-in host: the Academy code step verifies `email`. */
+async function hostVerify(
+  app: NestFastifyApplication,
+  email: string,
+): Promise<void> {
+  const jar = new Jar();
+  const form = await openHostForm(app, jar);
+  const res = await postHostForm(app, jar, "verify", {
+    email,
+    code: FAKE_VALID_CODE,
+    ...form,
+  });
+  expect(res.statusCode, res.body).toBe(200);
+}
+
+/**
+ * The login-code step on the sign-in host (`otpStep`), then the storefront
+ * callback that redeems the record it filled: the host answer and the
+ * storefront session's raw `Set-Cookie` (empty when the step was refused).
+ */
+async function hostOtpLogin(
+  app: NestFastifyApplication,
+  identifier: string,
+  code: string,
+  channel: "email" | "sms",
+): Promise<{ res: Awaited<ReturnType<typeof hostLogin>>; minted: string }> {
+  const res = await hostLogin(app, new Jar(), identifier, { code, channel });
+  if (res.statusCode !== 200) return { res, minted: "" };
+  const { setCookie } = await storefrontRedeem(app, lastHostSession(app));
+  return { res, minted: setCookie };
+}
 
 // Passwordless login (EARS-6 email-OTP / EARS-7 SMS-OTP) and the SMS toll-fraud
 // budget (EARS-14). Both OTP variants are native Zitadel (`otp_email` / `otp_sms`)
 // and converge on the single F2 session-establishment step — success sets a
 // `__Host-` cookie and returns a token-free body (EARS-8), failure is the same
-// generic 401 (EARS-16). Runs against a real Postgres with the IdP bound to the
+// generic 401 (EARS-16). The code step runs on the sign-in host's login-code
+// command; the storefront callback mints the session from the host record. Runs against a real Postgres with the IdP bound to the
 // in-memory fake (design §2/§6); SMS sends are budget-gated before reaching the
 // provider (EARS-14, design §10).
 describe.skipIf(!process.env.DATABASE_URL)(
@@ -91,28 +133,24 @@ describe.skipIf(!process.env.DATABASE_URL)(
     // EARS-34) — so a login-by-email-code test must verify the registrant first
     // ("Given a verified doctor_guest user", @EARS-6 scenario).
     async function verify(email: string): Promise<void> {
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/verify",
-        payload: { email, code: FAKE_VALID_CODE },
-      });
-      expect(res.statusCode).toBe(200);
+      await hostVerify(app, email);
     }
 
     beforeAll(async () => {
       idp = new FakeIdpClient();
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(idp)
-        // Generous budget so the EARS-6/7 happy paths are never the limiter here;
-        // the breaker itself is exercised in the dedicated describe below.
-        .overrideProvider(SMS_BUDGET_THRESHOLDS)
-        .useValue(DEFAULT_SMS_BUDGET_THRESHOLDS)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(idp)
+          // Generous budget so the EARS-6/7 happy paths are never the limiter here;
+          // the breaker itself is exercised in the dedicated describe below.
+          .overrideProvider(SMS_BUDGET_THRESHOLDS)
+          .useValue(DEFAULT_SMS_BUDGET_THRESHOLDS)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
@@ -147,16 +185,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(requested.statusCode).toBe(200);
       expect(requested.json()).toEqual({ status: "otp_sent" });
 
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login/otp",
-        payload: { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
-      });
+      const { res, minted } = await hostOtpLogin(
+        app,
+        email,
+        FAKE_VALID_CODE,
+        "email",
+      );
 
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ status: "authenticated" });
+      expect(res.json()).toMatchObject({ status: "redirect" });
       expect(JSON.stringify(res.json())).not.toMatch(/token/i);
-      expect(setCookie(res)).toContain(`${SESSION_COOKIE_NAME}=`);
+      expect(minted).toMatch(new RegExp(`^${SESSION_COOKIE_NAME}=`));
     });
 
     it("EARS-6: a wrong email OTP code is a generic 401 with no session cookie (enumeration-resistant, EARS-16)", async () => {
@@ -169,11 +208,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         payload: { identifier: email, channel: "email" },
       });
 
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login/otp",
-        payload: { identifier: email, code: "000000", channel: "email" },
-      });
+      const { res } = await hostOtpLogin(app, email, "000000", "email");
 
       expect(res.statusCode).toBe(401);
       expect(setCookie(res)).not.toContain(SESSION_COOKIE_NAME);
@@ -204,15 +239,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // Under budget, the SMS actually reached the (fake) provider.
       expect(idp.smsOtpSendCount()).toBe(before + 1);
 
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login/otp",
-        payload: { identifier: phone, code: FAKE_VALID_CODE, channel: "sms" },
-      });
+      const { res, minted } = await hostOtpLogin(
+        app,
+        phone,
+        FAKE_VALID_CODE,
+        "sms",
+      );
 
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ status: "authenticated" });
-      expect(setCookie(res)).toContain(`${SESSION_COOKIE_NAME}=`);
+      expect(res.json()).toMatchObject({ status: "redirect" });
+      expect(minted).toMatch(new RegExp(`^${SESSION_COOKIE_NAME}=`));
     });
 
     it("EARS-56: an SMS login-code request for a phone no account holds confirmed is counted (flow signin), writes no ledger row and answers unchanged", async () => {
@@ -331,12 +367,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }
 
     async function verify(email: string): Promise<void> {
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/verify",
-        payload: { email, code: FAKE_VALID_CODE },
-      });
-      expect(res.statusCode).toBe(200);
+      await hostVerify(app, email);
     }
 
     /** POST the login-email-code request; return { status, body, ms }. */
@@ -355,16 +386,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     beforeAll(async () => {
       mailer = new FakeMailer();
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(new FakeIdpClient(mailer))
-        .overrideProvider(MAILER)
-        .useValue(mailer)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(new FakeIdpClient(mailer))
+          .overrideProvider(MAILER)
+          .useValue(mailer)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
@@ -406,20 +438,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
       ]);
       expect(mailer.verificationCodeEmails).toEqual([]);
 
-      // EARS-41: the same login-verify route accepts that code — it verifies
+      // EARS-41: the same login-code step accepts that code — it verifies
       // the address and establishes the session.
-      const verifyRes = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login/otp",
-        payload: { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
-      });
+      const { res: verifyRes, minted } = await hostOtpLogin(
+        app,
+        email,
+        FAKE_VALID_CODE,
+        "email",
+      );
       expect(verifyRes.statusCode).toBe(200);
-      expect(verifyRes.json()).toEqual({ status: "authenticated" });
-      const raw = verifyRes.headers["set-cookie"];
-      const cookie = Array.isArray(raw)
-        ? raw.join("\n")
-        : ((raw as string) ?? "");
-      expect(cookie).toContain(SESSION_COOKIE_NAME);
+      expect(verifyRes.json()).toMatchObject({ status: "redirect" });
+      expect(minted).toContain(SESSION_COOKIE_NAME);
       const { rows } = await pool.query(
         "SELECT email_verified FROM users WHERE email = $1",
         [email],
@@ -442,13 +471,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(mailer.verificationCodeEmails).toEqual([]);
 
       // The otp_email challenge was armed: the valid code now establishes a session.
-      const verifyRes = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login/otp",
-        payload: { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
-      });
+      const { res: verifyRes, minted } = await hostOtpLogin(
+        app,
+        email,
+        FAKE_VALID_CODE,
+        "email",
+      );
       expect(verifyRes.statusCode).toBe(200);
-      expect(verifyRes.json()).toEqual({ status: "authenticated" });
+      expect(verifyRes.json()).toMatchObject({ status: "redirect" });
+      expect(minted).toContain(SESSION_COOKIE_NAME);
     });
 
     it("EARS-34/16: the response is byte-identical in status, body, AND timing across {nonexistent, existing-unverified, existing-verified}", async () => {

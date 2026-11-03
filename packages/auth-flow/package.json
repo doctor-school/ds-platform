@@ -16,13 +16,9 @@
     "./test-support": "./src/test-support/host-config-fixtures.ts",
     "./shell": "./src/shell/index.ts",
     "./login": "./src/login/index.ts",
-    "./login/route": "./src/login/login-route.tsx",
     "./register": "./src/register/index.ts",
-    "./register/route": "./src/register/register-route.tsx",
     "./verify": "./src/verify/index.ts",
-    "./verify/route": "./src/verify/verify-route.tsx",
     "./reset": "./src/reset/index.ts",
-    "./reset/route": "./src/reset/reset-route.tsx",
     "./sign-in-host/route": "./src/sign-in-host/sign-in-host-route.tsx",
     "./refusal/route": "./src/refusal/entry-refusal-route.tsx"
   },

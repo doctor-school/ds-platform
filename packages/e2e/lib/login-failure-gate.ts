@@ -24,6 +24,8 @@ import path from "node:path";
  *   3. closes with a real successful password sign-in of the worker's golden
  *      doctor from a cookie-free request context — the probe's browser context
  *      never sees it — which clears the origin's failure window;
+ *      — unless the attempt's own answer already was a successful login,
+ *      which cleared the window itself;
  *   4. releases the gate.
  * The other password sign-ins (`signInGoldenDoctor`) can only succeed, so they
  * need no gate: while every failure is closed before the next one starts the
@@ -35,11 +37,18 @@ import path from "node:path";
 const DEFAULT_LOCK = path.join(os.tmpdir(), "ds-e2e-login-failure-gate.lock");
 const OWNER_FILE = "owner";
 
-export interface GateOptions {
+export interface GateOptions<T = unknown> {
   /** The lock directory; one per machine by default. */
   lockPath?: string;
   /** The successful sign-in that clears the origin's failure window. */
   close: () => Promise<void>;
+  /**
+   * Whether the attempt's own answer was a successful password login. The api
+   * clears the origin's failure window on every successful login exactly as it
+   * does for the closing sign-in, so a returned attempt this accepts is not
+   * closed again. An attempt that throws is always closed.
+   */
+  succeeded?: (result: T) => boolean;
   /** How long to wait between attempts to take the gate. */
   pollMs?: number;
   /** Whether the process that holds the gate still runs. */
@@ -89,7 +98,7 @@ async function acquire(
  * `gatedPasswordLogin` (`./gated-password-login.ts`).
  */
 export async function runGatedLoginAttempt<T>(
-  options: GateOptions,
+  options: GateOptions<T>,
   attempt: () => Promise<T>,
 ): Promise<T> {
   const lockPath = options.lockPath ?? DEFAULT_LOCK;
@@ -99,11 +108,15 @@ export async function runGatedLoginAttempt<T>(
     options.isAlive ?? processIsAlive,
   );
   try {
+    let result: T;
     try {
-      return await attempt();
-    } finally {
+      result = await attempt();
+    } catch (error) {
       await options.close();
+      throw error;
     }
+    if (!options.succeeded?.(result)) await options.close();
+    return result;
   } finally {
     await rm(lockPath, { recursive: true, force: true });
   }

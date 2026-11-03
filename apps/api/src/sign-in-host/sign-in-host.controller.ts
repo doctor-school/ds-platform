@@ -146,7 +146,11 @@ export class SignInHostController {
     return outcome.body;
   }
 
-  /** EARS-5 (amended) — the password step on the host; `POST /v1/auth/login`'s guards. */
+  /**
+   * EARS-5 (amended) — the password step on the host: rate-limited, the
+   * password-login door, timing-equalized (EARS-16) and captcha-challenged
+   * after N failures (EARS-17).
+   */
   @Post("login")
   @Public()
   @RateLimited()
@@ -250,7 +254,7 @@ export class SignInHostController {
     return { status: "otp_sent", identifier: email };
   }
 
-  /** EARS-6/7 step 2 on the host; `POST /v1/auth/login/otp`'s guards. */
+  /** EARS-6/7 step 2 on the host: rate-limited and timing-equalized (EARS-16). */
   @Post("login/otp")
   @Public()
   @RateLimited()
@@ -351,8 +355,8 @@ export class SignInHostController {
   }
 
   /**
-   * EARS-24 / 41 on the host — the doctor form's code step:
-   * `POST /v1/storefront/doctor/verify`'s command and guards; the accepted
+   * EARS-24 / 41 on the host — the doctor form's code step: the doctor
+   * door's consent stamping, rate-limited and timing-equalized; the accepted
    * code is the EARS-5 credential step. Only on a form the doctor client opened.
    */
   @Post("storefront/doctor/verify")
@@ -389,7 +393,11 @@ export class SignInHostController {
     return { status: "redirect", url: result.url };
   }
 
-  /** 003 EARS-3/41 — the Academy registration code step on the host; `POST /v1/auth/verify`'s guards. */
+  /**
+   * 003 EARS-3/41 — the Academy registration code step on the host:
+   * rate-limited, timing-floored so a wrong code discloses neither existence
+   * nor state (EARS-41).
+   */
   @Post("verify")
   @Public()
   @RateLimited()
@@ -478,7 +486,7 @@ export class SignInHostController {
     });
   }
 
-  /** EARS-12 on the host; `POST /v1/auth/password/reset/complete`'s guards. */
+  /** EARS-12 on the host: rate-limited; a bad/expired code is the generic 400 (EARS-16). */
   @Post("password/reset/complete")
   @Public()
   @RateLimited()

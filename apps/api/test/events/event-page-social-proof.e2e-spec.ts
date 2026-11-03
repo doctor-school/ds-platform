@@ -17,6 +17,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "../../src/storefront/specialty-choice.cookie.js";
 import {
   deleteEventFixture,
@@ -177,16 +178,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: { email, password, consent },
       });
       expect(reg.statusCode).toBe(200);
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password },
-      });
-      expect(res.statusCode).toBe(200);
-      const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
-      expect(cookie).toBeDefined();
-      return cookie!.value;
+      return signIn(app, email, password, { device });
     }
 
     async function readPage(url: string, session?: string) {
@@ -209,12 +201,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake),
+      ).compile();
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
       );

@@ -20,7 +20,6 @@ import {
   TEST_FALLBACK_PEPPER,
 } from "../../src/auth/session/auth-audit.ledger.js";
 import { PARTNER_DATA_SHARING_PURPOSE } from "@ds/schemas";
-import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -36,6 +35,15 @@ import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 // zero, whatever store REDIS_URL would bind (#3539).
 import { InMemoryRateLimitStore } from "../../src/auth/rate-limit/rate-limit.store.fake.js";
 import { RATE_LIMIT_STORE } from "../../src/auth/rate-limit/rate-limit.store.js";
+import {
+  Jar,
+  lastHostSession,
+  openHostForm,
+  postHostForm,
+  storefrontSession,
+  withSignInHost,
+  type Storefront,
+} from "../setup/storefront-harness.js";
 
 const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
 
@@ -47,7 +55,7 @@ async function bootApp(
     .overrideProvider(IDP_CLIENT)
     .useValue(new FakeIdpClient());
   overrides(builder);
-  const moduleRef: TestingModule = await builder.compile();
+  const moduleRef: TestingModule = await withSignInHost(builder).compile();
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter(),
   );
@@ -55,6 +63,23 @@ async function bootApp(
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
   return app;
+}
+
+/**
+ * One credential or code step on the sign-in host (`step` under
+ * `/v1/sign-in-host/`) on a fresh form `client` opened: the host commands
+ * carry the storefront routes' rate-limit, timing and challenge guards.
+ */
+async function hostPost(
+  app: NestFastifyApplication,
+  step: string,
+  payload: Record<string, unknown>,
+  headers: Record<string, string> = device,
+  client: Storefront = "academy",
+) {
+  const jar = new Jar();
+  const form = await openHostForm(app, jar, { device, client });
+  return postHostForm(app, jar, step, { ...payload, ...form }, headers);
 }
 
 /**
@@ -103,12 +128,12 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
     it("EARS-13: when an identifier exceeds its window, the system shall return a generic 429 without revealing account existence", async () => {
       const identifier = "ratelimited@ds.test"; // unknown account on purpose
       const attempt = () =>
-        app.inject({
-          method: "POST",
-          url: "/v1/auth/login",
-          headers: device,
-          payload: { identifier, password: "whatever-long-pw" },
-        });
+        hostPost(
+          app,
+          "login",
+          { identifier, password: "whatever-long-pw" },
+          device,
+        );
 
       // 3 allowed (each a generic 401 — unknown account), the 4th is throttled.
       for (let i = 0; i < 3; i++)
@@ -170,22 +195,22 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
 
     it("EARS-13: when a login succeeds, the system shall clear the per-user window so the next attempt is not throttled", async () => {
       const wrong = () =>
-        app.inject({
-          method: "POST",
-          url: "/v1/auth/login",
-          headers: device,
-          payload: { identifier: email, password: "wrong-pw-here" },
-        });
+        hostPost(
+          app,
+          "login",
+          { identifier: email, password: "wrong-pw-here" },
+          device,
+        );
       // register already spent slot 1; spend slot 2 on a typo (generic 401).
       expect((await wrong()).statusCode).toBe(401);
       // The correct login is the 3rd (last in-budget) attempt — it SUCCEEDS and
       // forgives the per-user window.
-      const ok = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password },
-      });
+      const ok = await hostPost(
+        app,
+        "login",
+        { identifier: email, password },
+        device,
+      );
       expect(ok.statusCode).toBe(200);
       // Without forgive-on-success the window would now hold 3/3 and any further
       // attempt would 429; because the success cleared it, three more attempts are
@@ -213,12 +238,12 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
           consent: [{ purpose: "tos", version: "2026-01" }],
         },
       });
-      const verified = await app.inject({
-        method: "POST",
-        url: "/v1/auth/verify",
-        headers: device,
-        payload: { email: otpEmail, code: FAKE_VALID_CODE },
-      });
+      const verified = await hostPost(
+        app,
+        "verify",
+        { email: otpEmail, code: FAKE_VALID_CODE },
+        device,
+      );
       expect(verified.statusCode).toBe(200);
       // Arrange an empty per-user window for the code sign-in under test: the
       // setup above spent slots on the same identifier.
@@ -235,25 +260,25 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
           })
         ).statusCode,
       ).toBe(200);
-      const ok = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login/otp",
-        headers: device,
-        payload: {
+      const ok = await hostPost(
+        app,
+        "login/otp",
+        {
           identifier: otpEmail,
           code: FAKE_VALID_CODE,
           channel: "email",
         },
-      });
+        device,
+      );
       expect(ok.statusCode).toBe(200);
 
       const wrong = () =>
-        app.inject({
-          method: "POST",
-          url: "/v1/auth/login/otp",
-          headers: device,
-          payload: { identifier: otpEmail, code: "000000", channel: "email" },
-        });
+        hostPost(
+          app,
+          "login/otp",
+          { identifier: otpEmail, code: "000000", channel: "email" },
+          device,
+        );
       // Forgiven: three more attempts are admitted (generic 401), the 4th is 429.
       expect((await wrong()).statusCode).toBe(401);
       expect((await wrong()).statusCode).toBe(401);
@@ -275,21 +300,16 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
         },
       });
       // Slot 2: the code step SUCCEEDS (session from the code) and forgives.
-      const ok = await app.inject({
-        method: "POST",
-        url: "/v1/auth/verify",
-        headers: device,
-        payload: { email: verifyEmail, code: FAKE_VALID_CODE },
-      });
+      const ok = await hostPost(
+        app,
+        "verify",
+        { email: verifyEmail, code: FAKE_VALID_CODE },
+        device,
+      );
       expect(ok.statusCode).toBe(200);
 
       const wrong = () =>
-        app.inject({
-          method: "POST",
-          url: "/v1/auth/verify",
-          headers: device,
-          payload: { email: verifyEmail, code: "000000" },
-        });
+        hostPost(app, "verify", { email: verifyEmail, code: "000000" }, device);
       expect((await wrong()).statusCode).toBe(400);
       expect((await wrong()).statusCode).toBe(400);
       expect((await wrong()).statusCode).toBe(400);
@@ -312,21 +332,23 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
       });
       expect(registered.statusCode).toBe(200);
       // Slot 2: the doctor code step SUCCEEDS (session from the code) and forgives.
-      const ok = await app.inject({
-        method: "POST",
-        url: "/v1/storefront/doctor/verify",
-        headers: device,
-        payload: { email: doctorEmail, code: FAKE_VALID_CODE },
-      });
+      const ok = await hostPost(
+        app,
+        "storefront/doctor/verify",
+        { email: doctorEmail, code: FAKE_VALID_CODE },
+        device,
+        "doctor",
+      );
       expect(ok.statusCode).toBe(200);
 
       const wrong = () =>
-        app.inject({
-          method: "POST",
-          url: "/v1/storefront/doctor/verify",
-          headers: device,
-          payload: { email: doctorEmail, code: "000000" },
-        });
+        hostPost(
+          app,
+          "storefront/doctor/verify",
+          { email: doctorEmail, code: "000000" },
+          device,
+          "doctor",
+        );
       expect((await wrong()).statusCode).toBe(400);
       expect((await wrong()).statusCode).toBe(400);
       expect((await wrong()).statusCode).toBe(400);
@@ -354,12 +376,12 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
         payload: { identifier, channel: "email" },
       });
     const signInByCode = (identifier: string, code: string) =>
-      app.inject({
-        method: "POST",
-        url: "/v1/auth/login/otp",
-        headers: device,
-        payload: { identifier, code, channel: "email" },
-      });
+      hostPost(
+        app,
+        "login/otp",
+        { identifier, code, channel: "email" },
+        device,
+      );
 
     /** A fresh app (fresh limiter) with one verified account to sign in. */
     async function bootWithDoctor(): Promise<void> {
@@ -386,12 +408,12 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
           consent: [{ purpose: "tos", version: "2026-01" }],
         },
       });
-      const verified = await app.inject({
-        method: "POST",
-        url: "/v1/auth/verify",
-        headers: device,
-        payload: { email: doctor, code: FAKE_VALID_CODE },
-      });
+      const verified = await hostPost(
+        app,
+        "verify",
+        { email: doctor, code: FAKE_VALID_CODE },
+        device,
+      );
       expect(verified.statusCode).toBe(200);
     }
     afterAll(() => cleanup(app, [doctor]));
@@ -436,12 +458,12 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
         429,
       );
       // A password-login failure from the same address meets the same ceiling.
-      const login = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: doctor, password: "wrong-pw-here" },
-      });
+      const login = await hostPost(
+        app,
+        "login",
+        { identifier: doctor, password: "wrong-pw-here" },
+        device,
+      );
       expect(login.statusCode).toBe(429);
     });
   });
@@ -487,12 +509,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
       const since = (await pool.query<{ now: string }>("SELECT now() AS now"))
         .rows[0]!.now;
       const login = (pw: string) =>
-        app.inject({
-          method: "POST",
-          url: "/v1/auth/login",
-          headers: device,
-          payload: { identifier: email, password: pw },
-        });
+        hostPost(app, "login", { identifier: email, password: pw }, device);
       const limit = DEFAULT_RATE_LIMIT_THRESHOLDS.perUserPer15Min;
       for (let i = 0; i < limit; i++)
         expect((await login("wrong-password-here")).statusCode).toBe(401);
@@ -614,12 +631,12 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
     afterAll(() => cleanup(app, ["challenge-clear@ds.test"]));
 
     const badLogin = (extraHeaders: Record<string, string> = {}) =>
-      app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: { ...device, ...extraHeaders },
-        payload: { identifier: "challenge@ds.test", password: "wrong-pw-here" },
-      });
+      hostPost(
+        app,
+        "login",
+        { identifier: "challenge@ds.test", password: "wrong-pw-here" },
+        { ...device, ...extraHeaders },
+      );
 
     it("EARS-17: a first login is not challenged, but after N failures a token is required", async () => {
       // The first two failures are unchallenged generic 401s (not 403).
@@ -655,31 +672,32 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
 
       // Two failures arm the challenge…
       for (let i = 0; i < 2; i++)
-        await app.inject({
-          method: "POST",
-          url: "/v1/auth/login",
-          headers: device,
-          payload: { identifier: email, password: "wrong-pw-here" },
-        });
+        await hostPost(
+          app,
+          "login",
+          { identifier: email, password: "wrong-pw-here" },
+          device,
+        );
       // …a token-bearing correct login succeeds and clears the window…
-      const ok = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: { ...device, "x-smartcaptcha-token": GOOD_TOKEN },
-        payload: { identifier: email, password },
-      });
+      const ok = await hostPost(
+        app,
+        "login",
+        { identifier: email, password },
+        { ...device, "x-smartcaptcha-token": GOOD_TOKEN },
+      );
       expect(ok.statusCode).toBe(200);
+      // The accepted step's record redeems a storefront session.
       expect(
-        ok.cookies.find((c) => c.name === SESSION_COOKIE_NAME),
-      ).toBeDefined();
+        await storefrontSession(app, lastHostSession(app), "academy", device),
+      ).toBeTruthy();
 
       // …so the next login no longer needs a captcha token.
-      const after = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password },
-      });
+      const after = await hostPost(
+        app,
+        "login",
+        { identifier: email, password },
+        device,
+      );
       expect(after.statusCode).toBe(200);
     });
   });

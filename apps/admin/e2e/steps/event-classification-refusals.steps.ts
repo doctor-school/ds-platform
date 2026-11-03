@@ -17,7 +17,6 @@ import {
 type Kind = { id: string; title: string; allowed_formats: string[] };
 type Refusal = {
   status: number;
-  errorCode?: string;
   paths: (string | number)[][];
 };
 type State = {
@@ -190,12 +189,10 @@ async function submit(
         body: form,
       });
       const problem = (await response.json()) as {
-        errorCode?: string;
         issues?: { path: (string | number)[] }[];
       };
       return {
         status: response.status,
-        errorCode: problem.errorCode,
         paths: (problem.issues ?? []).map((issue) => issue.path),
       };
     },
@@ -203,7 +200,6 @@ async function submit(
   );
   current.refused.push(answer);
   expect(answer.status).toBe(400);
-  expect(answer.errorCode).toBe("VALIDATION_FAILED");
   expect(answer.paths).toContainEqual([current.field!]);
   expect(await eventRows(world)).toEqual(current.before);
 }

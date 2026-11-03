@@ -6,7 +6,7 @@ epic: ../../product/two-site-ia/brief.md
 status: In dev
 surface: user-facing
 storefronts: doctor-only
-storefronts_reason: "The doctor storefront home and its host: doctor mount of the shared storefront-shell package; the Academy shell is feature 008 and the Academy home feature 013 (rebuilt under #1799). Its cross-front blocks are the nearest-events block shared with the Academy home (#1485, paused) and the platform leaderboard extracted from the Academy education index (#1487), within the one-code epic #2020."
+storefronts_reason: "The doctor storefront home and its host: doctor mount of the shared storefront-shell package; the Academy shell is feature 008 and the Academy home feature 013 (rebuilt under #1799). Its cross-front blocks are the nearest-events block — the 019 events feed block capped on the home (#1485), which the Academy home mounts under #1799 — and the platform leaderboard extracted from the Academy education index (#1487), within the one-code epic #2020."
 lang: en
 ---
 

@@ -364,14 +364,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
         | one curator whose expert is draft |
         | one curator whose expert is retired |
 
-    @EARS-6 @happy
-    Scenario: One event belongs to several projects and both directions agree
-      Given one public event and two published projects
-      When the operator creates an active event_projects link for each project
-      Then the event-to-projects read returns both projects
-      And each project-to-events read returns the same event
-      And no event or project lifecycle state changes
-
     @EARS-7 @EARS-8 @happy
     Scenario: Speaker authoring and projection use only event_experts
       Given the legacy migration has cut over
@@ -888,13 +880,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       And an unexpected uncovered Expert aborts before any schema or row mutation
       And no whitespace split heuristic User match or review queue is used
 
-    @EARS-21 @happy
-    Scenario: Entity media changes are reversible
-      Given an entity has an uploaded image
-      When the operator replaces and then removes it
-      Then each committed change updates the media reference atomically
-      And cleanup is retained for each superseded object
-
     @EARS-22 @happy
     Scenario Outline: Every cross-link direction uses one idempotent command and row
       When the operator attaches a <relation> from the <endpoint> detail
@@ -913,15 +898,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
         | project-expert  | expert   |
         | project-partner | project  |
         | project-partner | partner  |
-
-    @EARS-23 @happy
-    Scenario: Shared list and selector interaction applies immediately
-      When the operator types search and selects two filters
-      Then results update without Enter or Apply
-      And pagination remains available
-      And both active values render as chips
-      And Reset all clears them
-      And no action with no possible effect is enabled
 
     @EARS-24 @happy
     Scenario: The Tech Lead re-creates a legacy row by hand and it appears in the public projection
@@ -1142,3 +1118,33 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       Then the event form shows the audience experts
       When the admin changes the audience to doctors and saves
       Then the event is stored with the audience doctors
+
+  @taxonomy-authoring-operations
+  Rule: An operator authors shared relationships media and list filters
+
+    Background:
+      Given a platform_admin operator in the admin app
+
+    @EARS-6 @happy
+    Scenario: One event belongs to several projects and both directions agree
+      Given one public event and two published projects
+      When the operator creates an active event_projects link for each project
+      Then the event-to-projects read returns both projects
+      And each project-to-events read returns the same event
+      And no event or project lifecycle state changes
+
+    @EARS-21 @happy
+    Scenario: Entity media changes are reversible
+      Given an entity has an uploaded image
+      When the operator replaces and then removes it
+      Then each committed change updates the media reference atomically
+      And cleanup is retained for each superseded object
+
+    @EARS-23 @happy
+    Scenario: Shared list and selector interaction applies immediately
+      When the operator types search and selects two filters
+      Then results update without Enter or Apply
+      And pagination remains available
+      And both active values render as chips
+      And Reset all clears them
+      And no action with no possible effect is enabled

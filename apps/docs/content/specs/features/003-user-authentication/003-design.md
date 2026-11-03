@@ -345,7 +345,7 @@ erDiagram
     }
 ```
 
-`ActiveSession` (requirements Read models) gains the linked `zitadel_session_id`; every revocation path — sign-out, back-channel logout, credential events, refresh reuse, fingerprint mismatch of the record — revokes by that id, synchronously in the API's own session store. The release that moves the storefronts revokes the unlinked sessions once (EARS-65).
+`ActiveSession` (requirements Read models) gains the linked `zitadel_session_id`; every revocation path — sign-out, back-channel logout, credential events, refresh reuse, fingerprint mismatch of the record — revokes by that id, synchronously in the API's own session store. A session with no linked `zitadel_session_id` (or no storefront client) is refused on every read — no subject, record deleted (EARS-8, EARS-65).
 
 ### Silent check on the other storefront
 

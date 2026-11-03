@@ -43,11 +43,20 @@ const SUB_INDEX_PREFIX = "ds:session:sub:";
 /** Key namespace for the `zitadelSessionId → linked sids` index (003 EARS-10 / EARS-64). */
 const LINK_INDEX_PREFIX = "ds:session:zs:";
 
+/** The value `raw` encodes as JSON, or `undefined` when it is not JSON. */
+function parseJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * The shape of a stored record — the JSON is parsed against it, never cast.
  * Records minted before the linked redeem (#3175 switch-over) carry no Zitadel
- * session id or storefront client, so both are optional here; a record of no
- * known shape reads as absent (no subject — fail closed).
+ * session id or storefront client, so both are optional here; a record that
+ * is not JSON or of no known shape reads as absent (no subject — fail closed).
  */
 const storedSessionRecord = z.object({
   sid: z.string(),
@@ -107,7 +116,7 @@ export class RedisSessionStore implements SessionStore {
   async get(sid: string): Promise<StoredSessionRecord | undefined> {
     const raw = await this.redis.get(`${KEY_PREFIX}${sid}`);
     if (!raw) return undefined;
-    const parsed = storedSessionRecord.safeParse(JSON.parse(raw));
+    const parsed = storedSessionRecord.safeParse(parseJson(raw));
     return parsed.success ? parsed.data : undefined;
   }
 

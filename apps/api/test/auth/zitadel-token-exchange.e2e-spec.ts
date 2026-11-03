@@ -97,16 +97,4 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OIDC token exchange (integration)", () => {
       expect(tokens.claims.roles).toContain("doctor_guest");
     },
   );
-
-  it("EARS-9: refresh-token rotation yields a fresh, distinct refresh token", async () => {
-    const login = await client.passwordLogin(email, password);
-    if (login.outcome !== "authenticated") {
-      throw new Error("precondition: password login must succeed");
-    }
-    const tokens = await client.exchangeSessionForTokens(login.session);
-    const rotated = await client.refreshTokens(tokens.refreshToken);
-    expect(rotated.reuseDetected).toBe(false);
-    if (rotated.reuseDetected) return;
-    expect(rotated.tokens.refreshToken).not.toBe(tokens.refreshToken);
-  });
 });

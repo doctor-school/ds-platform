@@ -4,7 +4,10 @@ import type { IdpSession } from "../idp/idp.types.js";
 import { InMemorySessionStore } from "./session-store.fake.js";
 import { InMemoryAuthAuditLog } from "./auth-audit.fake.js";
 import { SessionService } from "./session.service.js";
-import { SharedSessionHub } from "./shared-session.js";
+import {
+  SharedSessionHub,
+  type LinkedSessionRefresher,
+} from "./shared-session.js";
 import { SubjectRevocationHub } from "./subject-revocation.js";
 import { parseCookies, SESSION_COOKIE_NAME } from "./session.cookie.js";
 
@@ -44,6 +47,28 @@ async function mintFor(
   };
 }
 
+/**
+ * The storefront client's refresh grant as Zitadel answers it: each token is
+ * single use — a presented token rotates to a fresh pair, and presenting a
+ * spent one is refused as reuse (`invalid_grant`, RFC 6819).
+ */
+function rotatingRefresher(): LinkedSessionRefresher {
+  const spent = new Set<string>();
+  let seq = 0;
+  return {
+    refreshLinked: (_client, refreshToken) => {
+      if (spent.has(refreshToken))
+        return Promise.resolve({ reuseDetected: true });
+      spent.add(refreshToken);
+      seq += 1;
+      return Promise.resolve({
+        reuseDetected: false,
+        tokens: { accessToken: `at-${seq}`, refreshToken: `rt-${seq}` },
+      });
+    },
+  };
+}
+
 describe("SessionService — refresh rotation + logout", () => {
   const FP = "fp-device-1";
 
@@ -66,9 +91,7 @@ describe("SessionService — refresh rotation + logout", () => {
     const store = new InMemorySessionStore();
     const audit = new InMemoryAuthAuditLog();
     const shared = new SharedSessionHub();
-    shared.registerRefresher({
-      refreshLinked: (_client, refreshToken) => idp.refreshTokens(refreshToken),
-    });
+    shared.registerRefresher(rotatingRefresher());
     const svc = new SessionService(
       store,
       audit,

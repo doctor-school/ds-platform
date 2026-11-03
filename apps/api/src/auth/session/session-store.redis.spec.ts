@@ -71,4 +71,12 @@ describe("RedisSessionStore — reading records as stored", () => {
       await new RedisSessionStore(mapRedis(values)).get("sid-1"),
     ).toBeUndefined();
   });
+
+  it("003 EARS-8: a record that is not JSON reads as absent", async () => {
+    const values = new Map([["ds:session:sid-1", "{not json"]]);
+
+    expect(
+      await new RedisSessionStore(mapRedis(values)).get("sid-1"),
+    ).toBeUndefined();
+  });
 });

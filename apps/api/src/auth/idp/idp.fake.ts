@@ -15,7 +15,6 @@ import {
   type IdpClient,
   type IdpProjectGrant,
   type IdpProjectGrantHolder,
-  type IdpRefreshResult,
   type IdpSession,
   type IdpTokens,
   type IdpUser,
@@ -97,10 +96,6 @@ export class FakeIdpClient implements IdpClient {
     string,
     { sub: string; sessionToken: string }
   >();
-  /** Live (rotatable) refresh tokens → sub. Models the IdP-side refresh chain. */
-  private readonly liveRefresh = new Map<string, string>();
-  /** Refresh tokens already rotated once — replaying one is RFC-6819 reuse (EARS-9). */
-  private readonly consumedRefresh = new Set<string>();
   /** Per-identifier failed-check tally — asserted by EARS-5 tests; it never locks (003 EARS-15). */
   private readonly failed = new Map<string, number>();
   /** Subs with a live reset code → the code that completes it (EARS-11/12). Models Zitadel's forgot-password code flow; single-use, cleared on completion. */
@@ -433,7 +428,6 @@ export class FakeIdpClient implements IdpClient {
     }
     const sub = minted.sub;
     const refreshToken = `fake-refresh-${++this.seq}`;
-    this.liveRefresh.set(refreshToken, sub);
     return Promise.resolve({
       accessToken: `fake-access-${session.zitadelSessionId}`,
       refreshToken,
@@ -458,38 +452,10 @@ export class FakeIdpClient implements IdpClient {
     return Promise.resolve();
   }
 
-  refreshTokens(refreshToken: string): Promise<IdpRefreshResult> {
-    // RFC-6819 reuse detection (EARS-9): replaying an already-consumed token —
-    // or any token this IdP never issued — fails closed, so the BFF invalidates
-    // the chain + revokes the session rather than minting a fresh one. The IdP
-    // owns this detection (ADR-0001 §7).
-    if (this.consumedRefresh.has(refreshToken))
-      return Promise.resolve({ reuseDetected: true });
-    const sub = this.liveRefresh.get(refreshToken);
-    if (!sub) return Promise.resolve({ reuseDetected: true });
-
-    // Single-use rotation: consume the presented token and mint a new chain link.
-    this.liveRefresh.delete(refreshToken);
-    this.consumedRefresh.add(refreshToken);
-    const next = `fake-refresh-${++this.seq}`;
-    this.liveRefresh.set(next, sub);
-    return Promise.resolve({
-      reuseDetected: false,
-      tokens: {
-        accessToken: `fake-access-r-${this.seq}`,
-        refreshToken: next,
-        expiresInSeconds: 900,
-        // #157: granted roles only (see exchangeSessionForTokens) — a rotated
-        // token carries exactly what the original did.
-        claims: { sub, roles: this.grantedRoles(sub), mfa: false },
-      },
-    });
-  }
-
   /**
    * #157: authorize `sub` for `roleKey` — idempotent (a repeated grant is a
-   * no-op, mirroring Zitadel's ALREADY_EXISTS). After this the sub's exchanged /
-   * refreshed token claims carry `roleKey`; before any grant they are empty.
+   * no-op, mirroring Zitadel's ALREADY_EXISTS). After this the sub's exchanged
+   * token claims carry `roleKey`; before any grant they are empty.
    */
   grantProjectRole(
     sub: string,

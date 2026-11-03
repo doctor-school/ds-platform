@@ -5,6 +5,8 @@ slug: two-site-ia-033-author-application-product-ru
 epic: ../../product/two-site-ia/brief-ru.md
 status: Draft
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "The «Подать заявку» page is an Academy page (experts apply to make a project with the Academy, and projects are Academy-owned per ADR-0016 §4) plus the apps/admin application queue; the doctor storefront has no author-application surface."
 lang: ru
 ---
 

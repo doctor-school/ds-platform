@@ -112,6 +112,14 @@ import {
   isStopStateComment,
   latestOpenClaim,
 } from "./gh/lib/claim.mjs";
+import {
+  FEATURES_REL,
+  featureNumberFromLabels,
+  parseIssueStorefronts,
+  requiresStorefrontsLine,
+  specStorefronts,
+  storefrontsConsistencyError,
+} from "./gh/lib/storefronts.mjs";
 // Re-exported so the guard-test suite keeps covering the shared claim rules
 // through this module, as before #3560 moved them to lib/.
 export { closesRefs, formatClaimAge, isStartClaimComment, isStopStateComment };
@@ -263,6 +271,88 @@ export function formatFieldHygiene(
   ];
   for (const r of bad) out.push(`- #${r.number}: missing ${r.missing.join(", ")}`);
   return out.join("\n");
+}
+
+// ── storefronts hygiene (#3610) ─────────────────────────────────────────────
+
+/** An open Issue as the storefronts check consumes it. */
+export interface StorefrontsInput {
+  number: number;
+  title: string;
+  labels: string[];
+  body: string;
+  /** `gh` author login — a bot rewrites its own Issue body (`app/<bot>`). */
+  author?: string;
+}
+
+/** One open Issue whose `Storefronts:` line is missing or contradicts its spec. */
+export interface StorefrontsGap {
+  number: number;
+  title: string;
+  /** The Issue's `track:*` label (`trackOf`), for the per-track grouping. */
+  track: string | null;
+  kind: "missing" | "inconsistent";
+  detail: string;
+}
+
+/** A spec's declared storefronts by feature number (`tools/gh/lib/storefronts.mjs`). */
+export type SpecStorefrontsLookup = (
+  num: string,
+) => { value: string; file: string } | null;
+
+/**
+ * Open Issues in the `pnpm issue:create` scope (`requiresStorefrontsLine`: a
+ * tracked, non-epic, non-bot Issue) with no valid `Storefronts:` line, and
+ * spec-bound ones whose line contradicts the spec's `storefronts:` — the same
+ * rules `pnpm issue:create` refuses at creation, so pre-gate Issues and later
+ * spec re-scopes surface here.
+ */
+export function findStorefrontsGaps(
+  issues: StorefrontsInput[],
+  lookup: SpecStorefrontsLookup,
+): StorefrontsGap[] {
+  const out: StorefrontsGap[] = [];
+  for (const i of issues) {
+    if (!requiresStorefrontsLine(i)) continue;
+    const line = parseIssueStorefronts(i.body);
+    const track = trackOf(i.labels);
+    if (!line) {
+      out.push({
+        number: i.number,
+        title: i.title,
+        track,
+        kind: "missing",
+        detail: "no valid `Storefronts:` line",
+      });
+      continue;
+    }
+    const num = featureNumberFromLabels(i.labels);
+    const spec = num ? lookup(num) : null;
+    if (!spec) continue;
+    const err = storefrontsConsistencyError(spec, line);
+    if (err)
+      out.push({
+        number: i.number,
+        title: i.title,
+        track,
+        kind: "inconsistent",
+        detail: err,
+      });
+  }
+  return out.sort((a, b) => a.number - b.number);
+}
+
+/** Render `## Storefronts hygiene` — silent when every open Issue is compliant. */
+export function formatStorefrontsHygiene(rows: StorefrontsGap[]): string {
+  if (rows.length === 0) return "";
+  return formatTrackSection(
+    "Storefronts hygiene",
+    "Open Issues whose `Storefronts:` line is missing or contradicts their spec's `storefronts:` (#3604, #3610). Fix the line; a single-host Issue under a `both` spec cites its sibling Issue `#N` (open it via `pnpm issue:create` first if none exists), or is re-scoped to `both`, or the spec's `storefronts:` is corrected in a spec PR — skill groom-backlog.",
+    rows.map((r) => ({
+      track: r.track,
+      line: `- #${r.number} ${r.kind.toUpperCase()} — ${r.detail} — ${truncateTitle(r.title, 70)}`,
+    })),
+  );
 }
 
 // ── PR board hygiene (#1140) — dead + under-fielded PR rows on the board ───────
@@ -1494,6 +1584,7 @@ interface RawIssue {
   milestone?: { title?: string } | null;
   assignees?: Array<{ login: string }>;
   issueType?: { name?: string } | null;
+  author?: { login?: string } | null;
 }
 
 async function listOpenIssues(): Promise<RawIssue[]> {
@@ -1507,7 +1598,7 @@ async function listOpenIssues(): Promise<RawIssue[]> {
       "--limit",
       "300",
       "--json",
-      "number,title,body,labels,milestone,assignees,issueType",
+      "number,title,body,labels,milestone,assignees,issueType,author",
     ],
     { cwd: REPO_ROOT },
   );
@@ -2297,6 +2388,27 @@ async function main(): Promise<void> {
     })),
   );
   if (hygiene) out.push(hygiene, "");
+
+  // Storefronts hygiene (#3610): the Issue <-> spec rule of `pnpm issue:create`.
+  const featuresDir = resolve(REPO_ROOT, FEATURES_REL);
+  const specCache = new Map<string, ReturnType<SpecStorefrontsLookup>>();
+  const storefronts = formatStorefrontsHygiene(
+    findStorefrontsGaps(
+      issues.map((raw) => ({
+        number: raw.number,
+        title: raw.title ?? "",
+        labels: (raw.labels ?? []).map((l) => l.name),
+        body: raw.body ?? "",
+        author: raw.author?.login ?? "",
+      })),
+      (num) => {
+        if (!specCache.has(num))
+          specCache.set(num, specStorefronts(featuresDir, num));
+        return specCache.get(num) ?? null;
+      },
+    ),
+  );
+  if (storefronts) out.push(storefronts, "");
 
   // PR board hygiene (#1140) + roadmap hygiene (#1729): both fed by the SINGLE
   // paginated board scan run above (it also feeds the #1873 orphan rule).

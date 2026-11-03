@@ -5,6 +5,8 @@ slug: two-site-ia-019-doctor-events-feed-product-ru
 epic: ../../product/two-site-ia/brief-ru.md
 status: In dev
 surface: user-facing
+storefronts: doctor-only
+storefronts_reason: "The doctor storefront's events surface; the Academy runs the same events-feed module at its Academy host value, specified by feature 004 (Amendment 2026-10-01, #2509)."
 lang: ru
 ---
 

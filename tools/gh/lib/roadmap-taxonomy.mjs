@@ -55,6 +55,14 @@ export const RELEASE_GATE_TITLE_PREFIX = "gate:";
 export const FALLBACK_MILESTONE = "Platform ops & hardening";
 
 /**
+ * The track-label taxonomy (#1583) — the permanent product-axis every new Issue
+ * carries exactly one of. `track:academy` = academy.doctor.school surfaces;
+ * `track:doctor` = the doctor showcase site `apps/doctor`; `track:platform` =
+ * shared packages, backend, infra, process, or work serving both sites.
+ */
+export const TRACK_LABELS = ["track:academy", "track:doctor", "track:platform"];
+
+/**
  * Track label ↔ the Russian milestone-name prefix of that track's releases.
  * `track:platform` has no track release prefix — it homes on the fallback
  * milestone — so it is deliberately absent.

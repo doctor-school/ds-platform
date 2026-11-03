@@ -5,6 +5,8 @@ slug: two-site-ia-032-organization-registry-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "This slice specifies the Academy and admin surfaces of the one organisation registry; the doctor storefront reads the same registry for the doctor-registration partner attribution (021 EARS-8, tracked by the open #1544) and shows no leaderboard and no organisation cabinet (REQ-51)."
 lang: en
 ---
 

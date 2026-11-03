@@ -5,6 +5,8 @@ slug: two-site-ia-046-congress-submissions-product-ru
 epic: ../../product/two-site-ia/brief-ru.md
 status: Shipped
 surface: user-facing
+storefronts: doctor-only
+storefronts_reason: "The congress submissions cabinet is a doctor-audience section of the doctor storefront account (/account/congress); the Academy has no congress cabinet."
 lang: ru
 ---
 

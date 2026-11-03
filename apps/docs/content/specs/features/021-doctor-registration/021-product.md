@@ -5,6 +5,8 @@ slug: two-site-ia-021-doctor-registration-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
 surface: user-facing
+storefronts: doctor-only
+storefronts_reason: "The registration route is a route of apps/doctor; one account and one sign-up serve both storefronts (REQ-95, ADR-0015 §4), so the Academy has no registration surface of its own."
 lang: en
 ---
 

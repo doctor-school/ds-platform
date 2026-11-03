@@ -64,12 +64,13 @@
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   EARS_KIND_LABEL,
   FALLBACK_MILESTONE,
   ROADMAP_LABEL,
+  TRACK_LABELS,
   TRACK_MILESTONE_PREFIXES,
   classifyIssueTaxonomy,
   isEpicTitle,
@@ -77,6 +78,18 @@ import {
   ownsRoadmapLabel,
   releaseLetterLookalike,
 } from "./lib/roadmap-taxonomy.mjs";
+import {
+  FEATURES_REL,
+  featureNumberFromLabels,
+  parseIssueStorefronts,
+  requiresStorefrontsLine,
+  specStorefronts,
+  storefrontsConsistencyError,
+} from "./lib/storefronts.mjs";
+
+const DEFAULT_FEATURES_DIR = fileURLToPath(
+  new URL(`../../${FEATURES_REL}`, import.meta.url),
+);
 
 // Large payloads (board lists, GraphQL) overflow spawnSync's default 1 MiB
 // stdout buffer → ENOBUFS, which would crash silently (#315).
@@ -230,13 +243,8 @@ export const KIND_LABELS = [
   "tooling",
 ];
 
-/**
- * The track-label taxonomy (#1583) — the permanent product-axis every new Issue
- * carries exactly one of. `track:academy` = academy.doctor.school surfaces;
- * `track:doctor` = the doctor showcase site `apps/doctor`; `track:platform` =
- * shared packages, backend, infra, process, or work serving both sites.
- */
-export const TRACK_LABELS = ["track:academy", "track:doctor", "track:platform"];
+// The track-label taxonomy (#1583) lives in `lib/roadmap-taxonomy.mjs`.
+export { TRACK_LABELS };
 
 /**
  * Collect every `--label` value out of the gh passthrough, across the forms gh
@@ -432,45 +440,68 @@ export function reuseFieldError(args, body) {
 }
 
 /**
- * The `Storefronts:` field of the Issue body (`.github/ISSUE_TEMPLATE/*.md`):
- * `both`, or `academy-only` / `doctor-only` / `none` followed by `: <reason>`.
- * Same bold/list tolerance as `REUSE_FIELD_RE`.
- */
-const STOREFRONTS_FIELD_RE =
-  /^[ \t>*-]*(?:\*\*)?storefronts(?:\*\*)?[ \t]*:[ \t]*(?:\*\*)?[ \t]*(?:(both)\b[ \t\r]*$|(academy-only|doctor-only|none)[ \t]*:[ \t]*(.*\S)[ \t\r]*$)/gim;
-const STOREFRONTS_PLACEHOLDER_RE = /^(?:n\/?a|tbd|todo|none|-+|\?+|<[^>]*>)$/i;
-
-/**
  * Validate the storefronts scope answer (#3604): the two storefronts — the
  * Academy (`apps/portal`) and the doctor storefront (`apps/doctor`) — run on one
  * schema and one database, and work kept diverging because an Issue was
  * written for ONE host without saying what the other does. `Reuse:` answers
  * «which code»; this answers «which storefronts». The Issue follows its spec's
  * frontmatter `storefronts:` (enforced on specs by `pnpm lint:storefronts`);
- * a single-host child under a `both` spec names its sibling Issue for the
- * other storefront or the reason there is none. Epics are exempt like `Reuse:`.
+ * a single-host child under a `both` spec names its sibling Issue (`#N`) for
+ * the other storefront. Scope: `requiresStorefrontsLine` (shared with
+ * `pnpm backlog:triage`) — a tracked, non-epic Issue.
  * @param {string[]} args  the gh passthrough
  * @param {string} body    the resolved Issue body
  * @returns {string|null}
  */
 export function storefrontsFieldError(args, body) {
   const found = collectTrackLabels(args);
-  if (!found.some((l) => TRACK_LABELS.includes(l))) return null;
-  if (isEpicTitle(titleValue(args))) return null;
-  for (const m of (body ?? "").matchAll(STOREFRONTS_FIELD_RE)) {
-    if (m[1]) return null;
-    if (m[3] && !STOREFRONTS_PLACEHOLDER_RE.test(m[3].trim())) return null;
-  }
+  if (
+    !requiresStorefrontsLine({
+      labels: collectLabels(args),
+      title: titleValue(args),
+    })
+  )
+    return null;
+  if (parseIssueStorefronts(body)) return null;
   return (
     `every Issue (${found.join(" / ")}) must say which storefronts it covers in its body ` +
     `before it is opened (AGENTS.md §6, #3604). Add ONE line, one of:\n` +
     `    Storefronts: both\n` +
-    `    Storefronts: academy-only: <why the doctor storefront is out — its sibling Issue #N, or why none>\n` +
-    `    Storefronts: doctor-only: <why the Academy is out — its sibling Issue #N, or why none>\n` +
+    `    Storefronts: academy-only: <why the doctor storefront is out; under a \`both\` spec, its sibling Issue #N>\n` +
+    `    Storefronts: doctor-only: <why the Academy is out; under a \`both\` spec, its sibling Issue #N>\n` +
     `    Storefronts: none: <why no storefront page — admin / staff / sign-in host / tooling>\n` +
     `  A spec-bound Issue follows its spec's \`storefronts:\` frontmatter ` +
-    `(apps/docs/content/specs/features/NNN-<slug>/NNN-requirements*.md).`
+    `(apps/docs/content/specs/features/NNN-<slug>/NNN-requirements*.md, else NNN-product.md).`
   );
+}
+
+/**
+ * The Issue <-> spec consistency answer (#3610): a spec-bound Issue (a
+ * `feature:NNN-*` label) never names the storefront its single-host spec
+ * leaves out nor a storefront under a `none` spec, and a single-host Issue
+ * under a `both` spec names its sibling.
+ * The rule itself lives in `lib/storefronts.mjs` (shared with
+ * `pnpm backlog:triage`); a missing or unparseable spec adds no refusal here —
+ * `pnpm lint:storefronts` owns spec validity.
+ * @param {string[]} args  the gh passthrough
+ * @param {string} body    the resolved Issue body
+ * @param {{featuresDir?: string}} [opts]  spec tree root (test seam)
+ * @returns {string|null}
+ */
+export function storefrontsSpecError(
+  args,
+  body,
+  { featuresDir = DEFAULT_FEATURES_DIR } = {},
+) {
+  if (isEpicTitle(titleValue(args))) return null;
+  const issue = parseIssueStorefronts(body);
+  if (!issue) return null;
+  const num = featureNumberFromLabels(collectLabels(args));
+  if (!num) return null;
+  const spec = specStorefronts(featuresDir, num);
+  if (!spec) return null;
+  const err = storefrontsConsistencyError(spec, issue);
+  return err ? `${err} (#3610)` : null;
 }
 
 /**
@@ -856,6 +887,11 @@ function main() {
     bodyText(passthrough),
   );
   if (storefrontsError) die(storefrontsError);
+  const storefrontsSpec = storefrontsSpecError(
+    passthrough,
+    bodyText(passthrough),
+  );
+  if (storefrontsSpec) die(storefrontsSpec);
   //   • roadmap taxonomy (#1729, spec §7.1): EARS tasks need a parent, epics
   //     reject a milestone, everything else still needs one (a --parent'ed
   //     sub-issue inherits it, resolved below).

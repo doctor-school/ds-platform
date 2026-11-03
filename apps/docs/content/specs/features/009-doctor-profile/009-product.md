@@ -6,6 +6,8 @@ epic: ../../product/portal-surface-ia/brief.md
 status: Superseded
 superseded_by: https://github.com/doctor-school/ds-platform/issues/770
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "This superseded PRD scoped the Academy (apps/portal) /account profile delivered via #770; the account profile is now the shared @ds/account package mounted on both hosts (#2073), and the doctor storefront cabinet grows under #1791."
 lang: en
 ---
 

@@ -5,6 +5,8 @@ slug: academy-public-013-academy-home-product
 epic: ../../product/academy-public/brief.md
 status: Draft
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "The Academy home at / only; the doctor storefront home is specified by feature 017. The Academy home is being rebuilt whole under #1799, which mounts the shared nearest-events block of #1485."
 lang: en
 ---
 

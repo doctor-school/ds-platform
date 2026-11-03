@@ -5,6 +5,8 @@ slug: academy-public-016-experts-catalog-product
 epic: ../../product/academy-public/brief.md
 status: Draft
 surface: user-facing
+storefronts: academy-only
+storefronts_reason: "The Academy expert bench (/experts, /experts/[slug] on academy.doctor.school; Academy implementation #1801). ADR-0016 §4 puts the public expert card on both storefronts; the doctor-storefront half (the public expert card and the «Это я» claim) is #3614."
 lang: en
 ---
 

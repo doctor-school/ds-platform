@@ -5,6 +5,7 @@ slug: two-site-ia-020-event-page-two-storefronts-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
 surface: user-facing
+storefronts: both
 lang: en
 ---
 

@@ -5,6 +5,7 @@ slug: academy-public-012-content-taxonomy-product-ru
 epic: ../../product/academy-public/brief-ru.md
 status: In dev
 surface: user-facing
+storefronts: both
 lang: ru
 ---
 

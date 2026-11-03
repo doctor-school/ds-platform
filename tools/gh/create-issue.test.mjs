@@ -181,6 +181,11 @@ test("reuseFieldError requires a Reuse: line on every track, track:platform incl
   }
 });
 
+test("reuseFieldError help names the block level for canon: (#3616)", () => {
+  const args = ["--label", "track:doctor", "--title", "[017] EARS-9: home events preview"];
+  assert.match(reuseFieldError(args, "no field"), /existing block .* canon: names that block/);
+});
+
 test("reuseFieldError refuses a track:platform Issue without Reuse: and exempts epic containers", () => {
   const platform = ["--label", "track:platform", "--title", "[Platform] shared feed core"];
   assert.match(reuseFieldError(platform, "no field"), /Reuse: canon:/);

@@ -31,7 +31,8 @@ labels: []
 ## Reuse
 
 Reuse: <!-- exactly one of:
-     canon: <packages/… or apps/api/… path already owning this capability>
+     canon: <packages/… or apps/api/… path already owning this capability —
+            the existing block/composition when one renders the same read, not only its units>
      extract-from: <apps/portal/… or apps/doctor/… path> (#<extraction Issue>)
      new: <why nothing shared fits>
      MANDATORY on every Issue (`pnpm issue:create` fails

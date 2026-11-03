@@ -434,6 +434,8 @@ export function reuseFieldError(args, body) {
     `    Reuse: canon: packages/design-system/src/blocks/<unit>.tsx\n` +
     `    Reuse: extract-from: apps/portal/components/<unit>.tsx (#<extraction-issue>)\n` +
     `    Reuse: new: <why nothing shared fits>\n` +
+    `  When an existing block (a composition with its own states, copy, retry) already renders the ` +
+    `same read, canon: names that block, not only its units (#3616).\n` +
     `  Check the registry first: apps/docs/content/specs/product/two-site-ia/capability-ownership.md ` +
     `(and grep apps/portal, apps/doctor, packages/).`
   );

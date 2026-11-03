@@ -141,8 +141,8 @@ export class ZitadelStorefrontOidc implements StorefrontOidcIdp {
     clientId: string;
     refreshToken: string;
   }): Promise<LinkedRefreshResult> {
-    // No `scope`: a refresh re-issues the originally granted set (see the BFF
-    // adapter's `refreshTokens` — Zitadel refuses re-requesting the roles URN).
+    // No `scope`: a refresh re-issues the originally granted set (RFC 6749 §6;
+    // Zitadel refuses re-requesting the roles URN on the refresh grant).
     const call = await this.tokenCall(input.clientId, {
       grant_type: "refresh_token",
       refresh_token: input.refreshToken,

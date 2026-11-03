@@ -266,6 +266,36 @@ authentication — noise, or someone replaying a stale reference. A burst of
 `invalid` rows against one real subject from a live login is the case worth
 escalating.
 
+## Storefront session switch-over (#3175)
+
+The last slice of [#3006](https://github.com/doctor-school/ds-platform/issues/3006)
+([#3175](https://github.com/doctor-school/ds-platform/issues/3175)).
+
+**What the release changes.** Every storefront session is one the storefront
+callback minted from a live sign-in-host record (003 EARS-8). The API refuses
+every other record on every read — the auth hook, refresh and logout: a record
+with no Zitadel session id (minted before the storefronts moved to the sign-in
+host) or no storefront client (minted by the retired storefront forms) resolves
+to no subject (`GET /v1/auth/session` → `401`), its key is deleted with a
+`SessionRevoked` (`reason: force`), and it is never refreshed. The refusal is
+permanent, not a one-time step: there is no command to run at the release. A
+person whose session is refused signs in once through the sign-in host; with a
+live sign-in-host record that sign-in is silent (EARS-63). Admin sessions
+(`ds:admin-session:*`, 011) and the sign-in-host records are not touched.
+
+**Verification after the release.**
+
+1. A stale cookie gets no subject: a browser that held a storefront session
+   minted before the release calls `GET /v1/auth/session` → `401`, and the
+   storefront shows it as a guest.
+2. A fresh sign-in through the sign-in host works: from `academy.doctor.school`
+   and from the doctor storefront, «Войти» → the sign-in host → back on the
+   storefront signed in; `GET /v1/auth/session` → `200`.
+
+If step 2 fails, that is a release incident: roll back through `deploy-prod.yml`
+rollback mode (`tools/deploy/README.md` → Rollback mode) and follow
+[prod incident response](./prod-incident-response.md).
+
 ## Open deferrals
 
 Tracked so no surface stands in silently for missing live infra (AGENTS.md §6

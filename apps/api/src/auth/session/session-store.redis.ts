@@ -1,4 +1,9 @@
-import type { SessionRecord, SessionStore } from "./session.types.js";
+import { z } from "zod";
+import {
+  isLinkedSession,
+  type SessionStore,
+  type StoredSessionRecord,
+} from "./session.types.js";
 
 /**
  * The slice of a Redis client the store needs — narrowed (as the IdP adapter
@@ -38,6 +43,34 @@ const SUB_INDEX_PREFIX = "ds:session:sub:";
 /** Key namespace for the `zitadelSessionId → linked sids` index (003 EARS-10 / EARS-64). */
 const LINK_INDEX_PREFIX = "ds:session:zs:";
 
+/** The value `raw` encodes as JSON, or `undefined` when it is not JSON. */
+function parseJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The shape of a stored record — the JSON is parsed against it, never cast.
+ * Records minted before the linked redeem (#3175 switch-over) carry no Zitadel
+ * session id or storefront client, so both are optional here; a record that
+ * is not JSON or of no known shape reads as absent (no subject — fail closed).
+ */
+const storedSessionRecord = z.object({
+  sid: z.string(),
+  zitadelSessionId: z.string().optional(),
+  sub: z.string(),
+  roles: z.array(z.string()),
+  mfa: z.boolean(),
+  accessToken: z.string(),
+  refreshToken: z.string(),
+  fingerprint: z.string(),
+  expiresAtMs: z.number(),
+  oidcClient: z.enum(["academy", "doctor"]).optional(),
+});
+
 /**
  * Redis-backed {@link SessionStore} — the production binding (ADR-0001 §6:
  * "refresh stored server-side in Redis on the BFF"). Bound by
@@ -53,7 +86,7 @@ const LINK_INDEX_PREFIX = "ds:session:zs:";
 export class RedisSessionStore implements SessionStore {
   constructor(private readonly redis: RedisLike) {}
 
-  async create(record: SessionRecord): Promise<void> {
+  async create(record: StoredSessionRecord): Promise<void> {
     const ttlSeconds = Math.max(
       1,
       Math.ceil((record.expiresAtMs - Date.now()) / 1000),
@@ -73,17 +106,18 @@ export class RedisSessionStore implements SessionStore {
     await this.redis.expire(indexKey, ttlSeconds);
     // 003 EARS-10 / EARS-64: a linked session is also indexed by its Zitadel
     // session, the same way, so one sign-out revokes it on both storefronts.
-    if (record.oidcClient) {
+    if (isLinkedSession(record)) {
       const linkKey = `${LINK_INDEX_PREFIX}${record.zitadelSessionId}`;
       await this.redis.sadd(linkKey, record.sid);
       await this.redis.expire(linkKey, ttlSeconds);
     }
   }
 
-  async get(sid: string): Promise<SessionRecord | undefined> {
+  async get(sid: string): Promise<StoredSessionRecord | undefined> {
     const raw = await this.redis.get(`${KEY_PREFIX}${sid}`);
     if (!raw) return undefined;
-    return JSON.parse(raw) as SessionRecord;
+    const parsed = storedSessionRecord.safeParse(parseJson(raw));
+    return parsed.success ? parsed.data : undefined;
   }
 
   async rotate(
@@ -97,7 +131,7 @@ export class RedisSessionStore implements SessionStore {
     // gone (expired key / revoked) — rotation never resurrects a session.
     const record = await this.get(sid);
     if (!record) return;
-    const next: SessionRecord = { ...record, accessToken, refreshToken };
+    const next: StoredSessionRecord = { ...record, accessToken, refreshToken };
     const ttlSeconds = Math.max(
       1,
       Math.ceil((record.expiresAtMs - Date.now()) / 1000),
@@ -129,9 +163,9 @@ export class RedisSessionStore implements SessionStore {
     await this.redis.del(indexKey);
   }
 
-  async deleteLinked(zitadelSessionId: string): Promise<SessionRecord[]> {
+  async deleteLinked(zitadelSessionId: string): Promise<StoredSessionRecord[]> {
     const linkKey = `${LINK_INDEX_PREFIX}${zitadelSessionId}`;
-    const revoked: SessionRecord[] = [];
+    const revoked: StoredSessionRecord[] = [];
     for (const sid of await this.redis.smembers(linkKey)) {
       const record = await this.get(sid);
       await this.redis.del(`${KEY_PREFIX}${sid}`);

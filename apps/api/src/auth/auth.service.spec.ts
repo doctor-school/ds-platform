@@ -429,7 +429,7 @@ describe("AuthService.resetCompleteStep — auto-login (#221, EARS-12)", () => {
     const created = await idp.createUser({ email, password: oldPassword });
     const store = new InMemorySessionStore();
     const audit = new InMemoryAuthAuditLog();
-    const sessions = new SessionService(idp, store, audit);
+    const sessions = new SessionService(store, audit);
     const service = new AuthService(
       idp,
       explodingDb as never, // the reset path touches no DB
@@ -846,7 +846,7 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
     });
     const store = new InMemorySessionStore();
     const audit = new InMemoryAuthAuditLog();
-    const sessions = new SessionService(idp, store, audit);
+    const sessions = new SessionService(store, audit);
     const service = buildFailObsService(
       idp as unknown as IdpClient,
       {} as never, // mirror — unused on the reset path
@@ -1173,7 +1173,7 @@ describe("AuthService.resetCompleteStep — proof-of-mailbox email verify (003 E
     if (seedVerified) await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
     const store = new InMemorySessionStore();
     const audit = new InMemoryAuthAuditLog();
-    const sessions = new SessionService(idp, store, audit);
+    const sessions = new SessionService(store, audit);
     const mirrorFlips: string[] = [];
     const mirror = {
       markEmailVerified: (sub: string) => {
@@ -1375,7 +1375,7 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
     const idp = new FakeIdpClient(mailer);
     const audit = new InMemoryAuthAuditLog();
     const store = new InMemorySessionStore();
-    const sessions = new SessionService(idp, store, audit);
+    const sessions = new SessionService(store, audit);
     const flips: string[] = [];
     const mirror = {
       markEmailVerified: (sub: string) => {

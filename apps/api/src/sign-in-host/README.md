@@ -104,7 +104,9 @@ storefront client's `private_key_jwt`, never the BFF client, and keeps its
 bounded expiry. Its sign-out (`POST /v1/auth/logout`) terminates the Zitadel
 session, deletes the record and revokes every session linked to it on both
 storefronts; a fresh credential step that replaces a record revokes the
-sessions linked to the old one (EARS-64). Legacy sessions keep their paths.
+sessions linked to the old one (EARS-64). A session with no Zitadel session id
+or no storefront client is refused on every read (EARS-8): no subject, the
+record deleted with `SessionRevoked` (`force`), never refreshed.
 
 ### Back-channel logout (003 EARS-65)
 

@@ -843,7 +843,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const address = await account("refresh");
       const session = await hostSignIn(new Jar(), address);
       const store = app.get<SessionStore>(SESSION_STORE);
-      const bff = vi.spyOn(idp, "refreshTokens");
       for (const client of ["academy", "doctor"] as const) {
         const sid = sessionCookie(
           await redeem(await code(session, client)),
@@ -865,8 +864,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
         expect(after?.oidcClient).toBe(client);
         expect(after?.expiresAtMs).toBe(before!.expiresAtMs);
       }
-      // Never the BFF client's secret.
-      expect(bff).not.toHaveBeenCalled();
     });
 
     it("EARS-64: a fresh credential step that replaces the record revokes every storefront session linked to the old Zitadel session", async () => {

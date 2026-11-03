@@ -346,16 +346,6 @@ export interface IdpTokens {
 }
 
 /**
- * Result of a refresh exchange (design §3, EARS-9). The refresh token is
- * single-use: a successful exchange yields fresh token material; presenting an
- * already-consumed token is RFC-6819 **reuse**, which the IdP detects (ADR-0001
- * §7 — "refresh token theft detection", owner = IdP) and the BFF answers by
- * invalidating the chain + revoking the session.
- */
-export type IdpRefreshResult =
-  { reuseDetected: false; tokens: IdpTokens } | { reuseDetected: true };
-
-/**
  * EARS-34 (#1131): the server-side branch an email login-code request resolved to
  * — a decision the caller reflects into the `otp.sent` ledger (a code was issued
  * for `challenge`/`verification`, none for `none`) but NEVER into the client
@@ -705,13 +695,6 @@ export interface IdpClient {
    * caller answers.
    */
   terminateSession(session: IdpSession): Promise<void>;
-  /**
-   * EARS-9: rotate a single-use refresh token. On success the old token is
-   * consumed and fresh access + refresh tokens are returned; a replay of an
-   * already-consumed token resolves to `{ reuseDetected: true }` (RFC 6819,
-   * ADR-0001 §7) — the BFF then invalidates the chain and revokes the session.
-   */
-  refreshTokens(refreshToken: string): Promise<IdpRefreshResult>;
   /**
    * EARS-11: trigger Zitadel's forgot-password code flow for `identifier` (email
    * or phone). Resolves **identically regardless of whether the identifier

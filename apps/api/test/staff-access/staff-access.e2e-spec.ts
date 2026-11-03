@@ -614,6 +614,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await sessions.create({
         sid,
         zitadelSessionId: "z-unverified",
+        oidcClient: "academy",
         sub: unverified.sub,
         roles: ["doctor_guest"],
         mfa: false,

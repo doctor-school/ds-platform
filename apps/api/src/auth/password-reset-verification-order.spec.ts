@@ -14,7 +14,7 @@ it("EARS-35: verifies a proven reset before an OIDC exchange that refuses an unv
   const { sub } = await idp.createUser({ email, password: "Old-password1!" });
   const audit = new InMemoryAuthAuditLog();
   const store = new InMemorySessionStore();
-  const sessions = new SessionService(idp, store, audit);
+  const sessions = new SessionService(store, audit);
   const mirrorFlip = vi.fn(async () => undefined);
   const unused = new Proxy(
     {},

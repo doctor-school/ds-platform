@@ -17,7 +17,6 @@ import {
   type EmailLoginOutcome,
   type IdpClaims,
   type IdpClient,
-  type IdpRefreshResult,
   type IdpSession,
   type IdpTokens,
   type IdpProjectGrant,
@@ -1085,61 +1084,6 @@ export class ZitadelIdpClient implements IdpClient {
       refreshToken: data.refresh_token,
       expiresInSeconds: data.expires_in ?? 0,
       claims: parseIdpClaims(data.id_token ?? ""),
-    };
-  }
-
-  /**
-   * EARS-9 (design §3): rotate a single-use refresh token via the OAuth
-   * refresh-token grant. Zitadel issues rotating refresh tokens and owns
-   * RFC-6819 reuse detection (ADR-0001 §7) — a replay of a consumed token is a
-   * non-2xx (`invalid_grant`), which this adapter relays as `reuseDetected: true`
-   * so the BFF invalidates the chain. A success yields the fresh token pair and
-   * the re-parsed claims. Fails closed (any non-2xx ⇒ reuse) — never mints on
-   * an ambiguous response.
-   */
-  async refreshTokens(refreshToken: string): Promise<IdpRefreshResult> {
-    if (!this.config.clientId) {
-      throw new Error(
-        "zitadel OIDC application config (IDP_CLIENT_ID) is not set; cannot rotate (design §3, §11)",
-      );
-    }
-    // Send NO `scope` on the refresh grant. Per RFC 6749 §6 a refresh request
-    // may only narrow to a subset of the originally-granted scopes; Zitadel v4.15
-    // rejects the reserved project-roles URN scope here with `invalid_scope`
-    // (proven live against the dev-stand — the authorize hop grants it, the
-    // refresh hop refuses to re-request it). Omitting `scope` re-issues the full
-    // originally-granted set, and the project-roles claim still rides the rotated
-    // id_token via the app's role-assertion config (provision.sh sets
-    // accessTokenRoleAssertion/idTokenRoleAssertion + projectRoleAssertion), so
-    // `parseIdpClaims` still recovers `roles[]`. This is the EARS-9 wire-shape fix
-    // on top of the merged #122 adapter (which sent the full scope and 400'd).
-    const body = new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      ...this.tokenAuthParams(),
-    });
-    const res = await this.fetchImpl(this.url("/oauth/v2/token"), {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${this.config.serviceToken}`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: body.toString(),
-    });
-    // A rejected grant — the IdP's RFC-6819 reuse verdict — fails closed.
-    if (!res.ok) return { reuseDetected: true };
-    const data = (await res.json()) as OidcTokenResponse;
-    if (!data.access_token || !data.refresh_token) {
-      return { reuseDetected: true };
-    }
-    return {
-      reuseDetected: false,
-      tokens: {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        expiresInSeconds: data.expires_in ?? 0,
-        claims: parseIdpClaims(data.id_token ?? ""),
-      },
     };
   }
 

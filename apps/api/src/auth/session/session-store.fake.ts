@@ -1,4 +1,4 @@
-import type { SessionRecord, SessionStore } from "./session.types.js";
+import type { SessionStore, StoredSessionRecord } from "./session.types.js";
 
 /**
  * In-memory {@link SessionStore} (the testable side of the design §3 boundary).
@@ -8,14 +8,16 @@ import type { SessionRecord, SessionStore } from "./session.types.js";
  * session flows (EARS-5/8) run end-to-end against a real Postgres without a live
  * Redis — exactly as {@link FakeIdpClient} stands in for Zitadel. It honours the
  * TTL by lazily evicting on read so an expired session is indistinguishable from
- * an absent one, matching the Redis adapter's key-expiry semantics.
+ * an absent one, matching the Redis adapter's key-expiry semantics. `create`
+ * accepts any {@link StoredSessionRecord}, so a test can seed the unlinked
+ * records production Redis still holds (#3175); the port takes only linked ones.
  */
 export class InMemorySessionStore implements SessionStore {
-  private readonly bySid = new Map<string, SessionRecord>();
+  private readonly bySid = new Map<string, StoredSessionRecord>();
   /** Secondary index `sub → live sids`, so `deleteBySub` (EARS-12) is targeted and does not scan. */
   private readonly bySub = new Map<string, Set<string>>();
 
-  create(record: SessionRecord): Promise<void> {
+  create(record: StoredSessionRecord): Promise<void> {
     this.bySid.set(record.sid, record);
     let sids = this.bySub.get(record.sub);
     if (!sids) this.bySub.set(record.sub, (sids = new Set()));
@@ -23,7 +25,7 @@ export class InMemorySessionStore implements SessionStore {
     return Promise.resolve();
   }
 
-  get(sid: string): Promise<SessionRecord | undefined> {
+  get(sid: string): Promise<StoredSessionRecord | undefined> {
     const record = this.bySid.get(sid);
     if (!record) return Promise.resolve(undefined);
     if (record.expiresAtMs <= Date.now()) {
@@ -60,9 +62,9 @@ export class InMemorySessionStore implements SessionStore {
     return Promise.resolve();
   }
 
-  deleteLinked(zitadelSessionId: string): Promise<SessionRecord[]> {
+  deleteLinked(zitadelSessionId: string): Promise<StoredSessionRecord[]> {
     // Linked sessions are few per Zitadel session; a scan keeps the fake small.
-    const revoked: SessionRecord[] = [];
+    const revoked: StoredSessionRecord[] = [];
     for (const record of [...this.bySid.values()]) {
       if (record.oidcClient && record.zitadelSessionId === zitadelSessionId) {
         this.unlink(record);
@@ -73,7 +75,7 @@ export class InMemorySessionStore implements SessionStore {
   }
 
   /** Drop a record from both the primary map and the `sub` index, pruning the empty set. */
-  private unlink(record: SessionRecord): void {
+  private unlink(record: StoredSessionRecord): void {
     this.bySid.delete(record.sid);
     const sids = this.bySub.get(record.sub);
     if (sids) {

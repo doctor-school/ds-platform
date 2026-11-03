@@ -318,45 +318,6 @@ describe("ZitadelIdpClient OIDC session→token exchange", () => {
       }),
     ).rejects.toThrow(/OIDC application/i);
   });
-
-  it("EARS-9: refresh-token rotation hits the token endpoint with the refresh grant and parses claims", async () => {
-    const { fetchImpl, calls } = scriptedFetch({
-      token: {
-        ok: true,
-        status: 200,
-        body: {
-          access_token: "A2",
-          refresh_token: "R2",
-          expires_in: 900,
-          id_token: jwt({
-            sub: "zid-user-1",
-            amr: ["pwd"],
-            [ROLES_CLAIM]: { doctor_guest: {} },
-          }),
-        },
-      },
-    });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
-    const result = await client.refreshTokens("OLD_REFRESH");
-    expect(result.reuseDetected).toBe(false);
-    if (!result.reuseDetected) {
-      expect(result.tokens.accessToken).toBe("A2");
-      expect(result.tokens.refreshToken).toBe("R2");
-      expect(result.tokens.claims.roles).toEqual(["doctor_guest"]);
-    }
-    const token = calls.find((c) => c.url.includes("/oauth/v2/token"));
-    expect(token?.body).toContain("grant_type=refresh_token");
-    expect(token?.body).toContain("refresh_token=OLD_REFRESH");
-  });
-
-  it("EARS-9: a rejected refresh grant resolves to reuseDetected (RFC-6819)", async () => {
-    const { fetchImpl } = scriptedFetch({
-      token: { ok: false, status: 400, body: { error: "invalid_grant" } },
-    });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
-    const result = await client.refreshTokens("REUSED");
-    expect(result.reuseDetected).toBe(true);
-  });
 });
 
 /**

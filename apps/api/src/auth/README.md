@@ -325,14 +325,13 @@ once in `idp/idp.module.ts`:
   against a real Postgres without a live IdP, which is exactly what the e2e
   suites do (the credential side is not reachable in the shared CI unit job).
 
-The real adapter's `exchangeSessionForTokens` (EARS-8) and `refreshTokens`
-(EARS-9) implement the full OIDC dance — authorize-with-session → link the
-checked session (`POST /v2/oidc/auth_requests/{id}`) → `authorization_code` token
-exchange, and the `refresh_token` grant — parsing `roles[]` (the
-`urn:zitadel:iam:org:project:roles` claim) and `mfa` (from `amr`) from the
-id_token. They require the OIDC **application** config (`IDP_CLIENT_ID` /
-`IDP_REDIRECT_URI` / optional secret + scopes); absent that config those two
-paths fail closed (throw, mint nothing) while the rest of the adapter still
+The real adapter's `exchangeSessionForTokens` (EARS-8) implements the full OIDC
+dance — authorize-with-session → link the checked session
+(`POST /v2/oidc/auth_requests/{id}`) → `authorization_code` token exchange —
+parsing `roles[]` (the `urn:zitadel:iam:org:project:roles` claim) and `mfa`
+(from `amr`) from the id_token. It requires the OIDC **application** config
+(`IDP_CLIENT_ID` / `IDP_REDIRECT_URI` / optional secret + scopes); absent that
+config it fails closed (throw, mint nothing) while the rest of the adapter still
 works. The wire shape and claim parsing are pinned by `idp/zitadel.idp.spec.ts`;
 `test/auth/zitadel-token-exchange.e2e-spec.ts` asserts the live path, gated on
 `IDP_ISSUER` (skips in CI / until the dev-stand `ds-platform-dev` OIDC app is

@@ -1,11 +1,13 @@
-import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { FakeIdpClient } from "../idp/idp.fake.js";
 import type { IdpSession } from "../idp/idp.types.js";
 import { InMemorySessionStore } from "./session-store.fake.js";
 import { InMemoryAuthAuditLog } from "./auth-audit.fake.js";
 import { SessionService } from "./session.service.js";
-import { SharedSessionHub } from "./shared-session.js";
+import {
+  SharedSessionHub,
+  type LinkedSessionRefresher,
+} from "./shared-session.js";
 import { SubjectRevocationHub } from "./subject-revocation.js";
 import { parseCookies, SESSION_COOKIE_NAME } from "./session.cookie.js";
 
@@ -45,10 +47,35 @@ async function mintFor(
   };
 }
 
+/**
+ * The storefront client's refresh grant as Zitadel answers it: each token is
+ * single use — a presented token rotates to a fresh pair, and presenting a
+ * spent one is refused as reuse (`invalid_grant`, RFC 6819).
+ */
+function rotatingRefresher(): LinkedSessionRefresher {
+  const spent = new Set<string>();
+  let seq = 0;
+  return {
+    refreshLinked: (_client, refreshToken) => {
+      if (spent.has(refreshToken))
+        return Promise.resolve({ reuseDetected: true });
+      spent.add(refreshToken);
+      seq += 1;
+      return Promise.resolve({
+        reuseDetected: false,
+        tokens: { accessToken: `at-${seq}`, refreshToken: `rt-${seq}` },
+      });
+    },
+  };
+}
+
 describe("SessionService — refresh rotation + logout", () => {
   const FP = "fp-device-1";
 
-  /** A fresh service over fakes, plus a pre-linked-redeem session's `sid`. */
+  /**
+   * A fresh service over fakes, plus a linked session's `sid` — its refresh
+   * rotates through the storefront client the hub's refresher stands for.
+   */
   async function establishedSession(): Promise<{
     svc: SessionService;
     store: InMemorySessionStore;
@@ -63,24 +90,16 @@ describe("SessionService — refresh rotation + logout", () => {
       throw new Error("login setup failed");
     const store = new InMemorySessionStore();
     const audit = new InMemoryAuthAuditLog();
-    const svc = new SessionService(idp, store, audit);
-
-    // A session from before the linked redeem (no `oidcClient`) still rotates
-    // through the BFF client until it expires, so the store holds one here.
-    const tokens = await idp.exchangeSessionForTokens(login.session);
-    const sid = randomUUID();
-    await store.create({
-      sid,
-      zitadelSessionId: login.session.zitadelSessionId,
-      sub: tokens.claims.sub,
-      roles: tokens.claims.roles,
-      mfa: tokens.claims.mfa,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      fingerprint: FP,
-      expiresAtMs: Date.now() + 3600_000,
-    });
-    return { svc, store, audit, sid, sub: tokens.claims.sub };
+    const shared = new SharedSessionHub();
+    shared.registerRefresher(rotatingRefresher());
+    const svc = new SessionService(
+      store,
+      audit,
+      new SubjectRevocationHub(),
+      shared,
+    );
+    const { sid, sub } = await mintFor(svc, idp, login.session, FP);
+    return { svc, store, audit, sid, sub };
   }
 
   it("EARS-9: when a session's access token is refreshed, the system shall rotate the refresh token single-use and issue a new access token", async () => {
@@ -146,7 +165,7 @@ describe("SessionService — refresh rotation + logout", () => {
     await idp.createUser({ email: "other@ds.test", password: "pw-12345678" });
     const store = new InMemorySessionStore();
     const audit = new InMemoryAuthAuditLog();
-    const svc = new SessionService(idp, store, audit);
+    const svc = new SessionService(store, audit);
 
     async function establishFor(email: string): Promise<string> {
       const s = await idp.passwordLogin(email, "pw-12345678");
@@ -188,7 +207,6 @@ describe("SessionService — subject revocation hook", () => {
       },
     });
     const svc = new SessionService(
-      new FakeIdpClient(),
       new InMemorySessionStore(),
       new InMemoryAuthAuditLog(),
       hub,
@@ -202,7 +220,6 @@ describe("SessionService — subject revocation hook", () => {
     const hub = new SubjectRevocationHub();
     hub.register({ revokeSubject: () => Promise.reject(new Error("down")) });
     const svc = new SessionService(
-      new FakeIdpClient(),
       new InMemorySessionStore(),
       new InMemoryAuthAuditLog(),
       hub,
@@ -218,7 +235,6 @@ describe("SessionService — subject revocation hook", () => {
       refreshLinked: () => Promise.resolve({ reuseDetected: true }),
     });
     const svc = new SessionService(
-      new FakeIdpClient(),
       store,
       audit,
       new SubjectRevocationHub(),
@@ -273,7 +289,6 @@ describe("SessionService — subject revocation hook", () => {
         Promise.resolve({ reuseDetected: false, failed: true }),
     });
     const svc = new SessionService(
-      new FakeIdpClient(),
       store,
       audit,
       new SubjectRevocationHub(),
@@ -320,5 +335,132 @@ describe("SessionService — one minting path", () => {
   it("003 EARS-69: SessionService has no establish; every storefront session is minted through the linked redeem path", () => {
     expect("establish" in SessionService.prototype).toBe(false);
     expect(typeof SessionService.prototype.mintLinked).toBe("function");
+  });
+});
+
+// 003 EARS-8 (amended), #3175 switch-over — the store may still hold storefront
+// sessions minted before the linked redeem: with no Zitadel session id at all
+// (before S4), or by the storefront's own retired forms (no storefront client).
+// No sign-in-host record backs either, so every read refuses it: no subject,
+// the record deleted, never refreshed, one `SessionRevoked`.
+describe("SessionService — an unlinked storefront session is refused at read time", () => {
+  const legacy = {
+    sub: "sub-legacy",
+    roles: ["doctor_guest"],
+    mfa: false,
+    accessToken: "at-legacy",
+    refreshToken: "rt-legacy",
+    fingerprint: "fp-device-1",
+  };
+  const unlinked = [
+    ["no Zitadel session id", {}],
+    ["an empty Zitadel session id", { zitadelSessionId: "" }],
+    [
+      "no storefront client (a retired form mint)",
+      { zitadelSessionId: "zs-legacy" },
+    ],
+  ] as const;
+
+  function setup(): {
+    svc: SessionService;
+    store: InMemorySessionStore;
+    audit: InMemoryAuthAuditLog;
+    refreshes: string[];
+    ended: string[];
+  } {
+    const store = new InMemorySessionStore();
+    const audit = new InMemoryAuthAuditLog();
+    const shared = new SharedSessionHub();
+    const refreshes: string[] = [];
+    const ended: string[] = [];
+    shared.registerRefresher({
+      refreshLinked: (_client, refreshToken) => {
+        refreshes.push(refreshToken);
+        return Promise.resolve({ reuseDetected: false, failed: true });
+      },
+    });
+    shared.register({
+      endSharedSession: (_sub, zitadelSessionId) => {
+        ended.push(zitadelSessionId);
+        return Promise.resolve();
+      },
+    });
+    const svc = new SessionService(
+      store,
+      audit,
+      new SubjectRevocationHub(),
+      shared,
+    );
+    return { svc, store, audit, refreshes, ended };
+  }
+
+  async function seed(
+    store: InMemorySessionStore,
+    shape: { zitadelSessionId?: string },
+  ): Promise<string> {
+    const sid = `legacy-${Math.random().toString(36).slice(2)}`;
+    await store.create({
+      sid,
+      ...legacy,
+      ...shape,
+      expiresAtMs: Date.now() + 3600_000,
+    });
+    return sid;
+  }
+
+  for (const [label, shape] of unlinked) {
+    it(`003 EARS-8: a session with ${label} resolves to no session, is deleted and records SessionRevoked (force)`, async () => {
+      const { svc, store, audit } = setup();
+      const sid = await seed(store, shape);
+
+      expect(await svc.getBySid(sid)).toBeUndefined();
+
+      expect(await store.get(sid)).toBeUndefined();
+      expect(audit.events).toEqual([
+        { type: "SessionRevoked", sub: "sub-legacy", sid, reason: "force" },
+      ]);
+    });
+
+    it(`003 EARS-8: a session with ${label} is never refreshed`, async () => {
+      const { svc, store, audit, refreshes } = setup();
+      const sid = await seed(store, shape);
+
+      expect(await svc.refresh(sid)).toEqual({ status: "no_session" });
+
+      expect(refreshes).toEqual([]);
+      expect(await store.get(sid)).toBeUndefined();
+      expect(audit.events.map((e) => e.type)).toEqual(["SessionRevoked"]);
+    });
+
+    it(`003 EARS-8: logging out a session with ${label} deletes it, clears the cookie and ends no shared session`, async () => {
+      const { svc, store, audit, ended } = setup();
+      const sid = await seed(store, shape);
+
+      const { cookie } = await svc.logout(sid);
+
+      expect(cookie).toContain(`${SESSION_COOKIE_NAME}=;`);
+      expect(await store.get(sid)).toBeUndefined();
+      expect(ended).toEqual([]);
+      expect(audit.events).toEqual([
+        { type: "SessionRevoked", sub: "sub-legacy", sid },
+      ]);
+    });
+  }
+
+  it("003 EARS-8: a linked session still resolves", async () => {
+    const { svc, store } = setup();
+    const { cookie } = await svc.mintLinked({
+      zitadelSessionId: "zs-live",
+      client: "doctor",
+      claims: { sub: "sub-linked", roles: ["doctor_guest"], mfa: false },
+      accessToken: "at",
+      refreshToken: "rt",
+      fingerprint: "fp-device-1",
+      expiresAtMs: Date.now() + 3600_000,
+    });
+    const sid = parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
+
+    expect((await svc.getBySid(sid))?.sub).toBe("sub-linked");
+    expect(await store.get(sid)).toBeDefined();
   });
 });

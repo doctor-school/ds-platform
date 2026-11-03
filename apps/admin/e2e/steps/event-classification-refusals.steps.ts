@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
 
 import { expect, type Page } from "@playwright/test";
+import { createBdd } from "playwright-bdd";
 import { Pool } from "pg";
 
 import {
@@ -9,6 +10,7 @@ import {
   Given,
   Then,
   When,
+  test,
   type AdminWorld,
 } from "../support/fixtures";
 
@@ -43,11 +45,31 @@ function operation(op: string, detail?: unknown): void {
       JSON.stringify({ at: new Date().toISOString(), op, detail }) + "\n",
     );
 }
+const originalFetch = globalThis.fetch;
 Before({ tags: "@event-classification-refusals" }, async ({ page }) => {
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url,
+    );
+    operation(`${init?.method ?? "GET"} ${url.origin}${url.pathname}`);
+    if (url.pathname.endsWith("/register") && typeof init?.body === "string") {
+      const body = JSON.parse(init.body) as { email?: string };
+      if (body.email) operation("owned account", { email: body.email });
+    }
+    return originalFetch(input, init);
+  };
   page.on("request", (request) => {
     const url = new URL(request.url());
     operation(`browser ${request.method()} ${url.origin}${url.pathname}`);
   });
+});
+const { After } = createBdd(test);
+After({ tags: "@event-classification-refusals" }, async () => {
+  globalThis.fetch = originalFetch;
 });
 
 async function retained(sql: string, values: unknown[]): Promise<unknown[]> {
@@ -63,12 +85,12 @@ async function retained(sql: string, values: unknown[]): Promise<unknown[]> {
 }
 async function publishedKind(world: AdminWorld, title: string): Promise<Kind> {
   const rows = (await retained(
-    "SELECT id,title,allowed_formats FROM event_kinds WHERE title=$1 AND status=$2 AND deleted_at IS NULL",
+    "SELECT to_jsonb(k) AS row FROM event_kinds k WHERE title=$1 AND status=$2 AND deleted_at IS NULL",
     [title, "published"],
-  )) as Kind[];
+  )) as { row: Kind }[];
   expect(rows).toHaveLength(1);
-  state(world).kind = rows[0];
-  return rows[0];
+  state(world).kind = rows[0].row;
+  return rows[0].row;
 }
 async function fillBasics(page: Page, title: string): Promise<void> {
   await page.goto("/events/create");
@@ -104,9 +126,18 @@ async function rejectEmptyControl(
       "aria-invalid",
       "true",
     );
-    await expect(
-      page.getByText("Обязательное поле.", { exact: true }).first(),
-    ).toBeVisible();
+    const describedBy = await page
+      .getByTestId(control)
+      .getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    const message = page.locator(
+      describedBy!
+        .split(/\s+/u)
+        .map((id) => `[id="${id}"][role="alert"]`)
+        .join(","),
+    );
+    await expect(message).toContainText("Обязательное поле.");
+    await expect(message).toBeVisible();
     await expect(page).toHaveURL(/\/events\/create$/u);
     expect(writes).toEqual([]);
   } finally {

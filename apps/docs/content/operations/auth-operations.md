@@ -266,6 +266,87 @@ authentication — noise, or someone replaying a stale reference. A burst of
 `invalid` rows against one real subject from a live login is the case worth
 escalating.
 
+## Storefront session switch-over (one-time, #3175)
+
+The last slice of [#3006](https://github.com/doctor-school/ds-platform/issues/3006)
+([#3175](https://github.com/doctor-school/ds-platform/issues/3175)): after the S7
+release every storefront session is one the storefront callback minted from a
+live sign-in-host record (003 EARS-8 amended). The API refuses every other
+record at read time — a record with no Zitadel session id (minted before S4) or
+no storefront client (minted by the retired storefront forms) resolves to no
+subject, is deleted with a `SessionRevoked` (`reason: force`), and is never
+refreshed. That refusal does not reach linked sessions minted before the switch,
+so this one-time step revokes **every** storefront session once, right after the
+S7 release (owner decision 2026-11-03: no fixed night window, the platform has no
+active users).
+
+**What it touches.** Only the storefront session store in prod Redis: the keys
+`ds:session:<sid>` and their two indexes `ds:session:sub:*` / `ds:session:zs:*`.
+It leaves the admin sessions (`ds:admin-session:*`, a separate store — 011) and
+the sign-in-host records (003 EARS-64 — the shared browser session the switch-over
+signs people back in through; no clause ends them at a release) as they are.
+With its record kept, a person's next storefront visit signs in silently through
+the sign-in host (EARS-63); without one, the sign-in host shows its form.
+
+**Who runs it.** There is no standing operator shell on the prod boxes
+([prod incident response](./prod-incident-response.md) §1): the command runs in
+the owner's break-glass session on ds-data-prod (alias `ds-data-prod`,
+ProxyJump via ds-api-prod), where Redis runs as `ds-data-prod-redis-1`.
+
+**Pre-checks.**
+
+1. The S7 release is live: the `deploy-prod.yml` run of the S7 SHA is green and
+   its Deployment record is `success`.
+2. A fresh sign-in through the sign-in host works on both storefronts (the
+   verification below, step 2) — revoke only into a working sign-in.
+3. Count before, admin sessions included, so the after-count can show they are
+   untouched (counts only — never a key, a `sid` or a token):
+
+```bash
+ssh ds-data-prod 'sudo docker exec ds-data-prod-redis-1 sh -c "redis-cli --scan --pattern \"ds:session:*\" | grep -vcE \"^ds:session:(sub|zs):\"; redis-cli --scan --pattern \"ds:admin-session:*\" | wc -l"'
+```
+
+**The command.** Deletes every key under `ds:session:` and prints counts only.
+Idempotent: a second run prints `0` and changes nothing.
+
+```bash
+ssh ds-data-prod 'sudo docker exec -i ds-data-prod-redis-1 sh -s' <<'EOF'
+set -eu
+sessions=0 indexes=0
+for key in $(redis-cli --scan --pattern 'ds:session:*'); do
+  n=$(redis-cli UNLINK "$key")
+  case "$key" in
+    ds:session:sub:* | ds:session:zs:*) indexes=$((indexes + n)) ;;
+    *) sessions=$((sessions + n)) ;;
+  esac
+done
+echo "storefront sessions revoked: $sessions (index keys: $indexes)"
+echo "storefront keys left: $(redis-cli --scan --pattern 'ds:session:*' | wc -l)"
+EOF
+```
+
+Expected: `storefront sessions revoked: <N> (index keys: <M>)` with `<N>` the
+pre-check's first count (± sessions minted or expired in between), then
+`storefront keys left: 0` (a person who signs in during the run can leave one).
+The admin count, re-run with the pre-check, is unchanged. Record `<N>` on #3175.
+
+**Verification.**
+
+1. A stale cookie gets no subject: a browser that held a storefront session
+   before the run calls `GET /v1/auth/session` → `401`, and the storefront shows
+   it as a guest.
+2. A fresh sign-in through the sign-in host works: from `academy.doctor.school`
+   and from the doctor storefront, «Войти» → the sign-in host → back on the
+   storefront signed in; `GET /v1/auth/session` → `200`.
+
+**Recovery.** A revoked session is not restored — the step is the revocation,
+and the cost is one sign-in per person. If the sign-in host does not sign people
+in after the run, that is an S7 release incident, not a step to undo: roll back
+through `deploy-prod.yml` rollback mode
+(`tools/deploy/README.md` → Rollback mode)
+and follow [prod incident response](./prod-incident-response.md). Re-running the
+command is harmless.
+
 ## Open deferrals
 
 Tracked so no surface stands in silently for missing live infra (AGENTS.md §6

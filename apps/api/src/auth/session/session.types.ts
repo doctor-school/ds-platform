@@ -11,7 +11,8 @@
  *
  * Refresh **rotation** (single-use, reuse-detection) is EARS-9 / F4; F2 only
  * needs create + read, but the record already carries the refresh token so F4
- * extends the store, not the record shape.
+ * extends the store, not the record shape. Every record minted now is linked
+ * (003 EARS-8 amended); {@link StoredSessionRecord} is what a store may hold.
  */
 export interface SessionRecord {
   /** BFF session id — the opaque value carried in the `__Host-` cookie. */
@@ -33,21 +34,51 @@ export interface SessionRecord {
   /** Epoch ms at which the session expires (drives the store TTL). */
   expiresAtMs: number;
   /**
-   * 003 EARS-8 (amended) / EARS-62 — set only on a session the storefront
-   * callback minted: the storefront client it was redeemed for. Such a session
-   * is LINKED to the shared Zitadel session `zitadelSessionId` the sign-in-host
-   * record holds, and every revocation of that Zitadel session revokes it
-   * (EARS-10 one sign-out, EARS-64 replacement). Absent on a session the
-   * storefront's own forms minted, whose sign-out keeps its own behaviour.
+   * 003 EARS-8 (amended) / EARS-62 — the storefront client the callback
+   * redeemed this session for. The session is LINKED to the shared Zitadel
+   * session `zitadelSessionId` the sign-in-host record holds, and every
+   * revocation of that Zitadel session revokes it (EARS-10 one sign-out,
+   * EARS-64 replacement).
    */
+  oidcClient: "academy" | "doctor";
+}
+
+/**
+ * A storefront session record as a store holds it. Production Redis still holds
+ * records minted before the linked redeem (#3175 switch-over): with no Zitadel
+ * session id at all, or by the storefront's own retired forms (no storefront
+ * client). Only {@link isLinkedSession} narrows one to a {@link SessionRecord};
+ * {@link SessionService} refuses every other one at read time (003 EARS-8
+ * amended: no other path mints a storefront session).
+ */
+export type StoredSessionRecord = Omit<
+  SessionRecord,
+  "zitadelSessionId" | "oidcClient"
+> & {
+  zitadelSessionId?: string | undefined;
   oidcClient?: "academy" | "doctor" | undefined;
+};
+
+/** 003 EARS-8 (amended) — the record was minted by the storefront callback's linked redeem. */
+export function isLinkedSession(
+  record: StoredSessionRecord,
+): record is SessionRecord {
+  return (
+    typeof record.zitadelSessionId === "string" &&
+    record.zitadelSessionId.length > 0 &&
+    record.oidcClient !== undefined
+  );
 }
 
 export interface SessionStore {
   /** Persist a new session, expiring it at `record.expiresAtMs`. */
   create(record: SessionRecord): Promise<void>;
-  /** Look a session up by `sid`; `undefined` if absent or expired. */
-  get(sid: string): Promise<SessionRecord | undefined>;
+  /**
+   * Look a session up by `sid`, as stored; `undefined` if absent, expired or
+   * of no known shape. A record minted before the linked redeem comes back
+   * unlinked — callers narrow with {@link isLinkedSession}.
+   */
+  get(sid: string): Promise<StoredSessionRecord | undefined>;
   /**
    * EARS-9: replace the stored tokens after a single-use refresh rotation,
    * keeping the `sid`, principal, fingerprint, and expiry. No-op if the session
@@ -74,7 +105,7 @@ export interface SessionStore {
    * the Zitadel session `zitadelSessionId`, on both storefronts, and return
    * the deleted records (each owes its `SessionRevoked`). Idempotent.
    */
-  deleteLinked(zitadelSessionId: string): Promise<SessionRecord[]>;
+  deleteLinked(zitadelSessionId: string): Promise<StoredSessionRecord[]>;
 }
 
 /** DI token the {@link SessionStore} port is bound to (fake or Redis adapter). */

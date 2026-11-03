@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type { SessionClaims } from "@ds/schemas";
-import { IDP_CLIENT, type IdpClient } from "../idp/idp.types.js";
 import {
   AUTH_AUDIT,
   type AuthAuditLog,
@@ -12,6 +11,7 @@ import {
   serializeSessionCookie,
 } from "./session.cookie.js";
 import {
+  isLinkedSession,
   SESSION_STORE,
   type SessionRecord,
   type SessionStore,
@@ -48,7 +48,6 @@ export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 @Injectable()
 export class SessionService {
   constructor(
-    @Inject(IDP_CLIENT) private readonly idp: IdpClient,
     @Inject(SESSION_STORE) private readonly store: SessionStore,
     @Inject(AUTH_AUDIT) private readonly audit: AuthAuditLog,
     @Inject(SubjectRevocationHub)
@@ -123,7 +122,32 @@ export class SessionService {
 
   /** Resolve a session by its cookie `sid` (used by the auth middleware). */
   getBySid(sid: string): Promise<SessionRecord | undefined> {
-    return this.store.get(sid);
+    return this.readLinked(sid, "force");
+  }
+
+  /**
+   * 003 EARS-8 (amended), #3175 switch-over — every read of a storefront
+   * session by `sid` (the auth hook, refresh, logout) goes through here. A
+   * record no linked redeem minted — before S4 it carries no Zitadel session
+   * id; the storefront's retired forms set no storefront client — has no
+   * sign-in-host record behind it, so it is refused: deleted, with its
+   * `SessionRevoked`, and read as no session (never refreshed).
+   */
+  private async readLinked(
+    sid: string,
+    reason: SessionRevokedReason,
+  ): Promise<SessionRecord | undefined> {
+    const record = await this.store.get(sid);
+    if (!record) return undefined;
+    if (isLinkedSession(record)) return record;
+    await this.store.delete(sid);
+    await this.audit.record({
+      type: "SessionRevoked",
+      sub: record.sub,
+      sid,
+      ...(reason === "logout" ? {} : { reason }),
+    });
+    return undefined;
   }
 
   /**
@@ -135,18 +159,16 @@ export class SessionService {
    * The `sid`/cookie is unchanged on success — only the server-side tokens move.
    */
   async refresh(sid: string): Promise<RefreshOutcome> {
-    const record = await this.store.get(sid);
+    const record = await this.readLinked(sid, "force");
     if (!record) return { status: "no_session" };
 
     // 003 EARS-8 (amended): a callback-minted session rotates through its own
     // storefront client; the rotation keeps its link and its bounded expiry
-    // (`rotate` never moves `expiresAtMs`). A legacy session keeps the BFF client.
-    const result = record.oidcClient
-      ? await this.sharedSessions.refreshLinked(
-          record.oidcClient,
-          record.refreshToken,
-        )
-      : await this.idp.refreshTokens(record.refreshToken);
+    // (`rotate` never moves `expiresAtMs`).
+    const result = await this.sharedSessions.refreshLinked(
+      record.oidcClient,
+      record.refreshToken,
+    );
     if ("failed" in result) {
       // 003 EARS-65 — any refusal other than reuse (an IdP outage, or Zitadel's
       // `Errors.User.NotActive` for a locked user) is not theft: the presenting
@@ -170,8 +192,7 @@ export class SessionService {
       });
       // 003 EARS-65 — reuse on a linked session ends the whole linked set
       // (every storefront session of that shared session, both storefronts).
-      if (record.oidcClient)
-        await this.revokeLinked(record.zitadelSessionId, "theft_detected");
+      await this.revokeLinked(record.zitadelSessionId, "theft_detected");
       return { status: "reuse_detected" };
     }
 
@@ -198,20 +219,14 @@ export class SessionService {
    * was nothing to revoke).
    */
   async logout(sid: string): Promise<{ cookie: string }> {
-    const record = await this.store.get(sid);
-    if (record?.oidcClient) {
+    // An unlinked record is deleted with its `SessionRevoked` by the read.
+    const record = await this.readLinked(sid, "logout");
+    if (record) {
       // 003 EARS-10 (amended) — one sign-out on both storefronts: the Zitadel
       // session and the sign-in-host record holding it end first, then every
       // storefront session linked to it (this one included), all in this call.
       await this.sharedSessions.end(record.sub, record.zitadelSessionId);
       await this.revokeLinked(record.zitadelSessionId);
-    } else if (record) {
-      await this.store.delete(sid);
-      await this.audit.record({
-        type: "SessionRevoked",
-        sub: record.sub,
-        sid,
-      });
     }
     return { cookie: clearSessionCookie() };
   }

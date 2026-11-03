@@ -26,10 +26,13 @@ import { type LiveEventRow, EventsRepository } from "./events.repository.js";
  *
  * ## Why this read exists at all
  *
- * Because the feed cannot carry it. An эфир that started before the rendered
- * horizon is excluded from the feed by the horizon's lower bound (stand
- * finding 2026-09-02), so a viewer arriving mid-эфир would otherwise see what
- * is still to come and no way into what is happening.
+ * Because the feed places an эфир by its start, not by its being on air. A
+ * running «Будущие» window lists a `live` эфир that started before it opened
+ * (004 EARS-9, #3639), but the month grid and every later window do
+ * not — and even where it is listed it is one card among what is still to
+ * come. The block is the one surface that, whatever window is rendered, puts
+ * every running эфир first with its way in: the room for a registered viewer,
+ * the event page for everyone else.
  *
  * ## Nothing is derived here that 006 or 020 already decide
  *

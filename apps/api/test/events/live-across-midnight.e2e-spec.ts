@@ -55,7 +55,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const beforeMidnight = new Date(midnight.getTime() - HOUR);
 
     const seed = async (
-      state: "live" | "ended",
+      state: "live" | "ended" | "published",
       audience: TestEventAudience,
     ): Promise<string> => {
       const id = randomUUID();
@@ -77,8 +77,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     let academyLive = "";
     let academyEnded = "";
+    let academyPublished = "";
     let doctorLive = "";
     let doctorEnded = "";
+    let doctorPublished = "";
 
     const academy = (query: Record<string, string>) =>
       events.listPublicEvents(
@@ -120,8 +122,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       academyLive = await seed("live", "experts");
       academyEnded = await seed("ended", "experts");
+      academyPublished = await seed("published", "experts");
       doctorLive = await seed("live", "doctors");
       doctorEnded = await seed("ended", "doctors");
+      doctorPublished = await seed("published", "doctors");
     });
 
     afterAll(async () => {
@@ -129,12 +133,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await app.close();
     });
 
-    it("EARS-9: a live event that started before today's МСК midnight stays in the Academy «Будущие» with its live signal; an ended one from before midnight stays out", async () => {
+    it("EARS-9: a live event that started before today's МСК midnight stays in the Academy «Будущие» with its live signal; an ended or merely published one from before midnight stays out", async () => {
       const page = await academy({});
       const live = page.data.filter((card) => card.id === academyLive);
       expect(live).toHaveLength(1);
       expect(live[0]?.state).toBe("live");
       expect(page.data.some((card) => card.id === academyEnded)).toBe(false);
+      // Only `live` reaches back past the window's lower bound: a `published`
+      // эфир that started before midnight is placed by its start like any other.
+      expect(page.data.some((card) => card.id === academyPublished)).toBe(
+        false,
+      );
 
       // A stated window holding today holds it too.
       const stated = await academy({
@@ -154,6 +163,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // The one-event extent shows it; what lies beyond is asked from `to`
       // on, so the running эфир is not part of the remainder.
       const first = await academy({ count: "1" });
+      expect(first.data[0]?.id).toBe(academyLive);
       const all = await academy({ count: "1000" });
       const allLive = all.data.filter((card) => card.id === academyLive);
       expect(allLive).toHaveLength(1);
@@ -162,11 +172,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
     });
 
-    it("EARS-9: the doctor feed «Будущие» keeps a live event that started before today's МСК midnight; an ended one stays out", async () => {
+    it("EARS-9: the doctor feed «Будущие» keeps a live event that started before today's МСК midnight; an ended or merely published one stays out", async () => {
       const feed = await doctor({});
       const ids = feed.days.flatMap((day) => day.items.map((card) => card.id));
       expect(ids.filter((id) => id === doctorLive)).toHaveLength(1);
       expect(ids).not.toContain(doctorEnded);
+      expect(ids).not.toContain(doctorPublished);
 
       const later = await doctor({
         from: addDoctorEventsFeedDays(today, 1),

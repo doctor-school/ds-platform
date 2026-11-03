@@ -1,12 +1,12 @@
 ---
 title: "Feature 017 — Doctor storefront shell & the specialty catalog (PRD)"
-description: "Product requirements for the first screen of the second site: `doctor.school` as the doctor's storefront — the shell every doctor-facing screen consumes (header by sign-in status, navigation, footer with the single link into the Academy), the Минздрав specialty catalog as the doctor's first action with search over the whole official list plus «Другое», the remembered choice in the profile and in an anonymous session, the announcements calendar, the scale statistics and the voluntary leaderboard. Wave 1 of the two-site IA epic; the shell all of 018–021 build on; source of the 017 EARS triplet (ADR-0014)."
+description: "Product requirements for the first screen of the second site: `doctor.school` as the doctor's storefront — the shell every doctor-facing screen consumes (header by sign-in status, navigation, footer with the single link into the Academy), the Минздрав specialty catalog as the doctor's first action with search over the whole official list plus «Другое», the remembered choice in the profile and in an anonymous session, the nearest events, the scale statistics and the voluntary leaderboard. Wave 1 of the two-site IA epic; the shell all of 018–021 build on; source of the 017 EARS triplet (ADR-0014)."
 slug: two-site-ia-017-doctor-shell-specialties-product
 epic: ../../product/two-site-ia/brief.md
 status: In dev
 surface: user-facing
 storefronts: doctor-only
-storefronts_reason: "The doctor storefront home and its host: doctor mount of the shared storefront-shell package; the Academy shell is feature 008 and the Academy home feature 013 (rebuilt under #1799). Its cross-front blocks are the nearest-events block shared with the Academy home (#1485, paused) and the platform leaderboard extracted from the Academy education index (#1487), within the one-code epic #2020."
+storefronts_reason: "The doctor storefront home and its host: doctor mount of the shared storefront-shell package; the Academy shell is feature 008 and the Academy home feature 013 (rebuilt under #1799). Its cross-front blocks are the nearest-events block — the 019 events feed block capped on the home (#1485), which the Academy home mounts under #1799 — and the platform leaderboard extracted from the Academy education index (#1487), within the one-code epic #2020."
 lang: en
 ---
 
@@ -24,7 +24,7 @@ The first is the **shell** — the header (logo, search, and **one of two by sig
 
 The second is the **specialty catalog as the doctor's first action** (REQ-101). The Минздрав list — every entry of the nomenclature order in force plus «Другое» — is presented so that a doctor can both _find_ the one they already know and _see_ what exists, with search over the list because a list that long cannot be scrolled. Picking a specialty is what turns the site from a brochure into a product: from that moment the content is targeted to that specialty and its adjacent areas (REQ-1), where adjacency is a **managed reference table, not a similarity of names** (OWD-11). The choice is remembered — in the profile for a signed-in doctor, in the anonymous session for a guest — so the second visit opens straight into the targeted view.
 
-Around those two, the home page carries what makes the site credible and alive: the **scale statistics** the legacy site proved worked («с нами уже N врачей · M специальностей · …», every number computed from the live read, REQ-116), the **nearest events with the month calendar** and the link «Все события» (REQ-2, REQ-75), a «Что исследовать» showcase of the formats, and the **platform leaderboard** — in which a doctor appears **only by separate consent to public display** (REQ-34), the default being not to publish.
+Around those two, the home page carries what makes the site credible and alive: the **scale statistics** the legacy site proved worked («с нами уже N врачей · M специальностей · …», every number computed from the live read, REQ-116), the **nearest events** — the events feed of `/events` itself, cut to its first few cards — and the link «Все события» (REQ-2, REQ-75), a «Что исследовать» showcase of the formats, and the **platform leaderboard** — in which a doctor appears **only by separate consent to public display** (REQ-34), the default being not to publish.
 
 017 also owns the **marketing routes that move out of `apps/promo` into `apps/doctor`** (ADR-0015 §2 — one host owns one information architecture). Taking `apps/promo` out of service after the move is a **separate engineering deliverable of wave 1**, not part of this PRD.
 
@@ -38,11 +38,11 @@ Around those two, the home page carries what makes the site credible and alive: 
 - **US-6** — As a **cautious visitor**, I can look at the whole home page before choosing anything — nothing blocks the page until I pick a specialty.
 - **US-7** — As a **visitor**, the header shows me exactly one of «Войти / Регистрация» or «Личный кабинет» depending on whether I am signed in — never both, never an ambiguous state.
 - **US-8** — As a **doctor deciding whether this is serious**, I see the platform's scale — how many doctors are already here, how many specialties, lessons and events — as a plain line of numbers.
-- **US-9** — As a **doctor**, I see the nearest events and a compact month calendar on the home page and can go from there to the full events feed.
+- **US-9** — As a **doctor**, I see the nearest events on the home page and can go from there to the full events feed.
 - **US-10** — As a **doctor**, a «Что исследовать» block shows me what the formats actually are — a school, a lesson of the day, a clinical-case review — before I commit to anything.
 - **US-11** — As a **doctor**, I see the platform leaderboard and understand at a glance that appearing in it is **voluntary**; if I have not consented, I simply have no row there and the page says why calmly.
 - **US-12** — As a **doctor**, the storefront never shows me the Academy's internal life; the only way across is one link in the footer, and I take it only if I want to.
-- **US-13** — As a **doctor on a phone**, the header, the catalog, its search, the calendar and the leaderboard all work as well as on desktop — a large share of doctors arrive from mobile.
+- **US-13** — As a **doctor on a phone**, the header, the catalog, its search, the nearest events and the leaderboard all work as well as on desktop — a large share of doctors arrive from mobile.
 - **US-14** — As a **visitor who followed an old marketing link**, the public marketing routes now answer from `doctor.school` inside one information architecture, rather than from a separate marketing site with its own navigation.
 - **US-15** — As an **operator**, I maintain the specialties, the educational directions and the adjacency links between them in one place, and the storefront's targeting follows from those reference books rather than from per-page settings.
 - **US-16** — As a **product owner**, the shell decided here — header, navigation, footer — is the single shell of the storefront: features 018–021 consume it and none of them re-invents it.
@@ -53,7 +53,7 @@ Around those two, the home page carries what makes the site credible and alive: 
 
 1. A visitor opens `doctor.school` → the shell renders with the guest header, then the hero: the headline, the sub-line about what a doctor gets here, the evolutionary goal **verbatim**, and the scale statistics.
 2. Below it, the **specialty catalog** — the main block of the screen: a set of specialties visible immediately, a search field over the whole list, an expand control for the rest, and «Другое» last.
-3. The visitor may scroll past it and read the calendar, «Что исследовать» and the leaderboard — **nothing blocks the page** on the absence of a choice.
+3. The visitor may scroll past it and read the nearest events, «Что исследовать» and the leaderboard — **nothing blocks the page** on the absence of a choice.
 4. The visitor types part of a name → the list narrows; nothing matches → the catalog says so and keeps the search recoverable.
 5. The visitor picks a specialty → the storefront becomes targeted and the specialty feed (feature 018) takes over.
 
@@ -76,7 +76,7 @@ Around those two, the home page carries what makes the site credible and alive: 
 
 - **«Другое» chosen** → the doctor is not left without content: the storefront falls back to general (non-targeted) selections and says so, rather than showing an empty targeted feed.
 - **Announcements fail to load** → that block states the reason and offers a retry; the rest of the page stays usable.
-- **No upcoming events for the chosen specialty** → the calendar block shows its honest empty state and points at adjacent areas.
+- **No upcoming events for the chosen specialty** → the nearest events behave exactly as the events feed does for that specialty: the same empty statement and the same widening of the scope.
 - **Leaderboard empty, or the doctor never consented** → the block renders with a calm explanation instead of a missing or fabricated row.
 
 ## Product acceptance criteria
@@ -89,7 +89,7 @@ Around those two, the home page carries what makes the site credible and alive: 
 - The chosen specialty is the **primary axis of content targeting**, and adjacency is read from a **managed reference table** (ADR-0016 §5, OWD-11) — never derived from name similarity, and never presented to the doctor as their own specialty.
 - Specialties (Минздрав), educational directions and schools are **three distinct things**, never merged into one on-screen list and never labelled with one word.
 - The home page carries the **scale statistics** (doctors, specialties, lessons, events) and the **evolutionary goal verbatim**, with no gloss and no «готовится» marker beside it.
-- The home page shows the **nearest events plus a compact month calendar** and a link to the full events feed; before a specialty is chosen these are general, after it they are targeted.
+- The home page shows the **nearest events** — the events feed of `/events`, the same block cut to its first few cards — and a link «Все события» to the full feed; before a specialty is chosen these are general, after it they are targeted.
 - The **leaderboard** renders only doctors who gave **separate consent to public display**; the default is not to publish, and the voluntary nature is visible next to the block. The leaderboard requirement is **REQ-117**, which is cross-cutting by its own text: 017 owns the **platform-wide** board on the storefront, and the specialty-filtered board is 018's — one requirement split across two features by authoring decision, not two requirements (REQ-34, REQ-117).
 - The storefront carries **no Academy content** — no project cards, no Academy podcasts, no partner news — and **exactly one** Academy link **on this surface**, in the footer — the single REQ-24 exit has a second placement, «Стать экспертом» in the doctor's cabinet, which is not part of 017.
 - The interface **never states who finances the doctor's learning**; it says only that learning is free for the doctor.
@@ -130,12 +130,12 @@ Both forks below come from the screen prompt. **The canvas default is a working 
 | **F-017-1** | How the Минздрав specialties are shown | **А** — a tile grid of the popular specialties plus search plus «Показать все» · **Б** — search as the hero element with the most frequent suggested beneath · **В** — the full alphabetical list with letter anchors | **А** (canvas prop `catalogVariant`, default `А`)                                                                                    | none — **А** reads as an invitation and **В** as a directory, but the trade-off («I know mine» versus «show me what exists») is a product call | **Б** — owner pick 2026-08-25, interactive walkthrough; verbatim: «Б — поиск + плитки (Рекомендуется)»              |
 | **F-017-2** | Where the leaderboard lives            | a separate section on the home page · a compact plate beside the catalog                                                                                                                                              | the **separate section** — the canvas resolved this silently and carries **no prop**, so the promised second variant was never drawn | none                                                                                                                                           | **Отдельная секция** — owner pick 2026-08-25, interactive walkthrough; verbatim: «Отдельная секция (Рекомендуется)» |
 
-**State variants on the canvas (content-driven, not design forks):** sign-in status (guest / signed in — both mandatory), specialty chosen / not chosen, and the `dataState` prop (`обычно` default · loading skeleton · empty calendar · load error). These are states the built screen must handle, not options to choose between.
+**State variants on the canvas (content-driven, not design forks):** sign-in status (guest / signed in — both mandatory), specialty chosen / not chosen, and the `dataState` prop (`обычно` default · loading skeleton · no upcoming events · load error). These are states the built screen must handle, not options to choose between.
 
 ## Approved mockup
 
 **Stage A is not resolved for this feature.** The owner drew the canvas and it is vendored; the **canvas defaults are the working assumption, and the Stage-A pick is this PRD's fork table above** — no fork is decided until the owner records a pick there.
 
 - **Canvas:** [`design-source/doctor-home.dc.html`](../../../../../../design-source/doctor-home.dc.html) — screen `#d-home`, drawn by the owner; composition drawn from scratch on the tokens of `ds-foundation.dc.html`.
-- **Units reused as-is:** the event card (`unit-event-card.dc.html`), the month calendar in its compact form (the compact month of `events-feed.dc.html` — the earlier `events-feed-month.dc.html` is archived), the doctor content card in its base form (its anatomy is decided on the 018 canvas, and this screen is brought into line with it), and the points plate in its base form (its anatomy is decided on the `#d-lesson` canvas).
+- **Units reused as-is:** the event card (`unit-event-card.dc.html`), the doctor content card in its base form (its anatomy is decided on the 018 canvas, and this screen is brought into line with it), and the points plate in its base form (its anatomy is decided on the `#d-lesson` canvas).
 - The composition switcher fixed at the bottom of the canvas is a **design-review aid, not a product control**, and is not built.

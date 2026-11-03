@@ -13,7 +13,8 @@
     "./my-events": "./src/ui/my-events-route.tsx",
     "./host-config": "./src/host-config.ts",
     "./server": "./src/server/index.ts",
-    "./retry": "./src/ui/events-block-retry.tsx"
+    "./retry": "./src/ui/events-block-retry.tsx",
+    "./feed": "./src/ui/events-feed.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

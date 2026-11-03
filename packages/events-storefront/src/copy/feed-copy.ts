@@ -60,6 +60,8 @@ export const FEED_COPY = {
   feed: {
     pagination: "Лента событий",
     showMore: "Показать ещё",
+    /** A capped feed's one link to the full listing (017 EARS-9). */
+    allEvents: "Все события",
     showMoreOf: (batch: number, remaining: number) =>
       `Показать ещё ${batch} (осталось ${remaining})`,
     errorTitle: "Не удалось загрузить ленту событий",

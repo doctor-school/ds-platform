@@ -8,7 +8,7 @@ lang: en
 
 > Requirements: [`017-requirements-en.md`](./017-requirements-en.md) · PRD: [`017-product.md`](./017-product.md) · Scenarios: [`017-scenarios.feature`](./017-scenarios.feature)
 >
-> Composition source of truth: `design-source/doctor-home.dc.html` (screen `#d-home`) for the home-page body, `design-source/ds-shell.dc.html` (`host=doctor`) for the shell, with the event card (`unit-event-card.dc.html`) and the compact month calendar (the compact month of `events-feed.dc.html` — the earlier `events-feed-month.dc.html` is archived) reused as-is.
+> Composition source of truth: `design-source/doctor-home.dc.html` (screen `#d-home`) for the home-page body, `design-source/ds-shell.dc.html` (`host=doctor`) for the shell; the nearest-events section is the `/events` day feed block of `design-source/events-feed.dc.html` (019) capped to N cards under the home section heading — the owner's pick of 2026-11-03 (#1485), in place of the home canvas's own events cards.
 
 # 017 — Design
 
@@ -168,26 +168,21 @@ flowchart LR
 
 Two rules the review enforces: nothing enters `TargetingSet` without a managed row behind it, and items reached only through `ADJ` are labelled adjacent in the UI — never as the doctor's own specialty (EARS-8).
 
-**An empty targeted set is honest, not a failure.** A non-«Другое» specialty with no managed `SPECIALTY_DIRECTION` rows resolves to `mode: "targeted"` with empty `directions` — and therefore empty adjacent directions, since adjacency is reachable only through the doctor's own rows. That is the truthful answer: the specialty _is_ targeted, the managed books simply hold no rows behind it yet. Consumers MUST render their documented `пусто` state from the §6 matrix — the leaderboard shows its calm explanation, nearest events show «Пока ничего не запланировано…». Silently falling back to general or non-targeted content is forbidden: unmanaged content would enter the doctor's view without a managed row behind it, breaking the first rule above.
+**An empty targeted set is honest, not a failure.** A non-«Другое» specialty with no managed `SPECIALTY_DIRECTION` rows resolves to `mode: "targeted"` with empty `directions` — and therefore empty adjacent directions, since adjacency is reachable only through the doctor's own rows. That is the truthful answer: the specialty _is_ targeted, the managed books simply hold no rows behind it yet. Consumers MUST render their documented `пусто` state from the §6 matrix — the leaderboard shows its calm explanation. Silently falling back to general or non-targeted content is forbidden: unmanaged content would enter the doctor's view without a managed row behind it, breaking the first rule above. The nearest events are no such consumer of their own: they are the 019 feed block, so an empty targeted feed answers with 019's documented scope rule (019 EARS-9, LD-9) on the home exactly as on `/events`.
 
-**The adjacent-areas link renders only when there are adjacent areas to link to.** The `пусто` state of the nearest-events block has two variants, and the block picks between them on `adjacentDirections`, never on `directions`:
-
-- **`adjacentDirections` non-empty** — the doctor has own directions, they simply hold no upcoming events. «Пока ничего не запланировано…» plus the adjacent-areas link, which leads somewhere real.
-- **`adjacentDirections` empty** — including every honest-empty set above, where empty `directions` makes empty adjacency a certainty rather than a coincidence. The block renders the copy **alone**, with no link. A link to an empty adjacent set is a dead control, and a dead control is the same class of defect as the empty labelled box §6 opens by banning.
-
-`mode: "general"` with the explicit LD-5 statement is reserved for «Другое» and nothing else. Consumers must never infer generality from emptiness — the two states are distinguished by `mode`, never by the size of `directions`. This contract binds the block consumers #1485 (nearest events) and #1487 (leaderboard). The nearest-events block is not a doctor-local composition: its cards and compact month calendar mount from `@ds/events-storefront` (the package that also serves `/events`), and the home page supplies only the targeting scope and the §6 `пусто` variants as host values (new host-config fields the block adds; no such seam exists yet).
+`mode: "general"` with the explicit LD-5 statement is reserved for «Другое» and nothing else. Consumers must never infer generality from emptiness — the two states are distinguished by `mode`, never by the size of `directions`. This contract binds the block consumer #1487 (leaderboard) and the 019 feed read the nearest events render. The nearest-events block is not a doctor-local composition and not a second events block: it is the `/events` day feed block of `@ds/events-storefront` (019 EARS-3/EARS-9) mounted on the home page capped to the host's N cards, with one «Все события» link to the full listing (owner decision 2026-11-03, #1485); the home page supplies only the cap and its section heading, and the targeting scope rides the 019 feed read's relayed specialty cookie.
 
 ## 6. Home-page block × `dataState` matrix
 
 Every block resolves to exactly one render per state. An empty labelled box, a bare zero and an unresolving spinner are each defects.
 
-| Block             | `обычно`                                    | `загрузка`           | `пусто`                                                                                               | `ошибка`                                     |
-| ----------------- | ------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| Hero + statistics | 4 counters + goal verbatim                  | counters as skeleton | a counter with no source is **omitted**, not zeroed                                                   | counters omitted, hero copy intact           |
-| Specialty catalog | variant Б open, or the collapsed chosen row | tile skeletons       | n/a — the book is closed and never empty                                                              | error with retry; the page stays readable    |
-| Nearest events    | cards + compact month calendar              | card skeletons       | «Пока ничего не запланировано…»; + adjacent-areas link only if `adjacentDirections` is non-empty (§5) | «Не удалось загрузить события.» + «Обновить» |
-| «Что исследовать» | **deferred (LD-8)** — nothing renders       | n/a                  | n/a                                                                                                   | n/a                                          |
-| Leaderboard       | consented rows + voluntary note             | row skeletons        | calm explanation instead of rows                                                                      | error with retry, note still shown           |
+| Block             | `обычно`                                       | `загрузка`                     | `пусто`                                                   | `ошибка`                                                  |
+| ----------------- | ---------------------------------------------- | ------------------------------ | --------------------------------------------------------- | --------------------------------------------------------- |
+| Hero + statistics | 4 counters + goal verbatim                     | counters as skeleton           | a counter with no source is **omitted**, not zeroed       | counters omitted, hero copy intact                        |
+| Specialty catalog | variant Б open, or the collapsed chosen row    | tile skeletons                 | n/a — the book is closed and never empty                  | error with retry; the page stays readable                 |
+| Nearest events    | the 019 feed block capped to N + «Все события» | the feed skeleton (019 EARS-9) | the feed's empty render and scope rule (019 EARS-9, LD-9) | the feed's error + «Повторить» (019 EARS-9), still capped |
+| «Что исследовать» | **deferred (LD-8)** — nothing renders          | n/a                            | n/a                                                       | n/a                                                       |
+| Leaderboard       | consented rows + voluntary note                | row skeletons                  | calm explanation instead of rows                          | error with retry, note still shown                        |
 
 The `loggedIn` × `specialtyChosen` axes multiply this: 4 × 2 × 2 renders per block are the review surface EARS-15 signs off. «Что исследовать» has no row to multiply — the composition reserves its slot between the events block and the leaderboard and 017 renders nothing in it (LD-8): the block has no read contract in §7, no endpoint and no content entity, and it lands with the features that own school, lesson and clinical-case content.
 
@@ -199,7 +194,7 @@ The `loggedIn` × `specialtyChosen` axes multiply this: 4 × 2 × 2 renders per 
 | frequent specialties      | `public`                                             | `FrequentSpecialties`                                                    |
 | specialty search          | `public`                                             | `SpecialtySearchResult` — substring, case- and ё/е-insensitive           |
 | scale statistics          | `public`                                             | `ScaleStatistics` with `computedAt` (LD-3)                               |
-| home events               | `public`                                             | `HomeEvents` — general or targeted                                       |
+| nearest events            | `public`                                             | the 019 feed read (`EventsFeedPage`) — general or targeted               |
 | leaderboard               | `public`                                             | `Leaderboard` — consented rows only; `viewerHasConsent` null for a guest |
 | choose / change specialty | `public` (guest session) / `authenticated` (profile) | idempotent; rejects a non-member specialty                               |
 
@@ -218,7 +213,7 @@ Every failure is an RFC 7807 Problem Details document with `traceId` and an exac
 3. **EARS-2, EARS-4, EARS-5** — hero and the catalog in variant Б.
 4. **EARS-6, EARS-7** — persistence, the collapsed row and re-choice.
 5. **EARS-8** — targeting over the managed books; carries a `blocked_by` edge to the ADR-0016 §5 directions extension where that is not yet in place.
-6. **EARS-9 API/read, EARS-11** — the remaining home-page data slices; independent of each other. EARS-9's API projection may land here, but its rendered composition and mandatory working «Все события» CTA wait for the product-complete `/events` integration [#1516](https://github.com/doctor-school/ds-platform/issues/1516); no blank route, placeholder or «скоро» front door satisfies that dependency. EARS-10 builds nothing here: its block is deferred per LD-8 and only its reserved slot exists.
+6. **EARS-9, EARS-11** — the remaining home-page slices; independent of each other. EARS-9 builds no read and no block: it mounts the 019 feed block capped on the home page, and its mandatory working «Все события» CTA lands on the product-complete `/events` ([#1516](https://github.com/doctor-school/ds-platform/issues/1516)); no blank route, placeholder or «скоро» front door satisfies it. EARS-10 builds nothing here: its block is deferred per LD-8 and only its reserved slot exists.
 7. **EARS-13** — inventory, owner confirmation, then the route move.
 8. **EARS-14, EARS-15** — the accessibility/mobile bar and the design gate, run against each surface as it lands rather than at the end.
 

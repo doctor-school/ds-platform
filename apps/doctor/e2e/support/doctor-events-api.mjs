@@ -348,6 +348,18 @@ function liveBody(cookie) {
  */
 let feedFailing = false;
 let monthFailing = false;
+/**
+ * 017 EARS-9 (#1485) — the same control may also empty the upcoming read
+ * (`"empty": true` — no matching event), so a spec sees the capped feed block
+ * on the home state its empty render.
+ */
+let feedEmpty = false;
+/**
+ * The cookie header the last upcoming feed read carried (`GET /__e2e/feed`):
+ * the route relays the remembered `__Host-ds_specialty`, which the real
+ * service targets on (proven against the real database in the api e2e spec).
+ */
+let lastFeedCookie = null;
 
 /**
  * 019 EARS-11 as amended 2026-10-05 (gate row 46) — the doctor's «Мои события»
@@ -397,16 +409,22 @@ const server = createServer((request, response) => {
 
   // Test-only control: flip the live scenario mid-run so a spec can prove the
   // block clears itself on the next read rather than on a reload.
+  if (url.pathname === "/__e2e/feed" && request.method === "GET") {
+    return json(response, 200, { lastCookie: lastFeedCookie });
+  }
   if (url.pathname === "/__e2e/feed" && request.method === "POST") {
     let body = "";
     request.on("data", (chunk) => (body += chunk));
     request.on("end", () => {
       try {
-        feedFailing = JSON.parse(body || "{}").failing === true;
+        const control = JSON.parse(body || "{}");
+        feedFailing = control.failing === true;
+        feedEmpty = control.empty === true;
       } catch {
         feedFailing = false;
+        feedEmpty = false;
       }
-      json(response, 200, { failing: feedFailing });
+      json(response, 200, { failing: feedFailing, empty: feedEmpty });
     });
     return undefined;
   }
@@ -497,6 +515,9 @@ const server = createServer((request, response) => {
   }
 
   if (url.pathname === "/v1/storefront/doctor/events") {
+    if (url.searchParams.get("tense") !== "past") {
+      lastFeedCookie = request.headers.cookie ?? "";
+    }
     if (feedFailing) return json(response, 500, { status: 500 });
     if (url.searchParams.get("tense") === "past") {
       // «Прошедшие» widens BACKWARD by a count step: `from` moves, `to` stays
@@ -547,7 +568,9 @@ const server = createServer((request, response) => {
     // (`feedWhere`).
     const matched = ALL_DAYS.map((group) => ({
       ...group,
-      items: group.items.filter((item) => matchesFacets(item, url)),
+      items: group.items.filter(
+        (item) => !feedEmpty && matchesFacets(item, url),
+      ),
     }));
     const from = url.searchParams.get("from") ?? DEFAULT_FROM;
     // Every matching event from `from` on, soonest first, with its day group.

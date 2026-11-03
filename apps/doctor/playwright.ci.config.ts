@@ -71,6 +71,9 @@ export default defineConfig({
     "register-direct.spec.ts",
     "login-return-context.spec.ts",
     "events-*.spec.ts",
+    // 017 EARS-9 (#1485): the home nearest-events block reads the events
+    // stand-in's feed, so it rides the events tier beside its double.
+    "home-events.spec.ts",
     // #1955: the signed-in redirect and the login return-context copy are both
     // server reads against an api — they ride the return-context tier.
     "login-arrival.spec.ts",

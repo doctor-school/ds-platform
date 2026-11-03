@@ -44,6 +44,13 @@ export const DOCTOR_EVENTS_STOREFRONT = {
 } satisfies EventsStorefrontHostConfig;
 
 /**
+ * How many cards the doctor home's nearest events show (017 EARS-9, #1485):
+ * the home mounts the events page's own feed block (`@ds/events-storefront/feed`)
+ * over `DOCTOR_EVENTS_STOREFRONT`, capped to this many.
+ */
+export const DOCTOR_HOME_FEED_LIMIT = 3;
+
+/**
  * What the doctor storefront states about itself so the ONE event page
  * (`@ds/event-page`) can serve it at `/events/:slug` (#2072, epic #2020 wave 3;
  * gate §4.4). DATA only: the storefront read path, the one cookie the page read

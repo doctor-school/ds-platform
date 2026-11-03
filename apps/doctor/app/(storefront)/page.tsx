@@ -1,19 +1,31 @@
 import { headers } from "next/headers";
+import { EventsFeed } from "@ds/events-storefront/feed";
+import { SectionHeading } from "@/components/section-heading";
 import { SpecialtyCatalog } from "@/components/specialty-catalog";
 import { StorefrontHero } from "@/components/storefront-hero";
+import {
+  DOCTOR_EVENTS_STOREFRONT,
+  DOCTOR_HOME_FEED_LIMIT,
+} from "@/lib/events-storefront.host-config";
 import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
+import { retryDoctorEventsBlock } from "./events/retry-block-action";
 
 /**
  * Doctor storefront root (`doctor.school/`, ADR-0015 §2) — a PAGE inside the 017
  * shell layout (`app/(storefront)/layout.tsx`), not a self-contained screen. The
  * header and footer are the layout's (EARS-1); a page-local copy is a defect.
  *
- * Two REAL blocks so far, in the canvas's own order: the hero (EARS-2 — kicker,
+ * Three REAL blocks so far, in the canvas's own order: the hero (EARS-2 — kicker,
  * headline, free-for-the-doctor sub-line, the evolutionary goal verbatim, and
  * the four scale counters bound to one computed read, LD-3), then the specialty
  * catalog (EARS-4/EARS-5 — Stage-A variant Б: search field, frequent set,
  * «Показать весь список — N») or, once a specialty is remembered, its collapsed
- * targeted row (EARS-6/EARS-7).
+ * targeted row (EARS-6/EARS-7), then the nearest events (EARS-9, #1485): the
+ * events page's own day feed block (`@ds/events-storefront/feed`, 019
+ * EARS-3/EARS-9) capped to `DOCTOR_HOME_FEED_LIMIT` cards with «Все события»,
+ * retried through the events page's own block-retry action. It reads the same
+ * feed with the relayed specialty cookie, so it is general before a choice and
+ * targeted after.
  *
  * The catalog is a SIBLING in ordinary page flow, not a wrapper and not a gate.
  * That placement is the requirement, not a layout preference: EARS-4 forbids a
@@ -34,7 +46,7 @@ import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
  * layout does it for the header), so this read adds no caching trade-off — and a
  * statically cached page would in any case serve one visitor's specialty to all.
  *
- * The remaining home blocks (EARS-9/10/11) and the ADR-0015 §2 stage-3 migration
+ * The remaining home blocks (EARS-10/11) and the ADR-0015 §2 stage-3 migration
  * of the marketing routes out of `apps/promo` still land later, which is why the
  * route stays registered `deferred` in `tools/lint/prod-surface-manifest.yaml`
  * against the epic tracking the full build — these blocks are real, the PAGE is
@@ -43,6 +55,9 @@ import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
  * The page owns the exactly-one-non-empty-`h1` the axe gate asserts: it lives in
  * the hero, and the shell — which wraps many routes — carries none.
  */
+/** The canvas heading of the home's events section (`doctor-home.dc.html` «d-home · события»). */
+const EVENTS_HEADING = "Ближайшие события";
+
 export default async function DoctorHomePage() {
   const remembered = await resolveRememberedSpecialty(await headers());
 
@@ -53,6 +68,20 @@ export default async function DoctorHomePage() {
         actor={remembered.actor}
         initialChoice={remembered.choice}
       />
+      <section
+        aria-labelledby="home-events-heading"
+        className="my-11 px-4 layout:my-20 layout:px-12"
+        data-testid="home-events"
+      >
+        <div className="mx-auto w-full max-w-content">
+          <SectionHeading id="home-events-heading">{EVENTS_HEADING}</SectionHeading>
+          <EventsFeed
+            config={DOCTOR_EVENTS_STOREFRONT}
+            limit={DOCTOR_HOME_FEED_LIMIT}
+            retry={retryDoctorEventsBlock}
+          />
+        </div>
+      </section>
     </>
   );
 }

@@ -316,6 +316,7 @@ export async function FeedSection({
   kinds,
   request,
   retry,
+  limit,
 }: {
   config: EventsStorefrontHostConfig;
   query: RawQueryRecord;
@@ -328,6 +329,8 @@ export async function FeedSection({
   request: ReadRequest;
   /** The host's block retry: the failed feed's «Повторить» re-runs the feed read alone. */
   retry: EventsBlockRetryAction;
+  /** A cap on the shown cards — a home's nearest events (017 EARS-9); none on the events page. */
+  limit?: number;
 }) {
   const [read, registered] = await Promise.all([feed, mine]);
   return FeedBlock({
@@ -342,6 +345,7 @@ export async function FeedSection({
     kinds: () => kinds,
     request,
     retry,
+    ...(limit === undefined ? {} : { limit }),
   });
 }
 
@@ -349,6 +353,11 @@ export async function FeedSection({
  * The day feed from its read — the block its «Повторить» re-renders (019
  * EARS-9, #2832). The viewer's registered marks arrive as data from the
  * page's «Мои события» read, so a retry re-runs the feed read alone.
+ *
+ * With a `limit` (017 EARS-9, #1485) the same read renders its first `limit`
+ * cards and, in place of the forward «Показать ещё», one «Все события» link to
+ * the full listing; the retry it binds carries the cap, so a recovered block
+ * stays capped.
  */
 export async function FeedBlock({
   config,
@@ -359,6 +368,7 @@ export async function FeedBlock({
   kinds,
   request,
   retry,
+  limit,
 }: {
   config: EventsStorefrontHostConfig;
   query: RawQueryRecord;
@@ -368,6 +378,7 @@ export async function FeedBlock({
   kinds: KindBook;
   request: ReadRequest;
   retry: EventsBlockRetryAction;
+  limit?: number;
 }) {
   const tense = feedTenseOf(query);
   if (!read.ok) {
@@ -377,6 +388,7 @@ export async function FeedBlock({
           block: "feed",
           raw: query,
           registeredSlugs: [...registeredSlugs],
+          ...(limit === undefined ? {} : { limit }),
         })}
       >
         <BlockError
@@ -388,7 +400,12 @@ export async function FeedBlock({
     );
   }
   const page = read.value;
-  const more = showMoreHref(config.routes.listing, query, page.horizon);
+  const cards =
+    limit === undefined ? page.cards : page.cards.slice(0, limit);
+  const more =
+    limit === undefined
+      ? showMoreHref(config.routes.listing, query, page.horizon)
+      : config.routes.listing;
   const empty = feedReadsEmpty(page)
     ? await readEmptyFeedState(
         config,
@@ -404,17 +421,20 @@ export async function FeedBlock({
     <>
       <DayAnchorScroll day={rawQueryScalar(query.day) ?? null} />
       <FeedList
-        cards={page.cards}
+        cards={cards}
         tense={tense}
         registeredSlugs={registeredSlugs}
         routes={config.routes}
-        remaining={page.remaining}
+        remaining={page.remaining + page.cards.length - cards.length}
         showMore={
           more === null
             ? null
             : {
                 href: more,
-                label: showMoreLabel(page.nextBatch, page.remaining, FEED_COPY),
+                label:
+                  limit === undefined
+                    ? showMoreLabel(page.nextBatch, page.remaining, FEED_COPY)
+                    : FEED_COPY.feed.allEvents,
               }
         }
         empty={empty}

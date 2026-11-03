@@ -932,17 +932,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the admin submits an event-kind mutation carrying a slug
     Then the mutation is rejected
 
-  @EARS-26 @failure
-  Scenario: An event without a valid kind is refused
-    When the admin saves an event with no kind, an unknown kind or a retired kind
-    Then the event contract rejects the write
-
-  @EARS-26 @failure
-  Scenario: A format the kind does not allow is refused
-    Given the published kind «Конгресс» allows the formats offline and hybrid
-    When the admin saves an event of kind «Конгресс» with the format online
-    Then the event contract rejects the write with a field error on the format
-
   @EARS-27 @happy
   Scenario: The dictionary starts with the five seed kinds
     When the forward migration introducing event kinds has run
@@ -954,11 +943,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | Встреча клуба | online, offline, hybrid |
       | Мастер-класс  | offline, hybrid         |
     And every existing event references exactly one kind
-
-  @EARS-29 @failure
-  Scenario: An event without a valid audience is refused
-    When the admin saves an event with no audience or an unknown audience
-    Then the event contract rejects the write
 
   @EARS-29 @happy
   Scenario: The forward migration applies the reviewed row-by-row mapping
@@ -1148,3 +1132,25 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       And both active values render as chips
       And Reset all clears them
       And no action with no possible effect is enabled
+
+  @event-classification-refusals
+  Rule: An operator cannot save an invalid event classification
+
+    Background:
+      Given a platform_admin signed in to the admin
+
+    @EARS-26 @failure
+    Scenario: An event without a valid kind is refused
+      When the admin saves an event with no kind, an unknown kind or a retired kind
+      Then the event contract rejects the write
+
+    @EARS-26 @failure
+    Scenario: A format the kind does not allow is refused
+      Given the published kind «Конгресс» allows the formats offline and hybrid
+      When the admin saves an event of kind «Конгресс» with the format online
+      Then the event contract rejects the write with a field error on the format
+
+    @EARS-29 @failure
+    Scenario: An event without a valid audience is refused
+      When the admin saves an event with no audience or an unknown audience
+      Then the event contract rejects the write

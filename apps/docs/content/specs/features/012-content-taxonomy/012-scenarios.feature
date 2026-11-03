@@ -641,11 +641,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
         | not a UUID                | 400    | IDEMPOTENCY_KEY_INVALID    |
         | non-canonical UUID text   | 400    | IDEMPOTENCY_KEY_INVALID    |
 
-    @EARS-16 @EARS-17 @happy
-    Scenario: Create methods require no invented aggregate precondition
-      Given a valid entity create and a valid relationship create each have a new canonical UUID Idempotency-Key
-      When each POST is sent without If-Match
-      Then each create may succeed and returns its representation ETag and Location when applicable
 
     @EARS-16 @EARS-17 @failure
     Scenario Outline: Conditional mutation methods require the exact relevant ETag
@@ -663,12 +658,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
         | remove-content  | target ETag   |
         | replace-curator | project ETag  |
 
-    @EARS-17 @happy
-    Scenario: Idempotent replay preserves the original representation metadata
-      Given an active completed Idempotency-Key whose response stored status, body, ETag and Location
-      And the resource has since advanced beyond that stored ETag
-      When the same actor repeats the same route and payload with that key
-      Then the original status, body, ETag and Location are replayed without another mutation or audit row
 
     @EARS-17 @failure
     Scenario: One idempotency UUID is globally reserved across actors routes and expiry
@@ -680,13 +669,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       Then the permanently retained key still returns 409 IDEMPOTENCY_KEY_REUSED before fingerprint comparison
       And no retained actor identifier method route payload or response is needed to enforce the reservation
 
-    @EARS-17 @happy
-    Scenario: Optimistic concurrency prevents a lost write
-      Given another row is at version 3
-      When two different updates both submit If-Match version 3
-      Then exactly one succeeds and increments the row to version 4
-      And the other returns 412 PRECONDITION_FAILED without mutation
-      And the successful mutation has one attributed feature-010 audit record
 
     @EARS-17 @failure
     Scenario Outline: An idempotency key cannot authorize different semantic input
@@ -1160,3 +1142,30 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       When CreateExpert or LinkExpertUser is called with that unlinked User
       Then one Expert references that User through the same command model
       And a second ownership attempt is refused with 409 USER_EXPERT_CONFLICT
+
+  @taxonomy-protocol-contracts
+  Rule: Taxonomy commands preserve their representation and version contract
+
+    Background:
+      Given a platform_admin operator in the admin app
+
+    @EARS-16 @EARS-17 @happy
+    Scenario: Create methods require no invented aggregate precondition
+      Given a valid entity create and a valid relationship create each have a new canonical UUID Idempotency-Key
+      When each POST is sent without If-Match
+      Then each create may succeed and returns its representation ETag and Location when applicable
+
+    @EARS-17 @happy
+    Scenario: Idempotent replay preserves the original representation metadata
+      Given an active completed Idempotency-Key whose response stored status, body, ETag and Location
+      And the resource has since advanced beyond that stored ETag
+      When the same actor repeats the same route and payload with that key
+      Then the original status, body, ETag and Location are replayed without another mutation or audit row
+
+    @EARS-17 @happy
+    Scenario: Optimistic concurrency prevents a lost write
+      Given another row is at version 3
+      When two different updates both submit If-Match version 3
+      Then exactly one succeeds and increments the row to version 4
+      And the other returns 412 PRECONDITION_FAILED without mutation
+      And the successful mutation has one attributed feature-010 audit record

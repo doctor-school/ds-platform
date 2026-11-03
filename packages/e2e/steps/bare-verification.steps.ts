@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   AUTH_REQUEST_PARAM,
   isSignInHostForm,
@@ -142,7 +143,7 @@ When(
     const state = arrival(page);
     await arrive(state.page, new URL("/verify", world.hostBaseUrl).toString());
     await state.page.waitForURL((url) => isSignInHostForm(url));
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
   },
 );
 
@@ -188,7 +189,7 @@ When(
     target.searchParams.set("returnTo", RETURN_TO);
     await arrive(state.page, target.toString());
     await state.page.waitForURL((url) => isSignInHostForm(url));
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
   },
 );
 

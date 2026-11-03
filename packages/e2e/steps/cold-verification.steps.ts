@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   AUTH_REQUEST_PARAM,
   isSignInHostForm,
@@ -144,7 +145,7 @@ When(
       response?.request().isNavigationRequest(),
       "full document navigation",
     ).toBe(true);
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
   },
 );
 
@@ -320,7 +321,7 @@ When(
     await guest.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
       waitUntil: "load",
     });
-    await guest.waitForLoadState("networkidle");
+    await waitForClientReady(guest);
     await assertNoPrivateRegistrationAccess(guest, "", state);
     await inputSecret(
       guest.locator('input[autocomplete="username"]'),

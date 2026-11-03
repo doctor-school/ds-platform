@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
@@ -174,7 +175,7 @@ Given(
         "owned registration verification accepted",
       ).toBe(200);
       await owned.waitForURL((url) => url.pathname === "/account");
-      await owned.waitForLoadState("networkidle");
+      await waitForClientReady(owned);
       await assertSecureSession(owned, verified.response, world.hostBaseUrl);
       await identity(owner);
       const cookie = (await context.cookies()).find(
@@ -205,7 +206,7 @@ When(
         ).toString(),
         { waitUntil: "load" },
       );
-      await owner.page.waitForLoadState("networkidle");
+      await waitForClientReady(owner.page);
       await guest(owner);
       await expect(owner.page.getByTestId("login-method-otp")).toHaveAttribute(
         "aria-selected",
@@ -341,8 +342,10 @@ Then(
           request.channel === "email" &&
           request.identifier === owner.email &&
           request.code === owner.code;
-        authenticated =
-          storefrontCallbackAcknowledgement(signedIn.body, world.hostBaseUrl);
+        authenticated = storefrontCallbackAcknowledgement(
+          signedIn.body,
+          world.hostBaseUrl,
+        );
       } catch {
         /* Assertions project only booleans. */
       }
@@ -356,7 +359,7 @@ Then(
           url.origin === new URL(world.hostBaseUrl).origin &&
           url.pathname === "/account",
       );
-      await owner.page.waitForLoadState("networkidle");
+      await waitForClientReady(owner.page);
       await assertSecureSession(
         owner.page,
         signedIn.response,
@@ -368,7 +371,7 @@ Then(
         (c) => c.name === SESSION,
       )?.value;
       await owner.page.reload({ waitUntil: "load" });
-      await owner.page.waitForLoadState("networkidle");
+      await waitForClientReady(owner.page);
       await identity(owner);
       expect(
         Boolean(cookie) &&

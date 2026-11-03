@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   isAuthCommandPath,
   isSignInHostForm,
@@ -191,7 +192,7 @@ Given(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await assertSecureSession(owned, accepted.response, world.hostBaseUrl);
     await owned.getByTestId("profile-name-edit").click();
     await inputSecret(
@@ -288,7 +289,7 @@ When(
     await guest.goto(registrationUrl(world.hostBaseUrl, "/account"), {
       waitUntil: "load",
     });
-    await guest.waitForLoadState("networkidle");
+    await waitForClientReady(guest);
     const repeated = {
       email: state.email,
       password: state.replacementPassword,
@@ -339,7 +340,7 @@ When(
     await guest.waitForURL(
       (url) => isSignInHostForm(url) && url.pathname === "/verify",
     );
-    await guest.waitForLoadState("networkidle");
+    await waitForClientReady(guest);
     expect(
       new URL(guest.url()).searchParams.get("email") === state.email,
       "code step targets owned address",
@@ -463,7 +464,7 @@ Then(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertSecureSession(
       state.page,
       state.accepted.response,
@@ -512,7 +513,7 @@ Then(
       await guest.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
         waitUntil: "load",
       });
-      await guest.waitForLoadState("networkidle");
+      await waitForClientReady(guest);
       await assertNoPrivateRegistrationAccess(guest, "", account);
       await inputSecret(
         guest.locator('input[autocomplete="username"]'),
@@ -565,7 +566,7 @@ Then(
             url.origin === new URL(world.hostBaseUrl).origin &&
             url.pathname === "/account",
         );
-        await guest.waitForLoadState("networkidle");
+        await waitForClientReady(guest);
         await assertSecureSession(
           guest,
           submitted.response,

@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -160,7 +161,7 @@ Given(
     const verified = await verification;
     expect(verified.response.status(), "owned email verified").toBe(200);
     await owned.waitForURL((url) => url.pathname === "/account");
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await assertSecureSession(owned, verified.response, world.hostBaseUrl);
     await confirmOwnedPhone(owned, { phone: originalPhone, sink });
     const initial = await identity(owned);
@@ -267,7 +268,7 @@ Then(
     await expect(state.page.getByTestId("profile-phone-code")).toHaveCount(0);
     await assertSameIdentity(state, false, world.hostBaseUrl);
     await state.page.reload({ waitUntil: "load" });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await expect(
       state.page.getByTestId("profile-phone-verified"),
     ).toBeVisible();

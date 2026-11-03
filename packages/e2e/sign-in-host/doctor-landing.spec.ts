@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { randomUUID } from "node:crypto";
 
 import { golden } from "@ds/db/seed/golden";
@@ -151,8 +152,7 @@ async function completeRegistrationFromHere(
   page: Page,
   account: OwnedCredentials,
 ) {
-  await page.waitForLoadState("load");
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   expect(
     isSignInHostForm(page.url()),
     "the storefront entry led to the sign-in host form",
@@ -402,7 +402,7 @@ test.describe("021 #1945: the doctor host's sign-in landing", () => {
 
     watchStorefrontEntries(page, doctorBase());
     await page.goto(arrival("/login", LIVE), { waitUntil: "load" });
-    await page.waitForLoadState("networkidle");
+    await waitForClientReady(page);
     expect(isSignInHostForm(page.url())).toBe(true);
     expectEnteredThrough(page, doctorBase(), {
       pathname: "/login",

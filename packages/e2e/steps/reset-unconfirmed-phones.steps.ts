@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -123,7 +124,7 @@ Given(
       200,
     );
     await state.owner.waitForURL((url) => url.pathname === "/account");
-    await state.owner.waitForLoadState("networkidle");
+    await waitForClientReady(state.owner);
     await assertSecureSession(
       state.owner,
       verified.response,
@@ -202,7 +203,7 @@ When(
     for (const target of state.targets) {
       const guest = target.guest!;
       await guest.goto(`${world.hostBaseUrl}/reset`, { waitUntil: "load" });
-      await guest.waitForLoadState("networkidle");
+      await waitForClientReady(guest);
       await inputSecret(
         guest.getByLabel("Электронная почта или телефон", { exact: true }),
         target.phone,

@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   hostCommand,
   isAuthCommandPath,
@@ -146,7 +147,7 @@ Given(
     await owned.goto(new URL(path, world.hostBaseUrl).toString(), {
       waitUntil: "load",
     });
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     if (surface === "reset-complete") {
       await inputSecret(
         owned.locator('input[autocomplete="username"]'),
@@ -245,7 +246,7 @@ Then(
   "revealing issued no registration, password-login or reset-completion request and grants no private access",
   async ({ page }) => {
     const state = visitor(page);
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     expect(state.otherAuthCommands, "no credential submission").toBe(0);
     const reset = state.surface === "reset-complete";
     expect(state.resetRequests, "only the reset prerequisite is sent").toBe(

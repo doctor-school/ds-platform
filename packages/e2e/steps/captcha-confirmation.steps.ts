@@ -1,4 +1,8 @@
-import { isSignInHostForm, signInHostApiPath } from "../lib/sign-in-host-api.js";
+import { waitForClientReady } from "../lib/page-ready.js";
+import {
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -113,7 +117,7 @@ function resendId(v: Visitor) {
 }
 async function open(page: Page, target: string) {
   await page.goto(target, { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
 }
 async function instrument(v: Visitor) {
   // 003 EARS-17: BOTOFF proves distinct frontend token bytes; BOTON uses the
@@ -424,7 +428,7 @@ Given(
               url.origin === new URL(world.hostBaseUrl).origin &&
               url.pathname === "/account",
           );
-          await v.page.waitForLoadState("networkidle");
+          await waitForClientReady(v.page);
           await assertSecureSession(
             v.page,
             accepted.response,
@@ -491,7 +495,7 @@ When(
           url.origin === new URL(world.hostBaseUrl).origin &&
           url.pathname === "/account",
       );
-      await v.page.waitForLoadState("networkidle");
+      await waitForClientReady(v.page);
       await assertSecureSession(v.page, accepted.response, world.hostBaseUrl);
       const identity = await v.page.evaluate(async (email) => {
         const response = await fetch("/v1/me/profile", {

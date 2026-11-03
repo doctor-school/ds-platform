@@ -1,3 +1,4 @@
+import { waitForClientReady, settleClientTurn } from "../lib/page-ready.js";
 import {
   isAuthCommandPath,
   signInHostApiPath,
@@ -123,7 +124,7 @@ async function protectedSend(
     response.ok(),
     `real protected send ${label}: path=${pathname}, status=${response.status()}, code=${errorCode}`,
   ).toBe(true);
-  await page.waitForLoadState("networkidle");
+  await settleClientTurn(page);
   expect(
     sends.length,
     "first success resumes exactly one captured action",
@@ -183,8 +184,9 @@ Given(
     await installOnDemandProvider(owned);
     await installClock(owned);
     await owned.goto(`${world.hostBaseUrl}/register`, {
-      waitUntil: "networkidle",
+      waitUntil: "load",
     });
+    await waitForClientReady(owned);
     await idle(owned, state);
   },
 );
@@ -213,8 +215,9 @@ When(
         await installClock(owned);
         await owned.goto(
           `${world.hostBaseUrl}/${variant.endsWith("login") ? "login?method=code" : "reset"}`,
-          { waitUntil: "networkidle" },
+          { waitUntil: "load" },
         );
+        await waitForClientReady(owned);
         await idle(owned, state);
       }
       const sends: Send[] = [];

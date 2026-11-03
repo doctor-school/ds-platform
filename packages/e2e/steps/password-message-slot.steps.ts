@@ -1,3 +1,4 @@
+import { waitForClientReady, settleClientTurn } from "../lib/page-ready.js";
 import {
   isSignInHostForm,
   signInHostApiPath,
@@ -111,7 +112,7 @@ Given(
       waitUntil: "load",
     });
     await expect(page.getByTestId("registration-form")).toBeVisible();
-    await page.waitForLoadState("networkidle");
+    await waitForClientReady(page);
     const field = passwordField(page);
     await expect(field).toHaveValue("");
     await expect(field).not.toBeFocused();
@@ -154,7 +155,7 @@ When(
       (await formInteractions(page)).filter((type) => type === "submit"),
       "one normal form submission was attempted",
     ).toHaveLength(1);
-    await page.waitForLoadState("networkidle");
+    await settleClientTurn(page);
   },
 );
 

@@ -1,5 +1,9 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
-import { isSignInHostForm, signInHostApiPath } from "../lib/sign-in-host-api.js";
+import {
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import {
   expectEnteredThrough,
   watchStorefrontEntries,
@@ -174,7 +178,7 @@ When(
     login.searchParams.set("returnTo", EXTERNAL);
     watchStorefrontEntries(state.page, state.base);
     await state.page.goto(login.toString(), { waitUntil: "load" });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     // #3172: the credential form is the sign-in host's, entered through
     // Academy's own entry with the external target — never the external host.
     expect(
@@ -202,7 +206,10 @@ When(
     expect(
       {
         status: accepted.response.status(),
-        acknowledgementMatches: storefrontCallbackAcknowledgement(accepted.body, world.hostBaseUrl),
+        acknowledgementMatches: storefrontCallbackAcknowledgement(
+          accepted.body,
+          world.hostBaseUrl,
+        ),
       },
       "real password login succeeds",
     ).toEqual({ status: 200, acknowledgementMatches: true });
@@ -230,7 +237,7 @@ Then(
   "Academy uses its current local default landing with the same private owner and attempts no external target request",
   async ({ page, world }) => {
     const state = journey(page);
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     expect(
       new URL(state.page.url()).origin === new URL(state.base).origin &&
         new URL(state.page.url()).pathname === world.host.eventsPath,

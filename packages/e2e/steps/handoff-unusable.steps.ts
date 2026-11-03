@@ -1,4 +1,6 @@
-import { handoffCommandWithoutReference,
+import { settleClientTurn } from "../lib/page-ready.js";
+import {
+  handoffCommandWithoutReference,
   AUTH_REQUEST_PARAM,
   isAuthCommandPath,
   isSignInHostForm,
@@ -252,7 +254,7 @@ When(
         ),
         "fallback discloses no owned account address",
       ).toBe(false);
-      await guest.waitForLoadState("networkidle");
+      await settleClientTurn(guest);
       await assertNoAddressedMail(mail, mailpit, state.email, checkpoint);
       await assertGuest(guest);
       expect(

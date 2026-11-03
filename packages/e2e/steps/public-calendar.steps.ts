@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { isGoldenUuid } from "@ds/db/seed/golden";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
@@ -38,8 +39,7 @@ async function read<T>(request: APIRequestContext, path: string): Promise<T> {
 }
 async function hydrated(page: Page) {
   // 004 month-fidelity: server markup precedes the picker/day handlers.
-  await page.waitForLoadState("load");
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
 }
 async function selected(page: Page, month: string) {
   await expect(page).toHaveURL(

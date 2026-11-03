@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
@@ -179,7 +180,7 @@ Given(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await assertSecureSession(owned, accepted.response, world.hostBaseUrl);
     await assertOwnedVerifiedIdentity(state);
     state.priorCookies = (await context.cookies())
@@ -284,7 +285,7 @@ When(
     await state.page.goto(`${world.hostBaseUrl}/reset?returnTo=%2Faccount`, {
       waitUntil: "load",
     });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await inputSecret(
       state.page.locator('input[autocomplete="username"]'),
       state.email,
@@ -400,7 +401,7 @@ Then(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertSecureSession(
       state.page,
       accepted.response,
@@ -412,7 +413,7 @@ Then(
       (entry) => entry.name === SESSION,
     )?.value;
     await state.page.reload({ waitUntil: "load" });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertOwnedVerifiedIdentity(state);
     expect(
       cookie !== undefined &&
@@ -448,7 +449,7 @@ Then(
       await guest.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
         waitUntil: "load",
       });
-      await guest.waitForLoadState("networkidle");
+      await waitForClientReady(guest);
       await inputSecret(
         guest.locator('input[autocomplete="username"]'),
         state.email,

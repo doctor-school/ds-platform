@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -68,7 +69,8 @@ async function open(
   await page.addInitScript(() => localStorage.removeItem("ds-theme"));
   await page.emulateMedia({ colorScheme: initial });
   await installFailureProvider(page);
-  await page.goto(`${base}/${path}`, { waitUntil: "networkidle" });
+  await page.goto(`${base}/${path}`, { waitUntil: "load" });
+  await waitForClientReady(page);
   expect(
     await page.evaluate(() => localStorage.getItem("ds-theme")),
   ).toBeNull();

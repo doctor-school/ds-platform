@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   hostCommand,
   isSignInHostForm,
@@ -84,7 +85,7 @@ Given(
       "fresh owned phone has no prior SMS in the real sink",
     ).toBe(0);
     await visitor.goto(`${world.hostBaseUrl}/reset`, { waitUntil: "load" });
-    await visitor.waitForLoadState("networkidle");
+    await waitForClientReady(visitor);
     await expect(visitor.getByText(HINT, { exact: true })).toHaveCount(0);
     await assertNoPrivateRegistrationAccess(visitor, "", state);
   },
@@ -251,7 +252,7 @@ Then(
     await expect(
       state.visitor.getByTestId("reset-request-submit"),
     ).toBeVisible();
-    await state.visitor.waitForLoadState("networkidle");
+    await waitForClientReady(state.visitor);
     expect(state.commands).toEqual([
       signInHostApiPath("/v1/auth/password/reset"),
     ]);

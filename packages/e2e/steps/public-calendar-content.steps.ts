@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { golden, isGoldenUuid } from "@ds/db/seed/golden";
 import { expect, type Page } from "@playwright/test";
 
@@ -28,8 +29,7 @@ function byDay(entries: Entry[]) {
   return days;
 }
 async function settled(page: Page) {
-  await page.waitForLoadState("load");
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
 }
 async function open(page: Page, path: string) {
   const response = await page.goto(path, { waitUntil: "domcontentloaded" });

@@ -1,3 +1,4 @@
+import { waitForClientReady } from "./page-ready.js";
 import {
   expect,
   type Locator,
@@ -351,7 +352,7 @@ export async function registerOwnedCredentials(
   // #3172 — the caller can prove the return path by the entry it rode.
   watchStorefrontEntries(page, base);
   await page.goto(registrationUrl(base, returnTo), { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   return submitOwnedRegistration(page, base, account);
 }
 
@@ -388,7 +389,7 @@ export async function submitOwnedRegistration(
   const { response, body } = await registered;
   expect(response.ok(), "owned account registration accepted").toBe(true);
   await page.waitForURL((url) => url.pathname === "/verify");
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   const code = await fetchRecoveryCode(
     nativeRecoveryMail(),
     mailbox,

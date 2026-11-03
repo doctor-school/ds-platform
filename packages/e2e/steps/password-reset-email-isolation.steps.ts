@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
@@ -153,7 +154,7 @@ async function passwordLogin(
   password: string,
 ) {
   await page.goto(`${base}/login?returnTo=%2Faccount`, { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   await inputSecret(
     page.locator('input[autocomplete="username"]'),
     state.email,
@@ -291,7 +292,7 @@ Given(
       await reset.goto(`${world.hostBaseUrl}/reset?returnTo=%2Faccount`, {
         waitUntil: "load",
       });
-      await reset.waitForLoadState("networkidle");
+      await waitForClientReady(reset);
       await inputSecret(
         reset.locator('input[autocomplete="username"]'),
         account.email,
@@ -409,7 +410,7 @@ Then(
     const state = journey(page);
     for (const account of state.accounts) {
       await account.owner!.reload({ waitUntil: "load" });
-      await account.owner!.waitForLoadState("networkidle");
+      await waitForClientReady(account.owner!);
       await sameOwner(account.owner!, account);
       expect(
         (await account.owner!.context().cookies()).find(
@@ -538,7 +539,7 @@ Then(
         account.replacement,
       );
       await accepted.reload({ waitUntil: "load" });
-      await accepted.waitForLoadState("networkidle");
+      await waitForClientReady(accepted);
       await sameOwner(accepted, account);
     }
     expect(

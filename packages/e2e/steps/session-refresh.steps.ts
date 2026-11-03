@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -150,7 +151,7 @@ Given(
       "actual addressed email code verified",
     ).toBe(200);
     await state.page.waitForURL((url) => url.pathname === "/account");
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertSecureSession(state.page, verified.response, world.hostBaseUrl);
     await assertSameOwner(state, world.hostBaseUrl);
   },
@@ -192,7 +193,7 @@ When(
     ).toBe(true);
     await assertSameOwner(state, world.hostBaseUrl);
     await state.page.reload({ waitUntil: "load" });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertSameOwner(state, world.hostBaseUrl);
   },
 );

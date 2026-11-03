@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   isAuthCommandPath,
   isSignInHostForm,
@@ -317,7 +318,7 @@ When(
       response?.request().isNavigationRequest(),
       "actual document reload",
     ).toBe(true);
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await expect(
       state.page.locator('input[autocomplete="one-time-code"]'),
     ).toBeVisible();
@@ -332,7 +333,7 @@ When(
     await state.page.waitForURL(
       (url) => isSignInHostForm(url) && url.pathname === "/register",
     );
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await expect(
       state.page.locator('input[autocomplete="new-password"]'),
     ).toBeVisible();

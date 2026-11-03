@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
@@ -183,7 +184,7 @@ Given(
       200,
     );
     await owned.waitForURL((url) => url.pathname === "/account");
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await assertSecureSession(owned, verified.response, world.hostBaseUrl);
     await confirmOwnedPhone(owned, { phone: state.phone, sink });
     await sameOwner(state);
@@ -208,7 +209,7 @@ When(
       ).toString(),
       { waitUntil: "load" },
     );
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await expect(
       state.page.getByTestId("login-method-password"),
     ).toHaveAttribute("aria-selected", "true");
@@ -272,7 +273,7 @@ When(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertSecureSession(
       state.page,
       accepted.response,
@@ -288,7 +289,7 @@ Then(
   async ({ page }) => {
     const state = journey(page);
     await state.page.reload({ waitUntil: "load" });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await expect(
       state.page.getByTestId("profile-phone-verified"),
     ).toBeVisible();

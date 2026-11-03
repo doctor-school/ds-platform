@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
@@ -156,7 +157,7 @@ async function passwordLogin(
   password: string,
 ) {
   await page.goto(`${base}/login?returnTo=%2Faccount`, { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   await inputSecret(
     page.locator('input[autocomplete="username"]'),
     state.email,
@@ -251,7 +252,7 @@ Given(
     await reset.goto(`${world.hostBaseUrl}/reset?returnTo=%2Faccount`, {
       waitUntil: "load",
     });
-    await reset.waitForLoadState("networkidle");
+    await waitForClientReady(reset);
     await inputSecret(
       reset.locator('input[autocomplete="username"]'),
       state.phone,
@@ -326,7 +327,7 @@ Given(
         url.origin === new URL(world.hostBaseUrl).origin &&
         url.pathname === "/account",
     );
-    await reset.waitForLoadState("networkidle");
+    await waitForClientReady(reset);
     await assertSecureSession(reset, completed.response, world.hostBaseUrl);
     await sameOwner(reset, state);
     const cookie = (await reset.context().cookies()).find(
@@ -355,7 +356,7 @@ When(
     // request; the guest is then back on the storefront, whose session and
     // profile the replay must not have granted.
     await guest.goto(`${world.hostBaseUrl}/`, { waitUntil: "load" });
-    await guest.waitForLoadState("networkidle");
+    await waitForClientReady(guest);
     await noPrivateAccess(guest);
     // 003 EARS-12/53: the replay must exercise the consumed challenge.
     const refused = await replayOnHostForm(
@@ -391,7 +392,7 @@ When(
     ).toBe(1);
     const recovered = state.recovered!;
     await recovered.reload({ waitUntil: "load" });
-    await recovered.waitForLoadState("networkidle");
+    await waitForClientReady(recovered);
     await sameOwner(recovered, state);
     expect(
       (await recovered.context().cookies()).find((c) => c.name === SESSION)
@@ -442,7 +443,7 @@ Then(
     await sameOwner(accepted, state);
     const recovered = state.recovered!;
     await recovered.reload({ waitUntil: "load" });
-    await recovered.waitForLoadState("networkidle");
+    await waitForClientReady(recovered);
     await sameOwner(recovered, state);
     expect(
       (await recovered.context().cookies()).find((c) => c.name === SESSION)

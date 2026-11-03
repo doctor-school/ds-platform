@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -141,7 +142,7 @@ Given(
         "owned email verification accepted",
       ).toBe(200);
       await owner.page.waitForURL((url) => url.pathname === "/account");
-      await owner.page.waitForLoadState("networkidle");
+      await waitForClientReady(owner.page);
       await assertSecureSession(
         owner.page,
         verified.response,

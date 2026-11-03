@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import {
   isAuthCommandPath,
@@ -150,7 +151,7 @@ Given(
       returnTo: "/account",
     }).toString();
     await owned.goto(url.toString(), { waitUntil: "load" });
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await owned.getByTestId("otp-channel-email").click();
     await inputSecret(owned.getByTestId("otp-identifier"), state.email);
     const mailbox =
@@ -236,7 +237,7 @@ When(
   "the participant opens the suggested phone editor, changes its masked value and cancels without requesting a code",
   async ({ page }) => {
     const state = prefill(page);
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     state.observeEditing = true;
     await state.page.getByTestId("profile-phone-action").click();
     const field = state.page.getByTestId("profile-phone-input");

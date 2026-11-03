@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -117,7 +118,7 @@ async function passwordSignIn(state: AbandonedPhone, base: string) {
   await state.page.goto(`${base}/login?returnTo=%2Faccount`, {
     waitUntil: "load",
   });
-  await state.page.waitForLoadState("networkidle");
+  await waitForClientReady(state.page);
   await inputSecret(
     state.page.locator('input[autocomplete="username"]'),
     state.email,
@@ -147,7 +148,7 @@ async function passwordSignIn(state: AbandonedPhone, base: string) {
   );
   expect(accepted.response.status(), "email password still signs in").toBe(200);
   await state.page.waitForURL((url) => url.pathname === "/account");
-  await state.page.waitForLoadState("networkidle");
+  await waitForClientReady(state.page);
   await assertSecureSession(state.page, accepted.response, base);
 }
 
@@ -226,7 +227,7 @@ Given(
     const verified = await pending;
     expect(verified.response.status(), "owned email verified").toBe(200);
     await owned.waitForURL((url) => url.pathname === "/account");
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await assertSecureSession(owned, verified.response, world.hostBaseUrl);
     await confirmOwnedPhone(owned, { phone: original, sink });
     await profile(state, true);
@@ -249,7 +250,7 @@ Then(
   async ({ page, world }) => {
     const state = journey(page);
     await state.page.reload({ waitUntil: "load" });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await profile(state, false);
     await expect(state.page.getByTestId("profile-phone-verified")).toHaveCount(
       0,
@@ -265,7 +266,7 @@ Then(
         `${world.hostBaseUrl}/login?method=code&returnTo=%2Faccount`,
         { waitUntil: "load" },
       );
-      await state.page.waitForLoadState("networkidle");
+      await waitForClientReady(state.page);
       await state.page.getByTestId("otp-channel-sms").click();
       await inputSecret(state.page.getByTestId("otp-identifier"), phone);
       const after = await captureSmsCheckpoint(state.sink, phone);

@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { expect, type Locator, type Page } from "@playwright/test";
 
 import { baseUrlFor } from "../hosts.js";
@@ -93,9 +94,10 @@ async function bars(page: Page, button: Locator, name: string) {
 async function open(page: Page, origin: string) {
   expect(
     (
-      await page.goto(`${origin}/education-index`, { waitUntil: "networkidle" })
+      await page.goto(`${origin}/education-index`, { waitUntil: "load" })
     )?.status(),
   ).toBe(200);
+  await waitForClientReady(page);
   await expect(page).toHaveURL(`${origin}/education-index`);
   await expect(
     page.getByRole("heading", {
@@ -457,9 +459,10 @@ When(
           if (request.resourceType() === "stylesheet")
             failedStyles.push(new URL(request.url()).pathname);
         });
-        expect(
-          (await page.goto(route, { waitUntil: "networkidle" }))?.status(),
-        ).toBe(200);
+        expect((await page.goto(route, { waitUntil: "load" }))?.status()).toBe(
+          200,
+        );
+        await waitForClientReady(page);
         expect(new URL(page.url()).pathname).toBe(route);
         await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
         await expect(page.getByTestId("demo-plaque")).toBeVisible();

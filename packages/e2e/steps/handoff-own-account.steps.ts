@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import {
   isAuthCommandPath,
@@ -80,7 +81,7 @@ Given(
       returnTo: "/account",
     }).toString();
     await owned.goto(login.toString(), { waitUntil: "load" });
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await owned.getByTestId("otp-channel-email").click();
     await inputSecret(owned.getByTestId("otp-identifier"), state.email);
     const sentFrom = await captureAddressedMailCheckpoint(

@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   isAuthCommandPath,
   isSignInHostForm,
@@ -190,7 +191,7 @@ When(
     await state.page.goto(registrationUrl(world.hostBaseUrl, "/account"), {
       waitUntil: "load",
     });
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await inputSecret(
       state.page.locator('input[autocomplete="email"]'),
       state.email,
@@ -230,7 +231,7 @@ When(
     await state.page.waitForURL(
       (url) => isSignInHostForm(url) && url.pathname === "/verify",
     );
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     expect(
       new URL(state.page.url()).searchParams.get("email") === state.email,
       "second code step belongs to the same owned address",
@@ -383,7 +384,7 @@ Then(
       await guest.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
         waitUntil: "load",
       });
-      await guest.waitForLoadState("networkidle");
+      await waitForClientReady(guest);
       await assertNoPrivateRegistrationAccess(guest, "", account);
       await inputSecret(
         guest.locator('input[autocomplete="username"]'),

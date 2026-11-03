@@ -1,3 +1,4 @@
+import { waitForClientReady } from "./page-ready.js";
 import {
   expect,
   test,
@@ -132,7 +133,7 @@ export async function replayOnHostForm(
     { via: signInHostApiPath("/v1/auth/login") },
   );
   await page.goto(`${root}/`, { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   return sent;
 }
 
@@ -313,7 +314,7 @@ export async function provisionConfirmedAccount(
   try {
     const page = await context.newPage();
     await page.goto(`${origin}/register`, { waitUntil: "load" });
-    await page.waitForLoadState("networkidle");
+    await waitForClientReady(page);
     expect(
       isSignInHostForm(page.url()),
       `the ${host} storefront /register leads to the sign-in host form`,

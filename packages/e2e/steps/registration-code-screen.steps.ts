@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   isAuthCommandPath,
   isSignInHostForm,
@@ -161,7 +162,7 @@ Given(
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
     await owned.waitForURL((url) => url.pathname === "/account");
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await assertSecureSession(owned, accepted.response, world.hostBaseUrl);
     const identity = await owned.evaluate(async (email) => {
       const response = await fetch("/v1/me/profile", {
@@ -232,7 +233,7 @@ When(
       await owned.goto(registrationUrl(world.hostBaseUrl, "/account"), {
         waitUntil: "load",
       });
-      await owned.waitForLoadState("networkidle");
+      await waitForClientReady(owned);
       await inputSecret(owned.getByTestId("register-email"), visitor.email);
       await inputSecret(
         owned.getByTestId("register-password"),

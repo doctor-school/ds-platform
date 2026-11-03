@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -47,7 +48,7 @@ Given(
     refusals.set(page, state);
     await installCaptchaStub(context);
     await owned.goto(`${world.hostBaseUrl}/register`, { waitUntil: "load" });
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await inputSecret(
       owned.locator('input[autocomplete="email"]'),
       state.email,

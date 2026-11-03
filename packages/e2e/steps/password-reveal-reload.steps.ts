@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { createHash, randomUUID } from "node:crypto";
 import {
   expect,
@@ -121,7 +122,7 @@ Given(
     // what the later real reload re-enters.
     expect(isSignInHostForm(owned.url())).toBe(true);
     await owned.waitForURL((url) => new URL(url).pathname === "/register");
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
     await expect(field(state)).toBeVisible();
     await expect(toggle(state)).toBeEnabled();
     await assertToggle(state, false);
@@ -136,7 +137,7 @@ Given(
     }, SELECTION);
     await assertValueAndCaret(state);
     await assertNoPrivateRegistrationAccess(owned, "", state);
-    await owned.waitForLoadState("networkidle");
+    await waitForClientReady(owned);
   },
 );
 
@@ -285,7 +286,7 @@ When(
             );
           }),
       );
-      await state.page.waitForLoadState("networkidle");
+      await waitForClientReady(state.page);
       effects = await state.page.evaluate(() =>
         (window as RevealWindow).__revealEffects2905!.finish(),
       );
@@ -363,7 +364,7 @@ When(
       response?.request().isNavigationRequest(),
       "real document navigation",
     ).toBe(true);
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     expect(
       await state.page.evaluate(
         () => (window as RevealWindow).__revealDocument2905 === undefined,

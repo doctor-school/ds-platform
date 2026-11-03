@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
@@ -89,7 +90,7 @@ async function privatePage(browser: Browser, state: SmsReset): Promise<Page> {
 }
 async function open(page: Page, url: string): Promise<void> {
   await page.goto(url, { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
 }
 function post(page: Page, pathname: string): Promise<Response> {
   return page.waitForResponse(
@@ -185,7 +186,7 @@ Given(
     await input(earlier.locator('input[autocomplete="one-time-code"]'), code);
     expect((await verified).ok(), "registration code accepted").toBe(true);
     await earlier.waitForURL((url) => url.pathname === "/account");
-    await earlier.waitForLoadState("networkidle");
+    await waitForClientReady(earlier);
 
     await confirmOwnedPhone(earlier, { phone: state.phone, sink: state.sink });
     expect(await profile(earlier)).toEqual({

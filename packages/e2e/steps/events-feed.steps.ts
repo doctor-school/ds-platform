@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import {
   expect,
   type Locator,
@@ -73,8 +74,7 @@ function params(page: Page): URLSearchParams {
 
 /** Server-rendered links are live before their client handlers (#2253). */
 async function settle(page: Page): Promise<void> {
-  await page.waitForLoadState("load");
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
 }
 
 async function openFeed(page: Page, path: string): Promise<void> {

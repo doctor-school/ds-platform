@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, type APIResponse, type Page } from "@playwright/test";
@@ -49,7 +50,7 @@ async function open(
   await expect(page.getByTestId("storefront-hero")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   // 017 EARS-4/5: server markup can precede the catalog's client handlers.
-  await page.waitForLoadState("networkidle");
+  await waitForClientReady(page);
   await expect(catalog(page)).toHaveAttribute("data-state", expectedState);
   await expect(catalog(page)).not.toHaveAttribute("aria-busy", "true");
 }

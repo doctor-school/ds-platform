@@ -1,3 +1,4 @@
+import { waitForClientReady } from "../lib/page-ready.js";
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { randomUUID } from "node:crypto";
 import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
@@ -76,7 +77,7 @@ async function passwordAttempt(
   await state.page.goto(`${base}/login?returnTo=%2Faccount`, {
     waitUntil: "load",
   });
-  await state.page.waitForLoadState("networkidle");
+  await waitForClientReady(state.page);
   await inputSecret(
     state.page.locator('input[autocomplete="username"]'),
     state.email,
@@ -143,7 +144,7 @@ Given(
     const verified = await pending;
     expect(verified.response.status()).toBe(200);
     await state.page.waitForURL((url) => url.pathname === "/account");
-    await state.page.waitForLoadState("networkidle");
+    await waitForClientReady(state.page);
     await assertSecureSession(state.page, verified.response, world.hostBaseUrl);
     const { subject, ...evidence } = await identity(state);
     expect(evidence).toEqual({
@@ -240,7 +241,7 @@ When(
         }
         expect(tokenFree, "login acknowledgement carries no tokens").toBe(true);
         await state.page.waitForURL((url) => url.pathname === "/account");
-        await state.page.waitForLoadState("networkidle");
+        await waitForClientReady(state.page);
         await assertSecureSession(
           state.page,
           accepted.response,
@@ -272,7 +273,7 @@ Then(
       await state.page.goto(`${world.hostBaseUrl}/reset`, {
         waitUntil: "load",
       });
-      await state.page.waitForLoadState("networkidle");
+      await waitForClientReady(state.page);
       await inputSecret(
         state.page.locator('input[autocomplete="username"]'),
         state.email,

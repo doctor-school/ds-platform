@@ -15,15 +15,13 @@ import {
   type AdminWorld,
 } from "../support/fixtures";
 import { selectRelationshipCombobox } from "../support/relationship-combobox";
+import {
+  cleanupInventory,
+  mediaObservation,
+  type Cleanup,
+} from "../support/media-observation";
 
 type Project = { id: string; title: string };
-type Cleanup = {
-  id: string;
-  cleanup_kind: string;
-  object_key: string | null;
-  status: string;
-  execution_state: string;
-};
 type State = {
   eventId?: string;
   projects: Project[];
@@ -352,26 +350,41 @@ const IMAGES = [
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
 ];
-async function mediaSnapshot(project: Project) {
-  const rows = await retained(
-    "SELECT cover_ref,version,COALESCE((SELECT json_agg(j ORDER BY j.created_at,j.id) FROM (SELECT id,cleanup_kind,object_key,status,execution_state,created_at FROM media_cleanup_jobs WHERE entity_id=$1) j),'[]'::json) AS jobs FROM projects WHERE id=$1",
-    [project.id],
-  );
-  expect(rows).toHaveLength(1);
-  const jobs = rows[0]!.jobs as Cleanup[];
-  operation("owned media jobs", { projectId: project.id, jobs });
-  return {
-    ref: rows[0]!.cover_ref as string | null,
-    version: rows[0]!.version as number,
-    jobs,
-  };
+async function mediaRead<T>(read: (pool: Pool) => Promise<T>): Promise<T> {
+  if (!process.env.DATABASE_URL)
+    throw new Error("DATABASE_URL must select the Admin database under test");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+  try {
+    return await read(pool);
+  } finally {
+    await pool.end();
+  }
 }
-async function upload(page: Page, project: Project, image: number) {
+async function mediaSnapshot(
+  project: Project,
+  jobIds: string[],
+  beforeJobIds: string[] | null = null,
+) {
+  const snapshot = await mediaRead((pool) =>
+    mediaObservation(pool, project.id, jobIds, beforeJobIds, operation),
+  );
+  operation("owned media jobs", { projectId: project.id, jobs: snapshot.jobs });
+  return snapshot;
+}
+async function upload(
+  page: Page,
+  project: Project,
+  image: number,
+  jobIds: string[] = [],
+) {
   await page.setInputFiles("#cover", {
     name: `изображение-${image}.png`,
     mimeType: "image/png",
     buffer: Buffer.from(IMAGES[image]!, "base64"),
   });
+  const beforeJobIds = await mediaRead((pool) =>
+    cleanupInventory(pool, operation),
+  );
   const committed = mutation(page, "PATCH", `/v1/admin/projects/${project.id}`);
   await page.getByTestId("submit-project").click();
   const answer = await committed;
@@ -379,7 +392,7 @@ async function upload(page: Page, project: Project, image: number) {
   expect(answer.request().headers()["content-type"]).toContain(
     "multipart/form-data",
   );
-  const snapshot = await mediaSnapshot(project);
+  const snapshot = await mediaSnapshot(project, jobIds, beforeJobIds);
   expect(snapshot.ref).toBeTruthy();
   operation("owned media object", { projectId: project.id, key: snapshot.ref });
   await page.reload();
@@ -398,6 +411,11 @@ When("the operator replaces and then removes it", async ({ page, world }) => {
   media.keys.push(replacement.ref!);
   media.commits.push(replacement);
   expect(replacement.ref).not.toBe(media.keys[0]);
+  expect(replacement.jobs).toHaveLength(1);
+  const jobIds = replacement.jobs.map((job) => job.id);
+  const beforeJobIds = await mediaRead((pool) =>
+    cleanupInventory(pool, operation),
+  );
   await page.getByRole("button", { name: "убрать", exact: true }).click();
   const committed = mutation(
     page,
@@ -410,7 +428,11 @@ When("the operator replaces and then removes it", async ({ page, world }) => {
   expect(answer.request().postDataJSON()).toMatchObject({
     mediaAction: "clear",
   });
-  media.commits.push(await mediaSnapshot(media.project));
+  const cleared = await mediaSnapshot(media.project, jobIds, beforeJobIds);
+  expect(cleared.jobs.filter((job) => !jobIds.includes(job.id))).toHaveLength(
+    1,
+  );
+  media.commits.push(cleared);
   await page.reload();
   await expect(page.getByAltText("Обложка проекта")).toHaveCount(0);
 });
@@ -435,19 +457,26 @@ Then(
 );
 Then("cleanup is retained for each superseded object", async ({ world }) => {
   const media = state(world).media!;
-  const current = await mediaSnapshot(media.project);
+  const current = await mediaSnapshot(
+    media.project,
+    media.commits[2]!.jobs.map((job) => job.id),
+  );
   expect(current.ref).toBeNull();
   expect(current.jobs).toHaveLength(2);
   for (const [index, job] of current.jobs.entries()) {
     const committed = media.commits[index + 1]!.jobs[index]!;
     expect(job.id).toBe(committed.id);
     expect(job.cleanup_kind).toBe(index === 0 ? "replace" : "clear");
-    if (job.status === "active") expect(job.object_key).toBe(media.keys[index]);
-    else {
+    expect(job).toMatchObject({ entity_kind: "project", slot: "cover" });
+    if (job.status === "active") {
+      expect(job.object_key).toBe(media.keys[index]);
+      expect(job.entity_id).toBe(media.project.id);
+    } else {
       expect(job).toMatchObject({
         status: "expired",
         execution_state: "completed",
         object_key: null,
+        entity_id: null,
       });
     }
   }

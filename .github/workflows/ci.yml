@@ -1643,6 +1643,17 @@ jobs:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_admin_e2e
       IDP_ISSUER: http://localhost:9080
       E2E_ADMIN_URL: http://localhost:3200
+      # 012 refusal journeys observe actual object inventory and metadata.
+      # The external S3-compatible provider is runner-local and disposable,
+      # following runtime-images.yml's pinned S3Mock image.
+      S3_ENDPOINT: http://localhost:9090
+      S3_REGION: us-east-1
+      S3_BUCKET_UPLOADS: ds-admin-e2e
+      S3_ACCESS_KEY: ci-admin-e2e
+      S3_SECRET_KEY: ci-admin-e2e-secret
+      S3_FORCE_PATH_STYLE: "true"
+      # This job owns only its fixtures, not a global identity reconciliation.
+      RECONCILE_SWEEP_INTERVAL_MS: "0"
       # #2619 — the Academy origin «Публичная ссылка» links to. Job-level so the
       # admin (required at request time; it refuses to render without it) and the
       # Playwright steps that assert that link read ONE value.
@@ -1686,6 +1697,19 @@ jobs:
             echo "waiting for Redis ($i/30)..."; sleep 1
           done
           echo "Redis did not become ready in time"; docker logs ds-redis; exit 1
+
+      - name: Start the external S3-compatible test provider
+        run: docker run -d --name ds-admin-s3 --network host adobe/s3mock:5.2.2
+      - name: Wait for S3 and create the disposable Admin bucket
+        run: |
+          ready=false
+          for i in $(seq 1 30); do
+            if curl --max-time 5 -fsS -o /dev/null "$S3_ENDPOINT/"; then ready=true; break; fi
+            sleep 2
+          done
+          test "$ready" = true
+          curl --max-time 5 -fsS -X PUT "$S3_ENDPOINT/$S3_BUCKET_UPLOADS"
+          curl --max-time 5 -fsS "$S3_ENDPOINT/$S3_BUCKET_UPLOADS?list-type=2" | grep -q '<ListBucketResult'
 
       # ─ data layer ─ same SSOT image the `api-e2e` job builds (#369).
       - name: Build the data-layer Postgres image (pgvector + pg_partman)
@@ -1932,6 +1956,7 @@ jobs:
           echo '::group::idp'; docker logs --tail 400 ds-idp || true; echo '::endgroup::'
           echo '::group::postgres'; docker logs --tail 200 ds-postgres || true; echo '::endgroup::'
           echo '::group::redis'; docker logs --tail 100 ds-redis || true; echo '::endgroup::'
+          echo '::group::s3'; docker logs --tail 100 ds-admin-s3 || true; echo '::endgroup::'
       - name: Upload the Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

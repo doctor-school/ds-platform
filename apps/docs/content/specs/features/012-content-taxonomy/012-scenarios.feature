@@ -199,19 +199,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
         | partner | application/json without a binary                                              |
         | partner | multipart/form-data with one JSON payload and one kind-specific logo file     |
 
-    @EARS-1 @EARS-2 @EARS-4 @EARS-16 @failure
-    Scenario Outline: Ambiguous or authority-bearing media input is rejected before upload
-      Given a media-capable entity request uses <invalid_shape>
-      When the operator submits it with a new Idempotency-Key
-      Then the server returns <status> <error_code> Problem Details
-      And no object, domain row or domain audit row changes
-
-      Examples:
-        | invalid_shape                                      | status | error_code              |
-        | multipart/form-data without a file                 | 415    | UNSUPPORTED_MEDIA_TYPE  |
-        | a file together with mediaAction clear             | 400    | MEDIA_INPUT_CONFLICT    |
-        | multiple or wrong kind-specific file parts         | 400    | MEDIA_INPUT_CONFLICT    |
-        | a client-supplied coverRef photoRef or logoRef      | 400    | VALIDATION_FAILED       |
 
     @EARS-1 @EARS-2 @EARS-4 @EARS-16 @EARS-17 @failure
     Scenario: Object-storage failure has an exact replayable outcome
@@ -372,19 +359,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       And every public speaker surface reads the same ordered eligible event_experts
       And no free-text speaker or legacy fallback is accepted
 
-    @EARS-7 @failure
-    Scenario Outline: An expert link requires a role and a non-negative integer position
-      Given an event and a publishable expert exist
-      When the operator submits an event_experts link with <invalid_field>
-      Then the request is refused with 400 Problem Details
-      And no event_experts row is created or restored
-
-      Examples:
-        | invalid_field         |
-        | a missing role        |
-        | a blank role          |
-        | a negative position   |
-        | a fractional position |
 
     @EARS-5 @EARS-7 @EARS-8 @EARS-13 @EARS-16 @EARS-17 @failure
     Scenario Outline: Every speaker-visibility mutation shares the event serialization boundary
@@ -626,20 +600,6 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       Then the route guard requires platform_admin on that session before request validation idempotency normalization upload and handler entry
       And a session without that role is refused with 403 PLATFORM_ADMIN_REQUIRED and zero side effect
       And no per-mutation identity-provider call or second role is involved
-
-    @EARS-16 @EARS-17 @failure
-    Scenario Outline: An absent or invalid idempotency UUID is rejected before side effects
-      Given an otherwise valid mutating request with current preconditions
-      When its Idempotency-Key header is <header_state>
-      Then the server returns <status> <error_code> Problem Details
-      And no upload, idempotency row, domain row or domain audit row is created or changed
-
-      Examples:
-        | header_state              | status | error_code                 |
-        | omitted                   | 428    | IDEMPOTENCY_KEY_REQUIRED   |
-        | blank                     | 428    | IDEMPOTENCY_KEY_REQUIRED   |
-        | not a UUID                | 400    | IDEMPOTENCY_KEY_INVALID    |
-        | non-canonical UUID text   | 400    | IDEMPOTENCY_KEY_INVALID    |
 
 
     @EARS-16 @EARS-17 @failure
@@ -1169,3 +1129,48 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       Then exactly one succeeds and increments the row to version 4
       And the other returns 412 PRECONDITION_FAILED without mutation
       And the successful mutation has one attributed feature-010 audit record
+
+    @taxonomy-input-refusals
+    @EARS-1 @EARS-2 @EARS-4 @EARS-16 @failure
+    Scenario Outline: Ambiguous or authority-bearing media input is rejected before upload
+      Given a media-capable entity request uses <invalid_shape>
+      When the operator submits it with a new Idempotency-Key
+      Then the server returns <status> <error_code> Problem Details
+      And no object, domain row or domain audit row changes
+
+      Examples:
+        | invalid_shape                                      | status | error_code              |
+        | multipart/form-data without a file                 | 415    | UNSUPPORTED_MEDIA_TYPE  |
+        | a file together with mediaAction clear             | 400    | MEDIA_INPUT_CONFLICT    |
+        | multiple or wrong kind-specific file parts         | 400    | MEDIA_INPUT_CONFLICT    |
+        | a client-supplied coverRef photoRef or logoRef      | 400    | VALIDATION_FAILED       |
+
+    @taxonomy-input-refusals
+    @EARS-7 @failure
+    Scenario Outline: An expert link requires a role and a non-negative integer position
+      Given an event and a publishable expert exist
+      When the operator submits an event_experts link with <invalid_field>
+      Then the request is refused with 400 Problem Details
+      And no event_experts row is created or restored
+
+      Examples:
+        | invalid_field         |
+        | a missing role        |
+        | a blank role          |
+        | a negative position   |
+        | a fractional position |
+
+    @taxonomy-input-refusals
+    @EARS-16 @EARS-17 @failure
+    Scenario Outline: An absent or invalid idempotency UUID is rejected before side effects
+      Given an otherwise valid mutating request with current preconditions
+      When its Idempotency-Key header is <header_state>
+      Then the server returns <status> <error_code> Problem Details
+      And no upload, idempotency row, domain row or domain audit row is created or changed
+
+      Examples:
+        | header_state              | status | error_code                 |
+        | omitted                   | 428    | IDEMPOTENCY_KEY_REQUIRED   |
+        | blank                     | 428    | IDEMPOTENCY_KEY_REQUIRED   |
+        | not a UUID                | 400    | IDEMPOTENCY_KEY_INVALID    |
+        | non-canonical UUID text   | 400    | IDEMPOTENCY_KEY_INVALID    |

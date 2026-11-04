@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
 
 import { expect, type Page } from "@playwright/test";
@@ -27,6 +27,7 @@ type Command = {
   body?: Record<string, unknown>;
   key?: string;
   etag?: string;
+  files?: string[];
 };
 type State = {
   prefix: string;
@@ -40,6 +41,14 @@ type State = {
   recordBefore?: unknown[];
   record?: Record<string, unknown>;
   winner?: number;
+  refusal?: {
+    commands: Command[];
+    prefixes: string[];
+    before?: Awaited<ReturnType<typeof refusalSnapshot>>;
+    eventId?: string;
+    expertIds?: string[];
+    retiredId?: string;
+  };
 };
 const states = new WeakMap<AdminWorld, State>();
 function state(world: AdminWorld): State {
@@ -141,7 +150,13 @@ Before(
       );
       if (granting && ["PUT", "POST"].includes(init?.method ?? "GET")) {
         expect(subjects.has(granting[1])).toBe(true);
-        operation("owned grant target verified", { subject: granting[1] });
+        expect(body?.projectId).toBe(project);
+        expect(body?.roleKeys).toEqual(["platform_admin"]);
+        operation("owned grant target verified", {
+          subject: granting[1],
+          projectId: body?.projectId,
+          roleKeys: body?.roleKeys,
+        });
       }
       if (url.pathname === "/v1/auth/register")
         operation("owned account attempt", { email: body?.email });
@@ -229,7 +244,7 @@ async function rows<T extends QueryResultRow>(
   if (!connection)
     throw new Error("DATABASE_URL must select the Admin database under test");
   const database = decodeURIComponent(new URL(connection).pathname.slice(1));
-  if (!["ds_admin_e2e", "ds_dev_3631"].includes(database))
+  if (!["ds_admin_e2e", "ds_dev_3641"].includes(database))
     throw new Error("Protocol fixture requires its exact disposable database");
   operation("SELECT protocol fixture", { sql, values, database });
   const pool = new Pool({ connectionString: connection, max: 1 });
@@ -265,16 +280,40 @@ async function commands(page: Page, inputs: Command[]): Promise<Answer[]> {
     if (!csrf) throw new Error("No verified Admin CSRF cookie available");
     return Promise.all(
       inputs.map(async (input) => {
+        const form = input.files ? new FormData() : undefined;
+        if (form) {
+          form.append("payload", JSON.stringify(input.body ?? {}));
+          // A real, decodable PNG. The successful setup upload also verifies it
+          // crosses the normalizer and reaches the configured object store.
+          const bytes = Uint8Array.from(
+            atob(
+              "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVQImWN4ZhTwzCiAAUIBACnGBaFaU04qAAAAAElFTkSuQmCC",
+            ),
+            (value) => value.charCodeAt(0),
+          );
+          for (const part of input.files!)
+            form.append(
+              part,
+              new Blob([bytes], { type: "image/png" }),
+              "fixture.png",
+            );
+        }
         const response = await fetch(input.path, {
           method: input.method,
           credentials: "include",
           headers: {
-            "content-type": "application/json",
+            ...(!form ? { "content-type": "application/json" } : {}),
             "x-ds-admin-csrf": decodeURIComponent(csrf),
-            ...(input.key ? { "idempotency-key": input.key } : {}),
+            ...(input.key !== undefined
+              ? { "idempotency-key": input.key }
+              : {}),
             ...(input.etag ? { "if-match": input.etag } : {}),
           },
-          ...(input.body ? { body: JSON.stringify(input.body) } : {}),
+          ...(form
+            ? { body: form }
+            : input.body
+              ? { body: JSON.stringify(input.body) }
+              : {}),
         });
         return {
           status: response.status,
@@ -640,3 +679,488 @@ Then(
     });
   },
 );
+
+function required(name: string): string {
+  const value = process.env[name];
+  if (!value)
+    throw new Error(`${name} is required for real storage observations`);
+  return value;
+}
+
+// Read-only SigV4 requests use the same configured S3 service as the API. No
+// uploader spy or DB-derived object count substitutes for the provider read.
+async function storageRead(method: "GET" | "HEAD", path: string, query = "") {
+  const url = new URL(required("S3_ENDPOINT"));
+  url.pathname = `/${required("S3_BUCKET_UPLOADS")}/${path}`;
+  url.search = query;
+  url.searchParams.sort();
+  const date = new Date().toISOString().replace(/[:-]|\.\d{3}/gu, "");
+  const day = date.slice(0, 8);
+  const region = process.env.S3_REGION ?? "us-east-1";
+  const hash = (value: string) =>
+    createHash("sha256").update(value).digest("hex");
+  const hmac = (key: string | Buffer, value: string) =>
+    createHmac("sha256", key).update(value).digest();
+  const digest = hash("");
+  const names = "host;x-amz-content-sha256;x-amz-date";
+  const canonical = [
+    method,
+    url.pathname,
+    url.search.slice(1),
+    `host:${url.host}\nx-amz-content-sha256:${digest}\nx-amz-date:${date}\n`,
+    names,
+    digest,
+  ].join("\n");
+  const scope = `${day}/${region}/s3/aws4_request`;
+  const signing = hmac(
+    hmac(hmac(hmac(`AWS4${required("S3_SECRET_KEY")}`, day), region), "s3"),
+    "aws4_request",
+  );
+  const signature = hmac(
+    signing,
+    `AWS4-HMAC-SHA256\n${date}\n${scope}\n${hash(canonical)}`,
+  ).toString("hex");
+  operation("S3 read", { method, path: url.pathname, query: url.search });
+  const response = await originalFetch(url, {
+    method,
+    headers: {
+      "x-amz-date": date,
+      "x-amz-content-sha256": digest,
+      authorization: `AWS4-HMAC-SHA256 Credential=${required("S3_ACCESS_KEY")}/${scope}, SignedHeaders=${names}, Signature=${signature}`,
+    },
+  });
+  operation("S3 response", {
+    method,
+    path: url.pathname,
+    status: response.status,
+  });
+  expect(response.status).toBe(200);
+  return response;
+}
+
+async function objectInventory(prefixes: string[]) {
+  const inventory: { key: string; metadata: Record<string, string> }[] = [];
+  for (const prefix of prefixes) {
+    let continuation: string | undefined;
+    do {
+      const query = new URLSearchParams({ "list-type": "2", prefix });
+      if (continuation) query.set("continuation-token", continuation);
+      const xml = await (await storageRead("GET", "", query.toString())).text();
+      const decode = (value: string) =>
+        value
+          .replace(/&amp;/gu, "&")
+          .replace(/&lt;/gu, "<")
+          .replace(/&gt;/gu, ">")
+          .replace(/&quot;/gu, '"')
+          .replace(/&apos;/gu, "'");
+      for (const match of xml.matchAll(/<Key>(.*?)<\/Key>/gu)) {
+        const key = decode(match[1]);
+        expect(key.startsWith(prefix)).toBe(true);
+        const head = await storageRead(
+          "HEAD",
+          key.split("/").map(encodeURIComponent).join("/"),
+        );
+        const metadata = Object.fromEntries(
+          [...head.headers].filter(
+            ([name]) =>
+              [
+                "content-length",
+                "content-type",
+                "etag",
+                "last-modified",
+                "x-amz-version-id",
+              ].includes(name) || name.startsWith("x-amz-meta-"),
+          ),
+        );
+        inventory.push({ key, metadata });
+      }
+      continuation =
+        /<NextContinuationToken>(.*?)<\/NextContinuationToken>/u.exec(xml)?.[1];
+      if (continuation) continuation = decode(continuation);
+      expect(xml.includes("<IsTruncated>true</IsTruncated>")).toBe(
+        !!continuation,
+      );
+    } while (continuation);
+  }
+  inventory.sort((a, b) => a.key.localeCompare(b.key));
+  operation("complete applicable S3 inventory and metadata", {
+    prefixes,
+    inventory,
+  });
+  return inventory;
+}
+
+async function refusalSnapshot(prefixes: string[]) {
+  return {
+    // The database is disposable and task-owned. Complete applicable tables
+    // also detect an unexpected create whose id was never returned to us.
+    projects: await rows(
+      "SELECT to_jsonb(t) AS row FROM projects t ORDER BY id",
+    ),
+    experts: await rows("SELECT to_jsonb(t) AS row FROM experts t ORDER BY id"),
+    partners: await rows(
+      "SELECT to_jsonb(t) AS row FROM organisations t ORDER BY id",
+    ),
+    events: await rows("SELECT to_jsonb(t) AS row FROM events t ORDER BY id"),
+    links: await rows(
+      "SELECT to_jsonb(t) AS row FROM event_experts t ORDER BY id",
+    ),
+    audit: await rows(
+      "SELECT to_jsonb(t) AS row FROM audit_ledger t WHERE event_type LIKE 'data.%' ORDER BY id",
+    ),
+    idempotency: await rows(
+      "SELECT to_jsonb(t) AS row FROM idempotency_keys t ORDER BY key",
+    ),
+    cleanup: await rows(
+      "SELECT to_jsonb(t) AS row FROM media_cleanup_jobs t ORDER BY id",
+    ),
+    objects: await objectInventory(prefixes),
+  };
+}
+
+const mediaKinds = {
+  project: {
+    route: "projects",
+    part: "cover",
+    reference: "coverRef",
+    prefix: "taxonomy/projects/covers/",
+  },
+  expert: {
+    route: "experts",
+    part: "photo",
+    reference: "photoRef",
+    prefix: "taxonomy/experts/photos/",
+  },
+  partner: {
+    route: "organisations",
+    part: "logo",
+    reference: "logoRef",
+    prefix: "taxonomy/partners/logos/",
+  },
+} as const;
+async function mediaTarget(
+  page: Page,
+  world: AdminWorld,
+  kind: keyof typeof mediaKinds,
+) {
+  const shape = mediaKinds[kind];
+  const body =
+    kind === "expert"
+      ? {
+          familyName: "Проверкин",
+          givenName: "Иван",
+          professionalRole: "Кардиолог",
+          credentials: "К. м. н.",
+          affiliation: "Клиника",
+          bio: "Клиническая и образовательная практика.",
+        }
+      : {
+          title: `${state(world).prefix} ${kind}`,
+          ...(kind === "project"
+            ? {
+                defaultAudience: "doctors",
+                kind: "program",
+                description: "Образовательная программа.",
+              }
+            : {}),
+        };
+  const [created] = await commands(page, [
+    { method: "POST", path: `/v1/admin/${shape.route}`, key: key(), body },
+  ]);
+  expect(created.status).toBe(201);
+  operation(`owned ${kind}`, { id: created.body.id });
+  const uploadKey = key();
+  const path = `/v1/admin/${shape.route}/${created.body.id}`;
+  const [uploaded] = await commands(page, [
+    {
+      method: "PATCH",
+      path,
+      key: uploadKey,
+      etag: created.etag!,
+      files: [shape.part],
+      body: {},
+    },
+  ]);
+  expect(uploaded.status).toBe(200);
+  expect(uploaded.body.version).toBe(2);
+  expect(uploaded.etag).toBe('W/"2"');
+  const [stored] = await rows<{ ref: string }>(
+    `SELECT ${shape.part}_ref AS ref FROM ${shape.route} WHERE id=$1`,
+    [created.body.id],
+  );
+  expect(stored.ref).toMatch(
+    new RegExp(`^${shape.prefix}${uploadKey}-[0-9a-f]{32}\\.webp$`, "u"),
+  );
+  operation("owned normalized object", {
+    key: stored.ref,
+    entityId: created.body.id,
+  });
+  const inventory = await objectInventory([shape.prefix]);
+  const actual = inventory.find((object) => object.key === stored.ref);
+  expect(actual).toBeTruthy();
+  expect(actual!.metadata["content-type"]).toBe("image/webp");
+  expect(Number(actual!.metadata["content-length"])).toBeGreaterThan(0);
+  return {
+    ...shape,
+    path,
+    etag: uploaded.etag!,
+    id: created.body.id as string,
+  };
+}
+
+Given(
+  /^a media-capable entity request uses (.+)$/u,
+  async ({ page, world }, invalid: string) => {
+    const current = state(world);
+    const targets = [];
+    for (const kind of invalid ===
+    "a client-supplied coverRef photoRef or logoRef"
+      ? (["project", "expert", "partner"] as const)
+      : (["project"] as const))
+      targets.push(await mediaTarget(page, world, kind));
+    const requests: Command[] = [];
+    for (const target of targets) {
+      const base: Command = {
+        method: "PATCH",
+        path: target.path,
+        etag: target.etag,
+        body: {},
+        key: key(),
+      };
+      if (invalid === "multipart/form-data without a file")
+        requests.push({ ...base, files: [] });
+      else if (invalid === "a file together with mediaAction clear")
+        requests.push({
+          ...base,
+          files: [target.part],
+          body: { mediaAction: "clear" },
+        });
+      else if (invalid === "multiple or wrong kind-specific file parts") {
+        requests.push({ ...base, files: [target.part, target.part] });
+        requests.push({ ...base, key: key(), files: ["photo"] });
+      } else if (invalid === "a client-supplied coverRef photoRef or logoRef")
+        requests.push({
+          ...base,
+          body: { [target.reference]: "client-controlled/storage.webp" },
+        });
+      else throw new Error(`Unrecognized original media example: ${invalid}`);
+    }
+    current.refusal = {
+      commands: requests,
+      prefixes: targets.map((target) => target.prefix),
+    };
+    current.refusal.before = await refusalSnapshot(current.refusal.prefixes);
+  },
+);
+When(
+  "the operator submits it with a new Idempotency-Key",
+  async ({ page, world }) => {
+    const current = state(world);
+    for (const request of current.refusal!.commands)
+      expect(await idempotencyRecord(request)).toEqual([]);
+    current.answers = await commands(page, current.refusal!.commands);
+  },
+);
+Then(
+  /^the server returns (\d+) (\S+) Problem Details$/u,
+  async ({ world }, status: string, code: string) => {
+    const answers = state(world).answers!;
+    expect(answers.length).toBeGreaterThan(0);
+    for (const answer of answers) {
+      expect(answer.status).toBe(Number(status));
+      expect(answer.contentType).toContain("application/problem+json");
+      expect(answer.body).toMatchObject({
+        status: Number(status),
+        errorCode: code,
+        traceId: expect.any(String),
+      });
+    }
+  },
+);
+async function unchangedRefusal(world: AdminWorld) {
+  const current = state(world).refusal!;
+  expect(await refusalSnapshot(current.prefixes)).toEqual(current.before);
+  operation(
+    "refusal has unchanged storage domain audit idempotency and retained relations",
+    {
+      requests: current.commands.map(({ method, path }) => ({ method, path })),
+    },
+  );
+}
+Then("no object, domain row or domain audit row changes", async ({ world }) =>
+  unchangedRefusal(world),
+);
+
+Given(
+  "an otherwise valid mutating request with current preconditions",
+  async ({ page, world }) => {
+    const target = await mediaTarget(page, world, "project");
+    const current = state(world);
+    current.refusal = {
+      commands: [
+        {
+          method: "PATCH",
+          path: target.path,
+          etag: target.etag,
+          body: { title: `${current.prefix} valid replacement` },
+          files: [target.part],
+        },
+      ],
+      prefixes: [target.prefix],
+    };
+    current.refusal.before = await refusalSnapshot(current.refusal.prefixes);
+  },
+);
+When(
+  /^its Idempotency-Key header is (.+)$/u,
+  async ({ page, world }, header: string) => {
+    const request = state(world).refusal!.commands[0];
+    if (header === "omitted") delete request.key;
+    else if (header === "blank") request.key = "";
+    else if (header === "not a UUID") request.key = "not-a-uuid";
+    else if (header === "non-canonical UUID text")
+    request.key = `${key().slice(0, -1)}A`;
+    else throw new Error(`Unrecognized original UUID example: ${header}`);
+    state(world).answers = await commands(page, [request]);
+  },
+);
+Then(
+  "no upload, idempotency row, domain row or domain audit row is created or changed",
+  async ({ world }) => unchangedRefusal(world),
+);
+
+Given("an event and a publishable expert exist", async ({ page, world }) => {
+  const current = state(world);
+  const kinds = await rows<{ id: string }>(
+    "SELECT id FROM event_kinds WHERE status='published' AND deleted_at IS NULL AND allowed_formats @> ARRAY['online']::text[] ORDER BY id LIMIT 1",
+  );
+  expect(kinds).toHaveLength(1);
+  const [event] = await commands(page, [
+    {
+      method: "POST",
+      path: "/v1/admin/events",
+      body: {
+        title: `${current.prefix} event`,
+        school: "Школа проверки",
+        startsAtMsk: "2030-06-01T12:00",
+        durationMin: 60,
+        kindId: kinds[0].id,
+        participationFormat: "online",
+        audience: "doctors",
+      },
+    },
+  ]);
+  expect(event.status).toBe(201);
+  operation("owned event", { id: event.body.id });
+  const experts = [];
+  for (let index = 0; index < 2; index++) {
+    const expert = await mediaTarget(page, world, "expert");
+    const [published] = await commands(page, [
+      {
+        method: "POST",
+        path: `${expert.path}/publish`,
+        key: key(),
+        etag: expert.etag,
+        body: {},
+      },
+    ]);
+    expect(published.status).toBe(200);
+    expect(published.body.status).toBe("published");
+    experts.push(expert.id);
+  }
+  const [link] = await commands(page, [
+    {
+      method: "POST",
+      path: "/v1/admin/event-experts",
+      key: key(),
+      body: {
+        eventId: event.body.id,
+        expertId: experts[1],
+        role: "Спикер",
+        position: 0,
+      },
+    },
+  ]);
+  expect(link.status).toBe(201);
+  operation("owned event expert", { id: link.body.id });
+  const [retired] = await commands(page, [
+    {
+      method: "POST",
+      path: `/v1/admin/event-experts/${link.body.id}/retire`,
+      key: key(),
+      etag: link.etag!,
+      body: {},
+    },
+  ]);
+  expect(retired.status).toBe(200);
+  expect(retired.body).toMatchObject({ id: link.body.id, status: "retired" });
+  current.refusal = {
+    commands: [],
+    prefixes: [mediaKinds.expert.prefix],
+    eventId: event.body.id as string,
+    expertIds: experts,
+    retiredId: link.body.id as string,
+  };
+  current.refusal.before = await refusalSnapshot(current.refusal.prefixes);
+});
+When(
+  /^the operator submits an event_experts link with (.+)$/u,
+  async ({ page, world }, invalid: string) => {
+    const current = state(world).refusal!;
+    for (const expertId of current.expertIds!) {
+      const body: Record<string, unknown> = {
+        eventId: current.eventId,
+        expertId,
+        role: "Спикер",
+        position: 1,
+      };
+      if (invalid === "a missing role") delete body.role;
+      else if (invalid === "a blank role") body.role = "   ";
+      else if (invalid === "a negative position") body.position = -1;
+      else if (invalid === "a fractional position") body.position = 0.5;
+      else
+        throw new Error(
+          `Unrecognized original expert-link example: ${invalid}`,
+        );
+      current.commands.push({
+        method: "POST",
+        path: "/v1/admin/event-experts",
+        key: key(),
+        body,
+      });
+    }
+    state(world).answers = await commands(page, current.commands);
+  },
+);
+Then("the request is refused with 400 Problem Details", async ({ world }) => {
+  expect(state(world).answers).toHaveLength(2);
+  for (const answer of state(world).answers!) {
+    expect(answer.status).toBe(400);
+    expect(answer.contentType).toContain("application/problem+json");
+    expect(answer.body).toMatchObject({
+      status: 400,
+      errorCode: "VALIDATION_FAILED",
+      traceId: expect.any(String),
+    });
+  }
+});
+Then("no event_experts row is created or restored", async ({ world }) => {
+  await unchangedRefusal(world);
+  const current = state(world).refusal!;
+  const links = await rows<{
+    id: string;
+    expert_id: string;
+    status: string;
+    deleted_at: Date | null;
+  }>(
+    "SELECT id,expert_id,status,deleted_at FROM event_experts WHERE event_id=$1 ORDER BY id",
+    [current.eventId],
+  );
+  expect(links).toHaveLength(1);
+  expect(links[0]).toMatchObject({
+    id: current.retiredId,
+    expert_id: current.expertIds![1],
+    status: "retired",
+  });
+  expect(links[0].deleted_at).not.toBeNull();
+});

@@ -387,7 +387,7 @@ Anything else short of PASS is PARTIAL with the reason.
 
 ```bash
 sudo docker stop ds-recovery-pg               # --rm removes the container
-sudo docker ps -a --filter name=ds-recovery   # expect no rows
+sudo docker ps -a --filter 'name=^/?ds-recovery-'   # expect no rows
 sudo rm -rf "$SCRATCH"
 ```
 

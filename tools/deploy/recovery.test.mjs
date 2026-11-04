@@ -26,6 +26,7 @@ import {
   renderReport,
   sections,
   proofScript,
+  proofMarker,
   teardownScript,
   bundleName,
   initKeys,
@@ -48,6 +49,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -801,7 +803,7 @@ case "$1" in
   run)
     case "$*" in
       *" check")
-        [ -n "\${DSR_SIGNAL:-}" ] && kill -TERM "$(cat "$DSR_PID")"
+        [ -n "\${DSR_SIGNAL:-}" ] && kill -TERM "$(head -n1 "$DSR_PID")"
         echo "WAL segment ${SEG} successfully archived"; echo "check command end" ;;
       *" restore") echo "restore command end" ;;
     esac ;;
@@ -910,7 +912,7 @@ test("remote scripts: parsed whole with stdin from /dev/null, no stdin-inheritin
 test("teardownScript: stops runs by label, guards the pidfile, leftovers mode is anchored", () => {
   const scratch = scratchDir(new Date("2026-11-04T10:00:00Z"));
   const td = teardownScript({ brImage: IMG, scratch });
-  assert.ok(td.includes(`--filter label=${RUN_LABEL.split("=")[0]}`));
+  assert.ok(td.includes(`--filter 'label=${RUN_LABEL}'`));
   assert.ok(td.includes('/proc/"$PID"/cmdline'));
   assert.ok(td.includes(`rm -f -- '${ENV_FILE}' '${PROOF_PID}'`));
   const left = teardownScript({});
@@ -926,6 +928,88 @@ test("teardownScript: stops runs by label, guards the pidfile, leftovers mode is
   run.splice(i, 2);
   assert.throws(() => assertSafeDockerRun(run, "pgbackrest"), /--label/);
 });
+
+test("teardownScript: docker filters are the exact name prefix and the full run label", () => {
+  for (const td of [
+    teardownScript({ brImage: IMG, scratch: scratchDir(new Date()) }),
+    teardownScript({}),
+  ]) {
+    assert.ok(td.includes("--filter 'name=^/?ds-recovery-'"));
+    assert.ok(td.includes(`--filter 'label=${RUN_LABEL}'`));
+    assert.doesNotMatch(td, /--filter (name|label)=ds-recovery(\s|$)/m);
+  }
+});
+
+function runTeardownUnderBash({ pidfile, cmdline }) {
+  const root = mkdtempSync(join(tmpdir(), "dsr-td-")).replace(/\\/g, "/");
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  for (const [name, body] of [
+    ["docker", '#!/usr/bin/env bash\necho "$*" >> "$DSR_CALLS"\nexit 0\n'],
+    ["sleep", "#!/usr/bin/env bash\nexit 0\n"],
+  ]) {
+    writeFileSync(join(bin, name), body);
+    chmodSync(join(bin, name), 0o755);
+  }
+  const envDir = `${root}/run`;
+  mkdirSync(envDir);
+  writeFileSync(`${envDir}/proof.pid`, pidfile);
+  mkdirSync(`${root}/proc/4242`, { recursive: true });
+  writeFileSync(`${root}/proc/4242/cmdline`, cmdline);
+  // `kill` is a builtin: the test swaps it for a recorded call against the fake /proc.
+  const text = teardownScript({})
+    .split(ENV_DIR)
+    .join(envDir)
+    .split("/proc/")
+    .join(`${root}/proc/`)
+    .split('kill -TERM "$PID"')
+    .join('echo "TERM $PID" >> "$DSR_CALLS"')
+    .split('kill -0 "$PID"')
+    .join("false");
+  const r = spawnSync("bash", ["-s"], {
+    input: text,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${bin}${delimiter}${process.env.PATH}`,
+      DSR_CALLS: `${root}/calls`,
+    },
+  });
+  const calls = existsSync(`${root}/calls`)
+    ? readFileSync(`${root}/calls`, "utf8")
+    : "";
+  return { r, envDir, signalled: calls.includes("TERM 4242") };
+}
+
+test(
+  "teardownScript under bash -s: signals only the proof tagged with the pidfile's runid",
+  { skip: !bashOk && "bash not available" },
+  () => {
+    const scratch = scratchDir(new Date("2026-11-04T10:00:00Z"));
+    const mark = proofMarker(scratch);
+    assert.equal(mark, "ds-recovery-proof-20261104T100000Z");
+    const pidfile = `4242\n${mark}\n`;
+    const own = runTeardownUnderBash({
+      pidfile,
+      cmdline: `bash\0-s\0${mark}\0`,
+    });
+    assert.equal(own.signalled, true, own.r.stderr);
+    for (const cmdline of [
+      "bash\0-s\0",
+      "bash\0-s\0ds-recovery-proof-20261103T090000Z\0",
+    ]) {
+      const t = runTeardownUnderBash({ pidfile, cmdline });
+      assert.equal(t.signalled, false, JSON.stringify(cmdline));
+      assert.match(t.r.stderr, /not this tool's proof/);
+      assert.equal(existsSync(`${t.envDir}/proof.pid`), false);
+    }
+    const bare = runTeardownUnderBash({
+      pidfile: "4242\n",
+      cmdline: "bash\0-s\0",
+    });
+    assert.equal(bare.signalled, false);
+  },
+);
 
 // --- restore-proof orchestration through the injected runner ---------------------------
 

@@ -38,6 +38,9 @@ export const COPY = "ds-recovery-pg";
 export const SCRATCH_ROOT = "/var/lib/ds-platform/recovery-proof";
 export const RUN_LABEL = "ds-recovery=run";
 export const PROOF_PID = `${ENV_DIR}/proof.pid`;
+// Docker matches `name=` as an unanchored regex and `label=key` on the key alone.
+const NAME_FILTER = "'name=^/?ds-recovery-'";
+const LABEL_FILTER = `'label=${RUN_LABEL}'`;
 const LIMITS = [
   "--label",
   RUN_LABEL,
@@ -359,6 +362,12 @@ export function assertScratch(p) {
   return p;
 }
 
+// The proof runs as `bash -s <marker>`: the marker is a positional argument that bash
+// ignores but /proc/<pid>/cmdline shows, so teardown signals only this run's proof.
+export function proofMarker(scratch) {
+  return `ds-recovery-proof-${assertScratch(scratch).split("/ds-recovery-")[1]}`;
+}
+
 export function pgbackrestRun({ image, check = false, scratch = null, args }) {
   const argv = ["docker", "run", "--rm", ...LIMITS, "--env-file", ENV_FILE];
   argv.push(
@@ -501,7 +510,7 @@ on_signal() {
 }
 trap teardown EXIT
 trap on_signal INT TERM HUP PIPE
-echo "$$" > ${shq(PROOF_PID)}
+printf '%s\\n%s\\n' "$$" ${shq(proofMarker(scratch))} > ${shq(PROOF_PID)}
 CHECK_OUT=$(${noStdin(check)} 2>&1); CHECK_RC=$?
 echo "@@DSR check"; printf '%s\\n' "$CHECK_OUT" | grep -E 'WAL segment|ERROR|check command end'
 echo "@@DSR check-rc"; echo "$CHECK_RC"
@@ -561,12 +570,19 @@ fi`
     : "";
   // A proof still running (Node interrupted, ssh dropped) is stopped first: its runs
   // are found by label, and its own trap then exits once the run in flight stops.
-  const runs = `{ docker ps -q --filter label=${RUN_LABEL.split("=")[0]}; docker ps -q --filter name=ds-recovery; }`;
+  const runs = `{ docker ps -q --filter ${LABEL_FILTER}; docker ps -q --filter ${NAME_FILTER}; }`;
   return remoteScript(`set -u
-PID=$(cat ${shq(PROOF_PID)} 2>/dev/null)
+PID=$(sed -n 1p ${shq(PROOF_PID)} 2>/dev/null)
+MARK=$(sed -n 2p ${shq(PROOF_PID)} 2>/dev/null)
 case "$PID" in ''|*[!0-9]*) PID= ;; esac
-# Only the proof's own \`bash -s\`: a stale pidfile must never signal a reused PID.
-[ -n "$PID" ] && [ "$(tr '\\0' ' ' < /proc/"$PID"/cmdline 2>/dev/null)" = "bash -s " ] || PID=
+[[ "$MARK" =~ ^ds-recovery-proof-[0-9]{8}T[0-9]{6}Z$ ]] || MARK=
+# Only the proof tagged with this pidfile's marker: a stale pidfile must never signal a
+# reused PID, not even another \`sudo bash -s\`.
+if [ -n "$PID" ] && { [ -z "$MARK" ] || [ "$(tr '\\0' ' ' < /proc/"$PID"/cmdline 2>/dev/null)" != "bash -s $MARK " ]; }; then
+  echo "note: pid $PID in ${PROOF_PID} is not this tool's proof; not signalled, pidfile removed" >&2
+  rm -f -- ${shq(PROOF_PID)}
+  PID=
+fi
 [ -n "$PID" ] && kill -TERM "$PID" 2>/dev/null
 for _ in $(seq 1 30); do
   IDS=$(${runs} | sort -u)
@@ -575,7 +591,7 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 for _ in $(seq 1 30); do [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null || break; sleep 1; done
-echo "@@DSR ps"; docker ps -a --filter name=ds-recovery --format '{{.Names}}'; docker ps -a --filter label=${RUN_LABEL.split("=")[0]} --format '{{.Names}}'
+echo "@@DSR ps"; docker ps -a --filter ${NAME_FILTER} --format '{{.Names}}'; docker ps -a --filter ${LABEL_FILTER} --format '{{.Names}}'
 ${scratchRm}
 ${post}
 rm -f -- ${shq(ENV_FILE)} ${shq(PROOF_PID)}; rmdir ${shq(ENV_DIR)} 2>/dev/null
@@ -585,7 +601,7 @@ echo "@@DSR end"
 }
 
 export const MANUAL_TEARDOWN = `Teardown did not complete. Run \`pnpm recovery teardown\`, or by hand on ds-data-prod (RECOVERY.md §3.4):
-  sudo docker stop ds-recovery-pg; sudo docker ps -a --filter name=ds-recovery --filter label=ds-recovery
+  sudo docker stop ds-recovery-pg; sudo docker ps -a --filter 'name=^/?ds-recovery-'; sudo docker ps -a --filter 'label=ds-recovery=run'
   sudo rm -rf /var/lib/ds-platform/recovery-proof/ds-recovery-*
   sudo rm -f /run/ds-recovery/restore.env /run/ds-recovery/proof.pid && sudo rmdir /run/ds-recovery`;
 
@@ -1220,10 +1236,12 @@ export async function restoreProof(
   const keyNames = envKeys(dataEnv.toString("utf8"));
   dec.stdout.fill(0);
   const scratch = scratchDir(ctx.now);
-  const script = async (label, text) => {
+  const script = async (label, text, marker = null) => {
     const r = await ctx.run({
       cmd: "ssh",
-      args: ctx.targets.data("sudo -n bash -s"),
+      args: ctx.targets.data(
+        marker ? `sudo -n bash -s ${marker}` : "sudo -n bash -s",
+      ),
       input: Buffer.from(text),
       label,
     });
@@ -1314,7 +1332,11 @@ export async function restoreProof(
     ctx.print(
       "Restore proof running on ds-data-prod (check → restore → WAL replay); this can take a while.",
     );
-    proof = await script("proof", proofScript({ brImage, pgImage, scratch }));
+    proof = await script(
+      "proof",
+      proofScript({ brImage, pgImage, scratch }),
+      proofMarker(scratch),
+    );
   } finally {
     try {
       td = await teardown();

@@ -884,7 +884,7 @@ async function refusalSnapshot(prefixes: string[]) {
       "SELECT to_jsonb(t) AS row FROM event_experts t ORDER BY id",
     ),
     audit: await rows(
-      "SELECT to_jsonb(t) AS row FROM audit_ledger t WHERE event_type LIKE 'data.%' ORDER BY id",
+      "SELECT to_jsonb(t) AS row FROM audit_ledger t WHERE event_type LIKE ANY(ARRAY['data.projects.%','data.experts.%','data.organisations.%','data.events.%','data.event_experts.%']) ORDER BY id",
     ),
     idempotency: await rows(
       "SELECT to_jsonb(t) AS row FROM idempotency_keys t ORDER BY key",
@@ -1118,6 +1118,7 @@ Given("an event and a publishable expert exist", async ({ page, world }) => {
     {
       method: "POST",
       path: "/v1/admin/events",
+      files: [],
       body: {
         title: `${current.prefix} event`,
         school: "Школа проверки",

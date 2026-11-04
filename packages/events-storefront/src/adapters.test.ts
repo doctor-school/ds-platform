@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { adaptDoctorEventsFeed, adaptPublicEventListing } from "./adapters";
+import {
+  adaptDoctorEventsFeed,
+  adaptFeedEvents,
+  adaptPublicEventListing,
+} from "./adapters";
 
 const KIND = { id: "k-1", slug: "webinar", title: "Вебинар" };
 const RECORDING = {
@@ -345,5 +349,52 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
     );
     expect(page.cards[0]?.state).toBe("past");
     expect(page.cards[0]?.recording).toEqual(RECORDING);
+  });
+});
+
+describe("adaptFeedEvents — 018 EARS-4: the specialty feed's nearest events onto the same card model", () => {
+  const card = {
+    id: "f-1",
+    slug: "f-1",
+    href: "/events/f-1",
+    startsAt: "2026-10-20T16:00:00.000Z",
+    endsAt: "2026-10-20T17:00:00.000Z",
+    format: "offline",
+    kind: KIND,
+    title: "Встреча коллег",
+    speaker: "Сидоров С. С.",
+    source: "Проект",
+    nmo: true,
+    pulCost: 0,
+    signUpCount: null,
+    city: "Казань",
+    state: "normal",
+  };
+
+  it("EARS-4: maps every item through the one doctor card mapping, keeping a hidden counter null and the offline format", () => {
+    const block = adaptFeedEvents({
+      items: [
+        card,
+        { ...card, id: "f-2", slug: "f-2", format: "online", signUpCount: 9 },
+      ],
+      allEventsHref: "/events?specialty=cardiology",
+    });
+    expect(block.allEventsHref).toBe("/events?specialty=cardiology");
+    expect(block.cards).toHaveLength(2);
+    expect(block.cards[0]).toMatchObject({
+      format: "offline",
+      signUpCount: null,
+      nmo: true,
+      city: "Казань",
+      speakers: ["Сидоров С. С."],
+      state: "upcoming",
+    });
+    expect(block.cards[1]).toMatchObject({ format: "online", signUpCount: 9 });
+  });
+
+  it("EARS-4: refuses a read carrying a field the contract does not name (no ranking field rides along)", () => {
+    expect(() =>
+      adaptFeedEvents({ items: [], allEventsHref: "/events", rank: [1] }),
+    ).toThrow();
   });
 });

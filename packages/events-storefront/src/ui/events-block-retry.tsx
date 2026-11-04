@@ -1,12 +1,17 @@
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { z } from "zod";
-import { MONTH_PARAM, forwardedSessionFrom } from "@ds/schemas";
+import {
+  MONTH_PARAM,
+  SpecialtyCodeSchema,
+  forwardedSessionFrom,
+} from "@ds/schemas";
 
 import type { EventsStorefrontHostConfig } from "../host-config";
 import type { EventsFeedHorizon, FeedFacetOptions } from "../model/feed";
 import {
   fetchEventsFeed,
+  fetchSpecialtyFeedEvents,
   fetchMonthEntries,
   fetchEventKindTitles,
   fetchSpecialtyChoices,
@@ -15,6 +20,7 @@ import {
 import { FeedBlock, MyEventsBlock, readMyEvents } from "./feed-sections";
 import { RecoveredFeedRead } from "./feed-read-scope";
 import { MonthGridBlock } from "./month-view";
+import { SpecialtyEventsList } from "./specialty-events";
 
 const RawQuerySchema = z.record(
   z.string(),
@@ -56,6 +62,14 @@ const EventsBlockRetryInputSchema = z.discriminatedUnion("block", [
     limit: z.number().int().positive().optional(),
   }),
   z.object({ block: z.literal("my-events") }),
+  // 018 EARS-4 — the specialty feed's nearest-events block. The specialty is a
+  // book code (the api answers 404 for any other); the read path is minted
+  // from it, never passed in.
+  z.object({
+    block: z.literal("specialty-events"),
+    specialty: SpecialtyCodeSchema,
+    registeredSlugs: z.array(z.string()),
+  }),
 ]);
 
 export type EventsBlockRetryInput =
@@ -76,7 +90,12 @@ export type EventsBlockRetryInput =
       /** A capped feed's cap (017 EARS-9): the recovered block stays capped. */
       readonly limit?: number;
     }
-  | { readonly block: "my-events" };
+  | { readonly block: "my-events" }
+  | {
+      readonly block: "specialty-events";
+      readonly specialty: string;
+      readonly registeredSlugs: string[];
+    };
 
 /**
  * The host's block-retry server action: a host's `"use server"` module exports
@@ -164,6 +183,14 @@ export async function renderEventsBlock(
         </>
       );
     }
+    case "specialty-events":
+      return SpecialtyEventsList({
+        config,
+        specialtyCode: parsed.specialty,
+        read: await fetchSpecialtyFeedEvents(parsed.specialty, request),
+        registeredSlugs: parsed.registeredSlugs,
+        retry,
+      });
     case "my-events":
       return MyEventsBlock({
         config,

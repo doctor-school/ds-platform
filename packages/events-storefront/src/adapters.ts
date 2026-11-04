@@ -1,6 +1,7 @@
 import {
   DoctorEventsFeedSchema,
   type DoctorEventCard,
+  FeedEventsSchema,
   PublicEventListingPageSchema,
 } from "@ds/schemas";
 
@@ -22,27 +23,25 @@ export const adaptPublicEventListing: EventsStorefrontAdapter = (
   { tense },
 ): EventsFeedPage => {
   const page = PublicEventListingPageSchema.parse(dto);
-  const cards = page.data.map(
-    (card): EventsFeedCard => ({
-      id: card.id,
-      slug: card.slug,
-      startsAt: card.startsAt,
-      format: card.format,
-      kindTitle: card.kind.title,
-      title: card.title,
-      school: card.school,
-      speakers: card.speakers.map((speaker) => speaker.name),
-      specialties: card.specialties,
-      state:
-        card.state === "ended"
-          ? "past"
-          : card.state === "live"
-            ? "live"
-            : "upcoming",
-      signUpCount: card.signUpCount,
-      recording: "recording" in card ? card.recording : null,
-    }),
-  );
+  const cards = page.data.map((card): EventsFeedCard => ({
+    id: card.id,
+    slug: card.slug,
+    startsAt: card.startsAt,
+    format: card.format,
+    kindTitle: card.kind.title,
+    title: card.title,
+    school: card.school,
+    speakers: card.speakers.map((speaker) => speaker.name),
+    specialties: card.specialties,
+    state:
+      card.state === "ended"
+        ? "past"
+        : card.state === "live"
+          ? "live"
+          : "upcoming",
+    signUpCount: card.signUpCount,
+    recording: "recording" in card ? card.recording : null,
+  }));
   // The feed always reads the horizon form (D2, `feedReadQuery`). A page
   // without one is a cursor page — a read the feed never makes — and rendering
   // it would silently drop «Показать ещё», so it is refused: the block shows
@@ -81,30 +80,36 @@ function doctorState(card: DoctorEventCard): EventsFeedCard["state"] {
   return "upcoming";
 }
 
+/**
+ * One doctor card payload (019's `PublicEventSummary`) onto the feed card
+ * model — the ONE mapping every doctor read that carries event cards uses, so
+ * the events page and the specialty feed's nearest-events block (018 EARS-4)
+ * cannot render the same event differently.
+ */
+export function adaptDoctorEventCard(card: DoctorEventCard): EventsFeedCard {
+  return {
+    id: card.id,
+    slug: card.slug,
+    startsAt: card.startsAt,
+    format: card.format,
+    kindTitle: card.kind.title,
+    title: card.title,
+    school: card.source,
+    speakers: card.speaker ? [card.speaker] : [],
+    state: doctorState(card),
+    signUpCount: card.signUpCount,
+    nmo: card.nmo,
+    pulCost: card.pulCost,
+    ...(card.city ? { city: card.city } : {}),
+    ...(card.seatsLeft !== undefined ? { seatsLeft: card.seatsLeft } : {}),
+    recording: card.recording ?? null,
+  };
+}
+
 /** The doctor read `GET /v1/storefront/doctor/events?tense=…&from=&to=&…facets`. */
 export const adaptDoctorEventsFeed: EventsStorefrontAdapter = (dto) => {
   const feed = DoctorEventsFeedSchema.parse(dto);
-  const cards = feed.days.flatMap((day) =>
-    day.items.map(
-      (card): EventsFeedCard => ({
-        id: card.id,
-        slug: card.slug,
-        startsAt: card.startsAt,
-        format: card.format,
-        kindTitle: card.kind.title,
-        title: card.title,
-        school: card.source,
-        speakers: card.speaker ? [card.speaker] : [],
-        state: doctorState(card),
-        signUpCount: card.signUpCount,
-        nmo: card.nmo,
-        pulCost: card.pulCost,
-        ...(card.city ? { city: card.city } : {}),
-        ...(card.seatsLeft !== undefined ? { seatsLeft: card.seatsLeft } : {}),
-        recording: card.recording ?? null,
-      }),
-    ),
-  );
+  const cards = feed.days.flatMap((day) => day.items.map(adaptDoctorEventCard));
   return {
     today: feed.today,
     cards,
@@ -121,3 +126,19 @@ export const adaptDoctorEventsFeed: EventsStorefrontAdapter = (dto) => {
     defaultScopeEmpty: feed.targeting.defaultScopeEmpty,
   };
 };
+
+/**
+ * 018 EARS-4 — the specialty feed's nearest-events read
+ * `GET /v1/storefront/feed/{specialty}/events`: the same cards, plus the
+ * link-out into the 019 events feed scoped to the specialty.
+ */
+export function adaptFeedEvents(dto: unknown): {
+  cards: EventsFeedCard[];
+  allEventsHref: string;
+} {
+  const block = FeedEventsSchema.parse(dto);
+  return {
+    cards: block.items.map(adaptDoctorEventCard),
+    allEventsHref: block.allEventsHref,
+  };
+}

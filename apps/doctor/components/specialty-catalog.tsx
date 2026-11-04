@@ -71,11 +71,21 @@ export interface SpecialtyCatalogProps {
   actor: SpecialtyActor;
   /** The server's answer, or `null` when it could not resolve one. */
   initialChoice: SpecialtyChoice | null;
+  /**
+   * 018 EARS-1 — the catalog mounted by the specialty feed's «сменить
+   * специальность» opens already in its «сменить» state over the remembered
+   * choice, instead of the collapsed row the home shows.
+   */
+  reopened?: boolean;
+  /** 018 EARS-1 — called with the RECORDED specialty after a choice lands. */
+  onChosen?: (specialty: SpecialtyRef) => void;
 }
 
 export function SpecialtyCatalog({
   actor,
   initialChoice,
+  reopened = false,
+  onChosen,
 }: SpecialtyCatalogProps) {
   const [book, setBook] = useState<BookState>({ kind: "loading" });
   const [frequent, setFrequent] = useState<SpecialtyRef[]>([]);
@@ -97,7 +107,7 @@ export function SpecialtyCatalog({
   // «сменить» — the catalog is open OVER a remembered choice. Kept apart from
   // `chosen` so cancelling out of it (a re-choice, or a failed one) never has to
   // reconstruct what was already recorded.
-  const [changing, setChanging] = useState(false);
+  const [changing, setChanging] = useState(reopened);
   const [choiceFailed, setChoiceFailed] = useState(false);
 
   const normalized = normalizeSpecialtyQuery(query);
@@ -258,13 +268,14 @@ export function SpecialtyCatalog({
           // greet the doctor as the state of a question they just closed.
           setQuery("");
           setExpanded(false);
+          if (choice.specialty) onChosen?.(choice.specialty);
         })
         .catch(() => {
           saving.current = false;
           setChoiceFailed(true);
         });
     },
-    [actor],
+    [actor, onChosen],
   );
 
   /** «сменить» — re-open the full catalog without forgetting what is recorded. */

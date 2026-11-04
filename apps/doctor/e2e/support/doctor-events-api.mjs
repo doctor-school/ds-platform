@@ -402,6 +402,39 @@ function myEventsBody(cookie, tab) {
   };
 }
 
+/**
+ * 018 EARS-1 / EARS-4 — the specialty feed fixture: one book entry and its
+ * three nearest events — a counter shown, a counter hidden by its event's
+ * «Скрыть число записавшихся» option (`signUpCount: null`), and an offline
+ * colleagues' meet-up that is the `offline` format of the same card, НМО-
+ * accredited.
+ */
+const FEED_SPECIALTY = {
+  id: "0b8f1c52-5d0e-4c55-9d1f-1a2b3c4d5e6f",
+  code: "travmatologiya-i-ortopediya",
+  name: "Травматология и ортопедия",
+  isOther: false,
+};
+const FEED_EVENTS = [
+  card("feed-shown", "2026-09-02T09:00:00.000Z", {
+    title: "Разрыв ПКС: тактика",
+    signUpCount: 48,
+  }),
+  card("feed-hidden", "2026-09-03T12:00:00.000Z", {
+    title: "Остеоартроз: что нового",
+    signUpCount: null,
+  }),
+  card("feed-meetup", "2026-09-05T15:00:00.000Z", {
+    title: "Встреча травматологов",
+    format: "offline",
+    city: "Москва",
+    seatsLeft: 12,
+    nmo: true,
+    signUpCount: 9,
+  }),
+];
+let specialtyEventsFailing = false;
+
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
@@ -493,6 +526,11 @@ const server = createServer((request, response) => {
       entries: SPECIALTIES,
       total: SPECIALTIES.length,
     });
+  }
+  // 018 EARS-1 — the specialty feed re-opens 017's catalog, which reads the
+  // frequent set beside the book.
+  if (url.pathname === "/v1/public/specialties/frequent") {
+    return json(response, 200, { entries: SPECIALTIES });
   }
 
   if (url.pathname === "/v1/storefront/doctor/events/month") {
@@ -645,6 +683,51 @@ const server = createServer((request, response) => {
         specialtyReference: null,
         directionIds: [],
         adjacentDirectionIds: [],
+      },
+    });
+  }
+
+  // 018 EARS-1 / EARS-4 — the specialty feed envelope and its events block.
+  if (url.pathname === "/__e2e/specialty-feed" && request.method === "POST") {
+    let body = "";
+    request.on("data", (chunk) => (body += chunk));
+    request.on("end", () => {
+      try {
+        specialtyEventsFailing = JSON.parse(body || "{}").failing === true;
+      } catch {
+        specialtyEventsFailing = false;
+      }
+      json(response, 200, { failing: specialtyEventsFailing });
+    });
+    return undefined;
+  }
+  const feedPath = /^\/v1\/storefront\/feed\/([^/]+)(\/events)?$/.exec(
+    url.pathname,
+  );
+  if (feedPath) {
+    const code = decodeURIComponent(feedPath[1]);
+    if (code !== FEED_SPECIALTY.code) {
+      return json(response, 404, {
+        type: "https://docs.doctor.school/errors/specialty-feed-not-found",
+        title: "No specialty feed at this address",
+        status: 404,
+        errorCode: "SPECIALTY_FEED_NOT_FOUND",
+        traceId: "e2e",
+      });
+    }
+    if (feedPath[2]) {
+      if (specialtyEventsFailing) return json(response, 503, { status: 503 });
+      return json(response, 200, {
+        items: FEED_EVENTS,
+        allEventsHref: `/events?specialty=${code}`,
+      });
+    }
+    return json(response, 200, {
+      specialty: FEED_SPECIALTY,
+      blocks: [{ kind: "events", read: `/v1/storefront/feed/${code}/events` }],
+      order: "events-first",
+      viewer: {
+        loggedIn: (request.headers.cookie ?? "").includes("__Host-ds_session="),
       },
     });
   }

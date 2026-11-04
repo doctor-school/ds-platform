@@ -158,7 +158,7 @@ export class ProjectPartnersService {
     query: PublicCursorQuery,
   ): Promise<PublicProjectPartnerItemPage> {
     const project = await this.repo.findPublicProject(key);
-    if (!project || project.status !== "published" || project.deletedAt) {
+    if (!project) {
       throw new TaxonomyError("RESOURCE_NOT_FOUND");
     }
     const after = decodeCursor(query.cursor, TITLE_CURSOR_SHAPE);

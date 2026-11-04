@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -21,6 +22,7 @@ import {
   MAX_IMAGE_BYTES,
   parseIfMatchVersion,
   type ProjectAdminList,
+  ReplaceProjectResultsRequestSchema,
   UpdateProjectRequestSchema,
 } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
@@ -29,6 +31,7 @@ import {
   IdempotencyService,
 } from "./idempotency.service.js";
 import { sha256, type UploadedImage } from "./media/still-image-normalizer.js";
+import { ProjectResultsService } from "./project-results.service.js";
 import { ProjectsService } from "./projects.service.js";
 import { TaxonomyError } from "./taxonomy.errors.js";
 import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
@@ -60,6 +63,8 @@ export class ProjectsAdminController {
     @Inject(ProjectsService) private readonly projects: ProjectsService,
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
+    @Inject(ProjectResultsService)
+    private readonly projectResults: ProjectResultsService,
   ) {}
 
   /**
@@ -331,6 +336,98 @@ export class ProjectsAdminController {
     });
     void reply.header("etag", etag);
     return detail;
+  }
+
+  /** 030 EARS-2 — the project's ordered results plus the project ETag. */
+  @Get(":id/results")
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    audit: "none",
+    tests: ["EARS-2", "EARS-18"],
+  })
+  async results(
+    @Param("id") id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    if (!CANONICAL_UUID_REGEX.test(id)) {
+      throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    }
+    const { body, etag } = await this.projectResults.read(id);
+    void reply.header("etag", etag);
+    return body;
+  }
+
+  /**
+   * 030 EARS-2 / EARS-6 — `PUT /v1/admin/projects/:id/results`: replace the
+   * ordered set (0–20) as one write under the project's `If-Match`.
+   */
+  @Put(":id/results")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    revalidate: "live",
+    audit: "low-stakes",
+    tests: ["EARS-2", "EARS-6", "EARS-18"],
+  })
+  async replaceResults(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    if (!CANONICAL_UUID_REGEX.test(id)) {
+      throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    }
+    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const { raw: rawIfMatch, version: expectedVersion } = requirePublishVersion(
+      req,
+      "a results save",
+    );
+    const contentType = String(req.headers["content-type"] ?? "");
+    if (contentType && !contentType.includes("application/json")) {
+      throw new TaxonomyError(
+        "UNSUPPORTED_MEDIA_TYPE",
+        "project results carry no media; use application/json",
+      );
+    }
+    const parsed = ReplaceProjectResultsRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "invalid project results",
+        parsed.error.issues.map((i) => ({
+          path: i.path.join("."),
+          message: i.message,
+        })),
+      );
+    }
+    const route = "/v1/admin/projects/:id/results";
+    const outcome = await this.idempotency.begin({
+      key,
+      scope: "taxonomy.projects",
+      actorId: actorSub(req),
+      method: "PUT",
+      route,
+      fingerprint: this.idempotency.fingerprint({
+        method: "PUT",
+        path: `/v1/admin/projects/${id}/results`,
+        payload: parsed.data,
+        ifMatch: rawIfMatch,
+      }),
+    });
+    if (replayed(outcome, reply)) return outcome.replay.body;
+
+    const { body, etag } = await this.projectResults.replace({
+      projectId: id,
+      payload: parsed.data,
+      expectedVersion,
+      lease: outcome.lease,
+    });
+    void reply.header("etag", etag);
+    return body;
   }
 
   /**

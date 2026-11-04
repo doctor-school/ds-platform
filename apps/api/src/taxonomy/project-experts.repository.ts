@@ -4,6 +4,7 @@ import type { DrizzleHandle, Expert, Project, ProjectExpert } from "@ds/db";
 import { experts, projectExperts, projects } from "@ds/db";
 import type { ProjectExpertAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { projectPubliclyVisible } from "./project-public-visibility.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 
 // 012 EARS-9 (#1291) — Drizzle data access for the `project_experts` join.
@@ -353,7 +354,11 @@ export class ProjectExpertsRepository {
     return { rows: rows.map(shape), total: Number(totals?.value ?? 0) };
   }
 
-  /** Resolve a project by canonical UUID or slug; eligibility is the caller's. */
+  /**
+   * Resolve a PUBLIC project by canonical UUID or slug — `null` for an unknown
+   * one and for one that is not public alike (030 EARS-17: published with ≥1
+   * result, `projectPubliclyVisible`).
+   */
   async findPublicProject(key: {
     id?: string;
     slug?: string;
@@ -361,7 +366,10 @@ export class ProjectExpertsRepository {
     const where = key.id
       ? eq(projects.id, key.id)
       : eq(projects.slug, key.slug!);
-    const [row] = await this.db.select().from(projects).where(where);
+    const [row] = await this.db
+      .select()
+      .from(projects)
+      .where(and(where, projectPubliclyVisible));
     return row ?? null;
   }
 
@@ -427,8 +435,7 @@ export class ProjectExpertsRepository {
       eq(projectExperts.expertId, expertId),
       eq(projectExperts.status, "active"),
       isNull(projectExperts.deletedAt),
-      eq(projects.status, "published"),
-      isNull(projects.deletedAt),
+      projectPubliclyVisible,
     ];
     if (after) {
       filters.push(

@@ -16,6 +16,10 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { eventClassificationSql } from "../setup/event-classification.js";
+import {
+  deleteProjectResults,
+  seedProjectResult,
+} from "../setup/project-results.js";
 
 // 012 EARS-12 (#1294) — the CROSS-route public-read contract sweep.
 //
@@ -131,15 +135,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return { id: rows[0]!.id, slug };
     }
 
-    function insertProject(
+    /** 030 EARS-17: every fixture project declares one result, so only its lifecycle decides. */
+    async function insertProject(
       title: string,
       status: Lifecycle = "published",
     ): Promise<string> {
-      return insert(
+      const id = await insert(
         "projects",
         {
           slug: `p-1294-${randomUUID()}`,
-          kind: "school",
+          stage: "running",
           default_audience: "doctors",
           title,
           description: "Описание проекта",
@@ -147,6 +152,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         },
         createdEntities.projects!,
       );
+      await seedProjectResult(pool, id);
+      return id;
     }
 
     function insertExpert(
@@ -260,6 +267,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           project_id: projectId,
           organisation_id: partnerId,
           is_primary: isPrimary,
+          // 030 EARS-17: every link holds a role; the 032 investor seed role.
+          role_id: "03200000-0000-4000-8000-000000000001",
           ...joinState(retired),
         },
         createdJoins.project_organisations!,
@@ -442,7 +451,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       "coverUrl",
       "description",
       "id",
-      "kind",
       "primaryPartner",
       "slug",
       "title",
@@ -679,6 +687,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           ]);
         }
       }
+      await deleteProjectResults(pool, createdEntities.projects!);
       for (const [table, ids] of Object.entries(createdEntities)) {
         const batch = ids.splice(0);
         if (batch.length > 0) {

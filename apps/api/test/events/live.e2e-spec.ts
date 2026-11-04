@@ -24,6 +24,10 @@ import {
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
 import { eventClassificationSql } from "../setup/event-classification.js";
+import {
+  deleteProjectResults,
+  seedProjectResult,
+} from "../setup/project-results.js";
 
 /**
  * Wave-2 entry gate §4.3 D5 — `GET /v1/public/events/live`, the Academy's
@@ -171,10 +175,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // one project carries the first experts эфир, the idle one carries none.
       for (const slug of [projectSlug, idleProjectSlug]) {
         const project = await pool.query<{ id: string }>(
-          "INSERT INTO projects (slug, kind, title, description, default_audience, status, first_published_at) VALUES ($1, 'school', $2, 'Идёт сейчас', 'experts', 'published', now()) RETURNING id",
+          "INSERT INTO projects (slug, stage, title, description, default_audience, status, first_published_at) VALUES ($1, 'running', $2, 'Идёт сейчас', 'experts', 'published', now()) RETURNING id",
           [slug, `Проект ${slug}`],
         );
         projectIds.push(project.rows[0]!.id);
+        // 030 EARS-17: a published project is public only with ≥1 result.
+        await seedProjectResult(pool, project.rows[0]!.id);
       }
       await pool.query(
         "INSERT INTO event_projects (id, event_id, project_id, status) VALUES ($1, $2, $3, 'active')",
@@ -192,6 +198,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await pool.query("DELETE FROM event_projects WHERE project_id = $1", [
           id,
         ]);
+        await deleteProjectResults(pool, [id]);
         await pool.query("DELETE FROM projects WHERE id = $1", [id]);
       }
       for (const email of createdEmails) {

@@ -13,6 +13,7 @@ import {
   When,
   type AdminWorld,
 } from "../support/fixtures";
+import { chooseProjectStage } from "../support/event-classification";
 import { selectRelationshipCombobox } from "../support/relationship-combobox";
 
 type Kind = { id: string; slug: string; title: string };
@@ -255,11 +256,20 @@ Given(
     await page.locator("#title").fill(title);
     await page.locator("#description").fill("Scenario-owned published project");
     await page.getByTestId("project-default-audience").selectOption("experts");
+    // 030 EARS-1: «Проект идёт» owes no «Что происходит сейчас».
+    await chooseProjectStage(page);
     await page.getByTestId("submit-project").click();
     await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/u);
     const id = new URL(page.url()).pathname.split("/").pop()!;
     state(world).project = { id, title };
     operation(`owned project ${id}`);
+    // 030 EARS-6: a published project holds at least one result.
+    await page.getByTestId("tab-results").click();
+    await page.getByTestId("result-add").click();
+    await page.getByTestId("result-kind-0").selectOption({ label: "Клуб" });
+    await page.getByTestId("result-title-0").fill(title);
+    await page.getByTestId("results-save").click();
+    await expect(page.getByTestId("results-saved")).toBeVisible();
     await page.goto("/experts/create");
     for (const [field, value] of Object.entries({
       "family-name": `Кураторов${Date.now()}`,

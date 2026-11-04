@@ -13,6 +13,7 @@ import {
   test,
   type AdminWorld,
 } from "../support/fixtures";
+import { chooseProjectStage } from "../support/event-classification";
 
 type Row = {
   id: string;
@@ -387,6 +388,8 @@ When(
       page.off("request", observe);
     }
     await audience.selectOption("doctors");
+    // 030 EARS-1: «Проект идёт» owes no «Что происходит сейчас».
+    await chooseProjectStage(page);
     current.project = await created(page, "projects", "submit-project");
     current.before = await authoredRows(world, "projects");
     expect(current.before).toHaveLength(1);

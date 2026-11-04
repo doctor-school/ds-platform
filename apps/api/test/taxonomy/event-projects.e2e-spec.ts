@@ -24,6 +24,10 @@ import {
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
 import { eventClassification } from "../setup/event-classification.js";
+import {
+  deleteProjectResults,
+  seedProjectResult,
+} from "../setup/project-results.js";
 
 // 012 EARS-6 (#1288) — the event↔project relationship vertical over the REAL
 // stack: Fastify + the 011 admin session + Postgres.
@@ -189,7 +193,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "idempotency-key": key(),
         },
         payload: {
-          kind: "school",
+          stage: "running",
           defaultAudience: "doctors",
           title,
           description: "Программа для практикующих кардиологов.",
@@ -207,6 +211,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "UPDATE projects SET status = 'published', first_published_at = now() WHERE id = $1",
           [body.id],
         );
+        // 030 EARS-17: a published project is public only with ≥1 result.
+        await seedProjectResult(pool, body.id);
       }
       return { id: body.id, slug: body.slug, title };
     }
@@ -396,6 +402,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await deleteEventFixture(pool, id);
       }
       for (const id of createdProjectIds.splice(0)) {
+        await deleteProjectResults(pool, [id]);
         await pool.query("DELETE FROM projects WHERE id = $1", [id]);
       }
       for (const k of usedKeys.splice(0)) {
@@ -524,7 +531,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
             "coverUrl",
             "description",
             "id",
-            "kind",
             "primaryPartner",
             "slug",
             "title",
@@ -534,7 +540,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           id: project.id,
           slug: project.slug,
           title: project.title,
-          kind: "school",
           // `project_partners` (#1291) does not exist yet, so no project HAS a
           // partner — null is the truthful value, not a placeholder.
           primaryPartner: null,

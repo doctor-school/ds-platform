@@ -4,6 +4,7 @@ import type { DrizzleHandle, Event, EventProject, Project } from "@ds/db";
 import { eventKinds, eventProjects, events, projects } from "@ds/db";
 import type { EventProjectAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { projectPubliclyVisible } from "./project-public-visibility.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { withRelationConflictMapping } from "./taxonomy.errors.js";
 import {
@@ -376,7 +377,11 @@ export class EventProjectsRepository {
     return row ?? null;
   }
 
-  /** Resolve a public project by canonical UUID or slug; eligibility is the caller's. */
+  /**
+   * Resolve a PUBLIC project by canonical UUID or slug — `null` for an unknown
+   * one and for one that is not public alike (030 EARS-17: published with ≥1
+   * result, `projectPubliclyVisible`).
+   */
   async findPublicProject(key: {
     id?: string;
     slug?: string;
@@ -384,13 +389,16 @@ export class EventProjectsRepository {
     const where = key.id
       ? eq(projects.id, key.id)
       : eq(projects.slug, key.slug!);
-    const [row] = await this.db.select().from(projects).where(where);
+    const [row] = await this.db
+      .select()
+      .from(projects)
+      .where(and(where, projectPubliclyVisible));
     return row ?? null;
   }
 
   /**
    * §5.2 — the published projects related to one event, keyset-paginated on
-   * `(title, id)`. Only ACTIVE relations to PUBLISHED projects are traversed:
+   * `(title, id)`. Only ACTIVE relations to PUBLIC projects are traversed:
    * a retired relation and an unpublished endpoint are both invisible here, and
    * neither is distinguishable from «no such relation» by the caller.
    */
@@ -402,7 +410,7 @@ export class EventProjectsRepository {
     const filters = [
       eq(eventProjects.eventId, eventId),
       eq(eventProjects.status, "active"),
-      eq(projects.status, "published"),
+      projectPubliclyVisible,
     ];
     if (after) {
       filters.push(

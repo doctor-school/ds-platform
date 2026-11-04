@@ -76,6 +76,8 @@ export const GOLDEN_GROUP = Object.freeze({
   eventDirections: 0x000f,
   projectExperts: 0x0010,
   projectPartners: 0x0011,
+  // 030 EARS-2 / EARS-17 (#3503) — the ordered result set of a project.
+  projectResults: 0x0012,
 });
 
 /**
@@ -215,6 +217,14 @@ export const golden = Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.projects, 2),
       slug: "golden-media-draft",
     }),
+    /**
+     * 030 EARS-17 — the ONE published project with no result: off every public
+     * read, and the row the admin mark «Не на сайте: нет результатов» shows on.
+     */
+    publishedNoResults: Object.freeze({
+      id: goldenUuid(GOLDEN_GROUP.projects, 3),
+      slug: "golden-project-published-no-results",
+    }),
   }),
   events: Object.freeze({
     draft: Object.freeze({
@@ -286,6 +296,20 @@ export const golden = Object.freeze({
 });
 
 export type GoldenCatalogue = typeof golden;
+
+/**
+ * 030 EARS-3 (#3503) — the six seed output kinds («Виды результатов»). Like the
+ * event kinds they are NOT golden rows: migration 0055 inserts them with these
+ * fixed ids, and the golden results only reference them.
+ */
+export const SEED_PROJECT_OUTPUT_KINDS = Object.freeze({
+  shkola: Object.freeze({ id: "03000000-0000-4000-8000-000000000001" }),
+  kurs: Object.freeze({ id: "03000000-0000-4000-8000-000000000002" }),
+  podkast: Object.freeze({ id: "03000000-0000-4000-8000-000000000003" }),
+  sobytie: Object.freeze({ id: "03000000-0000-4000-8000-000000000004" }),
+  kongress: Object.freeze({ id: "03000000-0000-4000-8000-000000000005" }),
+  klub: Object.freeze({ id: "03000000-0000-4000-8000-000000000006" }),
+});
 
 /**
  * 012 EARS-27 (#2509) — the five seed event kinds. They are NOT golden rows:

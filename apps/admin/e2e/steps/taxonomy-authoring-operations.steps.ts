@@ -14,6 +14,7 @@ import {
   test,
   type AdminWorld,
 } from "../support/fixtures";
+import { chooseProjectStage } from "../support/event-classification";
 import { selectRelationshipCombobox } from "../support/relationship-combobox";
 import {
   cleanupInventory,
@@ -122,6 +123,8 @@ async function createProject(page: Page, title: string): Promise<Project> {
     .locator("#description")
     .fill("Образовательная программа для врачей.");
   await page.getByTestId("project-default-audience").selectOption("doctors");
+  // 030 EARS-1: «Проект идёт» owes no «Что происходит сейчас».
+  await chooseProjectStage(page);
   const committed = mutation(page, "POST", "/v1/admin/projects");
   await page.getByTestId("submit-project").click();
   const answer = await committed;
@@ -204,6 +207,13 @@ Given(
         expertId,
       });
       await page.goto(`/projects/${project.id}`);
+      // 030 EARS-6: a published project holds at least one result.
+      await page.getByTestId("tab-results").click();
+      await page.getByTestId("result-add").click();
+      await page.getByTestId("result-kind-0").selectOption({ label: "Клуб" });
+      await page.getByTestId("result-title-0").fill(project.title);
+      await page.getByTestId("results-save").click();
+      await expect(page.getByTestId("results-saved")).toBeVisible();
       await page.getByTestId("tab-publish").click();
       const published = mutation(
         page,

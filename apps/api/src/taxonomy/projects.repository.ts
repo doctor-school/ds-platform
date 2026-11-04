@@ -1,11 +1,11 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, count, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import type { DrizzleHandle, Project } from "@ds/db";
-import { projects } from "@ds/db";
+import { projectResults, projects } from "@ds/db";
 import type {
   AdminTaxonomyListQuery,
   EventAudience,
-  ProjectKind,
+  ProjectStage,
 } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
@@ -20,8 +20,13 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export interface ProjectInsert {
   slug: string;
-  kind: ProjectKind;
   title: string;
+  /** 030 EARS-1 */
+  stage: ProjectStage;
+  /** 030 EARS-1 — present iff `stage = soon`. */
+  stageNote: string | null;
+  /** 030 EARS-5 — a new project goes last. */
+  displayPosition: number;
   description: string | null;
   coverRef: string | null;
   /** 012 EARS-30 — prefills the audience of a new event linked to the project. */
@@ -30,8 +35,10 @@ export interface ProjectInsert {
 
 /** The field patch a PATCH applies. `undefined` means unchanged. */
 export interface ProjectPatch {
-  kind?: ProjectKind;
   title?: string;
+  /** 030 EARS-1 */
+  stage?: ProjectStage;
+  stageNote?: string | null;
   /** 012 EARS-30 — changing it rewrites no existing event. */
   defaultAudience?: EventAudience;
   description?: string | null;
@@ -63,14 +70,44 @@ export class ProjectsRepository {
     );
   }
 
+  /**
+   * 030 EARS-5 — the next display position: last among non-retired rows.
+   * Serialized by a transaction-scoped advisory lock so two concurrent creates
+   * never take the same slot.
+   */
+  async nextDisplayPosition(tx: Tx): Promise<number> {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended('projects-display-order', 0))`,
+    );
+    const [row] = await tx
+      .select({
+        next: sql<number>`coalesce(max(${projects.displayPosition}) + 1, 0)`,
+      })
+      .from(projects)
+      .where(isNull(projects.deletedAt));
+    return Number(row?.next ?? 0);
+  }
+
+  /** 030 EARS-6 / EARS-17 — how many results the project declares. */
+  async resultCount(
+    tx: Tx | Db | undefined,
+    projectId: string,
+  ): Promise<number> {
+    const [row] = await (tx ?? this.db)
+      .select({ value: count() })
+      .from(projectResults)
+      .where(eq(projectResults.projectId, projectId));
+    return Number(row?.value ?? 0);
+  }
+
   async insert(tx: Tx, values: ProjectInsert): Promise<Project> {
     const [row] = await tx.insert(projects).values(values).returning();
     if (!row) throw new Error("project insert returned no row");
     return row;
   }
 
-  async findById(id: string): Promise<Project | null> {
-    const [row] = await this.db
+  async findById(id: string, tx?: Tx): Promise<Project | null> {
+    const [row] = await (tx ?? this.db)
       .select()
       .from(projects)
       .where(eq(projects.id, id));
@@ -150,7 +187,7 @@ export class ProjectsRepository {
    */
   async list(
     query: AdminTaxonomyListQuery,
-  ): Promise<{ rows: Project[]; total: number }> {
+  ): Promise<{ rows: (Project & { resultCount: number })[]; total: number }> {
     const filters = [];
     if (query.status) {
       filters.push(eq(projects.status, query.status));
@@ -167,15 +204,29 @@ export class ProjectsRepository {
     }
     const where = filters.length > 0 ? and(...filters) : undefined;
 
-    const rows = await this.db
-      .select()
+    const counts = this.db
+      .select({
+        projectId: projectResults.projectId,
+        n: count().as("n"),
+      })
+      .from(projectResults)
+      .groupBy(projectResults.projectId)
+      .as("result_counts");
+    const joined = await this.db
+      .select({ project: projects, n: counts.n })
       .from(projects)
+      .leftJoin(counts, eq(counts.projectId, projects.id))
       .where(where)
       // Stable total order ending in id — two rows updated in the same
       // millisecond must not swap places between pages.
       .orderBy(asc(projects.title), asc(projects.id))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
+    // 030 EARS-17 — the list marks a project without results.
+    const rows = joined.map(({ project, n }) => ({
+      ...project,
+      resultCount: Number(n ?? 0),
+    }));
 
     const [totals] = await this.db
       .select({ value: count() })

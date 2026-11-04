@@ -1,3 +1,4 @@
+import { OUTPUT_KIND_IN_USE_PATH_PREFIX } from "@ds/schemas";
 import type { TaxonomyHttpError } from "@/providers/data-provider";
 
 /** The per-event entries of a refused narrowing (`allowedFormats.events.<id>`). */
@@ -50,6 +51,41 @@ export function refusedFields(error: unknown): string[] {
     if (field && !fields.includes(field)) fields.push(field);
   }
   return fields;
+}
+
+/**
+ * The items a refused project publish names (030 EARS-6): `title`,
+ * `description`, `results`, `stageNote` and `curator`, each once, in the
+ * server's order — so the publish panel links each one to the tab that fixes
+ * it. Any other refusal names none.
+ */
+export function publishBlockers(error: unknown): string[] {
+  const refusal = error as TaxonomyHttpError | undefined;
+  if (refusal?.errorCode !== "PUBLISH_REQUIREMENTS_NOT_MET") return [];
+  const items: string[] = [];
+  for (const entry of refusal.fieldErrors ?? []) {
+    const item = entry.path.split(".")[0];
+    if (item && !items.includes(item)) items.push(item);
+  }
+  return items;
+}
+
+/**
+ * The projects holding an output kind a retire was refused for (030 EARS-3,
+ * `409 OUTPUT_KIND_IN_USE`): one field error per project, `path` =
+ * `projects.<id>`, `message` = its title. Any other refusal names none.
+ */
+export function outputKindHolders(
+  error: unknown,
+): { id: string; title: string }[] {
+  const refusal = error as TaxonomyHttpError | undefined;
+  if (refusal?.errorCode !== "OUTPUT_KIND_IN_USE") return [];
+  return (refusal.fieldErrors ?? [])
+    .filter((e) => e.path.startsWith(OUTPUT_KIND_IN_USE_PATH_PREFIX))
+    .map((e) => ({
+      id: e.path.slice(OUTPUT_KIND_IN_USE_PATH_PREFIX.length),
+      title: e.message,
+    }));
 }
 
 export interface TaxonomyErrorContext {
@@ -271,15 +307,29 @@ export function taxonomyErrorKey(
     }
   }
 
+  // ── 030 EARS-3 output-kind book ──────────────────────────────────────────
+  // `OUTPUT_KIND_IN_USE` exists only on this surface: the retire was refused
+  // because draft or published projects still hold the kind, and the page
+  // lists them under the sentence (`outputKindHolders`).
+  if (ns === "projectOutputKinds") {
+    switch (code) {
+      case "OUTPUT_KIND_IN_USE":
+        return "projectOutputKinds.errors.inUse";
+      case "INVALID_TRANSITION":
+        return "projectOutputKinds.errors.invalidTransition";
+      case "RESOURCE_NOT_FOUND":
+        return "projectOutputKinds.errors.notFound";
+      default:
+        break;
+    }
+  }
+
   // ── 012 EARS-5 publish refusals on the entity surfaces (#1287) ───────────
   // Scoped like every block above: these codes reach an ENTITY screen only
-  // through its publish command, and three of them are the refusals whose fix
+  // through its publish command, and two of them are the refusals whose fix
   // is somewhere OTHER than the form the operator is looking at — which is
   // exactly why the generic «проверьте поля» would be a wrong sentence:
   //
-  // - `PUBLISHED_PROJECT_REQUIRES_CURATOR` — the project has no active curator
-  //   pointing at a publicly visible expert. The fix lives on the «Эксперты»
-  //   tab, not in any field on «Основное».
   // - `SPEAKER_POSITION_OCCUPIED` — publishing this expert would make an event
   //   link visible on a slot a legacy speaker row still holds. The fix is a
   //   different NUMBER on the event, not a corrected expert field.
@@ -287,11 +337,12 @@ export function taxonomyErrorKey(
   //
   // `PUBLISH_REQUIREMENTS_NOT_MET` keeps the shared tail mapping: the field-set
   // sentence is already per-kind there, and organisations have no completeness
-  // branch at all (§5.2 — title alone is a complete public projection).
+  // branch at all (§5.2 — title alone is a complete public projection). A
+  // project's missing curator is one of its items since 030 EARS-6 (path
+  // `curator`), so the publish panel lists it with the other missing items and
+  // links it to «Эксперты» (`publishBlockers`).
   if (ns === "projects" || ns === "experts" || ns === "organisations") {
     switch (code) {
-      case "PUBLISHED_PROJECT_REQUIRES_CURATOR":
-        return "projects.errors.curatorRequired";
       case "SPEAKER_POSITION_OCCUPIED":
         return "experts.errors.positionOccupied";
       case "CONTENT_REMOVED":

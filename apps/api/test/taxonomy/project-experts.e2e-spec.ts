@@ -17,6 +17,10 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import {
+  deleteProjectResults,
+  seedProjectResult,
+} from "../setup/project-results.js";
 
 // 012 EARS-9 (#1291) — the project↔expert relationship over the REAL stack:
 // Fastify + the 011 admin session + Postgres.
@@ -101,7 +105,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     ): Promise<string> {
       const row = {
         slug: `p-1291-${randomUUID()}`,
-        kind: "school",
+        stage: "running",
         // 012 EARS-30 (#2509): every project carries a default audience.
         default_audience: "doctors",
         title: `Школа ${Math.random().toString(36).slice(2, 8)}`,
@@ -150,6 +154,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           WHERE id = $1`,
         [id],
       );
+      // 030 EARS-17: a published project is public only with ≥1 result.
+      await seedProjectResult(pool, id);
     }
 
     async function projectVersion(id: string): Promise<number> {
@@ -326,6 +332,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "DELETE FROM project_organisations WHERE project_id = $1",
           [id],
         );
+        await deleteProjectResults(pool, [id]);
         await pool.query("DELETE FROM projects WHERE id = $1", [id]);
       }
       for (const id of createdExpertIds.splice(0)) {
@@ -870,7 +877,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       };
       expect(page.data[0]).toMatchObject({
         id: projectId,
-        kind: "school",
         role: "curator",
         // Populated by the ONE shared summary mapper; null until #1292's
         // relation makes it non-null.
@@ -880,7 +886,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "coverUrl",
         "description",
         "id",
-        "kind",
         "primaryPartner",
         "role",
         "slug",

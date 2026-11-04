@@ -28,6 +28,10 @@ import {
   TEST_EVENT_KIND_ID,
   type TestEventAudience,
 } from "../setup/event-classification.js";
+import {
+  deleteProjectResults,
+  seedProjectResult,
+} from "../setup/project-results.js";
 
 // 012 EARS-25…30 (#2509) — the event-kind dictionary, the event's required kind
 // + audience, and the per-storefront selection rule, over the REAL stack:
@@ -334,6 +338,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await pool.query("DELETE FROM event_projects WHERE project_id = $1", [
           id,
         ]);
+        await deleteProjectResults(pool, [id]);
         await pool.query("DELETE FROM projects WHERE id = $1", [id]);
       }
       for (const id of createdKindIds.splice(0)) {
@@ -464,11 +469,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // The event summary of a public traversal carries the stored kind.
       const projectId = randomUUID();
       await pool.query(
-        `INSERT INTO projects (id, slug, kind, title, default_audience, status, first_published_at)
-         VALUES ($1, $2, 'school', 'Проект 2509', 'experts', 'published', now())`,
+        `INSERT INTO projects (id, slug, stage, title, default_audience, status, first_published_at)
+         VALUES ($1, $2, 'running', 'Проект 2509', 'experts', 'published', now())`,
         [projectId, `p-2509-${projectId.slice(0, 8)}`],
       );
       createdProjectIds.push(projectId);
+      // 030 EARS-17: a published project is public only with ≥1 result.
+      await seedProjectResult(pool, projectId);
       const event = await seedEvent({ audience: "experts", kindId: draft.id });
       await pool.query(
         "INSERT INTO event_projects (event_id, project_id) VALUES ($1, $2)",
@@ -810,7 +817,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     // ── EARS-30: the project's default audience ──────────────────────────
 
     it("012 EARS-30: a project write requires a default audience, and a later change of it changes no existing event's audience", async () => {
-      const base = { kind: "school", title: `Школа 2509 ${marker()}` };
+      const base = { stage: "running", title: `Школа 2509 ${marker()}` };
       const missing = await app.inject({
         method: "POST",
         url: "/v1/admin/projects",

@@ -31,12 +31,19 @@ import type {
   NewProject,
   NewProjectExpert,
   NewProjectOrganisation,
+  NewProjectResult,
 } from "../../schema/taxonomy.js";
 import { SEED_ORGANISATION_ROLES } from "../../schema/taxonomy.js";
 import type { NewUser } from "../../schema/users.js";
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
 import { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
-import { golden, GOLDEN_GROUP, goldenUuid, SEED_EVENT_KINDS } from "./ids.js";
+import {
+  golden,
+  GOLDEN_GROUP,
+  goldenUuid,
+  SEED_EVENT_KINDS,
+  SEED_PROJECT_OUTPUT_KINDS,
+} from "./ids.js";
 import type { GoldenSubjectMap } from "./idp.js";
 import { GOLDEN_IDP_ACCOUNTS } from "./idp.js";
 import { goldenDateOnly, goldenMskMidnight, shiftFromNow } from "./now.js";
@@ -113,6 +120,11 @@ export interface GoldenDataset {
   eventDirections: NewEventDirection[];
   projectExperts: NewProjectExpert[];
   projectPartners: NewProjectOrganisation[];
+  /**
+   * 030 EARS-2 / EARS-17 — the ordered results of every published project but
+   * `golden.projects.publishedNoResults` (see `buildProjectResults`).
+   */
+  projectResults: NewProjectResult[];
 }
 
 /** Raised when the dataset itself is inconsistent — a fixture defect, not a run defect. */
@@ -266,7 +278,8 @@ export function buildGoldenDataset(
     {
       id: golden.projects.publishedSchool.id,
       slug: golden.projects.publishedSchool.slug,
-      kind: "school",
+      legacyKind: "school",
+      stage: "running",
       title: "Школа кардиолога (эталон)",
       defaultAudience: "doctors",
       description:
@@ -280,13 +293,29 @@ export function buildGoldenDataset(
     {
       id: golden.projects.draft.id,
       slug: golden.projects.draft.slug,
-      kind: "media",
+      legacyKind: "media",
+      stage: "running",
       title: "Медиапроект в черновике (эталон)",
       defaultAudience: "experts",
       status: "draft",
       version: 1,
       createdAt: created,
       updatedAt: created,
+    },
+    {
+      id: golden.projects.publishedNoResults.id,
+      slug: golden.projects.publishedNoResults.slug,
+      legacyKind: "school",
+      stage: "running",
+      title: "Проект без результатов (эталон)",
+      defaultAudience: "doctors",
+      description:
+        "Опубликованный проект золотого набора, у которого нет ни одного результата: он не виден ни в одном публичном чтении, а в админке несёт отметку «Не на сайте: нет результатов».",
+      status: "published",
+      firstPublishedAt: at({ days: -45 }),
+      version: 1,
+      createdAt: created,
+      updatedAt: at({ days: -45 }),
     },
     ...volume.projects,
   ];
@@ -744,6 +773,31 @@ export function buildGoldenDataset(
       createdAt: created,
       updatedAt: created,
     },
+    // 030 EARS-17 — the no-result project is a real published project: one
+    // active curator like every other (`012-design §3.2`).
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectExperts, 5),
+      projectId: golden.projects.publishedNoResults.id,
+      expertId: golden.experts.published.id,
+      role: "curator",
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectExperts, 6),
+      projectId: golden.projects.publishedNoResults.id,
+      expertId: goldenUuid(
+        GOLDEN_GROUP.experts,
+        GOLDEN_VOLUME_ORDINAL_BASE + 1,
+      ),
+      role: "member",
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
     ...volume.projectExperts,
   ];
 
@@ -752,6 +806,7 @@ export function buildGoldenDataset(
       id: goldenUuid(GOLDEN_GROUP.projectPartners, 1),
       projectId: golden.projects.publishedSchool.id,
       organisationId: goldenPartnerId(0),
+      roleId: SEED_ORGANISATION_ROLES.investor.id,
       isPrimary: true,
       status: "active",
       version: 1,
@@ -762,6 +817,7 @@ export function buildGoldenDataset(
       id: goldenUuid(GOLDEN_GROUP.projectPartners, 2),
       projectId: golden.projects.publishedSchool.id,
       organisationId: goldenPartnerId(11),
+      roleId: SEED_ORGANISATION_ROLES.investor.id,
       isPrimary: false,
       status: "active",
       version: 1,
@@ -772,6 +828,18 @@ export function buildGoldenDataset(
       id: goldenUuid(GOLDEN_GROUP.projectPartners, 3),
       projectId: golden.projects.draft.id,
       organisationId: goldenPartnerId(1),
+      roleId: SEED_ORGANISATION_ROLES.investor.id,
+      isPrimary: true,
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectPartners, 4),
+      projectId: golden.projects.publishedNoResults.id,
+      organisationId: goldenPartnerId(2),
+      roleId: SEED_ORGANISATION_ROLES.investor.id,
       isPrimary: true,
       status: "active",
       version: 1,
@@ -811,7 +879,59 @@ export function buildGoldenDataset(
     eventDirections,
     projectExperts,
     projectPartners,
+    projectResults: buildProjectResults(projects, created),
   };
+}
+
+/**
+ * 030 EARS-2 / EARS-17 — the ordered result set of every published golden
+ * project except `golden.projects.publishedNoResults`.
+ *
+ * The `public_project` predicate (030-design) hides a published project with no
+ * result from every public read, so a golden stand without results would show
+ * no project anywhere. Every other published project gets two results whose
+ * kinds follow its former 012 kind (a school: Школа + Курс; a media project:
+ * Подкаст + Событие), at dense positions 0..1, with deterministic ids. The
+ * dedicated project stays without one so the admin mark has a row to show.
+ *
+ * No result states a storefront link: the editor refuses a link off the stand's
+ * own `DOCTOR_PUBLIC_ORIGIN`, which differs per stand, so a fixed golden link
+ * would make every re-save of a golden project fail.
+ */
+function buildProjectResults(
+  projects: readonly NewProject[],
+  created: Date,
+): NewProjectResult[] {
+  const rows: NewProjectResult[] = [];
+  let ordinal = 1;
+  for (const project of projects) {
+    if (project.status !== "published" || project.deletedAt) continue;
+    if (project.id === golden.projects.publishedNoResults.id) continue;
+    const kinds =
+      project.legacyKind === "media"
+        ? ([
+            [SEED_PROJECT_OUTPUT_KINDS.podkast.id, "Подкаст проекта"],
+            [SEED_PROJECT_OUTPUT_KINDS.sobytie.id, "Открытые эфиры проекта"],
+          ] as const)
+        : ([
+            [SEED_PROJECT_OUTPUT_KINDS.shkola.id, "Цикл занятий школы"],
+            [SEED_PROJECT_OUTPUT_KINDS.kurs.id, "Курс по материалам школы"],
+          ] as const);
+    kinds.forEach(([outputKindId, title], position) => {
+      rows.push({
+        id: goldenUuid(GOLDEN_GROUP.projectResults, ordinal++),
+        projectId: project.id as string,
+        outputKindId,
+        position,
+        title,
+        description: `Результат проекта «${project.title}».`,
+        storefrontUrl: null,
+        createdAt: created,
+        updatedAt: created,
+      });
+    });
+  }
+  return rows;
 }
 
 /**

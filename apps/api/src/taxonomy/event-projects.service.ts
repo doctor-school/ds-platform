@@ -348,7 +348,7 @@ export class EventProjectsService {
     query: PublicCursorQuery,
   ): Promise<PublicEventSummaryPage> {
     const project = await this.repo.findPublicProject(key);
-    if (!project || project.status !== "published") {
+    if (!project) {
       throw new TaxonomyError("RESOURCE_NOT_FOUND");
     }
     const after = decodeCursor(query.cursor, EVENT_CURSOR_SHAPE);

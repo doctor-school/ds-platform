@@ -181,7 +181,7 @@ export class ProjectExpertsService {
     query: PublicCursorQuery,
   ): Promise<PublicProjectExpertItemPage> {
     const project = await this.repo.findPublicProject(key);
-    if (!project || project.status !== "published" || project.deletedAt) {
+    if (!project) {
       throw new TaxonomyError("RESOURCE_NOT_FOUND");
     }
     const after = decodeCursor(query.cursor, EXPERT_CURSOR_SHAPE);

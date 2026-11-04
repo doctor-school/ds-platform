@@ -33,6 +33,7 @@ import {
   organisationRoleAssignments,
   projectExperts,
   projectOrganisations,
+  projectResults,
   projects,
 } from "../../schema/taxonomy.js";
 import { users } from "../../schema/users.js";
@@ -143,6 +144,8 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "direction_adjacency",
   "project_experts",
   "project_organisations",
+  // 030 EARS-17 (#3503) — after its project and migration 0055's output kinds.
+  "project_results",
 ]);
 
 /**
@@ -305,6 +308,14 @@ export function buildGoldenSeedPlan(
       dataset.projectPartners,
       ["id"],
     ),
+    // The result editor replaces a project's set with fresh ids (030 EARS-2), so
+    // a stand re-run meets the row on its pinned (project, position) slot — the
+    // unique `project_results_project_position_key` — not on a golden id the
+    // stand may no longer hold.
+    step("project_results", projectResults, dataset.projectResults, [
+      "projectId",
+      "position",
+    ]),
   ];
 
   const planned = steps.map((s) => s.name);
@@ -467,6 +478,7 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
     "organisationId",
     partnerIds,
   );
+  check("project_results", dataset.projectResults, "projectId", projectIds);
   check(
     "organisation_role_assignments",
     dataset.organisationRoleAssignments,

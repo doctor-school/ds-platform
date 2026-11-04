@@ -1,4 +1,7 @@
-import { chooseProjectDefaultAudience } from "../support/event-classification";
+import {
+  chooseProjectDefaultAudience,
+  chooseProjectStage,
+} from "../support/event-classification";
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { PROJECT_DESCRIPTION_MAX } from "@ds/schemas";
@@ -236,9 +239,84 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page.locator("#description").fill("");
     await page.locator("#description").fill("Описание для скана доступности.");
     await chooseProjectDefaultAudience(page);
+    await chooseProjectStage(page);
     await page.getByTestId("submit-project").click();
     await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
     await page.getByTestId("project-form").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  // 030 EARS-20 (#3503) — the project container: the «Стадия» radio group with
+  // «Что происходит сейчас» and its field-addressed refusal, the «Результаты»
+  // repeatable rows (select, move / remove controls, refused row fields), and
+  // the publish refusal listing each missing item as a control.
+  test("030 EARS-20: the project form, results tab and publish refusal pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto("/projects/create");
+    await page.getByTestId("project-form").waitFor({ state: "visible" });
+    await page.locator("#title").fill(`Axe-скан контейнер ${Date.now()}`);
+    await page.locator("#description").fill("Описание для скана доступности.");
+    await chooseProjectDefaultAudience(page);
+    // «Скоро» is the default: an empty stage note is refused on its field.
+    await page.getByTestId("submit-project").click();
+    await page
+      .locator('[data-testid="project-stage-note"][aria-invalid="true"]')
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.getByTestId("project-stage-note").fill("Набираем экспертов");
+    await page.getByTestId("submit-project").click();
+    await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+
+    await page.getByTestId("tab-results").click();
+    await page.getByTestId("results-empty").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+    await page.getByTestId("result-add").click();
+    await page.getByTestId("result-add").click();
+    await page.getByTestId("result-url-0").fill("doctor.school");
+    await page.getByTestId("results-save").click();
+    await page
+      .locator('[data-testid="result-kind-0"][aria-invalid="true"]')
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.getByTestId("tab-publish").click();
+    await page.getByTestId("projects-publish").click();
+    await page.getByTestId("publish-blockers").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  // 030 EARS-20 (#3503) — «Виды результатов»: the book, its add form with the
+  // field-addressed duplicate refusal, and a record with its lifecycle bar.
+  test("030 EARS-20: the output-kind list + add + record surfaces pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto("/project-output-kinds");
+    await page
+      .getByTestId("project-output-kinds-table")
+      .getByRole("link", { name: "Школа", exact: true })
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.goto("/project-output-kinds/create");
+    await page.getByTestId("output-kind-form").waitFor({ state: "visible" });
+    await page.getByTestId("output-kind-title").fill("школа");
+    await page.getByTestId("submit-output-kind").click();
+    await page
+      .locator('[data-testid="output-kind-title"][aria-invalid="true"]')
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.goto("/project-output-kinds");
+    await page
+      .getByTestId("project-output-kinds-table")
+      .getByRole("link", { name: "Школа", exact: true })
+      .click();
+    await page.waitForURL(/\/project-output-kinds\/[0-9a-f-]{36}$/);
+    await page.getByTestId("output-kind-lifecycle").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
 
@@ -489,6 +567,7 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       await page.locator("#title").fill(`Axe-скан связи ${suffix} ${stamp}`);
       await page.locator("#description").fill("Описание для скана связей.");
       await chooseProjectDefaultAudience(page);
+      await chooseProjectStage(page);
       await page.getByTestId("submit-project").click();
       await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
       projects.push({

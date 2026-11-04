@@ -21,6 +21,10 @@ import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { deleteEventFixture } from "../setup/fixture-cleanup.js";
 import { eventClassificationSql } from "../setup/event-classification.js";
+import {
+  deleteProjectResults,
+  seedProjectResult,
+} from "../setup/project-results.js";
 
 /**
  * 014 EARS-12 (wave-2 entry gate §4.2, PR 2.5) — the Academy facets Проект,
@@ -176,16 +180,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
       year = month.slice(0, 4);
 
       const project = await pool.query<{ id: string }>(
-        "INSERT INTO projects (slug, kind, title, description, default_audience, status, first_published_at) VALUES ($1, 'school', $2, 'Фасеты', 'experts', 'published', now()) RETURNING id",
+        "INSERT INTO projects (slug, stage, title, description, default_audience, status, first_published_at) VALUES ($1, 'running', $2, 'Фасеты', 'experts', 'published', now()) RETURNING id",
         [projectSlug, `Проект ${tag}`],
       );
       projectId = project.rows[0]!.id;
       taxonomyRows.push({ table: "projects", id: projectId });
+      // 030 EARS-17: a published project is public only with ≥1 result.
+      await seedProjectResult(pool, projectId);
       const idle = await pool.query<{ id: string }>(
-        "INSERT INTO projects (slug, kind, title, description, default_audience, status, first_published_at) VALUES ($1, 'school', $2, 'Фасеты', 'experts', 'published', now()) RETURNING id",
+        "INSERT INTO projects (slug, stage, title, description, default_audience, status, first_published_at) VALUES ($1, 'running', $2, 'Фасеты', 'experts', 'published', now()) RETURNING id",
         [idleProjectSlug, `Пустой проект ${tag}`],
       );
       taxonomyRows.push({ table: "projects", id: idle.rows[0]!.id });
+      await seedProjectResult(pool, idle.rows[0]!.id);
       const expert = await pool.query<{ id: string }>(
         "INSERT INTO experts (slug, family_name, given_name, status, first_published_at) VALUES ($1, 'Фасетова', $2, 'published', now()) RETURNING id",
         [expertSlug, `Анна ${tag}`],
@@ -253,6 +260,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
           await pool.query(`DELETE FROM ${row.table} WHERE id = $1`, [row.id]);
         }
         for (const id of eventIds) await deleteEventFixture(pool, id);
+        await deleteProjectResults(
+          pool,
+          taxonomyRows.filter((r) => r.table === "projects").map((r) => r.id),
+        );
         for (const row of taxonomyRows) {
           await pool.query(`DELETE FROM ${row.table} WHERE id = $1`, [row.id]);
         }

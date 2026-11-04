@@ -51,6 +51,7 @@ import type {
   NewProjectExpert,
   NewProjectOrganisation,
 } from "../../schema/taxonomy.js";
+import { SEED_ORGANISATION_ROLES } from "../../schema/taxonomy.js";
 import type { NewUser } from "../../schema/users.js";
 import { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
 import {
@@ -576,7 +577,7 @@ function eventCreatedMs(plan: VolumeEventPlan, nowMs: number): number {
 
 /** 012 LD-12 — a project's default audience follows what it is. */
 function projectDefaultAudience(
-  kind: NewProject["kind"],
+  kind: NewProject["legacyKind"],
 ): "doctors" | "experts" {
   return kind === "media" ? "experts" : "doctors";
 }
@@ -703,7 +704,8 @@ function buildProjects(at: At): NewProject[] {
   return VOLUME_PROJECTS.map((spec, i) => ({
     id: goldenUuid(GOLDEN_GROUP.projects, GOLDEN_VOLUME_ORDINAL_BASE + i),
     slug: `golden-volume-project-${i + 1}`,
-    kind: spec.kind,
+    legacyKind: spec.kind,
+    stage: "running" as const,
     title: spec.title,
     defaultAudience: projectDefaultAudience(spec.kind),
     description: spec.description,
@@ -1526,6 +1528,7 @@ function buildProjectPartners(at: At): NewProjectOrganisation[] {
         id: goldenUuid(GOLDEN_GROUP.projectPartners, ordinal),
         projectId,
         organisationId: goldenPartnerId(slot),
+        roleId: SEED_ORGANISATION_ROLES.investor.id,
         isPrimary: position === 0,
         status: retired ? "retired" : "active",
         version: 1,

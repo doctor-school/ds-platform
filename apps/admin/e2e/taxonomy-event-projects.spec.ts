@@ -1,5 +1,8 @@
 import { chooseEventClassification, signInAsAdmin } from "@ds/e2e/admin-events";
-import { chooseProjectDefaultAudience } from "./support/event-classification";
+import {
+  chooseProjectDefaultAudience,
+  chooseProjectStage,
+} from "./support/event-classification";
 import { expect, test, type Page } from "@playwright/test";
 import {
   searchRelationshipCombobox,
@@ -35,6 +38,7 @@ async function createProject(
   await page.locator("#title").fill(title);
   await page.locator("#description").fill("Описание для проверки связей.");
   await chooseProjectDefaultAudience(page);
+  await chooseProjectStage(page);
   await page.getByTestId("submit-project").click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   return { title, url: page.url() };

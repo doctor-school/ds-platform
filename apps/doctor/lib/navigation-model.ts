@@ -19,7 +19,8 @@ import type { NavigationItem, NavigationModel } from "@ds/e2e/navigation-model";
  *
  * `landing` carries the §6.2 evidence — the `h1` each destination paints
  * (`components/storefront-hero.tsx`, the `/login` door,
- * `app/(storefront)/events/page.tsx` → `DOCTOR_EVENTS_FEED_COPY.title`,
+ * `app/(storefront)/events/page.tsx` → `DOCTOR_EVENTS_FEED_COPY.title`, the
+ * redirect targets of `/feed`,
  * `@ds/account`, mounted at `app/(storefront)/account/page.tsx`).
  *
  * A destination the chrome does NOT paint has no row here. `/register` is the
@@ -48,6 +49,30 @@ const ITEMS = {
     landing: { h1: "События" },
     audience: "both",
   },
+  /**
+   * «Моя лента» (018 entry, #3674) — the doctor's own specialty feed. The href
+   * is the STATIC `/feed`, a server redirect (`app/(storefront)/feed/page.tsx`)
+   * that resolves the remembered specialty: chosen → `/feed/<code>`; nothing
+   * chosen → the home specialty catalog (`/#specialties`). So the item declares
+   * both pages it may land on, each with its own evidence — the feed's
+   * `data-surface` (its `h1` is the specialty's name, which varies) and the home
+   * hero `h1`.
+   */
+  feed: {
+    id: "feed",
+    label: "Моя лента",
+    href: "/feed",
+    landing: {
+      redirectsTo: [
+        { path: "/feed/:code", landing: { surface: "specialty-feed" } },
+        {
+          path: "/",
+          landing: { h1: "Doctor.School — бесплатное образование для врачей" },
+        },
+      ],
+    },
+    audience: "both",
+  },
   /** The ONE guest control of the canvas (`ds-shell.dc.html` line 220, 017 US-7). */
   login: {
     id: "login",
@@ -73,12 +98,20 @@ export const doctorNav = ITEMS;
  * The top-nav strip, in render order — `lib/shell-config.ts` maps exactly this
  * list onto the shell's `nav`, so a nav item cannot exist outside the model.
  */
-export const doctorTopNav = [ITEMS.events] as const;
+export const doctorTopNav = [ITEMS.events, ITEMS.feed] as const;
+
+/**
+ * The home specialty catalog's fragment id (017 EARS-4) — where «Моя лента»
+ * sends a visitor who has chosen nothing yet, so the one question it needs
+ * answered is the first thing on screen.
+ */
+export const SPECIALTY_CATALOG_ANCHOR = "specialties";
 
 /** Every destination the storefront chrome offers — what the navigation walk visits. */
 export const doctorNavigationModel: NavigationModel = [
   ITEMS.home,
   ITEMS.events,
+  ITEMS.feed,
   ITEMS.login,
   ITEMS.account,
 ];

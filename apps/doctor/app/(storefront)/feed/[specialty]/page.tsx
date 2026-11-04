@@ -57,7 +57,11 @@ export default async function SpecialtyFeedPage({
   const { feed } = read;
 
   return (
-    <div className="pb-16 layout:pb-24" data-testid="specialty-feed">
+    <div
+      className="pb-16 layout:pb-24"
+      data-surface="specialty-feed"
+      data-testid="specialty-feed"
+    >
       <SpecialtyFeedHeader
         actor={remembered.actor}
         initialChoice={remembered.choice}

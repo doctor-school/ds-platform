@@ -8,11 +8,14 @@
 export {
   byId,
   itemsFor,
-  landingEvidence,
+  landingEvidenceAt,
   type Audience,
   type LandingEvidence,
   type NavigationItem,
   type NavigationLanding,
+  type NavigationPageLanding,
+  type NavigationRedirectLanding,
+  type NavigationRedirectTarget,
   type NavigationModel,
   type Visitor,
 } from "./navigation-model.js";

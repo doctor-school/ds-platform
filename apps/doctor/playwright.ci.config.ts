@@ -79,6 +79,9 @@ export default defineConfig({
     // events tier beside its double (`playwright.events.config.ts`).
     "feed-layout.spec.ts",
     "feed-events.spec.ts",
+    // #3674: the ways into the feed (home choice, «Моя лента») land on the
+    // feed envelope the events stand-in serves, so they ride the same tier.
+    "feed-entry.spec.ts",
     // #1955: the signed-in redirect and the login return-context copy are both
     // server reads against an api — they ride the return-context tier.
     "login-arrival.spec.ts",

@@ -6,16 +6,19 @@ import { test, expect } from "@playwright/test";
  * (#3172, `apps/login/e2e/doctor-register-direct.e2e.spec.ts`), and which one
  * a confirmed doctor lands on is the storefront callback's decision (stand
  * journeys, `packages/e2e`); the pages themselves are this storefront's, so
- * their proof stays here, against `e2e/support/return-context-api.mjs`.
+ * their proof stays here, against `e2e/support/return-context-api.mjs`. The
+ * remembered-specialty branch lands on that specialty's feed (`/feed/<code>`,
+ * #3674); nothing chosen lands on the home.
  */
-const EVENTS_FEED = "/events";
+/** The 018 feed of the one specialty `return-context-api.mjs` can remember. */
+const SPECIALTY_FEED = "/feed/kardiologiya";
 const HOME = "/";
 
 test.describe("021 EARS-3: LD-4 — where the direct arrival lands", () => {
   test("021 EARS-3.6: both landings resolve on this app — neither branch points at a dead path", async ({
     page,
   }) => {
-    for (const landing of [HOME, EVENTS_FEED]) {
+    for (const landing of [HOME, SPECIALTY_FEED]) {
       const response = await page.goto(landing);
       expect(response?.status(), `${landing} must resolve`).toBe(200);
     }

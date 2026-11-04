@@ -59,6 +59,7 @@ describe("§6.3: the doctor chrome and the navigation model are one list", () =>
     expect(DOCTOR_SHELL.logo.alt).toBe(doctorNav.home.label);
     expect(DOCTOR_SHELL.nav.map((item) => item.label)).toEqual([
       doctorNav.events.label,
+      doctorNav.feed.label,
     ]);
     expect(guest.label).toBe(doctorNav.login.label);
     expect(signedIn.label).toBe(doctorNav.account.label);

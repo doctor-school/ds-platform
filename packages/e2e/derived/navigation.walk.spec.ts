@@ -8,7 +8,7 @@ import {
   loadNavigationModel,
   type HostConfig,
 } from "../hosts.js";
-import { itemsFor, landingEvidence } from "../navigation-model.js";
+import { itemsFor, landingEvidenceAt } from "../navigation-model.js";
 import type { NavigationItem } from "../navigation-model.js";
 import { signInGoldenDoctor, signInOnHostForm } from "../lib/sign-in.js";
 import { isSignInHostForm } from "../lib/sign-in-host-api.js";
@@ -37,7 +37,9 @@ const workerSessions = new Map<
  *
  * Per item the walk asserts the three things a 200 alone does not prove:
  *   • the response status is 200 — the page was served, not 404/500;
- *   • the pathname is the href the chrome links to — no silent redirect;
+ *   • the pathname is the href the chrome links to — no silent redirect (an
+ *     item whose href redirects BY DESIGN declares its targets in the model,
+ *     and only those pathnames pass);
  *   • the landing evidence the model declares (`h1` text, or `data-surface` for a
  *     page that owns no `h1`) — this is the §6.2 rule, and it is what turns
  *     «200 but the WRONG page» (the #2012 class) into a red check.
@@ -63,24 +65,34 @@ const workerSessions = new Map<
 /** The golden doctor the walk signs in as — the ordinary verified audience. */
 const WALK_DOCTOR = "verified-cardiologist";
 
+/**
+ * Assert the visitor landed where `item` declares: the pathname must be the
+ * item's own href (or, for an item whose href redirects by design, one of its
+ * declared targets), and the page there must carry that landing's evidence.
+ */
 async function assertLanding(
   page: Page,
   item: NavigationItem,
   where: string,
 ): Promise<void> {
-  const evidence = landingEvidence(item);
-  if (evidence.kind === "h1") {
+  const landed = new URL(page.url()).pathname;
+  const evidence = landingEvidenceAt(item, landed);
+  expect(
+    evidence,
+    `pathname after opening ${where} — ${landed} is not a landing the model declares for ${item.href}`,
+  ).not.toBeNull();
+  if (evidence!.kind === "h1") {
     await expect(
       page.getByRole("heading", {
         level: 1,
-        name: evidence.value,
+        name: evidence!.value,
         exact: true,
       }),
       `the h1 of ${where}`,
     ).toBeVisible();
   } else {
     await expect(
-      page.locator(`[data-surface="${evidence.value}"]`),
+      page.locator(`[data-surface="${evidence!.value}"]`),
       `the data-surface marker of ${where}`,
     ).toBeVisible();
   }
@@ -106,7 +118,6 @@ for (const hostId of HOST_IDS) {
         expect(response, `no response for ${item.href}`).not.toBeNull();
         expect(response!.status(), `status of ${item.href}`).toBe(200);
 
-        const landed = new URL(page.url()).pathname;
         if (isSignInHostForm(page.url()) && item.href !== host.loginPath) {
           // The guest was sent to sign in. §6.3: assert the login surface really
           // rendered AND that the original destination survived as `returnTo`.
@@ -134,7 +145,6 @@ for (const hostId of HOST_IDS) {
           return;
         }
 
-        expect(landed, `pathname after opening ${item.href}`).toBe(item.href);
         await assertLanding(page, item, `${hostId} ${item.href}`);
       });
     }
@@ -172,11 +182,11 @@ for (const hostId of HOST_IDS) {
             );
             expect(response, `no response for ${item.href}`).not.toBeNull();
             expect(response!.status(), `status of ${item.href}`).toBe(200);
-            expect(
-              new URL(page.url()).pathname,
-              `pathname after opening ${item.href} as the golden doctor`,
-            ).toBe(item.href);
-            await assertLanding(page, item, `${hostId} ${item.href}`);
+            await assertLanding(
+              page,
+              item,
+              `${hostId} ${item.href} as the golden doctor`,
+            );
           });
         }
       });

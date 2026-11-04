@@ -333,7 +333,9 @@ const server = createServer((request, response) => {
   // guest. That collapse is exactly what tells the host whether to mount the
   // one-tap command or keep the server-resolved `/register` hand-off, so the
   // double has to answer it rather than let a browser switch decide.
-  const registration = /^\/v1\/events\/([^/]+)\/registration$/.exec(url.pathname);
+  const registration = /^\/v1\/events\/([^/]+)\/registration$/.exec(
+    url.pathname,
+  );
   if (registration && request.method === "GET") {
     if (!isLiveSession(request)) {
       return json(response, 401, { status: 401, message: "unauthorized" });
@@ -348,6 +350,39 @@ const server = createServer((request, response) => {
           registeredAt: "2026-09-01T10:00:00.000Z",
         })
       : json(response, 200, { registered: false });
+  }
+
+  // 021 EARS-3 / LD-4 (#3674) — the direct arrival with a remembered specialty
+  // lands on that specialty's 018 feed, so the feed route must resolve here:
+  // the envelope for the one remembered specialty (the shape
+  // `doctor-events-api.mjs` serves the events tier) and its events block, which
+  // this tier keeps empty — the feed's blocks are the events tier's subject.
+  const feedPath = /^\/v1\/storefront\/feed\/([^/]+)(\/events)?$/.exec(
+    url.pathname,
+  );
+  if (feedPath) {
+    const code = decodeURIComponent(feedPath[1]);
+    if (code !== SPECIALTY.code) {
+      return json(response, 404, {
+        type: "https://docs.doctor.school/errors/specialty-feed-not-found",
+        title: "No specialty feed at this address",
+        status: 404,
+        errorCode: "SPECIALTY_FEED_NOT_FOUND",
+        traceId: "e2e",
+      });
+    }
+    if (feedPath[2]) {
+      return json(response, 200, {
+        items: [],
+        allEventsHref: `/events?specialty=${code}`,
+      });
+    }
+    return json(response, 200, {
+      specialty: SPECIALTY,
+      blocks: [{ kind: "events", read: `/v1/storefront/feed/${code}/events` }],
+      order: "events-first",
+      viewer: { loggedIn: isLiveSession(request) },
+    });
   }
 
   if (url.pathname === "/v1/auth/session") {
@@ -443,6 +478,9 @@ function readJson(request, done) {
 }
 
 function json(response, status, body, headers) {
-  response.writeHead(status, { "content-type": "application/json", ...headers });
+  response.writeHead(status, {
+    "content-type": "application/json",
+    ...headers,
+  });
   response.end(JSON.stringify(body));
 }

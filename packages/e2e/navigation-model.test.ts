@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   itemsFor,
-  landingEvidence,
+  landingEvidenceAt,
   byId,
+  type NavigationItem,
   type NavigationModel,
 } from "./navigation-model";
 
@@ -55,22 +56,66 @@ describe("itemsFor", () => {
   it("never returns an item of the other audience (the walk would assert the wrong landing)", () => {
     for (const visitor of ["guest", "doctor"] as const) {
       for (const item of itemsFor(model, visitor)) {
-        expect(item.audience === visitor || item.audience === "both").toBe(true);
+        expect(item.audience === visitor || item.audience === "both").toBe(
+          true,
+        );
       }
     }
   });
 });
 
-describe("landingEvidence", () => {
-  it("reads an h1 landing as an h1 assertion", () => {
-    expect(landingEvidence(model[0]!)).toEqual({
+describe("landingEvidenceAt", () => {
+  it("reads an h1 landing as an h1 assertion at the item's own href", () => {
+    expect(landingEvidenceAt(model[0]!, "/webinars")).toEqual({
       kind: "h1",
       value: "Расписание эфиров",
     });
   });
 
-  it("reads a surface landing as a data-surface assertion", () => {
-    expect(landingEvidence(model[2]!)).toEqual({ kind: "surface", value: "login" });
+  it("reads a surface landing as a data-surface assertion at the item's own href", () => {
+    expect(landingEvidenceAt(model[2]!, "/login")).toEqual({
+      kind: "surface",
+      value: "login",
+    });
+  });
+
+  it("stays strict for a non-redirect item: any other pathname is no landing at all", () => {
+    expect(landingEvidenceAt(model[0]!, "/webinars/x")).toBeNull();
+    expect(landingEvidenceAt(model[0]!, "/")).toBeNull();
+  });
+
+  const redirecting: NavigationItem = {
+    id: "my-feed",
+    label: "Моя лента",
+    href: "/feed",
+    landing: {
+      redirectsTo: [
+        { path: "/feed/:code", landing: { surface: "specialty-feed" } },
+        { path: "/", landing: { h1: "Главная" } },
+      ],
+    },
+    audience: "both",
+  };
+
+  it("resolves a redirecting item to the declared target its pathname matches", () => {
+    expect(landingEvidenceAt(redirecting, "/feed/cardiology")).toEqual({
+      kind: "surface",
+      value: "specialty-feed",
+    });
+    expect(landingEvidenceAt(redirecting, "/")).toEqual({
+      kind: "h1",
+      value: "Главная",
+    });
+  });
+
+  it("a :param matches exactly one non-empty segment", () => {
+    expect(landingEvidenceAt(redirecting, "/feed/")).toBeNull();
+    expect(landingEvidenceAt(redirecting, "/feed/a/b")).toBeNull();
+  });
+
+  it("a redirecting item that stays on its own href, or lands elsewhere, has no landing", () => {
+    expect(landingEvidenceAt(redirecting, "/feed")).toBeNull();
+    expect(landingEvidenceAt(redirecting, "/events")).toBeNull();
   });
 });
 

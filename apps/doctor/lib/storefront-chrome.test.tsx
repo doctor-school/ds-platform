@@ -111,8 +111,11 @@ describe("017 EARS-1: exactly one action cluster", () => {
 });
 
 describe("017 EARS-1 / EARS-12: the doctor host config", () => {
-  it("017 EARS-1.5: the header nav is «Эфиры» alone and targets a shipped route", () => {
-    expect(DOCTOR_SHELL.nav).toEqual([{ label: "Эфиры", href: "/events" }]);
+  it("017 EARS-1.5: the header nav is «Эфиры» and «Моя лента», each targeting a shipped route", () => {
+    expect(DOCTOR_SHELL.nav).toEqual([
+      { label: "Эфиры", href: "/events" },
+      { label: "Моя лента", href: "/feed" },
+    ]);
   });
 
   it("017 EARS-1.6: the search targets a shipped route, never an invented /search", () => {

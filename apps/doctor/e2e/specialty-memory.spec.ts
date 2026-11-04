@@ -2,9 +2,14 @@ import { test, expect, type Page } from "@playwright/test";
 
 /**
  * 017 EARS-6 / EARS-7 (#1482) — choosing a specialty and the collapsed row, in a
- * real browser: a choice is recorded with no separate save step, the catalog
- * collapses to the row naming it, «сменить» re-opens the full variant-Б catalog,
- * re-choosing re-targets, and «Другое» is named exactly like any other entry.
+ * real browser: a choice is recorded with no separate save step and opens that
+ * specialty's feed (`/feed/<code>`, #3674), the home then shows the collapsed
+ * row naming it, «сменить» re-opens the full variant-Б catalog, re-choosing
+ * re-targets, and «Другое» is named exactly like any other entry.
+ *
+ * The feed a choice opens is the events tier's to render (`feed-entry.spec.ts`);
+ * this backend-free tier asserts only that the choice NAVIGATES there, then
+ * returns to the home to read the remembered row.
  *
  * Mocked at the network boundary (`page.route`) like `specialty-catalog.spec.ts`,
  * for the same reason: the CI config for this app is backend-free by design
@@ -126,7 +131,9 @@ async function serveStorefront(page: Page): Promise<ChoiceStore> {
       return;
     }
 
-    const entry = ENTRIES.find((candidate) => candidate.id === store.remembered);
+    const entry = ENTRIES.find(
+      (candidate) => candidate.id === store.remembered,
+    );
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -171,6 +178,18 @@ async function serveStorefront(page: Page): Promise<ChoiceStore> {
   return store;
 }
 
+/**
+ * Activate a catalog entry and follow the choice: a recorded choice opens that
+ * specialty's feed (#3674), so the visitor is back on the home only by
+ * returning to it — which is where the collapsed row is read.
+ */
+async function chooseAndReturn(page: Page, name: string) {
+  const entry = ENTRIES.find((candidate) => candidate.name === name)!;
+  await page.getByRole("button", { name, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/feed/${entry.code}$`));
+  await page.goto("/");
+}
+
 /** The collapsed row, as a whole: the state the section reports plus its parts. */
 async function expectTargeted(page: Page, name: string) {
   const catalog = page.getByTestId("specialty-catalog");
@@ -183,7 +202,7 @@ async function expectTargeted(page: Page, name: string) {
 }
 
 test.describe("017 EARS-6/7: remembering a chosen specialty (#1482)", () => {
-  test("017 EARS-6.10: choosing records the choice and collapses the catalog — no separate save step", async ({
+  test("017 EARS-6.10: choosing records the choice and opens its feed — no separate save step — and the home then shows the collapsed row", async ({
     page,
   }) => {
     const store = await serveStorefront(page);
@@ -198,7 +217,7 @@ test.describe("017 EARS-6/7: remembering a chosen specialty (#1482)", () => {
       /сохранить|подтвердить/i,
     );
 
-    await page.getByRole("button", { name: "Кардиология", exact: true }).click();
+    await chooseAndReturn(page, "Кардиология");
 
     await expectTargeted(page, "Кардиология");
     // The submitted reference is the entry's own identity, never the label a
@@ -212,9 +231,7 @@ test.describe("017 EARS-6/7: remembering a chosen specialty (#1482)", () => {
   }) => {
     const store = await serveStorefront(page);
     await page.goto("/");
-    await page
-      .getByRole("button", { name: "Травматология и ортопедия", exact: true })
-      .click();
+    await chooseAndReturn(page, "Травматология и ортопедия");
     await expectTargeted(page, "Травматология и ортопедия");
 
     await page.reload();
@@ -231,7 +248,7 @@ test.describe("017 EARS-6/7: remembering a chosen specialty (#1482)", () => {
   }) => {
     await serveStorefront(page);
     await page.goto("/");
-    await page.getByRole("button", { name: "Неврология", exact: true }).click();
+    await chooseAndReturn(page, "Неврология");
     await expectTargeted(page, "Неврология");
 
     await expect(page.getByTestId("specialty-adjacency-note")).toHaveText(
@@ -260,11 +277,11 @@ test.describe("017 EARS-6/7: remembering a chosen specialty (#1482)", () => {
   }) => {
     const store = await serveStorefront(page);
     await page.goto("/");
-    await page.getByRole("button", { name: "Неврология", exact: true }).click();
+    await chooseAndReturn(page, "Неврология");
     await expectTargeted(page, "Неврология");
 
     await page.getByTestId("specialty-change").click();
-    await page.getByRole("button", { name: "Кардиология", exact: true }).click();
+    await chooseAndReturn(page, "Кардиология");
 
     await expectTargeted(page, "Кардиология");
     expect(store.remembered).toBe(ENTRIES[0]!.id);
@@ -283,7 +300,7 @@ test.describe("017 EARS-6/7: remembering a chosen specialty (#1482)", () => {
 
     // «Другое» is reached the same way it always was — by expanding the book.
     await page.getByTestId("specialty-expand").click();
-    await page.getByRole("button", { name: "Другое", exact: true }).click();
+    await chooseAndReturn(page, "Другое");
 
     await expectTargeted(page, "Другое");
     await expect(page.getByTestId("specialty-adjacency-note")).toHaveText(
@@ -303,9 +320,13 @@ test.describe("017 EARS-6/7: remembering a chosen specialty (#1482)", () => {
     store.writeFails = true;
     await page.goto("/");
 
-    await page.getByRole("button", { name: "Кардиология", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Кардиология", exact: true })
+      .click();
 
-    // No collapsed row, no targeted state: the platform did not remember it.
+    // No collapsed row, no targeted state, no feed: the platform did not
+    // remember it, so the visitor stays on the open catalog.
+    await expect(page).toHaveURL(/\/$/);
     const catalog = page.getByTestId("specialty-catalog");
     await expect(catalog).not.toHaveAttribute("data-state", "chosen");
     await expect(page.getByTestId("specialty-chosen")).toHaveCount(0);
@@ -318,7 +339,7 @@ test.describe("017 EARS-6/7: remembering a chosen specialty (#1482)", () => {
     );
 
     store.writeFails = false;
-    await page.getByRole("button", { name: "Кардиология", exact: true }).click();
+    await chooseAndReturn(page, "Кардиология");
     await expectTargeted(page, "Кардиология");
     await expect(page.getByTestId("specialty-choice-error")).toHaveCount(0);
   });
@@ -328,7 +349,7 @@ test.describe("017 EARS-6/7: remembering a chosen specialty (#1482)", () => {
   }) => {
     await serveStorefront(page);
     await page.goto("/");
-    await page.getByRole("button", { name: "Кардиология", exact: true }).click();
+    await chooseAndReturn(page, "Кардиология");
     await expectTargeted(page, "Кардиология");
 
     await expect(page.getByTestId("storefront-hero")).toBeVisible();

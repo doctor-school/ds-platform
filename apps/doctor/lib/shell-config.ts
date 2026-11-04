@@ -55,12 +55,12 @@ export function doctorShellConfig(
     },
 
     /**
-     * «Эфиры» alone. The canvas `ds-shell.dc.html` draws four items on the
-     * academy artboard, but the owner decision of 2026-09-10 (Issue #2180, merged
-     * 008 / 017 deltas) is that BOTH storefronts ship the single shipped
-     * destination and the nav grows with features 015 / 016 and the partner
-     * surface. A nav item pointing at an unbuilt route is the placeholder
-     * affordance §6 forbids.
+     * «Эфиры» and «Моя лента». The canvas `ds-shell.dc.html` draws four items
+     * on the academy artboard, but the owner decision of 2026-09-10 (Issue
+     * #2180, merged 008 / 017 deltas) is that the nav carries only shipped
+     * destinations and grows as features ship: «Моя лента» joined with the 018
+     * specialty feed (owner decision on #3674, 2026-11-04). A nav item pointing
+     * at an unbuilt route is the placeholder affordance §6 forbids.
      */
     nav: doctorTopNav.map((item) => ({ label: item.label, href: item.href })),
 

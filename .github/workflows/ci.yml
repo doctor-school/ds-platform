@@ -1470,6 +1470,9 @@ jobs:
       - run: pnpm exec turbo run build --filter=@ds/showcase
       - run: pnpm --filter @ds/showcase exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/showcase test:e2e:ci
+      - name: NativeSelect mobile first-attempt repeat (3051)
+        run: >-
+          pnpm --filter @ds/showcase test:e2e:ci --grep 'NativeSelect: the mobile-width surface keeps native selection semantics' --repeat-each=50 --retries=0 --workers=1
 
   # playwright-academy-demo: dedicated runtime coverage for the deterministic,
   # development-only Academy home review app (#1302). This stays separate from
@@ -1951,6 +1954,12 @@ jobs:
           E2E_CANONICAL_EXPERT_DATABASE: ds_admin_e2e
           E2E_CANONICAL_EXPERT_LOG: ${{ runner.temp }}/canonical-expert-stand-ops.jsonl
         run: pnpm --filter @ds/admin test:e2e --project taxonomy --grep 'standalone Expert retains|project roster keeps exactly one curator|Expert-side authoring creates one retained member relationship|retired project Expert relationship returns|retired curator relationship stays retired|@public-read-boundaries|@canonical-expert-reads|@event-kind-public-reads|@event-kind-constraints|@event-classification-lifecycle|@taxonomy-authoring-operations|@event-classification-refusals|@taxonomy-authoring-contracts|@taxonomy-protocol-contracts'
+      - name: Admin spec-owned edit-audit contracts
+        if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
+        env:
+          E2E_EDIT_AUDIT_DATABASE: ds_admin_e2e
+          E2E_EDIT_AUDIT_LOG: ${{ runner.temp }}/edit-audit-stand-ops.jsonl
+        run: pnpm --filter @ds/admin test:e2e --project audit
       - name: Admin axe sweep
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
         run: pnpm --filter @ds/admin test:axe

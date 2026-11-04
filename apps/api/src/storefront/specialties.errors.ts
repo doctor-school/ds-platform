@@ -28,11 +28,15 @@ export const SPECIALTY_ERROR_STATUS: Readonly<
   // exists — it simply names no member of a CLOSED book, which is a semantic
   // refusal of the submitted value.
   SPECIALTY_NOT_IN_BOOK: 422,
+  // 018 EARS-1 — a feed PATH (`/feed/{specialty}`) that names no member of the
+  // book is a resource that does not exist, not a refused submitted value.
+  SPECIALTY_FEED_NOT_FOUND: 404,
 };
 
 /** Stable, non-disclosing titles — never echo the submitted value or a key. */
 const SPECIALTY_ERROR_TITLE: Readonly<Record<SpecialtyErrorCode, string>> = {
   SPECIALTY_NOT_IN_BOOK: "Specialty is not in the reference book",
+  SPECIALTY_FEED_NOT_FOUND: "No specialty feed at this address",
 };
 
 /**

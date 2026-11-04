@@ -104,9 +104,9 @@ the `≡` disclosure after the nav rows (canvas line 50, testid
 `shell-auth-link-mobile`). They are not part of the auth cluster element, which
 stays the single chip 017 EARS-1 requires; absent and empty are
 the same thing, and a host that passes none gets exactly the cluster #2180
-shipped. They are NOT top-nav items — the nav stays «Эфиры» alone on both hosts
-(owner decision 2026-09-10, #2180) — which is why they travel on the auth state
-rather than in `config.nav` (#2243).
+shipped. They are NOT top-nav items — the nav is the host's own `config.nav` («Эфиры»
+on the academy, «Эфиры» + «Моя лента» on the doctor host, #3674) — which is why
+they travel on the auth state rather than in `config.nav` (#2243).
 
 ### Route visibility
 

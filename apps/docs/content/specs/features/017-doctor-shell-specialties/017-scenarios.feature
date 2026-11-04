@@ -199,13 +199,39 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
       When they sign in and make their first authenticated navigation
       Then the profile value stands unchanged
       And the session value is discarded with no prompt and no merge
+
+    @EARS-6 @happy
+    Scenario: A choice opens the chosen specialty's feed
+      Given a visitor with no chosen specialty on the storefront home page
+      When they choose a specialty in the catalog
+      Then the shell lands on that specialty's "/feed/<code>" showing the data-surface "specialty-feed" marker
+      And the choice is remembered
+
     @EARS-7 @happy
-    Scenario: Re-choosing re-targets everything without a save step
+    Scenario: The home collapses the catalog to the remembered specialty
+      Given a visitor with a remembered specialty
+      When they open the storefront home page
+      Then the catalog renders collapsed to a single row naming that specialty with a «сменить» control
+
+    @EARS-7 @happy
+    Scenario: Re-choosing opens the newly chosen specialty's feed without a save step
       Given a visitor with a remembered specialty and the catalog re-opened
       When they choose a different specialty
-      Then every targeted block on the page re-renders for the new specialty
+      Then the shell lands on the new specialty's "/feed/<code>" showing the data-surface "specialty-feed" marker
       And the new choice is remembered
       And no separate save action was required
+
+    @EARS-1 @happy
+    Scenario: «Моя лента» opens the remembered specialty's feed
+      Given a visitor with a remembered specialty
+      When they activate «Моя лента» in the header navigation
+      Then the shell lands on that specialty's "/feed/<code>" showing the data-surface "specialty-feed" marker
+
+    @EARS-1 @failure
+    Scenario: «Моя лента» with nothing chosen opens the home specialty catalog, never an empty feed
+      Given a visitor with no chosen specialty
+      When they activate «Моя лента» in the header navigation
+      Then the shell lands on "/#specialties" showing the open specialty catalog in view
 
     # ------------------------------------------------------------- targeting
 

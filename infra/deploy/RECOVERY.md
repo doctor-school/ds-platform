@@ -87,12 +87,16 @@ not secrets; their values are in the templates or derive from the environment.
   passphrase. An S3 listing or object checksum is **not** accepted as proof: only a
   completed restore that recovers and promotes is.
 - **Fresh-host DR drill not run.** §4 (recreate both boxes and restore) has never
-  been exercised end to end.
+  been exercised end to end; it, backup verification, alerts and a quarterly drill
+  are #3671.
 - **One provider, no immutability.** The repository lives in one Timeweb S3 bucket
-  with no Object Lock, and there is no second repository (`repo2`, abroad) yet —
-  follow-up.
+  with no Object Lock (#3669), and there is no second repository (`repo2` at a
+  foreign provider, #3670) yet. The spec's backup topology is rewritten in #3672.
 - **Automation.** §3 is the manual, owner-run equivalent of the `rehearse-migration`
   throw-away restore that Issue #3648 automates on ds-data-prod.
+- **`--network none` stops WAL replay.** The spec's throw-away copy runs
+  `--network none`, but its `restore_command` (`pgbackrest archive-get`) needs the
+  S3 repository, so recovery ends at the backup's consistency point (§3.2) — #3648.
 
 Owner-private evidence (named only, never copied here): `outputs/2026-11-04-local-backup/report.json`
 and `outputs/2026-11-04-backup-implementation-plan/plan.json` (BBM workspace),
@@ -326,7 +330,7 @@ Each step is an existing section; this list only orders them.
 4. **App.** The live SHA from §1.1 through `deploy-prod.yml` (README → «Release»),
    then README → «Verify-on-box». The `ds` role keeps its restored password (§1.3).
 5. **Afterwards.** Rebuild the bundle (§2) if any value changed, and record the drill
-   outcome on the DR-drill follow-up.
+   outcome on #3671.
 
 Related: `infra/deploy/README.md` («Apply order», «Rollback»),
 `infra/deploy/compose/data-prod/README.md` («Secrets»),

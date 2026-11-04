@@ -56,6 +56,12 @@ export const HEAVY_JOBS = {
       /^packages\/design-system\/src\/blocks\/event-page-view\.ts$/,
       // apps/api/test/events/hidden-rename.e2e-spec.ts reads the SDK snapshot.
       /^packages\/api-client\/openapi\.snapshot\.json$/,
+      // packages/e2e/api-probes.config.ts owns the compiled-API BDD contour.
+      /^packages\/e2e\/api-probes\.config\.ts$/,
+      /^packages\/e2e\/api-probes\//,
+      /^packages\/e2e\/lib\/api-probe-fixtures\.ts$/,
+      /^apps\/docs\/content\/specs\/features\/001-api-bootstrap-health\/001-scenarios\.feature$/,
+      /^apps\/docs\/content\/specs\/features\/002-api-postgres-readiness\/002-scenarios\.feature$/,
     ],
   },
   "playwright-academy-demo": {

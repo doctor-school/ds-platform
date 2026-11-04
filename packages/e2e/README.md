@@ -268,7 +268,7 @@ retained. This coverage-only change has no render surface or owner Stage-B slot.
 
 ## Running it
 
-The suite drives a RAISED slot; it starts nothing itself (the slot topology
+The storefront suite drives a RAISED slot; it starts nothing itself (the slot topology
 belongs to `tools/staging`, never to a test config).
 
 ```sh
@@ -301,8 +301,11 @@ expressions, so the vocabulary and the selection can never drift apart).
 `@host:admin` is selected by no storefront project on purpose. An admin-surface
 journey (007, 011, 012) or a backend-only one (010) belongs to the admin suite in
 `apps/admin`; running it against a storefront reports a false red, which is the
-one thing this suite must not teach the team to ignore. A pure API spec (001, 002) drives its checks through ONE storefront's API proxy and is tagged
-`@host:academy` — never `@host:both`, which would pay double runtime for one API.
+one thing this suite must not teach the team to ignore. The pure API specs
+(001, 002) retain `@host:academy` metadata and have a separate compiled-API
+BDD contour (`api-probes.config.ts`), described below. Their fixture vocabulary
+lives outside the storefront `steps/**/*.ts` glob; normal storefront/stage
+generation keeps its existing unbound operational declarations.
 
 Positive selection is what makes the tag structural: an untagged file is selected
 by NEITHER project, so its scenarios silently stop existing. The `bddgen` script
@@ -315,6 +318,52 @@ authorship: `tools/lint/lib/diff.ts` keeps such a file OUT of the §6.4/§6.5
 «touched» set, so annotating a spec does not make the annotating PR inherit that
 spec's §8 backfill debt. Change one scenario line in the same file and it counts
 as touched again.
+
+### Compiled-API operational originals (001 EARS-1; 002 EARS-1/2)
+
+`api-probes.config.ts` reads the unchanged 001/002 original feature files and
+selects their existing `@host:academy` tag. `api-probes/steps.ts` binds exactly
+the health, healthy-readiness and storage-credential-refusal originals; the
+other three remain unbound. This backend-only contour boots the actual compiled
+`apps/api/dist/main.js`, uses real Postgres/vector and real MinIO, and preserves
+the canonical Vitest health/readiness/storage tests. It starts no browser and
+does not target a storefront proxy or staging slot.
+
+Build with `pnpm exec turbo run build --filter=@ds/api`. Locally, provision an
+owned `ds_dev_3679` via `pnpm dev:db:branch 3679` (including its canonical
+pre-migration snapshot). CI owns a disposable `ds_probe_3679` and uses
+`pnpm --filter @ds/api drizzle:migrate:ci`. Use a new disposable real MinIO
+container with the project's `minio/minio:latest server /data` mechanism,
+record its actual image digest, and create only one empty `ds-api-probes-3679`
+bucket with task-only credentials. Existing/shared buckets remain read-only.
+
+Export `E2E_API_PROBE_DATABASE_URL`, `E2E_API_PROBE_S3_ENDPOINT`,
+`E2E_API_PROBE_S3_ACCESS_KEY`, `E2E_API_PROBE_S3_SECRET_KEY`,
+`E2E_API_PROBE_S3_BUCKET=ds-api-probes-3679`, and an absolute private
+`E2E_API_PROBE_ARTIFACT_DIR` for the command log and redacted process receipts.
+Set `E2E_REPORT_DIR` to a private report directory. Then run exactly the trio:
+
+```sh
+export E2E_GREP='(Health endpoint reports ok on a running process|Readiness endpoint reports ok when Postgres, pgvector and object storage all respond|Readiness endpoint reports down when object storage refuses the credentials)(?: @host:academy)?$'
+pnpm --filter @ds/e2e exec bddgen --config api-probes.config.ts
+pnpm --filter @ds/e2e exec playwright test --config api-probes.config.ts
+```
+
+Missing fixture bindings fail explicitly. The helper verifies database identity,
+applied migrations and empty media/upload queues, omits IdP/external-service
+credentials, uses the supported reconcile sweep value `0`, verifies each owned
+API listener's PID and closes it after the scenario. The degraded process uses
+a nonexistent task key against the same real MinIO: SDK 403 and the startup
+probe must agree, while health remains 200 and readiness returns 503 without
+the provider reason. The `api-e2e` CI job provisions and removes its exact
+owned MinIO container and requires three first-attempt passes with no skips.
+Local operators likewise remove only their owned ephemeral container after proof;
+retain the exact owned DB only while review needs it, then use
+`pnpm dev:db:drop 3679`. Never reset or roll back the shared stand.
+
+This is operational compiled-source acceptance. It supplies no browser, full
+stage-suite, IdP-flow or production acceptance, and `pnpm e2e:stage` does not
+provision these fixtures or redirect stage traffic to a local API.
 
 ## Missing-step policy: `skip-scenario`
 

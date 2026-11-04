@@ -14,5 +14,6 @@ export {
   fetchMonthCounts,
   fetchMonthEntries,
   fetchSpecialtyChoices,
+  fetchSpecialtyFeedEvents,
   readRequestFrom,
 } from "./events-feed";

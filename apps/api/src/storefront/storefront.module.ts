@@ -27,6 +27,8 @@ import { SpecialtyChoiceMeController } from "./specialty-choice.me.controller.js
 import { SpecialtyChoicePublicController } from "./specialty-choice.public.controller.js";
 import { SpecialtyChoiceRepository } from "./specialty-choice.repository.js";
 import { SpecialtyChoiceService } from "./specialty-choice.service.js";
+import { SpecialtyFeedPublicController } from "./specialty-feed.public.controller.js";
+import { SpecialtyFeedService } from "./specialty-feed.service.js";
 import { StatisticsPublicController } from "./statistics.public.controller.js";
 import { StatisticsRepository } from "./statistics.repository.js";
 import { StatisticsService } from "./statistics.service.js";
@@ -89,6 +91,7 @@ import { TargetingService } from "./targeting.service.js";
     StatisticsPublicController,
     DoctorEventsPublicController,
     DoctorMyEventsMeController,
+    SpecialtyFeedPublicController,
   ],
   providers: [
     DoctorRegisterService,
@@ -102,6 +105,7 @@ import { TargetingService } from "./targeting.service.js";
     TargetingService,
     DoctorEventsRepository,
     DoctorEventsService,
+    SpecialtyFeedService,
     // Registered as a provider (not merely referenced in `@UseFilters`) so Nest
     // owns its lifecycle in this module's context.
     SpecialtyProblemFilter,

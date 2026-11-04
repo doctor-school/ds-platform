@@ -2,7 +2,7 @@
 title: "018 — The specialty feed"
 description: "Requirements for the doctor's return screen on doctor.school: one mixed feed targeted by the chosen specialty with the nearest events first, schools and courses with the series framing, lessons shared with the mobile application on one points account, the «Зачем это мне» value block, adjacent areas as their own labelled block, the specialty-filtered scale statistics, the consent-gated specialty leaderboard, the communities list, the guest-readable feed with honest gate states, the empty / partially empty / loading / per-block error renders, and the doctor content card unit the later screens consume unchanged."
 slug: 018-specialty-feed
-status: Draft
+status: In dev
 surface: user-facing
 storefronts: doctor-only
 storefronts_reason: "The doctor audience's specialty-targeted return screen; the spec keeps Academy content and projects out of it (EARS-5, EARS-14), and the Academy, which serves the expert audience, specifies no specialty feed. Its cross-front blocks are the shared content card unit (#1497, built under #3516) and the platform leaderboard (#1504)."
@@ -187,9 +187,9 @@ Each records a call the PRD left open. They are lead decisions in the AGENTS.md 
 
 ### Read models
 
-- `SpecialtyFeed { specialty: SpecialtyRef, blocks: FeedBlock[], order: 'events-first', viewer: { loggedIn, hasLeaderboardConsent } }` — the feed envelope; `blocks` lists only the connected content types, in the F-018-1 relative order, and `order` is the F-018-1 constant of LD-1.
+- `SpecialtyFeed { specialty: SpecialtyRef, blocks: FeedBlock[], order: 'events-first', viewer: { loggedIn } }` — the feed envelope; `blocks` lists only the connected content types, in the F-018-1 relative order, and `order` is the F-018-1 constant of LD-1. `viewer.hasLeaderboardConsent` joins the envelope with the leaderboard block (EARS-9, #1504).
 - `SpecialtyStatistics { colleagues, schools?, lessons?, specialty, computedAt }` — the specialty-filtered scale line (REQ-116); `schools` and `lessons` are present only once their content type is connected.
-- `FeedEvents { items: PublicEventSummary[], allEventsHref }` — the nearest events; every item carries `signUpCount` (`null` for an event whose «Скрыть число записавшихся» option is on, 019 EARS-19) and `format` (`online` | `offline-meetup`), and `nmo` as an attribute only.
+- `FeedEvents { items: PublicEventSummary[], allEventsHref }` — the nearest events; every item carries `signUpCount` (`null` for an event whose «Скрыть число записавшихся» option is on, 019 EARS-19) and `format` (`online` | `offline` | `hybrid`, the values of 019's event card), and `nmo` as an attribute only.
 - `FeedSchools { items: DoctorContentCard[], preparing: SchoolRef[] }` — schools and courses; a course item carries `seriesEpisodes`.
 - `FeedLessons { lessonOfTheDay: DoctorContentCard, total, allLessonsHref, sharedWithMobileApp: true }`.
 - `ValueBlock { items: { title, body }[], freeStatement }` — «Зачем это мне»; `freeStatement` never names a payer (LD-9).

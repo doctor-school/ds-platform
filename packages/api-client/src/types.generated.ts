@@ -2708,6 +2708,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storefront/feed/{specialty}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["SpecialtyFeedPublicController_envelope"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/storefront/feed/{specialty}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["SpecialtyFeedPublicController_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3449,6 +3481,42 @@ export interface components {
             pageSize: number;
             total: number;
         };
+        FeedEventsDto: {
+            allEventsHref: string;
+            items: {
+                city?: string;
+                endsAt: string | null;
+                /** @enum {string} */
+                format: "online" | "offline" | "hybrid";
+                href: string;
+                id: string;
+                kind: {
+                    id: string;
+                    slug: string;
+                    title: string;
+                };
+                nmo: boolean;
+                pulCost: number;
+                recording?: {
+                    durationSec: number | null;
+                    expectedBy: string | null;
+                    posterUrl: string | null;
+                    primaryKind: ("edited" | "raw") | null;
+                    secondaryKind: ("edited" | "raw") | null;
+                    /** @enum {string} */
+                    state: "montage" | "raw-only" | "preparing";
+                };
+                seatsLeft?: number;
+                signUpCount: number | null;
+                slug: string;
+                source: string;
+                speaker: string;
+                startsAt: string;
+                /** @enum {string} */
+                state: "normal" | "registered" | "soldOut" | "live" | "recorded";
+                title: string;
+            }[];
+        };
         LegacyBroadcastCreateDto: {
             /** @enum {string} */
             audience: "doctors" | "experts";
@@ -3734,6 +3802,24 @@ export interface components {
             captchaToken?: string;
             csrf: string;
             identifier: string;
+        };
+        SpecialtyFeedDto: {
+            blocks: {
+                /** @enum {string} */
+                kind: "events";
+                read: string;
+            }[];
+            /** @constant */
+            order: "events-first";
+            specialty: {
+                code: string;
+                id: string;
+                isOther: boolean;
+                name: string;
+            };
+            viewer: {
+                loggedIn: boolean;
+            };
         };
         StaffAccessGrantRequestDto: {
             email: string;
@@ -7960,6 +8046,48 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    SpecialtyFeedPublicController_envelope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                specialty: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecialtyFeedDto"];
+                };
+            };
+        };
+    };
+    SpecialtyFeedPublicController_events: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                specialty: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedEventsDto"];
+                };
             };
         };
     };

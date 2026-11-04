@@ -116,6 +116,20 @@ routes:
     file: apps/doctor/app/(storefront)/events/page.tsx
     status: product-ready
 
+  # 018 EARS-1 / EARS-4 (#1496, #1499) — the specialty feed inside 017's shell:
+  # breadcrumbs, the specialty heading with «сменить специальность», and the
+  # connected blocks only (release 1: the nearest events through the events
+  # feed block's card list, states and retry). Nothing on it is a placeholder: a
+  # type that is not connected has no block at all. `deferred` because release 1
+  # of 018 is not whole yet — «Зачем это мне» (#1502) and the adjacent areas
+  # (#1503) still have to plug in — and the route carries no Stage-B verdict;
+  # #1495 (the 018 feature) owns the flip to `product-ready`.
+  - app: doctor
+    route: /feed/[specialty]
+    file: apps/doctor/app/(storefront)/feed/[specialty]/page.tsx
+    status: deferred
+    issue: "#1495"
+
   # 020 EARS-1 (#1764) — the shared event page mounted on the doctor storefront.
   # The read model, the composition blocks and the server-resolved participation
   # CTA are REAL and shared with the academy host, and its Stage-B verdict is

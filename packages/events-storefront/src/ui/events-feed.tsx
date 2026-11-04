@@ -57,3 +57,6 @@ export async function EventsFeed({
     </Suspense>
   );
 }
+
+/** 018 EARS-4 — the specialty feed's nearest-events block (same subpath). */
+export { SpecialtyEventsBlock } from "./specialty-events";

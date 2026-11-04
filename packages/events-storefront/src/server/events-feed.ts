@@ -10,11 +10,14 @@ import {
   PublicEventKindListSchema,
   type RawQueryRecord,
   SpecialtyBookSchema,
+  specialtyFeedBlockRead,
 } from "@ds/schemas";
+
+import { adaptFeedEvents } from "../adapters";
 
 import type { EventsStorefrontHostConfig } from "../host-config";
 import type { KindTitle, SpecialtyChoice } from "../model/facets";
-import type { BlockRead, EventsFeedPage } from "../model/feed";
+import type { BlockRead, EventsFeedCard, EventsFeedPage } from "../model/feed";
 import { feedReadQuery, feedTenseOf, monthReadQuery } from "../model/feed-url";
 
 const API_BASE = (
@@ -99,7 +102,10 @@ export async function fetchEventsLive(
   }
 }
 
-export type ReadRequest = { readonly cookie: string; readonly forwardedFor: string };
+export type ReadRequest = {
+  readonly cookie: string;
+  readonly forwardedFor: string;
+};
 
 /**
  * What every feed-page read forwards from the incoming request — the page
@@ -219,5 +225,37 @@ export async function fetchEventKindTitles(
     );
   } catch {
     return null;
+  }
+}
+
+/**
+ * 018 EARS-4 — the specialty feed's nearest-events read
+ * (`GET /v1/storefront/feed/{specialty}/events`). The path is minted from the
+ * specialty code by the ONE schema helper, never taken from a caller, so a
+ * block retry cannot be pointed at another api path. The read is viewer-
+ * independent: only the client address chain rides along.
+ */
+export async function fetchSpecialtyFeedEvents(
+  specialtyCode: string,
+  request: ReadRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<BlockRead<{ cards: EventsFeedCard[]; allEventsHref: string }>> {
+  try {
+    const res = await fetchImpl(
+      `${API_BASE}${specialtyFeedBlockRead(specialtyCode, "events")}`,
+      {
+        headers: {
+          accept: "application/json",
+          ...(request.forwardedFor
+            ? { "x-forwarded-for": request.forwardedFor }
+            : {}),
+        },
+        cache: "no-store",
+      },
+    );
+    if (!res.ok) return { ok: false };
+    return { ok: true, value: adaptFeedEvents(await res.json()) };
+  } catch {
+    return { ok: false };
   }
 }

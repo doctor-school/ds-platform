@@ -1,8 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { fetchEventKindTitles, fetchEventsFeed, fetchEventsLive } from "./events-feed";
+import {
+  fetchEventKindTitles,
+  fetchEventsFeed,
+  fetchEventsLive,
+  fetchSpecialtyFeedEvents,
+} from "./events-feed";
 
-const page = { today: "2026-10-08", cards: [], horizon: { from: "a", to: "b", nextCount: null, nextFrom: null }, remaining: 0, nextBatch: 0, facetOptions: {}, matching: 0 };
+const page = {
+  today: "2026-10-08",
+  cards: [],
+  horizon: { from: "a", to: "b", nextCount: null, nextFrom: null },
+  remaining: 0,
+  nextBatch: 0,
+  facetOptions: {},
+  matching: 0,
+};
 const contentSet = {
   feedPath: "/v1/storefront/doctor/events",
   tenseParam: "tense" as const,
@@ -20,22 +33,46 @@ describe("fetchEventsFeed", () => {
     const result = await fetchEventsFeed(
       { contentSet, filterSet: "doctor" },
       { tense: "past", from: "2026-09-01" },
-      { cookie: "__Host-ds_session=s; ds_specialty=cardio", forwardedFor: "1.2.3.4" },
+      {
+        cookie: "__Host-ds_session=s; ds_specialty=cardio",
+        forwardedFor: "1.2.3.4",
+      },
       fetchImpl as unknown as typeof fetch,
     );
     expect(result).toEqual({ ok: true, value: page });
-    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toMatch(/\/v1\/storefront\/doctor\/events\?from=2026-09-01&tense=past$/);
-    expect((init.headers as Record<string, string>).cookie).toBe("ds_specialty=cardio");
-    expect((init.headers as Record<string, string>)["x-forwarded-for"]).toBe("1.2.3.4");
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toMatch(
+      /\/v1\/storefront\/doctor\/events\?from=2026-09-01&tense=past$/,
+    );
+    expect((init.headers as Record<string, string>).cookie).toBe(
+      "ds_specialty=cardio",
+    );
+    expect((init.headers as Record<string, string>)["x-forwarded-for"]).toBe(
+      "1.2.3.4",
+    );
     expect(contentSet.adapt).toHaveBeenCalledWith({}, { tense: "past" });
   });
 
   it("NEW: Academy host — the bare `/webinars` and `?tense=past` reads state no cursor page, so the api answers the default horizon with «Показать ещё» (D2, row 32)", async () => {
-    const academy = { ...contentSet, feedPath: "/v1/public/events", tenseParam: "timeframe" as const };
-    for (const [raw, tense] of [[{}, "upcoming"], [{ tense: "past" }, "past"]] as const) {
+    const academy = {
+      ...contentSet,
+      feedPath: "/v1/public/events",
+      tenseParam: "timeframe" as const,
+    };
+    for (const [raw, tense] of [
+      [{}, "upcoming"],
+      [{ tense: "past" }, "past"],
+    ] as const) {
       const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));
-      await fetchEventsFeed({ contentSet: academy, filterSet: "academy" }, raw, { cookie: "", forwardedFor: "" }, fetchImpl as unknown as typeof fetch);
+      await fetchEventsFeed(
+        { contentSet: academy, filterSet: "academy" },
+        raw,
+        { cookie: "", forwardedFor: "" },
+        fetchImpl as unknown as typeof fetch,
+      );
       const [url] = fetchImpl.mock.calls[0] as unknown as [string];
       // Neither `limit` nor `cursor`: a cursor page carries no next bound.
       expect(url.endsWith(`/v1/public/events?timeframe=${tense}`)).toBe(true);
@@ -45,21 +82,45 @@ describe("fetchEventsFeed", () => {
   it("a failed read is a block error, never a thrown page", async () => {
     const fetchImpl = vi.fn(async () => new Response("", { status: 503 }));
     expect(
-      await fetchEventsFeed({ contentSet, filterSet: "doctor" }, {}, { cookie: "", forwardedFor: "" }, fetchImpl as unknown as typeof fetch),
+      await fetchEventsFeed(
+        { contentSet, filterSet: "doctor" },
+        {},
+        { cookie: "", forwardedFor: "" },
+        fetchImpl as unknown as typeof fetch,
+      ),
     ).toEqual({ ok: false });
   });
 });
 
 describe("fetchEventsLive", () => {
-  const GUEST = { cookie: "", userAgent: "ua", acceptLanguage: "ru", forwardedFor: "1.2.3.4" };
+  const GUEST = {
+    cookie: "",
+    userAgent: "ua",
+    acceptLanguage: "ru",
+    forwardedFor: "1.2.3.4",
+  };
   it("parses the live LIST and degrades a failure to a block error", async () => {
     const ok = vi.fn(async () => new Response("[]", { status: 200 }));
     expect(
-      await fetchEventsLive("/v1/public/events/live", { contentSet }, GUEST, { cookie: "", forwardedFor: "" }, ok as unknown as typeof fetch),
+      await fetchEventsLive(
+        "/v1/public/events/live",
+        { contentSet },
+        GUEST,
+        { cookie: "", forwardedFor: "" },
+        ok as unknown as typeof fetch,
+      ),
     ).toEqual({ ok: true, value: [] });
-    const bad = vi.fn(async () => { throw new Error("down"); });
+    const bad = vi.fn(async () => {
+      throw new Error("down");
+    });
     expect(
-      await fetchEventsLive("/v1/public/events/live", { contentSet }, GUEST, { cookie: "", forwardedFor: "" }, bad as unknown as typeof fetch),
+      await fetchEventsLive(
+        "/v1/public/events/live",
+        { contentSet },
+        GUEST,
+        { cookie: "", forwardedFor: "" },
+        bad as unknown as typeof fetch,
+      ),
     ).toEqual({ ok: false });
   });
 
@@ -72,8 +133,13 @@ describe("fetchEventsLive", () => {
       { cookie: "other=1; ds_specialty=cardio", forwardedFor: "1.2.3.4" },
       fetchImpl as unknown as typeof fetch,
     );
-    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toMatch(/\/v1\/storefront\/doctor\/events\/live\?specialty=all$/);
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toMatch(
+      /\/v1\/storefront\/doctor\/events\/live\?specialty=all$/,
+    );
     const headers = init.headers as Record<string, string>;
     expect(headers.cookie).toBe("ds_specialty=cardio");
     expect(headers["x-forwarded-for"]).toBe("1.2.3.4");
@@ -81,10 +147,28 @@ describe("fetchEventsLive", () => {
 
   it("019 EARS-6: a signed-in viewer's live read forwards the whole session surface unchanged", async () => {
     const fetchImpl = vi.fn(async () => new Response("[]", { status: 200 }));
-    const session = { cookie: "__Host-ds_session=s; ds_specialty=cardio", userAgent: "ua", acceptLanguage: "ru", forwardedFor: "" };
-    await fetchEventsLive("/v1/storefront/doctor/events/live", { contentSet }, session, { cookie: session.cookie, forwardedFor: "" }, fetchImpl as unknown as typeof fetch);
-    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
-    expect(init.headers).toMatchObject({ cookie: session.cookie, "user-agent": "ua", "accept-language": "ru" });
+    const session = {
+      cookie: "__Host-ds_session=s; ds_specialty=cardio",
+      userAgent: "ua",
+      acceptLanguage: "ru",
+      forwardedFor: "",
+    };
+    await fetchEventsLive(
+      "/v1/storefront/doctor/events/live",
+      { contentSet },
+      session,
+      { cookie: session.cookie, forwardedFor: "" },
+      fetchImpl as unknown as typeof fetch,
+    );
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(init.headers).toMatchObject({
+      cookie: session.cookie,
+      "user-agent": "ua",
+      "accept-language": "ru",
+    });
   });
 });
 
@@ -92,22 +176,85 @@ describe("fetchEventKindTitles", () => {
   it("EARS-7: reads the public kind dictionary (published and retired kinds) as slug → title", async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json({
-        data: [{ id: "00460046-0000-4000-8000-000000000005", slug: "master-klass", title: "Мастер-класс" }],
+        data: [
+          {
+            id: "00460046-0000-4000-8000-000000000005",
+            slug: "master-klass",
+            title: "Мастер-класс",
+          },
+        ],
       }),
     );
-    expect(await fetchEventKindTitles(fetchImpl as unknown as typeof fetch)).toEqual([
-      { slug: "master-klass", title: "Мастер-класс" },
-    ]);
+    expect(
+      await fetchEventKindTitles(fetchImpl as unknown as typeof fetch),
+    ).toEqual([{ slug: "master-klass", title: "Мастер-класс" }]);
     const [url] = fetchImpl.mock.calls[0] as unknown as [string];
     expect(url).toMatch(/\/v1\/public\/event-kinds$/);
   });
 
   it("EARS-7: a failed dictionary read is reported as unknown (null), never a thrown page and never an empty dictionary", async () => {
     const failed = vi.fn(async () => new Response("", { status: 503 }));
-    expect(await fetchEventKindTitles(failed as unknown as typeof fetch)).toBeNull();
+    expect(
+      await fetchEventKindTitles(failed as unknown as typeof fetch),
+    ).toBeNull();
     const thrown = vi.fn(async () => {
       throw new Error("ECONNREFUSED");
     });
-    expect(await fetchEventKindTitles(thrown as unknown as typeof fetch)).toBeNull();
+    expect(
+      await fetchEventKindTitles(thrown as unknown as typeof fetch),
+    ).toBeNull();
+  });
+});
+
+describe("fetchSpecialtyFeedEvents", () => {
+  it("EARS-4: reads the specialty's events block path minted from the code, forwarding only the client address — never the viewer's cookie", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            items: [],
+            allEventsHref: "/events?specialty=cardiology",
+          }),
+          {
+            status: 200,
+          },
+        ),
+    );
+    const result = await fetchSpecialtyFeedEvents(
+      "cardiology",
+      {
+        cookie: "__Host-ds_session=s; ds_specialty=neuro",
+        forwardedFor: "1.2.3.4",
+      },
+      fetchImpl as unknown as typeof fetch,
+    );
+    expect(result).toEqual({
+      ok: true,
+      value: { cards: [], allEventsHref: "/events?specialty=cardiology" },
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toMatch(/\/v1\/storefront\/feed\/cardiology\/events$/);
+    const sent = init.headers as Record<string, string>;
+    expect(sent.cookie).toBeUndefined();
+    expect(sent["x-forwarded-for"]).toBe("1.2.3.4");
+  });
+
+  it("EARS-4: a failed or malformed read is a block error, never a thrown page", async () => {
+    for (const res of [
+      new Response("", { status: 503 }),
+      new Response('{"items":"x"}', { status: 200 }),
+    ]) {
+      const fetchImpl = vi.fn(async () => res);
+      expect(
+        await fetchSpecialtyFeedEvents(
+          "cardiology",
+          { cookie: "", forwardedFor: "" },
+          fetchImpl as unknown as typeof fetch,
+        ),
+      ).toEqual({ ok: false });
+    }
   });
 });

@@ -3,7 +3,7 @@ title: "Feature 018 — The specialty feed (PRD)"
 description: "Product requirements for the doctor's return screen on `doctor.school`: one targeted mixed feed for a chosen specialty — schools and courses (the course as a series), the nearest events including offline meet-ups, lessons shared with the mobile app, a «Зачем это мне» value block, explicitly labelled adjacent areas, the specialty-filtered scale statistics, the consent-gated specialty leaderboard and communities. Also the screen where the doctor content card's anatomy is decided for every later screen. Wave 1, `blocked_by` 017; source of the 018 EARS triplet (ADR-0014)."
 slug: two-site-ia-018-specialty-feed-product
 epic: ../../product/two-site-ia/brief.md
-status: Draft
+status: In dev
 surface: user-facing
 storefronts: doctor-only
 storefronts_reason: "The doctor audience's specialty-targeted return screen; the spec keeps Academy content and projects out of it (EARS-5, EARS-14), and the Academy, which serves the expert audience, specifies no specialty feed. Its cross-front blocks are the shared content card unit (#1497, built under #3516) and the platform leaderboard (#1504)."

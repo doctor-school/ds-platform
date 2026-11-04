@@ -3814,6 +3814,206 @@
         "required": ["data", "total", "page", "pageSize"],
         "type": "object"
       },
+      "FeedEventsDto": {
+        "additionalProperties": false,
+        "properties": {
+          "allEventsHref": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "city": {
+                  "type": "string"
+                },
+                "endsAt": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "format": {
+                  "enum": ["online", "offline", "hybrid"],
+                  "type": "string"
+                },
+                "href": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "slug", "title"],
+                  "type": "object"
+                },
+                "nmo": {
+                  "type": "boolean"
+                },
+                "pulCost": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "recording": {
+                  "properties": {
+                    "durationSec": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "expectedBy": {
+                      "anyOf": [
+                        {
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "posterUrl": {
+                      "anyOf": [
+                        {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "primaryKind": {
+                      "anyOf": [
+                        {
+                          "enum": ["edited", "raw"],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "secondaryKind": {
+                      "anyOf": [
+                        {
+                          "enum": ["edited", "raw"],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "state": {
+                      "enum": ["montage", "raw-only", "preparing"],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "primaryKind",
+                    "secondaryKind",
+                    "posterUrl",
+                    "expectedBy",
+                    "durationSec"
+                  ],
+                  "type": "object"
+                },
+                "seatsLeft": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "signUpCount": {
+                  "anyOf": [
+                    {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "slug": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "speaker": {
+                  "type": "string"
+                },
+                "startsAt": {
+                  "type": "string"
+                },
+                "state": {
+                  "enum": [
+                    "normal",
+                    "registered",
+                    "soldOut",
+                    "live",
+                    "recorded"
+                  ],
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "slug",
+                "href",
+                "startsAt",
+                "endsAt",
+                "format",
+                "kind",
+                "title",
+                "speaker",
+                "source",
+                "nmo",
+                "pulCost",
+                "signUpCount",
+                "state"
+              ],
+              "type": "object"
+            },
+            "maxItems": 3,
+            "type": "array"
+          }
+        },
+        "required": ["items", "allEventsHref"],
+        "type": "object"
+      },
       "LegacyBroadcastCreateDto": {
         "additionalProperties": false,
         "properties": {
@@ -4985,6 +5185,70 @@
           }
         },
         "required": ["identifier", "authRequest", "csrf"],
+        "type": "object"
+      },
+      "SpecialtyFeedDto": {
+        "additionalProperties": false,
+        "properties": {
+          "blocks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": ["events"],
+                  "type": "string"
+                },
+                "read": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["kind", "read"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "order": {
+            "const": "events-first",
+            "type": "string"
+          },
+          "specialty": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "isOther": {
+                "type": "boolean"
+              },
+              "name": {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["id", "code", "name", "isOther"],
+            "type": "object"
+          },
+          "viewer": {
+            "additionalProperties": false,
+            "properties": {
+              "loggedIn": {
+                "type": "boolean"
+              }
+            },
+            "required": ["loggedIn"],
+            "type": "object"
+          }
+        },
+        "required": ["specialty", "blocks", "order", "viewer"],
         "type": "object"
       },
       "StaffAccessGrantRequestDto": {
@@ -10542,6 +10806,62 @@
           }
         },
         "tags": ["DoctorRegisterPublic"]
+      }
+    },
+    "/v1/storefront/feed/{specialty}": {
+      "get": {
+        "operationId": "SpecialtyFeedPublicController_envelope",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "specialty",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialtyFeedDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["SpecialtyFeedPublic"]
+      }
+    },
+    "/v1/storefront/feed/{specialty}/events": {
+      "get": {
+        "operationId": "SpecialtyFeedPublicController_events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "specialty",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedEventsDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["SpecialtyFeedPublic"]
       }
     }
   },

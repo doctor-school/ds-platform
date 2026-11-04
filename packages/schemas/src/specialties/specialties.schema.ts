@@ -286,6 +286,8 @@ export type TargetingSet = z.infer<typeof TargetingSetSchema>;
 export const SPECIALTY_ERROR_CODES = [
   // 422 — the reference is well-formed but names no member of the closed book.
   "SPECIALTY_NOT_IN_BOOK",
+  // 404 — a path names a specialty feed of no member of the book (018 EARS-1).
+  "SPECIALTY_FEED_NOT_FOUND",
 ] as const;
 export const SpecialtyErrorCodeSchema = z.enum(SPECIALTY_ERROR_CODES);
 export type SpecialtyErrorCode = z.infer<typeof SpecialtyErrorCodeSchema>;

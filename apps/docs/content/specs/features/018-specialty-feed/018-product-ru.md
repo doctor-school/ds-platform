@@ -3,7 +3,7 @@ title: "Фича 018 — Лента специальности (PRD)"
 description: "Продуктовые требования к экрану возврата врача на `doctor.school`: одна таргетная смешанная лента по выбранной специальности — школы и курсы (курс как сериал), ближайшие события вместе с офлайн-встречами, уроки, общие с мобильным приложением, блок ценности «Зачем это мне», явно подписанные смежные области, статистика в разрезе специальности, лидерборд по специальности по отдельному согласию и сообщества. Здесь же задаётся анатомия карточки контента врача для всех последующих экранов. Волна 1, `blocked_by` 017; источник EARS-триплета 018 (ADR-0014)."
 slug: two-site-ia-018-specialty-feed-product-ru
 epic: ../../product/two-site-ia/brief-ru.md
-status: Draft
+status: In dev
 surface: user-facing
 storefronts: doctor-only
 storefronts_reason: "The doctor audience's specialty-targeted return screen; the spec keeps Academy content and projects out of it (EARS-5, EARS-14), and the Academy, which serves the expert audience, specifies no specialty feed. Its cross-front blocks are the shared content card unit (#1497, built under #3516) and the platform leaderboard (#1504)."

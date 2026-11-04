@@ -2,7 +2,7 @@
 title: "018 — Лента специальности"
 description: "Требования к экрану возвращения врача на doctor.school: одна смешанная лента по выбранной специальности с ближайшими событиями наверху, школы и курсы с рамкой курса-сериала, уроки, общие с мобильным приложением на одном счёте очков, блок «Зачем это мне», смежные области отдельным помеченным блоком, статистика масштаба по специальности, лидерборд по специальности только по согласию, список сообществ, чтение ленты гостем с честными состояниями гейта, пустое / частично пустое / загрузочное / поблочно-ошибочное состояния и единица «карточка контента врача», которую следующие экраны потребляют без изменений."
 slug: 018-specialty-feed-ru
-status: Draft
+status: In dev
 surface: user-facing
 storefronts: doctor-only
 storefronts_reason: "The doctor audience's specialty-targeted return screen; the spec keeps Academy content and projects out of it (EARS-5, EARS-14), and the Academy, which serves the expert audience, specifies no specialty feed. Its cross-front blocks are the shared content card unit (#1497, built under #3516) and the platform leaderboard (#1504)."
@@ -187,9 +187,9 @@ lang: ru
 
 ### Модели чтения
 
-- `SpecialtyFeed { specialty: SpecialtyRef, blocks: FeedBlock[], order: 'events-first', viewer: { loggedIn, hasLeaderboardConsent } }` — конверт ленты; `blocks` перечисляет только подключённые типы контента в относительном порядке F-018-1, а `order` — константа F-018-1 из LD-1.
+- `SpecialtyFeed { specialty: SpecialtyRef, blocks: FeedBlock[], order: 'events-first', viewer: { loggedIn } }` — конверт ленты; `blocks` перечисляет только подключённые типы контента в относительном порядке F-018-1, а `order` — константа F-018-1 из LD-1. `viewer.hasLeaderboardConsent` добавляется в конверт вместе с блоком лидерборда (EARS-9, #1504).
 - `SpecialtyStatistics { colleagues, schools?, lessons?, specialty, computedAt }` — строка масштаба по специальности (REQ-116); `schools` и `lessons` присутствуют, только когда их тип контента подключён.
-- `FeedEvents { items: PublicEventSummary[], allEventsHref }` — ближайшие события; каждый элемент несёт `signUpCount` и `format` (`online` | `offline-meetup`), а `nmo` только как атрибут.
+- `FeedEvents { items: PublicEventSummary[], allEventsHref }` — ближайшие события; каждый элемент несёт `signUpCount` и `format` (`online` | `offline` | `hybrid`, значения карточки события 019), а `nmo` только как атрибут.
 - `FeedSchools { items: DoctorContentCard[], preparing: SchoolRef[] }` — школы и курсы; у курса есть `seriesEpisodes`.
 - `FeedLessons { lessonOfTheDay: DoctorContentCard, total, allLessonsHref, sharedWithMobileApp: true }`.
 - `ValueBlock { items: { title, body }[], freeStatement }` — «Зачем это мне»; `freeStatement` не называет плательщика (LD-9).

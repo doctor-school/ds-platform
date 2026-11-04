@@ -30,9 +30,15 @@ import { RichTextContent } from "./rich-text-content";
  * an info `Alert` above the article.
  *
  * Typography maps the canvas onto DS tokens (no arbitrary values): the frame
- * max 1104px → `max-w-content`, the column 720px → `max-w-180`; h1
- * clamp(28–42px) / 800 / -.03em → `text-2xl` → `sm:text-3xl`, `font-extrabold`,
- * `tracking-tight`; byline 13.5px / 600 → `text-sm font-semibold`; partner mark
+ * max 1104px → `max-w-content`, the column 720px → `max-w-180`; the side
+ * padding clamp(16px,4vw,48px) is the `gutter` token itself. Every other canvas
+ * clamp becomes a two-token step taken at the DS breakpoint nearest the width
+ * where the clamp crosses the midpoint of the two tokens, so 640–1100px follows
+ * the canvas: top padding clamp(28–48px, 4.5vw) → `pt-7` → `md:pt-12`; bottom
+ * clamp(52–96px, 8vw) → `pb-13` → `lg:pb-24`; back-link gap clamp(24–36px,
+ * 3.5vw) → `mb-6` → `md:mb-9`; header and cover gaps clamp(28–40px, 4vw) →
+ * `mb-7` → `md:mb-10`; h1 clamp(28–42px, 3.6vw) / 800 / -.03em → `text-2xl` →
+ * `lg:text-3xl`, `font-extrabold`, `tracking-tight`; byline 13.5px / 600 → `text-sm font-semibold`; partner mark
  * 12px / 17px → `text-xs`.
  */
 
@@ -109,32 +115,36 @@ function Header({ material }: { material: MaterialArticleContent }) {
     .filter((part): part is string => Boolean(part))
     .join(" · ");
   return (
-    <header className="mb-7 flex flex-col gap-4 sm:mb-10">
+    <header className="mb-7 flex flex-col gap-4 md:mb-10">
       <div className="flex">
         <Badge variant="label">
           {MATERIAL_ARTICLE_COPY.kinds[material.kind]}
         </Badge>
       </div>
-      <h1 className="m-0 text-2xl leading-title font-extrabold tracking-tight text-balance text-foreground sm:text-3xl">
+      <h1 className="m-0 text-2xl leading-title font-extrabold tracking-tight text-balance text-foreground lg:text-3xl">
         {material.title}
       </h1>
-      <div className="flex flex-col gap-2">
-        <div
-          data-testid="material-byline"
-          className="text-sm font-semibold text-muted-foreground tabular-nums"
-        >
-          {byline}
+      {byline || material.partner ? (
+        <div className="flex flex-col gap-2">
+          {byline ? (
+            <div
+              data-testid="material-byline"
+              className="text-sm font-semibold text-muted-foreground tabular-nums"
+            >
+              {byline}
+            </div>
+          ) : null}
+          {material.partner ? (
+            <div
+              data-testid="material-partner-mark"
+              className="text-xs font-semibold text-muted-foreground"
+            >
+              {MATERIAL_ARTICLE_COPY.partnerPrefix}
+              {material.partner.name}
+            </div>
+          ) : null}
         </div>
-        {material.partner ? (
-          <div
-            data-testid="material-partner-mark"
-            className="text-xs font-semibold text-muted-foreground"
-          >
-            {MATERIAL_ARTICLE_COPY.partnerPrefix}
-            {material.partner.name}
-          </div>
-        ) : null}
-      </div>
+      ) : null}
     </header>
   );
 }
@@ -197,7 +207,7 @@ const MaterialArticle = React.forwardRef<HTMLDivElement, MaterialArticleProps>(
             {material.cover ? (
               <figure
                 data-testid="material-cover"
-                className="relative m-0 mb-7 aspect-video overflow-hidden border-2 border-border bg-section sm:mb-10"
+                className="relative m-0 mb-7 aspect-video overflow-hidden border-2 border-border bg-section md:mb-10"
               >
                 <img
                   src={material.cover.url}
@@ -216,14 +226,14 @@ const MaterialArticle = React.forwardRef<HTMLDivElement, MaterialArticleProps>(
       <div
         ref={ref}
         className={cn(
-          "mx-auto box-border w-full max-w-content px-4 pt-7 pb-13 sm:px-12 sm:pt-12 sm:pb-24",
+          "mx-auto box-border w-full max-w-content px-gutter pt-7 pb-13 md:pt-12 lg:pb-24",
           className,
         )}
         {...domProps}
       >
         <div className="max-w-180 min-w-0">
           {backHref ? (
-            <div className="mb-6 sm:mb-9">
+            <div className="mb-6 md:mb-9">
               <Link href={backHref} size="sm" weight="strong">
                 {MATERIAL_ARTICLE_COPY.back}
               </Link>

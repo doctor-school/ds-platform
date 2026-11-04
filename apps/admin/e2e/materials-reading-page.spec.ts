@@ -24,9 +24,12 @@ import { signInAsAdmin } from "@ds/e2e/admin-events";
  * storefront; it is driven by hand on the stand (PR body) and pinned in
  * `apps/portal/app/materials/[slug]/page.test.tsx`.
  *
- * Dev-stand-gated like every `apps/admin/e2e` flow spec: a booted admin + api
- * plus `E2E_PORTAL_URL` and `E2E_DOCTOR_URL` (the two storefronts proxying to
- * the same api). `E2E_SHOT_DIR` opts into the captures the PR body cites.
+ * Two groups. The EARS-3 preview needs only the admin + api, so it runs
+ * wherever the admin flows run — CI `admin-e2e` included. The storefront group
+ * (EARS-12 pages, EARS-17 doctor not-found) also needs `E2E_PORTAL_URL` and
+ * `E2E_DOCTOR_URL` (the two storefronts proxying to the same api) and skips
+ * without them; its CI journeys are tracked by #3517. `E2E_SHOT_DIR` opts into
+ * the captures the PR body cites.
  */
 const PORTAL = process.env.E2E_PORTAL_URL;
 const DOCTOR = process.env.E2E_DOCTOR_URL;
@@ -249,9 +252,13 @@ async function publishedMaterial(
   return created;
 }
 
-async function shot(page: Page, name: string): Promise<void> {
+async function shot(
+  page: Page,
+  name: string,
+  { fullPage = true }: { fullPage?: boolean } = {},
+): Promise<void> {
   if (!SHOT_DIR) return;
-  await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, fullPage: true });
+  await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, fullPage });
 }
 
 /** Captures in both schemes: the Academy theme is class-based (`<html class="dark">`). */
@@ -313,21 +320,7 @@ async function expectNoPageSideScroll(page: Page): Promise<void> {
   expect(overflow).toBeLessThanOrEqual(0);
 }
 
-test.describe("048 reading page", () => {
-  test.skip(
-    !PORTAL || !DOCTOR,
-    "needs E2E_PORTAL_URL and E2E_DOCTOR_URL (the storefronts of this stand)",
-  );
-  test.describe.configure({ mode: "serial" });
-
-  let news: Written;
-  let column: Written;
-  let draft: Written;
-  const newsTitle = `Открыт набор центров в исследование PRP ${RUN}`;
-  const columnTitle = `Ортобиология в России: чего не хватает практике ${RUN}`;
-  const partnerName = `Партнёр А ${RUN}`;
-  const expertFamily = `Страхов${RUN}`;
-
+test.describe("048 reading page — admin preview", () => {
   test("048 EARS-3: «Предпросмотр» shows the unsaved form as its reading page with the banner, saving nothing", async ({
     page,
   }) => {
@@ -348,13 +341,20 @@ test.describe("048 reading page", () => {
       await page.getByTestId("material-preview").click();
       const panel = page.getByTestId("material-preview-panel");
       await expect(panel).toBeVisible();
-      // Full-screen at every width: once the slide rests, it spans the viewport.
+      // Full-screen at every width: once the slide rests, it covers the viewport.
       await expect
         .poll(async () => {
           const box = await panel.boundingBox();
-          return box ? [Math.round(box.x), Math.round(box.width)] : null;
+          return box
+            ? [
+                Math.round(box.x),
+                Math.round(box.y),
+                Math.round(box.width),
+                Math.round(box.height),
+              ]
+            : null;
         })
-        .toEqual([0, viewport.width]);
+        .toEqual([0, 0, viewport.width, viewport.height]);
       await expect(panel).toHaveAttribute("aria-modal", "true");
       // The info `Alert` carries its glyph before the text.
       await expect(panel.getByTestId("material-preview-banner")).toContainText(
@@ -371,9 +371,12 @@ test.describe("048 reading page", () => {
         `preview panel ${viewport.width}px`,
         '[data-testid="material-preview-panel"]',
       );
+      // The viewport, not the full page: the sheet is `fixed`, so a full-page
+      // capture would draw it as a band over the scrolled form.
       await shot(
         page,
         `preview-${viewport === WIDE ? "desktop" : "mobile"}-light`,
+        { fullPage: false },
       );
       await page.keyboard.press("Escape");
       await expect(panel).toBeHidden();
@@ -391,10 +394,33 @@ test.describe("048 reading page", () => {
     }, title);
     expect(list.status, list.text).toBe(200);
     expect(list.text).not.toContain(title);
-    const feed = await page.request.get(`${PORTAL}/v1/public/feed?limit=24`);
-    expect(feed.ok()).toBe(true);
-    expect(JSON.stringify(await feed.json())).not.toContain(title);
+    // The public feed through the admin origin's `/v1/*` rewrite (the feed
+    // read is not host-scoped), so no storefront is needed.
+    const feed = await page.evaluate(async () => {
+      const res = await fetch("/v1/public/feed?limit=24", {
+        headers: { accept: "application/json" },
+      });
+      return { status: res.status, text: await res.text() };
+    });
+    expect(feed.status, feed.text).toBe(200);
+    expect(feed.text).not.toContain(title);
   });
+});
+
+test.describe("048 reading page — storefronts", () => {
+  test.skip(
+    !PORTAL || !DOCTOR,
+    "needs E2E_PORTAL_URL and E2E_DOCTOR_URL (the storefronts of this stand); CI journeys: #3517",
+  );
+  test.describe.configure({ mode: "serial" });
+
+  let news: Written;
+  let column: Written;
+  let draft: Written;
+  const newsTitle = `Открыт набор центров в исследование PRP ${RUN}`;
+  const columnTitle = `Ортобиология в России: чего не хватает практике ${RUN}`;
+  const partnerName = `Партнёр А ${RUN}`;
+  const expertFamily = `Страхов${RUN}`;
 
   test("seed: published news with cover and partner, a column without either, a draft", async ({
     page,
@@ -495,8 +521,10 @@ test.describe("048 reading page", () => {
     const external = article.getByRole("link", { name: "ClinicalTrials.gov" });
     await expect(external).toHaveAttribute("target", "_blank");
     await expect(external).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(external).toHaveText("ClinicalTrials.gov ↗");
     const own = article.getByRole("link", { name: "разделе вебинаров" });
     await expect(own).not.toHaveAttribute("target", /.+/);
+    await expect(own).toHaveText("разделе вебинаров");
     const mail = article.getByRole("link", { name: "research@doctor.school" });
     await expect(mail).toHaveAttribute("href", "mailto:research@doctor.school");
     await expect(mail).not.toHaveAttribute("target", /.+/);
@@ -535,6 +563,7 @@ test.describe("048 reading page", () => {
     const pubmed = page.getByRole("link", { name: "PubMed" });
     await expect(pubmed).toHaveAttribute("target", "_blank");
     await expect(pubmed).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(pubmed).toHaveText("PubMed ↗");
     await expectNoAxeViolationsBothSchemes(page, "column reading page");
     await shotBothSchemes(page, "page-column-bare-desktop");
     await page.setViewportSize(NARROW);

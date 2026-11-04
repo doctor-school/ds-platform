@@ -121,6 +121,52 @@ describe("048 EARS-2: RichTextContent", () => {
     expect(mail.hasAttribute("target")).toBe(false);
   });
 
+  it("048 EARS-12: a link to another host shall carry the canvas «↗» after its text, hidden from assistive tech", () => {
+    render(<RichTextContent body={body} />);
+    // The accessible name stays the link text — the glyph is decoration.
+    const other = screen.getByRole("link", { name: "чужая" });
+    expect(other.textContent).toBe("чужая ↗");
+    const glyph = other.querySelector('[aria-hidden="true"]');
+    expect(glyph?.textContent).toBe(" ↗");
+    expect(screen.getByRole("link", { name: "своя" }).textContent).toBe("своя");
+    expect(screen.getByRole("link", { name: "почта" }).textContent).toBe(
+      "почта",
+    );
+  });
+
+  it("048 EARS-12: adjacent text runs under one external link shall render one link with one «↗»", () => {
+    const href = "https://pubmed.ncbi.nlm.nih.gov";
+    const split: MaterialBody = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "обзор на ",
+              marks: [{ type: "link", attrs: { href } }],
+            },
+            {
+              type: "text",
+              text: "PubMed",
+              marks: [{ type: "bold" }, { type: "link", attrs: { href } }],
+            },
+            { type: "text", text: "." },
+          ],
+        },
+      ],
+    };
+    const { container } = render(<RichTextContent body={split} />);
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]?.textContent).toBe("обзор на PubMed ↗");
+    expect(links[0]?.querySelector("strong")?.textContent).toBe("PubMed");
+    expect(container.querySelector("p")?.textContent).toBe(
+      "обзор на PubMed ↗.",
+    );
+  });
+
   it("048 EARS-2: when a body carries a node, mark or link outside the allowlist, the renderer shall drop it", () => {
     const hostile = {
       type: "doc",

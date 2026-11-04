@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
  * 048 EARS-17 (#3514) — the rail and the reading page live only on the
  * Academy host: the doctor storefront has no `/materials` route (a
  * `doctor.school/materials/{slug}` request is its not-found page — pinned live
- * in `e2e/materials-absence.spec.ts`), and no doctor source imports anything of
+ * by «048 EARS-17» in `apps/admin/e2e/materials-reading-page.spec.ts`), and no
+ * doctor source imports anything of
  * the feed or material contract `packages/schemas/src/materials/`, nor the
  * material blocks of `@ds/design-system`.
  */

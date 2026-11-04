@@ -186,6 +186,26 @@ describe("MaterialArticle", () => {
       screen.queryByRole("link", { name: MATERIAL_ARTICLE_COPY.back }),
     ).toBeNull();
   });
+
+  it("EARS-3: an unpublished preview with no author line renders no byline (no empty row, no gap)", () => {
+    const { container, rerender } = render(
+      <MaterialArticle
+        material={{ ...news, publishedAt: null, author: null }}
+        banner={MATERIAL_ARTICLE_COPY.previewBanner}
+      />,
+    );
+    expect(screen.queryByTestId("material-byline")).toBeNull();
+    expect(screen.getByTestId("material-partner-mark")).toBeInTheDocument();
+    rerender(
+      <MaterialArticle
+        material={{ ...news, publishedAt: null, author: null, partner: null }}
+        banner={MATERIAL_ARTICLE_COPY.previewBanner}
+      />,
+    );
+    expect(screen.queryByTestId("material-byline")).toBeNull();
+    // The header holds the badge and the title only — no empty meta block.
+    expect(container.querySelector("header")?.children).toHaveLength(2);
+  });
 });
 
 describe("formatMaterialPublishedDay", () => {

@@ -59,7 +59,7 @@ const MARKER_SKEW_SECONDS = 60;
 const MARKER_LABEL = "ds-platform/storefront/guest-marker/v1";
 const SILENT_TX_LABEL = "ds-platform/storefront/silent-tx/v1";
 const OPAQUE_ID = /^[A-Za-z0-9_-]{43}$/;
-/** A bare registrable domain: dot-separated LDH labels, nothing a cookie attribute could carry. */
+/** A bare domain name: dot-separated LDH labels, nothing a cookie attribute could carry. */
 const COOKIE_DOMAIN =
   /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
 
@@ -133,18 +133,31 @@ export function signInSignalCookie(domain: string, nowMs: number): string {
 }
 
 /**
- * The signal's instant in seconds, or `null` — absent, malformed, or from the
- * future beyond the skew (a planted or broken-clock value is ignored, never an
- * error).
+ * The newest valid signal's instant in seconds, or `null`. A browser may send
+ * several (a parent-domain one beside a slot's, or one a script planted, sent
+ * oldest first), so every value is read and the newest counts; a malformed one,
+ * or one from the future beyond the skew, is ignored, never an error.
  */
 function signInSignalAt(
   cookieHeader: string | null,
   nowMs: number,
 ): number | null {
-  const value = readCookie(cookieHeader, SIGN_IN_SIGNAL_COOKIE);
-  if (!value || !/^\d{1,12}$/.test(value)) return null;
-  const at = Number(value);
-  return at - Math.floor(nowMs / 1000) > MARKER_SKEW_SECONDS ? null : at;
+  if (!cookieHeader) return null;
+  const latest = Math.floor(nowMs / 1000) + MARKER_SKEW_SECONDS;
+  let newest: number | null = null;
+  for (const part of cookieHeader.split(";")) {
+    const at = part.indexOf("=");
+    if (at === -1 || part.slice(0, at).trim() !== SIGN_IN_SIGNAL_COOKIE) {
+      continue;
+    }
+    const value = part.slice(at + 1).trim();
+    if (!/^\d{1,12}$/.test(value)) continue;
+    const signal = Number(value);
+    if (signal <= latest && (newest === null || signal > newest)) {
+      newest = signal;
+    }
+  }
+  return newest;
 }
 
 /** EARS-63 (b) — set by every silent callback outcome. */

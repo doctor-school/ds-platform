@@ -614,6 +614,14 @@ describe("003 EARS-63 (a): a sign-in on the other storefront voids the marker", 
     expect(api.calls).toEqual([]);
   });
 
+  it("EARS-63: (a) among several signals (a parent-domain one beside a slot's, or a planted older one) the newest valid one counts", async () => {
+    const api = fakeApi();
+    const m = await marker(NOW - 10 * 1000);
+    const cookie = `${m}; ${signal(NOW - 20 * 1000)}; ${SIGN_IN_SIGNAL_COOKIE}=x; ${signal(NOW + 5 * 60 * 1000)}; ${signal(NOW - 3 * 1000)}`;
+    redirected(await checkWith(cookie, api));
+    expect(api.starts()).toHaveLength(1);
+  });
+
   it("EARS-63: (a) with no shared parent domain configured the signal is not read: the marker suppresses as before", async () => {
     const api = fakeApi();
     const cookie = `${await marker(NOW - 10 * 1000)}; ${signal(NOW - 3 * 1000)}`;

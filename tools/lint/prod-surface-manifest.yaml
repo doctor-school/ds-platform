@@ -53,6 +53,12 @@ routes:
     route: /documents/[slug]
     file: apps/portal/app/documents/[slug]/page.tsx
     status: product-ready
+  # 048 EARS-12 (#3514) — the Academy reading page of a material, built from
+  # the Stage-A-approved canvas `design-source/academy-material.dc.html`.
+  - app: portal
+    route: /materials/[slug]
+    file: apps/portal/app/materials/[slug]/page.tsx
+    status: product-ready
   # 045 — temporary demo (Issue #2360): product-ready on purpose (ships to prod,
   # noindex); removed together with the release that ships 032/035 (EARS-14).
   - app: portal

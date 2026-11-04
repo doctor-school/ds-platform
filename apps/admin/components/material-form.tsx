@@ -1,11 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useForm, useWatch } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
-import { Button, Input, Label, MediaDropzone, Radio } from "@ds/design-system";
+import {
+  Button,
+  Input,
+  Label,
+  MediaDropzone,
+  Radio,
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@ds/design-system";
+import {
+  MATERIAL_ARTICLE_COPY,
+  MaterialArticle,
+} from "@ds/design-system/material-article";
 import { Combobox, FormActions, FormSection } from "@ds/design-system/blocks";
 import {
   Form,
@@ -28,6 +43,7 @@ import {
   MaterialFormSchema,
   type MaterialFormFields,
 } from "@/lib/form-schemas";
+import { materialPreviewContent } from "@/lib/material-preview";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { useRelationshipCombobox } from "@/lib/use-relationship-combobox";
 
@@ -59,6 +75,12 @@ const RichTextEditor = dynamic(
  *   preflights type and size, the API normalizer is authoritative.
  * - «Текст» — the `RichTextEditor` over the EARS-2 document; the server is the
  *   allowlist authority and its refusal lands at this field.
+ *
+ * - «Предпросмотр» (EARS-3, `material-preview`) — a `Sheet` rendering the
+ *   shared `MaterialArticle` from the CURRENT form state (unsaved edits, the
+ *   picked cover, the chosen expert and partner) under the banner
+ *   «Предпросмотр — материал не опубликован»; it saves, publishes and changes
+ *   nothing.
  *
  * Every server refusal is shown AT its field (`refused`) — a write refusal with
  * the `fieldRefusals` sentence, a publish refusal (EARS-4) with the missing
@@ -138,6 +160,11 @@ export function MaterialForm({
   });
   const kind = useWatch({ control: form.control, name: "kind" });
   const expertId = useWatch({ control: form.control, name: "expertId" });
+  const previewTitle = useWatch({ control: form.control, name: "title" });
+  const previewAuthorLine = useWatch({
+    control: form.control,
+    name: "authorLine",
+  });
   const partnerId = useWatch({
     control: form.control,
     name: "partnerOrganisationId",
@@ -150,6 +177,7 @@ export function MaterialForm({
   const [cover, setCover] = useState<File | null>(null);
   const [removeCover, setRemoveCover] = useState(false);
   const [coverError, setCoverError] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const expertPicker = useRelationshipCombobox({
     resource: "experts",
@@ -167,6 +195,22 @@ export function MaterialForm({
       ? { id: detail.partner.id, label: detail.partner.title }
       : null,
   });
+
+  // EARS-3 — the picked cover previews from an object URL, revoked with it.
+  const pickedCoverUrl = useMemo(
+    () => (cover ? URL.createObjectURL(cover) : null),
+    [cover],
+  );
+  useEffect(
+    () => () => {
+      if (pickedCoverUrl) URL.revokeObjectURL(pickedCoverUrl);
+    },
+    [pickedCoverUrl],
+  );
+  const optionLabel = (
+    options: readonly { value: string; label: string }[],
+    id: string | null | undefined,
+  ) => (id ? (options.find((o) => o.value === id)?.label ?? null) : null);
 
   const dirty =
     form.formState.isDirty || bodyDirty || cover !== null || removeCover;
@@ -493,6 +537,14 @@ export function MaterialForm({
 
         <FormActions>
           <Button
+            type="button"
+            variant="outline"
+            data-testid="material-preview"
+            onClick={() => setPreviewOpen(true)}
+          >
+            {t("materials.preview.open")}
+          </Button>
+          <Button
             type="submit"
             loading={submitting}
             data-testid="submit-material"
@@ -501,6 +553,33 @@ export function MaterialForm({
           </Button>
         </FormActions>
       </form>
+
+      <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
+        <SheetContent size="lg" data-testid="material-preview-panel">
+          <SheetHeader>
+            <SheetTitle>{t("materials.preview.title")}</SheetTitle>
+          </SheetHeader>
+          <SheetBody>
+            {previewOpen ? (
+              <MaterialArticle
+                banner={MATERIAL_ARTICLE_COPY.previewBanner}
+                material={materialPreviewContent({
+                  kind,
+                  title: previewTitle,
+                  authorLine: previewAuthorLine,
+                  expertName: optionLabel(expertPicker.options, expertId),
+                  partnerName: optionLabel(partnerPicker.options, partnerId),
+                  coverUrl:
+                    pickedCoverUrl ??
+                    (removeCover ? null : (detail?.coverUrl ?? null)),
+                  firstPublishedAt: detail?.firstPublishedAt ?? null,
+                  body,
+                })}
+              />
+            ) : null}
+          </SheetBody>
+        </SheetContent>
+      </Sheet>
     </Form>
   );
 }

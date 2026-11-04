@@ -169,11 +169,7 @@ export {
 } from "./primitives/fields";
 
 // ── Blocks (#235 / #227) ──────────────────────────────────────────────────────
-export {
-  AuthLayout,
-  AuthCard,
-  OtpFocusScreen,
-} from "./blocks";
+export { AuthLayout, AuthCard, OtpFocusScreen } from "./blocks";
 
 // 028 EARS-7 (#1966) — the legal-document reading surface and the Markdown→ToC
 // helper it renders through.
@@ -193,6 +189,15 @@ export {
   RICH_TEXT_SAME_TAB_HOSTS,
   type RichTextContentProps,
 } from "./blocks/rich-text-content";
+// 048 EARS-12 / EARS-3 (#3514) — the reading-page body, shared by the Academy
+// route and the admin preview.
+export {
+  MaterialArticle,
+  MATERIAL_ARTICLE_COPY,
+  formatMaterialPublishedDay,
+  type MaterialArticleContent,
+  type MaterialArticleProps,
+} from "./blocks/material-article";
 export {
   parseLegalDocument,
   type LegalDocumentTocEntry,

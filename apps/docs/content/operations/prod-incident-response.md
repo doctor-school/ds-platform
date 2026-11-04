@@ -20,6 +20,15 @@ and the [`run-prod-deploy` skill](../skills/run-prod-deploy/SKILL.md).
   serves only the release-driver verbs `status` / `release` / `rollback` /
   `rollback-status` / `redeploy` (prod box), `upload-report` / `observe` (stage
   box) and the data-box hop verbs — no logs, no shell.
+- **The prod read key** reaches only `ds-read-entrypoint` on ds-api-prod
+  (release pipeline spec §5 «Prod read verbs.»). The lead dispatches
+  `gh workflow run prod-observe.yml --ref main -f verb=schema` (Environment
+  `production-read`, no owner word); the run uploads its answer only as CMS
+  ciphertext and logs status lines only. `pnpm prod:read <run-id>` decrypts it
+  on the workstation into `~/.ds-platform/prod-read/<run-id>.json`, and
+  `pnpm prod:schema-drift <run-id>` prints the drift of prod's migrations and
+  catalogue against the checked-out tree. A figure from a decrypted answer never
+  goes into a commit, Issue, PR or other public place.
 - **Break-glass keys** (user `breakglass`) are held offline by the owner. A
   break-glass session is the owner's action, never the lead agent's.
 - **The read path is the monitoring box `mon-prod-tw`** (operator ssh alias
@@ -177,8 +186,12 @@ future. The lead agent drafts the ticket text; it does not contact the provider.
 
 ## 7. What the read path cannot show
 
-- **SQL against prod data.** The old ssh + `docker exec psql` playbook is gone.
-  A data question needs an owner break-glass session or an API/admin surface.
+- **SQL against prod data.** The old ssh + `docker exec psql` playbook is gone,
+  and there is no free-form query. The schema (applied migrations and catalogue)
+  is read through the prod read path (§1: `prod-observe.yml` `schema`, then
+  `pnpm prod:schema-drift`). Named aggregate observations arrive with #3647 and
+  the migration rehearsal with #3648; until then any other data question needs
+  an owner break-glass session or an API/admin surface.
 - **Container state directly.** There is no `docker ps`; state is inferred. A red
   `/v1/health` + Caddy `connection refused` + recent api log lines = a live
   process with no listener (the container is up, the server never bound).

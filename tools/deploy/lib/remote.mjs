@@ -503,6 +503,9 @@ export const BOX_ENTRYPOINTS = [
   // (`--role data --from-release`); the other boxes carry it unused.
   { dest: HARDEN_SSH_BIN, path: "infra/deploy/bin/harden-ssh.sh" },
 ];
+/** #3646: ds-data-prod's `install` set — every box entrypoint but ds-read-entrypoint,
+ * which only ds-api-prod serves (spec §5 «Prod read verbs.»). */
+export const DATA_BOX_ENTRYPOINTS = BOX_ENTRYPOINTS.filter(({ dest }) => dest !== DS_READ_ENTRYPOINT_BIN);
 export const RELEASE_STATE_ROOT = "/var/lib/ds-platform/release";
 export const RELEASE_POLL_MS = 10 * 1000;
 export const RELEASE_POLL_MAX_FAILURES = 6;

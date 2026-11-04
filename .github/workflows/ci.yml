@@ -436,29 +436,50 @@ jobs:
         run: |
           set -euo pipefail
           dir="$RUNNER_TEMP/api-probes-3679"
-          mkdir -p "$dir"
-          printf '%s\n' '{"database":"ds_probe_3679","containerName":"ds-api-probes-3679","label":"ds.task=3679","bucket":"ds-api-probes-3679"}' > "$dir/resources.json"
+          build="$RUNNER_TEMP/api-probes-3679-build"
+          mkdir -p "$dir" "$build"
+          printf '%s\n' 3679 > "$build/task-owner"
+          printf '%s\n' '{"database":"ds_probe_3679","provider":"official-source MinIO","source":"7aac2a2c5b7c882e68c1ce017d8256be2feea27f","bucket":"ds-api-probes-3679"}' > "$dir/resources.json"
+          # MinIO's community distribution is source-only; anonymous image pulls
+          # fail on clean runners (PR #3681 review 5766814555). Keep the toolchain,
+          # module/build caches, binary and data outside the uploaded receipts.
+          printf '%s\n' '{"command":"download and checksum official Go1.24.8 linux-amd64 into owned RUNNER_TEMP"}' >> "$dir/stand-ops-3679.log"
+          test "$(uname -m)" = x86_64
+          curl -fsSL https://go.dev/dl/go1.24.8.linux-amd64.tar.gz -o "$build/go.tar.gz"
+          printf '%s  %s\n' 6842c516ca66c89d648a7f1dbe28e28c47b61b59f8f06633eb2ceb1188e9251d "$build/go.tar.gz" | sha256sum -c -
+          tar -xzf "$build/go.tar.gz" -C "$build"
+          export GOROOT="$build/go" GOBIN="$build/bin" GOMODCACHE="$build/mod" GOCACHE="$build/cache" GOPATH="$build/gopath"
+          export GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GOFLAGS=-p=2 CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+          "$build/go/bin/go" version > "$dir/go-version.txt"
+          version=v0.0.0-20260212201848-7aac2a2c5b7c
+          curl -fsSL "https://proxy.golang.org/github.com/minio/minio/@v/$version.info" > "$dir/minio-source.json"
+          node --input-type=module - "$dir/minio-source.json" <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const source = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          if (source.Origin?.URL !== 'https://github.com/minio/minio' || source.Origin?.Hash !== '7aac2a2c5b7c882e68c1ce017d8256be2feea27f')
+            throw new Error('MinIO source provenance mismatch');
+          NODE
+          printf '%s\n' '{"command":"go install github.com/minio/minio@v0.0.0-20260212201848-7aac2a2c5b7c with checksum database enabled"}' >> "$dir/stand-ops-3679.log"
+          "$build/go/bin/go" install "github.com/minio/minio@$version"
+          "$build/go/bin/go" version -m "$build/bin/minio" > "$dir/minio-build.txt"
+          sha256sum "$build/bin/minio" > "$dir/minio-binary.sha256"
+          "$build/bin/minio" --version > "$dir/minio-version.txt"
           printf '%s\n' '{"command":"CREATE DATABASE ds_probe_3679 OWNER ds in job-owned ds-postgres"}' >> "$dir/stand-ops-3679.log"
           docker exec ds-postgres psql -U ds -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ds_probe_3679 OWNER ds'
           export MINIO_ROOT_USER="probe3679$(openssl rand -hex 8)"
           export MINIO_ROOT_PASSWORD="$(openssl rand -hex 24)"
           echo "::add-mask::$MINIO_ROOT_USER"
           echo "::add-mask::$MINIO_ROOT_PASSWORD"
-          printf '%s\n' '{"command":"docker run owned MinIO latest server /data with ephemeral storage and private job credentials"}' >> "$dir/stand-ops-3679.log"
-          docker run -d --name ds-api-probes-3679 --label ds.task=3679 \
-            -p 127.0.0.1::9000 -e MINIO_ROOT_USER -e MINIO_ROOT_PASSWORD \
-            minio/minio:latest server /data > "$dir/container.id"
-          docker inspect ds-api-probes-3679 --format '{{.Id}} {{index .Config.Labels "ds.task"}} {{.Image}}' > "$dir/container-identity.txt"
-          # compose.core.yml uses latest; retain its resolved digest, not a claimed pin.
-          docker image inspect minio/minio:latest --format '{{json .RepoDigests}}' > "$dir/minio-digest.json"
-          port="$(docker inspect ds-api-probes-3679 --format '{{(index (index .NetworkSettings.Ports "9000/tcp") 0).HostPort}}')"
+          printf '%s\n' '{"command":"bind and release free loopback MinIO port"}' >> "$dir/stand-ops-3679.log"
+          port="$(node --input-type=module <<'NODE'
+          import { createServer } from 'node:net';
+          const server = createServer();
+          await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+          console.log(server.address().port);
+          await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+          NODE
+          )"
           endpoint="http://127.0.0.1:$port"
-          ready=false
-          for i in $(seq 1 60); do
-            if curl --max-time 1 -fsS "$endpoint/minio/health/ready" >/dev/null; then ready=true; break; fi
-            sleep 1
-          done
-          test "$ready" = true
           {
             echo 'E2E_API_PROBE_DATABASE_URL=postgres://ds:ds@localhost:5432/ds_probe_3679'
             echo "E2E_API_PROBE_ARTIFACT_DIR=$dir"
@@ -467,6 +488,20 @@ jobs:
             echo "E2E_API_PROBE_S3_SECRET_KEY=$MINIO_ROOT_PASSWORD"
             echo 'E2E_API_PROBE_S3_BUCKET=ds-api-probes-3679'
           } >> "$GITHUB_ENV"
+          mkdir -p "$build/data"
+          printf '%s\n' '{"command":"start owned source-built MinIO server on reserved loopback port with owned ephemeral data"}' >> "$dir/stand-ops-3679.log"
+          "$build/bin/minio" --quiet server "$build/data" --address "127.0.0.1:$port" --console-address 127.0.0.1:0 > "$build/minio.private.log" 2>&1 &
+          pid=$!
+          echo "$pid" > "$dir/minio.pid"
+          ready=false
+          for i in $(seq 1 60); do
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            if curl --max-time 1 -fsS "$endpoint/minio/health/ready" >/dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          test "$ready" = true
+          test "$(readlink -f "/proc/$pid/exe")" = "$build/bin/minio"
+          printf '{"pid":%s,"port":%s,"binary":"%s"}\n' "$pid" "$port" "$build/bin/minio" > "$dir/minio-process.json"
       - name: Migrate the disposable operational-probe database
         env:
           DATABASE_URL: postgres://ds:ds@localhost:5432/ds_probe_3679
@@ -500,16 +535,42 @@ jobs:
           if (tests.length !== 3 || tests.some(test => test.status !== 'expected' || test.results.length !== 1 || test.results[0].status !== 'passed' || test.results[0].retry !== 0))
             throw new Error('The three originals must pass once each, with no skip, flake or retry');
           NODE
-      - name: Remove the owned operational-probe MinIO
+      - name: Remove the owned operational-probe MinIO process and files
         if: always()
         run: |
           set -euo pipefail
           dir="$RUNNER_TEMP/api-probes-3679"
-          if [ -s "$dir/container.id" ]; then
-            id="$(cat "$dir/container.id")"
-            test "$(docker inspect "$id" --format '{{.Id}} {{index .Config.Labels "ds.task"}}')" = "$id 3679"
-            printf '%s\n' '{"command":"docker rm -f exact owned MinIO id after label guard"}' >> "$dir/stand-ops-3679.log"
-            docker rm -f "$id"
+          build="$RUNNER_TEMP/api-probes-3679-build"
+          if [ -f "$build/task-owner" ]; then
+            test "$(cat "$build/task-owner")" = 3679
+            test "$(realpath "$build")" = "$(realpath "$RUNNER_TEMP")/api-probes-3679-build"
+            if [ -s "$dir/minio.pid" ]; then
+              pid="$(cat "$dir/minio.pid")"
+              if [ -e "/proc/$pid/exe" ]; then
+                test "$(readlink -f "/proc/$pid/exe")" = "$build/bin/minio"
+                printf '{"command":"terminate exact owned MinIO PID after executable guard","pid":%s}\n' "$pid" >> "$dir/stand-ops-3679.log"
+                kill "$pid"
+                for i in $(seq 1 30); do
+                  if [ ! -e "/proc/$pid/exe" ]; then break; fi
+                  sleep 0.1
+                done
+                test ! -e "/proc/$pid/exe"
+              fi
+              printf '%s\n' '{"command":"verify exited MinIO loopback port is free"}' >> "$dir/stand-ops-3679.log"
+              node --input-type=module <<'NODE'
+              import { createServer } from 'node:net';
+              const endpoint = new URL(process.env.E2E_API_PROBE_S3_ENDPOINT);
+              const server = createServer();
+              await new Promise((resolve, reject) => { server.once('error', reject); server.listen(Number(endpoint.port), '127.0.0.1', resolve); });
+              await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+          NODE
+            fi
+            printf '%s\n' '{"command":"remove owned module cache and exact build/binary/data tree after owner and absolute-path guards"}' >> "$dir/stand-ops-3679.log"
+            if [ -x "$build/go/bin/go" ]; then
+              GOROOT="$build/go" GOMODCACHE="$build/mod" GOCACHE="$build/cache" GOPATH="$build/gopath" GOTOOLCHAIN=local "$build/go/bin/go" clean -modcache
+            fi
+            rm -rf -- "$build"
+            test ! -e "$build"
           fi
       - name: Upload operational-probe receipts
         if: always()

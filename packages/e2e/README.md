@@ -332,9 +332,13 @@ does not target a storefront proxy or staging slot.
 Build with `pnpm exec turbo run build --filter=@ds/api`. Locally, provision an
 owned `ds_dev_3679` via `pnpm dev:db:branch 3679` (including its canonical
 pre-migration snapshot). CI owns a disposable `ds_probe_3679` and uses
-`pnpm --filter @ds/api drizzle:migrate:ci`. Use a new disposable real MinIO
-container with the project's `minio/minio:latest server /data` mechanism,
-record its actual image digest, and create only one empty `ds-api-probes-3679`
+`pnpm --filter @ds/api drizzle:migrate:ci`. CI builds official MinIO source
+`7aac2a2c5b7c882e68c1ce017d8256be2feea27f` with checksum-verified Go 1.24.8
+inside `RUNNER_TEMP`, recording module provenance, binary hash and the exact
+owned process. Upstream community distribution is source-only; a cached local
+`minio/minio:latest` image does not establish clean-runner availability.
+Locally use an owned real MinIO process or disposable container and record its
+source/binary or actual image digest. Create only one empty `ds-api-probes-3679`
 bucket with task-only credentials. Existing/shared buckets remain read-only.
 
 Export `E2E_API_PROBE_DATABASE_URL`, `E2E_API_PROBE_S3_ENDPOINT`,
@@ -356,8 +360,9 @@ API listener's PID and closes it after the scenario. The degraded process uses
 a nonexistent task key against the same real MinIO: SDK 403 and the startup
 probe must agree, while health remains 200 and readiness returns 503 without
 the provider reason. The `api-e2e` CI job provisions and removes its exact
-owned MinIO container and requires three first-attempt passes with no skips.
-Local operators likewise remove only their owned ephemeral container after proof;
+owned MinIO process, temporary binary/caches/data and requires three first-attempt
+passes with no skips. Local operators likewise remove only their owned ephemeral
+process or container after proof;
 retain the exact owned DB only while review needs it, then use
 `pnpm dev:db:drop 3679`. Never reset or roll back the shared stand.
 

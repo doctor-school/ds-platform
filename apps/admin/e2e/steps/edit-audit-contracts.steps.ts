@@ -1,18 +1,32 @@
 import { randomUUID } from "node:crypto";
-import { appendFileSync } from "node:fs";
+import {
+  appendFileSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { spawnSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { expect } from "@playwright/test";
 import { createBdd, test as base } from "playwright-bdd";
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
 
 import { AUDIT_CAPTURE_ALLOWLIST } from "../../../../packages/db/src/audit";
+import { nativePsql } from "../../../../packages/e2e/api-probes/native-pg.js";
 
 type JsonRow = Record<string, unknown>;
 type LedgerRow = JsonRow & {
   id: string;
   event_id: string;
   event_type: string;
+  subject_id: string | null;
   metadata: {
+    source: string;
     pk: { id: string };
     diff: Record<string, { old?: unknown; new?: unknown }>;
   };
@@ -26,6 +40,11 @@ type AuditWorld = {
   event?: JsonRow & { id: string };
   ledger?: LedgerRow;
   refusals: { code: string; message: string }[];
+  native?: ReturnType<typeof nativePsql>;
+  registration?: { id: string; registered_at: string };
+  written?: { id: string; registered_at: string };
+  guard?: { code: number | null; stdout: string; stderr: string };
+  guardFixture?: string;
 };
 
 function operation(sql: string): void {
@@ -74,10 +93,12 @@ export const test = base.extend<{ audit: AuditWorld }>({
       operation(sql);
       return (await client.query(sql, values)).rows;
     };
+    const world: AuditWorld = { query, client, refusals: [] };
     try {
       await query("BEGIN");
-      await use({ query, client, refusals: [] });
+      await use(world);
     } finally {
+      await world.native?.close();
       // The same checked connection may be in an aborted transaction after a failed assertion.
       operation("ROLLBACK");
       await client.query("ROLLBACK");
@@ -88,6 +109,180 @@ export const test = base.extend<{ audit: AuditWorld }>({
 });
 
 const { Given, When, Then } = createBdd(test);
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+function coverageGuard(fixture: string) {
+  operation(`RUN native audit-coverage-lint fixture ${fixture}`);
+  const result = spawnSync(
+    process.execPath,
+    ["--import", "tsx", resolve(root, "tools/lint/audit-coverage-lint.ts")],
+    {
+      cwd: root,
+      env: { ...process.env, LINT_FIXTURE_ROOT: fixture },
+      encoding: "utf8",
+      windowsHide: true,
+    },
+  );
+  if (result.error) throw result.error;
+  operation(
+    JSON.stringify({
+      fixture,
+      exit: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    }),
+  );
+  return { code: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+Given(
+  "a psql session on the dev stand with no app.actor_sub or app.source set",
+  async ({ audit }) => {
+    audit.native = nativePsql(process.env.E2E_EDIT_AUDIT_DATABASE!, (event) =>
+      operation(JSON.stringify(event)),
+    );
+    const context = JSON.parse(
+      await audit.native.query(`BEGIN;
+    SELECT json_build_object('database', current_database(), 'actor', current_setting('app.actor_sub', true), 'source', current_setting('app.source', true));`),
+    );
+    expect(context).toEqual({
+      database: process.env.E2E_EDIT_AUDIT_DATABASE,
+      actor: null,
+      source: null,
+    });
+  },
+);
+
+When(
+  "the session updates a registration row with a raw UPDATE statement",
+  async ({ audit }) => {
+    const slug = `direct-audit-${randomUUID()}`;
+    const result = await audit.native!.query(`
+    INSERT INTO events (slug, title, school, starts_at, duration_min, kind_id, audience) VALUES ('${slug}', 'Direct SQL audit fixture', 'audit-contract', now() + interval '1 day', 60,
+      (SELECT id FROM event_kinds WHERE 'online' = ANY(allowed_formats) AND status = 'published' ORDER BY slug LIMIT 1), 'experts');
+    INSERT INTO users (zitadel_sub, email) VALUES ('${slug}', '${slug}@example.invalid');
+    INSERT INTO registrations (user_id, event_id) SELECT u.id, e.id FROM users u, events e WHERE u.zitadel_sub = '${slug}' AND e.slug = '${slug}';
+    SELECT json_build_object('id', r.id, 'registered_at', r.registered_at::text) FROM registrations r JOIN events e ON e.id=r.event_id WHERE e.slug='${slug}';
+    SELECT json_build_object('actor', current_setting('app.actor_sub', true), 'source', current_setting('app.source', true));
+    UPDATE registrations SET registered_at = registered_at + interval '1 second' WHERE event_id = (SELECT id FROM events WHERE slug = '${slug}') RETURNING json_build_object('id', id, 'registered_at', registered_at::text);
+    SELECT to_jsonb(a) FROM audit_ledger a WHERE event_type = 'data.registrations.update' AND metadata->'pk'->>'id' = (SELECT r.id::text FROM registrations r JOIN events e ON e.id=r.event_id WHERE e.slug='${slug}');
+  `);
+    const rows = result
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((row) => JSON.parse(row));
+    expect(rows).toHaveLength(4);
+    expect(rows[1]).toEqual({ actor: null, source: null });
+    audit.registration = rows[0];
+    audit.written = rows[2];
+    audit.ledger = rows[3];
+  },
+);
+
+Then("the domain write succeeds", async ({ audit }) => {
+  expect(audit.written!.id).toBe(audit.registration!.id);
+  expect(
+    Date.parse(audit.written!.registered_at) -
+      Date.parse(audit.registration!.registered_at),
+  ).toBe(1000);
+});
+Then(
+  'one audit_ledger row with event_type "data.registrations.update" is appended',
+  async ({ audit }) => {
+    expect(audit.ledger!.event_type).toBe("data.registrations.update");
+    expect(audit.ledger!.metadata.pk).toEqual({ id: audit.registration!.id });
+    expect(Object.keys(audit.ledger!.metadata.diff)).toEqual(["registered_at"]);
+  },
+);
+Then('its metadata.source is "db-direct"', async ({ audit }) => {
+  expect(audit.ledger!.metadata.source).toBe("db-direct");
+});
+Then("its subject_id is NULL", async ({ audit }) => {
+  expect(audit.ledger!.subject_id).toBeNull();
+});
+Then("no actor is fabricated", async ({ audit }) => {
+  expect(audit.ledger!.subject_id).toBeNull();
+  expect(audit.ledger!.metadata).not.toHaveProperty("actor");
+  expect(audit.ledger!.metadata).not.toHaveProperty("actor_sub");
+});
+
+Given(
+  "a fixture schema declaring a new domain table with no audit trigger attachment and no allowlist entry",
+  async ({ audit }) => {
+    audit.guardFixture = resolve(
+      root,
+      "tools/lint/guard-tests/fixtures/audit-coverage/red-uncovered",
+    );
+    expect(
+      readFileSync(
+        resolve(audit.guardFixture, "packages/db/src/schema/c.ts"),
+        "utf8",
+      ),
+    ).toContain('pgTable("widget_c"');
+  },
+);
+When("the audit-coverage lint runs in CI", async ({ audit }) => {
+  audit.guard = coverageGuard(audit.guardFixture!);
+});
+Then("the check fails red naming the uncovered table", async ({ audit }) => {
+  expect(audit.guard!.code).toBe(1);
+  expect(audit.guard!.stderr).toContain("widget_c");
+});
+Then(
+  "it passes only when the table gains a trigger-attach migration line or an allowlist entry carrying a recorded rationale",
+  async () => {
+    const scratch = process.env.E2E_EDIT_AUDIT_SCRATCH;
+    if (!scratch)
+      throw new Error(
+        "E2E_EDIT_AUDIT_SCRATCH must name the owned scratch directory",
+      );
+    mkdirSync(scratch, { recursive: true });
+    const fixture = mkdtempSync(resolve(scratch, "audit-guard-"));
+    try {
+      cpSync(
+        resolve(
+          root,
+          "tools/lint/guard-tests/fixtures/audit-coverage/red-uncovered",
+        ),
+        fixture,
+        { recursive: true },
+      );
+      const migration = resolve(fixture, "apps/api/drizzle/0001_init.sql");
+      const original = readFileSync(migration, "utf8");
+      writeFileSync(
+        migration,
+        original +
+          '\nCREATE TRIGGER widget_c_audit AFTER INSERT OR UPDATE OR DELETE ON "widget_c" FOR EACH ROW EXECUTE FUNCTION audit_row_change();\n',
+      );
+      expect(coverageGuard(fixture).code).toBe(0);
+      writeFileSync(migration, original);
+      const registry = resolve(fixture, "packages/db/src/audit.ts");
+      writeFileSync(
+        registry,
+        'export const AUDIT_CAPTURE_ALLOWLIST = [{table:"widget_c",rationale:"Derived cache; no independent domain truth"}];\n',
+      );
+      expect(coverageGuard(fixture).code).toBe(0);
+      writeFileSync(
+        registry,
+        'export const AUDIT_CAPTURE_ALLOWLIST = [{table:"widget_c",rationale:""}];\n',
+      );
+      const bare = coverageGuard(fixture);
+      expect(bare.code).toBe(1);
+      expect(bare.stderr).toContain("widget_c");
+      expect(bare.stderr).toContain("rationale");
+      const convention = resolve(
+        root,
+        "tools/lint/guard-tests/fixtures/audit-coverage",
+      );
+      expect(coverageGuard(resolve(convention, "green")).code).toBe(0);
+      expect(
+        coverageGuard(resolve(convention, "red-bare-allowlist")).code,
+      ).toBe(1);
+    } finally {
+      rmSync(fixture, { recursive: true });
+    }
+  },
+);
 
 Given(
   "the audit trigger function is attached to every audited domain table by migration",

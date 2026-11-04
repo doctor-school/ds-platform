@@ -72,6 +72,26 @@ The steps that need a doctor's **storefront** session (the MFA cookie-separation
 
 The suite pins a **non-Moscow** `timezoneId` for every scenario, so the МСК assertions (EARS-10) prove no operator-local drift.
 
+The backend-only `audit` project reads the unchanged `010-scenarios.feature` and
+selects five originals: direct registration SQL, new-table coverage guard, full
+DELETE diff, no-op UPDATE and append-only refusal. Every original retains the
+migrated trigger and active ledger-enforcement Background. It needs an owned
+disposable `DATABASE_URL`, its exact `E2E_EDIT_AUDIT_DATABASE`, an absolute
+`E2E_EDIT_AUDIT_LOG`, and `E2E_EDIT_AUDIT_SCRATCH` outside the worktree. The direct
+write uses an actual native psql transaction through `E2E_API_PROBE_PG_CONTAINER`
+(SSH recipe: `E2E_API_PROBE_PG_SSH_HOST` and `E2E_API_PROBE_PG_SUDO`), proves both
+audit GUCs unset, updates an owned registration and reads exactly one honest
+`db-direct`/NULL-actor trail row before rollback. The new-table original invokes
+the actual CI lint on uncovered, triggered, rationale-bearing and bare-allowlist
+fixtures; that is static coverage validation, not runtime trigger attachment.
+Legacy DB/API/guard tests remain complementary.
+
+Run `pnpm --filter @ds/admin test:e2e --project audit --reporter=list,json` with
+`PLAYWRIGHT_JSON_OUTPUT_NAME` pointing outside the worktree, then
+`pnpm --filter @ds/e2e exec tsx api-probes/assert-report.ts <report-path> audit`.
+CI requires all five exact titles once, with no skip, flake or retry; it uploads
+the report and operation log. This contour starts no browser or identity flow.
+
 The `taxonomy` project reads the spec-owned
 `../docs/content/specs/features/012-content-taxonomy/012-scenarios.feature`
 directly. Its bound journeys cover the EARS-2/19/20 standalone Expert path and

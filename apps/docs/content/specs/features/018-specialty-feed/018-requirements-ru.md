@@ -187,9 +187,9 @@ lang: ru
 
 ### Модели чтения
 
-- `SpecialtyFeed { specialty: SpecialtyRef, blocks: FeedBlock[], order: 'events-first', viewer: { loggedIn, hasLeaderboardConsent } }` — конверт ленты; `blocks` перечисляет только подключённые типы контента в относительном порядке F-018-1, а `order` — константа F-018-1 из LD-1.
+- `SpecialtyFeed { specialty: SpecialtyRef, blocks: FeedBlock[], order: 'events-first', viewer: { loggedIn } }` — конверт ленты; `blocks` перечисляет только подключённые типы контента в относительном порядке F-018-1, а `order` — константа F-018-1 из LD-1. `viewer.hasLeaderboardConsent` добавляется в конверт вместе с блоком лидерборда (EARS-9, #1504).
 - `SpecialtyStatistics { colleagues, schools?, lessons?, specialty, computedAt }` — строка масштаба по специальности (REQ-116); `schools` и `lessons` присутствуют, только когда их тип контента подключён.
-- `FeedEvents { items: PublicEventSummary[], allEventsHref }` — ближайшие события; каждый элемент несёт `signUpCount` и `format` (`online` | `offline-meetup`), а `nmo` только как атрибут.
+- `FeedEvents { items: PublicEventSummary[], allEventsHref }` — ближайшие события; каждый элемент несёт `signUpCount` и `format` (`online` | `offline` | `hybrid`, значения карточки события 019), а `nmo` только как атрибут.
 - `FeedSchools { items: DoctorContentCard[], preparing: SchoolRef[] }` — школы и курсы; у курса есть `seriesEpisodes`.
 - `FeedLessons { lessonOfTheDay: DoctorContentCard, total, allLessonsHref, sharedWithMobileApp: true }`.
 - `ValueBlock { items: { title, body }[], freeStatement }` — «Зачем это мне»; `freeStatement` не называет плательщика (LD-9).

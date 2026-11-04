@@ -22,8 +22,9 @@ import { eventClassificationSql } from "../setup/event-classification.js";
  * nearest-events block of the specialty feed (018-design §7).
  *
  * The block builds no events feed of its own: it is 019's targeted read
- * (`DoctorEventsService`) for the PATH specialty and its adjacency set, cut to
- * the nearest few, with 019's ONE card payload per item. The fixture uses a
+ * (`DoctorEventsService`) for the PATH specialty only — an explicit-list pick, so
+ * adjacent areas never enter it (F-018-3: they are their own block, EARS-8) —
+ * cut to the nearest few, with 019's ONE card payload per item. The fixture uses a
  * specialty with no managed direction link of its own, so only the rows this
  * suite links can reach it.
  */

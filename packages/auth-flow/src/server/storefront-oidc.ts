@@ -42,6 +42,8 @@ import {
   GUEST_QUERY_FLAG,
   checkGuardCookie,
   clearedGuestMarkerCookie,
+  signInSignalCookie,
+  storefrontCookieDomain,
   guestMarkerCookie,
   readTransactionCookie,
   silentTransactionCookie,
@@ -485,6 +487,12 @@ export async function storefrontCallback(
     // EARS-63 (a) / (b) — a minted session deletes the marker; a silent
     // callback's outcome also sets the guard.
     headers.append("set-cookie", clearedGuestMarkerCookie());
+    // EARS-63 (a) — the sign-in signal on the shared parent domain voids the
+    // other storefront's older marker, so its next navigation runs the check.
+    const signalDomain = storefrontCookieDomain(env);
+    if (signalDomain) {
+      headers.append("set-cookie", signInSignalCookie(signalDomain, now));
+    }
     if (minted.data.kind === "silent") {
       headers.append("set-cookie", checkGuardCookie());
     }

@@ -153,6 +153,10 @@ services:
       # The api on this slot's own compose network — never a public host: the
       # internal prefix has no route on any edge (ADR-0015 §4 req. 2).
       INTERNAL_API_URL: http://api:3000
+      # 003 EARS-63 (a), #3685 — the parent domain every slot's storefronts
+      # share (`academy-<slot>.`, `doctor-<slot>.`): the sign-in signal lives
+      # there. Empty (a teardown env) ⇒ no signal, the marker as on one host.
+      STOREFRONT_COOKIE_DOMAIN: ${STAGE_BASE_DOMAIN:-}
       # Staging-contour only (#2981): serves /__contour/app-paths-manifest.json, the
       # route list the IMAGE mounts, to the derived route walk. Every image carries
       # the manifest; no production compose sets this, so prod answers 404 there.
@@ -192,6 +196,8 @@ services:
     environment:
       PORT: "3004"
       INTERNAL_API_URL: http://api:3000
+      # The sign-in signal's parent domain — see the portal block above.
+      STOREFRONT_COOKIE_DOMAIN: ${STAGE_BASE_DOMAIN:-}
       # Staging-contour only — see the portal block above.
       CONTOUR_MANIFEST: "1"
     depends_on:

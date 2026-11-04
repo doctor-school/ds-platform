@@ -152,6 +152,10 @@ services:
       # edge routes the prefix, ADR-0015 §4 req. 2), with the INTERNAL_API_TOKEN
       # bearer it reads from internal.env.
       INTERNAL_API_URL: http://api:3000
+      # 003 EARS-63 (a), #3685 — the parent domain both storefronts and the
+      # sign-in host share: every callback that mints a session sets the sign-in
+      # signal there, so the other storefront's older guest marker is void.
+      STOREFRONT_COOKIE_DOMAIN: doctor.school
       # Pin OFF (#2981): the `/__contour/app-paths-manifest.json` route answers only
       # when the runtime CONTOUR_MANIFEST is exactly "1" (slot compose). Pinned here
       # so a stray line in the shared api.env env_file can never expose it in prod.
@@ -244,6 +248,8 @@ services:
       PORT: "3004"
       # Internal API base + internal.env INTERNAL_API_TOKEN, as on the portal.
       INTERNAL_API_URL: http://api:3000
+      # The shared parent domain of the sign-in signal, as on the portal (#3685).
+      STOREFRONT_COOKIE_DOMAIN: doctor.school
       # Pin OFF, as on the portal (#2981): the contour manifest route stays 404 in prod.
       CONTOUR_MANIFEST: "0"
       # SmartCaptcha CLIENT key — RUNTIME env, same `.env` source as the portal

@@ -1653,6 +1653,19 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the event page on "doctor.school" renders signed in with no form and no second sign-in
     And no guest render of the event page reached the browser before the signed-in one
 
+  # A guest marker set before a sign-in on the other storefront is void (#3685):
+  # the sign-in signal on the shared parent domain makes the next navigation
+  # run the check instead of keeping the guest page for up to 10 minutes.
+  @EARS-63 @EARS-64 @happy @silent-check-marker-after-sign-in
+  Scenario: A guest on the doctor storefront who then signs in on the Academy is signed in there with no click
+    Given a browser with no session on either storefront
+    And the browser was checked as a guest on "doctor.school"
+    When the doctor signs in on "academy.doctor.school" in the same browser
+    And the doctor's browser requests the same event page on "doctor.school" as a document
+    Then the first response from "doctor.school" is a redirect into its silent check, before any page renders
+    And the event page on "doctor.school" renders signed in with no form and no second sign-in
+    And no guest render of the event page reached the browser before the signed-in one
+
   @EARS-63 @happy @silent-check-guest
   Scenario: With no shared session the silent check ends on the guest page and is not repeated
     Given a browser with no session on either storefront

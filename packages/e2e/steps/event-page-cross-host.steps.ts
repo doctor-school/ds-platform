@@ -204,6 +204,35 @@ Given("a browser with no session on either storefront", async ({ page }) => {
   }
 });
 
+/**
+ * 003 EARS-63 (a), #3685 — the storefront answered «checked, signed out»: its
+ * check ran, ended in `login_required`, and left the guest marker, so before
+ * the fix nothing would check again for 10 minutes.
+ */
+Given(
+  "the browser was checked as a guest on {string}",
+  async ({ page }, hostName: string) => {
+    const id = hostNamed(hostName);
+    await openAsDocument(page, id);
+    expect(await hasSession(page, id), `a guest on ${hostName}`).toBe(false);
+    const cookies = await page.context().cookies(base(id));
+    expect(
+      cookies.some((c) => c.name === GUEST_MARKER_COOKIE),
+      `the guest marker on ${hostName}`,
+    ).toBe(true);
+  },
+);
+
+/** A sign-in on the other storefront that keeps every cookie the browser holds. */
+When(
+  "the doctor signs in on {string} in the same browser",
+  async ({ page }, hostName: string) => {
+    const id = hostNamed(hostName);
+    await signInGoldenDoctor(page, HOSTS[id], SEED, base(id));
+    expect(await hasSession(page, id), `signed in on ${hostName}`).toBe(true);
+  },
+);
+
 When(
   "the browser requests an event page on academy.doctor.school as a document",
   async ({ page }) => {

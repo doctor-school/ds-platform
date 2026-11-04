@@ -42,6 +42,14 @@ export const GUEST_MARKER_COOKIE = "__Host-ds_guest";
 export const CHECK_GUARD_COOKIE = "__Host-ds_check";
 /** EARS-63 (b) — the one-shot query flag of a client that keeps no cookies. */
 export const GUEST_QUERY_FLAG = "ds_guest";
+/**
+ * EARS-63 (a) — the sign-in signal: `<minted-at seconds>`, no identifier, on
+ * the parent domain both storefronts share (`STOREFRONT_COOKIE_DOMAIN`), so a
+ * session minted on one storefront voids the other's older marker (#3685).
+ */
+export const SIGN_IN_SIGNAL_COOKIE = "__Secure-ds_signin_at";
+/** The runtime env field naming that shared parent domain; unset ⇒ no signal. */
+export const STOREFRONT_COOKIE_DOMAIN_ENV = "STOREFRONT_COOKIE_DOMAIN";
 
 const MARKER_SECONDS = 10 * 60;
 const GUARD_SECONDS = 60;
@@ -51,6 +59,9 @@ const MARKER_SKEW_SECONDS = 60;
 const MARKER_LABEL = "ds-platform/storefront/guest-marker/v1";
 const SILENT_TX_LABEL = "ds-platform/storefront/silent-tx/v1";
 const OPAQUE_ID = /^[A-Za-z0-9_-]{43}$/;
+/** A bare registrable domain: dot-separated LDH labels, nothing a cookie attribute could carry. */
+const COOKIE_DOMAIN =
+  /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
 
 function hostCookie(name: string, value: string, maxAge: number): string {
   return `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`;
@@ -99,6 +110,43 @@ export function clearedGuestMarkerCookie(): string {
   return hostCookie(GUEST_MARKER_COOKIE, "", 0);
 }
 
+/**
+ * EARS-63 (a) — the parent domain both storefronts and the sign-in host share,
+ * from the runtime env (ADR-0013 A1: data, never a host branch). `null` when
+ * it is unset or not a bare domain: no signal is set or read, and the marker
+ * behaves as it does on a single host (local dev on `localhost`).
+ */
+export function storefrontCookieDomain(
+  env: Readonly<Record<string, string | undefined>>,
+): string | null {
+  const raw = env[STOREFRONT_COOKIE_DOMAIN_ENV]?.trim().toLowerCase();
+  return raw && COOKIE_DOMAIN.test(raw) ? raw : null;
+}
+
+/**
+ * EARS-63 (a) — set by every storefront callback that mints a session: the
+ * instant, in seconds, on the shared parent domain. It lives as long as a
+ * marker can (plus the skew): an older signal can void no valid marker.
+ */
+export function signInSignalCookie(domain: string, nowMs: number): string {
+  return `${SIGN_IN_SIGNAL_COOKIE}=${Math.floor(nowMs / 1000)}; Domain=${domain}; Path=/; Max-Age=${MARKER_SECONDS + MARKER_SKEW_SECONDS}; HttpOnly; Secure; SameSite=Lax`;
+}
+
+/**
+ * The signal's instant in seconds, or `null` — absent, malformed, or from the
+ * future beyond the skew (a planted or broken-clock value is ignored, never an
+ * error).
+ */
+function signInSignalAt(
+  cookieHeader: string | null,
+  nowMs: number,
+): number | null {
+  const value = readCookie(cookieHeader, SIGN_IN_SIGNAL_COOKIE);
+  if (!value || !/^\d{1,12}$/.test(value)) return null;
+  const at = Number(value);
+  return at - Math.floor(nowMs / 1000) > MARKER_SKEW_SECONDS ? null : at;
+}
+
 /** EARS-63 (b) — set by every silent callback outcome. */
 export function checkGuardCookie(): string {
   return hostCookie(CHECK_GUARD_COOKIE, "1", GUARD_SECONDS);
@@ -111,12 +159,15 @@ function clearedCheckGuardCookie(): string {
 /**
  * EARS-63 (a) — a marker counts only when its HMAC verifies and it is at most
  * 10 minutes old: a marker a script plants (without `HttpOnly`, with any
- * lifetime) suppresses nothing.
+ * lifetime) suppresses nothing. With a shared parent domain (`signalDomain`),
+ * a marker issued before the last sign-in signal is void: a session minted on
+ * the other storefront since this one answered «signed out» (#3685).
  */
 export async function hasValidGuestMarker(
   cookieHeader: string | null,
   secret: string,
   nowMs: number,
+  signalDomain: string | null = null,
 ): Promise<boolean> {
   const value = readCookie(cookieHeader, GUEST_MARKER_COOKIE);
   if (!value) return false;
@@ -126,6 +177,10 @@ export async function hasValidGuestMarker(
   if (!/^\d{1,12}$/.test(issued)) return false;
   const age = Math.floor(nowMs / 1000) - Number(issued);
   if (age > MARKER_SECONDS || age < -MARKER_SKEW_SECONDS) return false;
+  if (signalDomain) {
+    const signedInAt = signInSignalAt(cookieHeader, nowMs);
+    if (signedInAt !== null && signedInAt > Number(issued)) return false;
+  }
   return sameText(
     value.slice(dot + 1),
     await mac(secret, MARKER_LABEL, issued),
@@ -395,7 +450,14 @@ export async function storefrontSilentCheck(
             ],
     });
   }
-  if (await hasValidGuestMarker(cookies, api.token, now)) {
+  if (
+    await hasValidGuestMarker(
+      cookies,
+      api.token,
+      now,
+      storefrontCookieDomain(env),
+    )
+  ) {
     return decided("marker", RENDER);
   }
   const tx = await readTransactionCookie(cookies, OIDC_TX_COOKIE, api.token);

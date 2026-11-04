@@ -39,7 +39,14 @@ export const DATA_VERBS = [
  * never calls them, so its `capabilities` probe does not require them: a box whose
  * entrypoint predates them still takes the release that installs them.
  */
-export const DATA_READ_VERBS = ["read-schema"];
+export const DATA_READ_VERBS = [
+  "read-schema",
+  // #3662: the key custody (spec §5 «Prod read verbs.» → recovery-bundle / recovery-check).
+  "recovery-bundle",
+  "recovery-check",
+  "recovery-put",
+  "recovery-latest",
+];
 
 // The entrypoint's own COMMAND_RE / COMMAND_MAX: what it admits as a request.
 const REQUEST_RE = /^[a-z0-9-]+( [a-z0-9-]+)*$/;

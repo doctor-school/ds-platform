@@ -1,0 +1,416 @@
+#!/usr/bin/env bash
+# ds-recovery — the box side of the automated key custody (Issue #3662; tech spec
+# apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md §5
+# «Prod read verbs.» → `recovery-bundle`, `recovery-check`; infra/deploy/RECOVERY.md
+# §2 «Automated custody (CI)»).
+#
+# A box encrypts its own /etc/ds-platform/*.env with `age` to the custodians' PUBLIC
+# recipients (infra/deploy/recovery/custodians.txt); nothing automated holds an
+# identity that decrypts the bundle. ds-data-prod stores every box's ciphertext and
+# manifest in the pgBackRest bucket under recovery-bundle/<box>/ only, with its own S3
+# credentials. The pgBackRest repository commands are not used: they would encrypt
+# with PGBACKREST_REPO1_CIPHER_PASS, the key the bundle escrows.
+#
+# Called as root by ds-read-entrypoint (ds-api-prod) and ds-deploy-entrypoint's data
+# verbs (ds-data-prod), never by a key directly; installed beside them as
+# /usr/local/lib/ds-platform/ds-recovery (tools/deploy/lib/remote.mjs BOX_ENTRYPOINTS,
+# the data entrypoint's DATA_INSTALL).
+#
+# Nothing it prints carries a value, a fingerprint or ciphertext: stdout is status
+# words or a file path, stderr one fixed reason.
+#
+#   ds-recovery install-age
+#   ds-recovery bundle  <box> <custodians> <work-dir> <stamp>   → stdout: members count
+#   ds-recovery upload  <box> <stamp> bundle|manifest <file>     (ds-data-prod only)
+#   ds-recovery latest  <box> <out-file>                         (ds-data-prod only) → stdout: FOUND | MISSING
+#   ds-recovery custodians <custodians>                          (the fail-closed gate alone)
+#   ds-recovery check   <box> <custodians> <manifest> [<max-days>] → status lines
+#
+# Exit codes: 0 ok (check: MATCH) · 1 failed / check verdict not MATCH · 2 usage ·
+# 3 refused (no age, no valid custodians, not the data box).
+set -euo pipefail
+export LC_ALL=C
+umask 077
+
+# Test hooks: a root prefix and DS_RECOVERY_NOW (epoch seconds). The installed copy
+# never reads them.
+ROOT=
+NOW=
+if [[ ${BASH_SOURCE[0]} != /usr/local/lib/ds-platform/ds-recovery ]]; then
+  ROOT=${DS_RECOVERY_ROOT:-}
+  NOW=${DS_RECOVERY_NOW:-}
+fi
+TAG=ds-recovery
+ENV_DIR=$ROOT/etc/ds-platform
+DATA_ENV=$ENV_DIR/data.env
+BOX_ROLE_FILE=$ENV_DIR/box-role
+STATE_DIR=$ROOT/var/lib/ds-platform/recovery
+FINGERPRINT_KEY=$STATE_DIR/fingerprint.key
+# The upstream version the apt package `age` (Ubuntu 24.04 universe) carries; the
+# package revision follows Ubuntu's security updates.
+AGE_VERSION=v1.1.1
+PREFIX=recovery-bundle
+BOX_RE='^(api-prod|data-prod)$'
+STAMP_RE='^[0-9]{8}T[0-9]{6}Z$'
+# X25519 recipients only (spec §5): a plugin recipient needs a plugin binary on the box.
+RECIPIENT_RE='^age1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$'
+MIN_RECIPIENTS=2
+MAX_OBJECT_BYTES=1048576
+DEFAULT_MAX_DAYS=8
+
+refuse() { printf '%s: %s\n' "$TAG" "$1" >&2; exit 3; }
+fail() { printf '%s: %s\n' "$TAG" "$1" >&2; exit 1; }
+usage() { printf '%s: usage: %s\n' "$TAG" "$1" >&2; exit 2; }
+
+# The members each box's bundle must hold (RECOVERY.md §1.1, §1.2): the gate.
+required_members() {
+  case $1 in
+    api-prod) printf '%s\n' api.env zitadel.env ;;
+    data-prod) printf '%s\n' data.env ;;
+  esac
+}
+
+check_box() { [[ $1 =~ $BOX_RE ]] || usage "<box> is api-prod or data-prod"; }
+check_stamp() { [[ $1 =~ $STAMP_RE ]] || usage "<stamp> is YYYYMMDDTHHMMSSZ"; }
+
+# Fail closed: at least MIN_RECIPIENTS distinct valid recipients, every other line a
+# comment or blank.
+check_custodians() {
+  local file=$1 line n=0 seen=' '
+  [[ -f $file ]] || refuse "no custodians file: #3662 custodian ceremony pending"
+  while IFS= read -r line || [[ -n $line ]]; do
+    line=${line%$'\r'}
+    [[ -z ${line//[[:space:]]/} || $line =~ ^[[:space:]]*# ]] && continue
+    [[ $line =~ $RECIPIENT_RE ]] ||
+      refuse "custodians.txt holds a line that is not a native age recipient: #3662 custodian ceremony pending"
+    [[ $seen == *" $line "* ]] && continue
+    seen+="$line "
+    n=$((n + 1))
+  done <"$file"
+  ((n >= MIN_RECIPIENTS)) ||
+    refuse "custodians.txt holds $n valid age recipients, $MIN_RECIPIENTS are required: #3662 custodian ceremony pending"
+}
+
+require_age() {
+  command -v age >/dev/null 2>&1 || refuse "age is not installed (the next release installs it)"
+}
+
+# The S3 object key of a box's file; every key this script touches is under PREFIX/.
+object_key() { # <box> <stamp> bundle|manifest|latest
+  case $3 in
+    bundle) printf '%s/%s/%s.tar.age' "$PREFIX" "$1" "$2" ;;
+    manifest) printf '%s/%s/%s.manifest.json' "$PREFIX" "$1" "$2" ;;
+    latest) printf '%s/%s/latest.json' "$PREFIX" "$1" ;;
+  esac
+}
+
+read -r -d '' PY <<'PY' || true
+import calendar, hashlib, hmac, json, os, re, sys, time
+
+NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+CONTEXT = b"ds-recovery/v1"
+
+def stop(reason):
+    sys.stderr.write("ds-recovery: " + reason + "\n")
+    sys.exit(1)
+
+def key(path):
+    with open(path, "rb") as f:
+        raw = f.read().strip()
+    if not re.fullmatch(rb"[0-9a-f]{64}", raw):
+        stop("the fingerprint key is unusable")
+    return bytes.fromhex(raw.decode())
+
+def key_id(k):
+    return hmac.new(k, CONTEXT + b"\0key-id", hashlib.sha256).hexdigest()[:16]
+
+# Keyed fingerprints (HMAC-SHA256 under the box's own fingerprint key), never a plain
+# hash of a value: a manifest reader without the key learns nothing about a value.
+def fingerprints(k, env_dir, members):
+    out = {}
+    for member in members:
+        names = {}
+        with open(os.path.join(env_dir, member), "rb") as f:
+            for raw in f.read().split(b"\n"):
+                line = raw.rstrip(b"\r")
+                if not line.strip() or line.lstrip().startswith(b"#") or b"=" not in line:
+                    continue
+                name, value = line.split(b"=", 1)
+                name = name.strip().decode("ascii", "replace")
+                if name.startswith("export "):
+                    name = name[len("export "):].strip()
+                if not NAME.fullmatch(name):
+                    continue
+                msg = CONTEXT + b"\0" + member.encode() + b"\0" + name.encode() + b"\0" + value
+                names[name] = hmac.new(k, msg, hashlib.sha256).hexdigest()
+        out[member] = names
+    return out
+
+def sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        h.update(f.read())
+    return h.hexdigest()
+
+def load_manifest(path, box):
+    try:
+        with open(path, "rb") as f:
+            m = json.loads(f.read())
+    except Exception:
+        stop("the manifest is not JSON")
+    if not isinstance(m, dict) or m.get("version") != 1 or m.get("box") != box:
+        stop("the manifest is not a v1 manifest of " + box)
+    for field in ("stamp", "takenAt", "members", "custodians", "bundle", "fingerprints", "fingerprintKeyId"):
+        if field not in m:
+            stop("the manifest has no " + field)
+    return m
+
+action = sys.argv[1]
+if action == "manifest":
+    box, stamp, env_dir, key_path, custodians, bundle, out = sys.argv[2:9]
+    members = sys.argv[9:]
+    k = key(key_path)
+    taken = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.strptime(stamp, "%Y%m%dT%H%M%SZ"))
+    manifest = {
+        "version": 1,
+        "box": box,
+        "stamp": stamp,
+        "takenAt": taken,
+        "members": members,
+        "custodians": {"sha256": sha256_file(custodians)},
+        "bundle": {
+            "object": "recovery-bundle/%s/%s.tar.age" % (box, stamp),
+            "bytes": os.path.getsize(bundle),
+            "sha256": sha256_file(bundle),
+        },
+        "fingerprintKeyId": key_id(k),
+        "fingerprints": fingerprints(k, env_dir, members),
+    }
+    with open(out, "w") as f:
+        json.dump(manifest, f, indent=2, sort_keys=True)
+        f.write("\n")
+elif action == "field":
+    # One non-secret field of a manifest, for the upload's own checks.
+    path, box, field = sys.argv[2:5]
+    m = load_manifest(path, box)
+    value = {"stamp": m["stamp"], "bytes": m["bundle"].get("bytes"), "object": m["bundle"].get("object")}[field]
+    print(value)
+elif action == "check":
+    box, env_dir, key_path, custodians, manifest_path, max_days, now = sys.argv[2:9]
+    m = load_manifest(manifest_path, box)
+    lines = []
+    now = float(now) if now else time.time()
+    taken = calendar.timegm(time.strptime(m["takenAt"], "%Y-%m-%dT%H:%M:%SZ"))
+    age_days = int((now - taken) // 86400)
+    if age_days > int(max_days):
+        lines.append("STALE %dd" % age_days)
+    if m["custodians"].get("sha256") != sha256_file(custodians):
+        lines.append("MISMATCH custodians")
+    live_members = sorted(n for n in os.listdir(env_dir) if n.endswith(".env") and os.path.isfile(os.path.join(env_dir, n)))
+    for member in sorted(set(live_members) ^ set(m["members"])):
+        lines.append("MISMATCH member:" + member)
+    if not os.path.isfile(key_path):
+        lines.append("MISMATCH fingerprint-key")
+    else:
+        k = key(key_path)
+        if key_id(k) != m["fingerprintKeyId"]:
+            lines.append("MISMATCH fingerprint-key")
+        else:
+            common = sorted(set(live_members) & set(m["members"]))
+            live = fingerprints(k, env_dir, common)
+            for member in common:
+                old = m["fingerprints"].get(member, {})
+                new = live[member]
+                for name in sorted(set(old) | set(new)):
+                    if not hmac.compare_digest(old.get(name, ""), new.get(name, "")):
+                        lines.append("MISMATCH %s:%s" % (member, name))
+    for line in lines or ["MATCH"]:
+        print(box + " " + line)
+    sys.exit(0 if not lines else 1)
+else:
+    stop("unknown action")
+PY
+py() { python3 -I -c "$PY" "$@"; }
+
+# --- S3 (ds-data-prod: the pgBackRest bucket, its credentials from data.env) ---------
+s3_value() { sed -n "s/^$1=//p" "$DATA_ENV" | tail -n 1 | tr -d '\r'; }
+# s3 PUT|GET|HEAD <object key> <file>; prints the HTTP status. The credentials go to
+# curl in a root-only config file, never on a command line.
+s3() {
+  local method=$1 key=$2 file=$3 bucket endpoint region access secret cfg payload code
+  [[ $key == "$PREFIX/"* && $key != *..* ]] || fail "an object key outside $PREFIX/"
+  [[ -f $DATA_ENV ]] || refuse "no $DATA_ENV: the upload runs on ds-data-prod only"
+  bucket=$(s3_value PGBACKREST_REPO1_S3_BUCKET)
+  endpoint=$(s3_value PGBACKREST_REPO1_S3_ENDPOINT)
+  region=$(s3_value PGBACKREST_REPO1_S3_REGION)
+  access=$(s3_value PGBACKREST_REPO1_S3_KEY)
+  secret=$(s3_value PGBACKREST_REPO1_S3_KEY_SECRET)
+  [[ -n $bucket && -n $endpoint && -n $region && -n $access && -n $secret ]] ||
+    fail "data.env lacks the PGBACKREST_REPO1_S3_* settings"
+  cfg=$(mktemp)
+  printf 'user = "%s:%s"\n' "$access" "$secret" >"$cfg"
+  local args=(-sS -K "$cfg" --aws-sigv4 "aws:amz:$region:s3" --connect-timeout 20 --max-time 120
+    -w '%{http_code}' "https://$endpoint/$bucket/$key")
+  case $method in
+    PUT)
+      payload=$(sha256sum -- "$file" | cut -d' ' -f1)
+      code=$(curl "${args[@]}" -H "x-amz-content-sha256: $payload" -T "$file" -o /dev/null 2>/dev/null) || code=000 ;;
+    GET)
+      code=$(curl "${args[@]}" -H "x-amz-content-sha256: $(sha256sum </dev/null | cut -d' ' -f1)" -o "$file" 2>/dev/null) || code=000 ;;
+    HEAD)
+      code=$(curl "${args[@]}" -H "x-amz-content-sha256: $(sha256sum </dev/null | cut -d' ' -f1)" -I -o "$file" 2>/dev/null) || code=000 ;;
+  esac
+  rm -f -- "$cfg"
+  printf '%s' "$code"
+}
+
+s3_put() { # <key> <file>
+  local code
+  code=$(s3 PUT "$1" "$2")
+  [[ $code == 200 ]] || fail "the upload to the bucket failed (HTTP $code)"
+}
+
+# The stored size of an object, or nothing when it is absent.
+s3_size() { # <key> <work-dir>
+  local code
+  code=$(s3 HEAD "$1" "$2/head")
+  case $code in
+    200) tr -d '\r' <"$2/head" | sed -n 's/^[Cc]ontent-[Ll]ength: *\([0-9][0-9]*\)$/\1/p' | tail -n 1 ;;
+    404) ;;
+    *) fail "the bucket read failed (HTTP $code)" ;;
+  esac
+}
+
+require_data_box() {
+  [[ $(cat "$BOX_ROLE_FILE" 2>/dev/null || true) == data ]] || refuse "the bucket is reached from ds-data-prod only"
+}
+
+# --- verbs --------------------------------------------------------------------------
+cmd=${1-}
+case $cmd in
+  install-age)
+    (($# == 1)) || usage "install-age"
+    if [[ $(age --version 2>/dev/null || true) == "$AGE_VERSION" ]]; then
+      printf '%s: age %s present\n' "$TAG" "$AGE_VERSION"
+      exit 0
+    fi
+    # Not fatal to the release that runs it: the recovery verbs refuse without age,
+    # and the daily recovery-check reports it.
+    DEBIAN_FRONTEND=noninteractive timeout 300 apt-get install -y --no-install-recommends age >/dev/null 2>&1 ||
+      { DEBIAN_FRONTEND=noninteractive timeout 300 apt-get update >/dev/null 2>&1 &&
+        DEBIAN_FRONTEND=noninteractive timeout 300 apt-get install -y --no-install-recommends age >/dev/null 2>&1; } || true
+    if [[ $(age --version 2>/dev/null || true) == "$AGE_VERSION" ]]; then
+      printf '%s: age %s installed\n' "$TAG" "$AGE_VERSION"
+    else
+      printf '%s: WARNING: age %s is not installed; the recovery verbs refuse until it is\n' "$TAG" "$AGE_VERSION"
+    fi
+    ;;
+
+  bundle)
+    (($# == 5)) || usage "bundle <box> <custodians> <work-dir> <stamp>"
+    box=$2 custodians=$3 work=$4 stamp=$5
+    check_box "$box"
+    check_stamp "$stamp"
+    [[ -d $work ]] || usage "<work-dir> must exist"
+    check_custodians "$custodians"
+    require_age
+    # The member gate: the bundle is every *.env, and must hold the box's required ones.
+    shopt -s nullglob
+    members=()
+    for f in "$ENV_DIR"/*.env; do
+      [[ -f $f ]] && members+=("${f##*/}")
+    done
+    shopt -u nullglob
+    ((${#members[@]} > 0)) || fail "member gate: $ENV_DIR holds no .env file"
+    while IFS= read -r want; do
+      found=0
+      for m in "${members[@]}"; do [[ $m == "$want" ]] && found=1; done
+      ((found == 1)) || fail "member gate: no $want"
+      [[ -s $ENV_DIR/$want ]] || fail "member gate: $want is empty"
+    done < <(required_members "$box")
+    if [[ ! -f $FINGERPRINT_KEY ]]; then
+      mkdir -p -- "$STATE_DIR" # 0700 and the key 0600: umask 077
+      openssl rand -hex 32 >"$FINGERPRINT_KEY.new"
+      mv -f -- "$FINGERPRINT_KEY.new" "$FINGERPRINT_KEY"
+    fi
+    # Plaintext only in the pipe: tar → age; the work dir sees ciphertext only.
+    tar -C "$ENV_DIR" -cf - -- "${members[@]}" 2>/dev/null |
+      age -R "$custodians" -o "$work/bundle.tar.age" 2>/dev/null ||
+      { rm -f -- "$work/bundle.tar.age"; fail "age could not encrypt the bundle"; }
+    [[ $(head -n 1 "$work/bundle.tar.age") == age-encryption.org/v1 ]] ||
+      { rm -f -- "$work/bundle.tar.age"; fail "age wrote no age file"; }
+    size=$(stat -c %s -- "$work/bundle.tar.age")
+    ((size <= MAX_OBJECT_BYTES)) || fail "the bundle is larger than $MAX_OBJECT_BYTES bytes"
+    py manifest "$box" "$stamp" "$ENV_DIR" "$FINGERPRINT_KEY" "$custodians" "$work/bundle.tar.age" \
+      "$work/manifest.json" "${members[@]}"
+    printf '%s\n' "${#members[@]}"
+    ;;
+
+  upload)
+    (($# == 5)) || usage "upload <box> <stamp> bundle|manifest <file>"
+    box=$2 stamp=$3 kind=$4 file=$5
+    check_box "$box"
+    check_stamp "$stamp"
+    require_data_box
+    [[ -f $file ]] || usage "<file> must exist"
+    size=$(stat -c %s -- "$file")
+    ((size > 0 && size <= MAX_OBJECT_BYTES)) || fail "the $kind is empty or larger than $MAX_OBJECT_BYTES bytes"
+    work=$(mktemp -d)
+    trap 'rm -rf -- "${work:-}"' EXIT
+    case $kind in
+      bundle)
+        [[ $(head -n 1 "$file") == age-encryption.org/v1 ]] || fail "the bundle is not an age file"
+        s3_put "$(object_key "$box" "$stamp" bundle)" "$file" ;;
+      manifest)
+        [[ $(py field "$file" "$box" stamp) == "$stamp" ]] || fail "the manifest is not of $stamp"
+        [[ $(py field "$file" "$box" object) == "$(object_key "$box" "$stamp" bundle)" ]] ||
+          fail "the manifest names another bundle object"
+        stored=$(s3_size "$(object_key "$box" "$stamp" bundle)" "$work")
+        [[ -n $stored ]] || fail "the bundle of $stamp is not in the bucket"
+        [[ $stored == "$(py field "$file" "$box" bytes)" ]] || fail "the stored bundle size differs from the manifest"
+        s3_put "$(object_key "$box" "$stamp" manifest)" "$file"
+        s3_put "$(object_key "$box" "$stamp" latest)" "$file" ;;
+      *) usage "upload <box> <stamp> bundle|manifest <file>" ;;
+    esac
+    ;;
+
+  latest)
+    (($# == 3)) || usage "latest <box> <out-file>"
+    box=$2 out=$3
+    check_box "$box"
+    require_data_box
+    work=$(mktemp -d)
+    trap 'rm -rf -- "${work:-}"' EXIT
+    code=$(s3 GET "$(object_key "$box" x latest)" "$work/latest.json")
+    case $code in
+      200) ;;
+      404) echo MISSING; exit 0 ;;
+      *) fail "the bucket read failed (HTTP $code)" ;;
+    esac
+    object=$(py field "$work/latest.json" "$box" object)
+    [[ $object =~ ^recovery-bundle/$box/[0-9]{8}T[0-9]{6}Z\.tar\.age$ ]] || fail "the manifest names an unexpected object"
+    stored=$(s3_size "$object" "$work")
+    # The manifest without its bundle object is no custody.
+    [[ -n $stored ]] || { echo MISSING; exit 0; }
+    [[ $stored == "$(py field "$work/latest.json" "$box" bytes)" ]] || fail "the stored bundle size differs from the manifest"
+    cp -- "$work/latest.json" "$out"
+    echo FOUND
+    ;;
+
+  custodians)
+    # The fail-closed gate alone, before a verb reads anything.
+    (($# == 2)) || usage "custodians <custodians>"
+    check_custodians "$2"
+    ;;
+
+  check)
+    (($# == 4 || $# == 5)) || usage "check <box> <custodians> <manifest> [<max-days>]"
+    box=$2 custodians=$3 manifest=$4 max_days=${5:-$DEFAULT_MAX_DAYS}
+    check_box "$box"
+    [[ $max_days =~ ^[1-9][0-9]{0,2}$ ]] || usage "<max-days> is 1..999"
+    check_custodians "$custodians"
+    py check "$box" "$ENV_DIR" "$FINGERPRINT_KEY" "$custodians" "$manifest" "$max_days" "$NOW"
+    ;;
+
+  *) usage "install-age | bundle | upload | latest | custodians | check" ;;
+esac

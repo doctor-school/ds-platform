@@ -1233,7 +1233,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     readBoxes({ cert: false });
     const r = readRun("capabilities");
     assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema"] });
+    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema", "recovery-bundle", "recovery-check"] });
     assert.match(log("logger"), /auth\.info accepted: capabilities/);
   });
 

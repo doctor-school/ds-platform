@@ -1,0 +1,13 @@
+# Recovery custodians (#3662; infra/deploy/RECOVERY.md §2 «Automated custody (CI)»).
+#
+# The age recipients (PUBLIC keys) the prod boxes encrypt the recovery bundle to.
+# Nothing automated can decrypt the bundle: the matching identities (private keys)
+# stay offline with the custodians.
+#
+# Format: one `# role: <role>` comment line, then that custodian's native X25519
+# recipient (`age1` + 58 bech32 characters) on its own line. At least two distinct
+# recipients, held by two different custodians; until then every recovery verb
+# refuses ("custodian ceremony pending"). Roles only, never names. Plugin recipients
+# (`age1yubikey1…`) are refused: the boxes carry no age plugin.
+#
+# The custodian ceremony has not happened yet, so this file holds no recipient.

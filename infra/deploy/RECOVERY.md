@@ -103,7 +103,49 @@ and `outputs/2026-11-04-backup-implementation-plan/plan.json` (BBM workspace),
 `Backups/bbm/2026-11-04T02-39-06Z`; BBMP-272
 `plane.bbm.academy/bbm/projects/e550afb5-ec05-4973-8456-49a74379ba2f/issues/5bfd979a-c108-4e68-9081-77929989da9a`.
 
-## 2. Recovery bundle (owner-run)
+## 2. Recovery bundle
+
+### Automated custody (CI)
+
+The routine path needs no workstation and no person. Actions `recovery-custody.yml`
+uses the prod read key (`ds-read-entrypoint` on ds-api-prod, the same key and forced
+command as `prod-observe.yml`) and runs two verbs (spec
+`apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md` §5
+«Prod read verbs.»):
+
+- **`recovery-bundle`, weekly.** Each prod box streams its own `/etc/ds-platform/*.env`
+  from `tar` into `age`, encrypted to the custodians' **public** recipients in
+  `infra/deploy/recovery/custodians.txt`. ds-data-prod stores the ciphertext and its
+  manifest in the pgBackRest bucket under `recovery-bundle/<box>/`, apart from the
+  pgBackRest repository. The manifest holds the member list, the hash of the custodians
+  file and keyed (HMAC) fingerprints of every key. It holds no value and no plain hash of
+  a value.
+- **`recovery-check`, daily.** Each box compares its live fingerprints with its
+  latest manifest and answers `MATCH`, `MISMATCH <key>`, `STALE <n>d` or `MISSING`.
+  Any answer but `MATCH` on both boxes fails the job.
+
+Nothing automated can decrypt a bundle: no box, no CI job and no agent holds an
+identity. The log carries status lines only. Until `custodians.txt` holds two
+recipients, both verbs refuse with «#3662 custodian ceremony pending».
+
+**The custodian ceremony is the only human step.** It runs once, and again only when a
+custodian changes. Outline:
+
+1. Each of two custodians (the owner, and a second custodian in another location)
+   generates an `age` identity offline. The private half never touches a box, a
+   repository or a chat. Recovery should survive a lost YubiKey, so each custodian also
+   keeps a sealed paper identity.
+2. Each custodian hands over only the public recipient (`age1…`).
+3. A PR adds both recipients to `custodians.txt`, each under a `# role:` line. Roles
+   are recorded, never names.
+4. After the merge, the lead dispatches `recovery-custody.yml` with `recovery-bundle`
+   and then `recovery-check`. Each custodian test-decrypts the first bundle offline
+   before the paper copy is sealed.
+
+The boxes carry no age plugin, so `custodians.txt` takes native X25519 recipients only.
+A later PR rewrites this section and retires the owner-run path below.
+
+### Owner-run bundle (`pnpm recovery`)
 
 **Automated: `pnpm recovery init-keys` (§2.1, once) and `pnpm recovery bundle`
 (§2.2–§2.3); `pnpm recovery doctor` checks the prerequisites first, and `pnpm recovery

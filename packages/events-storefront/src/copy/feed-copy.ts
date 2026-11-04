@@ -96,10 +96,12 @@ export const FEED_COPY = {
   retry: "Повторить",
   /**
    * 018 EARS-4 — the nearest-events block of the specialty feed
-   * (`design-source/doctor-feed.dc.html` «d-feed · события»).
+   * (`design-source/doctor-feed.dc.html` «d-feed · события»). The kicker
+   * names the specialty alone: the canvas's «и смежным областям» yields to
+   * the owner's pick F-018-3 (adjacent areas are a block of their own).
    */
   specialtyEvents: {
-    kicker: "По вашей специальности и смежным областям",
+    kicker: "По специальности",
     heading: "Ближайшие события",
     allEvents: "Все события по специальности →",
   },

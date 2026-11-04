@@ -42,7 +42,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     let hiddenCountId = "";
     let shownCountId = "";
-    let offlineAdjacentId = "";
+    let offlineId = "";
+    let adjacentOnlyId = "";
     let fourthId = "";
     let unreachableId = "";
 
@@ -156,15 +157,22 @@ describe.skipIf(!process.env.DATABASE_URL)(
         "UPDATE events SET hide_sign_up_count = false WHERE id = $1",
         [shownCountId],
       );
-      offlineAdjacentId = await makeEvent({
+      offlineId = await makeEvent({
         title: "Очная встреча коллег",
         startsAt: at(2, 12),
-        directionId: adjacent,
+        directionId: own,
       });
       await pool.query(
         "UPDATE events SET participation_format = 'offline' WHERE id = $1",
-        [offlineAdjacentId],
+        [offlineId],
       );
+      // Sooner than the meet-up: under an adjacency-widened scope it would
+      // take a top-3 slot (018 F-018-3 keeps adjacent areas a block of their own).
+      adjacentOnlyId = await makeEvent({
+        title: "Только смежная область",
+        startsAt: at(1, 15),
+        directionId: adjacent,
+      });
       fourthId = await makeEvent({
         title: "Четвёртое по счёту",
         startsAt: at(5, 12),
@@ -201,17 +209,22 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await app?.close();
     });
 
-    it("EARS-4: when a visitor opens the feed, system shall answer the nearest events of the specialty and its adjacent areas, soonest first, cut to the block's size — never an unlinked look-alike", async () => {
+    it("EARS-4: when a visitor opens the feed, system shall answer the nearest events of the specialty, soonest first, cut to the block's size — never an unlinked look-alike", async () => {
       const { block } = await readBlock();
       expect(block.items.map((item) => item.id)).toEqual([
         hiddenCountId,
         shownCountId,
-        offlineAdjacentId,
+        offlineId,
       ]);
       expect(block.items).toHaveLength(FEED_EVENTS_LIMIT);
       const ids = block.items.map((item) => item.id);
       expect(ids).not.toContain(fourthId);
       expect(ids).not.toContain(unreachableId);
+    });
+
+    it("EARS-4: an event of an adjacent area only is absent from the nearest events — adjacent areas are their own block (F-018-3), never mixed into this one", async () => {
+      const { block } = await readBlock();
+      expect(block.items.map((item) => item.id)).not.toContain(adjacentOnlyId);
     });
 
     it("EARS-4: the sign-up counter is a number on every item except an event whose «Скрыть число записавшихся» option is on, whose item carries `signUpCount: null`", async () => {
@@ -224,7 +237,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("EARS-4: an offline colleagues' meet-up is the `offline` format of the same event card payload, not a new item kind", async () => {
       const { block } = await readBlock();
-      const meetUp = block.items.find((item) => item.id === offlineAdjacentId);
+      const meetUp = block.items.find((item) => item.id === offlineId);
       expect(meetUp?.format).toBe("offline");
       const online = block.items.find((item) => item.id === shownCountId);
       expect(

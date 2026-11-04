@@ -28,9 +28,10 @@ import { SpecialtiesService } from "./specialties.service.js";
  *
  * {@link events} is 019's targeted read — {@link DoctorEventsService.feed},
  * the one selection, lifecycle, card mapping and «Скрыть число записавшихся»
- * rule of the doctor storefront — asked for the PATH specialty and its
- * adjacency set («моя и смежные» with the path specialty as the reference),
- * then cut to the nearest {@link FEED_EVENTS_LIMIT}. There is no second query.
+ * rule of the doctor storefront — asked for the PATH specialty alone (an
+ * explicit `specialty` pick, which takes no adjacency widening: adjacent areas
+ * are their own block, 018 F-018-3), then cut to the nearest
+ * {@link FEED_EVENTS_LIMIT}. There is no second query.
  *
  * ## A path naming no member of the book is not-found
  *
@@ -62,17 +63,15 @@ export class SpecialtyFeedService {
 
   async events(input: { specialty: string }): Promise<FeedEvents> {
     const specialty = await this.resolve(input.specialty);
-    const query = parseDoctorEventsFeedQuery({
-      specialty: "mine-and-adjacent",
-    });
+    const query = parseDoctorEventsFeedQuery({ specialty: specialty.code });
     if (!query.success) {
-      // The literal above is a member of the codec's closed scope set; a
-      // failure here is a broken codec, not a visitor input.
-      throw new Error("doctor events feed codec rejected `mine-and-adjacent`");
+      // The code is a resolved member of the book; a failure here is a broken
+      // codec, not a visitor input.
+      throw new Error("doctor events feed codec rejected a book specialty code");
     }
     const feed = await this.doctorEvents.feed({
       query: query.data,
-      specialtyReference: specialty.code,
+      specialtyReference: null,
     });
     return {
       items: feed.days.flatMap((day) => day.items).slice(0, FEED_EVENTS_LIMIT),

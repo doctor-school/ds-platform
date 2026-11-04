@@ -15,6 +15,10 @@ name: Recovery custody
 # ds-api-prod). The repository is public: no artifact is uploaded, and the log carries
 # the status lines of tools/deploy/lib/recovery-custody.mjs only — no value, no
 # fingerprint, no ciphertext. A box that does not answer its success word fails the job.
+#
+# Until the custodian ceremony (infra/deploy/recovery/custodians.txt with fewer than two
+# recipients) a scheduled run ends green without contacting the boxes and leaves a
+# notice; a dispatch still runs and fails closed on the box.
 
 on:
   schedule:
@@ -66,6 +70,7 @@ jobs:
         run: node tools/deploy/recovery-custody.mjs verb "$EVENT" "$SCHEDULE" "$INPUT_VERB"
 
       - name: Write the ssh key
+        if: steps.verb.outputs.run == 'true'
         env:
           PROD_READ_SSH_KEY: ${{ secrets.PROD_READ_SSH_KEY }}
           PROD_SSH_KNOWN_HOSTS: ${{ vars.PROD_SSH_KNOWN_HOSTS }}
@@ -78,6 +83,7 @@ jobs:
           chmod 600 "$dir/key" "$dir/known_hosts"
 
       - name: Ask capabilities
+        if: steps.verb.outputs.run == 'true'
         env:
           VERB: ${{ steps.verb.outputs.verb }}
         run: |
@@ -96,6 +102,7 @@ jobs:
           node tools/deploy/prod-read.mjs check-capabilities "$VERB" <"$RUNNER_TEMP/capabilities.json"
 
       - name: Run the verb
+        if: steps.verb.outputs.run == 'true'
         env:
           VERB: ${{ steps.verb.outputs.verb }}
         run: |

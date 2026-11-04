@@ -2,14 +2,17 @@
 // Issue #3662: the steps of recovery-custody.yml (lib/recovery-custody.mjs).
 //
 //   node tools/deploy/recovery-custody.mjs verb <event> <schedule> <input-verb>
-//       → appends `verb=<verb>` to $GITHUB_OUTPUT
+//       → appends `verb=<verb>` and `run=true|false` to $GITHUB_OUTPUT; a scheduled
+//         run before the custodian ceremony (fewer than two recipients) is run=false
 //   node tools/deploy/recovery-custody.mjs status <verb> <rc> <stdout-file> <stderr-file>
 //       → the status lines only; exit 1 unless every box answered its success word
 
 import { appendFileSync, readFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
+  custodianGate,
+  MIN_RECIPIENTS,
   RECOVERY_VERBS,
   recoveryReport,
   scheduledVerb,
@@ -18,7 +21,18 @@ import {
 // Pinned equal to the workflow's `on.schedule` by the tests.
 export const CRONS = { bundle: "17 3 * * 1", check: "23 4 * * *" };
 
-export function main(argv, { output = process.env.GITHUB_OUTPUT } = {}) {
+const CUSTODIANS = fileURLToPath(
+  new URL("../../infra/deploy/recovery/custodians.txt", import.meta.url),
+);
+
+export function main(
+  argv,
+  {
+    output = process.env.GITHUB_OUTPUT,
+    summary = process.env.GITHUB_STEP_SUMMARY,
+    custodians = CUSTODIANS,
+  } = {},
+) {
   const [cmd, ...rest] = argv;
   switch (cmd) {
     case "verb": {
@@ -31,8 +45,24 @@ export function main(argv, { output = process.env.GITHUB_OUTPUT } = {}) {
         );
         return 1;
       }
-      if (output) appendFileSync(output, `verb=${verb}\n`);
+      // Before the ceremony the box refuses every verb, so a schedule would go red
+      // daily (#3662 decision-debt (a)); a dispatch still reaches the box and fails
+      // closed there.
+      let text = "";
+      try {
+        text = readFileSync(custodians, "utf8");
+      } catch {
+        // No file: zero recipients, the same verdict as the box's.
+      }
+      const { count } = custodianGate(text);
+      const run = event !== "schedule" || count >= MIN_RECIPIENTS;
+      if (output) appendFileSync(output, `verb=${verb}\nrun=${run}\n`);
       console.log(`recovery-custody: verb ${verb}`);
+      if (!run) {
+        const line = `recovery-custody: ${verb} skipped, custodians.txt holds ${count} of ${MIN_RECIPIENTS} recipients: custodian ceremony pending (#3662)`;
+        console.log(`::notice::${line}`);
+        if (summary) appendFileSync(summary, `${line}\n`);
+      }
       return 0;
     }
     case "status": {

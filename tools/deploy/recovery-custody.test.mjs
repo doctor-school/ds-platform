@@ -2,16 +2,20 @@
 // its status filter (spec §5 «Prod read verbs.»; infra/deploy/RECOVERY.md §2
 // «Automated custody (CI)»). The repository is public: the job log is public.
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { describe, it, test } from "node:test";
+import { afterEach, beforeEach, describe, it, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { parse } from "yaml";
 
 import { DATA_READ_VERBS } from "./lib/data-prod.mjs";
 import {
+  custodianGate,
+  MIN_RECIPIENTS,
+  RECIPIENT_RE,
   RECOVERY_LINE_RE,
   RECOVERY_VERBS,
   recoveryReport,
@@ -168,7 +172,8 @@ describe("3662: recovery-custody.yml", () => {
       );
       assert.equal(
         readFileSync(out, "utf8"),
-        "verb=recovery-bundle\nverb=recovery-check\nverb=recovery-check\n",
+        // The committed custodians.txt holds no recipient yet: the schedule skips.
+        "verb=recovery-bundle\nrun=false\nverb=recovery-check\nrun=false\nverb=recovery-check\nrun=true\n",
       );
       assert.equal(
         main(["verb", "schedule", "0 0 * * *", ""], { output: out }),
@@ -265,5 +270,183 @@ describe("3662: the status filter — status lines only, a pass needs both boxes
       recoveryReport({ verb: "schema", rc: 0, stdout: "", stderr: "" }).ok,
       false,
     );
+  });
+});
+
+// Until the custodian ceremony a scheduled run would go red every day: with fewer than
+// two valid recipients it ends green without contacting the boxes; a dispatch still
+// fails closed on the box; from two on, the schedule runs as before. The count is the
+// box gate's own rule (ds-recovery check_custodians).
+describe("3662: the custodian gate before the ceremony", () => {
+  const DS_RECOVERY = join(REPO, "infra/deploy/bin/ds-recovery");
+  const DS_RECOVERY_TEXT = readFileSync(DS_RECOVERY, "utf8");
+  const R1 = `age1${"q".repeat(58)}`;
+  const R2 = `age1${"p".repeat(58)}`;
+  const PLUGIN = `age1yubikey1${"q".repeat(50)}`;
+  const FIXTURES = {
+    empty: "",
+    comments: "# role: first custodian\n\n   \n# nothing yet\n",
+    one: `# role: first custodian\n${R1}\n`,
+    two: `# role: first custodian\n${R1}\n# role: second custodian\r\n${R2}\r\n`,
+    duplicate: `# role: first custodian\n${R1}\n# role: second custodian\n${R1}\n`,
+    oneAndPlugin: `# role: first custodian\n${R1}\n# role: second custodian\n${PLUGIN}\n`,
+    twoAndPlugin: `${R1}\n${R2}\n${PLUGIN}\n`,
+    indented: `  ${R1}\n${R2}\n`,
+    noNewline: `${R1}\n${R2}`,
+  };
+  const READY = new Set(["two", "noNewline"]);
+
+  let dir;
+  const write = (name, text) => {
+    const p = join(dir, `${name}.txt`);
+    writeFileSync(p, text);
+    return p;
+  };
+  const run = (event, schedule, input, text) => {
+    const output = join(dir, "out");
+    const summary = join(dir, "summary");
+    writeFileSync(output, "");
+    writeFileSync(summary, "");
+    const logs = [];
+    const log = console.log;
+    console.log = (...a) => logs.push(a.join(" "));
+    let rc;
+    try {
+      rc = main(["verb", event, schedule, input], {
+        output,
+        summary,
+        custodians: write("custodians", text),
+      });
+    } finally {
+      console.log = log;
+    }
+    return {
+      rc,
+      output: readFileSync(output, "utf8"),
+      summary: readFileSync(summary, "utf8"),
+      logs,
+    };
+  };
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "recovery-gate-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("pins the recipient rule and the minimum equal to ds-recovery's", () => {
+    assert.equal(
+      shellVar(DS_RECOVERY_TEXT, "RECIPIENT_RE"),
+      RECIPIENT_RE.source,
+    );
+    assert.equal(
+      Number(shellVar(DS_RECOVERY_TEXT, "MIN_RECIPIENTS")),
+      MIN_RECIPIENTS,
+    );
+  });
+
+  it("counts distinct native recipients only; a plugin recipient or a duplicate does not count", () => {
+    assert.deepEqual(custodianGate(FIXTURES.empty), {
+      count: 0,
+      invalid: 0,
+      ready: false,
+    });
+    assert.equal(custodianGate(FIXTURES.comments).count, 0);
+    assert.equal(custodianGate(FIXTURES.one).count, 1);
+    assert.deepEqual(custodianGate(FIXTURES.two), {
+      count: 2,
+      invalid: 0,
+      ready: true,
+    });
+    assert.equal(custodianGate(FIXTURES.duplicate).count, 1);
+    assert.deepEqual(custodianGate(FIXTURES.oneAndPlugin), {
+      count: 1,
+      invalid: 1,
+      ready: false,
+    });
+    assert.deepEqual(custodianGate(FIXTURES.twoAndPlugin), {
+      count: 2,
+      invalid: 1,
+      ready: false,
+    });
+    for (const [name, text] of Object.entries(FIXTURES))
+      assert.equal(custodianGate(text).ready, READY.has(name), name);
+  });
+
+  const bash =
+    spawnSync("bash", ["-c", "true"], { stdio: "ignore" }).status === 0;
+  it(
+    "agrees with the box gate (`ds-recovery custodians`) on every fixture",
+    { skip: !bash && "needs bash" },
+    () => {
+      for (const [name, text] of Object.entries(FIXTURES)) {
+        const r = spawnSync(
+          "bash",
+          [DS_RECOVERY, "custodians", write(name, text)],
+          { encoding: "utf8" },
+        );
+        assert.equal(r.status === 0, custodianGate(text).ready, name);
+        if (r.status !== 0) assert.equal(r.status, 3, name);
+      }
+    },
+  );
+
+  for (const [name, text] of [
+    ["no recipient", FIXTURES.empty],
+    ["one recipient", FIXTURES.one],
+    ["one recipient and a plugin one", FIXTURES.oneAndPlugin],
+    ["a duplicate", FIXTURES.duplicate],
+  ]) {
+    it(`a scheduled run with ${name} ends green without contacting the boxes`, () => {
+      for (const cron of [CRONS.bundle, CRONS.check]) {
+        const r = run("schedule", cron, "", text);
+        assert.equal(r.rc, 0);
+        assert.match(r.output, /^verb=recovery-(bundle|check)\nrun=false\n$/);
+        assert.ok(
+          r.logs.some(
+            (l) =>
+              l.startsWith("::notice::") &&
+              l.includes("custodian ceremony pending (#3662)"),
+          ),
+        );
+        assert.match(r.summary, /custodian ceremony pending \(#3662\)/);
+        // Status words and counts only.
+        assert.ok(!`${r.logs.join("\n")}${r.summary}`.includes("age1"));
+      }
+    });
+  }
+
+  it("a scheduled run with two valid recipients runs as before", () => {
+    const r = run("schedule", CRONS.check, "", FIXTURES.two);
+    assert.equal(r.rc, 0);
+    assert.equal(r.output, "verb=recovery-check\nrun=true\n");
+    assert.equal(r.summary, "");
+  });
+
+  it("a scheduled run with two recipients beside an invalid line runs, so the box refuses it loudly", () => {
+    const r = run("schedule", CRONS.check, "", FIXTURES.twoAndPlugin);
+    assert.equal(r.output, "verb=recovery-check\nrun=true\n");
+  });
+
+  it("a dispatch still runs, and so fails closed on the box with no recipient", () => {
+    for (const verb of RECOVERY_VERBS) {
+      const r = run("workflow_dispatch", "", verb, FIXTURES.empty);
+      assert.equal(r.rc, 0);
+      assert.equal(r.output, `verb=${verb}\nrun=true\n`);
+    }
+  });
+
+  it("the workflow gates every step that touches the boxes on the gate's output", () => {
+    const steps = WORKFLOW.jobs.custody.steps;
+    const at = steps.findIndex((s) => s.id === "verb");
+    assert.ok(at > 0, "the verb step");
+    const touching = steps
+      .slice(at + 1)
+      .filter(
+        (s) =>
+          /\bssh -i/.test(s.run ?? "") || "PROD_READ_SSH_KEY" in (s.env ?? {}),
+      );
+    assert.equal(touching.length, 3);
+    for (const step of touching)
+      assert.equal(step.if, "steps.verb.outputs.run == 'true'", step.name);
   });
 });

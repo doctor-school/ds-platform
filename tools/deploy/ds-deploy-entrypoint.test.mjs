@@ -7,6 +7,7 @@
 // Needs bash, python3, find and install — CI Linux; skipped on Windows and where absent.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -24,7 +25,7 @@ import { afterEach, beforeEach, describe, it, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
-import { DATA_VERBS } from "./lib/data-prod.mjs";
+import { DATA_READ_VERBS, DATA_VERBS } from "./lib/data-prod.mjs";
 import { BOX_ENTRYPOINTS } from "./lib/remote.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -52,15 +53,16 @@ test("2984: the entrypoint checks env and sha with ds-release's own regexes", ()
   }
 });
 
-test("3313: the data verbs are one list: DATA_VERBS, the case arm, the client", () => {
+test("3313, 3646: the data verbs are one list: DATA_VERBS, the case arm, the client's release and read verbs", () => {
   const lines = readFileSync(ENTRYPOINT, "utf8").split("\n");
   const line = lines.find((l) => l.startsWith("DATA_VERBS="));
   assert.ok(line, "the entrypoint defines DATA_VERBS");
-  assert.deepEqual(line.slice("DATA_VERBS='".length, -1).split(" "), DATA_VERBS);
+  const all = [...DATA_VERBS, ...DATA_READ_VERBS];
+  assert.deepEqual(line.slice("DATA_VERBS='".length, -1).split(" "), all);
   const start = lines.indexOf("  capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \\");
   assert.ok(start > 0, "one case arm dispatches the data verbs");
   const arm = `${lines[start].slice(0, -1)}${lines[start + 1]}`.trim().replace(/\)$/, "");
-  assert.deepEqual(arm.split(/\s*\|\s*/), DATA_VERBS);
+  assert.deepEqual(arm.split(/\s*\|\s*/), all);
   assert.equal(lines[start + 2], "    data_verb");
 });
 
@@ -1117,5 +1119,273 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       `docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -qAt -U ds -d ds_prod -c SELECT CASE WHEN to_regclass('public.event_speakers') IS NULL THEN 'ABSENT' ELSE 'PRESENT' END @${compose}\n` +
         `docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info @${compose}\n`,
     );
+  });
+
+  // --- 3646: the prod read path ---------------------------------------------------------
+  // ds-api-prod's read mode (`--read`) reaches ds-data-prod's `read-schema` over the hop.
+  // The ssh stub hands the hop's verb to this same entrypoint against a second fixture
+  // root whose role is `data`, so the read runs end to end; docker answers psql with
+  // the fixture envelope and pg_dump with a fixed dump text.
+  const DUMP = "CREATE TABLE public.users (id uuid NOT NULL);\n";
+  const ANSWER = {
+    serverVersion: "17.2",
+    migrations: [{ id: 1, hash: "a".repeat(64), created_at: 1767225600000 }],
+    catalogue: {
+      tables: [
+        {
+          schema: "public",
+          name: "users",
+          columns: [{ name: "id", type: "uuid", notNull: true, default: null, identity: null, generated: null }],
+          indexes: [{ name: "users_pkey", definition: "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)" }],
+          constraints: [{ name: "users_pkey", kind: "primary key", definition: "PRIMARY KEY (id)" }],
+        },
+      ],
+      enums: [{ schema: "public", name: "record_status", values: ["active", "archived"] }],
+      sequences: [],
+    },
+  };
+  const readEnvelope = (extra = {}) => JSON.stringify({ database: "ds_prod", readOnly: true, answer: ANSWER, ...extra });
+  const dataRoot = () => join(dir, "data-root");
+  const recipient = () => join(root, "usr/local/lib/ds-platform/tree/infra/deploy/keys/prod-read-recipient.pem");
+  const readBoxes = ({ envelope = readEnvelope(), cert = true } = {}) => {
+    setRole("prod");
+    mkdirSync(join(dataRoot(), "etc/ds-platform"), { recursive: true });
+    writeFileSync(join(dataRoot(), "etc/ds-platform/box-role"), "data\n");
+    mkdirSync(join(dataRoot(), "home/deploy/ds-platform/infra/deploy/compose/data-prod"), { recursive: true });
+    mkdirSync(join(dataRoot(), "usr/local/bin"), { recursive: true });
+    writeFileSync(
+      join(dataRoot(), "usr/local/bin/ds-release"),
+      '#!/usr/bin/env bash\necho "data-ds-release $*" >> "$STUB_DIR/ds-release.log"\nexit "${STUB_DATA_CHECK_RC:-0}"\n',
+    );
+    chmodSync(join(dataRoot(), "usr/local/bin/ds-release"), 0o755);
+    writeFileSync(
+      join(root, "usr/local/bin/ds-release"),
+      '#!/usr/bin/env bash\necho "ds-release-called $*" >> "$STUB_DIR/ds-release.log"\nexit "${STUB_CHECK_RC:-0}"\n',
+    );
+    writeFileSync(join(dir, "psql-reply"), envelope);
+    writeFileSync(
+      join(stubs, "docker"),
+      [
+        "#!/usr/bin/env bash",
+        'printf "%s\\n" "$*" >> "$STUB_DIR/docker.log"',
+        'case " $* " in',
+        '  *" psql "*) cat > "$STUB_DIR/psql-stdin.log"',
+        '    [[ -z ${STUB_PSQL_ERR:-} ]] || { echo "$STUB_PSQL_ERR" >&2; exit 1; }',
+        '    cat "$STUB_DIR/psql-reply" ;;',
+        `  *" pg_dump "*) printf '%s' '${DUMP.trimEnd()}'; echo ;;`,
+        "esac",
+      ].join("\n") + "\n",
+    );
+    chmodSync(join(stubs, "docker"), 0o755);
+    writeFileSync(
+      join(stubs, "ssh"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "$*" >> "$STUB_DIR/ssh.log"',
+        'cmd=${*: -1}',
+        '[[ $cmd == check && -n ${STUB_HOP_CHECK_RC:-} ]] && exit "$STUB_HOP_CHECK_RC"',
+        `DS_ENTRYPOINT_ROOT="${dataRoot()}" SSH_ORIGINAL_COMMAND="$cmd" exec bash "${ENTRYPOINT}"`,
+      ].join("\n") + "\n",
+    );
+    chmodSync(join(stubs, "ssh"), 0o755);
+    if (cert) {
+      mkdirSync(dirname(recipient()), { recursive: true });
+      const made = spawnSync(
+        "openssl",
+        ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", join(dir, "result.key"), "-out", recipient(),
+          "-subj", "/CN=ds-prod-read-test", "-days", "1"],
+        { encoding: "utf8" },
+      );
+      assert.equal(made.status, 0, made.stderr);
+    }
+  };
+  const readRun = (command, opts = {}) => {
+    const env = {
+      ...process.env,
+      PATH: `${stubs}${delimiter}${process.env.PATH}`,
+      STUB_DIR: dir,
+      DS_ENTRYPOINT_ROOT: root,
+      SSH_ORIGINAL_COMMAND: command,
+      ...(opts.env ?? {}),
+    };
+    const r = spawnSync("bash", [ENTRYPOINT, ...(opts.args ?? ["--read"])], { env, input: "" });
+    return { status: r.status, stdout: r.stdout, stderr: String(r.stderr) };
+  };
+  const decrypt = (ciphertext) => {
+    writeFileSync(join(dir, "result.cms"), ciphertext);
+    const r = spawnSync(
+      "openssl",
+      ["cms", "-decrypt", "-inform", "DER", "-in", join(dir, "result.cms"), "-inkey", join(dir, "result.key"), "-recip", recipient()],
+      { encoding: "utf8" },
+    );
+    assert.equal(r.status, 0, r.stderr);
+    return JSON.parse(r.stdout);
+  };
+
+  it("3646: --read capabilities names the read verbs, in plaintext, on the prod box", () => {
+    readBoxes({ cert: false });
+    const r = readRun("capabilities");
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema"] });
+    assert.match(log("logger"), /auth\.info accepted: capabilities/);
+  });
+
+  it("3646: read mode is refused (exit 3) on any box but the prod box", () => {
+    for (const role of [undefined, "data", "stage"]) {
+      if (role) setRole(role);
+      for (const command of ["capabilities", "schema"]) {
+        const r = readRun(command);
+        assert.equal(r.status, 3, `${role}: ${command}`);
+        assert.match(r.stderr, /read mode is served by the prod box only/);
+      }
+    }
+    assert.equal(log("ds-release"), "");
+  });
+
+  for (const command of [
+    `status prod ${SHA}`,
+    `release prod ${SHA}`,
+    `rollback prod ${SHA}`,
+    `rollback-status prod ${SHA}`,
+    `redeploy prod ${SHA}`,
+    "observe academy-host",
+    `rehearse ${SHA}`,
+    `rehearsal-status ${SHA}`,
+    "read-schema",
+    "check",
+    `converge ${SHA}`,
+    "schema now",
+    "capabilities all",
+  ]) {
+    it(`3646: --read rejects \`${command}\` (exit 2, auth.warning), nothing run`, () => {
+      readBoxes({ cert: false });
+      installDriver('echo "driver-called $*" >> "$STUB_DIR/driver.log"');
+      const r = readRun(command);
+      assert.equal(r.status, 2, r.stderr);
+      assert.match(log("logger"), /auth\.warning rejected:/);
+      assert.equal(log("ds-release") + log("driver") + log("ssh") + log("docker"), "", "nothing ran");
+    });
+  }
+
+  it("3646: without --read the prod box serves no read verb; any other mode argument is rejected", () => {
+    readBoxes({ cert: false });
+    assert.equal(readRun("schema", { args: [] }).status, 2);
+    const caps = readRun("capabilities", { args: [] });
+    assert.equal(caps.status, 3, "capabilities without --read is the data box's");
+    for (const args of [["--write"], ["--read", "--read"], [""]]) {
+      assert.equal(readRun("capabilities", { args }).status, 2, JSON.stringify(args));
+    }
+    assert.equal(log("ssh"), "");
+  });
+
+  it("3646: schema answers the ds_prod snapshot, encrypted to the recipient: no plaintext on stdout", () => {
+    readBoxes();
+    const r = readRun("schema");
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(!r.stdout.includes("ds_prod") && !r.stdout.includes("users_pkey"), "ciphertext only");
+    const answer = decrypt(r.stdout);
+    assert.ok(!Number.isNaN(Date.parse(answer.takenAt)) && answer.takenAt.endsWith("Z"), "takenAt is a UTC timestamp");
+    assert.deepEqual(answer, {
+      verb: "schema",
+      database: "ds_prod",
+      takenAt: answer.takenAt,
+      serverVersion: ANSWER.serverVersion,
+      migrations: ANSWER.migrations,
+      dumpSha256: createHash("sha256").update(DUMP).digest("hex"),
+      catalogue: ANSWER.catalogue,
+    });
+    // The release check ran on both boxes before the read, then the one data verb.
+    assert.equal(log("ds-release"), "ds-release-called check prod\ndata-ds-release check prod\n");
+    const hops = log("ssh").trimEnd().split("\n");
+    assert.deepEqual(hops.map((l) => l.split(" ").at(-1)), ["check", "read-schema"]);
+    for (const flag of ["-n", "IdentitiesOnly=yes", "BatchMode=yes", "StrictHostKeyChecking=yes", "deploy@192.168.0.10"]) {
+      assert.ok(hops[1].split(" ").includes(flag), flag);
+    }
+    assert.match(hops[1], /-i \S*home\/deploy\/\.ssh\/data-prod-hop /);
+    assert.match(hops[1], /UserKnownHostsFile=\S*home\/deploy\/\.ssh\/known_hosts /);
+    // The catalogue read: one read-only transaction with the spec's timeouts.
+    const sql = log("psql-stdin");
+    assert.match(sql, /^BEGIN READ ONLY;\nSET LOCAL statement_timeout = '30s';\nSET LOCAL lock_timeout = '2s';\n/);
+    assert.match(sql, /current_setting\('transaction_read_only'\) = 'on'/);
+    assert.match(sql, /FROM drizzle\.__drizzle_migrations m/);
+    assert.match(sql, /pg_get_indexdef\(x\.indexrelid\)/);
+    assert.match(sql, /pg_get_constraintdef\(k\.oid\)/);
+    assert.match(sql, /ROLLBACK;\n$/);
+    const docker = log("docker");
+    assert.match(docker, /^compose exec -T -e PGCLIENTENCODING=UTF8 postgres psql -X -qAt -v ON_ERROR_STOP=1 -U ds -d ds_prod -f -$/m);
+    assert.match(
+      docker,
+      /^compose exec -T -e PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=30s postgres pg_dump --schema-only --no-comments --no-owner --no-privileges --lock-wait-timeout=2s -U ds ds_prod$/m,
+    );
+  });
+
+  it("3646: schema refuses (exit 3) without the recipient certificate, before any read", () => {
+    readBoxes({ cert: false });
+    const r = readRun("schema");
+    assert.equal(r.status, 3, r.stderr);
+    assert.match(r.stderr, /recipient certificate is not installed/);
+    assert.equal(log("ds-release") + log("ssh") + log("docker"), "");
+  });
+
+  it("3646: schema refuses (exit 3) when openssl cannot encrypt to the installed certificate", () => {
+    readBoxes();
+    writeFileSync(recipient(), "not a certificate\n");
+    const r = readRun("schema");
+    assert.equal(r.status, 3, r.stderr);
+    assert.match(r.stderr, /openssl cannot encrypt to the recipient certificate/);
+    assert.equal(r.stdout.length, 0, "nothing reaches stdout");
+  });
+
+  for (const [label, env] of [
+    ["a ds-prod-* unit runs on ds-api-prod", { STUB_CHECK_RC: "3" }],
+    ["a ds-prod-* unit runs on ds-data-prod", { STUB_DATA_CHECK_RC: "3" }],
+  ]) {
+    it(`3646: schema fails (exit 1, a release step is running) while ${label}`, () => {
+      readBoxes();
+      const r = readRun("schema", { env });
+      assert.equal(r.status, 1, r.stderr);
+      assert.equal(r.stderr, "ds-deploy-entrypoint: a release step is running\n");
+      assert.ok(!log("ssh").includes("read-schema"), "no read");
+      assert.equal(log("docker"), "");
+    });
+  }
+
+  for (const [label, setup, reason] of [
+    ["the transaction is not read-only", { envelope: readEnvelope({ readOnly: false, answer: null }) }, "the read-only transaction check failed"],
+    ["the read reached another database", { envelope: readEnvelope({ database: "postgres" }) }, "the read-only transaction check failed"],
+    ["psql times out", { env: { STUB_PSQL_ERR: "ERROR:  canceling statement due to statement timeout" } }, "the read timed out"],
+    ["a lock waits too long", { env: { STUB_PSQL_ERR: "ERROR:  canceling statement due to lock timeout" } }, "the read timed out"],
+    ["psql fails otherwise", { env: { STUB_PSQL_ERR: 'ERROR:  relation "drizzle.__drizzle_migrations" does not exist' } }, "the read failed"],
+    ["psql answers no JSON", { envelope: "garbage" }, "the read failed"],
+  ]) {
+    it(`3646: schema fails (exit 1) with the fixed reason when ${label}, nothing of the diagnostic leaves`, () => {
+      readBoxes({ envelope: setup.envelope });
+      const r = readRun("schema", { env: setup.env ?? {} });
+      assert.equal(r.status, 1, r.stderr);
+      assert.equal(r.stderr, `ds-deploy-entrypoint: ${reason}\n`);
+      assert.equal(r.stdout.length, 0);
+    });
+  }
+
+  it("3646: a hop the data box answers with an unknown verb refuses (exit 3); a dead hop fails (exit 1)", () => {
+    readBoxes();
+    writeFileSync(
+      join(stubs, "ssh"),
+      '#!/usr/bin/env bash\ncmd=${*: -1}\n[[ $cmd == check ]] && exit 0\necho "ds-deploy-entrypoint: rejected: unknown command" >&2\nexit 2\n',
+    );
+    const old = readRun("schema");
+    assert.equal(old.status, 3, old.stderr);
+    assert.match(old.stderr, /ds-data-prod does not serve read-schema/);
+    writeFileSync(join(stubs, "ssh"), '#!/usr/bin/env bash\necho "ssh: connect to host: secret detail" >&2\nexit 255\n');
+    const dead = readRun("schema");
+    assert.equal(dead.status, 1);
+    assert.equal(dead.stderr, "ds-deploy-entrypoint: the read failed\n");
+  });
+
+  it("3646: read-schema on the data box answers plaintext over the hop only to the read mode; elsewhere it is the data box's verb", () => {
+    setRole("prod");
+    const r = run("read-schema");
+    assert.equal(r.status, 3, "a data verb on a non-data box");
+    assert.match(r.stderr, /is served by the data box only/);
   });
 });

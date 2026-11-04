@@ -54,10 +54,17 @@ function cloudInitFile(yaml, path) {
   return `${body.join("\n")}\n`;
 }
 
-/** The single-quoted DEPLOY_SUDOERS_CONTENT of harden-ssh.sh (#2987). */
+/** The single-quoted PROD_DEPLOY_SUDOERS_CONTENT of harden-ssh.sh (#2987, #3646). */
 function scriptDeploySudoers() {
-  const m = SCRIPT_TEXT.match(/^DEPLOY_SUDOERS_CONTENT='([^']*)'$/m);
-  assert.ok(m, "harden-ssh.sh defines DEPLOY_SUDOERS_CONTENT in single quotes");
+  const m = SCRIPT_TEXT.match(/^PROD_DEPLOY_SUDOERS_CONTENT='([^']*)'$/m);
+  assert.ok(m, "harden-ssh.sh defines PROD_DEPLOY_SUDOERS_CONTENT in single quotes");
+  return m[1];
+}
+
+/** The single-quoted DATA_DEPLOY_SUDOERS_CONTENT of harden-ssh.sh (#3313, #3646). */
+function scriptDataSudoers() {
+  const m = SCRIPT_TEXT.match(/^DATA_DEPLOY_SUDOERS_CONTENT='([^']*)'$/m);
+  assert.ok(m, "harden-ssh.sh defines DATA_DEPLOY_SUDOERS_CONTENT in single quotes");
   return m[1];
 }
 
@@ -101,12 +108,29 @@ for (const [file, role] of Object.entries(ROLES)) {
   });
 }
 
-test("2987: deploy's prod sudo right is the entrypoint, with no argument, keeping only the request", () => {
+test("2987, 3646: deploy's prod sudo rights are the entrypoint with no argument or --read, keeping only the request", () => {
   assert.equal(
     scriptDeploySudoers(),
     'Defaults!/usr/local/bin/ds-deploy-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"\n' +
+      'deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint ""\n' +
+      "deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint --read\n",
+  );
+});
+
+test("3646: the data box's deploy right has no read mode", () => {
+  assert.equal(
+    scriptDataSudoers(),
+    'Defaults!/usr/local/bin/ds-deploy-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"\n' +
       'deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint ""\n',
   );
+});
+
+test("3646: the prod CI line pattern (PROD_CI_RE) matches the --read form, so the prod sweep keeps the read line", () => {
+  const re = new RegExp(SCRIPT_TEXT.match(/^PROD_CI_RE='([^']*)'$/m)[1]);
+  assert.match('command="sudo -n /usr/local/bin/ds-deploy-entrypoint",no-pty x', re);
+  assert.match('command="sudo -n /usr/local/bin/ds-deploy-entrypoint --read",restrict ssh-ed25519 AAAA', re);
+  assert.doesNotMatch('command="sudo -n /usr/local/bin/ds-deploy-entrypoint --write",restrict x', re);
+  assert.doesNotMatch("ssh-ed25519 AAAA operator", re);
 });
 
 const VISUDO = spawnSync("bash", ["-c", "PATH=$PATH:/usr/sbin:/sbin; command -v visudo"], { encoding: "utf8" });
@@ -118,6 +142,7 @@ test(
     try {
       for (const [name, content] of [
         ["90-ds-deploy", scriptDeploySudoers()],
+        ["90-ds-deploy-data", scriptDataSudoers()],
         ["91-ds-breakglass", SCRIPT_TEXT.match(/^sudoers_line='([^']*)'$/m)[1]],
       ]) {
         writeFileSync(join(dir, name), content, { mode: 0o440 });
@@ -480,7 +505,7 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
     const r = run(dataArgs());
     assert.equal(r.status, 0, r.out);
     assert.equal(read("home/deploy/.ssh/authorized_keys"), `${HOP_FORCED}\n`, "the operator key is gone");
-    assert.equal(read("etc/sudoers.d/90-ds-deploy"), scriptDeploySudoers());
+    assert.equal(read("etc/sudoers.d/90-ds-deploy"), scriptDataSudoers());
     assert.equal(read("etc/sudoers.d/90-cloud-init-users"), "# Created by cloud-init\n\n# User rules for deploy\n");
     assert.equal(read("etc/group"), "root:x:0:\nsudo:x:27:\ndocker:x:999:\ndeploy:x:1000:\n");
     assert.equal(read("etc/ds-platform/box-role"), "data\n");
@@ -578,7 +603,7 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
     const r = run(releaseArgs(), { SUDO_USER: "deploy" });
     assert.equal(r.status, 0, r.out);
     assert.equal(read("home/deploy/.ssh/authorized_keys"), `${HOP_FORCED}\n`, "the operator key is gone");
-    assert.equal(read("etc/sudoers.d/90-ds-deploy"), scriptDeploySudoers());
+    assert.equal(read("etc/sudoers.d/90-ds-deploy"), scriptDataSudoers());
     assert.equal(read("etc/sudoers.d/90-cloud-init-users"), "# Created by cloud-init\n\n# User rules for deploy\n");
     assert.equal(read("etc/group"), "root:x:0:\nsudo:x:27:\ndocker:x:999:\ndeploy:x:1000:\n");
     assert.equal(read("etc/ds-platform/box-role"), "data\n");
@@ -605,7 +630,7 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
     assert.equal(r.status, 0, r.out);
     assert.doesNotMatch(r.out, /nothing to change/);
     assert.equal(read("home/deploy/.ssh/authorized_keys"), `${HOP_FORCED}\n`);
-    assert.equal(read("etc/sudoers.d/90-ds-deploy"), scriptDeploySudoers());
+    assert.equal(read("etc/sudoers.d/90-ds-deploy"), scriptDataSudoers());
     assert.equal(read("etc/sudoers.d/90-cloud-init-users"), "# Created by cloud-init\n\n# User rules for deploy\n");
     assert.equal(read("etc/group"), NARROWED_GROUPS);
   });
@@ -661,11 +686,11 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
     assert.equal(run(releaseArgs("--dry-run"), { SUDO_USER: "deploy" }).status, 1);
   });
 
-  it("3320: --from-release is data's, and takes no break-glass key", () => {
+  it("3320, 3646: --from-release is data's and prod's, and takes no break-glass or CI key", () => {
     dataBox();
     breakglassBox();
     for (const args of [
-      ["--role", "prod", "--from-release"],
+      ["--role", "prod", "--from-release", "--ci-pubkey", join(keys, "ci-prod.pub")],
       ["--role", "stage", "--from-release"],
       releaseArgs("--breakglass-pubkey", join(keys, "breakglass.pub")),
       ["--role", "data"],
@@ -674,6 +699,116 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
       assert.equal(r.status, 2, `${args.join(" ")}: ${r.out}`);
     }
     assert.equal(calls(), "");
+  });
+
+  // #3646: the prod release converges the read key on ds-api-prod as root, from the
+  // installed tree's prod-read.pub: the read line and deploy's two sudo rights only.
+  const READ_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIREADKEYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx gha-prod-read";
+  const READ_KEY_2 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIREADKEY2xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx gha-prod-read-2";
+  const READ_LINE = (key) => `command="sudo -n /usr/local/bin/ds-deploy-entrypoint --read",restrict ${key}`;
+  const OLD_PROD_SUDOERS =
+    'Defaults!/usr/local/bin/ds-deploy-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"\n' +
+    'deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint ""\n';
+  const prodReleaseArgs = (...extra) => ["--role", "prod", "--from-release", ...extra];
+  const readPub = (content) => {
+    const p = join(root, "usr/local/lib/ds-platform/tree/infra/deploy/keys/prod-read.pub");
+    mkdirSync(dirname(p), { recursive: true });
+    if (content === null) rmSync(p, { force: true });
+    else writeFileSync(p, content);
+  };
+  const prodBox = () => {
+    breakglassBox();
+    writeFileSync(join(root, "home/deploy/.ssh/authorized_keys"), `${FORCED_PROD} ${CI_PROD}\n`);
+    writeFileSync(join(root, "etc/sudoers.d/90-ds-deploy"), OLD_PROD_SUDOERS);
+    readPub(`${READ_KEY}\n`);
+  };
+
+  it("3646: --from-release is admitted for --role prod: the read line and the --read right, nothing else", () => {
+    prodBox();
+    const before = snapshot();
+    const r = run(prodReleaseArgs(), { SUDO_USER: "root" });
+    assert.equal(r.status, 0, r.out);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${FORCED_PROD} ${CI_PROD}\n${READ_LINE(READ_KEY)}\n`);
+    assert.equal(read("etc/sudoers.d/90-ds-deploy"), scriptDeploySudoers());
+    assert.equal(calls().match(/^visudo -cf /gm).length, 2, "the break-glass file and the new deploy file are checked");
+    assert.match(calls(), /visudo -cf .*91-ds-breakglass/, "the break-glass checks ran");
+    // Exactly these two: no sshd file, box role, group, other sudoers file or unit.
+    const after = snapshot();
+    for (const path of Object.keys(before)) {
+      if (/authorized_keys$|90-ds-deploy$/.test(path) && path.includes("deploy")) continue;
+      assert.deepEqual(after[path], before[path], `${path} untouched`);
+    }
+    assert.ok(!existsSync(join(root, "etc/ds-platform/box-role")));
+    assert.doesNotMatch(calls(), /sshd|systemctl|gpasswd|useradd/);
+    rmSync(join(dir, "calls.log"));
+    const converged = snapshot();
+    const again = run(prodReleaseArgs(), { SUDO_USER: "root" });
+    assert.equal(again.status, 0, again.out);
+    assert.match(again.out, /nothing to change/);
+    assert.deepEqual(snapshot(), converged);
+  });
+
+  it("3646: a rotated prod-read.pub replaces the read line's key and keeps every other line", () => {
+    prodBox();
+    writeFileSync(
+      join(root, "home/deploy/.ssh/authorized_keys"),
+      `${READ_LINE(READ_KEY)}\n${FORCED_PROD} ${CI_PROD}\n# note\n`,
+    );
+    readPub(`${READ_KEY_2}\n`);
+    const r = run(prodReleaseArgs(), { SUDO_USER: "root" });
+    assert.equal(r.status, 0, r.out);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${FORCED_PROD} ${CI_PROD}\n# note\n${READ_LINE(READ_KEY_2)}\n`);
+  });
+
+  for (const [what, setup, message] of [
+    ["a missing prod-read.pub", () => readPub(null), /prod-read\.pub is missing/],
+    ["a prod-read.pub with two keys", () => readPub(`${READ_KEY}\n${READ_KEY_2}\n`), /exactly one key line/],
+    ["a prod-read.pub with options", () => readPub(`no-pty ${READ_KEY}\n`), /not a bare public key line/],
+    ["a read key that is already a CI key", () => readPub(`${CI_PROD}\n`), /already another key of deploy/],
+    ["no breakglass user", () => breakglassBox({ passwd: "" }), /no user breakglass/],
+    ["a breakglass without keys", () => breakglassBox({ keys: "# none\n" }), /holds no key/],
+  ]) {
+    it(`3646: --role prod --from-release refuses and changes nothing on ${what}`, () => {
+      prodBox();
+      setup();
+      const before = snapshot();
+      const r = run(prodReleaseArgs(), { SUDO_USER: "root" });
+      assert.equal(r.status, 1, r.out);
+      assert.match(r.out, message);
+      assert.match(r.out, /nothing was changed/);
+      assert.deepEqual(snapshot(), before);
+    });
+  }
+
+  it("3646: a visudo-rejected sudoers file leaves the read line out", () => {
+    prodBox();
+    writeFileSync(join(stubs, "visudo"), '#!/usr/bin/env bash\ngrep -q -- "--read" "$2" && exit 1\nexit 0\n');
+    const r = run(prodReleaseArgs(), { SUDO_USER: "root" });
+    assert.equal(r.status, 1, r.out);
+    assert.match(r.out, /visudo rejected the deploy sudoers file/);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${FORCED_PROD} ${CI_PROD}\n`);
+    assert.equal(read("etc/sudoers.d/90-ds-deploy"), OLD_PROD_SUDOERS);
+  });
+
+  it("3646: --dry-run of --role prod --from-release names both changes and changes nothing", () => {
+    prodBox();
+    const before = snapshot();
+    const r = run(prodReleaseArgs("--dry-run"), { SUDO_USER: "root" });
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, /would write .*90-ds-deploy/);
+    assert.match(r.out, /would put the read key .* behind the read-mode forced command/);
+    assert.deepEqual(snapshot(), before);
+  });
+
+  it("3646: the full --role prod run from a breakglass session keeps the read line and writes the --read right", () => {
+    writeFileSync(
+      join(root, "home/deploy/.ssh/authorized_keys"),
+      `${OPERATOR}\n${FORCED_PROD} ${CI_PROD}\n${READ_LINE(READ_KEY)}\n`,
+    );
+    const r = run(prodArgs());
+    assert.equal(r.status, 0, r.out);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${FORCED_PROD} ${CI_PROD}\n${READ_LINE(READ_KEY)}\n`);
+    assert.equal(read("etc/sudoers.d/90-ds-deploy"), scriptDeploySudoers());
   });
 
   it("3320: --role prod still narrows nothing of deploy's outside a breakglass session", () => {

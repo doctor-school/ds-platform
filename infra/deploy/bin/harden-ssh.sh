@@ -7,13 +7,22 @@
 #
 #   sudo harden-ssh.sh --role prod|stage|data --breakglass-pubkey <file>
 #                      [--ci-pubkey <file>]... [--dry-run]
-#   sudo harden-ssh.sh --role data --from-release [--dry-run]
+#   sudo harden-ssh.sh --role data|prod --from-release [--dry-run]
 #
 # --from-release (#3320) is the prod release's own data-prod converge, run over the
 # hop as deploy from the root-owned copy the data `install` verb places at
 # /usr/local/lib/ds-platform/harden-ssh.sh. It writes nothing of breakglass's: it
 # checks, before any change, that the break-glass path is in place and usable (see
 # check_breakglass_path) and refuses, changing nothing, when it is not.
+#
+# --role prod --from-release (#3646; spec §4 «The read key on ds-api-prod») is the
+# prod release's converge of the read key on ds-api-prod, run as root by the release
+# driver from the same root-owned copy. After the same break-glass checks it
+# converges exactly two things and removes no other line: the read line of deploy's
+# authorized_keys, rewritten from the installed tree's infra/deploy/keys/prod-read.pub
+# behind `command="sudo -n /usr/local/bin/ds-deploy-entrypoint --read",restrict` (a
+# missing or malformed file refuses the run, changing nothing), and
+# /etc/sudoers.d/90-ds-deploy (PROD_DEPLOY_SUDOERS_CONTENT, `visudo -cf` first).
 #
 # It converges:
 #   - /etc/ssh/sshd_config.d/10-ds-hardening.conf (the drop-in below);
@@ -71,8 +80,13 @@ ENTRYPOINT=/usr/local/bin/ds-deploy-entrypoint
 KEY_RESTRICTIONS=no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding
 # Any CI line, either role's form: what the operator-key refusal below tells apart
 # from an unrestricted line.
-RESTRICTED_RE='^command="(sudo -n )?/usr/local/bin/ds-deploy-entrypoint",'
-PROD_CI_RE='^command="sudo -n /usr/local/bin/ds-deploy-entrypoint",'
+RESTRICTED_RE='^command="(sudo -n )?/usr/local/bin/ds-deploy-entrypoint( --read)?",'
+# A prod CI line, the read line (#3646) included: what the prod sweep keeps.
+PROD_CI_RE='^command="sudo -n /usr/local/bin/ds-deploy-entrypoint( --read)?",'
+# The read key's line on ds-api-prod (#3646): its mode is fixed here, never by the client.
+READ_FORCED='command="sudo -n /usr/local/bin/ds-deploy-entrypoint --read",restrict'
+READ_RE='^command="sudo -n /usr/local/bin/ds-deploy-entrypoint --read",restrict '
+READ_PUBKEY=$ROOT/usr/local/lib/ds-platform/tree/infra/deploy/keys/prod-read.pub
 # Data (#3313): the hop line of the release driver on ds-api-prod, before or after the
 # converge (the forced-command prefix).
 HOP_FORCED='command="sudo -n /usr/local/bin/ds-deploy-entrypoint",'
@@ -81,8 +95,13 @@ INSTALLED_ENTRYPOINT=$ROOT$ENTRYPOINT
 
 # Prod and data (spec §4 «sudo on prod», #3313): deploy may run the entrypoint as root with no
 # argument, and sudo keeps SSH_ORIGINAL_COMMAND (the request) through its env reset.
-# infra/deploy/cloud-init/api-prod.yaml writes the same bytes; the tests pin them.
-DEPLOY_SUDOERS_CONTENT='Defaults!/usr/local/bin/ds-deploy-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"
+# Prod adds the read mode (#3646, `--read`; sudo matches the argument list exactly).
+# infra/deploy/cloud-init/api-prod.yaml writes the prod bytes; the tests pin them.
+PROD_DEPLOY_SUDOERS_CONTENT='Defaults!/usr/local/bin/ds-deploy-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"
+deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint ""
+deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint --read
+'
+DATA_DEPLOY_SUDOERS_CONTENT='Defaults!/usr/local/bin/ds-deploy-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"
 deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint ""
 '
 PUBKEY_RE='^(ssh-ed25519|sk-ssh-ed25519@openssh\.com|ecdsa-sha2-nistp(256|384|521)|ssh-rsa) [A-Za-z0-9+/]+=* ?[^[:cntrl:]]*$'
@@ -119,14 +138,18 @@ while [[ $# -gt 0 ]]; do
 done
 [[ $role =~ ^(prod|stage|data)$ ]] || usage "--role must be prod, stage or data"
 if [[ $from_release == 1 ]]; then
-  [[ $role == data ]] || usage "--from-release is --role data's: the release converges ds-data-prod only"
+  [[ $role == data || $role == prod ]] ||
+    usage "--from-release is --role data's or prod's: the release converges the prod boxes only"
   [[ -z $breakglass_file ]] ||
     usage "--from-release takes no --breakglass-pubkey: the break-glass user is the box's own and is only checked"
+  [[ ${#ci_files[@]} == 0 ]] || usage "--from-release takes no --ci-pubkey: the release converges no CI key"
 else
   [[ -n $breakglass_file ]] || usage "--breakglass-pubkey <file> is required"
 fi
 [[ -n $ROOT || $dry_run == 1 || $EUID -eq 0 ]] || usage "run as root (sudo)"
 [[ $role != data || ${#ci_files[@]} == 0 ]] || usage "--role data takes no --ci-pubkey: no CI key reaches the data box"
+DEPLOY_SUDOERS_CONTENT=$DATA_DEPLOY_SUDOERS_CONTENT
+[[ $role != prod ]] || DEPLOY_SUDOERS_CONTENT=$PROD_DEPLOY_SUDOERS_CONTENT
 if [[ $role == prod ]]; then
   # no-user-rc: sshd would run deploy's own ~/.ssh/rc as deploy before the sudo.
   CI_KEY_OPTIONS="command=\"sudo -n $ENTRYPOINT\",$KEY_RESTRICTIONS,no-user-rc"
@@ -175,6 +198,22 @@ if [[ $role == data ]]; then
   hop_key=${hop_line#*\" }
   [[ $hop_key =~ $PUBKEY_RE ]] || fail "the hop line carries no bare public key; nothing was changed"
   want_hop=$HOP_FORCED${hop_line#"$HOP_FORCED"}
+fi
+
+# --- prod from a release: the read line's preconditions (#3646) ------------------------
+# The read key of the tree this release installed, one bare key distinct from every
+# other key of deploy; anything else refuses the run before anything changes.
+if [[ $role == prod && $from_release == 1 ]]; then
+  [[ -f $READ_PUBKEY ]] || fail "$READ_PUBKEY is missing; nothing was changed"
+  [[ $(grep -c . "$READ_PUBKEY") == 1 ]] || fail "$READ_PUBKEY must hold exactly one key line; nothing was changed"
+  read_key=$(grep . "$READ_PUBKEY" | tr -d '
+')
+  [[ $read_key =~ $PUBKEY_RE ]] || fail "$READ_PUBKEY is not a bare public key line; nothing was changed"
+  [[ -f $DEPLOY_KEYS ]] || fail "$DEPLOY_KEYS is missing: the deploy user must exist first; nothing was changed"
+  other_keys=$(grep -Ev "$READ_RE" "$DEPLOY_KEYS" || true)
+  ! grep -qF -- " $(key_body "$read_key")" <<<"$other_keys" ||
+    fail "the read key is already another key of deploy; nothing was changed"
+  want_read="$READ_FORCED $read_key"
 fi
 
 sudoers_line='breakglass ALL=(ALL) NOPASSWD:ALL
@@ -273,6 +312,29 @@ drop_backups() {
     [[ $entry == *'!absent' ]] || rm -f "$entry.ds-harden.bak"
   done
 }
+
+# --- prod from a release: the read line and deploy's sudo rights, nothing else (#3646)
+# The right goes in first: a line without its right fails closed at sudo.
+if [[ $role == prod && $from_release == 1 ]]; then
+  if ! { [[ -f $DEPLOY_SUDOERS ]] && [[ $(cat "$DEPLOY_SUDOERS"; printf x) == "${DEPLOY_SUDOERS_CONTENT}x" ]]; }; then
+    note "write $DEPLOY_SUDOERS"
+    [[ $dry_run == 1 ]] || install_sudoers "$DEPLOY_SUDOERS" "$DEPLOY_SUDOERS_CONTENT" "the deploy sudoers file"
+  fi
+  if ! [[ $(grep -cE "$READ_RE" "$DEPLOY_KEYS" || true) == 1 ]] || ! grep -qxF -- "$want_read" "$DEPLOY_KEYS"; then
+    body=$(key_body "$read_key")
+    note "put the read key ${body:0:16}… behind the read-mode forced command in $DEPLOY_KEYS"
+    if [[ $dry_run == 0 ]]; then
+      rest=$(grep -Ev "$READ_RE" "$DEPLOY_KEYS" || true)
+      cp -p "$DEPLOY_KEYS" "$DEPLOY_KEYS.ds-harden.new"
+      { [[ -z $rest ]] || printf '%s
+' "$rest"; printf '%s
+' "$want_read"; } >"$DEPLOY_KEYS.ds-harden.new"
+      mv -f "$DEPLOY_KEYS.ds-harden.new" "$DEPLOY_KEYS"
+    fi
+  fi
+  [[ $changed == 1 ]] || say "nothing to change"
+  exit 0
+fi
 
 # --- sshd: the drop-in, then the main file's PermitRootLogin ----------------------
 if ! { [[ -f $DROPIN ]] && [[ $(cat "$DROPIN"; printf x) == "${DROPIN_CONTENT}x" ]]; }; then

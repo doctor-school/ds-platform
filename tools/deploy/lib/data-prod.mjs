@@ -32,6 +32,15 @@ export const DATA_VERBS = [
   "converge",
 ];
 
+/**
+ * The data verbs of the prod read path (#3646; spec §5 «Data verbs of the read
+ * path»): served on the data box beside DATA_VERBS (the entrypoint's DATA_VERBS is
+ * both lists, pinned), reached by the read mode on ds-api-prod only. The release
+ * never calls them, so its `capabilities` probe does not require them: a box whose
+ * entrypoint predates them still takes the release that installs them.
+ */
+export const DATA_READ_VERBS = ["read-schema"];
+
 // The entrypoint's own COMMAND_RE / COMMAND_MAX: what it admits as a request.
 const REQUEST_RE = /^[a-z0-9-]+( [a-z0-9-]+)*$/;
 const REQUEST_MAX = 200;

@@ -56,13 +56,15 @@ write_files:
     permissions: "0440"
     content: |
       breakglass ALL=(ALL) NOPASSWD:ALL
-  # #2987: deploy's one sudo right, the same bytes as DEPLOY_SUDOERS_CONTENT of
+  # #2987, #3646: deploy's two sudo rights (no argument, --read), the same bytes as
+  # PROD_DEPLOY_SUDOERS_CONTENT of
   # infra/deploy/bin/harden-ssh.sh (tools/deploy/harden-ssh.test.mjs pins them equal).
   - path: /etc/sudoers.d/90-ds-deploy
     permissions: "0440"
     content: |
       Defaults!/usr/local/bin/ds-deploy-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"
       deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint ""
+      deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint --read
   # What this box serves; ds-deploy-entrypoint serves `upload-report` on `stage` only.
   - path: /etc/ds-platform/box-role
     permissions: "0644"

@@ -558,6 +558,23 @@ export const INSTALLED_TREE_DIR = "/usr/local/lib/ds-platform/tree";
 export const INSTALLED_TREES_DIR = "/usr/local/lib/ds-platform/trees";
 export const INSTALLED_TREE_FILE = "/usr/local/lib/ds-platform/installed-tree";
 
+// #3646: the read key's public half in the tree the install just recorded (spec §4
+// «The read key on ds-api-prod»). Right after the install, the release converges the
+// read line and deploy's `--read` sudo right on ds-api-prod with the root-owned
+// harden-ssh.sh --role prod --from-release, which refuses a missing or malformed key
+// file. Until the owner's `pnpm prod:read-key` commits the key, the tree carries none:
+// the release then installs no read line and goes on.
+export const PROD_READ_PUBKEY = `${INSTALLED_TREE_DIR}/infra/deploy/keys/prod-read.pub`;
+export function prodReadKeyConvergeScript() {
+  return [
+    `if sudo test -f ${PROD_READ_PUBKEY}; then`,
+    `  sudo ${HARDEN_SSH_BIN} --role prod --from-release`,
+    "else",
+    `  echo "harden-ssh: ${PROD_READ_PUBKEY} is absent (no read key committed yet): no read line installed"`,
+    "fi",
+  ].join("\n");
+}
+
 function installedTreeLines(liveDir, sha) {
   const tree = INSTALLED_TREE_DIR;
   const version = `${INSTALLED_TREES_DIR}/${sha}`;

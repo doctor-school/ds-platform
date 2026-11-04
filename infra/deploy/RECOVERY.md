@@ -109,8 +109,10 @@ The bundle is the set of `/etc/ds-platform/*.env` files of both hosts, encrypted
 [`age`](https://age-encryption.org) to **two independent recipients**:
 
 - **Custody A** — an `age` identity kept in the owner's password manager.
-- **Custody B** — a second identity on a sealed offline paper copy, kept in a
-  different physical location from A.
+- **Custody B** — a second identity on a sealed offline paper copy, held by a
+  **second custodian** (default: the Product Lead) in a different physical location
+  from A, so recovery survives the owner's unavailability. The owner may substitute
+  another trusted custodian; record the custodian's role (never the value) on #3662.
 
 It is deliberately **not** encrypted to the `breakglass` SSH key: losing or rotating
 the access key must not lose recovery, and one compromised key must not open both.
@@ -120,42 +122,85 @@ Either identity alone opens the bundle.
 `age-keygen`); the commands below run in Git Bash. Plaintext secrets never land on
 the workstation disk: they only pass through pipes.
 
+**Shell.** Every binary pipe in §2–§3 runs in Git Bash, never in PowerShell 5.1: its
+pipes re-encode the stream as text and corrupt `tar` and `age` data. `age -p`,
+`age -d` with a passphrase identity and `age-keygen -y` read the console directly, so
+they need a real console: use Git Bash inside Windows Terminal, or, in Git Bash's
+default mintty window, first start `winpty bash` and run every block inside that
+shell. Each block starts with `set -o pipefail`, so a failing left side of a pipe
+fails the whole command instead of feeding `age` empty input. A native Windows
+program ends console input on Ctrl-Z, Enter.
+
 ### 2.1 Generate the identities (once; again only if one is lost or exposed)
 
 ```bash
-# Custody A: the identity is passphrase-encrypted before it touches disk;
-# age-keygen prints the public recipient on stderr, into A.pub.
-age-keygen 2> A.pub | age -p -o identity-A.age
+set -o pipefail
+# Custody A: the identity is passphrase-encrypted before it touches disk.
+age-keygen | age -p -o identity-A.age
+# The recipient is derived from the identity itself, through a pipe only.
+age -d identity-A.age | age-keygen -y > A.pub
 # Store identity-A.age (attachment) and its passphrase in the password manager entry.
 
-# Custody B: the identity goes to the terminal only; copy it by hand (or print the
-# terminal) onto paper. Only the public half is written to disk.
-age-keygen 2> B.pub
-# Check the paper copy: type it back in, Ctrl-D, and compare the output with B.pub.
-age-keygen -y
-# Clear the terminal scroll-back, seal the paper, store it in the second location.
+# Custody B: the identity goes to the terminal only; copy it by hand onto paper.
+age-keygen
+# Type the paper copy back in (Ctrl-Z, Enter): this both checks the transcription and
+# derives the recipient. A typo yields an error or a recipient B's paper cannot open,
+# which the test decrypt in §2.2 catches before the paper is sealed.
+age-keygen -y > B.pub
+# Clear the terminal scroll-back. Keep the paper unsealed until the §2.2 test decrypt.
 ```
 
-`A.pub` / `B.pub` hold the public recipients (`age1…`). They are not secret, but they
-are not committed either: keep them beside the bundle.
+`A.pub` / `B.pub` hold the public recipients (one `age1…` line each, no prefix). They
+are not secret, but they are not committed either: keep them beside the bundle.
 
 ### 2.2 Build the bundle (after every rotation or new key)
 
-One bundle per host, streamed straight from `sudo tar` into `age`:
+One bundle per host, streamed straight from `tar` into `age`. `/etc/ds-platform` is
+`0700 root`, so the `cd`, the glob and the `tar` all run inside one root shell on the
+host; `set -e` there and `pipefail` here make any failure fail the pipe:
 
 ```bash
+set -o pipefail
 D=$(date -u +%Y-%m-%d)
-ssh breakglass@ds-api-prod 'cd /etc/ds-platform && sudo tar -cf - *.env' \
-  | age -R A.pub -R B.pub -o "ds-recovery-$D-api-prod.tar.age"
-ssh -J breakglass@ds-api-prod breakglass@192.168.0.10 'cd /etc/ds-platform && sudo tar -cf - *.env' \
-  | age -R A.pub -R B.pub -o "ds-recovery-$D-data-prod.tar.age"
-# The member list only (names, never values):
-age -d -i identity-A.age "ds-recovery-$D-api-prod.tar.age" | tar -tf -
-age -d -i identity-A.age "ds-recovery-$D-data-prod.tar.age" | tar -tf -
+TAR="sudo sh -c 'set -e; cd /etc/ds-platform && tar -cf - *.env'"
+ssh breakglass@ds-api-prod "$TAR" \
+  | age -R A.pub -R B.pub -o "ds-recovery-$D-api-prod.tar.age" \
+  || { echo "FAIL api-prod bundle"; rm -f "ds-recovery-$D-api-prod.tar.age"; }
+ssh -J breakglass@ds-api-prod breakglass@192.168.0.10 "$TAR" \
+  | age -R A.pub -R B.pub -o "ds-recovery-$D-data-prod.tar.age" \
+  || { echo "FAIL data-prod bundle"; rm -f "ds-recovery-$D-data-prod.tar.age"; }
+
+# Hard gate: the member list (names, never values) must hold every expected file.
+# Missing file, empty list or unreadable bundle = FAIL, and the bundle is discarded.
+gate() { # <bundle> <expected member>...
+  f=$1; shift
+  list=$(age -d -i identity-A.age "$f" | tar -tf -) && [ -n "$list" ] \
+    || { echo "FAIL $f: unreadable or empty"; rm -f "$f"; return 1; }
+  for m in "$@"; do
+    printf '%s\n' "$list" | grep -qx "$m" || { echo "FAIL $f: no $m"; rm -f "$f"; return 1; }
+  done
+  echo "OK $f"; printf '%s\n' "$list"
+}
+gate "ds-recovery-$D-api-prod.tar.age" api.env zitadel.env
+gate "ds-recovery-$D-data-prod.tar.age" data.env
 ```
 
-Expect `api.env` and `zitadel.env` (plus `api-sign-in.env` and `internal.env` once a
-release has written them) in the first, `data.env` in the second.
+`api.env` and `zitadel.env` are required in the first (`api-sign-in.env` and
+`internal.env` also appear once a release has written them), `data.env` in the second.
+On any FAIL, fix the cause and rebuild; never keep a bundle that failed the gate.
+
+**Test decrypt with B (when B is created, before sealing the paper).** Type B's paper
+copy into `age` as the identity (Ctrl-Z, Enter); the plaintext only goes through the
+pipe to `tar -tf -`, which prints names:
+
+```bash
+set -o pipefail
+age -d -i - "ds-recovery-$D-data-prod.tar.age" | tar -tf -   # expect: data.env
+```
+
+The same member list as with A = custody B proven; seal the paper and hand it to the
+second custodian. Anything else: B was mis-transcribed, so regenerate B (§2.1) and
+rebuild both bundles.
 
 ### 2.3 Fingerprint-verify each irreplaceable key
 
@@ -164,6 +209,7 @@ the decrypted bundle. The keys are high-entropy, so the hash reveals nothing usa
 post only `match` / `mismatch`.
 
 ```bash
+set -o pipefail
 fp() { sed -n "s/^$1=//p" | tr -d '\r\n' | sha256sum | cut -c1-16; }
 # host side
 ssh -J breakglass@ds-api-prod breakglass@192.168.0.10 \
@@ -174,8 +220,8 @@ age -d -i identity-A.age "ds-recovery-$D-data-prod.tar.age" | tar -xOf - data.en
 
 Repeat for `ZITADEL_MASTERKEY` (`zitadel.env`), `SIGN_IN_RECORD_KEY` and
 `AUDIT_IDENTIFIER_PEPPER` (`api.env`) against ds-api-prod. All four must match.
-Custody B is proven by `age-keygen -y` printing `B.pub` (§2.1): the bundle is
-encrypted to that recipient.
+Custody B is proven by the one-time test decrypt in §2.2; later bundles are encrypted
+to the same `B.pub`.
 
 ### 2.4 Store the ciphertext
 
@@ -209,6 +255,7 @@ From the workstation. The passphrase comes **from the bundle**, not from
 `/etc/ds-platform/data.env`:
 
 ```bash
+set -o pipefail
 age -d -i identity-A.age "ds-recovery-$D-data-prod.tar.age" | tar -xOf - data.env \
   | ssh -J breakglass@ds-api-prod breakglass@192.168.0.10 \
     'sudo install -d -m 700 /run/ds-recovery && sudo sh -c "umask 077; cat > /run/ds-recovery/restore.env"'
@@ -220,16 +267,27 @@ age -d -i identity-A.age "ds-recovery-$D-data-prod.tar.age" | tar -xOf - data.en
 ENVF=/run/ds-recovery/restore.env
 CONF=/home/deploy/ds-platform/infra/deploy/compose/data-prod/pgbackrest/pgbackrest.conf
 SCRATCH=/var/lib/ds-platform/recovery-proof/$(date -u +%Y%m%dT%H%M%SZ)
-# The recorded image IDs: the postgres and pgbackrest entries under `images`.
-sudo jq .images /home/deploy/ds-platform-postgres-state.json
+# The recorded image IDs: the postgres and pgbackrest entries under `images`
+# (read by eye; jq is not assumed on the host).
+sudo cat /home/deploy/ds-platform-postgres-state.json
 PG_IMAGE='<postgres image id from images>'
 BR_IMAGE='<pgbackrest image id from images>'
-PGDATA_VOL=$(sudo docker volume ls -q --filter name=pgdata)   # exactly one
-PGSOCK_VOL=$(sudo docker volume ls -q --filter name=pgsocket) # exactly one
-BR="sudo docker run --rm --memory 768m --memory-swap 768m --oom-score-adj 1000 --env-file $ENVF -v $CONF:/etc/pgbackrest/pgbackrest.conf:ro"
+# Exact volume names of the fixed compose project `ds-data-prod`, matched by label.
+vol() { sudo docker volume ls -q --filter label=com.docker.compose.project=ds-data-prod \
+  --filter "label=com.docker.compose.volume=$1"; }
+PGDATA_VOL=$(vol pgdata); PGSOCK_VOL=$(vol pgsocket)
+[ "$PGDATA_VOL" = ds-data-prod_pgdata ] && [ "$PGSOCK_VOL" = ds-data-prod_pgsocket ] \
+  || echo "STOP: volumes are not exactly ds-data-prod_pgdata / ds-data-prod_pgsocket"
+# The pgbackrest image's own entrypoint ignores its command (it runs stanza-create,
+# check and then `exec cron -f`, a second backup scheduler). No container in this
+# procedure may run that default entrypoint: every one-shot run overrides it and is --rm.
+BR="sudo docker run --rm --memory 768m --memory-swap 768m --oom-score-adj 1000 --env-file $ENVF -v $CONF:/etc/pgbackrest/pgbackrest.conf:ro --user postgres --entrypoint pgbackrest"
 
-# 1. Backup point: label, type, WAL range, database size (read with the bundle pass)
-$BR "$BR_IMAGE" gosu postgres pgbackrest --stanza=ds --log-level-file=off info
+# 1. Backup point: label, type, WAL range, database size (read with the bundle pass).
+#    Note the timeline (first 8 hex digits of the archive max) and count the
+#    timeline history files: both are compared again after teardown (§3.4).
+$BR "$BR_IMAGE" --stanza=ds --log-level-file=off info
+$BR "$BR_IMAGE" --stanza=ds --log-level-file=off repo-ls --recurse --filter='\.history$' archive/ds
 
 # 2. Headroom: go on only if free >= 1.5 x the database size + 2 GiB
 #    and MemAvailable >= 1 GiB (spec «Headroom check»)
@@ -237,14 +295,18 @@ sudo install -d -m 700 /var/lib/ds-platform/recovery-proof
 df -h --output=avail /var/lib/ds-platform/recovery-proof
 grep MemAvailable /proc/meminfo
 
-# 3. check: forces a WAL switch on the live cluster and waits until it is archived
+# 3. check: forces a WAL switch (pg_switch_wal) on the live cluster and waits until
+#    that segment is archived. Record the segment name it prints as SEG: it is newer
+#    than the backup, so the copy can only reach it by replaying WAL from the archive.
 $BR -v "$PGDATA_VOL":/var/lib/postgresql/data:ro -v "$PGSOCK_VOL":/var/run/postgresql \
-  "$BR_IMAGE" gosu postgres pgbackrest --stanza=ds --log-level-file=off check
+  "$BR_IMAGE" --stanza=ds --log-level-file=off check 2>&1 | tee /dev/stderr \
+  | grep -o 'WAL segment [0-9A-F]\{24\} successfully archived'
+SEG='<the 24-hex segment from the line above>'
 
 # 4. Restore into the scratch directory (uid 999 = postgres in both images)
 sudo install -d -o 999 -g 999 -m 700 "$SCRATCH/pgdata"
 $BR -v "$SCRATCH/pgdata":/var/lib/postgresql/data "$BR_IMAGE" \
-  gosu postgres pgbackrest --stanza=ds --log-level-file=off --type=default --archive-mode=off restore
+  --stanza=ds --log-level-file=off --type=default --archive-mode=off restore
 
 # 5. Start the isolated copy: socket only, no published port, never archives
 sudo docker run -d --rm --name ds-recovery-pg \
@@ -268,6 +330,10 @@ that as PARTIAL.
 ```bash
 PSQL="sudo docker exec ds-recovery-pg psql -U ds -d ds_prod -At"
 sudo docker logs ds-recovery-pg 2>&1 | grep -E 'archive recovery complete|selected new timeline|ready to accept connections'
+# WAL replay from the archive (and so WAL decryption): SEG from step 3 restored,
+# and the LSN where redo ended.
+sudo docker logs ds-recovery-pg 2>&1 | grep -F "restored log file \"$SEG\" from archive"
+sudo docker logs ds-recovery-pg 2>&1 | grep -E 'redo done at [0-9A-F]+/[0-9A-F]+'
 $PSQL -c 'select pg_is_in_recovery()'   # f = recovered and promoted
 $PSQL -c 'select version()'
 $PSQL -c 'select count(*), max(created_at) from drizzle.__drizzle_migrations'
@@ -277,8 +343,12 @@ $PSQL -c '\dt'   # pick three core tables, then: select count(*) from <table>;  
 sudo docker exec ds-recovery-pg pg_amcheck -U ds -d ds_prod --install-missing -t 'drizzle.*'
 ```
 
-PASS needs: restore exit 0, the recovery-complete log line, `pg_is_in_recovery()` =
-`f`, the migration journal readable, both databases present and the three counts
+PASS needs: restore exit 0; the log line `restored log file "<SEG>" from archive` for
+the segment step 3 forced, which proves that WAL newer than the backup end was fetched
+from the archive, decrypted and replayed (the recovery-complete line and
+`pg_is_in_recovery()` = `f` alone also appear when `archive-get` fails and recovery
+stops at the backup's own end); the recovery-complete log line; `pg_is_in_recovery()`
+= `f`; the migration journal readable; both databases present and the three counts
 non-zero. Anything less is PARTIAL with the reason.
 
 ### 3.4 Teardown (always, PASS or not)
@@ -287,6 +357,17 @@ non-zero. Anything less is PARTIAL with the reason.
 sudo docker stop ds-recovery-pg               # --rm removes the container
 sudo docker ps -a --filter name=ds-recovery   # expect no rows
 sudo rm -rf "$SCRATCH"
+```
+
+Then confirm the copy left the prod stanza untouched, with the same `$BR` before the
+env file is removed: the timeline (first 8 hex digits of the archive max) equals the
+one noted in step 1, and the count of `.history` files is unchanged. A new timeline or
+history file means the copy archived into the prod stanza: report it as a FAIL of the
+procedure and open an Issue before the next run.
+
+```bash
+$BR "$BR_IMAGE" --stanza=ds --log-level-file=off info
+$BR "$BR_IMAGE" --stanza=ds --log-level-file=off repo-ls --recurse --filter='\.history$' archive/ds
 sudo rm -f /run/ds-recovery/restore.env && sudo rmdir /run/ds-recovery
 ```
 
@@ -299,10 +380,12 @@ Backup point: label <…>, type <full|incr>, WAL range <start>–<stop>
 Versions: pgBackRest <x.y>; PostgreSQL <x.y>
 Images: postgres <sha256:first 12>, pgbackrest <sha256:first 12>; equal to state file `images`: <yes|no>
 Headroom: free <GiB> vs needed <GiB>; MemAvailable <GiB>
+WAL proof: check segment SEG <24 hex>; restored from archive <yes|no>; redo done at <LSN>
 Checks: check <ok>; restore exit <0>; recovery complete <yes>; pg_is_in_recovery <f>;
   drizzle migrations <count> / <max created_at>; databases ds_prod + zitadel <yes>;
   counts <table>=<n>, <table>=<n>, <table>=<n>; pg_amcheck <ok|skipped>
 Teardown: container gone, scratch removed, /run env removed: <yes>
+Prod stanza after teardown: timeline <before>/<after> equal <yes>; .history files <before>/<after> equal <yes>
 Limitations: <e.g. recovery to backup end only; fresh-host drill not run>
 Verdict: PASS | PARTIAL (<reason>)
 ```
@@ -322,8 +405,10 @@ Each step is an existing section; this list only orders them.
 3. **Data before the first postgres boot** (ds-data-prod lost). Build the data images
    («Apply order» step 7), then restore into the empty `pgdata` volume **before**
    `postgres` first starts: a first boot on an empty volume runs `initdb` and creates
-   a new cluster the stanza does not match. Use the README «Rollback» restore command
-   with `--no-deps` (no postgres is running), then `sudo docker compose up -d` and
+   a new cluster the stanza does not match. `sudo docker compose create` makes the
+   labelled volumes without starting anything; then run the README «Rollback» restore
+   `docker run` (it overrides the sidecar entrypoint and needs no running postgres;
+   skip its `compose stop`), then `sudo docker compose up -d` and
    `pgbackrest --stanza=ds info`. The release guard records a new
    `ds-platform-postgres-state.json` on its first successful run
    (`tools/deploy/README.md`).

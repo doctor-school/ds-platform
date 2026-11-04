@@ -1186,10 +1186,20 @@ conflate them:
   ```bash
   cd ~/ds-platform/infra/deploy/compose/data-prod
   sudo docker compose stop postgres
-  sudo docker compose run --rm pgbackrest gosu postgres \
-    pgbackrest --stanza=ds --delta --type=default restore   # or --type=time --target='<pre-migrate ts>'
+  sudo docker run --rm --env-file /etc/ds-platform/data.env \
+    -v "$PWD/pgbackrest/pgbackrest.conf":/etc/pgbackrest/pgbackrest.conf:ro \
+    -v ds-data-prod_pgdata:/var/lib/postgresql/data \
+    --user postgres --entrypoint pgbackrest ds-pgbackrest:local \
+    --stanza=ds --delta --type=default restore   # or --type=time --target='<pre-migrate ts>'
   sudo docker compose up -d postgres
   ```
+
+  The `ds-pgbackrest` image's own entrypoint ignores its command (it runs
+  `stanza-create`, `check` and then `exec cron -f`), so every one-shot pgBackRest call
+  overrides it with `--entrypoint pgbackrest --user postgres` and is `--rm`; never run
+  that image's default entrypoint for a one-shot command. The `pgbackrest` compose
+  service is not used here either: it mounts `pgdata` read-only, and a restore writes
+  it.
 
   A PITR `--type=time` target rewinds to just before the bad migration using the
   continuously-archived WAL. Confirm with `pgbackrest --stanza=ds info`.

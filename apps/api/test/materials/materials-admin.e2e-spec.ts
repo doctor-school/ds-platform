@@ -21,6 +21,7 @@ import { MediaCleanupService } from "../../src/taxonomy/media/media-cleanup.serv
 import { UploadReconcileService } from "../../src/taxonomy/media/upload-reconcile.service.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { adminHeaders, establishAdminSession } from "../setup/admin-session.js";
+import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -251,14 +252,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       (problem(res).errors ?? []).map((e) => e.path);
 
     beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(IDP_CLIENT)
-        .useValue(fake)
-        .overrideProvider(RATE_LIMIT_THRESHOLDS)
-        .useValue(RELAXED_RATE_LIMIT)
-        .compile();
+      const moduleRef: TestingModule = await withSignInHost(
+        Test.createTestingModule({
+          imports: [AppModule],
+        })
+          .overrideProvider(IDP_CLIENT)
+          .useValue(fake)
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue(RELAXED_RATE_LIMIT),
+      ).compile();
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
       );
@@ -615,15 +617,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: "/v1/auth/register",
         payload: { email, password, consent },
       });
-      const login = await app.inject({
-        method: "POST",
-        url: "/v1/auth/login",
-        headers: device,
-        payload: { identifier: email, password },
-      });
-      const portal = login.cookies.find(
-        (c) => c.name === SESSION_COOKIE_NAME,
-      )!.value;
+      const portal = await signIn(app, email, password, { device });
       const routes: [string, string][] = [
         ["GET", "/v1/admin/materials"],
         ["POST", "/v1/admin/materials"],

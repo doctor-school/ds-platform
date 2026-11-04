@@ -45,6 +45,7 @@ import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { eventsOnActiveDirections } from "./event-direction-restriction.js";
 import { countEventSignUps, partitionEventSignUps } from "./event-sign-ups.js";
 import { countEventViewers } from "./event-viewers.js";
+import { eventStartsInRange } from "./event-horizon-where.js";
 import {
   academyFacetClauses,
   academyFacetOptions,
@@ -115,6 +116,8 @@ const ACADEMY_AUDIENCE = eq(events.audience, "experts");
 export interface EventListingWindow {
   fromInstant: Date | null;
   toInstant: Date;
+  /** The window holds today: every running эфир is in it (004 EARS-9, {@link eventStartsInRange}). */
+  running: boolean;
 }
 
 /**
@@ -141,12 +144,7 @@ function listingWhere(
       : inArray(events.state, [...PAST_BROADCAST_STATES]),
   ];
   if (cutoff !== null) where.push(gte(events.startsAt, cutoff));
-  if (window !== undefined) {
-    if (window.fromInstant !== null) {
-      where.push(gte(events.startsAt, window.fromInstant));
-    }
-    where.push(lt(events.startsAt, window.toInstant));
-  }
+  if (window !== undefined) where.push(...eventStartsInRange(window));
   return where;
 }
 
@@ -634,10 +632,11 @@ export class EventsRepository {
    * RUNNING right now, earliest start first: the selection of the one live
    * resolution both storefronts read (`EventsLiveService`).
    *
-   * The lifecycle filter is the single `live` state and there is NO horizon: an
-   * эфир that started before a rendered window is excluded from the feed (stand
-   * finding 2026-09-02), and the live block is precisely the surface where a
-   * running эфир must still be reachable. Liveness is 006's `state` column,
+   * The lifecycle filter is the single `live` state and there is NO horizon: a
+   * running «Будущие» window lists an эфир that went live before it opened
+   * (004 EARS-9, #3639), but the month grid and every later window do not, and
+   * the live block is the one surface where every running эфир is reachable
+   * whatever window is rendered. Liveness is 006's `state` column,
    * never `startsAt + durationMin` compared to `now()` (019-design §4).
    *
    * `directionIds` is the doctor storefront's targeting (017/018): `null` reads

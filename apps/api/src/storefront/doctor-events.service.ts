@@ -30,7 +30,7 @@ import {
   EVENT_HORIZON_READ_ORDER,
   EVENT_HORIZON_ROW_CAP,
   type EventHorizonReach,
-  eventHorizonInstants,
+  eventHorizonWindow,
   eventHorizonReachingFirstMatch,
   holdBackEventHorizonRows,
   eventHorizonTenseReach,
@@ -160,7 +160,7 @@ export class DoctorEventsService {
     const read = await this.repository.findFeedRows({
       ...tenseRead,
       directionIds,
-      ...eventHorizonInstants(requested),
+      ...eventHorizonWindow(requested, query.tense, today),
       kindSlugs: query.kind,
       formats: query.format,
       q: query.q,
@@ -189,6 +189,7 @@ export class DoctorEventsService {
       query.tense,
       listStartsIn,
       { count: filtered.length, heldBack: requested.heldBack },
+      today,
     );
 
     // #1973 — an empty default window under matches beyond opens on the
@@ -208,7 +209,7 @@ export class DoctorEventsService {
     const facets = await this.facetOptions(
       query,
       { ...tenseRead, directionIds },
-      eventHorizonTenseReach(requested, query.tense),
+      eventHorizonTenseReach(requested, query.tense, today),
     );
 
     return {
@@ -371,6 +372,8 @@ export class DoctorEventsService {
           : [...targeting.directionIds, ...targeting.adjacentDirectionIds],
       fromInstant: new Date(`${fromDay}T00:00:00+03:00`),
       toInstant: new Date(`${toDay}T00:00:00+03:00`),
+      // The grid places every эфир, a running one too, on its start day.
+      running: false,
       kindSlugs: facets.kind,
       formats: facets.format,
       q: facets.q,
@@ -425,6 +428,7 @@ export class DoctorEventsService {
       directionIds,
       fromInstant: null,
       toInstant: null,
+      running: false,
       kindSlugs: query.kind,
       formats: query.format,
       q: query.q,
@@ -466,7 +470,7 @@ export class DoctorEventsService {
       own.mode !== "all" &&
       !(await this.repository.hasUpcomingEventOn(
         [...own.directionIds, ...own.adjacentDirectionIds],
-        eventHorizonUpcomingReach(today),
+        eventHorizonUpcomingReach(today, today),
       ));
     if (query.specialty === undefined) {
       if (!defaultScopeEmpty) return own;

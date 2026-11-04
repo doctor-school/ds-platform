@@ -35,7 +35,10 @@ The webinar event module. It hosts two surfaces over one aggregate:
   truncates the cutoff and re-serves the row that issued it, #1888; or, in
   place of the cursor, the horizon `from`/`to` of the one listing codec with
   the doctor feed's own window and «Показать ещё» resolution, `event-horizon.ts`
-  — wave-2 entry gate §4.3 D2; every card carries its 012 `kind`, its attendance
+  — wave-2 entry gate §4.3 D2; both reads turn a horizon range into SQL through
+  the one `event-horizon-where.ts` clause, under which a «Будущие» range that
+  holds today also holds every running `live` эфир that started before today's
+  МСК midnight — 004 EARS-9, #3639; every card carries its 012 `kind`, its attendance
   `format` and the colleagues' `signUpCount`, the doctor card's count via the
   shared `event-sign-ups.ts`; `signUpCount` is `null` on both hosts while the
   event's `hide_sign_up_count` option is on — 007 EARS-12 / 019 EARS-19), the Academy live read

@@ -53,7 +53,7 @@ import {
   EVENT_HORIZON_READ_ORDER,
   EVENT_HORIZON_ROW_CAP,
   type EventHorizonReach,
-  eventHorizonInstants,
+  eventHorizonWindow,
   eventHorizonReachingFirstMatch,
   holdBackEventHorizonRows,
   resolveEventHorizonBeyond,
@@ -1318,7 +1318,7 @@ export class EventsService {
         today,
         listStartsIn,
       );
-      const window = eventHorizonInstants(requested);
+      const window = eventHorizonWindow(requested, query.timeframe, today);
       // Read from the moving edge, so the cap keeps the batch just asked for.
       const order = EVENT_HORIZON_READ_ORDER[query.timeframe];
       const read =
@@ -1356,6 +1356,7 @@ export class EventsService {
         query.timeframe,
         listStartsIn,
         { count: rows.length, heldBack: requested.heldBack },
+        today,
       );
       // #1973 — an empty default window under matches beyond opens on the
       // first match: the same read over the bound «Показать ещё» would name.

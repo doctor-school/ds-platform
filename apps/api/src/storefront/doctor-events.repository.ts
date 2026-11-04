@@ -4,11 +4,9 @@ import {
   asc,
   desc,
   eq,
-  gte,
   ilike,
   inArray,
   isNull,
-  lt,
   or,
   type SQL,
   sql,
@@ -39,6 +37,7 @@ import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { eventsOnActiveDirections } from "../events/event-direction-restriction.js";
 import { countEventSignUps } from "../events/event-sign-ups.js";
 import type { EventHorizonReach } from "../events/event-horizon.js";
+import { eventStartsInRange } from "../events/event-horizon-where.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -115,6 +114,11 @@ export interface DoctorFeedFilters {
    */
   fromInstant: Date | null;
   toInstant: Date | null;
+  /**
+   * 004 EARS-9 (#3639) — the horizon holds today, so every running (`live`)
+   * эфир is in it whatever day it started ({@link eventStartsInRange}).
+   */
+  running: boolean;
   /** 012 event-kind dictionary SLUGS of the `kind` facet — matched on `events.kind_id`. */
   kindSlugs: string[];
   /** The `format` facet — matched on the event's own `participation_format` column. */
@@ -152,12 +156,7 @@ export class DoctorEventsRepository {
       DOCTOR_AUDIENCE,
       inArray(events.state, [...filters.states]),
     ];
-    if (filters.toInstant !== null) {
-      where.push(lt(events.startsAt, filters.toInstant));
-    }
-    if (filters.fromInstant !== null) {
-      where.push(gte(events.startsAt, filters.fromInstant));
-    }
+    where.push(...eventStartsInRange(filters));
 
     // `specialty=all` drops the targeting subquery entirely rather than passing
     // "every direction id", so an event with no managed direction row is still

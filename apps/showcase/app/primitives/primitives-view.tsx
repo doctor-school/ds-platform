@@ -8,6 +8,8 @@ import { Link } from "@ds/design-system/link";
 import { Input } from "@ds/design-system/input";
 import { NativeSelect } from "@ds/design-system/native-select";
 import { Textarea } from "@ds/design-system/textarea";
+import { RichTextEditor } from "@ds/design-system/rich-text-editor";
+import { emptyMaterialBody, type MaterialBody } from "@ds/schemas";
 import { MediaDropzone } from "@ds/design-system/media-dropzone";
 import { Label } from "@ds/design-system/label";
 import {
@@ -540,6 +542,112 @@ function NativeSelectSection() {
                   className="w-full"
                 >
                   <NativeSelectFieldDemo state={state} />
+                </div>
+              </Cell>
+            ))}
+          </div>
+        )}
+      />
+    </PrimitiveSection>
+  );
+}
+
+const RICH_TEXT_EDITOR_SAMPLE: MaterialBody = {
+  type: "doc",
+  content: [
+    {
+      type: "heading",
+      attrs: { level: 2 },
+      content: [{ type: "text", text: "Что изменилось" }],
+    },
+    {
+      type: "paragraph",
+      content: [
+        { type: "text", text: "Целевой уровень " },
+        { type: "text", text: "снижен", marks: [{ type: "bold" }] },
+        { type: "text", text: " для большинства групп — " },
+        {
+          type: "text",
+          text: "запись вебинара",
+          marks: [
+            {
+              type: "link",
+              attrs: { href: "https://academy.doctor.school/events" },
+            },
+          ],
+        },
+        { type: "text", text: "." },
+      ],
+    },
+    {
+      type: "bulletList",
+      content: [
+        {
+          type: "listItem",
+          content: [
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: "Измерение дома." }],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+function RichTextEditorSample({
+  label,
+  initial,
+  disabled,
+  invalid,
+}: {
+  label: string;
+  initial: MaterialBody;
+  disabled: boolean;
+  invalid: boolean;
+}) {
+  const [value, setValue] = useState(initial);
+  return (
+    <RichTextEditor
+      aria-label={label}
+      value={value}
+      onChange={setValue}
+      disabled={disabled}
+      aria-invalid={invalid}
+    />
+  );
+}
+
+function RichTextEditorSection() {
+  const states = ["empty", "filled", "invalid", "disabled"] as const;
+  return (
+    <PrimitiveSection
+      title="RichTextEditor"
+      exportsLine="RichTextEditor — empty · filled · invalid · disabled; toolbar = the 048 body allowlist"
+    >
+      <p className="text-sm text-muted-foreground">
+        The material body editor (048 EARS-2): TipTap with StarterKit trimmed to
+        the @ds/schemas body allowlist plus Link (href only, https / http /
+        mailto). The toolbar is the allowlist; a paste from Word or a browser
+        drops images, tables, colours and fonts by schema.
+      </p>
+      <ThemePair
+        render={() => (
+          <div className="flex w-full flex-col gap-6 text-foreground">
+            {states.map((state) => (
+              <Cell key={state} label={state}>
+                <div className="w-full">
+                  <RichTextEditorSample
+                    label={`RichTextEditor sample (${state})`}
+                    initial={
+                      state === "empty"
+                        ? emptyMaterialBody()
+                        : RICH_TEXT_EDITOR_SAMPLE
+                    }
+                    disabled={state === "disabled"}
+                    invalid={state === "invalid"}
+                  />
                 </div>
               </Cell>
             ))}
@@ -3184,6 +3292,7 @@ export function PrimitivesView() {
       <InputSection />
       <NativeSelectSection />
       <TextareaSection />
+      <RichTextEditorSection />
       <MediaDropzoneSection />
       <LabelSection />
       <CardSection />

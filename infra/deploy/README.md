@@ -55,6 +55,8 @@ infra/deploy/
     stg-infra/        STAGE stand shared services — see «Staging box» below
   stage.env.example   /etc/ds-platform/stage.env template (STAGE box; sinks and the
                       stand's own captcha keys only, never a production credential)
+  RECOVERY.md         recovery after host loss: key manifest, owner-held recovery
+                      bundle (age), restore proof, full host-loss path (#3662)
 ```
 
 ## Staging box (`stage-1`)
@@ -627,6 +629,11 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    terraform output -raw pgbackrest_s3_secret_key      # → PGBACKREST_REPO1_S3_KEY_SECRET
    ```
 
+   **Save the irreplaceable keys into the recovery bundle** before you leave this
+   step, and again after any later change to these files: `PGBACKREST_REPO1_CIPHER_PASS`,
+   `ZITADEL_MASTERKEY`, `SIGN_IN_RECORD_KEY` and `AUDIT_IDENTIFIER_PEPPER` cannot be
+   regenerated without losing the data they bind → [`RECOVERY.md`](./RECOVERY.md) §2.
+
 7. **Bring up data-prod FIRST** (DB/Redis/backup). `VPC_IP` = data-prod's private
    address (`var.data_prod_private_ip`, default `192.168.0.10`) — the published
    ports bind to it, never `0.0.0.0`:
@@ -1179,13 +1186,26 @@ conflate them:
   ```bash
   cd ~/ds-platform/infra/deploy/compose/data-prod
   sudo docker compose stop postgres
-  sudo docker compose run --rm pgbackrest gosu postgres \
-    pgbackrest --stanza=ds --delta --type=default restore   # or --type=time --target='<pre-migrate ts>'
+  sudo docker run --rm --env-file /etc/ds-platform/data.env \
+    -v "$PWD/pgbackrest/pgbackrest.conf":/etc/pgbackrest/pgbackrest.conf:ro \
+    -v ds-data-prod_pgdata:/var/lib/postgresql/data \
+    --user postgres --entrypoint pgbackrest ds-pgbackrest:local \
+    --stanza=ds --delta --type=default restore   # or --type=time --target='<pre-migrate ts>'
   sudo docker compose up -d postgres
   ```
 
+  The `ds-pgbackrest` image's own entrypoint ignores its command (it runs
+  `stanza-create`, `check` and then `exec cron -f`), so every one-shot pgBackRest call
+  overrides it with `--entrypoint pgbackrest --user postgres` and is `--rm`; never run
+  that image's default entrypoint for a one-shot command. The `pgbackrest` compose
+  service is not used here either: it mounts `pgdata` read-only, and a restore writes
+  it.
+
   A PITR `--type=time` target rewinds to just before the bad migration using the
   continuously-archived WAL. Confirm with `pgbackrest --stanza=ds info`.
+
+Host loss (a box or its `/etc/ds-platform` gone), key custody and the owner-run
+restore proof: [`RECOVERY.md`](./RECOVERY.md).
 
 ## Prod migration rule — expand/contract
 

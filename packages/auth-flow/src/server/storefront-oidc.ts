@@ -176,9 +176,7 @@ async function completeRegistration(
   request: Headers,
   fetchImpl: typeof fetch,
 ): Promise<void> {
-  const sid = sessionCookies
-    .map((c) => c.split(";")[0] ?? "")
-    .find((c) => c.startsWith(`${SESSION_COOKIE_NAME}=`));
+  const sid = mintedSessionPair(sessionCookies);
   if (!sid) return;
   try {
     await fetchImpl(
@@ -195,6 +193,31 @@ async function completeRegistration(
   } catch {
     // Best-effort — the callback still lands on the event page.
   }
+}
+
+/**
+ * The minted session's `name=value` from the API's `Set-Cookie` lines — the
+ * pair alone, never its attributes.
+ */
+function mintedSessionPair(cookies: readonly string[]): string | undefined {
+  return cookies
+    .map((c) => c.split(";")[0] ?? "")
+    .find((c) => c.startsWith(`${SESSION_COOKIE_NAME}=`));
+}
+
+/**
+ * 021 LD-4 — the request's headers as the browser will send them next: the
+ * session this very callback minted in place of any it presented, every other
+ * cookie (the guest specialty store) and header kept.
+ */
+function withMintedSession(request: Headers, sid: string): Headers {
+  const headers = new Headers(request);
+  const kept = (request.get("cookie") ?? "")
+    .split(";")
+    .map((c) => c.trim())
+    .filter((c) => c && !c.startsWith(`${SESSION_COOKIE_NAME}=`));
+  headers.set("cookie", [...kept, sid].join("; "));
+  return headers;
 }
 
 function doorOf(entry: StorefrontEntry): SignInHostDoor {
@@ -408,6 +431,7 @@ export async function storefrontCallback(
     path: string | null,
     door?: SignInHostDoor | null,
     minted?: { api: InternalApi; slug: string; cookies: readonly string[] },
+    sessionCookies?: readonly string[],
   ) => {
     let target = path;
     // 021 EARS-20 — a completed registration whose return path is an event
@@ -433,9 +457,16 @@ export async function storefrontCallback(
         fetchImpl,
       );
     }
-    const to =
-      target ??
-      (await resolveArrivalLanding(config, request.headers, fetchImpl));
+    if (target) return seeOther(`${target}#`, headers);
+    // 021 LD-4 — the landing is read as the browser arrives there: with the
+    // session minted on this response (a profile-only specialty counts), or
+    // as the request came when nothing was minted.
+    const sid = sessionCookies && mintedSessionPair(sessionCookies);
+    const to = await resolveArrivalLanding(
+      config,
+      sid ? withMintedSession(request.headers, sid) : request.headers,
+      fetchImpl,
+    );
     return seeOther(`${to}#`, headers);
   };
 
@@ -505,6 +536,7 @@ export async function storefrontCallback(
       minted.data.door,
       // The registration completes only on the event page it lands on.
       slug && returnPath ? { api, slug, cookies } : undefined,
+      cookies,
     );
   }
   // A refusal lands on the browser's own transaction's path, when it named one.

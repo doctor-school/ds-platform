@@ -31,7 +31,9 @@ import {
   expectEnteredThrough,
   watchStorefrontEntries,
 } from "../lib/storefront-entry-watch.js";
-import { tickConsent } from "../lib/host-sign-in.js";
+import { goldenDoctorPassword } from "../lib/golden.js";
+import { signInPageThroughHost, tickConsent } from "../lib/host-sign-in.js";
+import { resolveWorkerGoldenDoctor } from "../lib/worker-golden.js";
 
 /**
  * WHERE a doctor lands on the doctor storefront once the sign-in host is done
@@ -345,6 +347,39 @@ test.describe("021 EARS-3: LD-4 — where the direct arrival lands", () => {
       page,
       `${doctorBase()}/register`,
       specialtyFeed(code),
+    );
+  });
+
+  test("021 EARS-3.4: a specialty held only in the profile lands the bare «Войти» on that specialty's 018 feed", async ({
+    page,
+    context,
+  }) => {
+    // The golden verified doctor's Кардиология lives in the PROFILE; a fresh
+    // browser with no guest store signs in through the bare `/login`, so only
+    // the session the callback mints can tell the landing what was chosen.
+    await context.clearCookies();
+    const doctor = resolveWorkerGoldenDoctor("verified-cardiologist");
+    await signInPageThroughHost(page, doctorBase(), {
+      email: doctor.email,
+      password: goldenDoctorPassword(doctor),
+    });
+    const read = await page.request.get(`${doctorBase()}/v1/me/specialty`, {
+      headers: { accept: "application/json" },
+    });
+    expect(read.status(), "the signed-in specialty read").toBe(200);
+    const choice = (await read.json()) as {
+      specialty: { code: string } | null;
+      storedIn: string;
+    };
+    expect(choice.storedIn, "the golden doctor's choice is the profile's").toBe(
+      "profile",
+    );
+    expect(
+      choice.specialty,
+      "the golden doctor has a specialty",
+    ).not.toBeNull();
+    expect(new URL(page.url()).pathname).toBe(
+      specialtyFeed(choice.specialty!.code),
     );
   });
 

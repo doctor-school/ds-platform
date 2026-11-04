@@ -284,6 +284,25 @@ function ButtonSection() {
         </div>
       </SubRow>
 
+      <SubRow label='variant="header-action" size="menu-chip" — the storefront auth chip: the ≡ menu primary below layout, the on-primary header chip from layout up (#3629)'>
+        <StateColumns
+          states={INTERACTIVE_STATES}
+          render={(state) => (
+            <div className="bg-card p-2 layout:bg-header layout:p-4">
+              <Button
+                data-testid={`button-header-action-${state}`}
+                variant="header-action"
+                size="menu-chip"
+                disabled={state === "disabled"}
+                className={state === "focus" ? FORCED_FOCUS : undefined}
+              >
+                Войти / Регистрация
+              </Button>
+            </div>
+          )}
+        />
+      </SubRow>
+
       <SubRow label="Sizes (variant=default)">
         <div className="flex flex-wrap items-center gap-4">
           {BUTTON_SIZES.map((size) => (

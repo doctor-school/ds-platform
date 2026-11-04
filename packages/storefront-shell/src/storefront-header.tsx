@@ -33,7 +33,8 @@ import { VisibleOffPaths } from "./route-visibility";
  *
  * Exactly ONE search element and ONE auth cluster exist in the DOM at any width:
  * the canvas reaches its mobile layout by re-flowing the search onto its own row
- * (`flex-wrap` + `order-last`), never by rendering a hidden second copy — a
+ * (`flex-wrap` + `order-last`) and by re-seating the cluster as the `≡` menu's
+ * last item (CSS only, #3629), never by rendering a hidden second copy — a
  * second cluster in the DOM is precisely what 017 EARS-1 forbids.
  *
  * Styling is tokens-only: the navy `header` band with `header-foreground` ink,
@@ -145,38 +146,62 @@ function HeaderChrome({
           ))}
         </nav>
 
-        <div className="ml-auto flex flex-none items-center gap-3 layout:ml-0">
+        {/* The right group. Canvas mobile bar (`ds-shell.dc.html` lines
+            41-58): ☾ · ≡ at a 10px gap, and the auth primary is the LAST item
+            INSIDE the `≡` menu (line 53). Desktop bar (lines 35-37): ☾ · chip.
+            017 EARS-1 allows ONE auth cluster in the DOM, so the same element
+            serves both (#3629): the menu panel is the `≡` disclosure's sibling,
+            shown by `peer-open` below `layout`, and from `layout` up the panel
+            dissolves (`layout:contents`), its rows hide and the cluster is a
+            plain flex child of this group after the theme control — the bar
+            the desktop always had. */}
+        <div className="ml-auto flex flex-none items-center gap-2.5 layout:ml-0 layout:gap-3">
           <ThemeToggle />
-          <ShellAuthCluster auth={auth} />
 
-          {/* 008 EARS-11 — below `layout` the nav collapses into the native `≡`
-              disclosure, carrying the SAME configured targets. */}
-          <details
-            data-testid="shell-mobile-menu"
-            className="relative layout:hidden"
-          >
-            <DisclosureSummary aria-label={config.footer.navTitle}>
-              <span aria-hidden="true">≡</span>
-            </DisclosureSummary>
-            <nav
-              data-testid="shell-nav-mobile"
-              className="absolute right-0 top-full z-20 mt-2 flex min-w-52 flex-col border-2 border-border bg-card p-2 text-card-foreground shadow-btn"
+          <div className="relative flex layout:contents">
+            {/* 008 EARS-11 — below `layout` the nav collapses into the native
+                `≡` disclosure, carrying the SAME configured targets. The
+                disclosure holds only its summary: the panel it opens is the
+                next sibling, so the cluster inside it can also be the bar's
+                chip from `layout` up. */}
+            <details
+              data-testid="shell-mobile-menu"
+              className="peer layout:hidden"
             >
-              {nav.map((item) => (
-                <MobileNavRow key={item.href} item={item} />
-              ))}
-              {/* …followed by the signed-in cluster's links (canvas line 50).
-                  Rows, not a second cluster: 017 EARS-1 allows exactly ONE
-                  `shell-auth-cluster` in the DOM at any width. */}
-              {authLinks.map((item) => (
-                <MobileNavRow
-                  key={item.href}
-                  item={item}
-                  testId="shell-auth-link-mobile"
-                />
-              ))}
-            </nav>
-          </details>
+              <DisclosureSummary aria-label={config.footer.navTitle}>
+                <span aria-hidden="true">≡</span>
+              </DisclosureSummary>
+            </details>
+            {/* `layout:peer-open:contents` is not redundant: `peer-open:flex`
+                outranks a bare `layout:contents` (its `:is()` adds a class of
+                specificity), so a menu left open on a phone that turns to a
+                desktop width would keep its dropdown box around the chip. */}
+            <div
+              data-testid="shell-mobile-panel"
+              className="absolute right-0 top-full z-20 mt-2.5 hidden min-w-60 flex-col border-2 border-border bg-card p-2 text-card-foreground shadow-btn peer-open:flex layout:contents layout:peer-open:contents"
+            >
+              <nav
+                data-testid="shell-nav-mobile"
+                className="flex flex-col layout:hidden"
+              >
+                {nav.map((item) => (
+                  <MobileNavRow key={item.href} item={item} />
+                ))}
+                {/* …followed by the signed-in cluster's links (canvas line 50).
+                    Rows, not a second cluster: 017 EARS-1 allows exactly ONE
+                    `shell-auth-cluster` in the DOM at any width. */}
+                {authLinks.map((item) => (
+                  <MobileNavRow
+                    key={item.href}
+                    item={item}
+                    testId="shell-auth-link-mobile"
+                  />
+                ))}
+              </nav>
+              {/* …and the primary LAST (canvas line 53) — the one cluster. */}
+              <ShellAuthCluster auth={auth} />
+            </div>
+          </div>
         </div>
       </header>
     </div>

@@ -29,11 +29,13 @@ import { ThemeToggle, type ThemeToggleLabels } from "./theme-toggle";
  * The chip is the canvas white-on-blue neo-brutalist chip, here as an icon-LINK
  * to the profile (008 EARS-5/6: never a dropdown, no «Выйти»). Its presentation
  * is NOT declared here and there is no chip class string in this package: it is
- * the design system's `on-primary` Button at its `avatar` size — the ONE header
- * chip definition both storefronts and the webinar room compose from (#2180).
- * A second class-string constant beside it is exactly what let the two
- * storefronts' chips drift apart. The #1145 dark-shadow lesson is recorded on
- * that definition.
+ * the design system's `on-primary` Button at its `avatar` size — the one
+ * interactive header-chip definition (#2180). The storefront header's own auth
+ * chip (`ShellAuthCluster`) is the `header-action` variant instead, whose
+ * `layout` half is `on-primary` class for class, so this chip and the desktop
+ * storefront chip draw the same. A second class-string constant beside them is
+ * exactly what let the two storefronts' chips drift apart. The #1145
+ * dark-shadow lesson is recorded on that definition.
  */
 
 /** The initials-avatar chip — the one header-chip definition at the canvas 40px

@@ -115,7 +115,9 @@ async function serveStorefront(page: Page): Promise<ChoiceStore> {
       return;
     }
 
-    const entry = ENTRIES.find((candidate) => candidate.id === store.remembered);
+    const entry = ENTRIES.find(
+      (candidate) => candidate.id === store.remembered,
+    );
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -214,11 +216,18 @@ async function present(page: Page, theme: "light" | "dark") {
   );
 }
 
-/** The shell chrome the action cluster and the logo live in (#1478). */
+/** The shell chrome the action cluster and the logo live in (#1478). Below
+ *  `layout` the cluster is the `≡` menu's last item (canvas `ds-shell.dc.html`
+ *  line 53, #3629), so the bar shows the `≡` there and the chip at desktop —
+ *  one cluster in the DOM either way (017 EARS-1). */
 async function expectShell(page: Page) {
   await expect(page.getByTestId("storefront-header")).toBeVisible();
   await expect(page.getByTestId("storefront-logo")).toBeVisible();
-  await expect(page.getByTestId("shell-auth-cluster")).toBeVisible();
+  await expect(page.getByTestId("shell-auth-cluster")).toHaveCount(1);
+  const mobile = page.viewportSize()!.width < 901;
+  await expect(
+    page.getByTestId(mobile ? "shell-mobile-menu" : "shell-auth-cluster"),
+  ).toBeVisible();
 }
 
 /** No composition may push the document wider than the viewport it renders in. */
@@ -364,6 +373,17 @@ for (const [label, viewport] of [
 
         await chooseCardiology(page);
         await expectAxeClean(page, `${label}px ${theme}, collapsed row`);
+
+        // Below `layout` the `≡` menu carries the auth primary (#3629): the
+        // open menu passes the same bar.
+        if (viewport.width < 901) {
+          await page
+            .getByTestId("shell-mobile-menu")
+            .locator("summary")
+            .click();
+          await expect(page.getByTestId("shell-auth-cluster")).toBeVisible();
+          await expectAxeClean(page, `${label}px ${theme}, ≡ menu open`);
+        }
       });
     }
   });
@@ -399,17 +419,32 @@ test.describe("017 EARS-14.3: labelled controls and keyboard reach (#1489)", () 
       );
       await expect(expand).toHaveAccessibleName(/\S/);
 
-      // A single forward Tab run, in DOM order: the action cluster, then the
-      // field, then the first entry, then the expand control.
+      // A single forward Tab run, in DOM order: the `≡` disclosure (the action
+      // cluster lives inside its menu below `layout`, #3629), then the field,
+      // then the first entry, then the expand control.
+      const menuToggle = page
+        .getByTestId("shell-mobile-menu")
+        .locator("summary");
+      await expect(menuToggle).toHaveAccessibleName(/\S/);
+      for (const target of [menuToggle, field, entries.first(), expand]) {
+        await keyboardReach(page, target);
+        await visibleFocus(target);
+      }
+
+      // The cluster's primary is reachable by keyboard through the `≡`: Enter
+      // opens the menu and Tab walks its rows to the primary, its last item.
       const clusterLink = page
         .getByTestId("shell-auth-cluster")
         .getByRole("link")
         .first();
+      await menuToggle.focus();
+      await page.keyboard.press("Enter");
       await expect(clusterLink).toHaveAccessibleName(/\S/);
-      for (const target of [clusterLink, field, entries.first(), expand]) {
-        await keyboardReach(page, target);
-        await visibleFocus(target);
-      }
+      await keyboardReach(page, clusterLink);
+      await visibleFocus(clusterLink);
+      await menuToggle.focus();
+      await page.keyboard.press("Enter");
+      await expect(clusterLink).toBeHidden();
 
       // And after a choice the keyboard reaches «сменить» the same way.
       await chooseCardiology(page);

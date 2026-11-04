@@ -36,8 +36,10 @@ test.describe("008 EARS-5/6 doctor header avatar icon → /account, no dropdown,
     const header = shellHeader(page);
     const avatar = page.getByTestId("shell-avatar");
     await expect(avatar).toBeVisible();
-    // The genuine initials from the saved display name (EARS-5).
-    await expect(avatar).toHaveText("ИП");
+    // The genuine initials from the saved display name (EARS-5). Rendered
+    // text, not textContent: the same link carries the profile label the `≡`
+    // menu shows below `layout` (#3629), hidden from the bar.
+    await expect(avatar).toHaveText("ИП", { useInnerText: true });
     // An icon-LINK to the profile — not a dropdown trigger.
     await expect(avatar).toHaveAttribute("href", "/account");
     expect(
@@ -124,6 +126,16 @@ test.describe("008 EARS-5/6 doctor header avatar icon → /account, no dropdown,
     await expect(row).toBeVisible();
     await expect(row).toHaveText(MY_EVENTS_LABEL);
     await expect(row).toHaveAttribute("href", MY_EVENTS_HREF);
+
+    // …and the menu's LAST item is the profile primary, labelled — the canvas
+    // `primary.label` (line 53), not the initials square of the desktop bar.
+    const primary = page.getByTestId("shell-avatar");
+    await expect(primary).toBeVisible();
+    await expect(primary).toHaveAttribute("href", "/account");
+    await expect(primary).not.toHaveText("ИП", { useInnerText: true });
+    expect((await primary.boundingBox())!.y).toBeGreaterThan(
+      (await row.boundingBox())!.y,
+    );
 
     await row.click();
     await expect(page).toHaveURL(new RegExp(`${MY_EVENTS_HREF}(?:$|[?#])`));

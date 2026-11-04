@@ -259,12 +259,23 @@ test.describe("017 EARS-11: the mobile nav disclosure", () => {
     await expect(page.getByTestId("shell-nav-desktop")).toBeHidden();
     const menu = page.getByTestId("shell-mobile-menu");
     await expect(menu).toBeVisible();
-    // Closed until asked: the dropdown's items are not on the surface.
+    // Closed until asked: the dropdown's items are not on the surface — the
+    // auth primary included, which the canvas draws as the menu's LAST item
+    // below `layout` (`ds-shell.dc.html` line 53, #3629), not in the bar.
     await expect(page.getByTestId("shell-nav-mobile")).toBeHidden();
+    await expect(page.getByTestId("shell-login")).toBeHidden();
 
     await menu.locator("summary").click();
     const mobileNav = page.getByTestId("shell-nav-mobile");
     await expect(mobileNav).toBeVisible();
+    const login = page.getByTestId("shell-login");
+    await expect(login).toBeVisible();
+    await expect(login).toHaveText("Войти / Регистрация");
+    // …below the nav rows, as wide as the menu.
+    const rowsBox = (await mobileNav.boundingBox())!;
+    const loginBox = (await login.boundingBox())!;
+    expect(loginBox.y).toBeGreaterThanOrEqual(rowsBox.y + rowsBox.height);
+    expect(Math.round(loginBox.width)).toBe(Math.round(rowsBox.width));
     // The SAME configured targets as the desktop nav — one config value.
     await expect(mobileNav.getByRole("link")).toHaveCount(1);
     await expect(

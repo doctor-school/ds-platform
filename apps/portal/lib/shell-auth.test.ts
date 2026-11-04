@@ -110,6 +110,21 @@ describe("008 EARS-4/5/6: the academy header auth, read on the server", () => {
     });
   });
 
+  it("008 EARS-5: the signed-in primary reads the canvas «Личный кабинет» (ds-shell.dc.html line 209)", async () => {
+    const fetchImpl = upstream(
+      () => json(200, CLAIMS),
+      () => json(200, DOCTOR),
+    );
+
+    const auth = await resolveAcademyShellAuth(
+      signedInRequest(),
+      LABELS,
+      fetchImpl,
+    );
+
+    expect(auth).toMatchObject({ status: "doctor", label: "Личный кабинет" });
+  });
+
   it("008 EARS-5: the profile read presents the same fingerprint surface the browser bound", async () => {
     const fetchImpl = upstream(
       () => json(200, CLAIMS),

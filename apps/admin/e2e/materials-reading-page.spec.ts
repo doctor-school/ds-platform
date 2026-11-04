@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsAdmin } from "@ds/e2e/admin-events";
 
@@ -15,6 +16,9 @@ import { signInAsAdmin } from "@ds/e2e/admin-events";
  *   not-found page with a real 404.
  * - EARS-17 — `doctor.school/materials/{slug}` is the doctor not-found page and
  *   the doctor home has no rail.
+ *
+ * Every rendered surface (both pages in both Academy schemes, the preview
+ * panel) also passes an axe WCAG 2 A/AA scan.
  *
  * The read error with «Повторить» needs the api to fail under a running
  * storefront; it is driven by hand on the stand (PR body) and pinned in
@@ -50,7 +54,11 @@ const LONG_BODY = {
           marks: [{ type: "bold" }],
         },
         { type: "text", text: " — " },
-        { type: "text", text: "по единому протоколу", marks: [{ type: "italic" }] },
+        {
+          type: "text",
+          text: "по единому протоколу",
+          marks: [{ type: "italic" }],
+        },
         { type: "hardBreak" },
         { type: "text", text: "Протокол зарегистрирован на " },
         {
@@ -177,38 +185,50 @@ async function adminWrite(
     coverBase64?: string;
   },
 ): Promise<Written> {
-  const result = await page.evaluate(async ({ path, payload, version, coverBase64 }) => {
-    const csrf =
-      document.cookie
-        .split("; ")
-        .find((pair) => pair.startsWith("__Host-ds_admin_csrf="))
-        ?.split("=")[1] ?? "";
-    const headers: Record<string, string> = {
-      accept: "application/json",
-      "x-ds-admin-csrf": decodeURIComponent(csrf),
-      "idempotency-key": crypto.randomUUID(),
-    };
-    if (version !== undefined) headers["if-match"] = `W/"${version}"`;
-    let body: BodyInit | undefined;
-    if (coverBase64) {
-      const form = new FormData();
-      form.append("payload", JSON.stringify(payload));
-      const bytes = Uint8Array.from(atob(coverBase64), (c) => c.charCodeAt(0));
-      form.append("cover", new Blob([bytes], { type: "image/png" }), "cover.png");
-      body = form;
-    } else if (payload !== undefined) {
-      headers["content-type"] = "application/json";
-      body = JSON.stringify(payload);
-    }
-    const res = await fetch(path, {
-      method: "POST",
-      credentials: "include",
-      headers,
-      body,
-    });
-    return { status: res.status, json: await res.json().catch(() => null) };
-  }, input);
-  expect(result.status, `${input.path} → ${JSON.stringify(result.json)}`).toBeLessThan(300);
+  const result = await page.evaluate(
+    async ({ path, payload, version, coverBase64 }) => {
+      const csrf =
+        document.cookie
+          .split("; ")
+          .find((pair) => pair.startsWith("__Host-ds_admin_csrf="))
+          ?.split("=")[1] ?? "";
+      const headers: Record<string, string> = {
+        accept: "application/json",
+        "x-ds-admin-csrf": decodeURIComponent(csrf),
+        "idempotency-key": crypto.randomUUID(),
+      };
+      if (version !== undefined) headers["if-match"] = `W/"${version}"`;
+      let body: BodyInit | undefined;
+      if (coverBase64) {
+        const form = new FormData();
+        form.append("payload", JSON.stringify(payload));
+        const bytes = Uint8Array.from(atob(coverBase64), (c) =>
+          c.charCodeAt(0),
+        );
+        form.append(
+          "cover",
+          new Blob([bytes], { type: "image/png" }),
+          "cover.png",
+        );
+        body = form;
+      } else if (payload !== undefined) {
+        headers["content-type"] = "application/json";
+        body = JSON.stringify(payload);
+      }
+      const res = await fetch(path, {
+        method: "POST",
+        credentials: "include",
+        headers,
+        body,
+      });
+      return { status: res.status, json: await res.json().catch(() => null) };
+    },
+    input,
+  );
+  expect(
+    result.status,
+    `${input.path} → ${JSON.stringify(result.json)}`,
+  ).toBeLessThan(300);
   return result.json as Written;
 }
 
@@ -242,6 +262,46 @@ async function shotBothSchemes(page: Page, name: string): Promise<void> {
       document.documentElement.classList.toggle("dark", dark);
     }, scheme === "dark");
     await shot(page, `${name}-${scheme}`);
+  }
+  await page.evaluate(() => document.documentElement.classList.remove("dark"));
+}
+
+const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
+
+/** axe WCAG 2 A/AA over `include` (default the whole page), in the current scheme. */
+async function expectNoAxeViolations(
+  page: Page,
+  label: string,
+  include?: string,
+): Promise<void> {
+  let builder = new AxeBuilder({ page })
+    .withTags(WCAG_TAGS)
+    // #2189 — the shared shell's BBM topbar keeps the owner-accepted canvas
+    // contrast (2026-09-11); #2180 — the footer's giant wordmark is aria-hidden
+    // decoration. Leaf exclusions, the same as every portal axe scan.
+    .exclude('[data-testid="shell-topbar"]')
+    .exclude('[data-testid="footer-giant"]');
+  if (include) builder = builder.include(include);
+  const results = await builder.analyze();
+  const summary = results.violations.map((v) => ({
+    id: v.id,
+    impact: v.impact,
+    help: v.help,
+    nodes: v.nodes.map((n) => n.target).flat(),
+  }));
+  expect(summary, `axe violations: ${label}`).toEqual([]);
+}
+
+/** The Academy page in both schemes (class-based `.dark`). */
+async function expectNoAxeViolationsBothSchemes(
+  page: Page,
+  label: string,
+): Promise<void> {
+  for (const dark of [false, true]) {
+    await page.evaluate((on) => {
+      document.documentElement.classList.toggle("dark", on);
+    }, dark);
+    await expectNoAxeViolations(page, `${label} (${dark ? "dark" : "light"})`);
   }
   await page.evaluate(() => document.documentElement.classList.remove("dark"));
 }
@@ -288,13 +348,14 @@ test.describe("048 reading page", () => {
       await page.getByTestId("material-preview").click();
       const panel = page.getByTestId("material-preview-panel");
       await expect(panel).toBeVisible();
-      // The panel slides in; capture it once it rests against the right edge.
+      // Full-screen at every width: once the slide rests, it spans the viewport.
       await expect
         .poll(async () => {
           const box = await panel.boundingBox();
-          return box ? Math.round(box.x + box.width) : -1;
+          return box ? [Math.round(box.x), Math.round(box.width)] : null;
         })
-        .toBe(viewport.width);
+        .toEqual([0, viewport.width]);
+      await expect(panel).toHaveAttribute("aria-modal", "true");
       // The info `Alert` carries its glyph before the text.
       await expect(panel.getByTestId("material-preview-banner")).toContainText(
         "Предпросмотр — материал не опубликован",
@@ -305,6 +366,11 @@ test.describe("048 reading page", () => {
         "Редакция Академии",
       );
       await expect(panel).toContainText("Текст, который ещё не сохранён.");
+      await expectNoAxeViolations(
+        page,
+        `preview panel ${viewport.width}px`,
+        '[data-testid="material-preview-panel"]',
+      );
       await shot(
         page,
         `preview-${viewport === WIDE ? "desktop" : "mobile"}-light`,
@@ -378,7 +444,11 @@ test.describe("048 reading page", () => {
     });
     draft = await adminWrite(page, {
       path: "/v1/admin/materials",
-      payload: { kind: "news", title: `Черновик новости ${RUN}`, body: SHORT_BODY },
+      payload: {
+        kind: "news",
+        title: `Черновик новости ${RUN}`,
+        body: SHORT_BODY,
+      },
     });
     expect(news.slug && column.slug && draft.slug).toBeTruthy();
   });
@@ -392,8 +462,12 @@ test.describe("048 reading page", () => {
     await expect(page).toHaveTitle(newsTitle);
     const article = page.getByRole("article");
     await expect(article.getByText("Новость", { exact: true })).toBeVisible();
-    await expect(article.getByRole("heading", { level: 1 })).toHaveText(newsTitle);
-    await expect(page.getByTestId("material-byline")).toHaveText(/^Академия · \d{1,2} [а-я]+$/);
+    await expect(article.getByRole("heading", { level: 1 })).toHaveText(
+      newsTitle,
+    );
+    await expect(page.getByTestId("material-byline")).toHaveText(
+      /^Академия · \d{1,2} [а-я]+$/,
+    );
     await expect(page.getByTestId("material-partner-mark")).toHaveText(
       `Партнёрский материал · ${partnerName}`,
     );
@@ -402,7 +476,9 @@ test.describe("048 reading page", () => {
     expect(
       await cover.evaluate((img) => (img as HTMLImageElement).naturalWidth),
     ).toBeGreaterThan(0);
-    await expect(article.getByRole("heading", { level: 2 })).toHaveText("Что изучаем");
+    await expect(article.getByRole("heading", { level: 2 })).toHaveText(
+      "Что изучаем",
+    );
     await expect(article.getByRole("heading", { level: 3 })).toHaveText(
       "Требования к центру",
     );
@@ -411,7 +487,9 @@ test.describe("048 reading page", () => {
     await expect(article.locator("blockquote")).toContainText(
       "Нам важно получить данные",
     );
-    await expect(article.locator("strong")).toHaveText("многоцентровое исследование");
+    await expect(article.locator("strong")).toHaveText(
+      "многоцентровое исследование",
+    );
     await expect(article.locator("em")).toHaveText("по единому протоколу");
     await expect(article.locator("p br")).toHaveCount(1);
     const external = article.getByRole("link", { name: "ClinicalTrials.gov" });
@@ -426,6 +504,7 @@ test.describe("048 reading page", () => {
     await expect(article.locator("script, iframe, style")).toHaveCount(0);
     const back = page.getByRole("link", { name: "← Новости, блог и видео" });
     await expect(back).toHaveAttribute("href", "/#feed-h");
+    await expectNoAxeViolationsBothSchemes(page, "news reading page");
     await shotBothSchemes(page, "page-news-cover-partner-desktop");
     await page.setViewportSize(NARROW);
     await expectNoPageSideScroll(page);
@@ -441,17 +520,22 @@ test.describe("048 reading page", () => {
     const response = await page.goto(`${PORTAL}/materials/${column.slug}`);
     expect(response?.status()).toBe(200);
     await expect(page).toHaveTitle(columnTitle);
-    await expect(page.getByText("Колонка эксперта", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Колонка эксперта", { exact: true }),
+    ).toBeVisible();
     await expect(page.getByTestId("material-byline")).toHaveText(
       new RegExp(`^${expertFamily} Михаил Андреевич · \\d{1,2} [а-я]+$`),
     );
-    await expect(page.getByTestId("material-byline").getByRole("link")).toHaveCount(0);
+    await expect(
+      page.getByTestId("material-byline").getByRole("link"),
+    ).toHaveCount(0);
     await expect(page.getByTestId("material-partner-mark")).toHaveCount(0);
     await expect(page.getByText(/Партнёрский материал/)).toHaveCount(0);
     await expect(page.getByTestId("material-cover")).toHaveCount(0);
     const pubmed = page.getByRole("link", { name: "PubMed" });
     await expect(pubmed).toHaveAttribute("target", "_blank");
     await expect(pubmed).toHaveAttribute("rel", "noopener noreferrer");
+    await expectNoAxeViolationsBothSchemes(page, "column reading page");
     await shotBothSchemes(page, "page-column-bare-desktop");
     await page.setViewportSize(NARROW);
     await expectNoPageSideScroll(page);

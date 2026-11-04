@@ -87,6 +87,7 @@ export {
   SheetDescription,
   type SheetProps,
   type SheetContentProps,
+  type SheetSize,
   type SheetNavigateDirection,
 } from "./primitives/sheet";
 // ── 012 authoring controls (#1283, Stage A #1282) ─────────────────────────────

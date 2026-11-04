@@ -76,7 +76,7 @@ const RichTextEditor = dynamic(
  * - «Текст» — the `RichTextEditor` over the EARS-2 document; the server is the
  *   allowlist authority and its refusal lands at this field.
  *
- * - «Предпросмотр» (EARS-3, `material-preview`) — a `Sheet` rendering the
+ * - «Предпросмотр» (EARS-3, `material-preview`) — a full-screen `Sheet` rendering the
  *   shared `MaterialArticle` from the CURRENT form state (unsaved edits, the
  *   picked cover, the chosen expert and partner) under the banner
  *   «Предпросмотр — материал не опубликован»; it saves, publishes and changes
@@ -554,8 +554,8 @@ export function MaterialForm({
         </FormActions>
       </form>
 
-      <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
-        <SheetContent size="lg" data-testid="material-preview-panel">
+      <Sheet size="full" open={previewOpen} onOpenChange={setPreviewOpen}>
+        <SheetContent data-testid="material-preview-panel">
           <SheetHeader>
             <SheetTitle>{t("materials.preview.title")}</SheetTitle>
           </SheetHeader>

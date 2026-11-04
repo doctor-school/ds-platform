@@ -483,6 +483,9 @@ export const DS_RELEASE_BIN = "/usr/local/bin/ds-release";
 // #2984: the forced command of every CI key, installed beside ds-release by the
 // same install step (its allowlisted verbs call ds-release).
 export const DS_DEPLOY_ENTRYPOINT_BIN = "/usr/local/bin/ds-deploy-entrypoint";
+// #3646: the forced command of the prod read key, its own binary so that an older
+// ds-deploy-entrypoint (which ignores its arguments) can never answer that key.
+export const DS_READ_ENTRYPOINT_BIN = "/usr/local/bin/ds-read-entrypoint";
 // #2985: the box-side release driver the entrypoint's `release` verb execs.
 export const RELEASE_DRIVER_BIN = "/usr/local/lib/ds-platform/release-driver";
 export const POSTGRES_PROBE_BIN = "/usr/local/lib/ds-platform/postgres-artifact-probe.py";
@@ -491,6 +494,7 @@ export const HARDEN_SSH_BIN = "/usr/local/lib/ds-platform/harden-ssh.sh";
 export const BOX_ENTRYPOINTS = [
   { dest: DS_RELEASE_BIN, path: "infra/deploy/bin/ds-release" },
   { dest: DS_DEPLOY_ENTRYPOINT_BIN, path: "infra/deploy/bin/ds-deploy-entrypoint" },
+  { dest: DS_READ_ENTRYPOINT_BIN, path: "infra/deploy/bin/ds-read-entrypoint" },
   { dest: RELEASE_DRIVER_BIN, path: "infra/deploy/bin/release-driver" },
   // #3313: the data box runs the PostgreSQL probe only from this root-owned copy
   // (spec §5 «Data-prod verbs.»); the other boxes carry it unused.
@@ -557,6 +561,23 @@ export function releaseInstallScript(liveDir = PROD_LIVE_TREE, { sha } = {}) {
 export const INSTALLED_TREE_DIR = "/usr/local/lib/ds-platform/tree";
 export const INSTALLED_TREES_DIR = "/usr/local/lib/ds-platform/trees";
 export const INSTALLED_TREE_FILE = "/usr/local/lib/ds-platform/installed-tree";
+
+// #3646: the read key's public half in the tree the install just recorded (spec §4
+// «The read key on ds-api-prod»). Right after the install, the release converges the
+// read line and deploy's ds-read-entrypoint sudo right on ds-api-prod with the root-owned
+// harden-ssh.sh --role prod --from-release, which refuses a missing or malformed key
+// file. Until the owner's `pnpm prod:read-key` commits the key, the tree carries none:
+// the release then installs no read line and goes on.
+export const PROD_READ_PUBKEY = `${INSTALLED_TREE_DIR}/infra/deploy/keys/prod-read.pub`;
+export function prodReadKeyConvergeScript() {
+  return [
+    `if sudo test -f ${PROD_READ_PUBKEY}; then`,
+    `  sudo ${HARDEN_SSH_BIN} --role prod --from-release`,
+    "else",
+    `  echo "harden-ssh: ${PROD_READ_PUBKEY} is absent (no read key committed yet): no read line installed"`,
+    "fi",
+  ].join("\n");
+}
 
 function installedTreeLines(liveDir, sha) {
   const tree = INSTALLED_TREE_DIR;

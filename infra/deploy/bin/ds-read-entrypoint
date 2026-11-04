@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# ds-read-entrypoint — the forced command of the prod read key on ds-api-prod (Issue
+# #3646; tech spec apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md
+# §4 «The read key on ds-api-prod», «Least privilege: the read key», §5 «Prod read verbs.»).
+#
+# The read key in deploy's authorized_keys carries
+#   command="sudo -n /usr/local/bin/ds-read-entrypoint",restrict
+# and deploy's sudo right for it is this file with no arguments, keeping
+# SSH_ORIGINAL_COMMAND through sudo's env reset (/etc/sudoers.d/90-ds-deploy).
+#
+# It is its own binary, never ds-deploy-entrypoint with an argument: an older
+# ds-deploy-entrypoint, put back by an install of a pre-#3646 tree, ignores its
+# arguments and would serve the full deploy verb set to the read key. Old trees never
+# write this path, and this file never execs or sources ds-deploy-entrypoint; the only
+# box programs it runs are `ds-release check prod` (fixed words) and, over the hop key,
+# the data entrypoint's `check` and `read-schema` (an older data entrypoint rejects
+# `read-schema`: fail-closed).
+#
+# It serves READ_VERBS below on the prod box only and rejects every other verb with
+# exit 2. Every answer but `capabilities` leaves as CMS ciphertext to the recipient
+# certificate installed with the tooling tree (READ_RECIPIENT), never plaintext: the
+# client's stdout is a public Actions artifact.
+#
+# Installed as /usr/local/bin/ds-read-entrypoint beside ds-release and
+# ds-deploy-entrypoint, by the same install step (tools/deploy/lib/remote.mjs).
+#
+# Exit codes: 0 ok · 1 the read failed (one fixed reason of READ_REASONS) · 2 rejected
+# (usage, an unknown verb) · 3 refused (not the prod box, no recipient certificate,
+# ds-data-prod does not serve the verb yet).
+set -euo pipefail
+export LC_ALL=C
+
+# Test hooks: a root prefix and the DS_ENTRYPOINT_* overrides below. The installed
+# entrypoint never reads them.
+ROOT=
+if [[ ${BASH_SOURCE[0]} != /usr/local/bin/ds-read-entrypoint ]]; then
+  ROOT=${DS_ENTRYPOINT_ROOT:-}
+fi
+override() { [[ -n $ROOT ]] && printf '%s' "${!1:-$2}" || printf '%s' "$2"; }
+DS_RELEASE=$ROOT/usr/local/bin/ds-release
+BOX_ROLE_FILE=$ROOT/etc/ds-platform/box-role
+
+COMMAND_RE='^[a-z0-9-]+( [a-z0-9-]+)*$'
+COMMAND_MAX=200
+
+TAG=ds-read-entrypoint
+# The tag of the data entrypoint's status lines on the hop's stderr.
+DATA_TAG=ds-deploy-entrypoint
+request=${SSH_ORIGINAL_COMMAND-}
+
+sanitised() { printf '%s' "$request" | LC_ALL=C tr -c '[:alnum:] ._/=-' '?' | head -c 120; }
+reject() {
+  logger -t "$TAG" -p auth.warning "rejected: $(sanitised)" || true
+  printf '%s: rejected: %s\n' "$TAG" "$1" >&2
+  exit 2
+}
+refuse() {
+  printf '%s: %s\n' "$TAG" "$1" >&2
+  exit 3
+}
+accepted() { logger -t "$TAG" -p auth.info "accepted: $(sanitised)" || true; }
+
+# The verbs it serves (spec §8 (g): S1 serves `capabilities` and `schema`);
+# prod-observe.yml refuses a verb `capabilities` does not name.
+READ_VERBS='capabilities schema'
+# The fixed failure reasons of a read (exit 1), the same list as the data
+# entrypoint's; a reason from the data box outside it reaches the client as
+# `the read failed`.
+READ_REASONS=(
+  'a release step is running'
+  'a rehearsal is running'
+  'the read-only transaction check failed'
+  'the read timed out'
+  'insufficient headroom (disk)'
+  'insufficient headroom (memory)'
+  'copy behind prod'
+  'archive check failed'
+  'the read failed'
+)
+# The recipient certificate, installed with the tooling tree (tools/deploy/lib/remote.mjs
+# INSTALLED_TREE_DIR) from the committed infra/deploy/keys/prod-read-recipient.pem.
+READ_RECIPIENT=$ROOT/usr/local/lib/ds-platform/tree/infra/deploy/keys/prod-read-recipient.pem
+# The hop to ds-data-prod, as the release driver takes it (tools/deploy/lib/remote.mjs
+# DATA_PROD_HOP_KEY / DATA_PROD_HOP_KNOWN_HOSTS, tools/deploy/prod.mjs VPC_IP).
+DATA_PROD_HOP_KEY=$ROOT/home/deploy/.ssh/data-prod-hop
+DATA_PROD_HOP_KNOWN_HOSTS=$ROOT/home/deploy/.ssh/known_hosts
+DATA_PROD_ADDRESS=$(override DS_ENTRYPOINT_DATA_PROD_ADDRESS 192.168.0.10)
+READ_HOP_TIMEOUT=$(override DS_ENTRYPOINT_READ_HOP_TIMEOUT 180)
+
+read_fail() {
+  printf '%s: %s\n' "$TAG" "$1" >&2
+  exit 1
+}
+
+# One of READ_REASONS, else `the read failed`.
+read_reason() {
+  local reason
+  for reason in "${READ_REASONS[@]}"; do
+    [[ $1 == "$reason" ]] && { printf '%s' "$reason"; return 0; }
+  done
+  printf 'the read failed'
+}
+
+# One data verb over the hop, stdin closed; its stdout and stderr are the caller's.
+data_prod_hop() {
+  timeout "$READ_HOP_TIMEOUT" ssh -n -i "$DATA_PROD_HOP_KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
+    -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$DATA_PROD_HOP_KNOWN_HOSTS" \
+    -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+    "deploy@$DATA_PROD_ADDRESS" "$1"
+}
+
+# A read never runs beside a release step: `ds-release check prod` here (the migrate
+# step, the -driver and -rollback units), then `check` on ds-data-prod (its up and
+# backup units). ds-release refuses with 3 while a ds-prod-* unit runs.
+read_release_check() {
+  local rc=0
+  [[ -x $DS_RELEASE ]] || refuse "ds-release is not installed"
+  sudo "$DS_RELEASE" check prod >/dev/null 2>&1 </dev/null || rc=$?
+  case $rc in 0) ;; 3) read_fail "a release step is running" ;; *) read_fail "the read failed" ;; esac
+  data_prod_hop check >/dev/null 2>&1 || rc=$?
+  case $rc in 0) ;; 3) read_fail "a release step is running" ;; 124) read_fail "the read timed out" ;; *) read_fail "the read failed" ;; esac
+}
+
+# The verb's whole answer, encrypted to READ_RECIPIENT (CMS AuthEnvelopedData,
+# AES-256-GCM, DER): only the ciphertext reaches stdout.
+read_encrypted() {
+  local data_verb=$1 rc=0 reason
+  read_work=$(mktemp -d) # global: the EXIT trap outlives this function; root-only (0700)
+  trap 'rm -rf -- "${read_work:-}"' EXIT
+  data_prod_hop "$data_verb" >"$read_work/answer.json" 2>"$read_work/stderr" || rc=$?
+  case $rc in
+    0) ;;
+    1)
+      reason=$(sed -n "s/^$DATA_TAG: //p" "$read_work/stderr" | tail -n 1)
+      read_fail "$(read_reason "$reason")"
+      ;;
+    2 | 3) refuse "ds-data-prod does not serve $data_verb (the next release installs it)" ;;
+    124) read_fail "the read timed out" ;;
+    *) read_fail "the read failed" ;;
+  esac
+  [[ -s $read_work/answer.json ]] || read_fail "the read failed"
+  openssl cms -encrypt -binary -aes-256-gcm -outform DER -in "$read_work/answer.json" \
+    -out "$read_work/result.cms" "$READ_RECIPIENT" >/dev/null 2>&1 ||
+    refuse "openssl cannot encrypt to the recipient certificate"
+  cat -- "$read_work/result.cms"
+}
+
+# sudo admits this file with no arguments only; anything else is not the read key.
+(($# == 0)) || reject "unexpected arguments"
+[[ -n $request ]] || reject "no command (this key runs only the read commands)"
+[[ ${#request} -le $COMMAND_MAX && $request =~ $COMMAND_RE ]] ||
+  reject "unexpected characters in the command"
+IFS=' ' read -r -a words <<<"$request"
+verb=${words[0]-}
+
+case "$verb" in
+  capabilities | schema) [[ ${#words[@]} -eq 1 ]] || reject "usage: $verb" ;;
+  *) reject "unknown read command (allowed: ${READ_VERBS// /, })" ;;
+esac
+accepted
+role=$(sudo cat "$BOX_ROLE_FILE" 2>/dev/null || true)
+[[ $role == prod ]] || refuse "the read commands are served by the prod box only"
+case "$verb" in
+  capabilities)
+    printf '{"role":"prod","mode":"read","verbs":["%s"]}\n' "${READ_VERBS// /\",\"}" ;;
+  schema)
+    sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
+    read_release_check
+    read_encrypted read-schema </dev/null ;;
+esac

@@ -490,7 +490,7 @@ release_status() {
 # JSON object checked field by field by DATA_PY below, or the tree archive.
 # infra/deploy/bin/harden-ssh.sh --role data refuses an installed entrypoint without
 # this line; tools/deploy/lib/data-prod.mjs and the tests pin the list.
-DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge'
+DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema'
 DATA_LIVE_TREE=$ROOT/home/deploy/ds-platform
 DATA_COMPOSE=$DATA_LIVE_TREE/infra/deploy/compose/data-prod
 DATA_STATE_FILE=$ROOT/home/deploy/ds-platform-postgres-state.json
@@ -504,6 +504,7 @@ HARDEN_SSH=$ROOT/usr/local/lib/ds-platform/harden-ssh.sh
 DATA_INSTALL=(
   /usr/local/bin/ds-release=infra/deploy/bin/ds-release
   /usr/local/bin/ds-deploy-entrypoint=infra/deploy/bin/ds-deploy-entrypoint
+  /usr/local/bin/ds-read-entrypoint=infra/deploy/bin/ds-read-entrypoint
   /usr/local/lib/ds-platform/release-driver=infra/deploy/bin/release-driver
   /usr/local/lib/ds-platform/postgres-artifact-probe.py=tools/deploy/postgres-artifact-probe.py
   /usr/local/lib/ds-platform/harden-ssh.sh=infra/deploy/bin/harden-ssh.sh
@@ -821,7 +822,7 @@ release_lock_verb() {
 data_verb() {
   local n=${#words[@]}
   case "$verb" in
-    capabilities | postgres-probe | postgres-checkpoint | data-env | backup-info | rollback-floor)
+    capabilities | postgres-probe | postgres-checkpoint | data-env | backup-info | rollback-floor | read-schema)
       ((n == 1)) || reject "usage: $verb" ;;
     ship | install | converge)
       ((n == 2)) || reject "usage: $verb <sha>"
@@ -873,7 +874,173 @@ data_verb() {
         "SELECT CASE WHEN to_regclass('public.event_speakers') IS NULL THEN 'ABSENT' ELSE 'PRESENT' END" </dev/null ;;
     finish) exec sudo "$DS_RELEASE" finish prod "${words[1]}" "${words[2]}" </dev/null ;;
     check | supersede) release_lock_verb "$verb" "${words[1]-}" </dev/null ;;
+    read-schema) read_schema </dev/null ;;
   esac
+}
+
+# --- the prod read path (Issue #3646; spec §5 «Prod read verbs.») -------------------
+# The fixed failure reasons of a read (exit 1); a reason from the data box outside
+# this list reaches the client as `the read failed`.
+READ_REASONS=(
+  'a release step is running'
+  'a rehearsal is running'
+  'the read-only transaction check failed'
+  'the read timed out'
+  'insufficient headroom (disk)'
+  'insufficient headroom (memory)'
+  'copy behind prod'
+  'archive check failed'
+  'the read failed'
+)
+read_fail() {
+  printf '%s: %s\n' "$TAG" "$1" >&2
+  exit 1
+}
+
+# read-schema (data box): the plaintext schema answer of `schema`, which
+# ds-read-entrypoint on ds-api-prod encrypts. argv: the data-prod compose dir. Exit 0 = the answer on
+# stdout · 1 = one fixed reason of READ_REASONS on stdout · 3 = not servable. The
+# catalogue SQL reads catalog relations only — no row data, no COMMENT text — and
+# the dump text never leaves this script, only its sha256.
+read -r -d '' READ_SCHEMA_PY <<'PY' || true
+import hashlib, json, os, subprocess, sys, time
+compose = sys.argv[1]
+DATABASE = "ds_prod"
+
+def stop(code, reason):
+    sys.stdout.write(reason + "\n")
+    sys.exit(code)
+
+# Non-system schemas: not pg_catalog, information_schema, pg_toast*, pg_temp_*.
+NS = ("n.nspname NOT IN ('pg_catalog', 'information_schema')"
+      " AND left(n.nspname, 8) <> 'pg_toast' AND left(n.nspname, 8) <> 'pg_temp_'")
+TABLES = """(SELECT coalesce(json_agg(t ORDER BY t."schema", t."name"), '[]'::json) FROM (
+  SELECT n.nspname AS "schema", c.relname AS "name",
+    (SELECT coalesce(json_agg(json_build_object(
+        'name', a.attname,
+        'type', format_type(a.atttypid, a.atttypmod),
+        'notNull', a.attnotnull,
+        'default', CASE WHEN a.attgenerated = '' THEN pg_get_expr(d.adbin, d.adrelid) END,
+        'identity', CASE a.attidentity WHEN 'a' THEN 'always' WHEN 'd' THEN 'by default' END,
+        'generated', CASE WHEN a.attgenerated <> '' THEN pg_get_expr(d.adbin, d.adrelid) END)
+        ORDER BY a.attnum), '[]'::json)
+      FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+      WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped) AS "columns",
+    (SELECT coalesce(json_agg(json_build_object(
+        'name', i.relname, 'definition', pg_get_indexdef(x.indexrelid)) ORDER BY i.relname), '[]'::json)
+      FROM pg_index x JOIN pg_class i ON i.oid = x.indexrelid
+      WHERE x.indrelid = c.oid) AS "indexes",
+    (SELECT coalesce(json_agg(json_build_object(
+        'name', k.conname,
+        'kind', CASE k.contype WHEN 'p' THEN 'primary key' WHEN 'f' THEN 'foreign key'
+          WHEN 'u' THEN 'unique' WHEN 'c' THEN 'check' WHEN 'x' THEN 'exclusion'
+          WHEN 'n' THEN 'not null' WHEN 't' THEN 'trigger' ELSE k.contype::text END,
+        'definition', pg_get_constraintdef(k.oid)) ORDER BY k.conname), '[]'::json)
+      FROM pg_constraint k WHERE k.conrelid = c.oid) AS "constraints"
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE c.relkind IN ('r', 'p') AND """ + NS + """
+) t)"""
+ENUMS = """(SELECT coalesce(json_agg(json_build_object(
+    'schema', n.nspname, 'name', y.typname,
+    'values', (SELECT coalesce(json_agg(e.enumlabel ORDER BY e.enumsortorder), '[]'::json)
+               FROM pg_enum e WHERE e.enumtypid = y.oid))
+    ORDER BY n.nspname, y.typname), '[]'::json)
+  FROM pg_type y JOIN pg_namespace n ON n.oid = y.typnamespace
+  WHERE y.typtype = 'e' AND """ + NS + ")"
+SEQUENCES = """(SELECT coalesce(json_agg(json_build_object('schema', n.nspname, 'name', c.relname)
+    ORDER BY n.nspname, c.relname), '[]'::json)
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE c.relkind = 'S' AND """ + NS + ")"
+MIGRATIONS = """(SELECT coalesce(json_agg(json_build_object(
+    'id', m.id, 'hash', m.hash, 'created_at', m.created_at) ORDER BY m.id), '[]'::json)
+  FROM drizzle.__drizzle_migrations m)"""
+# The answer is built only inside a read-only transaction on ds_prod; the check
+# travels with it and is verified before the answer is used.
+SQL = (
+    "BEGIN READ ONLY;\n"
+    "SET LOCAL statement_timeout = '30s';\n"
+    "SET LOCAL lock_timeout = '2s';\n"
+    "SELECT json_build_object('database', current_database(), 'readOnly',"
+    " current_setting('transaction_read_only') = 'on', 'answer', CASE WHEN current_database() = '"
+    + DATABASE + "' AND current_setting('transaction_read_only') = 'on' THEN json_build_object(\n"
+    "'serverVersion', current_setting('server_version'),\n"
+    "'migrations', " + MIGRATIONS + ",\n"
+    "'catalogue', json_build_object('tables', " + TABLES + ",\n'enums', " + ENUMS
+    + ",\n'sequences', " + SEQUENCES + ")) END);\n"
+    "ROLLBACK;\n"
+)
+TIMED_OUT = ("statement timeout", "lock timeout", "could not obtain lock")
+
+def run(argv, stdin, timeout):
+    try:
+        done = subprocess.run(argv, cwd=compose, input=stdin, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        stop(1, "the read timed out")
+    except OSError:
+        stop(1, "the read failed")
+    if done.returncode != 0:
+        text = done.stderr.decode("utf-8", "replace")
+        # 124: the in-container `timeout` bound pg_dump (it resets statement_timeout).
+        timed_out = done.returncode == 124 or any(m in text for m in TIMED_OUT)
+        stop(1, "the read timed out" if timed_out else "the read failed")
+    return done.stdout
+
+if not os.path.isdir(compose):
+    stop(3, "the data-prod compose directory is missing")
+taken = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+out = run(["docker", "compose", "exec", "-T", "-e", "PGCLIENTENCODING=UTF8", "postgres", "psql", "-X",
+           "-qAt", "-v", "ON_ERROR_STOP=1", "-U", "ds", "-d", DATABASE, "-f", "-"],
+          SQL.encode("utf-8"), 60)
+try:
+    envelope = json.loads(out.decode("utf-8"))
+except ValueError:
+    stop(1, "the read failed")
+if (not isinstance(envelope, dict) or envelope.get("database") != DATABASE
+        or envelope.get("readOnly") is not True or not isinstance(envelope.get("answer"), dict)):
+    stop(1, "the read-only transaction check failed")
+answer = envelope["answer"]
+catalogue = answer.get("catalogue")
+if (not isinstance(answer.get("serverVersion"), str) or not isinstance(answer.get("migrations"), list)
+        or not isinstance(catalogue, dict)
+        or not all(isinstance(catalogue.get(k), list) for k in ("tables", "enums", "sequences"))):
+    stop(1, "the read failed")
+# pg_dump resets statement_timeout and lock_timeout itself, so `timeout 100` inside the
+# container bounds the dump process (and its ACCESS SHARE locks); 120 s bounds the client.
+dump = run(["docker", "compose", "exec", "-T", "-e",
+            "PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=30s", "postgres",
+            "timeout", "100", "pg_dump", "--schema-only", "--no-comments", "--no-owner", "--no-privileges",
+            "--lock-wait-timeout=2s", "-U", "ds", DATABASE], b"", 120)
+if not dump:
+    stop(1, "the read failed")
+sys.stdout.write(json.dumps({
+    "verb": "schema",
+    "database": DATABASE,
+    "takenAt": taken,
+    "serverVersion": answer["serverVersion"],
+    "migrations": answer["migrations"],
+    "dumpSha256": hashlib.sha256(dump).hexdigest(),
+    "catalogue": {k: catalogue[k] for k in ("tables", "enums", "sequences")},
+}, separators=(",", ":")) + "\n")
+PY
+
+read_schema() {
+  local out rc=0
+  out=$(sudo python3 -I -X utf8 -c "$READ_SCHEMA_PY" "$DATA_COMPOSE") || rc=$?
+  case $rc in
+    0) printf '%s\n' "$out" ;;
+    3) refuse "${out:-the schema read cannot be served}" ;;
+    *) read_fail "$(read_reason "$out")" ;;
+  esac
+}
+
+# One of READ_REASONS, else `the read failed`.
+read_reason() {
+  local reason
+  for reason in "${READ_REASONS[@]}"; do
+    [[ $1 == "$reason" ]] && { printf '%s' "$reason"; return 0; }
+  done
+  printf 'the read failed'
 }
 
 case "$verb" in
@@ -934,7 +1101,7 @@ case "$verb" in
     observe "${words[1]}"
     ;;
   capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \
-    backup-info | rollback-floor | finish | check | supersede | converge)
+    backup-info | rollback-floor | finish | check | supersede | converge | read-schema)
     data_verb
     ;;
   *)

@@ -48,6 +48,8 @@ import {
   DATA_PROD_HOP_KEY,
   LOCAL_EXECUTOR,
   PROD_LIVE_TREE,
+  PROD_READ_PUBKEY,
+  prodReadKeyConvergeScript,
   RELEASE_DRIVER_BIN,
   shipTreeCommand,
   sshBaseArgs,
@@ -618,6 +620,7 @@ test(
 
 // --- #3313: ds-data-prod only through its verbs ----------------------------------------
 import {
+  DATA_READ_VERBS,
   DATA_VERBS,
   createDataProdClient,
   dataVerbCommand,
@@ -815,6 +818,47 @@ test("3320: the --local release converges ds-data-prod after its install and bef
   const converge = source.indexOf("if (local) await dataProd().converge(sha);");
   const env = source.indexOf('if (walk.releasePhase("data-prod-env")) {');
   assert.ok(install > 0 && converge > install && env > converge, "install → converge → data-prod-env");
+});
+
+test("3646: the --local release converges the read key on ds-api-prod right after the data converge, before any data-prod state change", () => {
+  const source = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
+  const converge = source.indexOf("if (local) await dataProd().converge(sha);");
+  const read = source.indexOf(
+    'if (local) await sshScript(API_PROD, prodReadKeyConvergeScript(), { label: "converge the read key" });',
+  );
+  const env = source.indexOf('if (walk.releasePhase("data-prod-env")) {');
+  assert.ok(converge > 0 && read > converge && env > read, "data converge → read-key converge → data-prod-env");
+});
+
+test("3646: the read-key converge runs the root-owned harden-ssh.sh --role prod --from-release, and installs nothing while the tree carries no read key", () => {
+  assert.equal(PROD_READ_PUBKEY, "/usr/local/lib/ds-platform/tree/infra/deploy/keys/prod-read.pub");
+  assert.equal(
+    prodReadKeyConvergeScript(),
+    [
+      `if sudo test -f ${PROD_READ_PUBKEY}; then`,
+      "  sudo /usr/local/lib/ds-platform/harden-ssh.sh --role prod --from-release",
+      "else",
+      `  echo "harden-ssh: ${PROD_READ_PUBKEY} is absent (no read key committed yet): no read line installed"`,
+      "fi",
+    ].join("\n"),
+  );
+  for (const [present, want] of [
+    [false, /no read line installed/],
+    [true, /harden-ssh-called --role prod --from-release/],
+  ]) {
+    const script = prodReadKeyConvergeScript()
+      .replaceAll("sudo test -f", present ? "true" : "false")
+      .replace("sudo /usr/local/lib/ds-platform/harden-ssh.sh", "echo harden-ssh-called");
+    const r = spawnSync("bash", ["-c", script], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, want);
+  }
+});
+
+test("3646: the release probe does not require the read verbs, so a box from before them takes the release that installs them", () => {
+  assert.deepEqual(DATA_READ_VERBS, ["read-schema"]);
+  assert.ok(!DATA_VERBS.includes("read-schema"));
+  assert.equal(servesDataVerbs(JSON.stringify({ role: "data", verbs: DATA_VERBS })), true);
 });
 
 test("3313: prod.mjs reaches ds-data-prod only through its verbs — no script, no shell form", () => {

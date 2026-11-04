@@ -450,7 +450,7 @@ describe("StorefrontHeader", () => {
         auth={{
           status: "doctor",
           profileHref: "/account",
-          label: "Мой профиль",
+          label: "Личный кабинет",
           initials: "ВК",
           links: [{ label: "Мои события", href: "/account/events" }],
         }}
@@ -488,7 +488,7 @@ describe("StorefrontHeader", () => {
         auth={{
           status: "doctor",
           profileHref: "/account",
-          label: "Мой профиль",
+          label: "Личный кабинет",
           initials: "ВК",
           links: [{ label: "Мои события", href: "/account/events" }],
         }}

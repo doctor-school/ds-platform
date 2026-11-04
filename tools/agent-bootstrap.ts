@@ -25,6 +25,14 @@
  * `pnpm pr:land`); a `## Warnings` row when main is red (naming the first red
  * commit of the streak) or the newest commit has no verdict > 1 h after it.
  *
+ * `## Release holds` (#3643): every OPEN Issue named by `Release-requires:` in
+ * a PR merged on main but not yet on prod (`<prod sha>..origin/main`, parsed by
+ * the release gate's `extractReleaseRequires`), as `#N <title> — held by PR #M`
+ * plus its owner state from facts — open PR(s) referencing `#N`, a claim /
+ * worktree signal, or `NO OWNER (no PR, no claim)`. Closed prerequisites are
+ * omitted; a malformed declaration is its own row; a failed source prints
+ * `unavailable`; unowned holds add one count-only `## Warnings` row.
+ *
  * Hard rule: NEVER throw an unhandled error. Every failure path returns a
  * printable warning so the SessionStart hook does not crash. Exit code is
  * always 0 (warnings reported in a "Warnings" section).
@@ -43,7 +51,16 @@ import {
   primaryWorktreePath,
   probeMainSync,
 } from "./main-sync";
-import { claimLabel, issueStream, probeClaim } from "./backlog-triage";
+import {
+  claimLabel,
+  detectClaim,
+  fetchClaimComments,
+  issueStream,
+  probeClaim,
+  worktreeClaimMtime,
+} from "./backlog-triage";
+import { extractReleaseRequires } from "./deploy/release-gate.mjs";
+import { extractPrNumbers } from "./deploy/release-notes.mjs";
 import {
   classifyDeployRange,
   evaluateProjectReality,
@@ -454,6 +471,265 @@ async function ghMergedShowPRs(): Promise<unknown[] | null> {
     return JSON.parse(stdout) as unknown[];
   } catch (e) {
     note("gh pr list (merged show)", e);
+    return null;
+  }
+}
+
+// ── Release holds (#3643) ───────────────────────────────────────────────────
+// A `Release-requires: #N` prerequisite on a merged PR holds the next release
+// (repo-conventions «Deferred prod action»), but only `release-gate.mjs` read
+// it, at deploy time. A hold left by a rotated session was then invisible: this
+// section prints each open prerequisite on main with its owner state from facts.
+
+/** `gh pr list --limit` for the merged-since-prod search; a full page warns. */
+export const RELEASE_HOLDS_LIMIT = 100;
+
+export interface ReleaseHoldRow {
+  issue: number;
+  title: string;
+  state: "OPEN" | "CLOSED";
+  /** Merged-undeployed PRs declaring this Issue in `Release-requires`. */
+  heldBy: number[];
+  /** Open PRs that reference the Issue (body, title or branch). */
+  prs: number[];
+  /** `claimLabel` of a claim/worktree signal, or null. */
+  claim: string | null;
+  /** The claim comments could not be read: owner state unknown, never NO OWNER. */
+  ownerUnavailable: boolean;
+}
+
+/** `null` = a source could not be read (rendered unavailable, never none). */
+export interface ReleaseHolds {
+  rows: ReleaseHoldRow[];
+  /** PRs whose `Release-requires` line the gate parser rejects. */
+  malformed: number[];
+}
+
+/**
+ * Prerequisite → declaring PRs, over the PRs on main but not on prod only.
+ * Parsing is `extractReleaseRequires` — the release gate's own parser.
+ */
+export function collectReleaseHolds(
+  prs: Array<{ number: number; body?: string | null }>,
+  undeployed: ReadonlySet<number>,
+): { heldBy: Map<number, number[]>; malformed: number[] } {
+  const heldBy = new Map<number, number[]>();
+  const malformed: number[] = [];
+  for (const pr of [...prs].sort((a, b) => a.number - b.number)) {
+    if (!undeployed.has(pr.number)) continue;
+    let refs: number[];
+    try {
+      refs = extractReleaseRequires(pr.body ?? "") as number[];
+    } catch {
+      malformed.push(pr.number);
+      continue;
+    }
+    for (const n of refs) heldBy.set(n, [...(heldBy.get(n) ?? []), pr.number]);
+  }
+  return { heldBy, malformed };
+}
+
+/** Open PRs whose body/title names `#N` / `(N)` or whose branch is `<prefix>/N-…`. */
+export function referencingOpenPrs(
+  issue: number,
+  openPrs: Array<{
+    number: number;
+    title?: string | null;
+    body?: string | null;
+    headRefName?: string | null;
+  }>,
+): number[] {
+  const ref = new RegExp(`#${issue}(?!\\d)`);
+  const titleRef = new RegExp(`(?:#|\\()${issue}(?!\\d)`);
+  const branch = new RegExp(`^[^/]+/${issue}-`);
+  return openPrs
+    .filter(
+      (p) =>
+        ref.test(p.body ?? "") ||
+        titleRef.test(p.title ?? "") ||
+        branch.test(p.headRefName ?? ""),
+    )
+    .map((p) => p.number)
+    .sort((a, b) => a - b);
+}
+
+const NO_OWNER = "NO OWNER (no PR, no claim)";
+
+/**
+ * The merged-PR search, bounded by the prod commit's date in UTC: `%cI`
+ * carries the committer's offset, while GitHub's `merged:` qualifier is UTC.
+ */
+export function releaseHoldsSearchQuery(prodCommitIso: string): string {
+  const ms = Date.parse(prodCommitIso.trim());
+  if (Number.isNaN(ms))
+    throw new Error(`unparsable prod commit date: ${prodCommitIso.trim()}`);
+  return `"Release-requires" in:body merged:>=${new Date(ms).toISOString().slice(0, 10)}`;
+}
+
+function openHolds(holds: ReleaseHolds): ReleaseHoldRow[] {
+  return holds.rows.filter((r) => r.state === "OPEN");
+}
+
+export function renderReleaseHoldsSection(
+  holds: ReleaseHolds | null,
+): string[] {
+  const head = "## Release holds";
+  if (holds === null) return [head, "(unavailable — see Warnings)"];
+  const lines = openHolds(holds).map((r) => {
+    const owner = [
+      ...r.prs.map((n) => `PR #${n}`),
+      ...(r.claim ? [r.claim] : []),
+    ];
+    const by = r.heldBy.map((n) => `PR #${n}`).join(", ");
+    const state =
+      owner.length > 0
+        ? owner.join(" · ")
+        : r.ownerUnavailable
+          ? "owner unavailable (claim fetch failed) — see Warnings"
+          : NO_OWNER;
+    return `- #${r.issue} ${r.title} — held by ${by} — ${state}`;
+  });
+  for (const n of holds.malformed)
+    lines.push(`- PR #${n} — malformed Release-requires`);
+  return [head, ...(lines.length > 0 ? lines : ["(none)"])];
+}
+
+/** One Warnings row carrying the count of unowned holds (count only). */
+export function releaseHoldsWarning(holds: ReleaseHolds | null): Warn | null {
+  if (holds === null) return null;
+  const n = openHolds(holds).filter(
+    (r) => r.prs.length === 0 && !r.claim && !r.ownerUnavailable,
+  ).length;
+  if (n === 0) return null;
+  return {
+    source: "Release holds",
+    message: `${n} open Release-requires prerequisite(s) on main have ${NO_OWNER} — see ## Release holds`,
+  };
+}
+
+/**
+ * Collector: PRs in `<prod sha>..origin/main` (squash subjects), their bodies
+ * from ONE merged-PR search bounded by the prod commit's date, then each
+ * declared Issue's state, the open PRs and the claim probe. Any failed source
+ * → `null` + a Warnings row. Never throws. Discovery rides GitHub's search
+ * index, which can lag a just-merged PR or a just-edited body; this is a
+ * session-entry view — `release-gate.mjs` re-reads every PR and stays the
+ * authoritative check at deploy time.
+ */
+async function probeReleaseHolds(
+  realityProbe: ProjectRealityProbe,
+): Promise<ReleaseHolds | null> {
+  try {
+    const prodSha = realityProbe.healthSha ?? realityProbe.deploymentSha;
+    if (!prodSha) throw new Error("no prod SHA (health/Deployment) to anchor");
+    const [{ stdout: subjects }, { stdout: prodDate }] = await Promise.all([
+      execa("git", ["log", "--format=%s", `${prodSha}..origin/main`], {
+        cwd: REPO_ROOT,
+      }),
+      execa("git", ["log", "-1", "--format=%cI", prodSha], { cwd: REPO_ROOT }),
+    ]);
+    const undeployed = new Set(
+      extractPrNumbers(subjects.split(/\r?\n/).filter(Boolean)) as number[],
+    );
+    if (undeployed.size === 0) return { rows: [], malformed: [] };
+    const { stdout: mergedOut } = await execa(
+      "gh",
+      [
+        "pr",
+        "list",
+        "--state",
+        "merged",
+        "--search",
+        releaseHoldsSearchQuery(prodDate),
+        "--limit",
+        String(RELEASE_HOLDS_LIMIT),
+        "--json",
+        "number,body",
+      ],
+      { cwd: REPO_ROOT },
+    );
+    const merged = JSON.parse(mergedOut) as Array<{
+      number: number;
+      body: string;
+    }>;
+    if (merged.length >= RELEASE_HOLDS_LIMIT)
+      warnings.push({
+        source: "gh pr list (release holds)",
+        message: `hit the ${RELEASE_HOLDS_LIMIT}-row limit — release holds may be incomplete; raise RELEASE_HOLDS_LIMIT in tools/agent-bootstrap.ts`,
+      });
+    const { heldBy, malformed } = collectReleaseHolds(merged, undeployed);
+    if (heldBy.size === 0) return { rows: [], malformed };
+    const issues = await Promise.all(
+      [...heldBy.keys()].map(async (n) => {
+        const issue = await ghApiJson<{ title?: string; state?: string }>(
+          `repos/{owner}/{repo}/issues/${n}`,
+        );
+        return { n, issue };
+      }),
+    );
+    const open = issues.filter((i) => i.issue.state !== "closed");
+    const openPrs =
+      open.length === 0
+        ? []
+        : (JSON.parse(
+            (
+              await execa(
+                "gh",
+                [
+                  "pr",
+                  "list",
+                  "--state",
+                  "open",
+                  "--limit",
+                  String(RELEASE_HOLDS_LIMIT),
+                  "--json",
+                  "number,title,body,headRefName",
+                ],
+                { cwd: REPO_ROOT },
+              )
+            ).stdout,
+          ) as Parameters<typeof referencingOpenPrs>[1]);
+    if (openPrs.length >= RELEASE_HOLDS_LIMIT)
+      warnings.push({
+        source: "gh pr list (release holds, open)",
+        message: `hit the ${RELEASE_HOLDS_LIMIT}-row limit — a PR working on a hold may be missed; raise RELEASE_HOLDS_LIMIT in tools/agent-bootstrap.ts`,
+      });
+    const mainRoot = await primaryWorktreePath(REPO_ROOT);
+    const nowMs = Date.now();
+    const rows = await Promise.all(
+      issues.map(async ({ n, issue }): Promise<ReleaseHoldRow> => {
+        const isOpen = issue.state !== "closed";
+        // Not `probeClaim`: it reads a failed comments fetch as "no claim",
+        // which here would print a false NO OWNER.
+        const [worktreeMtimeMs, comments] = isOpen
+          ? await Promise.all([
+              worktreeClaimMtime(mainRoot, n),
+              fetchClaimComments(n, REPO_ROOT),
+            ])
+          : [undefined, []];
+        const ownerUnavailable = isOpen && comments === undefined;
+        if (ownerUnavailable)
+          note(
+            `release holds claim probe #${n}`,
+            "gh issue view --json comments failed",
+          );
+        const claim = isOpen
+          ? detectClaim({ worktreeMtimeMs, comments, nowMs })
+          : null;
+        return {
+          issue: n,
+          title: issue.title ?? "",
+          state: isOpen ? "OPEN" : "CLOSED",
+          heldBy: heldBy.get(n) ?? [],
+          prs: isOpen ? referencingOpenPrs(n, openPrs) : [],
+          claim: claim ? claimLabel(claim) : null,
+          ownerUnavailable,
+        };
+      }),
+    );
+    return { rows: rows.sort((a, b) => a.issue - b.issue), malformed };
+  } catch (e) {
+    note("release holds", e);
     return null;
   }
 }
@@ -989,7 +1265,11 @@ async function main(): Promise<void> {
   }
   await syncParallelFlag(conc);
   // Parallel-session claim signal (#811) — same check as `pnpm backlog:triage`.
-  const claims = await claimSignals(ready);
+  // Release holds (#3643) need the reality probe's prod SHA, hence after it.
+  const [claims, releaseHolds] = await Promise.all([
+    claimSignals(ready),
+    probeReleaseHolds(realityProbe),
+  ]);
 
   const activeSpecs = await Promise.all(
     working.map(async (i) => {
@@ -1208,6 +1488,11 @@ async function main(): Promise<void> {
   out.push(...renderShowReviewSection(mergedShow));
   const showWarn = showReviewWarning(mergedShow);
   if (showWarn) warnings.push(showWarn);
+  out.push("");
+
+  out.push(...renderReleaseHoldsSection(releaseHolds));
+  const holdsWarn = releaseHoldsWarning(releaseHolds);
+  if (holdsWarn) warnings.push(holdsWarn);
   out.push("");
 
   out.push("## Stage slots");

@@ -74,6 +74,11 @@ export default defineConfig({
     // 017 EARS-9 (#1485): the home nearest-events block reads the events
     // stand-in's feed, so it rides the events tier beside its double.
     "home-events.spec.ts",
+    // 018 EARS-1/EARS-4 (#1496/#1499): the specialty feed reads its envelope
+    // and nearest events from the events stand-in, so both specs ride the
+    // events tier beside its double (`playwright.events.config.ts`).
+    "feed-layout.spec.ts",
+    "feed-events.spec.ts",
     // #1955: the signed-in redirect and the login return-context copy are both
     // server reads against an api — they ride the return-context tier.
     "login-arrival.spec.ts",

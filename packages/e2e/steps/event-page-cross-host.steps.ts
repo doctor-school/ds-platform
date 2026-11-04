@@ -755,7 +755,7 @@ const speculativeAnswers = new WeakMap<
     {
       status: number;
       cacheControl: string | undefined;
-      setCookie: string | undefined;
+      appCookies: string[];
     }
   >
 >();
@@ -779,7 +779,7 @@ When(
       {
         status: number;
         cacheControl: string | undefined;
-        setCookie: string | undefined;
+        appCookies: string[];
       }
     >();
     for (const [label, purpose] of loads) {
@@ -793,7 +793,13 @@ When(
       answers.set(label, {
         status: res.status(),
         cacheControl: headers["cache-control"],
-        setCookie: headers["set-cookie"],
+        // The stage edge (infra/deploy/compose/stg-infra/Caddyfile, the
+        // basic-auth gate) sets `ds_stage_gate`; every other cookie is the app's.
+        appCookies: res
+          .headersArray()
+          .filter(({ name }) => name.toLowerCase() === "set-cookie")
+          .map(({ value }) => value.slice(0, value.indexOf("=")).trim())
+          .filter((name) => name !== "ds_stage_gate"),
       });
     }
     speculativeAnswers.set(page, answers);
@@ -808,7 +814,7 @@ Then(
     for (const [label, answer] of answers) {
       expect(answer.status, `${label} answered ${answer.status}`).toBe(503);
       expect(answer.cacheControl, label).toBe("no-store");
-      expect(answer.setCookie, label).toBeUndefined();
+      expect(answer.appCookies, label).toEqual([]);
     }
   },
 );

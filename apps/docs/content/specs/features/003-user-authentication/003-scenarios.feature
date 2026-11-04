@@ -1665,8 +1665,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
   @EARS-63 @failure @silent-check-exempt
   Scenario: Exempt requests and crawlers never redirect
     Given a browser with no Academy session
-    When the Academy receives a crawler request, a request without fetch metadata, a prefetch, a POST, a "/v1" call, a static asset, a ".well-known" file and the health route
+    When the Academy receives a crawler request, a request without fetch metadata, a POST, a "/v1" call, a static asset, a ".well-known" file and the health route
     Then none of them is answered with a redirect
+
+  @EARS-63 @failure @silent-check-speculative
+  Scenario: A speculative load of a checkable page is refused, never rendered unchecked
+    Given a browser with no Academy session
+    When the Academy receives a prerender and a navigational prefetch of a page as a document
+    Then each is answered 503 with Cache-Control no-store and sets no cookie
 
   # Exhausting the per-IP bucket starves every check of that address for 15
   # minutes, so it runs only in the isolated default-limits contour.

@@ -155,7 +155,7 @@ Four rules live there, each stated once for both storefronts:
   interactive transaction is replaced, a limited start renders the guest page.
   A checkable speculative load — a prerender or a navigational prefetch, which
   the browser would later show as the navigation with no new request, marked
-  in `Sec-Purpose`, the legacy `Purpose`, `X-Purpose` or `X-Moz` — gets
+  in `Sec-Purpose`, the legacy `Purpose` or `X-Moz` — gets
   `503 no-store` with no transaction and no cookie, so the browser discards it
   and the real navigation is checked (#3660). Each decision
   logs one `[silent-check] client=<storefront> outcome=<…>` line.

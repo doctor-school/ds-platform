@@ -357,7 +357,7 @@ flowchart TD
     S -- yes --> P[Render signed in]
     S -- no --> M{Valid marker, guard, live silent tx or ds_guest=1?}
     M -- yes --> GG[Render guest; first request with guard deletes it]
-    M -- no --> SP{Speculative load? prerender / prefetch in Sec-Purpose, Purpose, X-Purpose or X-Moz}
+    M -- no --> SP{Speculative load? prerender / prefetch in Sec-Purpose, Purpose or X-Moz}
     SP -- yes --> SR[503 no-store, no tx, no cookie: browser discards it, the navigation is checked]
     SP -- no --> RL{Silent bucket ok?}
     RL -- no --> GH[Guest page HTTP 200]

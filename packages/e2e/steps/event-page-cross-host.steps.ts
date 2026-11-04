@@ -710,7 +710,7 @@ Given("a browser with no Academy session", async ({ page }) => {
 });
 
 When(
-  /^the Academy receives a crawler request, a request without fetch metadata, a prefetch, a POST, a "\/v1" call, a static asset, a "\.well-known" file and the health route$/,
+  /^the Academy receives a crawler request, a request without fetch metadata, a POST, a "\/v1" call, a static asset, a "\.well-known" file and the health route$/,
   async ({ page }) => {
     const academy = base("academy");
     const nav = TOP_LEVEL_NAVIGATION_HEADERS;
@@ -727,7 +727,6 @@ When(
           }),
       ],
       ["no fetch metadata", () => get("/")],
-      ["prefetch", () => get("/", { ...nav, "sec-purpose": "prefetch" })],
       [
         "POST",
         () =>
@@ -745,6 +744,72 @@ When(
       answers.set(label, (await probe()).status());
     }
     exemptAnswers.set(page, answers);
+  },
+);
+
+/** 003 EARS-63 (d) — the Academy's answers to the speculative loads. */
+const speculativeAnswers = new WeakMap<
+  Page,
+  Map<
+    string,
+    {
+      status: number;
+      cacheControl: string | undefined;
+      setCookie: string | undefined;
+    }
+  >
+>();
+
+When(
+  "the Academy receives a prerender and a navigational prefetch of a page as a document",
+  async ({ page }) => {
+    const academy = base("academy");
+    const nav = TOP_LEVEL_NAVIGATION_HEADERS;
+    const loads: readonly [string, Record<string, string>][] = [
+      ["prerender", { "sec-purpose": "prefetch;prerender" }],
+      // Chromium before 139 sends the legacy Purpose beside Sec-Purpose.
+      [
+        "prerender with legacy Purpose",
+        { "sec-purpose": "prefetch;prerender", purpose: "prefetch" },
+      ],
+      ["navigational prefetch", { "sec-purpose": "prefetch" }],
+    ];
+    const answers = new Map<
+      string,
+      {
+        status: number;
+        cacheControl: string | undefined;
+        setCookie: string | undefined;
+      }
+    >();
+    for (const [label, purpose] of loads) {
+      // Each load is its own first visit: no marker, guard or transaction.
+      await page.context().clearCookies();
+      const res = await page.request.get(`${academy}/`, {
+        maxRedirects: 0,
+        headers: { ...nav, ...purpose },
+      });
+      const headers = res.headers();
+      answers.set(label, {
+        status: res.status(),
+        cacheControl: headers["cache-control"],
+        setCookie: headers["set-cookie"],
+      });
+    }
+    speculativeAnswers.set(page, answers);
+  },
+);
+
+Then(
+  "each is answered 503 with Cache-Control no-store and sets no cookie",
+  async ({ page }) => {
+    const answers = speculativeAnswers.get(page);
+    if (!answers) throw new Error("003 EARS-63: no speculative load was made");
+    for (const [label, answer] of answers) {
+      expect(answer.status, `${label} answered ${answer.status}`).toBe(503);
+      expect(answer.cacheControl, label).toBe("no-store");
+      expect(answer.setCookie, label).toBeUndefined();
+    }
   },
 );
 

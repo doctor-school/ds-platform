@@ -401,7 +401,6 @@ describe("003 EARS-63 (d): a speculative load is never shown as an unchecked gue
       "a prefetch signalled only by the legacy Purpose",
       { purpose: "prefetch" },
     ],
-    ["a prefetch signalled by X-Purpose", { "x-purpose": "preview" }],
     ["a prefetch signalled by X-Moz", { "x-moz": "prefetch" }],
   ] as const)(
     "EARS-63: (d) %s of a checkable page is refused with 503, no transaction, no cookie",
@@ -449,6 +448,15 @@ describe("003 EARS-63 (d): a speculative load is never shown as an unchecked gue
       ),
     ).toEqual([]);
     expect(api.starts()).toEqual([]);
+  });
+
+  it("EARS-63: (d) Safari's X-Purpose: preview is not a speculative load: the navigation is checked as usual", async () => {
+    const api = fakeApi();
+    const res = redirected(
+      await check(nav("/", { "x-purpose": "preview" }), api, DOCTOR),
+    );
+    expect(res.status).toBe(303);
+    expect(api.starts()).toHaveLength(1);
   });
 
   it("EARS-63: (d) a navigational prefetch with a valid marker renders the guest page", async () => {

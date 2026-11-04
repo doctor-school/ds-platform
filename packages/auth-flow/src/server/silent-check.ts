@@ -239,11 +239,17 @@ export function isSilentCheckCandidate(
  * The headers a browser marks a speculative load with: the standard
  * `Sec-Purpose` (`prefetch`, `prefetch;prerender`,
  * `prefetch;anonymous-client-ip`), Chromium's legacy `Purpose: prefetch` (sent
- * beside `Sec-Purpose` until Chrome 139, and still by forks that lag it),
- * Safari's `X-Purpose: preview` and Firefox's `X-Moz: prefetch`.
+ * beside `Sec-Purpose` until Chrome 139, and still by forks that lag it) and
+ * Firefox's `X-Moz: prefetch` (only ever on a `<link rel=prefetch>` hint, which
+ * stops at `not-navigation` before this).
+ *
+ * Safari's address-bar preload (`X-Purpose: preview`) is deliberately NOT one:
+ * nothing shows that Safari discards a non-2xx preload rather than displaying
+ * it, so a 503 could put a blank page in front of a real navigation. It goes
+ * through the normal check, as it always has.
  */
-const SPECULATION_HEADERS = ["sec-purpose", "purpose", "x-purpose", "x-moz"];
-const SPECULATION_VALUE = /prefetch|prerender|preview/i;
+const SPECULATION_HEADERS = ["sec-purpose", "purpose", "x-moz"];
+const SPECULATION_VALUE = /prefetch|prerender/i;
 
 /**
  * EARS-63 (d) — a speculative load of a document: a prerender (the address bar,

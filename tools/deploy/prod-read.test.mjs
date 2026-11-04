@@ -7,6 +7,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -30,7 +31,7 @@ import {
   resultKey,
   statusLine,
 } from "./lib/prod-read.mjs";
-import { sha256 } from "./lib/schema-drift.mjs";
+import { newestSnapshot, sha256 } from "./lib/schema-drift.mjs";
 import { schemaDrift } from "./prod-read.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -475,4 +476,42 @@ test("3646: prod:schema-drift compares against the checked-out journal and newes
     () => schemaDrift({ answer: { verb: "observe" }, root: REPO }),
     /not a schema answer/,
   );
+});
+
+test("3683: prod:schema-drift accepts the indexes the tree's migration SQL writes by hand", () => {
+  const meta = join(REPO, "apps/api/drizzle/meta");
+  const journal = JSON.parse(readFileSync(join(meta, "_journal.json"), "utf8"));
+  const snapshot = JSON.parse(
+    readFileSync(join(meta, newestSnapshot(readdirSync(meta))), "utf8"),
+  );
+  const directions = Object.values(snapshot.tables).find(
+    (x) => x.name === "directions",
+  );
+  const table = (extra) => ({
+    schema: "public",
+    name: "directions",
+    columns: [],
+    indexes: [
+      {
+        name: extra,
+        definition: `CREATE INDEX ${extra} ON public.directions USING gin (slug gin_trgm_ops)`,
+      },
+    ],
+    constraints: [],
+  });
+  assert.ok(directions, "the snapshot has public.directions");
+  const lines = (extra) =>
+    schemaDrift({
+      answer: {
+        verb: "schema",
+        migrations: [],
+        catalogue: { tables: [table(extra)], enums: [] },
+      },
+      root: REPO,
+    }).catalogue.filter((l) => l.startsWith("index extra:"));
+  assert.ok(journal.entries.length > 0);
+  assert.deepEqual(lines("directions_slug_trgm_idx"), []);
+  assert.deepEqual(lines("directions_stray_idx"), [
+    "index extra: public.directions directions_stray_idx",
+  ]);
 });

@@ -37,6 +37,7 @@ import {
 } from "./lib/prod-read.mjs";
 import {
   catalogueDrift,
+  handWrittenIndexes,
   migrationDrift,
   newestSnapshot,
 } from "./lib/schema-drift.mjs";
@@ -68,7 +69,9 @@ export function schemaDrift({ answer, root }) {
   return {
     snapshot: name,
     migrations: migrationDrift(journal, readSql, answer.migrations),
-    catalogue: catalogueDrift(snapshot, answer.catalogue),
+    catalogue: catalogueDrift(snapshot, answer.catalogue, {
+      handWrittenIndexes: handWrittenIndexes(journal, readSql),
+    }),
   };
 }
 

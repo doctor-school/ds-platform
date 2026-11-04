@@ -10,12 +10,22 @@
 //   (b) catalogue — against the newest `apps/api/drizzle/meta/*_snapshot.json`:
 //       missing, extra or changed tables, columns (type, not-null, default), indexes
 //       and constraints by name, enums by values, after the fixed normalisation of
-//       type and default spelling below.
+//       type and default spelling below. Not drift (Issue #3683): the `partman`
+//       schema and the child partitions pg_partman creates under a snapshot table;
+//       a snapshot name longer than Postgres' 63-byte identifier limit, compared as
+//       Postgres stores it; an index the migration SQL writes by hand, which no
+//       drizzle-kit snapshot carries.
 
 import { createHash } from "node:crypto";
 
 /** The migrator's own bookkeeping schema (`drizzle.__drizzle_migrations`): never drift. */
 export const MIGRATOR_SCHEMA = "drizzle";
+
+/** pg_partman's own schema (its config and template tables): never drift. */
+export const PARTMAN_SCHEMA = "partman";
+
+/** NAMEDATALEN - 1: Postgres truncates a longer identifier to this many bytes. */
+export const MAX_IDENTIFIER_BYTES = 63;
 
 const SNAPSHOT_RE = /^(\d+)_snapshot\.json$/;
 
@@ -68,6 +78,55 @@ export function migrationDrift(journal, readSql, applied) {
     }
   }
   return lines;
+}
+
+/** An identifier as Postgres stores it: truncated to 63 UTF-8 bytes on a character boundary. */
+export function pgIdentifier(name) {
+  const text = String(name);
+  if (Buffer.byteLength(text) <= MAX_IDENTIFIER_BYTES) return text;
+  let out = "";
+  let bytes = 0;
+  for (const ch of text) {
+    const n = Buffer.byteLength(ch);
+    if (bytes + n > MAX_IDENTIFIER_BYTES) break;
+    out += ch;
+    bytes += n;
+  }
+  return out;
+}
+
+// One statement form per alternative, matched in file order: group 1 a created
+// index, groups 2→3 a rename, group 4 a dropped index (an optional quoted schema
+// prefix before each name).
+const INDEX_DDL_RE =
+  /\b(?:CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(?:"[^"]+"\.)?"([^"]+)"|ALTER\s+INDEX\s+(?:IF\s+EXISTS\s+)?(?:"[^"]+"\.)?"([^"]+)"\s+RENAME\s+TO\s+"([^"]+)"|DROP\s+INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+EXISTS\s+)?(?:"[^"]+"\.)?"([^"]+)")/gi;
+
+/**
+ * The indexes the migration SQL writes by hand (drizzle-kit snapshots carry none of
+ * them): every `CREATE INDEX "<name>"`, followed through `ALTER INDEX … RENAME TO`
+ * and `DROP INDEX` in journal order; `--` comments ignored. Only quoted names
+ * are read — the spelling drizzle-kit and the hand-written migrations use.
+ * @returns {Set<string>} index names as Postgres stores them
+ */
+export function handWrittenIndexes(journal, readSql) {
+  if (!journal || !Array.isArray(journal.entries))
+    throw new Error("the journal has no entries");
+  const names = new Set();
+  for (const entry of journal.entries) {
+    const text = readSql(entry.tag);
+    if (text === null)
+      throw new Error(
+        `the migration file of journal entry ${entry.tag} is missing`,
+      );
+    const sql = text.replace(/--[^\n]*/g, "");
+    for (const [, created, from, to, dropped] of sql.matchAll(INDEX_DDL_RE)) {
+      if (created) names.add(pgIdentifier(created));
+      else if (from) {
+        if (names.delete(pgIdentifier(from))) names.add(pgIdentifier(to));
+      } else names.delete(pgIdentifier(dropped));
+    }
+  }
+  return names;
 }
 
 const ALIASES = new Map([
@@ -163,25 +222,25 @@ function snapshotTable(table) {
   }
   const constraints = new Map();
   const composite = Object.values(table.compositePrimaryKeys ?? {});
-  for (const pk of composite) constraints.set(pk.name, "primary key");
+  const put = (k, kind) => constraints.set(pgIdentifier(k), kind);
+  for (const pk of composite) put(pk.name, "primary key");
   if (
     composite.length === 0 &&
     Object.values(table.columns ?? {}).some((c) => c.primaryKey)
   ) {
-    constraints.set(`${name}_pkey`, "primary key");
+    put(`${name}_pkey`, "primary key");
   }
   for (const fk of Object.values(table.foreignKeys ?? {}))
-    constraints.set(fk.name, "foreign key");
+    put(fk.name, "foreign key");
   for (const u of Object.values(table.uniqueConstraints ?? {}))
-    constraints.set(u.name, "unique");
+    put(u.name, "unique");
   for (const col of Object.values(table.columns ?? {}))
-    if (col.isUnique && col.uniqueName)
-      constraints.set(col.uniqueName, "unique");
+    if (col.isUnique && col.uniqueName) put(col.uniqueName, "unique");
   for (const c of Object.values(table.checkConstraints ?? {}))
-    constraints.set(c.name, "check");
+    put(c.name, "check");
   const indexes = new Map();
   for (const i of Object.values(table.indexes ?? {}))
-    indexes.set(i.name, { unique: Boolean(i.isUnique) });
+    indexes.set(pgIdentifier(i.name), { unique: Boolean(i.isUnique) });
   return { columns, constraints, indexes };
 }
 
@@ -213,16 +272,50 @@ function prodTable(table) {
   return { columns, constraints, indexes };
 }
 
+/**
+ * The parent `schema.name` of a child partition, or null. The box reports
+ * `partitionOf` (`pg_inherits` of a `relispartition` table); an answer read before
+ * that field existed falls back to the shape pg_partman leaves: the parent is a
+ * partitioned table — Postgres prints its own indexes `ON ONLY` — and every child
+ * is named `<parent>_<suffix>` in the parent's schema with the parent's columns,
+ * name for name and type for type (a partition has no columns of its own); the
+ * longest such parent wins.
+ */
+function columnShape(table) {
+  return JSON.stringify((table.columns ?? []).map((c) => [c.name, c.type]));
+}
+
+function partitionParent(table, tables) {
+  if ("partitionOf" in table) return table.partitionOf ?? null;
+  let parent = null;
+  for (const p of tables) {
+    if (
+      p.schema === table.schema &&
+      table.name.startsWith(`${p.name}_`) &&
+      (p.indexes ?? []).some((i) => / ON ONLY /.test(String(i.definition))) &&
+      columnShape(p) === columnShape(table) &&
+      (parent === null || p.name.length > parent.name.length)
+    )
+      parent = p;
+  }
+  return parent && `${parent.schema}.${parent.name}`;
+}
+
 function show(v) {
   return v === null ? "none" : JSON.stringify(v);
 }
 
 /**
  * (b) Catalogue. `snapshot` is a drizzle-kit `*_snapshot.json`, `catalogue` the
- * answer's `catalogue`.
+ * answer's `catalogue`, `handWrittenIndexes` the names of
+ * {@link handWrittenIndexes}: such an index on prod is not extra.
  * @returns {string[]} one line per drift
  */
-export function catalogueDrift(snapshot, catalogue) {
+export function catalogueDrift(
+  snapshot,
+  catalogue,
+  { handWrittenIndexes: handWritten = new Set() } = {},
+) {
   if (!snapshot || typeof snapshot.tables !== "object")
     throw new Error("the snapshot has no tables");
   if (!catalogue || !Array.isArray(catalogue.tables))
@@ -236,7 +329,12 @@ export function catalogueDrift(snapshot, catalogue) {
   );
   const have = new Map(
     catalogue.tables
-      .filter((t) => t.schema !== MIGRATOR_SCHEMA)
+      .filter(
+        (t) =>
+          t.schema !== MIGRATOR_SCHEMA &&
+          t.schema !== PARTMAN_SCHEMA &&
+          !want.has(partitionParent(t, catalogue.tables)),
+      )
       .map((t) => [`${t.schema}.${t.name}`, prodTable(t)]),
   );
   for (const key of [...want.keys()].sort())
@@ -290,7 +388,8 @@ export function catalogueDrift(snapshot, catalogue) {
         );
     }
     for (const name of h.indexes.keys())
-      if (!w.indexes.has(name)) lines.push(`index extra: ${key} ${name}`);
+      if (!w.indexes.has(name) && !handWritten.has(name))
+        lines.push(`index extra: ${key} ${name}`);
   }
   const wantEnums = new Map(
     Object.values(snapshot.enums ?? {}).map((e) => [

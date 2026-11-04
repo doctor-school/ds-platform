@@ -998,7 +998,11 @@ TABLES = """(SELECT coalesce(json_agg(t ORDER BY t."schema", t."name"), '[]'::js
           WHEN 'u' THEN 'unique' WHEN 'c' THEN 'check' WHEN 'x' THEN 'exclusion'
           WHEN 'n' THEN 'not null' WHEN 't' THEN 'trigger' ELSE k.contype::text END,
         'definition', pg_get_constraintdef(k.oid)) ORDER BY k.conname), '[]'::json)
-      FROM pg_constraint k WHERE k.conrelid = c.oid) AS "constraints"
+      FROM pg_constraint k WHERE k.conrelid = c.oid) AS "constraints",
+    (SELECT pn.nspname || '.' || p.relname
+      FROM pg_inherits h JOIN pg_class p ON p.oid = h.inhparent
+        JOIN pg_namespace pn ON pn.oid = p.relnamespace
+      WHERE h.inhrelid = c.oid AND c.relispartition) AS "partitionOf"
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE c.relkind IN ('r', 'p') AND """ + NS + """
 ) t)"""

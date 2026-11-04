@@ -166,7 +166,12 @@ Four rules live there, each stated once for both storefronts:
   the marker on every mint, answers a cookieless silent callback with
   `<path>?ds_guest=1#`, and recovers a callback with no live transaction (003
   EARS-62) into a fresh silent check — or, with the guard present, `/` as a
-  guest with the marker.
+  guest with the marker. Every mint also sets the sign-in signal
+  `__Secure-ds_signin_at=<minted s>` on the parent domain both storefronts
+  share (the runtime env `STOREFRONT_COOKIE_DOMAIN`: `doctor.school` in prod,
+  `STAGE_BASE_DOMAIN` on a stage slot, unset on a single-host dev stand ⇒ no
+  signal); a marker issued before the signal is void, so a sign-in on the
+  other storefront makes the next navigation here run the check (#3685).
 
 ## The five rules of the auth flow (S1–S5)
 

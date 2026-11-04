@@ -4,6 +4,7 @@ import { ACADEMY_AUTH_FLOW, DOCTOR_AUTH_FLOW } from "../hosts";
 import {
   CHECK_GUARD_COOKIE,
   GUEST_MARKER_COOKIE,
+  SIGN_IN_SIGNAL_COOKIE,
   checkGuardCookie,
   guestMarkerCookie,
   silentTransactionCookieValue,
@@ -566,6 +567,178 @@ describe("003 EARS-63 (a): the guest marker", () => {
       redirected(await check(nav("/", { cookie }), api));
     }
     expect(api.starts()).toHaveLength(3);
+  });
+});
+
+describe("003 EARS-63 (a): a sign-in on the other storefront voids the marker", () => {
+  const SHARED = { ...ENV, STOREFRONT_COOKIE_DOMAIN: "example" };
+  const signal = (atMs: number) =>
+    `${SIGN_IN_SIGNAL_COOKIE}=${Math.floor(atMs / 1000)}`;
+  const checkWith = (
+    cookie: string,
+    api: ReturnType<typeof fakeApi>,
+    env: Record<string, string> = SHARED,
+  ) =>
+    storefrontSilentCheck(nav("/", { cookie }), DOCTOR, {
+      fetchImpl: api.fetchImpl,
+      env,
+      now: () => NOW,
+    });
+
+  it("EARS-63: (a) a marker issued before the last sign-in signal is void: the navigation runs the check", async () => {
+    const api = fakeApi();
+    const cookie = `${await marker(NOW - 10 * 1000)}; ${signal(NOW - 3 * 1000)}`;
+    redirected(await checkWith(cookie, api));
+    expect(api.starts()).toHaveLength(1);
+  });
+
+  it("EARS-63: (a) a marker issued after the last sign-in signal still suppresses the check", async () => {
+    const api = fakeApi();
+    const cookie = `${await marker(NOW - 3 * 1000)}; ${signal(NOW - 10 * 1000)}`;
+    expect(rendered(await checkWith(cookie, api))).toEqual([]);
+    expect(api.calls).toEqual([]);
+  });
+
+  it("EARS-63: (a) a signal from the future beyond the skew, or a malformed one, is ignored", async () => {
+    const api = fakeApi();
+    const m = await marker(NOW - 10 * 1000);
+    for (const bad of [
+      signal(NOW + 2 * 60 * 1000),
+      `${SIGN_IN_SIGNAL_COOKIE}=abc`,
+      `${SIGN_IN_SIGNAL_COOKIE}=`,
+      `${SIGN_IN_SIGNAL_COOKIE}=1e12`,
+      `${SIGN_IN_SIGNAL_COOKIE}=${"9".repeat(20)}`,
+    ]) {
+      expect(rendered(await checkWith(`${m}; ${bad}`, api))).toEqual([]);
+    }
+    expect(api.calls).toEqual([]);
+  });
+
+  it("EARS-63: (a) among several signals (a parent-domain one beside a slot's, or a planted older one) the newest valid one counts", async () => {
+    const api = fakeApi();
+    const m = await marker(NOW - 10 * 1000);
+    const cookie = `${m}; ${signal(NOW - 20 * 1000)}; ${SIGN_IN_SIGNAL_COOKIE}=x; ${signal(NOW + 5 * 60 * 1000)}; ${signal(NOW - 3 * 1000)}`;
+    redirected(await checkWith(cookie, api));
+    expect(api.starts()).toHaveLength(1);
+  });
+
+  it("EARS-63: (a) with no shared parent domain configured the signal is not read: the marker suppresses as before", async () => {
+    const api = fakeApi();
+    const cookie = `${await marker(NOW - 10 * 1000)}; ${signal(NOW - 3 * 1000)}`;
+    expect(rendered(await checkWith(cookie, api, ENV))).toEqual([]);
+    expect(api.calls).toEqual([]);
+  });
+
+  it("EARS-63: (a / b) the signal never starts a check on its own and never bypasses the loop guard", async () => {
+    const api = fakeApi();
+    const guarded = `${CHECK_GUARD_COOKIE}=1; ${await marker(NOW - 10 * 1000)}; ${signal(NOW - 3 * 1000)}`;
+    rendered(await checkWith(guarded, api));
+    expect(api.starts()).toEqual([]);
+    const signedIn = fakeApi({ signedIn: true });
+    expect(
+      rendered(
+        await checkWith(
+          `__Host-ds_session=sid; ${signal(NOW - 3 * 1000)}`,
+          signedIn,
+        ),
+      ),
+    ).toEqual([]);
+    expect(signedIn.starts()).toEqual([]);
+  });
+
+  const mintedBody = (kind: "silent" | "interactive") => () =>
+    new Response(
+      JSON.stringify({
+        sub: "u1",
+        roles: ["doctor_guest"],
+        mfa: false,
+        returnPath: "/webinars",
+        door: "login",
+        kind,
+        completeRegistration: null,
+      }),
+      {
+        status: 200,
+        headers: {
+          "set-cookie":
+            "__Host-ds_session=fresh-sid; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax",
+        },
+      },
+    );
+  const SIGNAL_LINE = `${SIGN_IN_SIGNAL_COOKIE}=${Math.floor(NOW / 1000)}; Domain=example; Path=/; Max-Age=660; HttpOnly; Secure; SameSite=Lax`;
+  const callbackWith = async (
+    host: StorefrontOidcHost,
+    cookie: string,
+    api: ReturnType<typeof fakeApi>,
+    env: Record<string, string> = SHARED,
+  ) =>
+    (
+      await storefrontCallback(
+        nav("/auth/callback?code=c&state=st", { cookie }),
+        host,
+        { fetchImpl: api.fetchImpl, env, now: () => NOW },
+      )
+    ).headers.getSetCookie();
+
+  it("EARS-63: (a) every callback that mints — interactive or silent, on either storefront — sets the sign-in signal on the shared parent domain", async () => {
+    const silentTx = `${OIDC_TX_COOKIE}=${await silentTransactionCookieValue(TOKEN, SILENT_TX_ID)}`;
+    for (const host of [ACADEMY, DOCTOR]) {
+      for (const [kind, cookie] of [
+        ["interactive", `${OIDC_TX_COOKIE}=${INTERACTIVE_TX_ID}`],
+        ["silent", silentTx],
+      ] as const) {
+        const set = await callbackWith(
+          host,
+          cookie,
+          fakeApi({ redeem: mintedBody(kind) }),
+        );
+        expect(set).toContain(SIGNAL_LINE);
+      }
+    }
+  });
+
+  it("EARS-63: (a) login_required never sets the signal, and without a parent domain no callback sets it", async () => {
+    const silentTx = `${OIDC_TX_COOKIE}=${await silentTransactionCookieValue(TOKEN, SILENT_TX_ID)}`;
+    const refused = await callbackWith(
+      DOCTOR,
+      silentTx,
+      fakeApi({
+        redeem: () =>
+          Response.json(
+            {
+              message: "redeem refused",
+              returnPath: "/webinars",
+              door: "login",
+              kind: "silent",
+            },
+            { status: 401 },
+          ),
+      }),
+    );
+    expect(refused.some((c) => c.startsWith(`${SIGN_IN_SIGNAL_COOKIE}=`))).toBe(
+      false,
+    );
+    const local = await callbackWith(
+      ACADEMY,
+      `${OIDC_TX_COOKIE}=${INTERACTIVE_TX_ID}`,
+      fakeApi({ redeem: mintedBody("interactive") }),
+      ENV,
+    );
+    expect(local.some((c) => c.startsWith(`${SIGN_IN_SIGNAL_COOKIE}=`))).toBe(
+      false,
+    );
+  });
+
+  it("EARS-63: (a) a malformed parent domain is treated as unset", async () => {
+    const set = await callbackWith(
+      ACADEMY,
+      `${OIDC_TX_COOKIE}=${INTERACTIVE_TX_ID}`,
+      fakeApi({ redeem: mintedBody("interactive") }),
+      { ...ENV, STOREFRONT_COOKIE_DOMAIN: "evil.example; Path=/x" },
+    );
+    expect(set.some((c) => c.startsWith(`${SIGN_IN_SIGNAL_COOKIE}=`))).toBe(
+      false,
+    );
   });
 });
 

@@ -51,6 +51,7 @@ type State = {
   };
 };
 const states = new WeakMap<AdminWorld, State>();
+const ownedObjects = new Set<string>();
 function state(world: AdminWorld): State {
   let current = states.get(world);
   if (!current) {
@@ -300,6 +301,10 @@ async function rows<T extends QueryResultRow>(
   operation("SELECT protocol fixture", { sql, values, database });
   const pool = new Pool({ connectionString: connection, max: 1 });
   try {
+    operation("SELECT protocol database binding", {
+      sql: "SELECT current_database() AS name",
+      database,
+    });
     expect(
       (await pool.query("SELECT current_database() AS name")).rows[0].name,
     ).toBe(database);
@@ -804,25 +809,47 @@ async function objectInventory(prefixes: string[]) {
           .replace(/&gt;/gu, ">")
           .replace(/&quot;/gu, '"')
           .replace(/&apos;/gu, "'");
-      for (const match of xml.matchAll(/<Key>(.*?)<\/Key>/gu)) {
-        const key = decode(match[1]);
+      for (const match of xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/gu)) {
+        const field = (name: string) =>
+          decode(
+            new RegExp(`<${name}>(.*?)</${name}>`, "u").exec(match[1])?.[1] ??
+              "",
+          );
+        const key = field("Key");
         expect(key.startsWith(prefix)).toBe(true);
-        const head = await storageRead(
-          "HEAD",
-          key.split("/").map(encodeURIComponent).join("/"),
-        );
-        const metadata = Object.fromEntries(
-          [...head.headers].filter(
-            ([name]) =>
-              [
-                "content-length",
-                "content-type",
-                "etag",
-                "last-modified",
-                "x-amz-version-id",
-              ].includes(name) || name.startsWith("x-amz-meta-"),
-          ),
-        );
+        // LIST observes every applicable key and its provider metadata. HEAD
+        // additionally binds the API-created objects to the configured writer;
+        // unrelated retained objects need no extra per-object network call.
+        const metadata: Record<string, string> = {
+          "list-etag": field("ETag"),
+          "list-size": field("Size"),
+          "list-last-modified": field("LastModified"),
+          "list-storage-class": field("StorageClass"),
+        };
+        expect(metadata["list-etag"]).not.toBe("");
+        expect(metadata["list-last-modified"]).not.toBe("");
+        expect(Number(metadata["list-size"])).toBeGreaterThanOrEqual(0);
+        if (ownedObjects.has(key)) {
+          const head = await storageRead(
+            "HEAD",
+            key.split("/").map(encodeURIComponent).join("/"),
+          );
+          Object.assign(
+            metadata,
+            Object.fromEntries(
+              [...head.headers].filter(
+                ([name]) =>
+                  [
+                    "content-length",
+                    "content-type",
+                    "etag",
+                    "last-modified",
+                    "x-amz-version-id",
+                  ].includes(name) || name.startsWith("x-amz-meta-"),
+              ),
+            ),
+          );
+        }
         inventory.push({ key, metadata });
       }
       continuation =
@@ -946,6 +973,7 @@ async function mediaTarget(
     key: stored.ref,
     entityId: created.body.id,
   });
+  ownedObjects.add(stored.ref);
   const inventory = await objectInventory([shape.prefix]);
   const actual = inventory.find((object) => object.key === stored.ref);
   expect(actual).toBeTruthy();
@@ -1083,7 +1111,7 @@ Then(
 Given("an event and a publishable expert exist", async ({ page, world }) => {
   const current = state(world);
   const kinds = await rows<{ id: string }>(
-    "SELECT id FROM event_kinds WHERE status='published' AND deleted_at IS NULL AND allowed_formats @> ARRAY['online']::text[] ORDER BY id LIMIT 1",
+    "SELECT id FROM event_kinds WHERE status='published' AND deleted_at IS NULL AND 'online'=ANY(allowed_formats) ORDER BY id LIMIT 1",
   );
   expect(kinds).toHaveLength(1);
   const [event] = await commands(page, [

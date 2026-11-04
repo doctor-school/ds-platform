@@ -931,6 +931,44 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/events/${ABSENT_ID}/recordings/${ABSENT_ID}/publish`,
     payload: {},
   },
+  // 048 EARS-8 (#3512) — the «Материалы» authoring surface, platform_admin only
+  // on the same raised floor: the guard refuses before validation, the
+  // Idempotency-Key / If-Match preamble or the cover upload, so an unfielded
+  // request is answered by authz, never by the protocol.
+  {
+    endpoint: "GET /v1/admin/materials",
+    method: "GET",
+    url: "/v1/admin/materials",
+  },
+  {
+    endpoint: "GET /v1/admin/materials/:id",
+    method: "GET",
+    url: `/v1/admin/materials/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/materials",
+    method: "POST",
+    url: "/v1/admin/materials",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/materials/:id",
+    method: "PATCH",
+    url: `/v1/admin/materials/${ABSENT_ID}`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/materials/:id/publish",
+    method: "POST",
+    url: `/v1/admin/materials/${ABSENT_ID}/publish`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/materials/:id/unpublish",
+    method: "POST",
+    url: `/v1/admin/materials/${ABSENT_ID}/unpublish`,
+    payload: {},
+  },
 ];
 
 /** An authz refusal — never a 2xx, never a partially-served admin answer. */

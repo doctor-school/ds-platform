@@ -88,6 +88,21 @@ export function outputKindHolders(
     }));
 }
 
+/**
+ * 048 EARS-1 / EARS-4 — the fields a material refusal addresses. A write refused
+ * by validation and a publish refused by its requirement set
+ * (`409 PUBLISH_REQUIREMENTS_NOT_MET`) both name their fields, and the form shows
+ * each reason at its field — so both codes are read here, unlike
+ * {@link refusedFields}, whose surfaces show a publish refusal as one sentence.
+ */
+export function materialRefusedFields(error: unknown): string[] {
+  const refusal = error as TaxonomyHttpError | undefined;
+  if (refusal?.errorCode === "PUBLISH_REQUIREMENTS_NOT_MET") {
+    return refusedFields({ ...refusal, errorCode: "VALIDATION_FAILED" });
+  }
+  return refusedFields(error);
+}
+
 export interface TaxonomyErrorContext {
   /** The command disambiguates a shared wire code without changing fallback truth. */
   action?: "restore-curator" | "restore-primary";
@@ -341,7 +356,12 @@ export function taxonomyErrorKey(
   // project's missing curator is one of its items since 030 EARS-6 (path
   // `curator`), so the publish panel lists it with the other missing items and
   // links it to «Эксперты» (`publishBlockers`).
-  if (ns === "projects" || ns === "experts" || ns === "organisations") {
+  if (
+    ns === "projects" ||
+    ns === "experts" ||
+    ns === "organisations" ||
+    ns === "materials"
+  ) {
     switch (code) {
       case "SPEAKER_POSITION_OCCUPIED":
         return "experts.errors.positionOccupied";

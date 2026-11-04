@@ -24,11 +24,14 @@ export function useRelationshipCombobox({
   excludedIds,
   value,
   removedLabel,
+  initialSelected = null,
 }: {
   resource: "events" | "projects" | "experts" | "directions" | "organisations";
   excludedIds: string[];
   value: string;
   removedLabel?: string;
+  /** The stored endpoint's label from the host's detail read (048 form). */
+  initialSelected?: { id: string; label: string } | null;
 }): ServerComboboxController {
   const excludedKey = excludedIds.join("|");
 
@@ -67,6 +70,7 @@ export function useRelationshipCombobox({
       label: item.title ?? item.name ?? removedLabel ?? "—",
     }),
     selectedId: value || null,
+    initialSelected,
     pageSize: RELATIONSHIP_ENDPOINT_PAGE_SIZE,
   });
 

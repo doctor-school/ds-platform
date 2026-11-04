@@ -278,6 +278,67 @@ describe("dataProvider — the event-kind resource (012 EARS-25, #2509)", () => 
   });
 });
 
+describe("dataProvider — the material cover (048 EARS-1, #3512)", () => {
+  function stub(body: unknown, status = 200) {
+    const fetchStub = vi.fn(
+      async () =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    globalThis.fetch = fetchStub as unknown as typeof fetch;
+    return fetchStub;
+  }
+  const doc = { type: "doc", content: [{ type: "paragraph" }] };
+
+  it("048 EARS-1: a create with a cover posts multipart — the JSON payload part plus one `cover` file", async () => {
+    const fetchStub = stub({ id: "m-1" }, 201);
+    const cover = new File([new Uint8Array([1, 2, 3])], "c.png", {
+      type: "image/png",
+    });
+    await dataProvider.create({
+      resource: "materials",
+      variables: { kind: "news", title: "Новость", body: doc, cover },
+    });
+    const [url, init] = fetchStub.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe("/v1/admin/materials");
+    const form = init.body as FormData;
+    expect(form).toBeInstanceOf(FormData);
+    expect(JSON.parse(form.get("payload") as string)).toEqual({
+      kind: "news",
+      title: "Новость",
+      body: doc,
+    });
+    expect((form.get("cover") as File).name).toBe("c.png");
+    // The browser sets the multipart content-type WITH its boundary.
+    expect(
+      (init.headers as Record<string, string>)["content-type"],
+    ).toBeUndefined();
+  });
+
+  it("048 EARS-1: a create without a cover and a cover clear stay JSON", async () => {
+    const fetchStub = stub({ id: "m-1" });
+    await dataProvider.update({
+      resource: "materials",
+      id: "m-1",
+      variables: { mediaAction: "clear", cover: null, version: 2 },
+    });
+    const [, init] = fetchStub.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect((init.headers as Record<string, string>)["content-type"]).toBe(
+      "application/json",
+    );
+    expect((init.headers as Record<string, string>)["if-match"]).toBe('W/"2"');
+    expect(JSON.parse(init.body as string)).toEqual({ mediaAction: "clear" });
+  });
+});
+
 describe("dataProvider.custom — a write answered with no body", () => {
   it("047 EARS-7: a 204 No Content (the revocation) resolves with no data instead of failing to read a body", async () => {
     globalThis.fetch = vi.fn(

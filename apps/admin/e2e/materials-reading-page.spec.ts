@@ -521,7 +521,7 @@ test.describe("048 reading page — storefronts", () => {
     const external = article.getByRole("link", { name: "ClinicalTrials.gov" });
     await expect(external).toHaveAttribute("target", "_blank");
     await expect(external).toHaveAttribute("rel", "noopener noreferrer");
-    await expect(external).toHaveText("ClinicalTrials.gov ↗");
+    await expect(external).toHaveText("ClinicalTrials.gov ↗\uFE0E");
     const own = article.getByRole("link", { name: "разделе вебинаров" });
     await expect(own).not.toHaveAttribute("target", /.+/);
     await expect(own).toHaveText("разделе вебинаров");
@@ -563,7 +563,7 @@ test.describe("048 reading page — storefronts", () => {
     const pubmed = page.getByRole("link", { name: "PubMed" });
     await expect(pubmed).toHaveAttribute("target", "_blank");
     await expect(pubmed).toHaveAttribute("rel", "noopener noreferrer");
-    await expect(pubmed).toHaveText("PubMed ↗");
+    await expect(pubmed).toHaveText("PubMed ↗\uFE0E");
     await expectNoAxeViolationsBothSchemes(page, "column reading page");
     await shotBothSchemes(page, "page-column-bare-desktop");
     await page.setViewportSize(NARROW);

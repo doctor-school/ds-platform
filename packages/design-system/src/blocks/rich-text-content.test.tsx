@@ -125,9 +125,11 @@ describe("048 EARS-2: RichTextContent", () => {
     render(<RichTextContent body={body} />);
     // The accessible name stays the link text — the glyph is decoration.
     const other = screen.getByRole("link", { name: "чужая" });
-    expect(other.textContent).toBe("чужая ↗");
+    expect(other.textContent).toBe("чужая ↗\uFE0E");
+    // U+FE0E (text presentation) keeps the arrow a text glyph in the link
+    // colour; without it an emoji font in the stack draws a colour tile.
     const glyph = other.querySelector('[aria-hidden="true"]');
-    expect(glyph?.textContent).toBe(" ↗");
+    expect(glyph?.textContent).toBe(" ↗\uFE0E");
     expect(screen.getByRole("link", { name: "своя" }).textContent).toBe("своя");
     expect(screen.getByRole("link", { name: "почта" }).textContent).toBe(
       "почта",
@@ -160,10 +162,10 @@ describe("048 EARS-2: RichTextContent", () => {
     const { container } = render(<RichTextContent body={split} />);
     const links = screen.getAllByRole("link");
     expect(links).toHaveLength(1);
-    expect(links[0]?.textContent).toBe("обзор на PubMed ↗");
+    expect(links[0]?.textContent).toBe("обзор на PubMed ↗\uFE0E");
     expect(links[0]?.querySelector("strong")?.textContent).toBe("PubMed");
     expect(container.querySelector("p")?.textContent).toBe(
-      "обзор на PubMed ↗.",
+      "обзор на PubMed ↗\uFE0E.",
     );
   });
 

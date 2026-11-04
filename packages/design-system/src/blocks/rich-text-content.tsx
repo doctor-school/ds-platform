@@ -97,7 +97,10 @@ function renderMarked(
  * splits a link wherever another mark starts or ends) render as ONE link, so a
  * link to another host carries the canvas «↗» once, after its whole text — the
  * canvas `runs()` appends ` ↗` to every `http(s)` link outside the Academy. The
- * glyph is `aria-hidden`: the accessible name stays the link text.
+ * glyph is `aria-hidden`: the accessible name stays the link text. U+FE0E
+ * (text presentation) keeps it a text arrow in the link colour, as the canvas
+ * draws it — the host font stacks name colour-emoji fonts, which would
+ * otherwise draw U+2197 as an emoji tile.
  */
 function renderInline(
   content: readonly MaterialBodyInline[] | undefined,
@@ -140,7 +143,7 @@ function renderInline(
       <Link key={key} variant="inline" href={href} {...target}>
         {runs}
         {target.target === "_blank" ? (
-          <span aria-hidden="true">{" ↗"}</span>
+          <span aria-hidden="true">{" ↗\uFE0E"}</span>
         ) : null}
       </Link>,
     );

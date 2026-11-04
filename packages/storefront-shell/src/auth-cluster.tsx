@@ -1,9 +1,9 @@
 import NextLink from "next/link";
+import { UserRound } from "lucide-react";
 import { Button } from "@ds/design-system/button";
 
 import type { ShellAuthState } from "./config";
 import { GuestLoginLink } from "./guest-login-link";
-import { HeaderProfileChip } from "./user-cluster";
 
 /**
  * 008 EARS-4/5/6 · 017 EARS-1 — the storefront chrome's auth affordance, owned
@@ -29,6 +29,19 @@ import { HeaderProfileChip } from "./user-cluster";
  * mean inventing one or painting a placeholder number at a doctor — both
  * forbidden (AGENTS.md §6). It lands with its read contract, Issue #1559.
  */
+/**
+ * Where the cluster sits (#3629). Below `layout` it is the last item of the `≡`
+ * menu panel (canvas `ds-shell.dc.html` line 53: `margin-top:4px`, the full
+ * panel width); from `layout` up it is the bar's chip group after the theme
+ * control, as it always was. Placement only — the chip's look is the DS
+ * `header-action` variant, split at the same breakpoint.
+ */
+const CLUSTER_PLACEMENT =
+  "mt-1 flex flex-col gap-3 layout:mt-0 layout:flex-row layout:items-center";
+
+/** A doctor with no saved display name gets a neutral silhouette (#997). */
+const avatarFallbackIcon = <UserRound aria-hidden="true" className="size-5" />;
+
 export function ShellAuthCluster({ auth }: { auth: ShellAuthState }) {
   if (auth.status === "loading") {
     // The session read is still in flight: reserve the chip's box so the bar
@@ -49,7 +62,7 @@ export function ShellAuthCluster({ auth }: { auth: ShellAuthState }) {
       <div
         data-testid="shell-auth-cluster"
         data-cluster="guest"
-        className="flex items-center gap-3"
+        className={CLUSTER_PLACEMENT}
       >
         {/* ONE guest control, «Войти / Регистрация» — the canvas
             `guestCluster.primary` (`ds-shell.dc.html` line 220), the same single
@@ -65,7 +78,7 @@ export function ShellAuthCluster({ auth }: { auth: ShellAuthState }) {
     <div
       data-testid="shell-auth-cluster"
       data-cluster="doctor"
-      className="flex items-center gap-3"
+      className={CLUSTER_PLACEMENT}
     >
       {/* The signed-in destinations (`user.links` line 209) are NOT part of this
           cluster: the canvas draws them INSIDE the nav group, before the theme
@@ -79,7 +92,7 @@ export function ShellAuthCluster({ auth }: { auth: ShellAuthState }) {
         // (017 EARS-1, canvas lines 192/209). Same primitive and size as the
         // guest chip it replaces, so the bar's height never moves with the
         // session.
-        <Button asChild variant="on-primary" size="chip">
+        <Button asChild variant="header-action" size="menu-chip">
           <NextLink href={auth.profileHref} data-testid="shell-avatar">
             {auth.label}
           </NextLink>
@@ -89,12 +102,21 @@ export function ShellAuthCluster({ auth }: { auth: ShellAuthState }) {
         // no «Выйти» (008 EARS-5/6). `initials: null` is a doctor with no saved
         // display name: the chip falls back to a neutral silhouette and still
         // navigates (#997).
-        <HeaderProfileChip
-          label={auth.label}
-          initials={auth.initials}
-          href={auth.profileHref}
-          testId="shell-avatar"
-        />
+        // Below `layout` the canvas menu primary carries the label (line 53,
+        // `primary.label`); from `layout` up the square shows the initials.
+        // One link, both texts, CSS picks — never a second chip (EARS-1).
+        <Button asChild variant="header-action" size="menu-avatar">
+          <NextLink
+            href={auth.profileHref}
+            aria-label={auth.label}
+            data-testid="shell-avatar"
+          >
+            <span className="layout:hidden">{auth.label}</span>
+            <span className="hidden layout:inline-flex">
+              {auth.initials ? auth.initials : avatarFallbackIcon}
+            </span>
+          </NextLink>
+        </Button>
       )}
     </div>
   );

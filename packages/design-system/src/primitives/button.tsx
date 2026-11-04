@@ -68,6 +68,23 @@ const buttonVariants = cva(
           "focus-visible:shadow-focus",
           "disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-none disabled:opacity-40",
         ),
+        // Header action — the storefront auth chip, ONE element the canvas
+        // draws in two places (#3629, `ds-shell.dc.html`): below `layout` it
+        // is the `≡` menu's last item, the full-width filled primary (line 53:
+        // `btnBg`/`btnFg` = `primary-action`/`primary-foreground` in both
+        // themes, weight 800, no border, no cast); from `layout` up it is the
+        // `on-primary` white chip above, class for class under `layout:`, so
+        // the desktop bar is the chip it always was. Two looks on one element
+        // because 017 EARS-1 allows exactly one auth cluster in the DOM —
+        // never a hidden second copy per width.
+        "header-action": cn(
+          "font-extrabold bg-primary-action text-primary-foreground",
+          "hover:bg-primary-hover focus-visible:shadow-focus disabled:opacity-40",
+          "layout:flex-none layout:bg-header-foreground layout:text-header-chip-foreground layout:shadow-header-chip",
+          "layout:hover:bg-header-foreground layout:hover:no-underline layout:hover:translate-x-px layout:hover:translate-y-px layout:hover:shadow-header-chip-hover",
+          "layout:active:translate-x-0.5 layout:active:translate-y-0.5 layout:active:shadow-none layout:active:text-header-chip-foreground",
+          "layout:disabled:translate-x-0 layout:disabled:translate-y-0 layout:disabled:shadow-none",
+        ),
         // Destructive — filled danger red, same ink offset cast as primary.
         destructive: cn(
           "border-2 border-destructive bg-destructive text-destructive-foreground font-extrabold shadow-btn",
@@ -118,6 +135,12 @@ const buttonVariants = cva(
         // so the profile chip is this one variant rather than a parallel
         // class-string constant.
         avatar: "size-10 text-sm",
+        // The `header-action` geometries (#3629): below `layout` the canvas
+        // menu primary row (`ds-shell.dc.html` line 53 — 12×16 at 14px), from
+        // `layout` up the `chip` / `avatar` geometry above, unchanged.
+        "menu-chip":
+          "px-4 py-3 text-sm leading-5 layout:px-chip-x layout:text-chip",
+        "menu-avatar": "px-4 py-3 text-sm leading-5 layout:size-10 layout:p-0",
       },
       // The SURFACE the control sits on, declared LAST so it wins the ink over
       // the variant's own resting colour. `header` is the invariant navy band of

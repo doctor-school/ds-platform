@@ -95,6 +95,90 @@ describe("Button surface-safe on-primary variant", () => {
 });
 
 /**
+ * #3629 — the storefront auth chip is ONE element the canvas draws in two
+ * places (`design-source/ds-shell.dc.html`): below `layout` it is the `≡`
+ * menu's last item, the full-width filled primary (line 53 — `btnBg`/`btnFg`,
+ * 12×16 at 14px/800, no cast); from `layout` up it is the white header chip
+ * (line 37). 017 EARS-1 forbids a second copy, so the two looks are one
+ * variant split at the breakpoint — and the `layout` half must be the
+ * `on-primary` chip class for class, so the desktop bar does not move.
+ */
+describe("Button header-action variant (#3629)", () => {
+  const prefixed = (cls: string) =>
+    cls
+      .split(" ")
+      .filter(Boolean)
+      .map((c) => `layout:${c}`);
+
+  it("017 EARS-14: below layout it is the canvas menu primary — filled btnBg/btnFg, no cast, no border", () => {
+    const cls = buttonVariants({ variant: "header-action" }).split(" ");
+    expect(cls).toContain("bg-primary-action");
+    expect(cls).toContain("text-primary-foreground");
+    expect(cls).toContain("font-extrabold");
+    expect(cls).toContain("hover:bg-primary-hover");
+    expect(cls).toContain("focus-visible:shadow-focus");
+    expect(cls.filter((c) => !c.startsWith("layout:"))).not.toContain(
+      "shadow-header-chip",
+    );
+    expect(cls.join(" ")).not.toMatch(/\bborder-/);
+  });
+
+  it("017 EARS-1: from layout up it carries every class of the on-primary chip", () => {
+    const cls = buttonVariants({ variant: "header-action" }).split(" ");
+    // Each on-primary class holds at `layout` either unscoped (the same at
+    // both widths) or under the `layout:` scope.
+    for (const c of buttonVariants({ variant: "on-primary" }).split(" ")) {
+      if (!c) continue;
+      expect(
+        [c, `layout:${c}`].some((x) => cls.includes(x)),
+        c,
+      ).toBe(true);
+    }
+  });
+
+  it("017 EARS-14: the menu-chip size is the menu row below layout and the chip geometry from layout up", () => {
+    const cls = buttonVariants({
+      variant: "header-action",
+      size: "menu-chip",
+    }).split(" ");
+    expect(cls).toEqual(
+      expect.arrayContaining([
+        "px-4",
+        "py-3",
+        "text-sm",
+        "leading-5",
+        ...prefixed("px-chip-x text-chip"),
+      ]),
+    );
+  });
+
+  it("017 EARS-14: the menu-avatar size is the menu row below layout and the 40px square from layout up", () => {
+    const cls = buttonVariants({
+      variant: "header-action",
+      size: "menu-avatar",
+    }).split(" ");
+    expect(cls).toEqual(
+      expect.arrayContaining(["px-4", "py-3", ...prefixed("size-10 p-0")]),
+    );
+  });
+
+  it("017 EARS-1: the rendered chip keeps both inks — tailwind-merge drops neither half", () => {
+    render(
+      <Button variant="header-action" size="menu-chip">
+        Войти
+      </Button>,
+    );
+    const cls = screen
+      .getByRole("button", { name: "Войти" })
+      .className.split(" ");
+    expect(cls).toContain("text-primary-foreground");
+    expect(cls).toContain("layout:text-header-chip-foreground");
+    expect(cls).toContain("text-sm");
+    expect(cls).toContain("layout:text-chip");
+  });
+});
+
+/**
  * Neo-brutalist re-skin contract (#512, source `design-source/ds-foundation.dc.html`).
  * The look is CSS proven live on the dev stand; this pins the token-class contract
  * jsdom can assert — square radius-0, a hard 2px border, and the PER-VARIANT offset
@@ -222,7 +306,11 @@ describe("Button loading state", () => {
  */
 describe("Button tone (#2180, canvas ds-shell.dc.html line 36)", () => {
   it("008 EARS-3: the header tone paints a quiet control in the band foreground, not the page ink", () => {
-    const cls = buttonVariants({ variant: "ghost", size: "icon", tone: "header" });
+    const cls = buttonVariants({
+      variant: "ghost",
+      size: "icon",
+      tone: "header",
+    });
     expect(cls).toMatch(/(?:^|\s)text-header-foreground(?:\s|$)/);
     // `tone` emits last, so the ghost variant's own ink loses (tailwind-merge).
     expect(cls).toMatch(/(?:^|\s)size-11(?:\s|$)/);
@@ -230,7 +318,9 @@ describe("Button tone (#2180, canvas ds-shell.dc.html line 36)", () => {
   });
 
   it("008 EARS-3: the default tone adds nothing and the axis never reaches the DOM", () => {
-    expect(buttonVariants({ variant: "ghost" })).not.toMatch(/text-header-foreground/);
+    expect(buttonVariants({ variant: "ghost" })).not.toMatch(
+      /text-header-foreground/,
+    );
     render(
       <Button variant="ghost" size="icon" tone="header" aria-label="Theme">
         <span aria-hidden="true">x</span>
@@ -251,7 +341,12 @@ describe("Button tone (#2180, canvas ds-shell.dc.html line 36)", () => {
  */
 describe("Button field size (#2901, the field control height)", () => {
   it("shares the field control height and keeps the default horizontal padding for every variant", () => {
-    for (const variant of ["default", "outline", "secondary", "destructive"] as const) {
+    for (const variant of [
+      "default",
+      "outline",
+      "secondary",
+      "destructive",
+    ] as const) {
       const cls = buttonVariants({ variant, size: "field" });
       expect(cls).toMatch(/(?:^|\s)h-11(?:\s|$)/);
       expect(cls).toMatch(/(?:^|\s)px-5(?:\s|$)/);
@@ -265,6 +360,9 @@ describe("Button field size (#2901, the field control height)", () => {
         Copy
       </Button>,
     );
-    expect(screen.getByRole("button", { name: "Copy" })).toHaveClass("h-11", "px-5");
+    expect(screen.getByRole("button", { name: "Copy" })).toHaveClass(
+      "h-11",
+      "px-5",
+    );
   });
 });

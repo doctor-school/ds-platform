@@ -505,6 +505,83 @@ describe("StorefrontHeader", () => {
     expect(screen.getAllByTestId("shell-auth-cluster")).toHaveLength(1);
   });
 
+  it("017 EARS-14 · 017 EARS-1: below layout the ONE auth cluster is the ≡ menu's last item; from layout up it sits in the bar (#3629)", () => {
+    // Canvas `ds-shell.dc.html` lines 41-58: the mobile bar is logo · ☾ · ≡ and
+    // the primary is the LAST item inside the `≡` menu (line 53); the desktop
+    // bar keeps it after the theme control (line 37). One element serves both:
+    // the menu panel is the `≡` disclosure's sibling, shown by `peer-open`, and
+    // dissolves into the bar (`layout:contents`) from the breakpoint up.
+    for (const auth of [
+      { status: "guest", loginHref: "/login", label: "Войти / Регистрация" },
+      { status: "doctor", profileHref: "/account", label: "Личный кабинет" },
+      {
+        status: "doctor",
+        profileHref: "/account",
+        label: "Личный кабинет",
+        initials: "ВК",
+        links: [{ label: "Мои события", href: "/account/events" }],
+      },
+    ] as const) {
+      const view = render(<StorefrontHeader config={ACADEMY} auth={auth} />);
+      const clusters = screen.getAllByTestId("shell-auth-cluster");
+      expect(clusters).toHaveLength(1);
+      const cluster = clusters[0]!;
+
+      const menu = screen.getByTestId("shell-mobile-menu");
+      const panel = screen.getByTestId("shell-mobile-panel");
+      expect(menu.className.split(" ")).toContain("peer");
+      expect(menu.nextElementSibling).toBe(panel);
+      expect(panel.className.split(" ")).toEqual(
+        expect.arrayContaining([
+          "hidden",
+          "peer-open:flex",
+          "layout:contents",
+          "layout:peer-open:contents",
+        ]),
+      );
+
+      // Inside the panel: the nav rows first, the cluster LAST.
+      const rows = screen.getByTestId("shell-nav-mobile");
+      expect(panel.contains(rows)).toBe(true);
+      expect(rows.className.split(" ")).toContain("layout:hidden");
+      expect(panel.lastElementChild).toBe(cluster);
+
+      // The chip is the split header-action primitive: the canvas menu primary
+      // below layout, the white header chip from layout up.
+      const chip = cluster.querySelector("a")!;
+      expect(chip.className.split(" ")).toEqual(
+        expect.arrayContaining([
+          "bg-primary-action",
+          "layout:bg-header-foreground",
+        ]),
+      );
+      view.unmount();
+    }
+  });
+
+  it("017 EARS-14: the academy initials chip reads «Личный кабинет» in the menu and its initials in the bar", () => {
+    render(
+      <StorefrontHeader
+        config={ACADEMY}
+        auth={{
+          status: "doctor",
+          profileHref: "/account",
+          label: "Личный кабинет",
+          initials: "ВК",
+        }}
+      />,
+    );
+    const chip = screen.getByTestId("shell-avatar");
+    expect(chip).toHaveAttribute("aria-label", "Личный кабинет");
+    expect(within(chip).getByText("Личный кабинет").className).toContain(
+      "layout:hidden",
+    );
+    const initials = within(chip).getByText("ВК");
+    expect(initials.className.split(" ")).toEqual(
+      expect.arrayContaining(["hidden", "layout:inline-flex"]),
+    );
+  });
+
   it("008 EARS-5: a signed-in state without links renders no auth link at all", () => {
     // The doctor storefront passes none (canvas `user.links` line 192 = `[]`),
     // and its cluster must stay byte-identical to what #2180 shipped.

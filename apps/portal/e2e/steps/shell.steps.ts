@@ -103,7 +103,10 @@ Then(
     ]);
     await expect(themeToggle(page)).toBeVisible();
     // EARS-5/6: the avatar is an icon showing the doctor's real initials.
-    await expect(page.getByTestId("shell-avatar")).toHaveText(DOCTOR_INITIALS);
+    await expect(page.getByTestId("shell-avatar")).toHaveText(DOCTOR_INITIALS, {
+      // Rendered text: the link also carries the `≡`-menu label (#3629).
+      useInnerText: true,
+    });
   },
 );
 

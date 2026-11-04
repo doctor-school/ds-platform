@@ -62,7 +62,7 @@ export function GuestLoginLink({
   const pathname = usePathname();
   const mode = useSearchParams()?.get("mode");
   return (
-    <Button asChild variant="on-primary" size="chip">
+    <Button asChild variant="header-action" size="menu-chip">
       <a data-testid="shell-login" href={guestLoginHref(loginHref, pathname, mode)}>
         {label}
       </a>

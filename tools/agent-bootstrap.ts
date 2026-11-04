@@ -51,7 +51,14 @@ import {
   primaryWorktreePath,
   probeMainSync,
 } from "./main-sync";
-import { claimLabel, issueStream, probeClaim } from "./backlog-triage";
+import {
+  claimLabel,
+  detectClaim,
+  fetchClaimComments,
+  issueStream,
+  probeClaim,
+  worktreeClaimMtime,
+} from "./backlog-triage";
 import { extractReleaseRequires } from "./deploy/release-gate.mjs";
 import { extractPrNumbers } from "./deploy/release-notes.mjs";
 import {
@@ -487,6 +494,8 @@ export interface ReleaseHoldRow {
   prs: number[];
   /** `claimLabel` of a claim/worktree signal, or null. */
   claim: string | null;
+  /** The claim comments could not be read: owner state unknown, never NO OWNER. */
+  ownerUnavailable: boolean;
 }
 
 /** `null` = a source could not be read (rendered unavailable, never none). */
@@ -546,6 +555,17 @@ export function referencingOpenPrs(
 
 const NO_OWNER = "NO OWNER (no PR, no claim)";
 
+/**
+ * The merged-PR search, bounded by the prod commit's date in UTC: `%cI`
+ * carries the committer's offset, while GitHub's `merged:` qualifier is UTC.
+ */
+export function releaseHoldsSearchQuery(prodCommitIso: string): string {
+  const ms = Date.parse(prodCommitIso.trim());
+  if (Number.isNaN(ms))
+    throw new Error(`unparsable prod commit date: ${prodCommitIso.trim()}`);
+  return `"Release-requires" in:body merged:>=${new Date(ms).toISOString().slice(0, 10)}`;
+}
+
 function openHolds(holds: ReleaseHolds): ReleaseHoldRow[] {
   return holds.rows.filter((r) => r.state === "OPEN");
 }
@@ -561,7 +581,13 @@ export function renderReleaseHoldsSection(
       ...(r.claim ? [r.claim] : []),
     ];
     const by = r.heldBy.map((n) => `PR #${n}`).join(", ");
-    return `- #${r.issue} ${r.title} — held by ${by} — ${owner.length > 0 ? owner.join(" · ") : NO_OWNER}`;
+    const state =
+      owner.length > 0
+        ? owner.join(" · ")
+        : r.ownerUnavailable
+          ? "owner unavailable (claim fetch failed) — see Warnings"
+          : NO_OWNER;
+    return `- #${r.issue} ${r.title} — held by ${by} — ${state}`;
   });
   for (const n of holds.malformed)
     lines.push(`- PR #${n} — malformed Release-requires`);
@@ -572,7 +598,7 @@ export function renderReleaseHoldsSection(
 export function releaseHoldsWarning(holds: ReleaseHolds | null): Warn | null {
   if (holds === null) return null;
   const n = openHolds(holds).filter(
-    (r) => r.prs.length === 0 && !r.claim,
+    (r) => r.prs.length === 0 && !r.claim && !r.ownerUnavailable,
   ).length;
   if (n === 0) return null;
   return {
@@ -585,7 +611,10 @@ export function releaseHoldsWarning(holds: ReleaseHolds | null): Warn | null {
  * Collector: PRs in `<prod sha>..origin/main` (squash subjects), their bodies
  * from ONE merged-PR search bounded by the prod commit's date, then each
  * declared Issue's state, the open PRs and the claim probe. Any failed source
- * → `null` + a Warnings row. Never throws.
+ * → `null` + a Warnings row. Never throws. Discovery rides GitHub's search
+ * index, which can lag a just-merged PR or a just-edited body; this is a
+ * session-entry view — `release-gate.mjs` re-reads every PR and stays the
+ * authoritative check at deploy time.
  */
 async function probeReleaseHolds(
   realityProbe: ProjectRealityProbe,
@@ -611,7 +640,7 @@ async function probeReleaseHolds(
         "--state",
         "merged",
         "--search",
-        `"Release-requires" in:body merged:>=${prodDate.trim().slice(0, 10)}`,
+        releaseHoldsSearchQuery(prodDate),
         "--limit",
         String(RELEASE_HOLDS_LIMIT),
         "--json",
@@ -660,13 +689,32 @@ async function probeReleaseHolds(
               )
             ).stdout,
           ) as Parameters<typeof referencingOpenPrs>[1]);
+    if (openPrs.length >= RELEASE_HOLDS_LIMIT)
+      warnings.push({
+        source: "gh pr list (release holds, open)",
+        message: `hit the ${RELEASE_HOLDS_LIMIT}-row limit — a PR working on a hold may be missed; raise RELEASE_HOLDS_LIMIT in tools/agent-bootstrap.ts`,
+      });
     const mainRoot = await primaryWorktreePath(REPO_ROOT);
     const nowMs = Date.now();
     const rows = await Promise.all(
       issues.map(async ({ n, issue }): Promise<ReleaseHoldRow> => {
         const isOpen = issue.state !== "closed";
+        // Not `probeClaim`: it reads a failed comments fetch as "no claim",
+        // which here would print a false NO OWNER.
+        const [worktreeMtimeMs, comments] = isOpen
+          ? await Promise.all([
+              worktreeClaimMtime(mainRoot, n),
+              fetchClaimComments(n, REPO_ROOT),
+            ])
+          : [undefined, []];
+        const ownerUnavailable = isOpen && comments === undefined;
+        if (ownerUnavailable)
+          note(
+            `release holds claim probe #${n}`,
+            "gh issue view --json comments failed",
+          );
         const claim = isOpen
-          ? await probeClaim(n, mainRoot, REPO_ROOT, nowMs)
+          ? detectClaim({ worktreeMtimeMs, comments, nowMs })
           : null;
         return {
           issue: n,
@@ -675,6 +723,7 @@ async function probeReleaseHolds(
           heldBy: heldBy.get(n) ?? [],
           prs: isOpen ? referencingOpenPrs(n, openPrs) : [],
           claim: claim ? claimLabel(claim) : null,
+          ownerUnavailable,
         };
       }),
     );

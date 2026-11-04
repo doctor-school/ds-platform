@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   collectReleaseHolds,
   referencingOpenPrs,
+  releaseHoldsSearchQuery,
   releaseHoldsWarning,
   renderReleaseHoldsSection,
   type ReleaseHoldRow,
@@ -22,6 +23,7 @@ describe("agent-bootstrap release holds (#3643)", () => {
     heldBy: [3543],
     prs: [],
     claim: null,
+    ownerUnavailable: false,
     ...over,
   });
 
@@ -133,5 +135,26 @@ describe("agent-bootstrap release holds (#3643)", () => {
         { number: 5, title: "z", body: "Refs #349", headRefName: "d/349-x" },
       ]),
     ).toEqual([1, 2, 3]);
+  });
+
+  it("bounds the merged search by the prod commit's UTC date, not its local offset", () => {
+    // 05:07 at +07:00 is 22:07 UTC the day before; GitHub's merged: is UTC.
+    expect(releaseHoldsSearchQuery("2026-11-04T05:07:04+07:00")).toBe(
+      '"Release-requires" in:body merged:>=2026-11-03',
+    );
+    expect(releaseHoldsSearchQuery("2026-11-04T09:00:00+07:00\n")).toBe(
+      '"Release-requires" in:body merged:>=2026-11-04',
+    );
+    expect(() => releaseHoldsSearchQuery("not a date")).toThrow();
+  });
+
+  it("never renders NO OWNER when the claim source could not be read", () => {
+    const holds = { rows: [row({ ownerUnavailable: true })], malformed: [] };
+    const body = renderReleaseHoldsSection(holds).join("\n");
+    expect(body).toContain(
+      "held by PR #3543 — owner unavailable (claim fetch failed) — see Warnings",
+    );
+    expect(body).not.toContain("NO OWNER");
+    expect(releaseHoldsWarning(holds)).toBeNull();
   });
 });

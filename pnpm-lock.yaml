@@ -569,6 +569,9 @@ importers:
       '@ds/account':
         specifier: workspace:*
         version: link:../../packages/account
+      '@ds/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
       '@ds/auth-flow':
         specifier: workspace:*
         version: link:../../packages/auth-flow

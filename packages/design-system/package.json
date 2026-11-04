@@ -48,6 +48,7 @@
     "./account-profile-card": "./src/blocks/account-profile-card.tsx",
     "./legal-document": "./src/blocks/legal-document.tsx",
     "./rich-text-content": "./src/blocks/rich-text-content.tsx",
+    "./material-article": "./src/blocks/material-article.tsx",
     "./blocks": "./src/blocks/index.ts"
   },
   "scripts": {

@@ -29,6 +29,11 @@ import { cn } from "../lib/utils";
  * then anyway); `useSyncExternalStore` reads the real match before paint on the
  * client.
  *
+ * SIZE `full` (#3514, the 048 admin material preview) is the exception: set on
+ * the `Sheet` root, it is a full-screen cover at EVERY width and therefore modal
+ * at every width too — a non-modal panel hiding the whole page would let Tab
+ * walk into content nobody can see. `SheetContent` inherits the root size.
+ *
  * Deviations from upstream shadcn `sheet`: `top`/`bottom` sides dropped (no
  * consumer), `size` added, `onNavigate` added, the × carries a RU name. Motion:
  * the enter slide is a CSS transition from `@starting-style` (Tailwind
@@ -62,18 +67,33 @@ function useInspectorViewport(): boolean {
   );
 }
 
-const SheetModalContext = React.createContext<boolean>(false);
+type SheetSize = "md" | "lg" | "full";
+
+type SheetContextValue = { modal: boolean; size: SheetSize | undefined };
+
+const SheetModalContext = React.createContext<SheetContextValue>({
+  modal: false,
+  size: undefined,
+});
 
 type SheetProps = Omit<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Root>,
   "modal"
->;
+> & {
+  /**
+   * Panel size for the content. `full` = a full-screen modal cover at every
+   * width (it is the only size that changes modality, so it lives on the root).
+   */
+  size?: SheetSize | undefined;
+};
 
-/** Root. Modality is decided by the viewport (see the header note), not a prop. */
-function Sheet(props: SheetProps) {
-  const modal = !useInspectorViewport();
+/** Root. Modality is decided by the viewport and `size` (see the header note), not a prop. */
+function Sheet({ size, ...props }: SheetProps) {
+  const inspector = useInspectorViewport();
+  const modal = size === "full" || !inspector;
+  const value = React.useMemo(() => ({ modal, size }), [modal, size]);
   return (
-    <SheetModalContext.Provider value={modal}>
+    <SheetModalContext.Provider value={value}>
       <DialogPrimitive.Root modal={modal} {...props} />
     </SheetModalContext.Provider>
   );
@@ -123,8 +143,18 @@ const sheetVariants = cva(
       size: {
         md: "lg:w-1/3 lg:min-w-90",
         lg: "lg:w-1/2 lg:min-w-120",
+        full: "lg:w-full",
       },
     },
+    compoundVariants: [
+      // A full cover has no page beside it, so no structural edge toward one.
+      {
+        size: "full",
+        side: "right",
+        className: "lg:border-l-0 lg:shadow-none",
+      },
+      { size: "full", side: "left", className: "lg:border-r-0 lg:shadow-none" },
+    ],
     defaultVariants: { side: "right", size: "md" },
   },
 );
@@ -172,7 +202,10 @@ type SheetContentProps = React.ComponentPropsWithoutRef<
 > & {
   /** Edge the panel docks to from `lg`. Default `right`. */
   side?: "right" | "left" | undefined;
-  /** `md` ≈ a third of the viewport (min 360px); `lg` = half (min 480px). */
+  /**
+   * `md` ≈ a third of the viewport (min 360px); `lg` = half (min 480px).
+   * Defaults to the root's `size`; `full` is set on the `Sheet` root only.
+   */
   size?: "md" | "lg" | undefined;
   /**
    * Record paging: ↑ → `"prev"`, ↓ → `"next"`, fired when focus is on the panel
@@ -195,7 +228,7 @@ const SheetContent = React.forwardRef<
       className,
       children,
       side = "right",
-      size = "md",
+      size: contentSize,
       onNavigate,
       showCloseButton = true,
       container,
@@ -205,7 +238,9 @@ const SheetContent = React.forwardRef<
     },
     ref,
   ) => {
-    const modal = React.useContext(SheetModalContext);
+    const { modal, size: rootSize } = React.useContext(SheetModalContext);
+    const size: SheetSize =
+      rootSize === "full" ? "full" : (contentSize ?? rootSize ?? "md");
     return (
       <SheetPortal {...(container ? { container } : {})}>
         {modal ? <SheetOverlay /> : null}
@@ -372,5 +407,6 @@ export {
   SheetDescription,
   type SheetProps,
   type SheetContentProps,
+  type SheetSize,
   type SheetNavigateDirection,
 };

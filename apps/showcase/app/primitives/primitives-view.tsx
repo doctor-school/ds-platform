@@ -3206,10 +3206,13 @@ function SheetFormDemo() {
   const [stage, setStage] = useState<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
   const [side, setSide] = useState<"right" | "left">("right");
-  const [size, setSize] = useState<"md" | "lg">("md");
+  const [size, setSize] = useState<"md" | "lg" | "full">("md");
   const id = useId();
 
-  function openWith(nextSide: "right" | "left", nextSize: "md" | "lg") {
+  function openWith(
+    nextSide: "right" | "left",
+    nextSize: "md" | "lg" | "full",
+  ) {
     setSide(nextSide);
     setSize(nextSize);
     setOpen(true);
@@ -3217,7 +3220,7 @@ function SheetFormDemo() {
 
   return (
     <SheetStage
-      label="form — body + footer actions; side / size"
+      label="form — body + footer actions; side / size (md · lg · full)"
       onStage={setStage}
     >
       <div className="flex flex-wrap items-start gap-3 p-6">
@@ -3228,9 +3231,20 @@ function SheetFormDemo() {
         <Button variant="outline" onClick={() => openWith("left", "md")}>
           Слева, md
         </Button>
+        <Button variant="outline" onClick={() => openWith("right", "full")}>
+          Во весь экран
+        </Button>
       </div>
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent container={stage} side={side} size={size}>
+      <Sheet
+        open={open}
+        onOpenChange={setOpen}
+        size={size === "full" ? "full" : undefined}
+      >
+        <SheetContent
+          container={stage}
+          side={side}
+          size={size === "full" ? undefined : size}
+        >
           <SheetHeader>
             <SheetTitle>Новая заявка</SheetTitle>
             <SheetDescription>
@@ -3291,7 +3305,10 @@ function SheetSection() {
         inspector docked to the edge: the list behind stays visible, scrollable
         and clickable, and choosing another row keeps the panel open. Below{" "}
         <code className="font-mono text-xs">lg</code> it becomes a modal full
-        cover with a scrim. Escape or × closes it;{" "}
+        cover with a scrim.{" "}
+        <code className="font-mono text-xs">size=&quot;full&quot;</code> on the
+        root is a full-screen modal cover at every width (a preview of a whole
+        page). Escape or × closes it;{" "}
         <code className="font-mono text-xs">onNavigate</code> pages records on
         ↑/↓. Only <code className="font-mono text-xs">SheetBody</code> scrolls.
         Each stage is its own positioning frame, so the specimen docks to the

@@ -253,3 +253,68 @@ describe("#2396 Sheet — motion and variants", () => {
     await dismiss(user);
   });
 });
+
+/**
+ * #3514 — the 048 admin material preview is a full-screen sheet (048-design
+ * §«Admin», `material-preview`): the reading page at its real width. A cover
+ * that hides the whole page must be modal at EVERY width — a non-modal
+ * full-screen panel would let Tab walk into a page nobody can see.
+ */
+function FullFixture() {
+  return (
+    <div>
+      <button type="button">Строка реестра</button>
+      <Sheet size="full">
+        <SheetTrigger>Открыть запись</SheetTrigger>
+        <SheetContent data-testid="sheet">
+          <SheetHeader>
+            <SheetTitle>Предпросмотр</SheetTitle>
+          </SheetHeader>
+          <SheetBody>
+            <button type="button">Внутри</button>
+          </SheetBody>
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+async function openFull() {
+  const user = userEvent.setup();
+  render(<FullFixture />);
+  await user.click(screen.getByText("Открыть запись"));
+  const sheet = await screen.findByRole("dialog");
+  return { user, sheet };
+}
+
+describe("#3514 Sheet — size=full is a full-screen modal cover", () => {
+  it("covers the whole viewport at ≥ lg too: full width, no docked edge", async () => {
+    const { user, sheet } = await openFull();
+    expect(sheet).toHaveAttribute("data-size", "full");
+    expect(sheet.className).toMatch(/lg:w-full/);
+    expect(sheet.className).not.toMatch(/lg:w-1\//);
+    expect(sheet.className).not.toMatch(/lg:border-l-2/);
+    await dismiss(user);
+  });
+
+  it("is modal at ≥ lg: aria-modal, a scrim, the page behind hidden, focus trapped", async () => {
+    const { user, sheet } = await openFull();
+    expect(sheet).toHaveAttribute("aria-modal", "true");
+    expect(sheet).toHaveAttribute("data-modal", "true");
+    expect(document.querySelector("[data-sheet-overlay]")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Строка реестра" })).toBeNull();
+    for (let i = 0; i < 4; i += 1) {
+      await user.tab();
+      expect(sheet.contains(document.activeElement)).toBe(true);
+    }
+    await dismiss(user);
+  });
+
+  it("stays a modal full cover below lg", async () => {
+    desktop = false;
+    const { user, sheet } = await openFull();
+    expect(sheet).toHaveAttribute("data-modal", "true");
+    expect(sheet).toHaveAttribute("data-size", "full");
+    await dismiss(user);
+  });
+});

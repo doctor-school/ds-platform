@@ -28,7 +28,8 @@ import { Link } from "../primitives/link";
  * stale or hand-edited row can never reach the page as markup.
  *
  * Link targets: `academy.doctor.school` opens in the same tab; any other host
- * opens a new tab with `rel="noopener noreferrer"`; `mailto:` stays in place.
+ * opens a new tab with `rel="noopener noreferrer"` and carries the canvas «↗»
+ * (aria-hidden) after its text; `mailto:` stays in place.
  *
  * Typography maps the canvas onto existing DS tokens (no arbitrary values):
  * paragraph 15.5px / 1.75 / 500 → `text-body-compact` / `leading-relaxed` /
@@ -62,43 +63,92 @@ function linkTarget(href: string): { target?: string; rel?: string } {
     : { target: "_blank", rel: "noopener noreferrer" };
 }
 
-function renderText(
+/** The allowed link target of a run, or `undefined` when it is not a link. */
+function linkHref(
+  marks: readonly MaterialBodyMark[] | undefined,
+): string | undefined {
+  for (const mark of marks ?? []) {
+    if (
+      mark.type === "link" &&
+      typeof mark.attrs?.href === "string" &&
+      isAllowedMaterialLinkHref(mark.attrs.href)
+    )
+      return mark.attrs.href;
+  }
+  return undefined;
+}
+
+function renderMarked(
   text: string,
   marks: readonly MaterialBodyMark[] | undefined,
   key: React.Key,
 ): React.ReactNode {
   let node: React.ReactNode = text;
-  let href: string | undefined;
   for (const mark of marks ?? []) {
     if (mark.type === "bold")
       node = <strong className="font-extrabold">{node}</strong>;
     else if (mark.type === "italic") node = <em>{node}</em>;
-    else if (
-      mark.type === "link" &&
-      typeof mark.attrs?.href === "string" &&
-      isAllowedMaterialLinkHref(mark.attrs.href)
-    )
-      href = mark.attrs.href;
-  }
-  if (href !== undefined) {
-    return (
-      <Link key={key} variant="inline" href={href} {...linkTarget(href)}>
-        {node}
-      </Link>
-    );
   }
   return <React.Fragment key={key}>{node}</React.Fragment>;
 }
 
+/**
+ * Inline content. Adjacent text runs that share one link target (ProseMirror
+ * splits a link wherever another mark starts or ends) render as ONE link, so a
+ * link to another host carries the canvas «↗» once, after its whole text — the
+ * canvas `runs()` appends ` ↗` to every `http(s)` link outside the Academy. The
+ * glyph is `aria-hidden`: the accessible name stays the link text. U+FE0E
+ * (text presentation) keeps it a text arrow in the link colour, as the canvas
+ * draws it — the host font stacks name colour-emoji fonts, which would
+ * otherwise draw U+2197 as an emoji tile.
+ */
 function renderInline(
   content: readonly MaterialBodyInline[] | undefined,
 ): React.ReactNode[] {
-  return (content ?? []).map((node, index) => {
-    if (node.type === "text" && typeof node.text === "string")
-      return renderText(node.text, node.marks, index);
-    if (node.type === "hardBreak") return <br key={index} />;
-    return null;
-  });
+  const out: React.ReactNode[] = [];
+  const nodes = content ?? [];
+  let index = 0;
+  while (index < nodes.length) {
+    const node = nodes[index]!;
+    const key = index;
+    if (node.type === "hardBreak") {
+      out.push(<br key={key} />);
+      index += 1;
+      continue;
+    }
+    if (node.type !== "text" || typeof node.text !== "string") {
+      index += 1;
+      continue;
+    }
+    const href = linkHref(node.marks);
+    if (href === undefined) {
+      out.push(renderMarked(node.text, node.marks, key));
+      index += 1;
+      continue;
+    }
+    const runs: React.ReactNode[] = [];
+    while (index < nodes.length) {
+      const run = nodes[index]!;
+      if (
+        run.type !== "text" ||
+        typeof run.text !== "string" ||
+        linkHref(run.marks) !== href
+      )
+        break;
+      runs.push(renderMarked(run.text, run.marks, index));
+      index += 1;
+    }
+    const target = linkTarget(href);
+    out.push(
+      <Link key={key} variant="inline" href={href} {...target}>
+        {runs}
+        {target.target === "_blank" ? (
+          <span aria-hidden="true">{" ↗\uFE0E"}</span>
+        ) : null}
+      </Link>,
+    );
+  }
+  return out;
 }
 
 type Context = "body" | "quote" | "list";

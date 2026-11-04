@@ -339,11 +339,21 @@ export type {
 // 048 EARS-2 / EARS-12 (#3511) — the ONE renderer of a material body (canvas
 // `design-source/academy-material.dc.html`, «academy-material · текст»): the
 // reading page and the admin preview mount it; neither owns a copy.
-export {
-  RichTextContent,
-  RICH_TEXT_SAME_TAB_HOSTS,
-} from "./rich-text-content";
+export { RichTextContent, RICH_TEXT_SAME_TAB_HOSTS } from "./rich-text-content";
 export type { RichTextContentProps } from "./rich-text-content";
+
+// 048 EARS-12 / EARS-3 (#3514) — the ONE reading-page body of a material
+// (canvas `design-source/academy-material.dc.html`): the Academy route
+// `/materials/{slug}` and the admin preview `Sheet` mount it.
+export {
+  MaterialArticle,
+  MATERIAL_ARTICLE_COPY,
+  formatMaterialPublishedDay,
+} from "./material-article";
+export type {
+  MaterialArticleContent,
+  MaterialArticleProps,
+} from "./material-article";
 
 // 021 EARS-9 + EARS-10 (#1546) — the ONE canonical post-confirmation success
 // state of a registration door. Data-in, presentation-out: the accrual sentence,

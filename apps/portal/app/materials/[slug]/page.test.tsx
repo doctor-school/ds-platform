@@ -21,7 +21,6 @@ vi.mock("next/navigation", () => ({
 
 const { default: MaterialPage, generateMetadata } = await import("./page");
 const { default: MaterialError } = await import("./error");
-const { default: MaterialLoading } = await import("./loading");
 
 const material = {
   slug: "ortobiologiya-v-rossii",
@@ -129,10 +128,5 @@ describe("048 Academy reading page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(reset).toHaveBeenCalledTimes(1);
-  });
-
-  it("EARS-12: the loading state is the canvas skeleton", () => {
-    render(<MaterialLoading />);
-    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
   });
 });

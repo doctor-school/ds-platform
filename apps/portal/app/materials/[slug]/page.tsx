@@ -20,6 +20,11 @@ import { PublicMaterialSchema, type PublicMaterial } from "@ds/schemas";
  *
  * The read is anonymous and viewer-independent; the partner mark is judged at
  * the moment of the read (EARS-19), so the page renders per request.
+ *
+ * The segment deliberately has no `loading.tsx`: a loading boundary streams the
+ * shell first and commits a `200` before `notFound()` can run, so an
+ * unpublished address would answer `200` with the not-found body. Without it
+ * the read completes before the first byte and the status is the real `404`.
  */
 export const dynamic = "force-dynamic";
 

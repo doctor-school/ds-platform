@@ -172,6 +172,7 @@ import {
   boxSpawnArgs,
   hopDestination,
   prodReadKeyConvergeScript,
+  recoveryToolsConvergeScript,
   releaseCheckScript,
   releaseFinishScript,
   releaseInstallFromSourceScript,
@@ -2398,6 +2399,8 @@ async function deploy(hotfixRef = null, local = null) {
     // #3646: and converges the read key's line and its ds-read-entrypoint sudo right on ds-api-prod
     // (harden-ssh.sh --role prod --from-release; a no-op until a read key is committed).
     if (local) await sshScript(API_PROD, prodReadKeyConvergeScript(), { label: "converge the read key" });
+    // #3662: and puts `age` on ds-api-prod for the key custody (never fatal).
+    if (local) await sshScript(API_PROD, recoveryToolsConvergeScript(), { label: "install age" });
   }
   openReleaseSha = sha;
   openReleaseHosts = redeploy ? [API_PROD] : [API_PROD, DATA_PROD];

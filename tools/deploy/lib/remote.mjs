@@ -490,6 +490,8 @@ export const DS_READ_ENTRYPOINT_BIN = "/usr/local/bin/ds-read-entrypoint";
 export const RELEASE_DRIVER_BIN = "/usr/local/lib/ds-platform/release-driver";
 export const POSTGRES_PROBE_BIN = "/usr/local/lib/ds-platform/postgres-artifact-probe.py";
 export const HARDEN_SSH_BIN = "/usr/local/lib/ds-platform/harden-ssh.sh";
+// #3662: the key custody's box side, run by ds-read-entrypoint and the data verbs.
+export const DS_RECOVERY_BIN = "/usr/local/lib/ds-platform/ds-recovery";
 /** Box binary → its path in the repository tree, in install order. */
 export const BOX_ENTRYPOINTS = [
   { dest: DS_RELEASE_BIN, path: "infra/deploy/bin/ds-release" },
@@ -502,6 +504,8 @@ export const BOX_ENTRYPOINTS = [
   // #3320: the prod release converges ds-data-prod by running this root-owned copy
   // (`--role data --from-release`); the other boxes carry it unused.
   { dest: HARDEN_SSH_BIN, path: "infra/deploy/bin/harden-ssh.sh" },
+  // #3662: the recovery bundle's box side (both prod boxes; stage carries it unused).
+  { dest: DS_RECOVERY_BIN, path: "infra/deploy/bin/ds-recovery" },
 ];
 /** #3646: ds-data-prod's `install` set — every box entrypoint but ds-read-entrypoint,
  * which only ds-api-prod serves (spec §5 «Prod read verbs.»). */
@@ -580,6 +584,13 @@ export function prodReadKeyConvergeScript() {
     `  echo "harden-ssh: ${PROD_READ_PUBKEY} is absent (no read key committed yet): no read line installed"`,
     "fi",
   ].join("\n");
+}
+
+// #3662: the release puts `age` on ds-api-prod for the key custody (ds-data-prod gets
+// it in its `converge` verb). Never fatal to the release: ds-recovery prints a
+// WARNING line and the recovery verbs refuse until age is there.
+export function recoveryToolsConvergeScript() {
+  return `sudo ${DS_RECOVERY_BIN} install-age`;
 }
 
 function installedTreeLines(liveDir, sha) {

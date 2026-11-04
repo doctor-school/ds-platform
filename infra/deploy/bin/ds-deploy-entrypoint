@@ -490,7 +490,7 @@ release_status() {
 # JSON object checked field by field by DATA_PY below, or the tree archive.
 # infra/deploy/bin/harden-ssh.sh --role data refuses an installed entrypoint without
 # this line; tools/deploy/lib/data-prod.mjs and the tests pin the list.
-DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema'
+DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema recovery-bundle recovery-check recovery-put recovery-latest'
 DATA_LIVE_TREE=$ROOT/home/deploy/ds-platform
 DATA_COMPOSE=$DATA_LIVE_TREE/infra/deploy/compose/data-prod
 DATA_STATE_FILE=$ROOT/home/deploy/ds-platform-postgres-state.json
@@ -499,6 +499,11 @@ DATA_STATE_FILE=$ROOT/home/deploy/ds-platform-postgres-state.json
 GLITCHTIP_ENV=$ROOT/etc/ds-platform/glitchtip.env
 POSTGRES_PROBE=$ROOT/usr/local/lib/ds-platform/postgres-artifact-probe.py
 HARDEN_SSH=$ROOT/usr/local/lib/ds-platform/harden-ssh.sh
+# #3662: the key custody's box side and the custodians of the shipped tree.
+DS_RECOVERY=$ROOT/usr/local/lib/ds-platform/ds-recovery
+[[ -z $ROOT ]] || export DS_RECOVERY_ROOT=$ROOT
+RECOVERY_CUSTODIANS=$DATA_LIVE_TREE/infra/deploy/recovery/custodians.txt
+RECOVERY_STAMP_RE='^[0-9]{8}t[0-9]{6}z$'
 # Box entrypoint = its path in the shipped tree; tools/deploy/lib/remote.mjs
 # DATA_BOX_ENTRYPOINTS, pinned equal by the tests. ds-read-entrypoint is served by
 # ds-api-prod only (spec §5 «Prod read verbs.»), so this box does not install it.
@@ -508,6 +513,7 @@ DATA_INSTALL=(
   /usr/local/lib/ds-platform/release-driver=infra/deploy/bin/release-driver
   /usr/local/lib/ds-platform/postgres-artifact-probe.py=tools/deploy/postgres-artifact-probe.py
   /usr/local/lib/ds-platform/harden-ssh.sh=infra/deploy/bin/harden-ssh.sh
+  /usr/local/lib/ds-platform/ds-recovery=infra/deploy/bin/ds-recovery
 )
 MAX_DATA_PAYLOAD_BYTES=65536
 MAX_SHIP_BYTES=$(override DS_ENTRYPOINT_MAX_SHIP_BYTES $((256 * 1024 * 1024)))                      # 256 MiB gzip stream
@@ -822,8 +828,13 @@ release_lock_verb() {
 data_verb() {
   local n=${#words[@]}
   case "$verb" in
-    capabilities | postgres-probe | postgres-checkpoint | data-env | backup-info | rollback-floor | read-schema)
+    capabilities | postgres-probe | postgres-checkpoint | data-env | backup-info | rollback-floor | read-schema |       recovery-bundle | recovery-check)
       ((n == 1)) || reject "usage: $verb" ;;
+    recovery-put)
+      [[ $n == 4 && ${words[1]} == api-prod && ${words[2]} =~ $RECOVERY_STAMP_RE && ${words[3]} =~ ^(bundle|manifest)$ ]] ||
+        reject "usage: recovery-put api-prod <yyyymmddthhmmssz> bundle|manifest" ;;
+    recovery-latest)
+      [[ $n == 2 && ${words[1]} == api-prod ]] || reject "usage: recovery-latest api-prod" ;;
     ship | install | converge)
       ((n == 2)) || reject "usage: $verb <sha>"
       check_sha "${words[1]}" ;;
@@ -860,6 +871,8 @@ data_verb() {
       # the harden-ssh.sh it runs is this release's, root-owned; it is idempotent and
       # prints `nothing to change` once the box is converged. Its exit is the verb's.
       install_entrypoints "${words[1]}"
+      # #3662: age for the key custody; never fatal here (the recovery verbs refuse).
+      sudo "$DS_RECOVERY" install-age </dev/null || true
       exec sudo "$HARDEN_SSH" --role data --from-release </dev/null ;;
     data-up) data_step up "${words[1]}" "${words[2]-}" </dev/null ;;
     backup) data_step backup "${words[1]}" "${words[2]-}" </dev/null ;;
@@ -875,7 +888,56 @@ data_verb() {
     finish) exec sudo "$DS_RELEASE" finish prod "${words[1]}" "${words[2]}" </dev/null ;;
     check | supersede) release_lock_verb "$verb" "${words[1]-}" </dev/null ;;
     read-schema) read_schema </dev/null ;;
+    recovery-bundle) recovery_bundle </dev/null ;;
+    recovery-check) recovery_check </dev/null ;;
+    recovery-put) recovery_put "${words[2]}" "${words[3]}" ;;
+    recovery-latest) recovery_latest </dev/null ;;
   esac
+}
+
+# --- the key custody (Issue #3662; spec §5 «Prod read verbs.») ----------------------
+# Reached by ds-read-entrypoint's recovery-bundle / recovery-check over the hop.
+# ds-data-prod bundles its own *.env and keeps every box's ciphertext and manifest in
+# the pgBackRest bucket under recovery-bundle/<box>/; stdout carries status lines only
+# (recovery-latest: the manifest, which holds keyed fingerprints and no value).
+recovery_work() {
+  [[ -x $DS_RECOVERY ]] || refuse "ds-recovery is not installed (the next release installs it)"
+  recovery_dir=$(mktemp -d) # global: the EXIT trap outlives this function; root-only
+  trap 'rm -rf -- "${recovery_dir:-}"' EXIT
+}
+recovery_bundle() {
+  local stamp members
+  recovery_work
+  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+  members=$("$DS_RECOVERY" bundle data-prod "$RECOVERY_CUSTODIANS" "$recovery_dir" "$stamp")
+  "$DS_RECOVERY" upload data-prod "$stamp" bundle "$recovery_dir/bundle.tar.age"
+  "$DS_RECOVERY" upload data-prod "$stamp" manifest "$recovery_dir/manifest.json"
+  printf 'data-prod STORED %s members %s
+' "$stamp" "$members"
+}
+recovery_check() {
+  local found
+  recovery_work
+  "$DS_RECOVERY" custodians "$RECOVERY_CUSTODIANS"
+  found=$("$DS_RECOVERY" latest data-prod "$recovery_dir/latest.json")
+  if [[ $found != FOUND ]]; then
+    echo "data-prod MISSING"
+    exit 1
+  fi
+  "$DS_RECOVERY" check data-prod "$RECOVERY_CUSTODIANS" "$recovery_dir/latest.json"
+}
+# recovery-put api-prod <stamp> bundle|manifest; stdin: the file, at most 1 MiB.
+recovery_put() {
+  local stamp=${1^^} kind=$2
+  recovery_work
+  head -c 1048577 >"$recovery_dir/$kind"
+  "$DS_RECOVERY" upload api-prod "$stamp" "$kind" "$recovery_dir/$kind" </dev/null
+}
+recovery_latest() {
+  local found
+  recovery_work
+  found=$("$DS_RECOVERY" latest api-prod "$recovery_dir/latest.json")
+  if [[ $found == FOUND ]]; then cat -- "$recovery_dir/latest.json"; else echo MISSING; fi
 }
 
 # --- the prod read path (Issue #3646; spec §5 «Prod read verbs.») -------------------
@@ -1101,7 +1163,7 @@ case "$verb" in
     observe "${words[1]}"
     ;;
   capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \
-    backup-info | rollback-floor | finish | check | supersede | converge | read-schema)
+    backup-info | rollback-floor | finish | check | supersede | converge | read-schema | recovery-bundle | recovery-check | recovery-put | recovery-latest)
     data_verb
     ;;
   *)

@@ -13,13 +13,15 @@
 # arguments and would serve the full deploy verb set to the read key. Old trees never
 # write this path, and this file never execs or sources ds-deploy-entrypoint; the only
 # box programs it runs are `ds-release check prod` (fixed words) and, over the hop key,
-# the data entrypoint's `check` and `read-schema` (an older data entrypoint rejects
-# `read-schema`: fail-closed).
+# the data entrypoint's `check`, `read-schema` and the recovery verbs (an older data
+# entrypoint rejects them: fail-closed), and ds-recovery (#3662).
 #
 # It serves READ_VERBS below on the prod box only and rejects every other verb with
-# exit 2. Every answer but `capabilities` leaves as CMS ciphertext to the recipient
-# certificate installed with the tooling tree (READ_RECIPIENT), never plaintext: the
-# client's stdout is a public Actions artifact.
+# exit 2. `schema` leaves as CMS ciphertext to the recipient certificate installed
+# with the tooling tree (READ_RECIPIENT), never plaintext: the client's stdout is a
+# public Actions artifact. `capabilities` answers its verb list; `recovery-bundle` and
+# `recovery-check` (#3662) answer status lines only (RECOVERY_LINE_RE): no value, no
+# fingerprint, no ciphertext — the bundle's ciphertext goes to the pgBackRest bucket.
 #
 # Installed as /usr/local/bin/ds-read-entrypoint beside ds-release and
 # ds-deploy-entrypoint, by the same install step (tools/deploy/lib/remote.mjs).
@@ -60,9 +62,10 @@ refuse() {
 }
 accepted() { logger -t "$TAG" -p auth.info "accepted: $(sanitised)" || true; }
 
-# The verbs it serves (spec §8 (g): S1 serves `capabilities` and `schema`);
-# prod-observe.yml refuses a verb `capabilities` does not name.
-READ_VERBS='capabilities schema'
+# The verbs it serves (spec §8 (g): S1 serves `capabilities` and `schema`; #3662 adds
+# the key custody); prod-observe.yml / recovery-custody.yml refuse a verb
+# `capabilities` does not name.
+READ_VERBS='capabilities schema recovery-bundle recovery-check'
 # The fixed failure reasons of a read (exit 1), the same list as the data
 # entrypoint's; a reason from the data box outside it reaches the client as
 # `the read failed`.
@@ -86,6 +89,14 @@ DATA_PROD_HOP_KEY=$ROOT/home/deploy/.ssh/data-prod-hop
 DATA_PROD_HOP_KNOWN_HOSTS=$ROOT/home/deploy/.ssh/known_hosts
 DATA_PROD_ADDRESS=$(override DS_ENTRYPOINT_DATA_PROD_ADDRESS 192.168.0.10)
 READ_HOP_TIMEOUT=$(override DS_ENTRYPOINT_READ_HOP_TIMEOUT 180)
+# #3662: the key custody's box side and the custodians of the installed tree.
+DS_RECOVERY=$ROOT/usr/local/lib/ds-platform/ds-recovery
+[[ -z $ROOT ]] || export DS_RECOVERY_ROOT=$ROOT
+RECOVERY_CUSTODIANS=$ROOT/usr/local/lib/ds-platform/tree/infra/deploy/recovery/custodians.txt
+# The status lines a recovery verb may print; any other line from a box is dropped.
+RECOVERY_LINE_RE='^(api-prod|data-prod) (MATCH|MISSING|STORED [0-9]{8}T[0-9]{6}Z members [0-9]{1,3}|STALE [0-9]{1,5}d|MISMATCH [A-Za-z0-9_.:-]{1,80})$'
+# A ds-recovery refusal or failure: its own fixed text, bounded.
+RECOVERY_REASON_RE='^ds-recovery: [A-Za-z0-9 #().,:/_-]{1,200}$'
 
 read_fail() {
   printf '%s: %s\n' "$TAG" "$1" >&2
@@ -104,6 +115,14 @@ read_reason() {
 # One data verb over the hop, stdin closed; its stdout and stderr are the caller's.
 data_prod_hop() {
   timeout "$READ_HOP_TIMEOUT" ssh -n -i "$DATA_PROD_HOP_KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
+    -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$DATA_PROD_HOP_KNOWN_HOSTS" \
+    -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+    "deploy@$DATA_PROD_ADDRESS" "$1"
+}
+
+# One data verb over the hop with the caller's stdin (recovery-put).
+data_prod_hop_in() {
+  timeout "$READ_HOP_TIMEOUT" ssh -i "$DATA_PROD_HOP_KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
     -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$DATA_PROD_HOP_KNOWN_HOSTS" \
     -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
     "deploy@$DATA_PROD_ADDRESS" "$1"
@@ -145,6 +164,90 @@ read_encrypted() {
   cat -- "$read_work/result.cms"
 }
 
+# --- the key custody (Issue #3662; spec §5 «Prod read verbs.») ----------------------
+recovery_lines() { grep -E "$RECOVERY_LINE_RE" "$1" || true; }
+# The last ds-recovery reason of a file, or the fallback.
+recovery_reason() {
+  local line
+  line=$(grep -E "$RECOVERY_REASON_RE" "$1" | tail -n 1 || true)
+  printf '%s' "${line:-$2}"
+}
+# The verdict of one hop: 0, or the status of a failed hop with its reason on stderr.
+recovery_hop_status() { # <rc> <stderr file> <what>
+  case $1 in
+    0) return 0 ;;
+    1) printf '%s: data-prod: %s\n' "$TAG" "$(recovery_reason "$2" "$3 failed")" >&2; return 1 ;;
+    2) printf '%s: data-prod: ds-data-prod does not serve the recovery verbs (the next release installs them)\n' "$TAG" >&2; return 3 ;;
+    3) printf '%s: data-prod: %s\n' "$TAG" "$(recovery_reason "$2" "$3 refused")" >&2; return 3 ;;
+    124) printf '%s: data-prod: %s timed out\n' "$TAG" "$3" >&2; return 1 ;;
+    *) printf '%s: data-prod: %s failed\n' "$TAG" "$3" >&2; return 1 ;;
+  esac
+}
+# A local ds-recovery failure: its reason on stderr, its status kept.
+recovery_local_status() { # <rc> <stderr file>
+  (($1 == 0)) && return 0
+  printf '%s: api-prod: %s\n' "$TAG" "$(recovery_reason "$2" "ds-recovery failed")" >&2
+  (($1 == 3)) && return 3
+  return 1
+}
+
+# api-prod: bundle here, store through ds-data-prod (the bucket's credentials live there).
+recovery_bundle_api() {
+  local w=$recovery_work/api stamp members rc=0
+  mkdir -- "$w" # inside the root-only (0700) recovery_work
+  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+  members=$("$DS_RECOVERY" bundle api-prod "$RECOVERY_CUSTODIANS" "$w" "$stamp" 2>"$w/err") || rc=$?
+  recovery_local_status "$rc" "$w/err" || return $?
+  data_prod_hop_in "recovery-put api-prod ${stamp,,} bundle" <"$w/bundle.tar.age" >/dev/null 2>"$w/err" || rc=$?
+  recovery_hop_status "$rc" "$w/err" "storing the api-prod bundle" || return $?
+  data_prod_hop_in "recovery-put api-prod ${stamp,,} manifest" <"$w/manifest.json" >/dev/null 2>"$w/err" || rc=$?
+  recovery_hop_status "$rc" "$w/err" "storing the api-prod manifest" || return $?
+  printf 'api-prod STORED %s members %s\n' "$stamp" "$members" | grep -E "$RECOVERY_LINE_RE"
+}
+recovery_bundle_data() {
+  local w=$recovery_work/data rc=0
+  mkdir -- "$w" # inside the root-only (0700) recovery_work
+  data_prod_hop recovery-bundle >"$w/out" 2>"$w/err" || rc=$?
+  recovery_lines "$w/out"
+  recovery_hop_status "$rc" "$w/err" "the data-prod bundle"
+}
+recovery_check_api() {
+  local w=$recovery_work/api rc=0
+  mkdir -- "$w" # inside the root-only (0700) recovery_work
+  "$DS_RECOVERY" custodians "$RECOVERY_CUSTODIANS" 2>"$w/err" || rc=$?
+  recovery_local_status "$rc" "$w/err" || return $?
+  data_prod_hop "recovery-latest api-prod" >"$w/latest.json" 2>"$w/err" || rc=$?
+  recovery_hop_status "$rc" "$w/err" "reading the api-prod manifest" || return $?
+  if [[ $(head -c 7 "$w/latest.json") == MISSING ]]; then
+    echo "api-prod MISSING"
+    return 1
+  fi
+  "$DS_RECOVERY" check api-prod "$RECOVERY_CUSTODIANS" "$w/latest.json" >"$w/out" 2>"$w/err" || rc=$?
+  recovery_lines "$w/out"
+  # 1 with status lines is a verdict (MISMATCH / STALE), not a failure of the check.
+  if ((rc == 1)) && [[ -n $(recovery_lines "$w/out") ]]; then return 1; fi
+  recovery_local_status "$rc" "$w/err"
+}
+recovery_check_data() {
+  local w=$recovery_work/data rc=0
+  mkdir -- "$w" # inside the root-only (0700) recovery_work
+  data_prod_hop recovery-check >"$w/out" 2>"$w/err" || rc=$?
+  recovery_lines "$w/out"
+  if ((rc == 1)) && [[ -n $(recovery_lines "$w/out") ]]; then return 1; fi
+  recovery_hop_status "$rc" "$w/err" "the data-prod check"
+}
+# Both boxes, always both: the verb's status is the worse of the two (3 > 1 > 0).
+recovery_verb() {
+  local api=0 data=0
+  [[ -x $DS_RECOVERY ]] || refuse "ds-recovery is not installed (the next release installs it)"
+  recovery_work=$(mktemp -d) # global: the EXIT trap outlives this function; root-only (0700)
+  trap 'rm -rf -- "${recovery_work:-}"' EXIT
+  "recovery_$1_api" || api=$?
+  "recovery_$1_data" || data=$?
+  ((api == 3 || data == 3)) && exit 3
+  ((api == 0 && data == 0)) || exit 1
+}
+
 # sudo admits this file with no arguments only; anything else is not the read key.
 (($# == 0)) || reject "unexpected arguments"
 [[ -n $request ]] || reject "no command (this key runs only the read commands)"
@@ -154,7 +257,7 @@ IFS=' ' read -r -a words <<<"$request"
 verb=${words[0]-}
 
 case "$verb" in
-  capabilities | schema) [[ ${#words[@]} -eq 1 ]] || reject "usage: $verb" ;;
+  capabilities | schema | recovery-bundle | recovery-check) [[ ${#words[@]} -eq 1 ]] || reject "usage: $verb" ;;
   *) reject "unknown read command (allowed: ${READ_VERBS// /, })" ;;
 esac
 accepted
@@ -167,4 +270,7 @@ case "$verb" in
     sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
     read_release_check
     read_encrypted read-schema </dev/null ;;
+  recovery-bundle | recovery-check)
+    read_release_check
+    recovery_verb "${verb#recovery-}" </dev/null ;;
 esac

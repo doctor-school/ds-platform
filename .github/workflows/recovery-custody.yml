@@ -1,0 +1,114 @@
+name: Recovery custody
+
+# The automated key custody (#3662; spec
+# apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md §5
+# «Prod read verbs.» → `recovery-bundle`, `recovery-check`; infra/deploy/RECOVERY.md
+# §2 «Automated custody (CI)»). Weekly, each prod box encrypts its own
+# /etc/ds-platform/*.env with age to the custodians' public recipients and ds-data-prod
+# stores the ciphertext and a keyed-fingerprint manifest in the pgBackRest bucket under
+# recovery-bundle/<box>/; daily, each box compares its live fingerprints with its latest
+# manifest. Nothing here, on the boxes or in CI can decrypt a bundle.
+#
+#   gh workflow run recovery-custody.yml --ref main -f verb=recovery-check
+#
+# The same read key and forced command as prod-observe.yml (ds-read-entrypoint on
+# ds-api-prod). The repository is public: no artifact is uploaded, and the log carries
+# the status lines of tools/deploy/lib/recovery-custody.mjs only — no value, no
+# fingerprint, no ciphertext. A box that does not answer its success word fails the job.
+
+on:
+  schedule:
+    # Pinned equal to CRONS of tools/deploy/recovery-custody.mjs by the tests.
+    - cron: "17 3 * * 1"
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+    inputs:
+      verb:
+        description: "The recovery verb."
+        required: true
+        type: choice
+        options: [recovery-check, recovery-bundle]
+        default: recovery-check
+
+permissions:
+  contents: read
+
+# One prod read at a time, beside prod-observe.yml; never `deploy-prod` (a pending read
+# there could cancel a queued release). The box-side check keeps reads off a release.
+concurrency:
+  group: prod-observe
+  cancel-in-progress: false
+
+env:
+  # ds-api-prod's public address (`api_prod_public_ip`, infra/deploy/README.md), as
+  # in prod-observe.yml.
+  PROD_SSH_HOST: 77.233.220.222
+  PROD_SSH_USER: deploy
+
+jobs:
+  custody:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production-read
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Pick the verb
+        id: verb
+        env:
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT_VERB: ${{ inputs.verb }}
+        run: node tools/deploy/recovery-custody.mjs verb "$EVENT" "$SCHEDULE" "$INPUT_VERB"
+
+      - name: Write the ssh key
+        env:
+          PROD_READ_SSH_KEY: ${{ secrets.PROD_READ_SSH_KEY }}
+          PROD_SSH_KNOWN_HOSTS: ${{ vars.PROD_SSH_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          dir="$RUNNER_TEMP/prod-read-ssh"
+          mkdir -p "$dir"
+          printf '%s\n' "$PROD_READ_SSH_KEY" > "$dir/key"
+          printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > "$dir/known_hosts"
+          chmod 600 "$dir/key" "$dir/known_hosts"
+
+      - name: Ask capabilities
+        env:
+          VERB: ${{ steps.verb.outputs.verb }}
+        run: |
+          set +e
+          ssh -i "$RUNNER_TEMP/prod-read-ssh/key" -o IdentitiesOnly=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/prod-read-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            "$PROD_SSH_USER@$PROD_SSH_HOST" capabilities </dev/null \
+            >"$RUNNER_TEMP/capabilities.json" 2>"$RUNNER_TEMP/capabilities.err"
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            node tools/deploy/prod-read.mjs status capabilities "$rc" /dev/null "$RUNNER_TEMP/capabilities.err" || true
+            exit 1
+          fi
+          node tools/deploy/prod-read.mjs check-capabilities "$VERB" <"$RUNNER_TEMP/capabilities.json"
+
+      - name: Run the verb
+        env:
+          VERB: ${{ steps.verb.outputs.verb }}
+        run: |
+          set +e
+          ssh -i "$RUNNER_TEMP/prod-read-ssh/key" -o IdentitiesOnly=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/prod-read-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            "$PROD_SSH_USER@$PROD_SSH_HOST" "$VERB" </dev/null \
+            >"$RUNNER_TEMP/recovery.out" 2>"$RUNNER_TEMP/recovery.err"
+          rc=$?
+          set -e
+          node tools/deploy/recovery-custody.mjs status "$VERB" "$rc" "$RUNNER_TEMP/recovery.out" "$RUNNER_TEMP/recovery.err"
+
+      - name: Remove the ssh key and the work files
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/prod-read-ssh" "$RUNNER_TEMP"/*.err "$RUNNER_TEMP/recovery.out" "$RUNNER_TEMP/capabilities.json"

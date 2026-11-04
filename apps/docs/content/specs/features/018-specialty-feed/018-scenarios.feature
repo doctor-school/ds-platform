@@ -224,6 +224,14 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     And no joining or membership control is rendered in the block
 
   @EARS-11 @happy
+  Scenario: A guest reads the release-1 feed in full
+    Given a visitor with no account
+    When the visitor opens the feed
+    Then the events, «Зачем это мне» and adjacent-areas blocks render in full
+    And no block response carries a gate marker
+    And no card or block renders «нужна регистрация» or any other account prompt
+
+  @EARS-11 @happy @deferred-block:content-card
   Scenario: A guest reads the whole feed and sees honest gates
     Given a visitor with no account
     And content that requires an account among the cards
@@ -232,7 +240,7 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     And the gated card renders «нужна регистрация» with its public metadata
     And following the gate leads into feature 021's registration and returns to that card
 
-  @EARS-11 @failure
+  @EARS-11 @failure @deferred-block:content-card
   Scenario: The gated payload never reaches an anonymous reader
     Given a visitor with no account
     When the feed block reads are served

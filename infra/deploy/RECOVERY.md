@@ -20,7 +20,7 @@ an unreadable block of files, not personal data.
 
 **Nothing secret leaves custody.** No key value goes into chat, a GitHub Issue or PR,
 Git, a CI log or a terminal transcript you share. Evidence is posted as fingerprints
-(`sha256`), counts, labels and PASS/PARTIAL, never values. This follows the OWASP
+(`sha256`), counts, labels and PASS/PARTIAL/FAIL, never values. This follows the OWASP
 [Secrets Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html)
 (backup and recovery of secrets, no secrets in logs) and the
 [Cryptographic Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html)
@@ -104,6 +104,22 @@ and `outputs/2026-11-04-backup-implementation-plan/plan.json` (BBM workspace),
 `plane.bbm.academy/bbm/projects/e550afb5-ec05-4973-8456-49a74379ba2f/issues/5bfd979a-c108-4e68-9081-77929989da9a`.
 
 ## 2. Recovery bundle (owner-run)
+
+**Automated: `pnpm recovery init-keys` (§2.1, once) and `pnpm recovery bundle`
+(§2.2–§2.3); `pnpm recovery doctor` checks the prerequisites first, and `pnpm recovery
+all` runs doctor → bundle → restore proof (§3).** Every bundle is encrypted to `A.pub`
+and `B.pub` (public files only) and gated by the member list decrypted with identity A
+plus the fingerprints; only the first bundle after `init-keys` runs as `pnpm recovery
+bundle --test-b`, which also test-decrypts with the typed paper copy B before the paper
+is sealed (§2.2). The manual commands below are the
+reference and the fallback. The tool (`tools/deploy/recovery.mjs`, from the repository
+root in Git Bash inside Windows Terminal) works in `~/ds-recovery` by default and
+refuses a directory inside a git repository or an existing identity. What stays manual:
+unlocking the `breakglass` key (ssh-agent or `--identity <key>`), typing the identity-A
+passphrase when `age` asks for it, writing custody B onto paper and typing it back
+(hidden input; B is shown once and never written to disk), putting `identity-A.age` and
+its passphrase into the password manager, storing the bundles (§2.4), and sealing paper
+B and handing it to the second custodian.
 
 The bundle is the set of `/etc/ds-platform/*.env` files of both hosts, encrypted with
 [`age`](https://age-encryption.org) to **two independent recipients**:
@@ -189,7 +205,8 @@ gate "ds-recovery-$D-data-prod.tar.age" data.env
 `internal.env` also appear once a release has written them), `data.env` in the second.
 On any FAIL, fix the cause and rebuild; never keep a bundle that failed the gate.
 
-**Test decrypt with B (when B is created, before sealing the paper).** Type B's paper
+**Test decrypt with B (once, when B is created, before sealing the paper; the tool's
+`bundle --test-b`).** Type B's paper
 copy into `age` as the identity (Ctrl-Z, Enter); the plaintext only goes through the
 pipe to `tar -tf -`, which prints names:
 
@@ -221,7 +238,8 @@ age -d -i identity-A.age "ds-recovery-$D-data-prod.tar.age" | tar -xOf - data.en
 Repeat for `ZITADEL_MASTERKEY` (`zitadel.env`), `SIGN_IN_RECORD_KEY` and
 `AUDIT_IDENTIFIER_PEPPER` (`api.env`) against ds-api-prod. All four must match.
 Custody B is proven by the one-time test decrypt in §2.2; later bundles are encrypted
-to the same `B.pub`.
+to the same `B.pub` and verified with identity A and these fingerprints only, so a
+rotation never unseals paper B.
 
 ### 2.4 Store the ciphertext
 
@@ -238,6 +256,17 @@ a rotation, a new key in a template, a reissue from §1.3 — is followed by §2
 in the same session.
 
 ## 3. Restore proof (owner-run, ds-data-prod)
+
+**Automated: `pnpm recovery restore-proof --bundle <out>/ds-recovery-<date>-data-prod.tar.age`.**
+The manual commands below are the reference and the fallback. The tool stages the
+bundle's `data.env` on tmpfs, runs §3.2–§3.4 as root scripts fed over ssh stdin (the
+image IDs come from the state file, SEG from `check`), tears down (container, scratch
+directory, tmpfs file) after a PASS, a failure, a Ctrl-C or a dropped ssh session, and
+writes the sanitised §3.5 report to `<out>/reports/restore-proof-<UTC>.md`. Only a
+crash of the workstation itself can leave leftovers; the next run then stops and names
+`pnpm recovery teardown`, which removes every `ds-recovery-*` container, scratch
+directory and the staged env file (and prints the §3.4 commands if anything remains).
+What stays manual: the identity-A passphrase, and posting the report to #3662.
 
 Proves that the bundle's `PGBACKREST_REPO1_CIPHER_PASS` opens the live repository by
 completing a real restore into a throw-away cluster. An S3 listing or an object
@@ -266,7 +295,7 @@ age -d -i identity-A.age "ds-recovery-$D-data-prod.tar.age" | tar -xOf - data.en
 ```bash
 ENVF=/run/ds-recovery/restore.env
 CONF=/home/deploy/ds-platform/infra/deploy/compose/data-prod/pgbackrest/pgbackrest.conf
-SCRATCH=/var/lib/ds-platform/recovery-proof/$(date -u +%Y%m%dT%H%M%SZ)
+SCRATCH=/var/lib/ds-platform/recovery-proof/ds-recovery-$(date -u +%Y%m%dT%H%M%SZ)
 # The recorded image IDs: the postgres and pgbackrest entries under `images`
 # (read by eye; jq is not assumed on the host).
 sudo cat /home/deploy/ds-platform-postgres-state.json
@@ -349,13 +378,16 @@ from the archive, decrypted and replayed (the recovery-complete line and
 `pg_is_in_recovery()` = `f` alone also appear when `archive-get` fails and recovery
 stops at the backup's own end); the recovery-complete log line; `pg_is_in_recovery()`
 = `f`; the migration journal readable; both databases present and the three counts
-non-zero. Anything less is PARTIAL with the reason.
+non-zero. FAIL, with the reason: `check` did not complete or printed no SEG, the
+restore exited non-zero, the prod stanza's timeline or `.history` files changed or
+could not be read after teardown (§3.4), or the teardown left anything behind.
+Anything else short of PASS is PARTIAL with the reason.
 
 ### 3.4 Teardown (always, PASS or not)
 
 ```bash
 sudo docker stop ds-recovery-pg               # --rm removes the container
-sudo docker ps -a --filter name=ds-recovery   # expect no rows
+sudo docker ps -a --filter 'name=^/?ds-recovery-'   # expect no rows
 sudo rm -rf "$SCRATCH"
 ```
 
@@ -387,7 +419,7 @@ Checks: check <ok>; restore exit <0>; recovery complete <yes>; pg_is_in_recovery
 Teardown: container gone, scratch removed, /run env removed: <yes>
 Prod stanza after teardown: timeline <before>/<after> equal <yes>; .history files <before>/<after> equal <yes>
 Limitations: <e.g. recovery to backup end only; fresh-host drill not run>
-Verdict: PASS | PARTIAL (<reason>)
+Verdict: PASS | PARTIAL (<reason>) | FAIL (<reason>)
 ```
 
 No key value, row content or personal data goes into the report.

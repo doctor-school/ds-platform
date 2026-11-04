@@ -91,6 +91,10 @@ export interface CheckedForm {
   readonly formCookieId: string;
 }
 
+/** What the entry found behind the browser's sign-in-host cookie (its log line). */
+type LiveRecordOutcome =
+  "no-cookie" | "no-row" | "foreign" | "expired" | "revoked" | "record";
+
 /**
  * 003 EARS-5 (amended) / 60 / 64 / 66 / 67 / 68 / 71 — the sign-in host's
  * decisions: what an auth request navigation renders or where it goes, and
@@ -168,6 +172,20 @@ export class SignInHostService {
       };
     }
 
+    // 003 EARS-63 / EARS-64 — one line per entry, at its decision: the record
+    // the browser met (`unread` when the limit answered first, `unused` when a
+    // usable record could not answer this entry, `refused` when Zitadel no
+    // longer honoured it) and how the entry ended. No identifier: the
+    // storefront, the prompt kind and the two outcomes only.
+    const promptKind = request.prompt.includes("none") ? "none" : "interactive";
+    const logEntry = (
+      record: LiveRecordOutcome | "unread" | "unused" | "refused",
+      result: "limited" | "finalised" | "login_required" | "form",
+    ) =>
+      this.logger.log(
+        `entry storefront=${storefront} prompt=${promptKind} record=${record} result=${result}`,
+      );
+
     // 003 EARS-63 (f), ADR-0015 §4 req. 9 — every entry of a `prompt=none`
     // auth request counts in the silent path's own per-IP bucket; a limited
     // one finalises with `login_required`, so the storefront callback ends it
@@ -183,6 +201,7 @@ export class SignInHostService {
         request.id,
         "login_required",
       );
+      logEntry("unread", "limited");
       return {
         body: {
           action: "redirect",
@@ -213,11 +232,6 @@ export class SignInHostService {
       req.fingerprint,
       now,
       setCookies,
-    );
-    // 003 EARS-63 / EARS-64 — one line per entry: which record outcome the
-    // browser met. No identifier: the storefront, the prompt kind, the outcome.
-    this.logger.log(
-      `entry storefront=${storefront} prompt=${request.prompt.includes("none") ? "none" : "interactive"} record=${live.outcome}`,
     );
 
     // Only a fresh intent names the door: Zitadel's arrival on `/login` opens
@@ -250,6 +264,8 @@ export class SignInHostService {
           intent.handoff,
           live.record.record.session.sub,
         )));
+    let recordOutcome: Parameters<typeof logEntry>[0] =
+      live.record && !recordMayAnswer ? "unused" : live.outcome;
     if (live.record && recordMayAnswer) {
       const { cookieId, record } = live.record;
       // EARS-64: a live record answers at once, without a form.
@@ -259,10 +275,12 @@ export class SignInHostService {
       );
       if (url) {
         await this.records.touchFinalised(cookieId, now);
+        logEntry(recordOutcome, "finalised");
         return { body: { action: "redirect", url }, setCookies };
       }
       // Zitadel no longer honours the session: the browser is signed out.
       await this.drop(cookieId, record.session, setCookies);
+      recordOutcome = "refused";
     }
 
     // EARS-68: a silent check with no usable record is `login_required`.
@@ -271,6 +289,7 @@ export class SignInHostService {
         request.id,
         "login_required",
       );
+      logEntry(recordOutcome, "login_required");
       return {
         body: {
           action: "redirect",
@@ -280,6 +299,7 @@ export class SignInHostService {
       };
     }
 
+    logEntry(recordOutcome, "form");
     // Render: fresh form state under a fresh cookie (req. 3), recording the
     // storefront for a later stale request (EARS-66).
     const formId = newOpaqueId();
@@ -531,8 +551,7 @@ export class SignInHostService {
     now: Date,
     setCookies: string[],
   ): Promise<{
-    outcome:
-      "no-cookie" | "no-row" | "foreign" | "expired" | "revoked" | "record";
+    outcome: LiveRecordOutcome;
     record: { cookieId: string; record: SignInHostRecord } | null;
   }> {
     if (!cookieId) return { outcome: "no-cookie", record: null };

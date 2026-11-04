@@ -82,6 +82,7 @@ import {
 // zero, whatever store REDIS_URL would bind (#3539).
 import { InMemoryRateLimitStore } from "../../src/auth/rate-limit/rate-limit.store.fake.js";
 import { RATE_LIMIT_STORE } from "../../src/auth/rate-limit/rate-limit.store.js";
+import { RateLimitService } from "../../src/auth/rate-limit/rate-limit.service.js";
 
 // The sign-in-host block is read at module compile (`loadEnv` in the
 // factories). The dev stand and the CI api-e2e job set it; a bare run gets a
@@ -958,10 +959,13 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     );
   });
 
-  it("EARS-63/64: each sign-in-host entry logs one line naming its record outcome (no-cookie / no-row / foreign / record), with no identifier", async () => {
+  it("EARS-63/64: each sign-in-host entry logs one line at its decision — the record it met and how it ended — with no identifier", async () => {
     const address = await account("entry-log");
     const signedIn = new Jar();
     await signIn(signedIn, address);
+    // A second browser's record: the foreign-fingerprint entry drops the first.
+    const other = new Jar();
+    await signIn(other, address);
     const noRow = new Jar();
     noRow.values.set(RECORD_COOKIE_NAME, randomBytes(32).toString("base64url"));
     const log = vi.spyOn(Logger.prototype, "log");
@@ -969,6 +973,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       log.mock.calls
         .map(([line]) => String(line))
         .filter((line) => line.startsWith("entry "));
+    const limiter = app.get(RateLimitService);
     try {
       const silent = () =>
         hostIdp.seedAuthRequest({ clientId: DOCTOR, prompt: ["none"] });
@@ -979,15 +984,29 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         ...DEVICE,
         "user-agent": "OtherBrowser/2.0",
       });
+      // The silent bucket answers before the record is read.
+      vi.spyOn(limiter, "tryConsume").mockResolvedValueOnce(false);
+      await entry(new Jar(), silent());
+      // A form-only ask: the usable record cannot answer it.
+      await entry(
+        other,
+        hostIdp.seedAuthRequest({ clientId: DOCTOR, prompt: ["login"] }),
+      );
+      // Zitadel no longer honours the record's session.
+      vi.spyOn(hostIdp, "finaliseWithSession").mockResolvedValueOnce(null);
+      await entry(other, silent());
       expect(entryLines()).toEqual([
-        "entry storefront=doctor prompt=none record=no-cookie",
-        "entry storefront=doctor prompt=none record=no-row",
-        "entry storefront=doctor prompt=none record=record",
-        "entry storefront=doctor prompt=none record=foreign",
+        "entry storefront=doctor prompt=none record=no-cookie result=login_required",
+        "entry storefront=doctor prompt=none record=no-row result=login_required",
+        "entry storefront=doctor prompt=none record=record result=finalised",
+        "entry storefront=doctor prompt=none record=foreign result=login_required",
+        "entry storefront=doctor prompt=none record=unread result=limited",
+        "entry storefront=doctor prompt=interactive record=unused result=form",
+        "entry storefront=doctor prompt=none record=refused result=login_required",
       ]);
       for (const line of entryLines()) expect(line).not.toContain(address);
     } finally {
-      log.mockRestore();
+      vi.restoreAllMocks();
     }
   });
 

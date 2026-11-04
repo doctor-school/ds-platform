@@ -181,19 +181,14 @@ const SEARCH_CRAWLER =
 /**
  * EARS-63 (d) / (e) — why a request may not start a check at all, or `null`
  * when it may. Exempt: a non-`GET`; no top-level-document fetch metadata
- * (which also covers a client without fetch metadata); a plain prefetch or a
- * Next.js router request; `/v1/*`; static assets; `/.well-known/*`; the
- * storefront's own auth routes; the health route; a search crawler; the
- * one-shot `ds_guest=1` return. A prerender (`Sec-Purpose: prefetch;prerender`)
- * is NOT exempt: the browser shows it as the navigation (see `isPrerender`).
+ * (which also covers a client without fetch metadata); a Next.js router
+ * request; `/v1/*`; static assets; `/.well-known/*`; the storefront's own auth
+ * routes; the health route; a search crawler; the one-shot `ds_guest=1`
+ * return. A speculative load (prefetch or prerender, see `isSpeculativeLoad`)
+ * is NOT exempt: the browser may show it as the navigation.
  */
 export type SilentCheckExemption =
-  | "not-navigation"
-  | "prefetch"
-  | "router"
-  | "crawler"
-  | "guest-return"
-  | "route";
+  "not-navigation" | "router" | "crawler" | "guest-return" | "route";
 
 export function silentCheckExemption(
   request: Request,
@@ -202,12 +197,6 @@ export function silentCheckExemption(
   const h = request.headers;
   if (request.method !== "GET" || !isTopLevelNavigation(h)) {
     return "not-navigation";
-  }
-  if (
-    (!isPrerender(h) && /prefetch/i.test(h.get("sec-purpose") ?? "")) ||
-    /prefetch/i.test(h.get("purpose") ?? "")
-  ) {
-    return "prefetch";
   }
   if (
     h.has("rsc") ||
@@ -247,15 +236,28 @@ export function isSilentCheckCandidate(
 }
 
 /**
- * EARS-63 (d) — a prerender (Chrome omnibox / speculation rules send
- * `Sec-Purpose: prefetch;prerender`) renders the document in a hidden page
- * that the browser later ACTIVATES as the navigation, with no new request. A
- * guest page prerendered unchecked would therefore be shown as the person's
- * navigation and the check would never run (#3660). A plain prefetch is only
- * a fetch and stays exempt.
+ * The headers a browser marks a speculative load with: the standard
+ * `Sec-Purpose` (`prefetch`, `prefetch;prerender`,
+ * `prefetch;anonymous-client-ip`), Chromium's legacy `Purpose: prefetch` (sent
+ * beside `Sec-Purpose` until Chrome 139, and still by forks that lag it),
+ * Safari's `X-Purpose: preview` and Firefox's `X-Moz: prefetch`.
  */
-function isPrerender(headers: Headers): boolean {
-  return /prerender/i.test(headers.get("sec-purpose") ?? "");
+const SPECULATION_HEADERS = ["sec-purpose", "purpose", "x-purpose", "x-moz"];
+const SPECULATION_VALUE = /prefetch|prerender|preview/i;
+
+/**
+ * EARS-63 (d) — a speculative load of a document: a prerender (the address bar,
+ * speculation rules) renders it in a hidden page the browser later ACTIVATES
+ * as the navigation, and a navigational prefetch (speculation rules) keeps the
+ * response and serves it as the navigation — either way with no new request.
+ * A guest page loaded that way unchecked would be shown as the person's
+ * navigation and the check would never run (#3660). Whichever header carries
+ * the mark, and whatever else is also present, it decides the same way.
+ */
+function isSpeculativeLoad(headers: Headers): boolean {
+  return SPECULATION_HEADERS.some((name) =>
+    SPECULATION_VALUE.test(headers.get(name) ?? ""),
+  );
 }
 
 /** The return path of a check: the request's path and query, `ds_guest` removed (req. 1). */
@@ -330,14 +332,15 @@ export interface SilentCheckDeps {
 const RENDER: SilentCheckOutcome = { setCookies: [] };
 
 /**
- * EARS-63 (d) — the answer to a checkable prerender: a non-2xx, which makes
- * the browser discard the prerender (a prerender activates only on a 2xx), so
- * the person's real navigation reaches this proxy and runs the check. It
- * starts no transaction and sets no cookie: a prerender the person never
- * opens costs nothing, and leaves no silent-transaction cookie that would
- * hold the real navigation's check back.
+ * EARS-63 (d) — the answer to a checkable speculative load: a non-2xx, which
+ * makes the browser discard it (a prerender activates, and a prefetch is
+ * served, only on a 2xx), so the person's real navigation reaches this proxy
+ * and runs the check. It starts no transaction and sets no cookie: a load the
+ * person never opens costs nothing, and leaves no silent-transaction cookie
+ * that would hold the real navigation's check back. These 503s are expected
+ * traffic: a 5xx alert must exclude requests carrying a speculation header.
  */
-function prerenderRefusal(): Response {
+function speculativeLoadRefusal(): Response {
   return new Response(null, {
     status: 503,
     headers: { "cache-control": "no-store", "retry-after": "0" },
@@ -394,9 +397,9 @@ export async function storefrontSilentCheck(
   const auth = await resolveServerAuth(request.headers, fetchImpl);
   if (auth.status === "doctor") return decided("session", RENDER);
 
-  // EARS-63 (d) — a checkable prerender is never activated as a guest page.
-  if (isPrerender(request.headers)) {
-    return decided("prerender", { response: prerenderRefusal() });
+  // EARS-63 (d) — a checkable speculative load is never shown as a guest page.
+  if (isSpeculativeLoad(request.headers)) {
+    return decided("speculative", { response: speculativeLoadRefusal() });
   }
 
   // EARS-63 (c) — a live interactive transaction never holds the check back:

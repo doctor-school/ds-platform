@@ -276,8 +276,6 @@ describe("003 EARS-63: the silent check starts only on a checkable request", () 
     ],
     ["a non-GET", nav("/", {}, { method: "POST", body: "x" })],
     ["a HEAD", nav("/", {}, { method: "HEAD" })],
-    ["a prefetch (Sec-Purpose)", nav("/", { "sec-purpose": "prefetch" })],
-    ["a prefetch (Purpose)", nav("/", { purpose: "prefetch" })],
     ["a Next.js router request (RSC)", nav("/", { rsc: "1" })],
     ["a Next.js router prefetch", nav("/", { "next-router-prefetch": "1" })],
     ["a frame", nav("/", { "sec-fetch-dest": "iframe" })],
@@ -382,7 +380,41 @@ describe("003 EARS-63: the silent check starts only on a checkable request", () 
 /** Chrome's prerender (omnibox / speculation rules): a document navigation. */
 const PRERENDER = { "sec-purpose": "prefetch;prerender" };
 
-describe("003 EARS-63 (d): a prerender is never activated as an unchecked guest page", () => {
+describe("003 EARS-63 (d): a speculative load is never shown as an unchecked guest page", () => {
+  it.each([
+    ["a prerender", PRERENDER],
+    // Chromium before 139 (and the forks that lag it) sends the legacy
+    // `Purpose: prefetch` beside `Sec-Purpose` on every prefetch and prerender.
+    [
+      "a prerender that also carries the legacy Purpose header",
+      { ...PRERENDER, purpose: "prefetch" },
+    ],
+    [
+      "a speculation-rules navigational prefetch (Sec-Purpose)",
+      { "sec-purpose": "prefetch" },
+    ],
+    [
+      "a cross-site navigational prefetch",
+      { "sec-purpose": "prefetch;anonymous-client-ip" },
+    ],
+    [
+      "a prefetch signalled only by the legacy Purpose",
+      { purpose: "prefetch" },
+    ],
+    ["a prefetch signalled by X-Purpose", { "x-purpose": "preview" }],
+    ["a prefetch signalled by X-Moz", { "x-moz": "prefetch" }],
+  ] as const)(
+    "EARS-63: (d) %s of a checkable page is refused with 503, no transaction, no cookie",
+    async (_name, headers) => {
+      const api = fakeApi();
+      const res = redirected(await check(nav("/", headers), api, DOCTOR));
+      expect(res.status).toBe(503);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("set-cookie")).toBeNull();
+      expect(api.starts()).toEqual([]);
+    },
+  );
+
   it("EARS-63: (d) a checkable prerender is refused with a non-2xx, so the browser discards it and the real navigation runs the check", async () => {
     const api = fakeApi();
     const res = redirected(await check(nav("/", PRERENDER), api, DOCTOR));
@@ -419,12 +451,17 @@ describe("003 EARS-63 (d): a prerender is never activated as an unchecked guest 
     expect(api.starts()).toEqual([]);
   });
 
-  it("EARS-63: (d) a plain prefetch stays exempt and is rendered untouched", async () => {
+  it("EARS-63: (d) a navigational prefetch with a valid marker renders the guest page", async () => {
     const api = fakeApi();
     expect(
-      rendered(await check(nav("/", { "sec-purpose": "prefetch" }), api)),
+      rendered(
+        await check(
+          nav("/", { "sec-purpose": "prefetch", cookie: await marker() }),
+          api,
+        ),
+      ),
     ).toEqual([]);
-    expect(api.calls).toEqual([]);
+    expect(api.starts()).toEqual([]);
   });
 });
 
@@ -446,7 +483,8 @@ describe("003 EARS-63: one log line per proxy decision, no personal data", () =>
 
   it.each([
     ["303", () => nav("/", { cookie: "__Host-ds_session=gone" }), {}],
-    ["prerender", () => nav("/", PRERENDER), {}],
+    ["speculative", () => nav("/", PRERENDER), {}],
+    ["speculative", () => nav("/", { "sec-purpose": "prefetch" }), {}],
     [
       "session",
       () => nav("/", { cookie: "__Host-ds_session=sid" }),
@@ -454,11 +492,6 @@ describe("003 EARS-63: one log line per proxy decision, no personal data", () =>
     ],
     ["limited", () => nav("/"), { silentCheck: 429 }],
     ["guard", () => nav("/", { cookie: `${CHECK_GUARD_COOKIE}=1` }), {}],
-    [
-      "not-candidate reason=prefetch",
-      () => nav("/", { "sec-purpose": "prefetch" }),
-      {},
-    ],
     ["not-candidate reason=router", () => nav("/", { rsc: "1" }), {}],
     [
       "not-candidate reason=crawler",

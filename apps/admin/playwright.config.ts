@@ -54,6 +54,16 @@ const taxonomyTestDir = defineBddConfig({
   missingSteps: "skip-scenario",
 });
 
+const auditTestDir = defineBddConfig({
+  features:
+    "../docs/content/specs/features/010-universal-edit-audit/010-scenarios.feature",
+  featuresRoot: "../docs/content/specs/features",
+  steps: ["e2e/steps/edit-audit-contracts.steps.ts"],
+  outputDir: ".features-gen/audit",
+  tags: "@host:admin",
+  missingSteps: "skip-scenario",
+});
+
 export default defineConfig({
   testDir,
   fullyParallel: false,
@@ -76,6 +86,11 @@ export default defineConfig({
       name: "taxonomy",
       testDir: taxonomyTestDir,
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "audit",
+      testDir: auditTestDir,
+      grep: /Deleting a row captures the full old row in the diff|An update that changes nothing leaves no trail row|A trail row cannot be rewritten or removed/,
     },
   ],
 });

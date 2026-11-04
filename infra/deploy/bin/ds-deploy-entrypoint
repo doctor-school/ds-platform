@@ -500,11 +500,11 @@ GLITCHTIP_ENV=$ROOT/etc/ds-platform/glitchtip.env
 POSTGRES_PROBE=$ROOT/usr/local/lib/ds-platform/postgres-artifact-probe.py
 HARDEN_SSH=$ROOT/usr/local/lib/ds-platform/harden-ssh.sh
 # Box entrypoint = its path in the shipped tree; tools/deploy/lib/remote.mjs
-# BOX_ENTRYPOINTS, pinned equal by the tests.
+# DATA_BOX_ENTRYPOINTS, pinned equal by the tests. ds-read-entrypoint is served by
+# ds-api-prod only (spec §5 «Prod read verbs.»), so this box does not install it.
 DATA_INSTALL=(
   /usr/local/bin/ds-release=infra/deploy/bin/ds-release
   /usr/local/bin/ds-deploy-entrypoint=infra/deploy/bin/ds-deploy-entrypoint
-  /usr/local/bin/ds-read-entrypoint=infra/deploy/bin/ds-read-entrypoint
   /usr/local/lib/ds-platform/release-driver=infra/deploy/bin/release-driver
   /usr/local/lib/ds-platform/postgres-artifact-probe.py=tools/deploy/postgres-artifact-probe.py
   /usr/local/lib/ds-platform/harden-ssh.sh=infra/deploy/bin/harden-ssh.sh

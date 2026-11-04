@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 import { DATA_READ_VERBS, DATA_VERBS } from "./lib/data-prod.mjs";
-import { BOX_ENTRYPOINTS } from "./lib/remote.mjs";
+import { BOX_ENTRYPOINTS, DATA_BOX_ENTRYPOINTS, DS_READ_ENTRYPOINT_BIN } from "./lib/remote.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ENTRYPOINT = resolve(here, "../../infra/deploy/bin/ds-deploy-entrypoint");
@@ -67,14 +67,18 @@ test("3313, 3646: the data verbs are one list: DATA_VERBS, the case arm, the cli
   assert.equal(lines[start + 2], "    data_verb");
 });
 
-test("3313: the data box installs the BOX_ENTRYPOINTS of remote.mjs, in order", () => {
+test("3313, 3646: the data box installs the DATA_BOX_ENTRYPOINTS of remote.mjs, in order — no ds-read-entrypoint", () => {
   const lines = readFileSync(ENTRYPOINT, "utf8").split("\n");
   const start = lines.indexOf("DATA_INSTALL=(");
   assert.ok(start > 0, "DATA_INSTALL is defined");
   const end = lines.indexOf(")", start);
   assert.deepEqual(
     lines.slice(start + 1, end).map((l) => l.trim()),
-    BOX_ENTRYPOINTS.map(({ dest, path }) => `${dest}=${path}`),
+    DATA_BOX_ENTRYPOINTS.map(({ dest, path }) => `${dest}=${path}`),
+  );
+  assert.deepEqual(
+    BOX_ENTRYPOINTS.filter((e) => !DATA_BOX_ENTRYPOINTS.includes(e)).map(({ dest }) => dest),
+    [DS_READ_ENTRYPOINT_BIN],
   );
 });
 
@@ -1033,9 +1037,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     }
     const r = run(`install ${SHA}`);
     assert.equal(r.status, 0, String(r.stderr));
-    for (const { dest, path } of BOX_ENTRYPOINTS) {
+    for (const { dest, path } of DATA_BOX_ENTRYPOINTS) {
       assert.equal(readFileSync(join(root, dest), "utf8"), `# ${path}\n`, dest);
     }
+    assert.equal(existsSync(join(root, DS_READ_ENTRYPOINT_BIN)), false, "ds-read-entrypoint is not installed on ds-data-prod");
   });
 
   it("3320: converge installs the shipped entrypoints, then runs the installed harden-ssh.sh --role data --from-release", () => {

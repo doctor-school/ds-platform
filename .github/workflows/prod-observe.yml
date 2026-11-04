@@ -1,0 +1,139 @@
+name: Prod observe
+
+# One read of production through the prod read key (#3646; spec
+# apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md §4
+# «Prod read results leave only encrypted.», §5 «Prod read verbs.» → «Workflow
+# `prod-observe.yml`.»). The lead dispatches it; a read needs no owner word (§10).
+#
+#   gh workflow run prod-observe.yml --ref main -f verb=schema
+#   pnpm prod:read <run-id>            # or: pnpm prod:schema-drift <run-id>
+#
+# The key reaches only ds-read-entrypoint on ds-api-prod (forced command). The job
+# checks the inputs' shape, asks `capabilities` (plaintext, verbs only) and refuses a
+# verb it does not name, sends the one verb and uploads its answer — CMS ciphertext
+# to the recipient certificate, never plaintext — as the artifact
+# `prod-read-<run_id>`. The log and the job summary carry status lines only: verb,
+# exit code, ciphertext size and sha256, and for a failure one fixed reason.
+# The `rehearse` poll of `rehearsal-status` arrives with the rehearsal (#3648).
+
+on:
+  workflow_dispatch:
+    inputs:
+      verb:
+        description: "The read verb."
+        required: true
+        type: choice
+        options: [schema, observe, rehearse, rehearsal-status]
+        default: schema
+      name:
+        description: "observe: the catalogue entry name."
+        required: false
+        type: string
+        default: ""
+      params:
+        description: "observe: the parameters, one JSON object (at most 4 KiB)."
+        required: false
+        type: string
+        default: "{}"
+      sha:
+        description: "rehearse / rehearsal-status: the full 40-hex SHA."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# Never `deploy-prod`: a newer pending run in a group cancels the older pending one,
+# so a read there could cancel a queued release or rollback. The box-side check keeps
+# reads off a running release instead.
+concurrency:
+  group: prod-observe
+  cancel-in-progress: false
+
+env:
+  # ds-api-prod's public address (`api_prod_public_ip`, infra/deploy/README.md), as
+  # in deploy-prod.yml.
+  PROD_SSH_HOST: 77.233.220.222
+  PROD_SSH_USER: deploy
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production-read
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the inputs
+        id: inputs
+        env:
+          VERB: ${{ inputs.verb }}
+          NAME: ${{ inputs.name }}
+          PARAMS: ${{ inputs.params }}
+          SHA: ${{ inputs.sha }}
+        run: node tools/deploy/prod-read.mjs check-inputs "$RUNNER_TEMP/params.json"
+
+      - name: Write the ssh key
+        env:
+          PROD_READ_SSH_KEY: ${{ secrets.PROD_READ_SSH_KEY }}
+          PROD_SSH_KNOWN_HOSTS: ${{ vars.PROD_SSH_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          dir="$RUNNER_TEMP/prod-read-ssh"
+          mkdir -p "$dir"
+          printf '%s\n' "$PROD_READ_SSH_KEY" > "$dir/key"
+          printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > "$dir/known_hosts"
+          chmod 600 "$dir/key" "$dir/known_hosts"
+
+      - name: Ask capabilities
+        env:
+          VERB: ${{ inputs.verb }}
+        run: |
+          set +e
+          ssh -i "$RUNNER_TEMP/prod-read-ssh/key" -o IdentitiesOnly=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/prod-read-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            "$PROD_SSH_USER@$PROD_SSH_HOST" capabilities </dev/null \
+            >"$RUNNER_TEMP/capabilities.json" 2>"$RUNNER_TEMP/capabilities.err"
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            node tools/deploy/prod-read.mjs status capabilities "$rc" /dev/null "$RUNNER_TEMP/capabilities.err" || true
+            exit 1
+          fi
+          node tools/deploy/prod-read.mjs check-capabilities "$VERB" <"$RUNNER_TEMP/capabilities.json"
+
+      - name: Read
+        id: read
+        env:
+          VERB: ${{ inputs.verb }}
+          COMMAND: ${{ steps.inputs.outputs.command }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/result"
+          set +e
+          ssh -i "$RUNNER_TEMP/prod-read-ssh/key" -o IdentitiesOnly=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/prod-read-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            "$PROD_SSH_USER@$PROD_SSH_HOST" "$COMMAND" <"$RUNNER_TEMP/params.json" \
+            >"$RUNNER_TEMP/result/result.cms" 2>"$RUNNER_TEMP/read.err"
+          rc=$?
+          set -e
+          node tools/deploy/prod-read.mjs status "$VERB" "$rc" "$RUNNER_TEMP/result/result.cms" "$RUNNER_TEMP/read.err"
+
+      - name: Upload the ciphertext
+        if: steps.read.outputs.upload == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: prod-read-${{ github.run_id }}
+          path: ${{ runner.temp }}/result/result.cms
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Remove the ssh key and the work files
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/prod-read-ssh" "$RUNNER_TEMP/result" "$RUNNER_TEMP"/*.err "$RUNNER_TEMP/capabilities.json" "$RUNNER_TEMP/params.json"

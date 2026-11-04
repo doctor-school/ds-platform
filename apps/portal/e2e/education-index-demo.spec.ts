@@ -351,18 +351,59 @@ test.describe("045 education-index demo · noindex + compliance words (V-7)", ()
   });
 });
 
-test.describe("045 education-index demo · 390 layout (V-1, EARS-12)", () => {
-  test.use({ viewport: { width: 390, height: 1000 } });
+// 390 is the canvas phone width (EARS-12); 360 is the narrow phone the same
+// «no sideways scroll» rule holds on (#3597). The whole-document check joins
+// 320 with #3629: there the shared storefront header still overflows on the
+// Linux runner. The 045 page content itself is held to 320 below.
+for (const width of [390, 360]) {
+  test.describe(`045 education-index demo · ${width} layout (V-1, EARS-12)`, () => {
+    test.use({ viewport: { width, height: 1000 } });
+
+    for (const route of [PUBLIC, CABINET]) {
+      test(`045 EARS-12: ${route} has no sideways overflow at ${width}`, async ({
+        page,
+      }) => {
+        await page.goto(route, { waitUntil: "networkidle" });
+        await page.evaluate(() => document.fonts.ready);
+        const layout = await page.evaluate(() => {
+          const root = document.documentElement;
+          const overflowing = [...document.querySelectorAll("body *")]
+            .map((element) => ({
+              element,
+              box: element.getBoundingClientRect(),
+            }))
+            .filter(({ box }) => box.width > 0 && box.right > innerWidth + 0.5)
+            .map(({ element, box }) => {
+              const label =
+                element.getAttribute("data-testid") ??
+                (element.textContent ?? "").trim().slice(0, 40);
+              return `${element.tagName.toLowerCase()}.${String(element.getAttribute("class") ?? "").slice(0, 60)} «${label}» right=${box.right.toFixed(1)}`;
+            });
+          return { scrollWidth: root.scrollWidth, innerWidth, overflowing };
+        });
+        expect(
+          layout.scrollWidth,
+          `elements past the ${width} edge:\n${layout.overflowing.join("\n")}`,
+        ).toBeLessThanOrEqual(layout.innerWidth);
+      });
+    }
+  });
+}
+
+// 320 (#3597): the 045 page content — the layout frame's one `<main>`, so the
+// shared storefront header and footer are outside it (#3629 owns the header) —
+// keeps every box inside the phone column.
+test.describe("045 education-index demo · 320 page content (V-1, EARS-12)", () => {
+  test.use({ viewport: { width: 320, height: 1000 } });
 
   for (const route of [PUBLIC, CABINET]) {
-    test(`045 EARS-12: ${route} has no sideways overflow at 390`, async ({
+    test(`045 EARS-12: ${route} page content has no sideways overflow at 320`, async ({
       page,
     }) => {
       await page.goto(route, { waitUntil: "networkidle" });
       await page.evaluate(() => document.fonts.ready);
-      const layout = await page.evaluate(() => {
-        const root = document.documentElement;
-        const overflowing = [...document.querySelectorAll("body *")]
+      const overflowing = await page.evaluate(() =>
+        [...document.querySelectorAll("main *")]
           .map((element) => ({ element, box: element.getBoundingClientRect() }))
           .filter(({ box }) => box.width > 0 && box.right > innerWidth + 0.5)
           .map(({ element, box }) => {
@@ -370,13 +411,11 @@ test.describe("045 education-index demo · 390 layout (V-1, EARS-12)", () => {
               element.getAttribute("data-testid") ??
               (element.textContent ?? "").trim().slice(0, 40);
             return `${element.tagName.toLowerCase()}.${String(element.getAttribute("class") ?? "").slice(0, 60)} «${label}» right=${box.right.toFixed(1)}`;
-          });
-        return { scrollWidth: root.scrollWidth, innerWidth, overflowing };
-      });
-      expect(
-        layout.scrollWidth,
-        `elements past the 390 edge:\n${layout.overflowing.join("\n")}`,
-      ).toBeLessThanOrEqual(layout.innerWidth);
+          }),
+      );
+      expect(overflowing, "page-content elements past the 320 edge").toEqual(
+        [],
+      );
     });
   }
 });

@@ -36,6 +36,9 @@ bucket/endpoint/region, and the repo cipher passphrase
 the `PGBACKREST_*` values its `archive_command` needs for WAL egress; `pgbackrest`
 reads the `PGBACKREST_*` values.
 
+Custody of `PGBACKREST_REPO1_CIPHER_PASS` (without it every backup is unreadable):
+[`../../RECOVERY.md`](../../RECOVERY.md).
+
 ## Services
 
 - **postgres** — a pgvector + pg_partman + pgbackrest build (`postgres/Dockerfile`):

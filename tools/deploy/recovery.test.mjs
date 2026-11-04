@@ -30,9 +30,28 @@ import {
   bundleName,
   initKeys,
   buildBundle,
+  bundle,
+  restoreProof,
+  factsScript,
+  infoScript,
+  remoteScript,
   ENV_FILE,
+  ENV_DIR,
+  PROOF_PID,
+  RUN_LABEL,
   CONF,
 } from "./recovery.mjs";
+import { spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
 
 const IMG = "sha256:" + "a".repeat(64);
 
@@ -45,7 +64,10 @@ test("parseArgs: subcommands, flags and the default out dir", () => {
     out: "/u/o/ds-recovery",
     bundle: null,
     identity: null,
+    testB: false,
   });
+  assert.equal(parseArgs(["bundle", "--test-b"], { home }).testB, true);
+  assert.equal(parseArgs(["teardown"], { home }).cmd, "teardown");
   const p = parseArgs(
     [
       "restore-proof",
@@ -412,7 +434,7 @@ test("proofScript / teardownScript: every docker run is safe, teardown is trappe
   assert.ok(runs.length >= 3);
   for (const l of runs) assert.match(l, /'--rm'/);
   const td = teardownScript({ brImage: IMG, scratch });
-  assert.match(td, /docker stop ds-recovery-pg/);
+  assert.match(td, /docker stop \$IDS/);
   assert.match(
     td,
     /rm -rf -- '\/var\/lib\/ds-platform\/recovery-proof\/ds-recovery-20261104T100000Z'/,
@@ -759,4 +781,437 @@ test("buildBundle: test decrypt with B reads B from stdin, never from a file", a
     decrypts.map((d) => d.input.toString()),
     ["AGE-SECRET-KEY-1A\n", "AGE-SECRET-KEY-1B\n"],
   );
+});
+
+// --- remote scripts under a real `bash -s` --------------------------------------------
+
+const SEG = "0000000100000000000000AB";
+const DOCKER_SHIM = `#!/usr/bin/env bash
+# Stands in for docker on the host; drains stdin on -i as the real client does.
+echo "$*" >> "$DSR_CALLS"
+case "$1" in
+  exec)
+    if [ "$2" = "-i" ]; then cat >/dev/null; printf 'users|5\\nposts|4\\ntags|3\\n'; exit 0; fi
+    case "$*" in
+      *pg_is_in_recovery*) echo f ;;
+      *server_version*) echo 17.6 ;;
+      *drizzle_migrations*) echo "42|2026-11-01" ;;
+      *pg_database*) printf 'ds_prod\\nzitadel\\n' ;;
+    esac ;;
+  run)
+    case "$*" in
+      *" check")
+        [ -n "\${DSR_SIGNAL:-}" ] && kill -TERM "$(cat "$DSR_PID")"
+        echo "WAL segment ${SEG} successfully archived"; echo "check command end" ;;
+      *" restore") echo "restore command end" ;;
+    esac ;;
+  logs)
+    echo 'restored log file "${SEG}" from archive'
+    echo "archive recovery complete"
+    echo "database system is ready to accept connections" ;;
+  inspect) echo true ;;
+esac
+exit 0
+`;
+
+const bashOk =
+  spawnSync("bash", ["-c", "echo ok"], { encoding: "utf8" }).stdout?.trim() ===
+  "ok";
+
+function runProofUnderBash({ signal = false } = {}) {
+  const root = mkdtempSync(join(tmpdir(), "dsr-")).replace(/\\/g, "/");
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  const shim = (name, body) => {
+    writeFileSync(join(bin, name), body);
+    chmodSync(join(bin, name), 0o755);
+  };
+  shim("docker", DOCKER_SHIM);
+  shim("install", '#!/usr/bin/env bash\nmkdir -p "${@: -1}"\n');
+  shim("sleep", "#!/usr/bin/env bash\nexit 0\n");
+  const scratch = scratchDir(new Date("2026-11-04T10:00:00Z"));
+  const envDir = `${root}/run`;
+  mkdirSync(envDir);
+  writeFileSync(`${envDir}/restore.env`, "X=1\n");
+  mkdirSync(`${root}/scratch`);
+  const text = proofScript({ brImage: IMG, pgImage: IMG, scratch })
+    .split(scratch)
+    .join(`${root}/scratch`)
+    .split(ENV_DIR)
+    .join(envDir);
+  const r = spawnSync("bash", ["-s"], {
+    input: text,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${bin}${delimiter}${process.env.PATH}`,
+      DSR_CALLS: `${root}/calls`,
+      DSR_PID: `${envDir}/proof.pid`,
+      DSR_SIGNAL: signal ? "1" : "",
+    },
+  });
+  return { r, root, envDir, sec: sections(r.stdout) };
+}
+
+test(
+  "proofScript under bash -s: an inner stdin reader never swallows the script",
+  { skip: !bashOk && "bash not available" },
+  () => {
+    const { r, root, sec } = runProofUnderBash();
+    assert.ok("end" in sec, `script stopped early: ${r.stdout}\n${r.stderr}`);
+    assert.equal(sec["in-recovery"], "f");
+    assert.equal(sec.databases, "ds_prod\nzitadel");
+    assert.equal(sec.counts, "users|5\nposts|4\ntags|3");
+    assert.ok(sec["seg-restored"].includes(SEG));
+    assert.equal(
+      existsSync(`${root}/scratch`),
+      false,
+      "EXIT trap removes scratch",
+    );
+  },
+);
+
+test(
+  "proofScript under bash -s: a signal removes the staged env file and the scratch",
+  { skip: !bashOk && "bash not available" },
+  () => {
+    const { sec, root, envDir } = runProofUnderBash({ signal: true });
+    assert.ok(!("end" in sec));
+    assert.equal(existsSync(`${envDir}/restore.env`), false);
+    assert.equal(existsSync(`${envDir}/proof.pid`), false);
+    assert.equal(existsSync(`${root}/scratch`), false);
+  },
+);
+
+test("remote scripts: parsed whole with stdin from /dev/null, no stdin-inheriting -i", () => {
+  const scratch = scratchDir(new Date("2026-11-04T10:00:00Z"));
+  for (const text of [
+    factsScript({ scratch }),
+    infoScript({ brImage: IMG }),
+    proofScript({ brImage: IMG, pgImage: IMG, scratch }),
+    teardownScript({ brImage: IMG, scratch }),
+    teardownScript({}),
+  ]) {
+    assert.match(text, /^ds_main\(\) \{\n/);
+    assert.ok(text.endsWith("}\nds_main </dev/null\n"));
+    for (const l of text.split("\n")) {
+      if (/docker'? '?(exec|run)'?\b.*\s'?-i'?(\s|$)/.test(l))
+        assert.match(l, /<<'SQL'|<\s*\S/, `stdin-inheriting -i: ${l}`);
+      if (/'docker' 'run'/.test(l))
+        assert.match(l, /<\/dev\/null/, `docker run without </dev/null: ${l}`);
+    }
+  }
+  assert.equal(
+    remoteScript("true\n"),
+    "ds_main() {\ntrue\n}\nds_main </dev/null\n",
+  );
+});
+
+test("teardownScript: stops runs by label, guards the pidfile, leftovers mode is anchored", () => {
+  const scratch = scratchDir(new Date("2026-11-04T10:00:00Z"));
+  const td = teardownScript({ brImage: IMG, scratch });
+  assert.ok(td.includes(`--filter label=${RUN_LABEL.split("=")[0]}`));
+  assert.ok(td.includes('/proc/"$PID"/cmdline'));
+  assert.ok(td.includes(`rm -f -- '${ENV_FILE}' '${PROOF_PID}'`));
+  const left = teardownScript({});
+  assert.ok(
+    left.includes(
+      '[[ "$d" =~ ^/var/lib/ds-platform/recovery-proof/ds-recovery-[0-9]{8}T[0-9]{6}Z$ ]] && rm -rf -- "$d"',
+    ),
+  );
+  assert.ok(!left.includes("info-after"));
+  const run = pgbackrestRun({ image: IMG, args: ["info"] });
+  const i = run.indexOf("--label");
+  assert.equal(run[i + 1], RUN_LABEL);
+  run.splice(i, 2);
+  assert.throws(() => assertSafeDockerRun(run, "pgbackrest"), /--label/);
+});
+
+// --- restore-proof orchestration through the injected runner ---------------------------
+
+const INFO_JSON = JSON.stringify([
+  {
+    name: "ds",
+    backup: [
+      {
+        label: "20261104-010000F",
+        type: "full",
+        archive: { start: "A", stop: "B" },
+        info: { size: 1024 },
+        backrest: { version: "2.56" },
+      },
+    ],
+    archive: [{ max: "000000010000000000000099" }],
+  },
+]);
+const STATE = JSON.stringify({ images: { postgres: IMG, pgbackrest: IMG } });
+const AVAIL = String(100 * 1024 ** 3);
+const at = (...l) => l.join("\n");
+
+function proofHarness({
+  failAt = null,
+  leftovers = false,
+  onProof = null,
+} = {}) {
+  const out = mkdtempSync(join(tmpdir(), "dsr-out-"));
+  const steps = [];
+  const printed = [];
+  const exits = [];
+  let handler = null;
+  let released = false;
+  const tar = tarOf([["data.env", "PGBACKREST_REPO1_CIPHER_PASS=topsecret\n"]]);
+  const scripts = {
+    facts: at(
+      "@@DSR state",
+      STATE,
+      "@@DSR volumes",
+      "ds-data-prod_pgdata",
+      "ds-data-prod_pgsocket",
+      "@@DSR running",
+      `postgres ${IMG}`,
+      `pgbackrest ${IMG}`,
+      "@@DSR container",
+      "@@DSR envdir",
+      leftovers ? "present" : "",
+      "@@DSR scratch",
+      "@@DSR avail",
+      failAt === "headroom" ? "1" : AVAIL,
+      "@@DSR mem",
+      String(4 * 1024 ** 2),
+      "@@DSR end",
+    ),
+    info: at(
+      "@@DSR info",
+      INFO_JSON,
+      "@@DSR info-rc",
+      failAt === "info" ? "1" : "0",
+      "@@DSR history",
+      "00000001.history",
+      "@@DSR history-rc",
+      "0",
+      "@@DSR end",
+    ),
+    proof: at(
+      "@@DSR check",
+      `WAL segment ${SEG} successfully archived`,
+      "@@DSR check-rc",
+      "0",
+      "@@DSR seg",
+      SEG,
+      "@@DSR restore",
+      "@@DSR restore-rc",
+      "0",
+      "@@DSR ready",
+      "yes",
+      "@@DSR seg-restored",
+      `restored log file "${SEG}" from archive`,
+      "@@DSR copy-log",
+      "archive recovery complete",
+      "redo done at 0/5000100",
+      "@@DSR in-recovery",
+      "f",
+      "@@DSR version",
+      "17.6",
+      "@@DSR migrations",
+      "42|2026-11-01",
+      "@@DSR databases",
+      "ds_prod",
+      "zitadel",
+      "@@DSR counts",
+      "users|5",
+      "posts|4",
+      "tags|3",
+      "@@DSR amcheck",
+      "ok",
+      "@@DSR end",
+    ),
+    teardown: at(
+      "@@DSR ps",
+      "@@DSR scratch",
+      "removed",
+      "@@DSR info-after",
+      INFO_JSON,
+      "@@DSR info-after-rc",
+      "0",
+      "@@DSR history-after",
+      "00000001.history",
+      "@@DSR history-after-rc",
+      "0",
+      "@@DSR env",
+      "removed",
+      "@@DSR end",
+    ),
+  };
+  const ctx = {
+    out,
+    now: new Date("2026-11-04T10:00:00Z"),
+    identityA: "AGE-SECRET-KEY-1A",
+    targets: { api: (c) => ["api", c], data: (c) => ["data", c] },
+    print: (l) => printed.push(l),
+    onSignal: (fn) => ((handler = fn), () => (released = true)),
+    exit: (code) => exits.push(code),
+    run: async (c) => {
+      if (c.cmd === "age") {
+        steps.push("decrypt");
+        return { code: 0, stdout: tar };
+      }
+      const label = c.label.startsWith("stage") ? "stage" : c.label;
+      steps.push(label);
+      if (label === "stage")
+        return { code: failAt === "stage" ? 1 : 0, stdout: Buffer.alloc(0) };
+      if (label === "proof") {
+        if (onProof) await onProof(handler);
+        if (failAt === "proof") return { code: 255, stdout: Buffer.alloc(0) };
+      }
+      return { code: 0, stdout: Buffer.from(`${scripts[label]}\n`) };
+    },
+  };
+  return {
+    ctx,
+    steps,
+    printed,
+    exits,
+    released: () => released,
+    out,
+    file: join(out, "ds-recovery-2026-11-04-data-prod.tar.age"),
+  };
+}
+
+test("restoreProof: steps in order, PASS report written, signal handler released", async () => {
+  const h = proofHarness();
+  const r = await restoreProof(h.ctx, { bundle: h.file });
+  assert.deepEqual(h.steps, [
+    "decrypt",
+    "facts",
+    "stage",
+    "info",
+    "proof",
+    "teardown",
+  ]);
+  assert.equal(r.verdict, "PASS");
+  assert.equal(readdirSync(join(h.out, "reports")).length, 1);
+  assert.ok(h.released());
+  assert.ok(!h.printed.join("\n").includes("topsecret"));
+});
+
+for (const failAt of ["stage", "info", "headroom", "proof"]) {
+  test(`restoreProof: a failure at ${failAt} still tears down exactly once`, async () => {
+    const h = proofHarness({ failAt });
+    await assert.rejects(restoreProof(h.ctx, { bundle: h.file }));
+    assert.equal(h.steps.at(-1), "teardown");
+    assert.equal(h.steps.filter((s) => s === "teardown").length, 1);
+    assert.ok(h.released());
+  });
+}
+
+test("restoreProof: a signal during the proof tears down once, then exits non-zero", async () => {
+  const h = proofHarness({
+    failAt: "proof",
+    onProof: (handler) => handler("SIGINT"),
+  });
+  await assert.rejects(
+    restoreProof(h.ctx, { bundle: h.file }),
+    /did not complete/,
+  );
+  assert.equal(h.steps.filter((s) => s === "teardown").length, 1);
+  assert.deepEqual(h.exits, [130]);
+  assert.ok(h.printed.some((l) => /SIGINT: tearing down/.test(l)));
+});
+
+test("restoreProof: leftovers of a crashed run stop before staging and name the teardown command", async () => {
+  const h = proofHarness({ leftovers: true });
+  await assert.rejects(
+    restoreProof(h.ctx, { bundle: h.file }),
+    /leftovers.*envdir.*pnpm recovery teardown/,
+  );
+  assert.deepEqual(h.steps, ["decrypt", "facts"]);
+});
+
+test("restoreProof: an unclean teardown fails the proof and prints the manual teardown", async () => {
+  const h = proofHarness();
+  const run = h.ctx.run;
+  h.ctx.run = async (c) => {
+    const r = await run(c);
+    if (c.label === "teardown")
+      r.stdout = Buffer.from(
+        r.stdout.toString().replace("@@DSR env\nremoved", "@@DSR env\npresent"),
+      );
+    return r;
+  };
+  const r = await restoreProof(h.ctx, { bundle: h.file });
+  assert.equal(r.verdict, "FAIL");
+  assert.ok(h.printed.some((l) => l.includes("pnpm recovery teardown")));
+});
+
+// --- bundle: custody B tested once ---------------------------------------------------
+
+function bundleHarness({ isTTY = true } = {}) {
+  const out = mkdtempSync(join(tmpdir(), "dsr-b-"));
+  for (const n of ["identity-A.age", "A.pub", "B.pub"])
+    writeFileSync(join(out, n), n === "B.pub" ? "age1bbb\n" : "x\n");
+  const values = {
+    ZITADEL_MASTERKEY: "zk",
+    SIGN_IN_RECORD_KEY: "sk",
+    AUDIT_IDENTIFIER_PEPPER: "ap",
+    PGBACKREST_REPO1_CIPHER_PASS: "cp",
+  };
+  const tars = {
+    api: tarOf([
+      ["api.env", "SIGN_IN_RECORD_KEY=sk\nAUDIT_IDENTIFIER_PEPPER=ap\n"],
+      ["zitadel.env", "ZITADEL_MASTERKEY=zk\n"],
+    ]),
+    data: tarOf([["data.env", "PGBACKREST_REPO1_CIPHER_PASS=cp\n"]]),
+  };
+  const prompts = [];
+  const decrypts = [];
+  let current = null;
+  const ctx = {
+    out,
+    now: new Date("2026-11-04T10:00:00Z"),
+    identityA: "AGE-SECRET-KEY-1A",
+    isTTY,
+    exists: existsSync,
+    targets: { api: (c) => ["api", c], data: (c) => ["data", c] },
+    print: () => {},
+    readSecret: async (p) => (prompts.push(p), "AGE-SECRET-KEY-1B"),
+    run: async (c) => {
+      if (c.cmd === "ssh" && c.args[1].includes("tar -cf")) {
+        current = c.args[0];
+        return { code: 0, stdout: tars[current] };
+      }
+      if (c.cmd === "ssh") {
+        const key = Object.keys(values).find((k) => c.args[1].includes(k));
+        return {
+          code: 0,
+          stdout: Buffer.from(`${fingerprint(values[key])}  -\n`),
+        };
+      }
+      if (c.cmd === "age-keygen")
+        return { code: 0, stdout: Buffer.from("age1bbb\n") };
+      if (c.args[0] === "-d") {
+        decrypts.push(c.input.toString());
+        return { code: 0, stdout: tars[current] };
+      }
+      return { code: 0, stdout: Buffer.alloc(0) };
+    },
+  };
+  return { ctx, prompts, decrypts };
+}
+
+test("bundle: by default encrypts to A + B, asks for no B and decrypts with A only", async () => {
+  const h = bundleHarness();
+  const r = await bundle(h.ctx);
+  assert.equal(r.fingerprints, "4/4");
+  assert.deepEqual(h.prompts, []);
+  assert.deepEqual(h.decrypts, ["AGE-SECRET-KEY-1A\n", "AGE-SECRET-KEY-1A\n"]);
+});
+
+test("bundle --test-b: test-decrypts with B; refuses without a TTY before any prompt", async () => {
+  const h = bundleHarness();
+  await bundle(h.ctx, { testB: true });
+  assert.equal(h.prompts.length, 1);
+  assert.equal(h.decrypts.filter((d) => d.includes("1B")).length, 2);
+  const n = bundleHarness({ isTTY: false });
+  await assert.rejects(bundle(n.ctx, { testB: true }), /interactive terminal/);
+  assert.deepEqual(n.prompts, []);
 });

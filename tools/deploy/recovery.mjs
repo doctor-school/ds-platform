@@ -22,7 +22,7 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { assertAbsent, auditedRunner } from "./pg18-rehearsal.mjs";
+import { auditedRunner } from "./pg18-rehearsal.mjs";
 import { BREAKGLASS_API_PROD } from "./prod.mjs";
 import { PROD_LIVE_TREE } from "./lib/remote.mjs";
 
@@ -36,7 +36,11 @@ export const PGDATA_VOL = "ds-data-prod_pgdata";
 export const PGSOCK_VOL = "ds-data-prod_pgsocket";
 export const COPY = "ds-recovery-pg";
 export const SCRATCH_ROOT = "/var/lib/ds-platform/recovery-proof";
+export const RUN_LABEL = "ds-recovery=run";
+export const PROOF_PID = `${ENV_DIR}/proof.pid`;
 const LIMITS = [
+  "--label",
+  RUN_LABEL,
   "--memory",
   "768m",
   "--memory-swap",
@@ -73,8 +77,15 @@ const KNOWN_SECRET_KEYS = [
   "DATABASE_URL",
 ];
 
-const COMMANDS = ["doctor", "init-keys", "bundle", "restore-proof", "all"];
-const USAGE = `usage: pnpm recovery <${COMMANDS.join("|")}> [--out <dir>] [--bundle <data-prod bundle>] [--identity <ssh key>]`;
+const COMMANDS = [
+  "doctor",
+  "init-keys",
+  "bundle",
+  "restore-proof",
+  "all",
+  "teardown",
+];
+const USAGE = `usage: pnpm recovery <${COMMANDS.join("|")}> [--out <dir>] [--bundle <data-prod bundle>] [--identity <ssh key>] [--test-b]`;
 
 // --- args ---------------------------------------------------------------------
 
@@ -88,8 +99,13 @@ export function parseArgs(argv, { home = homedir() } = {}) {
     out: `${String(home).replace(/[\\/]+$/, "")}/ds-recovery`,
     bundle: null,
     identity: null,
+    testB: false,
   };
   for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === "--test-b") {
+      out.testB = true;
+      continue;
+    }
     const [flag, inline] = rest[i].split(/=(.*)/s, 2);
     const key = {
       "--out": "out",
@@ -285,6 +301,10 @@ export function assertSafeDockerRun(argv, kind) {
     if (a === "--privileged" || a.startsWith("--mount"))
       throw new Error(`${a} forbidden`);
   }
+  if (value("--label") !== RUN_LABEL)
+    throw new Error(
+      `docker run without --label ${RUN_LABEL} (teardown finds runs by it)`,
+    );
   const name = value("--name");
   if (name !== null && !name.startsWith("ds-recovery-"))
     throw new Error(`container name ${name} is not ds-recovery-*`);
@@ -403,16 +423,23 @@ export function copyRun({ image, scratch }) {
 }
 
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
-const line = (argv) => argv.map(shq).join(" ");
+const noStdin = (argv) => `${argv.map(shq).join(" ")} </dev/null`;
 const HISTORY = ["repo-ls", "--recurse", "--filter=\\.history$", "archive/ds"];
 
 // --- remote scripts (run as `sudo -n bash -s` on ds-data-prod) ----------------------
+
+// `bash -s` reads the script from ssh stdin while it runs, so an inner command that
+// reads stdin (`docker exec -i`, `docker run -i`, `cat`) would swallow the rest of the
+// script. The body is a function bash parses whole before running it, with stdin from
+// /dev/null; a payload goes in through an explicit heredoc.
+export const remoteScript = (body) =>
+  `ds_main() {\n${body}}\nds_main </dev/null\n`;
 
 export function factsScript({ scratch }) {
   assertScratch(scratch);
   const lbl = (v) =>
     `--filter label=com.docker.compose.project=ds-data-prod --filter label=com.docker.compose.volume=${v}`;
-  return `set -u
+  return remoteScript(`set -u
 echo "@@DSR state"; cat ${shq(STATE_FILE)}
 echo "@@DSR volumes"; docker volume ls -q ${lbl("pgdata")}; docker volume ls -q ${lbl("pgsocket")}
 echo "@@DSR running"
@@ -422,25 +449,25 @@ for s in postgres pgbackrest; do
 done
 echo "@@DSR container"; docker ps -aq --filter name=ds-recovery
 echo "@@DSR envdir"; [ -e ${shq(ENV_DIR)} ] && echo present
-echo "@@DSR scratch"; [ -e ${shq(scratch)} ] && echo present
+echo "@@DSR scratch"; [ -e ${shq(scratch)} ] && echo present; ls -d ${shq(SCRATCH_ROOT)}/ds-recovery-* 2>/dev/null
 install -d -m 700 ${shq(SCRATCH_ROOT)}
 echo "@@DSR avail"; df -B1 --output=avail ${shq(SCRATCH_ROOT)} | tail -n 1
 echo "@@DSR mem"; awk '/^MemAvailable:/ {print $2}' /proc/meminfo
 echo "@@DSR end"
-`;
+`);
 }
 
 // The passphrase comes from the bundle (RECOVERY.md §3.1), staged on tmpfs only.
 export const STAGE_COMMAND = `sudo -n sh -c '[ "$(stat -f -c %T /run)" = tmpfs ] && install -d -m 700 ${ENV_DIR} && umask 077 && cat > ${ENV_FILE}'`;
 
 export function infoScript({ brImage }) {
-  return `set -u
-OUT=$(${line(pgbackrestRun({ image: brImage, args: ["--output=json", "info"] }))} 2>/dev/null); RC=$?
+  return remoteScript(`set -u
+OUT=$(${noStdin(pgbackrestRun({ image: brImage, args: ["--output=json", "info"] }))} 2>/dev/null); RC=$?
 echo "@@DSR info"; printf '%s\\n' "$OUT"; echo "@@DSR info-rc"; echo "$RC"
-OUT=$(${line(pgbackrestRun({ image: brImage, args: HISTORY }))} 2>/dev/null); RC=$?
+OUT=$(${noStdin(pgbackrestRun({ image: brImage, args: HISTORY }))} 2>/dev/null); RC=$?
 echo "@@DSR history"; printf '%s\\n' "$OUT" | grep '\\.history$'; echo "@@DSR history-rc"; echo "$RC"
 echo "@@DSR end"
-`;
+`);
 }
 
 export function proofScript({ brImage, pgImage, scratch }) {
@@ -453,20 +480,29 @@ export function proofScript({ brImage, pgImage, scratch }) {
     scratch,
     args: ["--type=default", "--archive-mode=off", "restore"],
   });
-  const psql = `docker exec -i ${COPY} psql -X -U ds -d ds_prod -At`;
+  const psql = `docker exec ${COPY} psql -X -U ds -d ds_prod -At`;
   const counts =
     "select format('select %L || ''|'' || count(*) from %I.%I', c.relname, n.nspname, c.relname) " +
     "from pg_class c join pg_namespace n on n.oid = c.relnamespace " +
     "where n.nspname = 'public' and c.relkind in ('r', 'p') order by c.reltuples desc limit 3 \\gexec";
-  return `set -uo pipefail
+  // On a signal (Ctrl-C, ssh drop) the run is over: the staged env file goes too.
+  // On a normal exit Node's teardown still needs it for the after-teardown stanza read.
+  return remoteScript(`set -uo pipefail
 LOGPID=
 teardown() {
-  docker stop ${COPY} >/dev/null 2>&1 || true
+  docker stop ${COPY} >/dev/null 2>&1 </dev/null || true
   [ -n "$LOGPID" ] && kill "$LOGPID" 2>/dev/null
   rm -rf -- ${s}
+  rm -f -- ${shq(PROOF_PID)}
+}
+on_signal() {
+  rm -f -- ${shq(ENV_FILE)} ${shq(PROOF_PID)}; rmdir ${shq(ENV_DIR)} 2>/dev/null
+  exit 1
 }
 trap teardown EXIT
-CHECK_OUT=$(${line(check)} 2>&1); CHECK_RC=$?
+trap on_signal INT TERM HUP PIPE
+echo "$$" > ${shq(PROOF_PID)}
+CHECK_OUT=$(${noStdin(check)} 2>&1); CHECK_RC=$?
 echo "@@DSR check"; printf '%s\\n' "$CHECK_OUT" | grep -E 'WAL segment|ERROR|check command end'
 echo "@@DSR check-rc"; echo "$CHECK_RC"
 [ "$CHECK_RC" -eq 0 ] || exit 0
@@ -474,11 +510,11 @@ SEG=$(printf '%s\\n' "$CHECK_OUT" | grep -o 'WAL segment [0-9A-F]\\{24\\} succes
 echo "@@DSR seg"; echo "$SEG"
 [ -n "$SEG" ] || exit 0
 install -d -o 999 -g 999 -m 700 ${shq(`${scratch}/pgdata`)}
-echo "@@DSR restore"; ${line(restore)} 2>&1 | grep -E 'ERROR|restore command end'
+echo "@@DSR restore"; ${noStdin(restore)} 2>&1 | grep -E 'ERROR|restore command end'
 RESTORE_RC=\${PIPESTATUS[0]}
 echo "@@DSR restore-rc"; echo "$RESTORE_RC"
 [ "$RESTORE_RC" -eq 0 ] || exit 0
-${line(copyRun({ image: pgImage, scratch }))} >/dev/null || exit 0
+${noStdin(copyRun({ image: pgImage, scratch }))} >/dev/null || exit 0
 docker logs -f ${COPY} > ${log} 2>&1 &
 LOGPID=$!
 READY=no
@@ -492,39 +528,66 @@ echo "@@DSR seg-restored"; grep -F "restored log file \\"$SEG\\" from archive" $
 echo "@@DSR copy-log"
 grep -E 'archive recovery complete|selected new timeline|ready to accept connections|redo done at|FATAL|PANIC' ${log} | tail -n 50
 [ "$READY" = yes ] || exit 0
-echo "@@DSR in-recovery"; ${psql} -c 'select pg_is_in_recovery()'
-echo "@@DSR version"; ${psql} -c 'show server_version'
-echo "@@DSR migrations"; ${psql} -c "select count(*) || '|' || coalesce(max(created_at)::text, '') from drizzle.__drizzle_migrations"
-echo "@@DSR databases"; ${psql} -c "select datname from pg_database where datname in ('ds_prod', 'zitadel') order by 1"
-echo "@@DSR counts"; printf '%s\\n' "${counts}" | ${psql}
+echo "@@DSR in-recovery"; ${psql} -c 'select pg_is_in_recovery()' </dev/null
+echo "@@DSR version"; ${psql} -c 'show server_version' </dev/null
+echo "@@DSR migrations"; ${psql} -c "select count(*) || '|' || coalesce(max(created_at)::text, '') from drizzle.__drizzle_migrations" </dev/null
+echo "@@DSR databases"; ${psql} -c "select datname from pg_database where datname in ('ds_prod', 'zitadel') order by 1" </dev/null
+echo "@@DSR counts"; docker exec -i ${COPY} psql -X -U ds -d ds_prod -At <<'SQL'
+${counts}
+SQL
 echo "@@DSR amcheck"
-if docker exec ${COPY} pg_amcheck -U ds -d ds_prod --install-missing -t 'drizzle.*' >/dev/null 2>&1; then echo ok; else echo failed; fi
+if docker exec ${COPY} pg_amcheck -U ds -d ds_prod --install-missing -t 'drizzle.*' >/dev/null 2>&1 </dev/null; then echo ok; else echo failed; fi
 echo "@@DSR end"
-`;
+`);
 }
 
-export function teardownScript({ brImage, scratch }) {
-  const s = shq(assertScratch(scratch));
+// With `scratch` null it is `pnpm recovery teardown`: every namespaced leftover of a
+// crashed run, each scratch path re-checked against the same anchored pattern.
+export function teardownScript({ brImage = null, scratch = null }) {
+  const scratchRm = scratch
+    ? `rm -rf -- ${shq(assertScratch(scratch))}
+echo "@@DSR scratch"; if [ -e ${shq(scratch)} ]; then echo present; else echo removed; fi`
+    : `for d in ${shq(SCRATCH_ROOT)}/ds-recovery-*; do
+  [[ "$d" =~ ^/var/lib/ds-platform/recovery-proof/ds-recovery-[0-9]{8}T[0-9]{6}Z$ ]] && rm -rf -- "$d"
+done
+echo "@@DSR scratch"; if ls -d ${shq(SCRATCH_ROOT)}/ds-recovery-* >/dev/null 2>&1; then echo present; else echo removed; fi`;
   const post = brImage
     ? `if [ -s ${shq(ENV_FILE)} ]; then
-  OUT=$(${line(pgbackrestRun({ image: brImage, args: ["--output=json", "info"] }))} 2>/dev/null); RC=$?
+  OUT=$(${noStdin(pgbackrestRun({ image: brImage, args: ["--output=json", "info"] }))} 2>/dev/null); RC=$?
   echo "@@DSR info-after"; printf '%s\\n' "$OUT"; echo "@@DSR info-after-rc"; echo "$RC"
-  OUT=$(${line(pgbackrestRun({ image: brImage, args: HISTORY }))} 2>/dev/null); RC=$?
+  OUT=$(${noStdin(pgbackrestRun({ image: brImage, args: HISTORY }))} 2>/dev/null); RC=$?
   echo "@@DSR history-after"; printf '%s\\n' "$OUT" | grep '\\.history$'; echo "@@DSR history-after-rc"; echo "$RC"
 fi`
     : "";
-  return `set -u
-docker stop ${COPY} >/dev/null 2>&1 || true
-for _ in $(seq 1 30); do [ -z "$(docker ps -aq --filter name=ds-recovery)" ] && break; sleep 1; done
-echo "@@DSR ps"; docker ps -a --filter name=ds-recovery --format '{{.Names}}'
-rm -rf -- ${s}
-echo "@@DSR scratch"; if [ -e ${s} ]; then echo present; else echo removed; fi
+  // A proof still running (Node interrupted, ssh dropped) is stopped first: its runs
+  // are found by label, and its own trap then exits once the run in flight stops.
+  const runs = `{ docker ps -q --filter label=${RUN_LABEL.split("=")[0]}; docker ps -q --filter name=ds-recovery; }`;
+  return remoteScript(`set -u
+PID=$(cat ${shq(PROOF_PID)} 2>/dev/null)
+case "$PID" in ''|*[!0-9]*) PID= ;; esac
+# Only the proof's own \`bash -s\`: a stale pidfile must never signal a reused PID.
+[ -n "$PID" ] && [ "$(tr '\\0' ' ' < /proc/"$PID"/cmdline 2>/dev/null)" = "bash -s " ] || PID=
+[ -n "$PID" ] && kill -TERM "$PID" 2>/dev/null
+for _ in $(seq 1 30); do
+  IDS=$(${runs} | sort -u)
+  [ -z "$IDS" ] && break
+  docker stop $IDS >/dev/null 2>&1 || true
+  sleep 1
+done
+for _ in $(seq 1 30); do [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null || break; sleep 1; done
+echo "@@DSR ps"; docker ps -a --filter name=ds-recovery --format '{{.Names}}'; docker ps -a --filter label=${RUN_LABEL.split("=")[0]} --format '{{.Names}}'
+${scratchRm}
 ${post}
-rm -f -- ${shq(ENV_FILE)}; rmdir ${shq(ENV_DIR)} 2>/dev/null
-echo "@@DSR env"; if [ -e ${shq(ENV_FILE)} ]; then echo present; else echo removed; fi
+rm -f -- ${shq(ENV_FILE)} ${shq(PROOF_PID)}; rmdir ${shq(ENV_DIR)} 2>/dev/null
+echo "@@DSR env"; if [ -e ${shq(ENV_DIR)} ]; then echo present; else echo removed; fi
 echo "@@DSR end"
-`;
+`);
 }
+
+export const MANUAL_TEARDOWN = `Teardown did not complete. Run \`pnpm recovery teardown\`, or by hand on ds-data-prod (RECOVERY.md §3.4):
+  sudo docker stop ds-recovery-pg; sudo docker ps -a --filter name=ds-recovery --filter label=ds-recovery
+  sudo rm -rf /var/lib/ds-platform/recovery-proof/ds-recovery-*
+  sudo rm -f /run/ds-recovery/restore.env /run/ds-recovery/proof.pid && sudo rmdir /run/ds-recovery`;
 
 // --- parsing ------------------------------------------------------------------------
 
@@ -710,8 +773,10 @@ export async function buildBundle({
     });
     if (enc.code !== 0)
       throw new Error(`FAIL ${host}: age encrypt exited ${enc.code}`);
+    // B is test-decrypted only when it is given (`bundle --test-b`, once before the
+    // paper is sealed); every bundle is still encrypted to both recipients.
     const listed = {};
-    for (const who of ["A", "B"]) {
+    for (const who of ["A", "B"].filter((w) => identities[w])) {
       const dec = await run({
         cmd: "age",
         args: ["-d", "-i", "-", file],
@@ -721,11 +786,12 @@ export async function buildBundle({
         throw new Error(`FAIL ${file}: does not open with custody ${who}`);
       wipe.push(dec.stdout);
       listed[who] = parseTar(dec.stdout);
+      for (const m of listed[who]) wipe.push(m.data);
     }
     const names = listed.A.map((m) => m.name);
     const gate = memberGate(host, names);
     if (!gate.ok) throw new Error(`FAIL ${file}: ${gate.reason}`);
-    if (listed.B.map((m) => m.name).join("\n") !== names.join("\n"))
+    if (listed.B && listed.B.map((m) => m.name).join("\n") !== names.join("\n"))
       throw new Error(`FAIL ${file}: custody B lists other members than A`);
     let matched = 0;
     for (const [member, key] of IRREPLACEABLE[host]) {
@@ -747,7 +813,6 @@ export async function buildBundle({
         throw new Error(`FAIL ${host}: ${verdict}`);
       matched++;
     }
-    for (const m of [...listed.A, ...listed.B]) wipe.push(m.data);
     print(`OK ${file}: ${names.join(", ")}`);
     return { members: names, extra: gate.extra, matched };
   } catch (err) {
@@ -771,11 +836,27 @@ export function spawnRun(spec) {
       stdio: [stdin, "pipe", spec.stderr ?? "inherit"],
     });
     const chunks = [];
+    const errs = [];
     child.stdout.on("data", (c) => chunks.push(c));
+    child.stderr?.on("data", (c) => errs.push(c));
     child.on("error", (e) =>
-      done({ code: e.code ?? "ERROR", stdout: Buffer.alloc(0) }),
+      done({
+        code: e.code ?? "ERROR",
+        stdout: Buffer.alloc(0),
+        stderr: Buffer.alloc(0),
+      }),
     );
-    child.on("close", (code) => done({ code, stdout: Buffer.concat(chunks) }));
+    child.on("close", (code) =>
+      done({
+        code,
+        stdout: Buffer.concat(chunks),
+        stderr: Buffer.concat(errs),
+      }),
+    );
+    // A child that exits before draining its input (EPIPE) is judged by its exit
+    // code; an unhandled stream error would kill Node before any teardown.
+    child.stdin?.on("error", () => {});
+    child.stdout.on("error", () => {});
     if (spec.input !== undefined) child.stdin.end(spec.input);
   });
 }
@@ -843,6 +924,13 @@ function context(opts) {
     readSecret: readSecretLine,
     exists: existsSync,
     identityA: null,
+    isTTY: !!(process.stdin.isTTY && process.stdout.isTTY),
+    onSignal: (fn) => {
+      const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
+      for (const s of signals) process.on(s, fn);
+      return () => signals.forEach((s) => process.off(s, fn));
+    },
+    exit: (code) => process.exit(code),
   };
 }
 
@@ -916,7 +1004,9 @@ async function doctor(ctx) {
       r.code === 0,
       r.code === "ENOENT"
         ? `${bin}: not on PATH${bin.startsWith("age") ? " — winget install FiloSottile.age" : ""}`
-        : `${bin} ${r.stdout.toString().trim()}`,
+        : `${bin} ${Buffer.concat([r.stdout, r.stderr ?? Buffer.alloc(0)])
+            .toString()
+            .trim()}`,
     );
   }
   for (const [label, args] of [
@@ -1056,15 +1146,22 @@ export async function initKeys(d) {
   d.writeFile(`${out}/B.pub`, `${b.recipient}\n`);
   d.print(`OK custody B: ${out}/B.pub
 Next: store identity-A.age (attachment) and its passphrase in the password manager entry;
-keep paper B UNSEALED until \`pnpm recovery bundle\` has test-decrypted with it.
+keep paper B UNSEALED: the first bundle must be built with \`pnpm recovery bundle --test-b\`,
+which test-decrypts with it; seal it only after that. Later bundles need no B.
 Clear the terminal scroll-back now.`);
 }
 
-async function bundle(ctx) {
+export async function bundle(ctx, { testB = false } = {}) {
   for (const n of ["identity-A.age", "A.pub", "B.pub"])
     if (!ctx.exists(`${ctx.out}/${n}`))
       throw new Error(`missing ${ctx.out}/${n} — run init-keys first`);
-  const identities = { A: await unlockA(ctx), B: await readB(ctx) };
+  // Without a real console the hidden prompt falls back to a line read, which echoes B.
+  if (testB && !ctx.isTTY)
+    throw new Error(
+      "bundle --test-b needs an interactive terminal (Windows Terminal, or winpty bash): B would be echoed",
+    );
+  const identities = { A: await unlockA(ctx) };
+  if (testB) identities.B = await readB(ctx);
   const recipients = [`${ctx.out}/A.pub`, `${ctx.out}/B.pub`];
   let matched = 0;
   const files = {};
@@ -1088,12 +1185,16 @@ async function bundle(ctx) {
     matched += r.matched;
     if (r.extra.length) ctx.print(`  also in ${host}: ${r.extra.join(", ")}`);
   }
-  ctx.print(`Fingerprints: ${matched}/4 MATCH. Custody B test decrypt: OK — seal paper B and hand it to the second custodian.
+  ctx.print(`Fingerprints: ${matched}/4 MATCH. ${
+    testB
+      ? "Custody B test decrypt: OK — seal paper B and hand it to the second custodian."
+      : "Encrypted to A.pub + B.pub; custody B not test-decrypted in this run (proven once by `bundle --test-b`)."
+  }
 Store both bundles in two places independent of both hosts (RECOVERY.md §2.4); never next to identity A or paper B.`);
   return { dataBundle: files["data-prod"], fingerprints: `${matched}/4` };
 }
 
-async function restoreProof(
+export async function restoreProof(
   ctx,
   {
     bundle: file,
@@ -1133,7 +1234,13 @@ async function restoreProof(
   };
 
   const facts = await script("facts", factsScript({ scratch }));
-  await assertAbsent(["container", "envdir", "scratch"], (k) => facts[k] ?? "");
+  const left = ["container", "envdir", "scratch"].filter((k) =>
+    (facts[k] ?? "").trim(),
+  );
+  if (left.length)
+    throw new Error(
+      `STOP: leftovers of an earlier run on ds-data-prod (${left.join(", ")}) — run \`pnpm recovery teardown\` first`,
+    );
   if (facts.volumes !== `${PGDATA_VOL}\n${PGSOCK_VOL}`)
     throw new Error(
       `STOP: volumes are not exactly ${PGDATA_VOL} / ${PGSOCK_VOL}`,
@@ -1162,6 +1269,25 @@ async function restoreProof(
   let proof;
   let room;
   let td;
+  // One teardown per run, shared by the `finally` and a signal handler, so a Ctrl-C
+  // or a dropped ssh still clears the copy, the scratch and the staged env file.
+  let tdOnce = null;
+  const teardown = () =>
+    (tdOnce ??= script("teardown", teardownScript({ brImage, scratch })).then(
+      (t) => (teardownClean(t) || ctx.print(MANUAL_TEARDOWN), t),
+      (err) => {
+        ctx.print(MANUAL_TEARDOWN);
+        throw err;
+      },
+    ));
+  let aborted = false;
+  const release = ctx.onSignal(async (signal) => {
+    if (aborted) return;
+    aborted = true;
+    ctx.print(`\n${signal}: tearing down on ds-data-prod before exit`);
+    await teardown().catch(() => {});
+    ctx.exit(130);
+  });
   try {
     const st = await ctx.run({
       cmd: "ssh",
@@ -1190,7 +1316,11 @@ async function restoreProof(
     );
     proof = await script("proof", proofScript({ brImage, pgImage, scratch }));
   } finally {
-    td = await script("teardown", teardownScript({ brImage, scratch }));
+    try {
+      td = await teardown();
+    } finally {
+      release();
+    }
   }
 
   const info = parseInfo(before.info);
@@ -1228,8 +1358,7 @@ async function restoreProof(
       .map((l) => [l.split("|")[0], Number(l.split("|")[1])]),
     timelineEqual: !!after && after.timeline === info.timeline,
     historyEqual: histBefore !== null && histAfter === histBefore,
-    teardownClean:
-      td.ps === "" && td.scratch === "removed" && td.env === "removed",
+    teardownClean: teardownClean(td),
   };
   const report = sanitizeReport(
     renderReport({
@@ -1257,7 +1386,27 @@ async function restoreProof(
   const path = `${ctx.out}/reports/restore-proof-${stamp(ctx.now)}.md`;
   writeFileSync(path, `${report}\n`);
   ctx.print(`\n${report}\n\nReport: ${path} (sanitised; post it to #3662)`);
-  if (proofVerdict(facts2).verdict !== "PASS") process.exitCode = 1;
+  return { verdict: proofVerdict(facts2).verdict, report: path };
+}
+
+const teardownClean = (td) =>
+  td.ps === "" && td.scratch === "removed" && td.env === "removed";
+
+async function teardownLeftovers(ctx) {
+  const r = await ctx.run({
+    cmd: "ssh",
+    args: ctx.targets.data("sudo -n bash -s"),
+    input: Buffer.from(teardownScript({})),
+    label: "teardown leftovers",
+  });
+  const td = sections(r.stdout.toString());
+  const ok = "end" in td && teardownClean(td);
+  ctx.print(
+    ok
+      ? "OK ds-data-prod: no ds-recovery container, scratch directory or staged env file left"
+      : `FAIL ds-data-prod: containers [${td.ps ?? "unread"}], scratch ${td.scratch ?? "unread"}, env ${td.env ?? "unread"}\n${MANUAL_TEARDOWN}`,
+  );
+  if (!ok) throw new Error("teardown: FAIL");
 }
 
 async function main(argv) {
@@ -1275,17 +1424,22 @@ async function main(argv) {
       remove: (p) => rmSync(p, { force: true }),
       readSecret: readSecretLine,
       print: ctx.print,
-      isTTY: !!(process.stdin.isTTY && process.stdout.isTTY),
+      isTTY: ctx.isTTY,
     });
-  if (opts.cmd === "bundle") return bundle(ctx);
+  if (opts.cmd === "teardown") return teardownLeftovers(ctx);
+  if (opts.cmd === "bundle") return bundle(ctx, { testB: opts.testB });
+  let proof;
   if (opts.cmd === "restore-proof")
-    return restoreProof(ctx, { bundle: opts.bundle });
-  await doctor(ctx);
-  const b = await bundle(ctx);
-  return restoreProof(ctx, {
-    bundle: b.dataBundle,
-    fingerprints: b.fingerprints,
-  });
+    proof = await restoreProof(ctx, { bundle: opts.bundle });
+  else {
+    await doctor(ctx);
+    const b = await bundle(ctx, { testB: opts.testB });
+    proof = await restoreProof(ctx, {
+      bundle: b.dataBundle,
+      fingerprints: b.fingerprints,
+    });
+  }
+  if (proof.verdict !== "PASS") process.exitCode = 1;
 }
 
 const invoked = process.argv[1] ? resolve(process.argv[1]) : "";

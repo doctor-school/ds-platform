@@ -352,10 +352,9 @@ test.describe("045 education-index demo · noindex + compliance words (V-7)", ()
 });
 
 // 390 is the canvas phone width (EARS-12); 360 is the narrow phone the same
-// «no sideways scroll» rule holds on (#3597). The whole-document check joins
-// 320 with #3629: there the shared storefront header still overflows on the
-// Linux runner. The 045 page content itself is held to 320 below.
-for (const width of [390, 360]) {
+// «no sideways scroll» rule holds on (#3597); 320 is the smallest phone, held
+// with the shared storefront header included since #3629.
+for (const width of [390, 360, 320]) {
   test.describe(`045 education-index demo · ${width} layout (V-1, EARS-12)`, () => {
     test.use({ viewport: { width, height: 1000 } });
 
@@ -390,9 +389,9 @@ for (const width of [390, 360]) {
   });
 }
 
-// 320 (#3597): the 045 page content — the layout frame's one `<main>`, so the
-// shared storefront header and footer are outside it (#3629 owns the header) —
-// keeps every box inside the phone column.
+// 320 (#3597): the 045 page content — the layout frame's one `<main>` — keeps
+// every box inside the phone column; the list names the page's own culprits
+// apart from the shared chrome the whole-document check above also covers.
 test.describe("045 education-index demo · 320 page content (V-1, EARS-12)", () => {
   test.use({ viewport: { width: 320, height: 1000 } });
 

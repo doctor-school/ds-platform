@@ -19,6 +19,7 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { pipeline } from "node:stream/promises";
 
 // Prod health endpoint — the verify-over-HTTP pointer of the stall message
 // (#942/#927). `tools/deploy/prod.mjs` re-exports it: the status record's
@@ -416,6 +417,29 @@ function shellQuote(s) {
   return `'${s.replaceAll("'", `'\\''`)}'`;
 }
 
+async function pipeProcess(child, source, destination, label) {
+  let running = true;
+  const exited = new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code) => {
+      running = false;
+      if (code === 0) resolve();
+      else reject(new Error(`${label} exited ${code}`));
+    });
+  });
+  // A child's close does not flush a separate filesystem writer's buffered data.
+  const copied = pipeline(source, destination);
+  try {
+    await Promise.all([exited, copied]);
+  } catch (error) {
+    if (running) child.kill();
+    source.destroy();
+    destination.destroy();
+    await Promise.allSettled([exited, copied]);
+    throw error;
+  }
+}
+
 /**
  * `git archive` of a committed SHA, piped into {@link shipTreeCommand} over ssh.
  *
@@ -441,31 +465,19 @@ export async function shipTree(
   if (host === LOCAL_EXECUTOR && !sourceDir) {
     throw new Error("a local ship needs the tree directory it ships");
   }
-  await new Promise((resolve, reject) => {
+  try {
     const out = createWriteStream(tmp);
     const [command, argv] = sourceDir
       ? ["tar", ["czf", "-", "-C", dirname(sourceDir), basename(sourceDir)]]
       : ["git", ["archive", "--format=tar.gz", "--prefix=ds-platform/", sha]];
     const archiver = spawn(command, argv);
-    archiver.stdout.pipe(out);
-    archiver.on("error", reject);
-    archiver.on("close", (c) =>
-      c === 0 ? resolve() : reject(new Error(`${command} ${argv[0]} exited ${c}`)),
-    );
-  });
-  try {
-    await new Promise((resolve, reject) => {
-      // #3313: ds-data-prod takes the archive through its `ship <sha>` verb instead.
-      const command = remoteCommand ?? shipTreeCommand({ liveDir, preserved, asRoot });
-      const child = spawn(...boxSpawnArgs(host, command), {
-        stdio: ["pipe", "inherit", "inherit"],
-      });
-      child.on("error", reject);
-      child.on("close", (c) =>
-        c === 0 ? resolve() : reject(new Error(`tar x on ${host} exited ${c}`)),
-      );
-      createReadStream(tmp).pipe(child.stdin);
+    await pipeProcess(archiver, archiver.stdout, out, `${command} ${argv[0]}`);
+    // #3313: ds-data-prod takes the archive through its `ship <sha>` verb instead.
+    const remote = remoteCommand ?? shipTreeCommand({ liveDir, preserved, asRoot });
+    const child = spawn(...boxSpawnArgs(host, remote), {
+      stdio: ["pipe", "inherit", "inherit"],
     });
+    await pipeProcess(child, createReadStream(tmp), child.stdin, `tar x on ${host}`);
   } finally {
     await rm(tmp, { force: true });
   }

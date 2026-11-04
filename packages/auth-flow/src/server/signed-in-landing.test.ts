@@ -60,7 +60,7 @@ describe("021 EARS-3 (#2333): the landing is re-decided for the NEW session", ()
     const action = signedInLandingAction(DOCTOR_FIXTURE);
 
     expect(action).toBeTypeOf("function");
-    expect(await action!()).toBe("/events");
+    expect(await action!()).toBe("/feed/kardiologiya");
     // The SIGNED-IN read, made with the session the action's request carries.
     const [url, init] = specialtyFetch.mock.calls[0]!;
     expect(String(url)).toMatch(/\/v1\/me\/specialty$/);

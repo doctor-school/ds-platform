@@ -57,9 +57,13 @@ import { tickConsent } from "../lib/host-sign-in.js";
 /** The golden doctors-audience эфир on air relative to the pin. */
 const LIVE = golden.events.live.slug;
 
-/** The two LD-4 destinations, spelled out: the suite is the outside view. */
+/**
+ * The two LD-4 destinations, spelled out: the suite is the outside view. The
+ * feed is the remembered specialty's own 018 feed, `/feed/<code>`.
+ */
 const EVENTS_FEED = "/events";
 const HOME = "/";
+const specialtyFeed = (code: string) => `/feed/${encodeURIComponent(code)}`;
 
 /** A golden specialty name the guest catalog can remember (017 EARS-6). */
 const CARDIOLOGY = "Кардиология";
@@ -329,10 +333,10 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
 test.describe("021 EARS-3: LD-4 — where the direct arrival lands", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test("021 EARS-3.4: with a remembered specialty the landing is the 019 events feed", async ({
+  test("021 EARS-3.4: with a remembered specialty the landing is that specialty's 018 feed", async ({
     page,
   }) => {
-    await chooseGuestSpecialty(
+    const code = await chooseGuestSpecialty(
       page,
       `${doctorBase()}${EVENTS_FEED}`,
       CARDIOLOGY,
@@ -340,7 +344,7 @@ test.describe("021 EARS-3: LD-4 — where the direct arrival lands", () => {
     await registerAndConfirmLandingOn(
       page,
       `${doctorBase()}/register`,
-      EVENTS_FEED,
+      specialtyFeed(code),
     );
   });
 
@@ -348,16 +352,19 @@ test.describe("021 EARS-3: LD-4 — where the direct arrival lands", () => {
     browser,
   }) => {
     const landings: string[] = [];
+    let feed = "";
     for (const remembered of [false, true]) {
       const context = await browser.newContext();
       try {
         await prepareCaptcha(context, doctorBase());
         const page = await context.newPage();
         if (remembered) {
-          await chooseGuestSpecialty(
-            page,
-            `${doctorBase()}${EVENTS_FEED}`,
-            CARDIOLOGY,
+          feed = specialtyFeed(
+            await chooseGuestSpecialty(
+              page,
+              `${doctorBase()}${EVENTS_FEED}`,
+              CARDIOLOGY,
+            ),
           );
         }
         watchStorefrontEntries(page, doctorBase());
@@ -378,7 +385,7 @@ test.describe("021 EARS-3: LD-4 — where the direct arrival lands", () => {
       expect(landing).not.toBe("/account");
       expect(landing).not.toContain("account");
       // A closed union of exactly the two LD-4 destinations.
-      expect([HOME, EVENTS_FEED]).toContain(landing);
+      expect([HOME, feed]).toContain(landing);
     }
   });
 });

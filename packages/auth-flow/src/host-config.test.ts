@@ -43,7 +43,7 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
     const landing = DOCTOR_FIXTURE.landing;
     expect(landing.specialtyAware).toBe(true);
     if (!landing.specialtyAware) throw new Error("unreachable");
-    expect(landing.specialtyFeed).toBe("/events");
+    expect(landing.specialtyFeed).toBe("/feed/:code");
     expect(landing.specialtyEndpoints).toEqual({
       signedIn: "/v1/me/specialty",
       guest: "/v1/public/specialty-choice",

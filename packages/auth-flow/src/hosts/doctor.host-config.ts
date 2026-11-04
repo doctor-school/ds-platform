@@ -81,14 +81,15 @@ export const DOCTOR_AUTH_FLOW = {
     // (the same literal `lib/room-config.ts` states; pinned by the test).
     room: "/events/:slug/room",
   },
-  // 021 EARS-3 / LD-4 — a remembered specialty lands on the events feed; no
+  // 021 EARS-3 / LD-4 — a remembered specialty lands on ITS 018 feed
+  // (`/feed/<code>`, the route `app/(storefront)/feed/[specialty]` serves); no
   // specialty, or an unresolved read, lands on the storefront home. The two reads
   // are named as paths (the same ones `lib/specialty-choice.ts` issues from the
   // browser); `@ds/auth-flow/server` reads them.
   landing: {
     afterLogin: "/",
     specialtyAware: true,
-    specialtyFeed: "/events",
+    specialtyFeed: "/feed/:code",
     specialtyEndpoints: {
       signedIn: "/v1/me/specialty",
       guest: "/v1/public/specialty-choice",

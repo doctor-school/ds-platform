@@ -145,7 +145,14 @@ function HeaderChrome({
           ))}
         </nav>
 
-        <div className="ml-auto flex flex-none items-center gap-3 layout:ml-0">
+        {/* #3629 — below `layout` the cluster may shrink to the row and wrap
+            its tail: on a 320 phone the guest cluster (☾ 44 + chip 198 + ≡ 44
+            + two 12 gaps = 310 px on the ubuntu runner) is wider than the
+            288 px row, so the `≡` drops to its own right-aligned line instead
+            of pushing the page sideways. Where the cluster fits (every width
+            from 360 up) nothing wraps or shrinks, so the bar is unchanged; at
+            `layout` it is the fixed-width, single-line group it always was. */}
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3 layout:ml-0 layout:flex-none layout:flex-nowrap">
           <ThemeToggle />
           <ShellAuthCluster auth={auth} />
 

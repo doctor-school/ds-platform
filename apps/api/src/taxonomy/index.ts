@@ -13,6 +13,11 @@ export {
   publicOrganisationColumns,
   type PublicOrganisationRow,
 } from "./organisation-public-display.js";
+export {
+  beforeKeysetCursor,
+  exactCursorInstant,
+  isEventCursorInstant,
+} from "./public-event-cursor.js";
 export { toPartnerSummary } from "./public-project-summary.service.js";
 export type { PublicEventKey } from "./speaker-projection.repository.js";
 export {

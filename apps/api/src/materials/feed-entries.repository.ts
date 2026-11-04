@@ -1,8 +1,13 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
-import { feedEntries } from "@ds/db";
+import { experts, feedEntries, organisations } from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import {
+  beforeKeysetCursor,
+  exactCursorInstant,
+  organisationPubliclyDisplayed,
+} from "../taxonomy/index.js";
 import type { MaterialsTx } from "./materials.repository.js";
 
 // 048 EARS-10 (#3512) — the ONLY reader and writer of `feed_entries` (Lead
@@ -30,13 +35,86 @@ export interface FeedEntryWrite {
   publishedAt: Date;
 }
 
+/** The `(published_at, id)` position a feed cursor carries. */
+export interface FeedCursorPosition {
+  instant: string;
+  id: string;
+}
+
+/** 012 public expert: published, not retired, not editorially removed. */
+export const expertPubliclyVisible: SQL = and(
+  eq(experts.status, "published"),
+  isNull(experts.deletedAt),
+  isNull(experts.contentRemovedAt),
+)!;
+
+/**
+ * 048 EARS-9, EARS-10, EARS-19 (#3513) — one page of the public feed, newest
+ * first with ties by id, read from `feed_entries` joined ONLY to the directory
+ * rows an entry references: its column's 012 expert (public state and current
+ * name parts, judged now — a column is absent while its expert is not public)
+ * and its 032 partner through the shared display predicate (the partner never
+ * hides an entry, so it is a LEFT JOIN on the predicate). `materials` is never
+ * read (V-6). A pure builder so the unit suite can inspect its SQL.
+ */
+export function publicFeedPageQuery(
+  db: Db,
+  limit: number,
+  before: FeedCursorPosition | null,
+) {
+  const visible = or(isNull(feedEntries.authorExpertId), expertPubliclyVisible);
+  return db
+    .select({
+      id: feedEntries.id,
+      kind: feedEntries.kind,
+      title: feedEntries.title,
+      imageRef: feedEntries.imageRef,
+      imageUrl: feedEntries.imageUrl,
+      sourcePlatform: feedEntries.sourcePlatform,
+      sourceName: feedEntries.sourceName,
+      href: feedEntries.href,
+      publishedAt: feedEntries.publishedAt,
+      publishedAtCursor: exactCursorInstant(feedEntries.publishedAt),
+      expertFamilyName: experts.familyName,
+      expertGivenName: experts.givenName,
+      expertPatronymic: experts.patronymic,
+      partnerTitle: organisations.title,
+    })
+    .from(feedEntries)
+    .leftJoin(experts, eq(experts.id, feedEntries.authorExpertId))
+    .leftJoin(
+      organisations,
+      and(
+        eq(organisations.id, feedEntries.partnerOrganisationId),
+        organisationPubliclyDisplayed,
+      ),
+    )
+    .where(
+      before
+        ? and(
+            visible,
+            beforeKeysetCursor(feedEntries.publishedAt, feedEntries.id, before),
+          )
+        : visible,
+    )
+    .orderBy(desc(feedEntries.publishedAt), desc(feedEntries.id))
+    .limit(limit);
+}
+
+export type PublicFeedRow = Awaited<
+  ReturnType<typeof publicFeedPageQuery>
+>[number];
+
 @Injectable()
 export class FeedEntriesRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly handle: Db) {}
 
-  /** The pool handle, for the public feed read (#3513). */
-  db(): Db {
-    return this.handle;
+  /** The public feed page of {@link publicFeedPageQuery} (#3513). */
+  publicPage(
+    limit: number,
+    before: FeedCursorPosition | null,
+  ): Promise<PublicFeedRow[]> {
+    return publicFeedPageQuery(this.handle, limit, before);
   }
 
   /**

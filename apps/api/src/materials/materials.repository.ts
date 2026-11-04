@@ -1,9 +1,11 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, count, desc, eq, ilike, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm";
 import type { DrizzleHandle, Material } from "@ds/db";
 import { experts, materials, organisations } from "@ds/db";
 import type { AdminMaterialListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { organisationPubliclyDisplayed } from "../taxonomy/index.js";
+import { expertPubliclyVisible } from "./feed-entries.repository.js";
 import {
   type AuditedTransaction,
   withRequestAuditContext,
@@ -18,6 +20,15 @@ import {
 
 type Db = DrizzleHandle["db"];
 export type MaterialsTx = AuditedTransaction;
+
+/** A public material with the read-time name parts of its expert and its partner's title. */
+export interface PublicMaterialRow {
+  material: Material;
+  expertFamilyName: string | null;
+  expertGivenName: string | null;
+  expertPatronymic: string | null;
+  partnerTitle: string | null;
+}
 
 export type TaxonomyRowStatus = "draft" | "published" | "retired";
 
@@ -104,6 +115,41 @@ export class MaterialsRepository {
     const [row] = await tx.insert(materials).values(values).returning();
     if (!row) throw new Error("material insert returned no row");
     return row;
+  }
+
+  /**
+   * 048 EARS-11, EARS-19 (#3513) — the public material by slug: published,
+   * and for a column only while its 012 expert is public, judged now (the
+   * «Public predicate» on `materials`); the partner's title only while the 032
+   * display predicate holds, never deciding whether the material is public.
+   * `null` for draft, unknown and non-public alike.
+   */
+  async findPublicBySlug(slug: string): Promise<PublicMaterialRow | null> {
+    const [row] = await this.handle
+      .select({
+        material: materials,
+        expertFamilyName: experts.familyName,
+        expertGivenName: experts.givenName,
+        expertPatronymic: experts.patronymic,
+        partnerTitle: organisations.title,
+      })
+      .from(materials)
+      .leftJoin(experts, eq(experts.id, materials.expertId))
+      .leftJoin(
+        organisations,
+        and(
+          eq(organisations.id, materials.partnerOrganisationId),
+          organisationPubliclyDisplayed,
+        ),
+      )
+      .where(
+        and(
+          eq(materials.slug, slug),
+          eq(materials.status, "published"),
+          or(eq(materials.kind, "news"), expertPubliclyVisible),
+        ),
+      );
+    return row ?? null;
   }
 
   async findById(

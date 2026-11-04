@@ -374,6 +374,25 @@ export function expertDisplayName(input: {
 }
 
 /**
+ * 048 Lead decision 21 — the abbreviated public form «Фамилия И. О.»
+ * («Страхов М. А.») the feed card's column source line shows: the family name
+ * and the initials of the given name and, only when there is one, the
+ * patronymic. Built from the same 012 name parts as {@link expertDisplayName},
+ * at the moment of the read; `null` exactly when the display name is.
+ */
+export function expertShortName(input: {
+  familyName: string | null;
+  givenName: string | null;
+  patronymic: string | null;
+}): string | null {
+  if (!input.familyName || !input.givenName) return null;
+  const initials = [input.givenName, input.patronymic]
+    .filter((part): part is string => Boolean(part))
+    .map((part) => `${Array.from(part)[0]!.toLocaleUpperCase("ru-RU")}.`);
+  return [input.familyName, ...initials].join(" ");
+}
+
+/**
  * The admin detail projection. `photoUrl` is a server-issued signed/CDN URL
  * derived from the stored key at read time — the key itself never crosses the
  * wire (012-design §5.1). `initials` is the server-computed avatar fallback.

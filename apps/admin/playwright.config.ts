@@ -90,7 +90,7 @@ export default defineConfig({
     {
       name: "audit",
       testDir: auditTestDir,
-      grep: /Deleting a row captures the full old row in the diff|An update that changes nothing leaves no trail row|A trail row cannot be rewritten or removed/,
+      grep: /Deleting a row captures the full old row in the diff|An update that changes nothing leaves no trail row|A trail row cannot be rewritten or removed|A direct SQL write with no audit context still leaves an honest trail row|A new table cannot silently opt out of auditing/,
     },
   ],
 });

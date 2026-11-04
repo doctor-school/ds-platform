@@ -323,34 +323,57 @@ as touched again.
 
 `api-probes.config.ts` reads the unchanged 001/002 original feature files and
 selects their existing `@host:academy` tag. `api-probes/steps.ts` binds exactly
-the health, healthy-readiness and storage-credential-refusal originals; the
-other three remain unbound. This backend-only contour boots the actual compiled
+the health, healthy-readiness, storage-credential-refusal and missing-pgvector
+originals; the other two remain unbound. This backend-only contour boots the actual compiled
 `apps/api/dist/main.js`, uses real Postgres/vector and real MinIO, and preserves
 the canonical Vitest health/readiness/storage tests. It starts no browser and
 does not target a storefront proxy or staging slot.
 
 Build with `pnpm exec turbo run build --filter=@ds/api`. Locally, provision an
-owned `ds_dev_3679` via `pnpm dev:db:branch 3679` (including its canonical
-pre-migration snapshot). CI owns a disposable `ds_probe_3679` and uses
+new owned `ds_dev_3688` via `pnpm dev:db:branch 3688` (including its canonical
+pre-migration snapshot). Refuse an already-existing task DB. CI owns a disposable `ds_probe_3688` and uses
 `pnpm --filter @ds/api drizzle:migrate:ci`. CI builds official MinIO source
 `7aac2a2c5b7c882e68c1ce017d8256be2feea27f` with checksum-verified Go 1.24.8
 inside `RUNNER_TEMP`, recording module provenance, binary hash and the exact
 owned process. Upstream community distribution is source-only; a cached local
 `minio/minio:latest` image does not establish clean-runner availability.
-Locally use an owned real MinIO process or disposable container and record its
-source/binary or actual image digest. Create only one empty `ds-api-probes-3679`
-bucket with task-only credentials. Existing/shared buckets remain read-only.
+Locally use the existing real dev object store with one new empty
+`ds-api-probes-3688` bucket, or an explicitly authorized owned real MinIO process
+or container whose source/binary or actual image digest is recorded. Refuse an
+existing task bucket; leave other buckets and all grants unchanged.
 
 Export `E2E_API_PROBE_DATABASE_URL`, `E2E_API_PROBE_S3_ENDPOINT`,
 `E2E_API_PROBE_S3_ACCESS_KEY`, `E2E_API_PROBE_S3_SECRET_KEY`,
-`E2E_API_PROBE_S3_BUCKET=ds-api-probes-3679`, and an absolute private
+`E2E_API_PROBE_S3_BUCKET=ds-api-probes-3688`, and an absolute private
 `E2E_API_PROBE_ARTIFACT_DIR` for the command log and redacted process receipts.
-Set `E2E_REPORT_DIR` to a private report directory. Then run exactly the trio:
+Set `E2E_REPORT_DIR` to a private report directory. For the negative fixture, set
+`E2E_API_PROBE_NOVECTOR_DATABASE_URL` to the same server/account with the exact
+`ds_dev_3688_novector` suffix (`ds_probe_3688_novector` in CI),
+`E2E_API_PROBE_PG_CONTAINER` to the actual PostgreSQL container, and
+`E2E_API_PROBE_PRIVATE_DIR` to a new directory outside the worktree and uploaded
+artifacts. An SSH recipe also sets `E2E_API_PROBE_PG_SSH_HOST` and its canonical
+`E2E_API_PROBE_PG_SUDO` (`1`, `true` or `yes`). Optional
+`E2E_API_PROBE_OPS_LOG` mirrors helper commands into the task's stand log.
+
+`prepare-missing-vector.ts` verifies source identity, real migrations and empty
+worker queues, refuses any existing target, and streams a native custom archive
+through the existing PostgreSQL service. It permits omission only of vector's
+extension/COMMENT/ACL entries, rejects unexpected vector dependents, and uses
+strict transactional native restore into a new empty owned database. Every
+other TOC entry is retained. It compares ordered logical column definitions,
+migration history and all public-table row counts; physical attribute numbers
+and database catalog names naturally differ after pg_dump. The receipt retains
+hashes and counts; private archive/TOC files are removed even on failure. No
+extension is dropped and no migration row or schema is fabricated.
+
+Run exactly the four operational originals:
 
 ```sh
-export E2E_GREP='(Health endpoint reports ok on a running process|Readiness endpoint reports ok when Postgres, pgvector and object storage all respond|Readiness endpoint reports down when object storage refuses the credentials)(?: @host:academy)?$'
+pnpm --filter @ds/e2e exec tsx api-probes/prepare-missing-vector.ts
+export E2E_GREP='(Health endpoint reports ok on a running process|Readiness endpoint reports ok when Postgres, pgvector and object storage all respond|Readiness endpoint reports down when object storage refuses the credentials|Readiness endpoint reports down when the pgvector extension is missing)(?: @host:academy)?$'
 pnpm --filter @ds/e2e exec bddgen --config api-probes.config.ts
 pnpm --filter @ds/e2e exec playwright test --config api-probes.config.ts
+pnpm --filter @ds/e2e exec tsx api-probes/assert-report.ts "$E2E_REPORT_DIR/results.json" api
 ```
 
 Missing fixture bindings fail explicitly. The helper verifies database identity,
@@ -360,11 +383,13 @@ API listener's PID and closes it after the scenario. The degraded process uses
 a nonexistent task key against the same real MinIO: SDK 403 and the startup
 probe must agree, while health remains 200 and readiness returns 503 without
 the provider reason. The `api-e2e` CI job provisions and removes its exact
-owned MinIO process, temporary binary/caches/data and requires three first-attempt
-passes with no skips. Local operators likewise remove only their owned ephemeral
-process or container after proof;
-retain the exact owned DB only while review needs it, then use
-`pnpm dev:db:drop 3679`. Never reset or roll back the shared stand.
+owned MinIO process, temporary binary/caches/data and requires four first-attempt
+passes with no skip, flake or retry, each expected source title exactly once.
+The vector-negative API must independently answer health 200 and readiness 503
+with postgres `ok`, pgvector `down`, objectStorage `ok`, the original timestamp,
+Content-Type and response-schema clauses. Local operators remove their exact
+empty task bucket and owned processes, then use `pnpm dev:db:drop 3688_novector`
+and `pnpm dev:db:drop 3688`. Never reset or roll back the shared stand.
 
 This is operational compiled-source acceptance. It supplies no browser, full
 stage-suite, IdP-flow or production acceptance, and `pnpm e2e:stage` does not

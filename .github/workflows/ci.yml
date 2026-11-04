@@ -428,22 +428,22 @@ jobs:
           done
           echo "Postgres did not become ready in time"; docker logs ds-postgres; exit 1
 
-      # 001 EARS-1 / 002 EARS-1/2: preserve the originals and run only this trio.
+      # 001 EARS-1 / 002 EARS-1/2: preserve and run the four operational originals.
       # A separate empty DB/bucket keeps full-API timers away from other fixtures.
       - name: Build the compiled API for the operational originals
         run: pnpm exec turbo run build --filter=@ds/api
       - name: Prepare the owned operational-probe resources
         run: |
           set -euo pipefail
-          dir="$RUNNER_TEMP/api-probes-3679"
-          build="$RUNNER_TEMP/api-probes-3679-build"
+          dir="$RUNNER_TEMP/api-probes-3688"
+          build="$RUNNER_TEMP/api-probes-3688-build"
           mkdir -p "$dir" "$build"
-          printf '%s\n' 3679 > "$build/task-owner"
-          printf '%s\n' '{"database":"ds_probe_3679","provider":"official-source MinIO","source":"7aac2a2c5b7c882e68c1ce017d8256be2feea27f","bucket":"ds-api-probes-3679"}' > "$dir/resources.json"
+          printf '%s\n' 3688 > "$build/task-owner"
+          printf '%s\n' '{"database":"ds_probe_3688","provider":"official-source MinIO","source":"7aac2a2c5b7c882e68c1ce017d8256be2feea27f","bucket":"ds-api-probes-3688"}' > "$dir/resources.json"
           # MinIO's community distribution is source-only; anonymous image pulls
           # fail on clean runners (PR #3681 review 5766814555). Keep the toolchain,
           # module/build caches, binary and data outside the uploaded receipts.
-          printf '%s\n' '{"command":"download and checksum official Go1.24.8 linux-amd64 into owned RUNNER_TEMP"}' >> "$dir/stand-ops-3679.log"
+          printf '%s\n' '{"command":"download and checksum official Go1.24.8 linux-amd64 into owned RUNNER_TEMP"}' >> "$dir/stand-ops-3688.log"
           test "$(uname -m)" = x86_64
           curl -fsSL https://go.dev/dl/go1.24.8.linux-amd64.tar.gz -o "$build/go.tar.gz"
           printf '%s  %s\n' 6842c516ca66c89d648a7f1dbe28e28c47b61b59f8f06633eb2ceb1188e9251d "$build/go.tar.gz" | sha256sum -c -
@@ -459,18 +459,18 @@ jobs:
           if (source.Origin?.URL !== 'https://github.com/minio/minio' || source.Origin?.Hash !== '7aac2a2c5b7c882e68c1ce017d8256be2feea27f')
             throw new Error('MinIO source provenance mismatch');
           NODE
-          printf '%s\n' '{"command":"go install github.com/minio/minio@v0.0.0-20260212201848-7aac2a2c5b7c with checksum database enabled"}' >> "$dir/stand-ops-3679.log"
+          printf '%s\n' '{"command":"go install github.com/minio/minio@v0.0.0-20260212201848-7aac2a2c5b7c with checksum database enabled"}' >> "$dir/stand-ops-3688.log"
           "$build/go/bin/go" install "github.com/minio/minio@$version"
           "$build/go/bin/go" version -m "$build/bin/minio" > "$dir/minio-build.txt"
           sha256sum "$build/bin/minio" > "$dir/minio-binary.sha256"
           "$build/bin/minio" --version > "$dir/minio-version.txt"
-          printf '%s\n' '{"command":"CREATE DATABASE ds_probe_3679 OWNER ds in job-owned ds-postgres"}' >> "$dir/stand-ops-3679.log"
-          docker exec ds-postgres psql -U ds -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ds_probe_3679 OWNER ds'
-          export MINIO_ROOT_USER="probe3679$(openssl rand -hex 8)"
+          printf '%s\n' '{"command":"CREATE DATABASE ds_probe_3688 OWNER ds in job-owned ds-postgres"}' >> "$dir/stand-ops-3688.log"
+          docker exec ds-postgres psql -U ds -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ds_probe_3688 OWNER ds'
+          export MINIO_ROOT_USER="probe3688$(openssl rand -hex 8)"
           export MINIO_ROOT_PASSWORD="$(openssl rand -hex 24)"
           echo "::add-mask::$MINIO_ROOT_USER"
           echo "::add-mask::$MINIO_ROOT_PASSWORD"
-          printf '%s\n' '{"command":"bind and release free loopback MinIO port"}' >> "$dir/stand-ops-3679.log"
+          printf '%s\n' '{"command":"bind and release free loopback MinIO port"}' >> "$dir/stand-ops-3688.log"
           port="$(node --input-type=module <<'NODE'
           import { createServer } from 'node:net';
           const server = createServer();
@@ -481,15 +481,18 @@ jobs:
           )"
           endpoint="http://127.0.0.1:$port"
           {
-            echo 'E2E_API_PROBE_DATABASE_URL=postgres://ds:ds@localhost:5432/ds_probe_3679'
+            echo 'E2E_API_PROBE_DATABASE_URL=postgres://ds:ds@localhost:5432/ds_probe_3688'
+            echo 'E2E_API_PROBE_NOVECTOR_DATABASE_URL=postgres://ds:ds@localhost:5432/ds_probe_3688_novector'
+            echo 'E2E_API_PROBE_PG_CONTAINER=ds-postgres'
+            echo "E2E_API_PROBE_PRIVATE_DIR=$RUNNER_TEMP/api-probes-3688-private-pg"
             echo "E2E_API_PROBE_ARTIFACT_DIR=$dir"
             echo "E2E_API_PROBE_S3_ENDPOINT=$endpoint"
             echo "E2E_API_PROBE_S3_ACCESS_KEY=$MINIO_ROOT_USER"
             echo "E2E_API_PROBE_S3_SECRET_KEY=$MINIO_ROOT_PASSWORD"
-            echo 'E2E_API_PROBE_S3_BUCKET=ds-api-probes-3679'
+            echo 'E2E_API_PROBE_S3_BUCKET=ds-api-probes-3688'
           } >> "$GITHUB_ENV"
           mkdir -p "$build/data"
-          printf '%s\n' '{"command":"start owned source-built MinIO server on reserved loopback port with owned ephemeral data"}' >> "$dir/stand-ops-3679.log"
+          printf '%s\n' '{"command":"start owned source-built MinIO server on reserved loopback port with owned ephemeral data"}' >> "$dir/stand-ops-3688.log"
           "$build/bin/minio" --quiet server "$build/data" --address "127.0.0.1:$port" --console-address 127.0.0.1:0 > "$build/minio.private.log" 2>&1 &
           pid=$!
           echo "$pid" > "$dir/minio.pid"
@@ -504,13 +507,15 @@ jobs:
           printf '{"pid":%s,"port":%s,"binary":"%s"}\n' "$pid" "$port" "$build/bin/minio" > "$dir/minio-process.json"
       - name: Migrate the disposable operational-probe database
         env:
-          DATABASE_URL: postgres://ds:ds@localhost:5432/ds_probe_3679
+          DATABASE_URL: postgres://ds:ds@localhost:5432/ds_probe_3688
         run: |
-          printf '%s\n' '{"command":"pnpm --filter @ds/api drizzle:migrate:ci against ds_probe_3679"}' >> "$E2E_API_PROBE_ARTIFACT_DIR/stand-ops-3679.log"
+          printf '%s\n' '{"command":"pnpm --filter @ds/api drizzle:migrate:ci against ds_probe_3688"}' >> "$E2E_API_PROBE_ARTIFACT_DIR/stand-ops-3688.log"
           pnpm --filter @ds/api drizzle:migrate:ci
+      - name: Copy the migrated DB without only vector extension metadata
+        run: pnpm --filter @ds/e2e exec tsx api-probes/prepare-missing-vector.ts
       - name: Create the one empty owned MinIO bucket
         run: |
-          printf '%s\n' '{"command":"S3 CreateBucket ds-api-probes-3679 in owned MinIO"}' >> "$E2E_API_PROBE_ARTIFACT_DIR/stand-ops-3679.log"
+          printf '%s\n' '{"command":"S3 CreateBucket ds-api-probes-3688 in owned MinIO"}' >> "$E2E_API_PROBE_ARTIFACT_DIR/stand-ops-3688.log"
           pnpm --filter @ds/api exec node --input-type=module <<'NODE'
           import { S3Client, CreateBucketCommand } from '@aws-sdk/client-s3';
           const env = process.env;
@@ -519,36 +524,28 @@ jobs:
           try { await client.send(new CreateBucketCommand({Bucket: env.E2E_API_PROBE_S3_BUCKET})); }
           finally { client.destroy(); }
           NODE
-      - name: Run exactly three API operational originals
+      - name: Run exactly four API operational originals
         env:
-          E2E_REPORT_DIR: ${{ runner.temp }}/api-probes-3679/report
-          E2E_GREP: "(Health endpoint reports ok on a running process|Readiness endpoint reports ok when Postgres, pgvector and object storage all respond|Readiness endpoint reports down when object storage refuses the credentials)(?: @host:academy)?$"
+          E2E_REPORT_DIR: ${{ runner.temp }}/api-probes-3688/report
+          E2E_GREP: "(Health endpoint reports ok on a running process|Readiness endpoint reports ok when Postgres, pgvector and object storage all respond|Readiness endpoint reports down when object storage refuses the credentials|Readiness endpoint reports down when the pgvector extension is missing)(?: @host:academy)?$"
         run: |
           pnpm --filter @ds/e2e exec bddgen --config api-probes.config.ts
           pnpm --filter @ds/e2e exec playwright test --config api-probes.config.ts
-          node --input-type=module <<'NODE'
-          import { readFileSync } from 'node:fs';
-          const report = JSON.parse(readFileSync(process.env.E2E_REPORT_DIR + '/results.json', 'utf8'));
-          const tests = [];
-          function visit(suite) { for (const spec of suite.specs ?? []) tests.push(...spec.tests); for (const child of suite.suites ?? []) visit(child); }
-          for (const suite of report.suites) visit(suite);
-          if (tests.length !== 3 || tests.some(test => test.status !== 'expected' || test.results.length !== 1 || test.results[0].status !== 'passed' || test.results[0].retry !== 0))
-            throw new Error('The three originals must pass once each, with no skip, flake or retry');
-          NODE
+          pnpm --filter @ds/e2e exec tsx api-probes/assert-report.ts "$E2E_REPORT_DIR/results.json" api
       - name: Remove the owned operational-probe MinIO process and files
         if: always()
         run: |
           set -euo pipefail
-          dir="$RUNNER_TEMP/api-probes-3679"
-          build="$RUNNER_TEMP/api-probes-3679-build"
+          dir="$RUNNER_TEMP/api-probes-3688"
+          build="$RUNNER_TEMP/api-probes-3688-build"
           if [ -f "$build/task-owner" ]; then
-            test "$(cat "$build/task-owner")" = 3679
-            test "$(realpath "$build")" = "$(realpath "$RUNNER_TEMP")/api-probes-3679-build"
+            test "$(cat "$build/task-owner")" = 3688
+            test "$(realpath "$build")" = "$(realpath "$RUNNER_TEMP")/api-probes-3688-build"
             if [ -s "$dir/minio.pid" ]; then
               pid="$(cat "$dir/minio.pid")"
               if [ -e "/proc/$pid/exe" ]; then
                 test "$(readlink -f "/proc/$pid/exe")" = "$build/bin/minio"
-                printf '{"command":"terminate exact owned MinIO PID after executable guard","pid":%s}\n' "$pid" >> "$dir/stand-ops-3679.log"
+                printf '{"command":"terminate exact owned MinIO PID after executable guard","pid":%s}\n' "$pid" >> "$dir/stand-ops-3688.log"
                 kill "$pid"
                 for i in $(seq 1 30); do
                   if [ ! -e "/proc/$pid/exe" ]; then break; fi
@@ -556,7 +553,7 @@ jobs:
                 done
                 test ! -e "/proc/$pid/exe"
               fi
-              printf '%s\n' '{"command":"verify exited MinIO loopback port is free"}' >> "$dir/stand-ops-3679.log"
+              printf '%s\n' '{"command":"verify exited MinIO loopback port is free"}' >> "$dir/stand-ops-3688.log"
               node --input-type=module <<'NODE'
               import { createServer } from 'node:net';
               const endpoint = new URL(process.env.E2E_API_PROBE_S3_ENDPOINT);
@@ -565,7 +562,7 @@ jobs:
               await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
           NODE
             fi
-            printf '%s\n' '{"command":"remove owned module cache and exact build/binary/data tree after owner and absolute-path guards"}' >> "$dir/stand-ops-3679.log"
+            printf '%s\n' '{"command":"remove owned module cache and exact build/binary/data tree after owner and absolute-path guards"}' >> "$dir/stand-ops-3688.log"
             if [ -x "$build/go/bin/go" ]; then
               GOROOT="$build/go" GOMODCACHE="$build/mod" GOCACHE="$build/cache" GOPATH="$build/gopath" GOTOOLCHAIN=local "$build/go/bin/go" clean -modcache
             fi
@@ -577,7 +574,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: api-operational-originals
-          path: ${{ runner.temp }}/api-probes-3679
+          path: ${{ runner.temp }}/api-probes-3688
           if-no-files-found: ignore
           retention-days: 7
 
@@ -2112,7 +2109,22 @@ jobs:
         env:
           E2E_EDIT_AUDIT_DATABASE: ds_admin_e2e
           E2E_EDIT_AUDIT_LOG: ${{ runner.temp }}/edit-audit-stand-ops.jsonl
-        run: pnpm --filter @ds/admin test:e2e --project audit
+          E2E_EDIT_AUDIT_SCRATCH: ${{ runner.temp }}/edit-audit-fixtures
+          E2E_API_PROBE_PG_CONTAINER: ds-postgres
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/edit-audit-report/results.json
+        run: |
+          pnpm --filter @ds/admin test:e2e --project audit --reporter=list,json
+          pnpm --filter @ds/e2e exec tsx api-probes/assert-report.ts "$PLAYWRIGHT_JSON_OUTPUT_NAME" audit
+      - name: Upload edit-audit original receipts
+        if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: edit-audit-originals
+          path: |
+            ${{ runner.temp }}/edit-audit-report
+            ${{ runner.temp }}/edit-audit-stand-ops.jsonl
+          if-no-files-found: error
+          retention-days: 7
       - name: Admin axe sweep
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
         run: pnpm --filter @ds/admin test:axe

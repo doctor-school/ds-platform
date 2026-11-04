@@ -14,6 +14,8 @@ export const test = base.extend<{ apiProbe: ApiProbe }>({
     const fixture = await startApiProbe(
       testInfo.title ===
         "Readiness endpoint reports down when object storage refuses the credentials",
+      testInfo.title ===
+        "Readiness endpoint reports down when the pgvector extension is missing",
     );
     try {
       await use(fixture);
@@ -48,22 +50,42 @@ Given(
     expect((await response.json()).checks.postgres).toBe("ok");
   },
 );
-Given("the initial Drizzle migration has been applied", async () => {
-  const facts = await databaseFacts();
-  expect(facts.initial).toBe("idempotency_keys");
-  expect(facts.migrations).toBeGreaterThan(0);
-});
+Given(
+  "the initial Drizzle migration has been applied",
+  async ({ apiProbe }) => {
+    const facts = await databaseFacts(apiProbe.missingVector);
+    expect(facts.initial).toBe("idempotency_keys");
+    expect(facts.migrations).toBeGreaterThan(0);
+  },
+);
 Given("the object-storage probe has run at startup", async ({ apiProbe }) => {
   expect(apiProbe.log).toMatch(
     /object storage is (ready|down: InvalidAccessKeyId \(HTTP 403\))/,
   );
 });
-Given("Postgres accepts connections", async () => {
-  expect((await databaseFacts()).connected).toBe(1);
+Given("Postgres accepts connections", async ({ apiProbe }) => {
+  expect((await databaseFacts(apiProbe.missingVector)).connected).toBe(1);
 });
-Given('the "vector" extension is installed in the database', async () => {
-  expect((await databaseFacts()).vector).toBe("vector");
-});
+Given(
+  'the "vector" extension is installed in the database',
+  async ({ apiProbe }) => {
+    expect((await databaseFacts(apiProbe.missingVector)).vector).toBe("vector");
+  },
+);
+Given(
+  'the "vector" extension is NOT installed in the database',
+  async ({ apiProbe }) => {
+    expect(apiProbe.missingVector).toBe(true);
+    expect((await databaseFacts(true)).vector).toBeNull();
+    const ready = await fetch(`${apiProbe.url}/v1/ready`);
+    expect(ready.status).toBe(503);
+    expect((await ready.json()).checks).toEqual({
+      postgres: "ok",
+      pgvector: "down",
+      objectStorage: "ok",
+    });
+  },
+);
 Given("the last object-storage probe succeeded", async ({ apiProbe }) => {
   expect(apiProbe.log).toContain("object storage is ready");
   expect(await apiProbe.storageProbe()).toEqual({

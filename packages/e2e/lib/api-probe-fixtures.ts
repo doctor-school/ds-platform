@@ -43,10 +43,17 @@ function required(name: string): string {
   return value;
 }
 
-function databaseUrl(): string {
-  const value = required("E2E_API_PROBE_DATABASE_URL");
-  if (!/^\/(ds_dev_3679|ds_probe_3679)$/.test(new URL(value).pathname))
-    throw new Error("API probes require the dedicated #3679 database");
+function databaseUrl(missingVector = false): string {
+  const value = required(
+    missingVector
+      ? "E2E_API_PROBE_NOVECTOR_DATABASE_URL"
+      : "E2E_API_PROBE_DATABASE_URL",
+  );
+  const expected = missingVector
+    ? /^\/ds_(dev|probe)_3688_novector$/
+    : /^\/ds_(dev|probe)_3688$/;
+  if (!expected.test(new URL(value).pathname))
+    throw new Error("API probes require the dedicated #3688 database");
   return value;
 }
 
@@ -54,13 +61,18 @@ export function probeLog(event: Record<string, unknown>): void {
   const dir = required("E2E_API_PROBE_ARTIFACT_DIR");
   mkdirSync(dir, { recursive: true });
   appendFileSync(
-    resolve(dir, "stand-ops-3679.log"),
+    resolve(dir, "stand-ops-3688.log"),
     JSON.stringify({ at: new Date().toISOString(), ...event }) + "\n",
   );
+  if (process.env.E2E_API_PROBE_OPS_LOG)
+    appendFileSync(
+      process.env.E2E_API_PROBE_OPS_LOG,
+      JSON.stringify({ at: new Date().toISOString(), ...event }) + "\n",
+    );
 }
 
-export async function databaseFacts() {
-  const url = databaseUrl();
+export async function databaseFacts(missingVector = false) {
+  const url = databaseUrl(missingVector);
   probeLog({
     command:
       "SELECT database identity, migration, vector and empty worker queues",
@@ -68,11 +80,26 @@ export async function databaseFacts() {
   });
   const { pool } = createDrizzle(url);
   try {
+    probeLog({
+      command: "SQL",
+      database: new URL(url).pathname,
+      sql: "SELECT current_database() AS name",
+    });
     const identity = await pool.query<{ name: string }>(
       "SELECT current_database() AS name",
     );
     if (`/${identity.rows[0]?.name}` !== new URL(url).pathname)
       throw new Error("Probe database identity mismatch");
+    const factsSql = `SELECT 1 AS connected, to_regtype('vector')::text AS vector,
+      to_regclass('public.idempotency_keys')::text AS initial,
+      (SELECT count(*)::int FROM drizzle.__drizzle_migrations) AS migrations,
+      (SELECT count(*)::int FROM media_cleanup_jobs) AS cleanup,
+      (SELECT count(*)::int FROM idempotency_keys) AS uploads`;
+    probeLog({
+      command: "SQL",
+      database: new URL(url).pathname,
+      sql: factsSql,
+    });
     const facts = await pool.query<{
       connected: number;
       vector: string | null;
@@ -80,11 +107,7 @@ export async function databaseFacts() {
       migrations: number;
       cleanup: number;
       uploads: number;
-    }>(`SELECT 1 AS connected, to_regtype('vector')::text AS vector,
-      to_regclass('public.idempotency_keys')::text AS initial,
-      (SELECT count(*)::int FROM drizzle.__drizzle_migrations) AS migrations,
-      (SELECT count(*)::int FROM media_cleanup_jobs) AS cleanup,
-      (SELECT count(*)::int FROM idempotency_keys) AS uploads`);
+    }>(factsSql);
     const fact = facts.rows[0]!;
     if (fact.cleanup !== 0 || fact.uploads !== 0)
       throw new Error("Owned probe DB contains media/upload work");
@@ -103,6 +126,7 @@ export interface ApiProbe {
   process: ChildProcess;
   url: string;
   degraded: boolean;
+  missingVector: boolean;
   log: string;
   request?: Response;
   body?: Record<string, unknown>;
@@ -160,15 +184,20 @@ function verifyListener(pid: number, port: number): void {
     );
 }
 
-export async function startApiProbe(degraded: boolean): Promise<ApiProbe> {
-  await databaseFacts();
+export async function startApiProbe(
+  degraded: boolean,
+  missingVector = false,
+): Promise<ApiProbe> {
+  const facts = await databaseFacts(missingVector);
+  if (facts.vector !== (missingVector ? null : "vector"))
+    throw new Error("Probe database vector precondition mismatch");
   const endpoint = required("E2E_API_PROBE_S3_ENDPOINT");
   const accessKeyId = degraded
-    ? `absent-3679-${randomUUID()}`
+    ? `absent-3688-${randomUUID()}`
     : required("E2E_API_PROBE_S3_ACCESS_KEY");
   const secretAccessKey = required("E2E_API_PROBE_S3_SECRET_KEY");
   const bucket = required("E2E_API_PROBE_S3_BUCKET");
-  if (bucket !== "ds-api-probes-3679")
+  if (bucket !== "ds-api-probes-3688")
     throw new Error("Unexpected probe bucket");
   const server = createServer();
   probeLog({ command: "bind and release free loopback port" });
@@ -198,7 +227,7 @@ export async function startApiProbe(degraded: boolean): Promise<ApiProbe> {
   Object.assign(env, {
     NODE_ENV: "development",
     SENTRY_ENVIRONMENT: "test",
-    DATABASE_URL: databaseUrl(),
+    DATABASE_URL: databaseUrl(missingVector),
     PORT: String(port),
     RECONCILE_SWEEP_INTERVAL_MS: "0",
     AUDIT_IDENTIFIER_PEPPER: `probe-${randomUUID()}`,
@@ -215,6 +244,7 @@ export async function startApiProbe(degraded: boolean): Promise<ApiProbe> {
     cwd: root,
     port,
     degraded,
+    missingVector,
     entrySha256: createHash("sha256").update(readFileSync(entry)).digest("hex"),
     reconcileSweep: 0,
     idpServiceToken: "omitted",
@@ -230,6 +260,7 @@ export async function startApiProbe(degraded: boolean): Promise<ApiProbe> {
     process: child,
     url: `http://127.0.0.1:${port}`,
     degraded,
+    missingVector,
     log: "",
     async storageProbe() {
       probeLog({
@@ -295,7 +326,7 @@ export async function startApiProbe(degraded: boolean): Promise<ApiProbe> {
         fixture.log
           .replaceAll(accessKeyId, "<access-key>")
           .replaceAll(secretAccessKey, "<secret-key>")
-          .replaceAll(databaseUrl(), "<owned-database-url>"),
+          .replaceAll(databaseUrl(missingVector), "<owned-database-url>"),
       );
       probeLog({
         command: "bind and release exited API port",

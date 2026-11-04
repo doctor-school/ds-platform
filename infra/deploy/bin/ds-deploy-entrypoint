@@ -35,15 +35,6 @@
 #                             «Data-prod verbs.»), the forced command of the hop key
 #                             from ds-api-prod: see DATA_VERBS below
 #
-# With the one argument `--read` (Issue #3646; spec §4 «The read key on ds-api-prod»,
-# §5 «Prod read verbs.») it is the read mode of the prod read key, whose
-# authorized_keys line fixes the argument: on the prod box only, it admits only
-# READ_VERBS below and rejects everything else (status, release, rollback, redeploy
-# included) with exit 2. Without it no read verb is served. Every answer but
-# `capabilities` leaves as CMS ciphertext to the recipient certificate installed
-# with the tooling tree (READ_RECIPIENT), never plaintext: the client's stdout is a
-# public Actions artifact.
-#
 # observe runs only the observations OBSERVE_PY below defines (its OBSERVATIONS
 # table, pinned equal to the case arm by the tests): never SQL or shell from the
 # client. Every parameter is checked against its own pattern box-side and reaches
@@ -128,15 +119,6 @@ refuse() {
   exit 3
 }
 accepted() { logger -t "$TAG" -p auth.info "accepted: $(sanitised)" || true; }
-
-# The key's mode is its forced command's argument (#3646): none, or `--read`. sudo
-# matches deploy's two rights exactly, so no other argument list reaches root.
-mode=
-case $# in
-  0) ;;
-  1) [[ $1 == --read ]] || reject "unknown mode argument" ; mode=read ;;
-  *) reject "unknown mode arguments" ;;
-esac
 
 [[ -n $request ]] || reject "no command (this key runs only the allowlisted deploy commands)"
 [[ ${#request} -le $COMMAND_MAX && $request =~ $COMMAND_RE ]] ||
@@ -522,6 +504,7 @@ HARDEN_SSH=$ROOT/usr/local/lib/ds-platform/harden-ssh.sh
 DATA_INSTALL=(
   /usr/local/bin/ds-release=infra/deploy/bin/ds-release
   /usr/local/bin/ds-deploy-entrypoint=infra/deploy/bin/ds-deploy-entrypoint
+  /usr/local/bin/ds-read-entrypoint=infra/deploy/bin/ds-read-entrypoint
   /usr/local/lib/ds-platform/release-driver=infra/deploy/bin/release-driver
   /usr/local/lib/ds-platform/postgres-artifact-probe.py=tools/deploy/postgres-artifact-probe.py
   /usr/local/lib/ds-platform/harden-ssh.sh=infra/deploy/bin/harden-ssh.sh
@@ -914,8 +897,8 @@ read_fail() {
   exit 1
 }
 
-# read-schema (data box): the plaintext schema answer of `schema`, which the read mode
-# on ds-api-prod encrypts. argv: the data-prod compose dir. Exit 0 = the answer on
+# read-schema (data box): the plaintext schema answer of `schema`, which
+# ds-read-entrypoint on ds-api-prod encrypts. argv: the data-prod compose dir. Exit 0 = the answer on
 # stdout · 1 = one fixed reason of READ_REASONS on stdout · 3 = not servable. The
 # catalogue SQL reads catalog relations only — no row data, no COMMENT text — and
 # the dump text never leaves this script, only its sha256.
@@ -998,7 +981,9 @@ def run(argv, stdin, timeout):
         stop(1, "the read failed")
     if done.returncode != 0:
         text = done.stderr.decode("utf-8", "replace")
-        stop(1, "the read timed out" if any(m in text for m in TIMED_OUT) else "the read failed")
+        # 124: the in-container `timeout` bound pg_dump (it resets statement_timeout).
+        timed_out = done.returncode == 124 or any(m in text for m in TIMED_OUT)
+        stop(1, "the read timed out" if timed_out else "the read failed")
     return done.stdout
 
 if not os.path.isdir(compose):
@@ -1020,9 +1005,11 @@ if (not isinstance(answer.get("serverVersion"), str) or not isinstance(answer.ge
         or not isinstance(catalogue, dict)
         or not all(isinstance(catalogue.get(k), list) for k in ("tables", "enums", "sequences"))):
     stop(1, "the read failed")
+# pg_dump resets statement_timeout and lock_timeout itself, so `timeout 100` inside the
+# container bounds the dump process (and its ACCESS SHARE locks); 120 s bounds the client.
 dump = run(["docker", "compose", "exec", "-T", "-e",
             "PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=30s", "postgres",
-            "pg_dump", "--schema-only", "--no-comments", "--no-owner", "--no-privileges",
+            "timeout", "100", "pg_dump", "--schema-only", "--no-comments", "--no-owner", "--no-privileges",
             "--lock-wait-timeout=2s", "-U", "ds", DATABASE], b"", 120)
 if not dump:
     stop(1, "the read failed")
@@ -1055,86 +1042,6 @@ read_reason() {
   done
   printf 'the read failed'
 }
-
-# The read mode on ds-api-prod. The verbs it serves (spec §8 (g): S1 serves
-# `capabilities` and `schema`); prod-observe.yml refuses a verb `capabilities` does
-# not name.
-READ_VERBS='capabilities schema'
-# The recipient certificate, installed with the tooling tree (tools/deploy/lib/remote.mjs
-# INSTALLED_TREE_DIR) from the committed infra/deploy/keys/prod-read-recipient.pem.
-READ_RECIPIENT=$ROOT/usr/local/lib/ds-platform/tree/infra/deploy/keys/prod-read-recipient.pem
-# The hop to ds-data-prod, as the release driver takes it (tools/deploy/lib/remote.mjs
-# DATA_PROD_HOP_KEY / DATA_PROD_HOP_KNOWN_HOSTS, tools/deploy/prod.mjs VPC_IP).
-DATA_PROD_HOP_KEY=$ROOT/home/deploy/.ssh/data-prod-hop
-DATA_PROD_HOP_KNOWN_HOSTS=$ROOT/home/deploy/.ssh/known_hosts
-DATA_PROD_ADDRESS=$(override DS_ENTRYPOINT_DATA_PROD_ADDRESS 192.168.0.10)
-READ_HOP_TIMEOUT=$(override DS_ENTRYPOINT_READ_HOP_TIMEOUT 180)
-
-# One data verb over the hop, stdin closed; its stdout and stderr are the caller's.
-data_prod_hop() {
-  timeout "$READ_HOP_TIMEOUT" ssh -n -i "$DATA_PROD_HOP_KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
-    -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$DATA_PROD_HOP_KNOWN_HOSTS" \
-    -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
-    "deploy@$DATA_PROD_ADDRESS" "$1"
-}
-
-# A read never runs beside a release step: `ds-release check prod` here (the migrate
-# step, the -driver and -rollback units), then `check` on ds-data-prod (its up and
-# backup units). ds-release refuses with 3 while a ds-prod-* unit runs.
-read_release_check() {
-  local rc=0
-  [[ -x $DS_RELEASE ]] || refuse "ds-release is not installed"
-  sudo "$DS_RELEASE" check prod >/dev/null 2>&1 </dev/null || rc=$?
-  case $rc in 0) ;; 3) read_fail "a release step is running" ;; *) read_fail "the read failed" ;; esac
-  data_prod_hop check >/dev/null 2>&1 || rc=$?
-  case $rc in 0) ;; 3) read_fail "a release step is running" ;; 124) read_fail "the read timed out" ;; *) read_fail "the read failed" ;; esac
-}
-
-# The verb's whole answer, encrypted to READ_RECIPIENT (CMS AuthEnvelopedData,
-# AES-256-GCM, DER): only the ciphertext reaches stdout.
-read_encrypted() {
-  local data_verb=$1 rc=0 reason
-  read_work=$(mktemp -d) # global: the EXIT trap outlives this function; root-only (0700)
-  trap 'rm -rf -- "${read_work:-}"' EXIT
-  data_prod_hop "$data_verb" >"$read_work/answer.json" 2>"$read_work/stderr" || rc=$?
-  case $rc in
-    0) ;;
-    1)
-      reason=$(sed -n "s/^$TAG: //p" "$read_work/stderr" | tail -n 1)
-      read_fail "$(read_reason "$reason")"
-      ;;
-    2 | 3) refuse "ds-data-prod does not serve $data_verb (the next release installs it)" ;;
-    124) read_fail "the read timed out" ;;
-    *) read_fail "the read failed" ;;
-  esac
-  [[ -s $read_work/answer.json ]] || read_fail "the read failed"
-  openssl cms -encrypt -binary -aes-256-gcm -outform DER -in "$read_work/answer.json" \
-    -out "$read_work/result.cms" "$READ_RECIPIENT" >/dev/null 2>&1 ||
-    refuse "openssl cannot encrypt to the recipient certificate"
-  cat -- "$read_work/result.cms"
-}
-
-read_mode() {
-  local role
-  case "$verb" in
-    capabilities | schema) [[ ${#words[@]} -eq 1 ]] || reject "usage: $verb" ;;
-    *) reject "unknown read command (allowed: ${READ_VERBS// /, })" ;;
-  esac
-  accepted
-  role=$(sudo cat "$BOX_ROLE_FILE" 2>/dev/null || true)
-  [[ $role == prod ]] || refuse "read mode is served by the prod box only"
-  case "$verb" in
-    capabilities)
-      printf '{"role":"prod","mode":"read","verbs":["%s"]}\n' "${READ_VERBS// /\",\"}" ;;
-    schema)
-      sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
-      read_release_check
-      read_encrypted read-schema </dev/null ;;
-  esac
-  exit 0
-}
-
-[[ $mode != read ]] || read_mode
 
 case "$verb" in
   status)

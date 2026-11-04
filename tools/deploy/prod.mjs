@@ -2395,7 +2395,7 @@ async function deploy(hotfixRef = null, local = null) {
     // before any data-prod state change (a no-op once converged); the workstation path
     // reaches it as breakglass, a shell login, and never converges.
     if (local) await dataProd().converge(sha);
-    // #3646: and converges the read key's line and `--read` sudo right on ds-api-prod
+    // #3646: and converges the read key's line and its ds-read-entrypoint sudo right on ds-api-prod
     // (harden-ssh.sh --role prod --from-release; a no-op until a read key is committed).
     if (local) await sshScript(API_PROD, prodReadKeyConvergeScript(), { label: "converge the read key" });
   }

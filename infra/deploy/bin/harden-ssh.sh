@@ -20,8 +20,8 @@
 # driver from the same root-owned copy. After the same break-glass checks it
 # converges exactly two things and removes no other line: the read line of deploy's
 # authorized_keys, rewritten from the installed tree's infra/deploy/keys/prod-read.pub
-# behind `command="sudo -n /usr/local/bin/ds-deploy-entrypoint --read",restrict` (a
-# missing or malformed file refuses the run, changing nothing), and
+# behind `command="sudo -n /usr/local/bin/ds-read-entrypoint",restrict` (a missing or
+# malformed file refuses the run, changing nothing), and
 # /etc/sudoers.d/90-ds-deploy (PROD_DEPLOY_SUDOERS_CONTENT, `visudo -cf` first).
 #
 # It converges:
@@ -80,12 +80,14 @@ ENTRYPOINT=/usr/local/bin/ds-deploy-entrypoint
 KEY_RESTRICTIONS=no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding
 # Any CI line, either role's form: what the operator-key refusal below tells apart
 # from an unrestricted line.
-RESTRICTED_RE='^command="(sudo -n )?/usr/local/bin/ds-deploy-entrypoint( --read)?",'
-# A prod CI line, the read line (#3646) included: what the prod sweep keeps.
-PROD_CI_RE='^command="sudo -n /usr/local/bin/ds-deploy-entrypoint( --read)?",'
-# The read key's line on ds-api-prod (#3646): its mode is fixed here, never by the client.
-READ_FORCED='command="sudo -n /usr/local/bin/ds-deploy-entrypoint --read",restrict'
-READ_RE='^command="sudo -n /usr/local/bin/ds-deploy-entrypoint --read",restrict '
+RESTRICTED_RE='^command="((sudo -n )?/usr/local/bin/ds-deploy-entrypoint|sudo -n /usr/local/bin/ds-read-entrypoint)",'
+# A prod CI line or the read line (#3646): what the prod sweep keeps.
+PROD_CI_RE='^command="sudo -n /usr/local/bin/ds-(deploy|read)-entrypoint",'
+# The read key's line on ds-api-prod (#3646): its own binary, never ds-deploy-entrypoint
+# with an argument — an older ds-deploy-entrypoint ignores its arguments.
+READ_ENTRYPOINT=/usr/local/bin/ds-read-entrypoint
+READ_FORCED="command=\"sudo -n $READ_ENTRYPOINT\",restrict"
+READ_RE='^command="sudo -n /usr/local/bin/ds-read-entrypoint",restrict '
 READ_PUBKEY=$ROOT/usr/local/lib/ds-platform/tree/infra/deploy/keys/prod-read.pub
 # Data (#3313): the hop line of the release driver on ds-api-prod, before or after the
 # converge (the forced-command prefix).
@@ -95,11 +97,12 @@ INSTALLED_ENTRYPOINT=$ROOT$ENTRYPOINT
 
 # Prod and data (spec §4 «sudo on prod», #3313): deploy may run the entrypoint as root with no
 # argument, and sudo keeps SSH_ORIGINAL_COMMAND (the request) through its env reset.
-# Prod adds the read mode (#3646, `--read`; sudo matches the argument list exactly).
+# Prod adds the read key's own entrypoint (#3646), likewise with no argument.
 # infra/deploy/cloud-init/api-prod.yaml writes the prod bytes; the tests pin them.
 PROD_DEPLOY_SUDOERS_CONTENT='Defaults!/usr/local/bin/ds-deploy-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"
+Defaults!/usr/local/bin/ds-read-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"
 deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint ""
-deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint --read
+deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-read-entrypoint ""
 '
 DATA_DEPLOY_SUDOERS_CONTENT='Defaults!/usr/local/bin/ds-deploy-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"
 deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint ""
@@ -182,6 +185,11 @@ for f in ${ci_files[@]+"${ci_files[@]}"}; do
     grep -Eqv "$RESTRICTED_RE"; then
     usage "$f is already an unrestricted key of deploy (the operator key?); a CI key must be a new key"
   fi
+  # The read key passed as a CI key would turn the read line into a full CI line.
+  if { [[ -f $DEPLOY_KEYS ]] && grep -E "$READ_RE" "$DEPLOY_KEYS" | grep -qF -- " $(key_body "$k")"; } ||
+    { [[ -f $READ_PUBKEY ]] && grep -qF -- " $(key_body "$k")" "$READ_PUBKEY"; }; then
+    usage "$f is the prod read key; a CI key must be a distinct key"
+  fi
 done
 
 # --- data: the preconditions of the narrowing, before anything changes (#3313) -------
@@ -206,8 +214,7 @@ fi
 if [[ $role == prod && $from_release == 1 ]]; then
   [[ -f $READ_PUBKEY ]] || fail "$READ_PUBKEY is missing; nothing was changed"
   [[ $(grep -c . "$READ_PUBKEY") == 1 ]] || fail "$READ_PUBKEY must hold exactly one key line; nothing was changed"
-  read_key=$(grep . "$READ_PUBKEY" | tr -d '
-')
+  read_key=$(grep . "$READ_PUBKEY" | tr -d '\r')
   [[ $read_key =~ $PUBKEY_RE ]] || fail "$READ_PUBKEY is not a bare public key line; nothing was changed"
   [[ -f $DEPLOY_KEYS ]] || fail "$DEPLOY_KEYS is missing: the deploy user must exist first; nothing was changed"
   other_keys=$(grep -Ev "$READ_RE" "$DEPLOY_KEYS" || true)
@@ -322,13 +329,11 @@ if [[ $role == prod && $from_release == 1 ]]; then
   fi
   if ! [[ $(grep -cE "$READ_RE" "$DEPLOY_KEYS" || true) == 1 ]] || ! grep -qxF -- "$want_read" "$DEPLOY_KEYS"; then
     body=$(key_body "$read_key")
-    note "put the read key ${body:0:16}… behind the read-mode forced command in $DEPLOY_KEYS"
+    note "put the read key ${body:0:16}… behind the read forced command in $DEPLOY_KEYS"
     if [[ $dry_run == 0 ]]; then
       rest=$(grep -Ev "$READ_RE" "$DEPLOY_KEYS" || true)
       cp -p "$DEPLOY_KEYS" "$DEPLOY_KEYS.ds-harden.new"
-      { [[ -z $rest ]] || printf '%s
-' "$rest"; printf '%s
-' "$want_read"; } >"$DEPLOY_KEYS.ds-harden.new"
+      { [[ -z $rest ]] || printf '%s\n' "$rest"; printf '%s\n' "$want_read"; } >"$DEPLOY_KEYS.ds-harden.new"
       mv -f "$DEPLOY_KEYS.ds-harden.new" "$DEPLOY_KEYS"
     fi
   fi

@@ -30,6 +30,7 @@ import { BOX_ENTRYPOINTS } from "./lib/remote.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ENTRYPOINT = resolve(here, "../../infra/deploy/bin/ds-deploy-entrypoint");
+const READ_ENTRYPOINT = resolve(here, "../../infra/deploy/bin/ds-read-entrypoint");
 const DS_RELEASE = resolve(here, "../../infra/deploy/bin/ds-release");
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 
@@ -1122,7 +1123,8 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
   });
 
   // --- 3646: the prod read path ---------------------------------------------------------
-  // ds-api-prod's read mode (`--read`) reaches ds-data-prod's `read-schema` over the hop.
+  // ds-api-prod's read key runs ds-read-entrypoint, which reaches ds-data-prod's
+  // `read-schema` over the hop.
   // The ssh stub hands the hop's verb to this same entrypoint against a second fixture
   // root whose role is `data`, so the read runs end to end; docker answers psql with
   // the fixture envelope and pg_dump with a fixed dump text.
@@ -1172,7 +1174,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         '  *" psql "*) cat > "$STUB_DIR/psql-stdin.log"',
         '    [[ -z ${STUB_PSQL_ERR:-} ]] || { echo "$STUB_PSQL_ERR" >&2; exit 1; }',
         '    cat "$STUB_DIR/psql-reply" ;;',
-        `  *" pg_dump "*) printf '%s' '${DUMP.trimEnd()}'; echo ;;`,
+        `  *" pg_dump "*) [[ -z \${STUB_DUMP_RC:-} ]] || exit "$STUB_DUMP_RC"; printf '%s' '${DUMP.trimEnd()}'; echo ;;`,
         "esac",
       ].join("\n") + "\n",
     );
@@ -1208,7 +1210,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       SSH_ORIGINAL_COMMAND: command,
       ...(opts.env ?? {}),
     };
-    const r = spawnSync("bash", [ENTRYPOINT, ...(opts.args ?? ["--read"])], { env, input: "" });
+    const r = spawnSync("bash", [opts.bin ?? READ_ENTRYPOINT, ...(opts.args ?? [])], { env, input: "" });
     return { status: r.status, stdout: r.stdout, stderr: String(r.stderr) };
   };
   const decrypt = (ciphertext) => {
@@ -1222,7 +1224,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     return JSON.parse(r.stdout);
   };
 
-  it("3646: --read capabilities names the read verbs, in plaintext, on the prod box", () => {
+  it("3646: ds-read-entrypoint capabilities names the read verbs, in plaintext, on the prod box", () => {
     readBoxes({ cert: false });
     const r = readRun("capabilities");
     assert.equal(r.status, 0, r.stderr);
@@ -1230,13 +1232,13 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.match(log("logger"), /auth\.info accepted: capabilities/);
   });
 
-  it("3646: read mode is refused (exit 3) on any box but the prod box", () => {
+  it("3646: the read commands are refused (exit 3) on any box but the prod box", () => {
     for (const role of [undefined, "data", "stage"]) {
       if (role) setRole(role);
       for (const command of ["capabilities", "schema"]) {
         const r = readRun(command);
         assert.equal(r.status, 3, `${role}: ${command}`);
-        assert.match(r.stderr, /read mode is served by the prod box only/);
+        assert.match(r.stderr, /the read commands are served by the prod box only/);
       }
     }
     assert.equal(log("ds-release"), "");
@@ -1256,8 +1258,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     `converge ${SHA}`,
     "schema now",
     "capabilities all",
+    "upload-report",
+    ...DATA_VERBS.filter((v) => v !== "capabilities"),
   ]) {
-    it(`3646: --read rejects \`${command}\` (exit 2, auth.warning), nothing run`, () => {
+    it(`3646: ds-read-entrypoint rejects \`${command}\` (exit 2, auth.warning), nothing run`, () => {
       readBoxes({ cert: false });
       installDriver('echo "driver-called $*" >> "$STUB_DIR/driver.log"');
       const r = readRun(command);
@@ -1267,15 +1271,49 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     });
   }
 
-  it("3646: without --read the prod box serves no read verb; any other mode argument is rejected", () => {
+  it("3646: ds-deploy-entrypoint serves no read verb on the prod box; ds-read-entrypoint takes no argument", () => {
     readBoxes({ cert: false });
-    assert.equal(readRun("schema", { args: [] }).status, 2);
-    const caps = readRun("capabilities", { args: [] });
-    assert.equal(caps.status, 3, "capabilities without --read is the data box's");
-    for (const args of [["--write"], ["--read", "--read"], [""]]) {
+    assert.equal(readRun("schema", { bin: ENTRYPOINT }).status, 2);
+    const caps = readRun("capabilities", { bin: ENTRYPOINT });
+    assert.equal(caps.status, 3, "capabilities on ds-deploy-entrypoint is the data box's");
+    for (const args of [["--read"], ["--write"], [""]]) {
       assert.equal(readRun("capabilities", { args }).status, 2, JSON.stringify(args));
     }
     assert.equal(log("ssh"), "");
+  });
+
+  // The downgrade an install of a pre-#3646 tree makes: it rewrites ds-deploy-entrypoint
+  // (an older one ignores its arguments and serves every deploy verb) but never the
+  // read entrypoint. The read key must still reach only ds-read-entrypoint's verbs.
+  it("3646: with an older ds-deploy-entrypoint installed, the read key reaches only ds-read-entrypoint", () => {
+    readBoxes();
+    const old = join(root, "usr/local/bin/ds-deploy-entrypoint");
+    writeFileSync(old, '#!/usr/bin/env bash\necho "old-entrypoint $SSH_ORIGINAL_COMMAND" >> "$STUB_DIR/old.log"\nexit 0\n');
+    chmodSync(old, 0o755);
+    installDriver('echo "driver-called $*" >> "$STUB_DIR/driver.log"');
+    for (const command of [`release prod ${SHA}`, `rollback prod ${SHA}`, `redeploy prod ${SHA}`, `status prod ${SHA}`]) {
+      assert.equal(readRun(command).status, 2, command);
+    }
+    assert.equal(log("old") + log("driver") + log("ds-release"), "", "no deploy verb ran");
+    const r = readRun("schema");
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(decrypt(r.stdout).verb, "schema");
+    assert.equal(log("old"), "", "the read path never runs ds-deploy-entrypoint on ds-api-prod");
+    // Statically: the read binary neither execs nor sources the deploy entrypoint.
+    const code = readFileSync(READ_ENTRYPOINT, "utf8")
+      .split("\n")
+      .filter((l) => !/^\s*#/.test(l));
+    assert.deepEqual(code.filter((l) => l.includes("ds-deploy-entrypoint")), ["DATA_TAG=ds-deploy-entrypoint"]);
+  });
+
+  it("3646: the read and data entrypoints carry the same fixed read reasons", () => {
+    const reasons = (file) => {
+      const text = readFileSync(file, "utf8");
+      const start = text.indexOf("READ_REASONS=(\n");
+      return text.slice(start, text.indexOf("\n)\n", start));
+    };
+    assert.ok(reasons(READ_ENTRYPOINT).includes("'the read failed'"));
+    assert.equal(reasons(READ_ENTRYPOINT), reasons(ENTRYPOINT));
   });
 
   it("3646: schema answers the ds_prod snapshot, encrypted to the recipient: no plaintext on stdout", () => {
@@ -1315,7 +1353,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.match(docker, /^compose exec -T -e PGCLIENTENCODING=UTF8 postgres psql -X -qAt -v ON_ERROR_STOP=1 -U ds -d ds_prod -f -$/m);
     assert.match(
       docker,
-      /^compose exec -T -e PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=30s postgres pg_dump --schema-only --no-comments --no-owner --no-privileges --lock-wait-timeout=2s -U ds ds_prod$/m,
+      /^compose exec -T -e PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=30s postgres timeout 100 pg_dump --schema-only --no-comments --no-owner --no-privileges --lock-wait-timeout=2s -U ds ds_prod$/m,
     );
   });
 
@@ -1344,7 +1382,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       readBoxes();
       const r = readRun("schema", { env });
       assert.equal(r.status, 1, r.stderr);
-      assert.equal(r.stderr, "ds-deploy-entrypoint: a release step is running\n");
+      assert.equal(r.stderr, "ds-read-entrypoint: a release step is running\n");
       assert.ok(!log("ssh").includes("read-schema"), "no read");
       assert.equal(log("docker"), "");
     });
@@ -1357,12 +1395,13 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     ["a lock waits too long", { env: { STUB_PSQL_ERR: "ERROR:  canceling statement due to lock timeout" } }, "the read timed out"],
     ["psql fails otherwise", { env: { STUB_PSQL_ERR: 'ERROR:  relation "drizzle.__drizzle_migrations" does not exist' } }, "the read failed"],
     ["psql answers no JSON", { envelope: "garbage" }, "the read failed"],
+    ["the in-container timeout stops pg_dump", { env: { STUB_DUMP_RC: "124" } }, "the read timed out"],
   ]) {
     it(`3646: schema fails (exit 1) with the fixed reason when ${label}, nothing of the diagnostic leaves`, () => {
       readBoxes({ envelope: setup.envelope });
       const r = readRun("schema", { env: setup.env ?? {} });
       assert.equal(r.status, 1, r.stderr);
-      assert.equal(r.stderr, `ds-deploy-entrypoint: ${reason}\n`);
+      assert.equal(r.stderr, `ds-read-entrypoint: ${reason}\n`);
       assert.equal(r.stdout.length, 0);
     });
   }
@@ -1379,10 +1418,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     writeFileSync(join(stubs, "ssh"), '#!/usr/bin/env bash\necho "ssh: connect to host: secret detail" >&2\nexit 255\n');
     const dead = readRun("schema");
     assert.equal(dead.status, 1);
-    assert.equal(dead.stderr, "ds-deploy-entrypoint: the read failed\n");
+    assert.equal(dead.stderr, "ds-read-entrypoint: the read failed\n");
   });
 
-  it("3646: read-schema on the data box answers plaintext over the hop only to the read mode; elsewhere it is the data box's verb", () => {
+  it("3646: read-schema on the data box answers plaintext over the hop only to ds-read-entrypoint; elsewhere it is the data box's verb", () => {
     setRole("prod");
     const r = run("read-schema");
     assert.equal(r.status, 3, "a data verb on a non-data box");

@@ -35,7 +35,7 @@ export const DATA_VERBS = [
 /**
  * The data verbs of the prod read path (#3646; spec §5 «Data verbs of the read
  * path»): served on the data box beside DATA_VERBS (the entrypoint's DATA_VERBS is
- * both lists, pinned), reached by the read mode on ds-api-prod only. The release
+ * both lists, pinned), reached by ds-read-entrypoint on ds-api-prod only. The release
  * never calls them, so its `capabilities` probe does not require them: a box whose
  * entrypoint predates them still takes the release that installs them.
  */

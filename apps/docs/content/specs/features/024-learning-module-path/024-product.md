@@ -20,7 +20,7 @@ lang: en
 
 A doctor on `doctor.school` learns in **lessons**, and a lesson is **not a video** [owner, D5]: «Урок — это совокупность материалов… на 45 минут или академический час. Одно видео — это не урок.» A lesson is a **set of elements** drawn from an extensible catalog of element types — a series episode, microlearning, a downloadable material, a podcast, a test, a clinical case — composed to about one academic hour (≈ 45 min) [owner, D5, D9]. The methodology research behind the default composition (one series episode, microlearning per decomposition element, a downloadable material, one podcast, mandatory entry and exit tests, a clinical case as the lesson's skeleton) is recorded on Issue #1792; this PRD takes it as the **default lesson template**, not as a fixed shape [proposed].
 
-Lessons always live inside a **module**, and modules inside a **course** [owner, D1, D3, D4]. 024 owns what happens inside that structure: **the path** a doctor walks through a module — drawn as a map, as in the mobile prototype — and **the rules** that decide what is open, what counts as done, in what order and with which tests.
+Lessons always live inside a **module**, and modules inside a **course** [owner, D1, D3; direction]; that a module is mandatory, holds six lessons plus a club and is sold separately is a default of the structure preset [proposed default per D4]. 024 owns what happens inside that structure: **the path** a doctor walks through a module — drawn as a map, as in the mobile prototype — and **the rules** that decide what is open, what counts as done, in what order and with which tests.
 
 The central product decision is that **those rules are settings, not code** [owner, P0]. The owner could not — and should not have to — answer in advance whether the next lesson opens after the test, after the video, or immediately: «Это всё должно быть гибко и настраиваемо… за основу мы можем взять Duolingo». So 024 specifies a **rules constructor** [owner, direction]:
 
@@ -82,7 +82,7 @@ Around the path, 024 carries the lesson screen's registry scope (functional map 
 ## Product acceptance criteria
 
 - **A lesson is a set of elements**, never a single video; each element has a type from the element-type catalog and an expected duration; the default template targets about one academic hour (≈ 45 min) [owner, D5; template proposed]. A lesson is published only as a whole — a lesson whose composition is incomplete is not shown to doctors [proposed, from CP O-169].
-- **Every lesson belongs to a module of a course** [owner, D1, D3, D4]; 024 offers no free-standing lesson.
+- **Every lesson belongs to a module of a course** [owner, D1, D3; direction]; 024 offers no free-standing lesson.
 - **Completion, unlocking, order, visibility of locked items and test settings are settings**, editable by an author without a release; none of them is a constant in code [owner, P0].
 - **Settings inherit** platform → school → course → module → lesson → element; the **nearest override applies**, and the author can see where each effective rule comes from [owner, direction; display proposed].
 - **Completion rules** combine conditions with «all of», «any of» and «N of M» [owner, direction]. The initial condition types are: watched to at least X %, file opened, podcast listened to at least X %, test at or above its threshold, club attended, manual mark [proposed]. What «viewed» means for each element type is defined per type in the catalog, with a configurable percentage where it applies [proposed; Issue #1792 Open list].
@@ -99,7 +99,8 @@ Around the path, 024 carries the lesson screen's registry scope (functional map 
 - **The path map** shows every lesson's computed status and, for a locked one, the reason in the doctor's words [proposed].
 - **Gate (REQ-20):** a guest sees the description, element list and teaser of a lesson; content elements show an honest registration gate; no gated content is served to a guest.
 - **Podcast companion (REQ-35)** is an optional element of a lesson; whether it counts toward completion is the lesson's completion rule [proposed].
-- **Partner downloads (REQ-67)** are an element type and carry the partner/advertising label (REQ-66); there is no advertising inside microlearning [proposed, from CP O-044].
+- **Partner downloads (REQ-67)** are an element type and carry the partner/advertising label (REQ-66).
+- **Advertising inside a lesson — the single rule (023 refers here):** partner or advertising content appears in a lesson only as a labelled partner element (REQ-66, REQ-67); there is no advertising inside microlearning or any other instructional element [proposed, from CP O-044].
 - **Corrective material (REQ-68)** can be linked to a test question and is offered after a wrong answer.
 - **Star ratings (REQ-92)** and **feedback on marketing materials (REQ-135)** are available to a signed-in doctor on the lesson.
 - **Mobile parity (REQ-53, OWD-10):** the same lessons, facts and statuses, and one points account, on the site and in the mobile application; the screens work at the mobile breakpoint and meet the platform accessibility bar.

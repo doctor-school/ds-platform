@@ -1,6 +1,6 @@
 ---
 title: "Feature 023 — The school and the course (PRD)"
-description: "Product requirements for the structure a doctor learns in on `doctor.school`: a direction has several schools, one per expert; a school holds courses; a course is made of modules — each module (by default six lessons plus a club) is sold separately; a module holds lessons. The school screen, the course and module program view, graduate reviews, mentoring and internship at school level, partner/advertising labelling, the «start anywhere, certificate only for the whole course» rule as a preset of the 024 rules constructor, and the entry into document verification on completion. Wave 2, `blocked_by` 024; source of the 023 EARS triplet (ADR-0014)."
+description: "Product requirements for the structure a doctor learns in on `doctor.school`: a direction has several schools, one per expert; a school holds courses; a course is made of modules — by default of the structure preset each module holds six lessons plus a club and is sold separately; a module holds lessons. The school screen, the course and module program view, graduate reviews, mentoring and internship at school level, partner/advertising labelling, the «start anywhere, certificate only for the whole course» rule as a preset of the 024 rules constructor, and the entry into document verification on completion. Wave 2, `blocked_by` 024; source of the 023 EARS triplet (ADR-0014)."
 slug: two-site-ia-023-school-and-course-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
@@ -21,14 +21,14 @@ lang: en
 Doctor.School is a «school of schools». On the doctor storefront the end product a doctor chooses is a **school** — not an Academy project, which a doctor never sees (REQ-50, ADR-0016 §4). 023 defines that product and its structure:
 
 - **Direction → school → course → module → lesson** [owner, D1]. A direction can have **several schools, one per expert**; a course always lives inside a school [owner, D2]. A lesson always lives inside a course and its module; the feed's «lesson of the day» is a lesson of a course with a link to that course [owner, D3].
-- **The module is mandatory and sold separately**: by default six lessons plus a club that closes the module; a doctor can buy a module apart from its course [owner, D4 — as the default of the structure presets, P0]. The reference course (an ДПО block of 36 hours) is three modules × six lessons = 18 lessons + 18 podcasts + 3 clubs — an example, not a norm [proposed, from the methodology research on #1792].
+- **Modules group a course's lessons.** By default of the structure preset a module is mandatory, holds six lessons plus a club that closes it, and is sold separately from its course [proposed default per D4; P0 makes it a default, not a rule]. The reference course (an ДПО block of 36 hours) is three modules × six lessons = 18 lessons + 18 podcasts + 3 clubs — an example, not a norm [proposed, from the methodology research on #1792].
 - **A single-module course hides its module level** in the interface, so a short course (including the single lesson from the 033 author application) reads as a course of lessons, not as «module 1 of 1» [proposed — the constructor direction's resolution of the 033 case].
 
 The school screen shows a school as a product of its direction: who leads it, which courses it offers and what they lead to, what graduates say (REQ-118), and what the school gives beyond lessons — **mentoring and internships as school-level functions** (REQ-119). A course page shows its **program**: modules, their lessons, the clubs, the duration in academic hours, and what document the course leads to. A course is still presented to the doctor as a **series** (REQ-16, as on the 018 feed).
 
 The rules of how the course is walked — what opens when, what counts as done — are **not defined here**: they are the settings of the 024 rules constructor, inherited from the school and the course. 023 contributes the course-level rule from the registry, Q-7: **«урок №5 без предыдущих можно, сертификат — только за полный курс»** — a doctor may start with any episode, but the certificate requires the whole course. Under P0 this is **a preset of the constructor** (free unlock inside the course, course completion = all modules done), not a hard-coded behaviour [owner, P0; preset proposed].
 
-On completion, a course leads to a **document**: 023 shows the doctor what the course leads to and gives the **entry into document verification**, available at any time (REQ-17, REQ-22); issuing the document is feature 038 and verification storage is 037. Partner and advertising content on a school or course page is **explicitly labelled** (REQ-66); there is no advertising inside lessons.
+On completion, a course leads to a **document**: 023 shows the doctor what the course leads to and gives the **entry into document verification**, available at any time (REQ-17, REQ-22); issuing the document is feature 038 and verification storage is 037. Partner and advertising content on a school or course page is **explicitly labelled** (REQ-66); what advertising may appear inside a lesson is the single rule stated in [024](../024-learning-module-path/024-product.md) (Product acceptance criteria, partner downloads).
 
 ## User stories
 
@@ -70,15 +70,15 @@ On completion, a course leads to a **document**: 023 shows the doctor what the c
 
 ## Product acceptance criteria
 
-- **The structure is direction → school → course → module → lesson** [owner, D1]; a direction may have several schools, each led by one expert; a course belongs to exactly one school [owner, D2]; a lesson belongs to exactly one module of one course [owner, D3, D4].
-- **Every course has at least one module**; the default module template is six lessons plus a closing club, and modules are **sellable separately** from the course [owner, D4 as a default; template values proposed]. The six-lesson figure is a default, not a constraint [owner, P0].
+- **The structure is direction → school → course → module → lesson** [owner, D1]; a direction may have several schools, each led by one expert; a course belongs to exactly one school [owner, D2]; a lesson belongs to exactly one module of one course [owner, D3; direction].
+- **Every course has at least one module** [owner, direction]. By default of the structure preset a module holds six lessons plus a closing club and is **sellable separately** from the course [proposed default per D4]; these are defaults, not constraints [owner, P0].
 - **A single-module course hides its module level** in the doctor's interface [proposed].
 - The **school screen** presents a school as the doctor's end product: its expert, its courses with what they lead to, graduate reviews (REQ-118), mentoring and internships as school-level functions (REQ-119). The word «проект» never appears in the doctor's interface (REQ-50).
 - The **course program** lists modules, their lessons and closing clubs, the duration in academic hours and the document at the end; a course keeps its **series** framing with the episode count (REQ-16).
 - **Progress on school and course screens** is the status computed by the 024 rules in force — never a separately stored «percent done» [owner, direction].
 - **The Q-7 rule** — any lesson may be started without the previous ones, the certificate is only for the whole course — is available as **a rules preset** a course can take, not as fixed platform behaviour [owner, P0; preset proposed]. Course completion under it requires every module to be done.
 - The **«lesson of the day»** in the feed is always a lesson of a course and links to that course [owner, D3].
-- **Partner and advertising content** on school and course pages is explicitly labelled (REQ-66); lessons carry no advertising.
+- **Partner and advertising content** on school and course pages is explicitly labelled (REQ-66); advertising inside a lesson follows the single rule in [024](../024-learning-module-path/024-product.md).
 - **Document entry:** the course shows which document it leads to and its prerequisites; document verification can be entered at any time from the course (REQ-17, REQ-22); issuing the document is 038 and the verification record is 037.
 - A **guest** reads schools and programs before registering; gated steps show an honest gate, and no gated content is served to a guest.
 - **A live event recording (014) is neither a lesson nor a course episode** [owner, D8].

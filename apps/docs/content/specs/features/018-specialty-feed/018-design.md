@@ -36,9 +36,7 @@ flowchart TD
   B5 -. "adjacent direction" .-> FA["the adjacent direction's own feed"]
 ```
 
-The statistics line sits between the heading and block 1. The order above is the F-018-1 constant of **LD-1**: it is a server-side value, identical for every viewer holding the same specialty, and there is no ranking input, no weighting and no per-viewer ordering anywhere in the read path.
-
-> **Amended 2026-11-04 ([#1495](https://github.com/doctor-school/ds-platform/issues/1495)).** The feed is additive by content type: a block renders only once its content type is connected, and the constant above fixes the relative order of the blocks present. Release 1 renders the statistics line (colleagues only), blocks 1, 4 and 5; blocks 2, 3, 6 and 7 join at their positions when 023, 024, 022 and 027 connect their types. Read under [`018-requirements-en.md`](./018-requirements-en.md) → «Amendment — 2026-11-04» (EARS-16).
+The statistics line sits between the heading and block 1. Blocks 1–7 are the full order; the page renders only the blocks whose content type is connected (LD-1, requirements «Feed composition by content type») — release 1 renders the statistics line with colleagues only and blocks 1, 4 and 5 — and a newly connected type takes its numbered position with no other block moving. The order above is the F-018-1 constant of **LD-1**: it is a server-side value, identical for every viewer holding the same specialty, and there is no ranking input, no weighting and no per-viewer ordering anywhere in the read path.
 
 ## 2. The doctor content card unit
 
@@ -162,32 +160,30 @@ Every targeted block filters on `TargetingSet.directions`; the adjacent-areas bl
 
 ## 6. Statistics and leaderboard reads
 
-- `SpecialtyStatistics` is a computed read scoped to the specialty, carrying `computedAt`; a counter whose source is unavailable is omitted rather than zeroed (EARS-3). The platform-wide counterpart belongs to 017's home page and is a different read — the two are never substituted for one another.
+- `SpecialtyStatistics` is a computed read scoped to the specialty, carrying `computedAt` and `colleagues`, plus `schools` / `lessons` only once their content type is connected; a counter whose source is unavailable is omitted rather than zeroed (EARS-3). The platform-wide counterpart belongs to 017's home page and is a different read — the two are never substituted for one another.
 - `SpecialtyLeaderboard` filters on the specialty **and** on a recorded public-display consent (REQ-34). The query joins the consent row; there is no post-filter in the client and no anonymised row. `viewerHasConsent` is `null` for a guest, `false` for a signed-in doctor without consent — which is what drives the calm in-block explanation rather than a missing block.
 
 ## 7. Read contracts
 
-| Read                                              | Auth   | Shape                  | Notes                                                                                                                                                                                                                     |
-| ------------------------------------------------- | ------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /v1/storefront/feed/{specialty}`             | public | `SpecialtyFeed`        | envelope, fixed order (LD-1)                                                                                                                                                                                              |
-| `GET /v1/storefront/feed/{specialty}/events`      | public | `FeedEvents`           | `signUpCount` always **[Amended 2026-10-13 ([#2913](https://github.com/doctor-school/ds-platform/issues/2913)) — `null` for an event whose «Скрыть число записавшихся» option is on; 019 EARS-19]**, `format`, `nmo` attr |
-| `GET /v1/storefront/feed/{specialty}/schools`     | public | `FeedSchools`          | `seriesEpisodes`, `preparing[]` (LD-4)                                                                                                                                                                                    |
-| `GET /v1/storefront/feed/{specialty}/lessons`     | public | `FeedLessons`          | `sharedWithMobileApp: true`                                                                                                                                                                                               |
-| `GET /v1/storefront/feed/{specialty}/adjacent`    | public | `AdjacentAreas`        | from the managed relation only                                                                                                                                                                                            |
-| `GET /v1/storefront/feed/{specialty}/leaderboard` | public | `SpecialtyLeaderboard` | consented rows only                                                                                                                                                                                                       |
-| `GET /v1/storefront/feed/{specialty}/communities` | public | `SpecialtyCommunities` | read-only (LD-5)                                                                                                                                                                                                          |
-| `GET /v1/storefront/statistics?specialty=`        | public | `SpecialtyStatistics`  | `computedAt`, omit-on-missing                                                                                                                                                                                             |
+| Read                                              | Auth   | Shape                  | Notes                                                                                            |
+| ------------------------------------------------- | ------ | ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `GET /v1/storefront/feed/{specialty}`             | public | `SpecialtyFeed`        | envelope, fixed order (LD-1)                                                                     |
+| `GET /v1/storefront/feed/{specialty}/events`      | public | `FeedEvents`           | `signUpCount` (`null` when «Скрыть число записавшихся» is on, 019 EARS-19), `format`, `nmo` attr |
+| `GET /v1/storefront/feed/{specialty}/schools`     | public | `FeedSchools`          | `seriesEpisodes`, `preparing[]` (LD-4)                                                           |
+| `GET /v1/storefront/feed/{specialty}/lessons`     | public | `FeedLessons`          | `sharedWithMobileApp: true`                                                                      |
+| `GET /v1/storefront/feed/{specialty}/adjacent`    | public | `AdjacentAreas`        | from the managed relation only                                                                   |
+| `GET /v1/storefront/feed/{specialty}/leaderboard` | public | `SpecialtyLeaderboard` | consented rows only                                                                              |
+| `GET /v1/storefront/feed/{specialty}/communities` | public | `SpecialtyCommunities` | read-only (LD-5)                                                                                 |
+| `GET /v1/storefront/statistics?specialty=`        | public | `SpecialtyStatistics`  | `computedAt`, omit-on-missing                                                                    |
 
 All reads are `access: public` per ADR-0001; the session only changes card `state` and `viewer`. Errors are RFC 7807 Problem Details (ADR-0002) rendered as the block's Russian-language error with a retry.
 
 ## 8. Sequencing the build
 
-> **Amended 2026-11-04 ([#1495](https://github.com/doctor-school/ds-platform/issues/1495)).** Release 1 builds steps 2 (statistics with colleagues only), 3 (EARS-4 only), 4 (EARS-7 + EARS-8 only), 5, 6 and 7 over the blocks present; EARS-2 is no longer step 1 — it lands with its first consumer, EARS-5 (023) or EARS-6 (024), and precedes only those blocks and the card-state renders of EARS-12. EARS-9 waits for the 022 consent, EARS-10 for 027. Read under [`018-requirements-en.md`](./018-requirements-en.md) → «Amendment — 2026-11-04».
-
-1. **EARS-2 — the doctor content card unit** in `@ds/design-system` with all seven states and the showcase entry. Schools, lessons and later doctor-content consumers compose it; event surfaces do not.
-2. **EARS-1 + EARS-3** — the route inside exact landed 017 artifacts: shell #1478, specialty choice #1482 and targeting/adjacency #1484; breadcrumbs, specialty heading, fixed order, statistics line. Route integration #1496 consumes the doctor content card #1497 without waiting for parent-level 017 completion.
-3. **EARS-4 → EARS-5 → EARS-6** — events (first), schools and courses, lessons, each with its own read. EARS-4 waits for route composition #1496, Feature 019's widening of the Feature-004 `WebinarCard` #1517, and the product-complete `/events` destination #1516; no blank route or placeholder satisfies the link-out.
-4. **EARS-7 + EARS-8 + EARS-9 + EARS-10** — value block, adjacent areas, leaderboard, communities.
-5. **EARS-11 + EARS-12** — guest gating end-to-end and the five `dataState` renders per block.
-6. **EARS-13 + EARS-14** — mobile composition, axe, and the purity scan.
+1. **EARS-1 + EARS-3** — the route inside exact landed 017 artifacts: shell #1478, specialty choice #1482 and targeting/adjacency #1484; breadcrumbs, specialty heading, the fixed order over the connected types, the statistics line with colleagues only. Route integration #1496 does not wait for the doctor content card.
+2. **EARS-4** — events (first), with its own read. It waits for route composition #1496, Feature 019's widening of the Feature-004 `WebinarCard` #1517, and the product-complete `/events` destination #1516; no blank route or placeholder satisfies the link-out.
+3. **EARS-7 + EARS-8** — value block, adjacent areas.
+4. **EARS-11 + EARS-12** — guest gating end-to-end and the five `dataState` renders over the blocks present.
+5. **EARS-13 + EARS-14** — mobile composition, axe, and the purity scan.
+6. **As each content type is connected** — EARS-2, the doctor content card unit in `@ds/design-system` with all seven states and the showcase entry, lands with its first consumer; EARS-5 after 023, EARS-6 after 024, EARS-9 after the 022 consent, EARS-10 after 027. Each adds its block at its F-018-1 position, its `dataState` renders and its mobile and axe coverage; event surfaces never compose the content card.
 7. **EARS-15** — the process gate around all of the above: design-system gate before each surface, Stage-B live confirmation before merge.

@@ -182,9 +182,24 @@ test.describe("#351 interaction-state runtime smoke on the showcase (backend-fre
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    const select = page.getByRole("combobox", { name: "Роль" }).first();
+    const section = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "NativeSelect", exact: true }),
+    });
+    const light = section.locator(".light");
+    const select = light
+      .getByText("empty", { exact: true })
+      .locator("..")
+      .getByRole("combobox", { name: "Роль", exact: true });
+    await expect(section).toHaveCount(1);
+    await expect(light).toHaveCount(1);
+    await expect(select).toHaveCount(1);
+    // The invalid specimen is set by a client effect; SSR visibility alone lets
+    // selection race the form's empty-value initialization (#3051).
+    await expect(light.locator('select[aria-invalid="true"]')).toHaveCount(1);
+    await expect(select).toHaveJSProperty("tagName", "SELECT");
     await select.selectOption("Партнёр");
     await expect(select).toHaveValue("Партнёр");
+    await expect(select).toHaveAttribute("data-filled", "true");
   });
 });
 

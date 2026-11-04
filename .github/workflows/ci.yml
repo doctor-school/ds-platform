@@ -1470,6 +1470,9 @@ jobs:
       - run: pnpm exec turbo run build --filter=@ds/showcase
       - run: pnpm --filter @ds/showcase exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/showcase test:e2e:ci
+      - name: NativeSelect mobile first-attempt repeat (3051)
+        run: >-
+          pnpm --filter @ds/showcase test:e2e:ci --grep 'NativeSelect: the mobile-width surface keeps native selection semantics' --repeat-each=50 --retries=0 --workers=1
 
   # playwright-academy-demo: dedicated runtime coverage for the deterministic,
   # development-only Academy home review app (#1302). This stays separate from

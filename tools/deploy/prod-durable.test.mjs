@@ -175,6 +175,7 @@ test("2984/2985: the rollback installs every box entrypoint, each HEAD's blob", 
     [
       "/usr/local/bin/ds-release",
       "/usr/local/bin/ds-deploy-entrypoint",
+      "/usr/local/bin/ds-read-entrypoint",
       "/usr/local/lib/ds-platform/release-driver",
       "/usr/local/lib/ds-platform/postgres-artifact-probe.py",
       "/usr/local/lib/ds-platform/harden-ssh.sh",

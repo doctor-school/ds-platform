@@ -147,12 +147,18 @@ Four rules live there, each stated once for both storefronts:
 - **The silent check** (`silent-check.ts`, 003 EARS-63, 020 EARS-18/22,
   ADR-0015 §4 step 4, req. 1/9/12). `storefrontSilentCheck` runs first in each
   host's middleware/proxy: a checkable request (a top-level document `GET`
-  with fetch metadata, not a crawler, prefetch, router request, `/v1/*`,
+  with fetch metadata, not a crawler, router request, `/v1/*`,
   asset, `/.well-known/*`, auth route or health route) with no live session,
   no valid `__Host-ds_guest` marker, no `__Host-ds_check` guard and no live
   silent transaction gets `303` into a silent transaction (`prompt=none`,
   `POST /v1/internal/oidc/silent-check`, `Cache-Control: no-store`); a live
   interactive transaction is replaced, a limited start renders the guest page.
+  A checkable speculative load — a prerender or a navigational prefetch, which
+  the browser would later show as the navigation with no new request, marked
+  in `Sec-Purpose`, the legacy `Purpose` or `X-Moz` — gets
+  `503 no-store` with no transaction and no cookie, so the browser discards it
+  and the real navigation is checked (#3660). Each decision
+  logs one `[silent-check] client=<storefront> outcome=<…>` line.
   The marker (`<issued s>.<HMAC>`, 10 min) and the silent transaction's cookie
   value (`<txId>.<HMAC>`) are HMACs keyed by `INTERNAL_API_TOKEN` with their
   own domain-separation labels. `storefrontCallback` sets the guard on every

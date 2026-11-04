@@ -91,6 +91,10 @@ export interface CheckedForm {
   readonly formCookieId: string;
 }
 
+/** What the entry found behind the browser's sign-in-host cookie (its log line). */
+type LiveRecordOutcome =
+  "no-cookie" | "no-row" | "foreign" | "expired" | "revoked" | "record";
+
 /**
  * 003 EARS-5 (amended) / 60 / 64 / 66 / 67 / 68 / 71 — the sign-in host's
  * decisions: what an auth request navigation renders or where it goes, and
@@ -168,6 +172,20 @@ export class SignInHostService {
       };
     }
 
+    // 003 EARS-63 / EARS-64 — one line per entry, at its decision: the record
+    // the browser met (`unread` when the limit answered first, `unused` when a
+    // usable record could not answer this entry, `refused` when Zitadel no
+    // longer honoured it) and how the entry ended. No identifier: the
+    // storefront, the prompt kind and the two outcomes only.
+    const promptKind = request.prompt.includes("none") ? "none" : "interactive";
+    const logEntry = (
+      record: LiveRecordOutcome | "unread" | "unused" | "refused",
+      result: "limited" | "finalised" | "login_required" | "form",
+    ) =>
+      this.logger.log(
+        `entry storefront=${storefront} prompt=${promptKind} record=${record} result=${result}`,
+      );
+
     // 003 EARS-63 (f), ADR-0015 §4 req. 9 — every entry of a `prompt=none`
     // auth request counts in the silent path's own per-IP bucket; a limited
     // one finalises with `login_required`, so the storefront callback ends it
@@ -183,6 +201,7 @@ export class SignInHostService {
         request.id,
         "login_required",
       );
+      logEntry("unread", "limited");
       return {
         body: {
           action: "redirect",
@@ -224,12 +243,12 @@ export class SignInHostService {
     // A form-only entry — registration, reset — and the EARS-68
     // fresh-credential asks all render the form even with a record.
     const recordMayAnswer =
-      live !== null &&
+      live.record !== null &&
       door === "login" &&
       !freshCredentialAsked({
         prompt: request.prompt,
         maxAgeSeconds: request.maxAgeSeconds,
-        lastCredentialAt: live.record.lastCredentialAt,
+        lastCredentialAt: live.record.record.lastCredentialAt,
         now,
       }) &&
       // EARS-44 (amended), design lead decisions (2)/(3): a hand-off intent
@@ -243,20 +262,25 @@ export class SignInHostService {
       (!intent?.handoff ||
         (await this.auth.isOwnLoginHandoff(
           intent.handoff,
-          live.record.session.sub,
+          live.record.record.session.sub,
         )));
-    if (live && recordMayAnswer) {
+    let recordOutcome: Parameters<typeof logEntry>[0] =
+      live.record && !recordMayAnswer ? "unused" : live.outcome;
+    if (live.record && recordMayAnswer) {
+      const { cookieId, record } = live.record;
       // EARS-64: a live record answers at once, without a form.
       const url = await this.hostIdp.finaliseWithSession(
         request.id,
-        live.record.session,
+        record.session,
       );
       if (url) {
-        await this.records.touchFinalised(live.cookieId, now);
+        await this.records.touchFinalised(cookieId, now);
+        logEntry(recordOutcome, "finalised");
         return { body: { action: "redirect", url }, setCookies };
       }
       // Zitadel no longer honours the session: the browser is signed out.
-      await this.drop(live.cookieId, live.record.session, setCookies);
+      await this.drop(cookieId, record.session, setCookies);
+      recordOutcome = "refused";
     }
 
     // EARS-68: a silent check with no usable record is `login_required`.
@@ -265,6 +289,7 @@ export class SignInHostService {
         request.id,
         "login_required",
       );
+      logEntry(recordOutcome, "login_required");
       return {
         body: {
           action: "redirect",
@@ -274,6 +299,7 @@ export class SignInHostService {
       };
     }
 
+    logEntry(recordOutcome, "form");
     // Render: fresh form state under a fresh cookie (req. 3), recording the
     // storefront for a later stale request (EARS-66).
     const formId = newOpaqueId();
@@ -514,24 +540,32 @@ export class SignInHostService {
     };
   }
 
-  /** The cookie id and record behind `cookieId`, if it may answer this request. */
+  /**
+   * The cookie id and record behind `cookieId`, if it may answer this
+   * request, and the outcome the entry logs: `no-cookie`, `no-row`, `foreign`
+   * (a foreign fingerprint), `expired`, `revoked` or `record`.
+   */
   private async liveRecord(
     cookieId: string | undefined,
     fingerprint: string,
     now: Date,
     setCookies: string[],
-  ): Promise<{ cookieId: string; record: SignInHostRecord } | null> {
-    if (!cookieId) return null;
+  ): Promise<{
+    outcome: LiveRecordOutcome;
+    record: { cookieId: string; record: SignInHostRecord } | null;
+  }> {
+    if (!cookieId) return { outcome: "no-cookie", record: null };
     const record = await this.records.find(cookieId);
     if (!record) {
       setCookies.push(clearRecordCookie());
-      return null;
+      return { outcome: "no-row", record: null };
     }
-    if (recordVerdict(record, now, fingerprint) !== "usable") {
+    const verdict = recordVerdict(record, now, fingerprint);
+    if (verdict !== "usable") {
       // EARS-64: foreign fingerprint or expired — deleted, its Zitadel session
       // terminated, the browser treated as signed out.
       await this.drop(cookieId, record.session, setCookies);
-      return null;
+      return { outcome: verdict, record: null };
     }
     // EARS-12 / EARS-41: every session of the subject was revoked after this
     // record's credential step — a row that survived the revocation's delete
@@ -539,9 +573,9 @@ export class SignInHostService {
     const revokedAt = await this.state.subjectRevokedAt(record.session.sub);
     if (revokedAt && record.lastCredentialAt.getTime() < revokedAt.getTime()) {
       await this.drop(cookieId, record.session, setCookies);
-      return null;
+      return { outcome: "revoked", record: null };
     }
-    return { cookieId, record };
+    return { outcome: "record", record: { cookieId, record } };
   }
 
   private async drop(

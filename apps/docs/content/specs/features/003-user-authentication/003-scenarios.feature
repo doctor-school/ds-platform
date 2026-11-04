@@ -1643,6 +1643,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the Academy callback mints a session and the event page renders signed in
     And no guest render of the page reaches the browser before the signed-in one
 
+  # The reverse direction (#3660): signed in on the Academy, a top-level
+  # navigation to the doctor storefront renders signed in with no click.
+  @EARS-63 @EARS-64 @happy @silent-check-academy-to-doctor
+  Scenario: A doctor signed in on the Academy is signed in on the doctor storefront with no click
+    Given a doctor signed in on "academy.doctor.school" in this browser
+    When the doctor's browser requests the same event page on "doctor.school" as a document
+    Then the first response from "doctor.school" is a redirect into its silent check, before any page renders
+    And the event page on "doctor.school" renders signed in with no form and no second sign-in
+    And no guest render of the event page reached the browser before the signed-in one
+
   @EARS-63 @happy @silent-check-guest
   Scenario: With no shared session the silent check ends on the guest page and is not repeated
     Given a browser with no session on either storefront
@@ -1655,8 +1665,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
   @EARS-63 @failure @silent-check-exempt
   Scenario: Exempt requests and crawlers never redirect
     Given a browser with no Academy session
-    When the Academy receives a crawler request, a request without fetch metadata, a prefetch, a POST, a "/v1" call, a static asset, a ".well-known" file and the health route
+    When the Academy receives a crawler request, a request without fetch metadata, a POST, a "/v1" call, a static asset, a ".well-known" file and the health route
     Then none of them is answered with a redirect
+
+  @EARS-63 @failure @silent-check-speculative
+  Scenario: A speculative load of a checkable page is refused, never rendered unchecked
+    Given a browser with no Academy session
+    When the Academy receives a prerender and a navigational prefetch of a page as a document
+    Then each is answered 503 with Cache-Control no-store and sets no cookie
 
   # Exhausting the per-IP bucket starves every check of that address for 15
   # minutes, so it runs only in the isolated default-limits contour.

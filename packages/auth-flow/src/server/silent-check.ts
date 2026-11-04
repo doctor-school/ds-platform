@@ -179,30 +179,35 @@ const SEARCH_CRAWLER =
   /compatible; ?ya(?:ndex)?[a-z]+|googlebot|google-inspectiontool|googleother|adsbot-google|mediapartners-google|bingbot|bingpreview|msnbot|duckduckbot|baiduspider|slurp|applebot|petalbot|seznambot|sogou|mail\.ru_bot|exabot|qwantify/i;
 
 /**
- * EARS-63 (d) / (e) — whether the request may start a check at all. Exempt: a
- * non-`GET`; no top-level-document fetch metadata (which also covers a client
- * without fetch metadata); a prefetch or a Next.js router request; `/v1/*`;
- * static assets; `/.well-known/*`; the storefront's own auth routes; the
- * health route; a search crawler; the one-shot `ds_guest=1` return.
+ * EARS-63 (d) / (e) — why a request may not start a check at all, or `null`
+ * when it may. Exempt: a non-`GET`; no top-level-document fetch metadata
+ * (which also covers a client without fetch metadata); a Next.js router
+ * request; `/v1/*`; static assets; `/.well-known/*`; the storefront's own auth
+ * routes; the health route; a search crawler; the one-shot `ds_guest=1`
+ * return. A speculative load (prefetch or prerender, see `isSpeculativeLoad`)
+ * is NOT exempt: the browser may show it as the navigation.
  */
-export function isSilentCheckCandidate(
+export type SilentCheckExemption =
+  "not-navigation" | "router" | "crawler" | "guest-return" | "route";
+
+export function silentCheckExemption(
   request: Request,
   config: AuthFlowHostConfig,
-): boolean {
+): SilentCheckExemption | null {
   const h = request.headers;
-  if (request.method !== "GET" || !isTopLevelNavigation(h)) return false;
+  if (request.method !== "GET" || !isTopLevelNavigation(h)) {
+    return "not-navigation";
+  }
   if (
-    /prefetch/i.test(h.get("sec-purpose") ?? "") ||
-    /prefetch/i.test(h.get("purpose") ?? "") ||
     h.has("rsc") ||
     h.has("next-router-prefetch") ||
     h.has("next-router-state-tree")
   ) {
-    return false;
+    return "router";
   }
-  if (SEARCH_CRAWLER.test(h.get("user-agent") ?? "")) return false;
+  if (SEARCH_CRAWLER.test(h.get("user-agent") ?? "")) return "crawler";
   const url = new URL(request.url);
-  if (url.searchParams.has(GUEST_QUERY_FLAG)) return false;
+  if (url.searchParams.has(GUEST_QUERY_FLAG)) return "guest-return";
   const path = url.pathname;
   const last = path.slice(path.lastIndexOf("/") + 1);
   const authRoutes = [
@@ -211,8 +216,7 @@ export function isSilentCheckCandidate(
     config.routes.verify,
     config.routes.reset,
   ];
-  return !(
-    path.startsWith("/v1/") ||
+  return path.startsWith("/v1/") ||
     path === "/v1" ||
     path.startsWith("/_next/") ||
     path.startsWith("/.well-known/") ||
@@ -220,6 +224,45 @@ export function isSilentCheckCandidate(
     path === "/healthz" ||
     last.includes(".") ||
     authRoutes.includes(path)
+    ? "route"
+    : null;
+}
+
+export function isSilentCheckCandidate(
+  request: Request,
+  config: AuthFlowHostConfig,
+): boolean {
+  return silentCheckExemption(request, config) === null;
+}
+
+/**
+ * The headers a browser marks a speculative load with: the standard
+ * `Sec-Purpose` (`prefetch`, `prefetch;prerender`,
+ * `prefetch;anonymous-client-ip`), Chromium's legacy `Purpose: prefetch` (sent
+ * beside `Sec-Purpose` until Chrome 139, and still by forks that lag it) and
+ * Firefox's `X-Moz: prefetch` (only ever on a `<link rel=prefetch>` hint, which
+ * stops at `not-navigation` before this).
+ *
+ * Safari's address-bar preload (`X-Purpose: preview`) is deliberately NOT one:
+ * nothing shows that Safari discards a non-2xx preload rather than displaying
+ * it, so a 503 could put a blank page in front of a real navigation. It goes
+ * through the normal check, as it always has.
+ */
+const SPECULATION_HEADERS = ["sec-purpose", "purpose", "x-moz"];
+const SPECULATION_VALUE = /prefetch|prerender/i;
+
+/**
+ * EARS-63 (d) — a speculative load of a document: a prerender (the address bar,
+ * speculation rules) renders it in a hidden page the browser later ACTIVATES
+ * as the navigation, and a navigational prefetch (speculation rules) keeps the
+ * response and serves it as the navigation — either way with no new request.
+ * A guest page loaded that way unchecked would be shown as the person's
+ * navigation and the check would never run (#3660). Whichever header carries
+ * the mark, and whatever else is also present, it decides the same way.
+ */
+function isSpeculativeLoad(headers: Headers): boolean {
+  return SPECULATION_HEADERS.some((name) =>
+    SPECULATION_VALUE.test(headers.get(name) ?? ""),
   );
 }
 
@@ -288,9 +331,27 @@ export interface SilentCheckDeps {
   readonly fetchImpl?: typeof fetch;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly now?: () => number;
+  /** One line per decision (default `console.info`); never personal data. */
+  readonly log?: (line: string) => void;
 }
 
 const RENDER: SilentCheckOutcome = { setCookies: [] };
+
+/**
+ * EARS-63 (d) — the answer to a checkable speculative load: a non-2xx, which
+ * makes the browser discard it (a prerender activates, and a prefetch is
+ * served, only on a 2xx), so the person's real navigation reaches this proxy
+ * and runs the check. It starts no transaction and sets no cookie: a load the
+ * person never opens costs nothing, and leaves no silent-transaction cookie
+ * that would hold the real navigation's check back. These 503s are expected
+ * traffic: a 5xx alert must exclude requests carrying a speculation header.
+ */
+function speculativeLoadRefusal(): Response {
+  return new Response(null, {
+    status: 503,
+    headers: { "cache-control": "no-store", "retry-after": "0" },
+  });
+}
 
 /**
  * 003 EARS-63 — the storefront middleware / proxy step. Runs on every request
@@ -301,12 +362,20 @@ export async function storefrontSilentCheck(
   host: SilentCheckHost,
   deps: SilentCheckDeps = {},
 ): Promise<SilentCheckOutcome> {
-  if (!isSilentCheckCandidate(request, host.config)) return RENDER;
+  const log = deps.log ?? ((line: string) => console.info(line));
+  const decided = (outcome: string, result: SilentCheckOutcome) => {
+    log(`[silent-check] client=${host.client} outcome=${outcome}`);
+    return result;
+  };
+  const exemption = silentCheckExemption(request, host.config);
+  // A request that is not a document navigation is never in question: no line.
+  if (exemption === "not-navigation") return RENDER;
+  if (exemption) return decided(`not-candidate reason=${exemption}`, RENDER);
   const env = deps.env ?? process.env;
   const api = internalApi(env);
   // Without the internal credential no check can start (and no marker can be
   // verified): every page renders as it does for any signed-out visitor.
-  if (!api) return RENDER;
+  if (!api) return decided("no-credential", RENDER);
   const fetchImpl = deps.fetchImpl ?? fetch;
   const now = (deps.now ?? Date.now)();
   const cookies = request.headers.get("cookie");
@@ -316,7 +385,7 @@ export async function storefrontSilentCheck(
   // second check.
   if (readCookie(cookies, CHECK_GUARD_COOKIE) !== null) {
     const auth = await resolveServerAuth(request.headers, fetchImpl);
-    return {
+    return decided("guard", {
       setCookies:
         auth.status === "doctor"
           ? [clearedCheckGuardCookie()]
@@ -324,13 +393,20 @@ export async function storefrontSilentCheck(
               clearedCheckGuardCookie(),
               await guestMarkerCookie(api.token, now),
             ],
-    };
+    });
   }
-  if (await hasValidGuestMarker(cookies, api.token, now)) return RENDER;
+  if (await hasValidGuestMarker(cookies, api.token, now)) {
+    return decided("marker", RENDER);
+  }
   const tx = await readTransactionCookie(cookies, OIDC_TX_COOKIE, api.token);
-  if (tx?.silent) return RENDER;
+  if (tx?.silent) return decided("tx", RENDER);
   const auth = await resolveServerAuth(request.headers, fetchImpl);
-  if (auth.status === "doctor") return RENDER;
+  if (auth.status === "doctor") return decided("session", RENDER);
+
+  // EARS-63 (d) — a checkable speculative load is never shown as a guest page.
+  if (isSpeculativeLoad(request.headers)) {
+    return decided("speculative", { response: speculativeLoadRefusal() });
+  }
 
   // EARS-63 (c) — a live interactive transaction never holds the check back:
   // the silent one replaces it in the cookie, and its callback finds nothing.
@@ -343,7 +419,7 @@ export async function storefrontSilentCheck(
     tx?.txId,
   );
   // EARS-63 (f) — a limited (or failed) start renders the guest page itself.
-  if (!started) return RENDER;
+  if (!started) return decided("limited", RENDER);
   const headers = new Headers();
   headers.append(
     "set-cookie",
@@ -353,5 +429,7 @@ export async function storefrontSilentCheck(
   // EARS-63 (g) — the check redirect is never cached.
   headers.set("cache-control", "no-store");
   headers.set("referrer-policy", "no-referrer");
-  return { response: new Response(null, { status: 303, headers }) };
+  return decided("303", {
+    response: new Response(null, { status: 303, headers }),
+  });
 }

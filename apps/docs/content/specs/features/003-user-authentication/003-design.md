@@ -351,13 +351,15 @@ erDiagram
 
 ```mermaid
 flowchart TD
-    R[Document GET on storefront] --> E{Exempt? non-GET, no fetch metadata, prefetch/RSC, /v1, static, .well-known, auth routes, health, crawler}
+    R[Document GET on storefront] --> E{Exempt? non-GET, no fetch metadata, RSC, /v1, static, .well-known, auth routes, health, crawler}
     E -- yes --> G0[Render as today]
     E -- no --> S{Live storefront session?}
     S -- yes --> P[Render signed in]
     S -- no --> M{Valid marker, guard, live silent tx or ds_guest=1?}
     M -- yes --> GG[Render guest; first request with guard deletes it]
-    M -- no --> RL{Silent bucket ok?}
+    M -- no --> SP{Speculative load? prerender / prefetch in Sec-Purpose, Purpose or X-Moz}
+    SP -- yes --> SR[503 no-store, no tx, no cookie: browser discards it, the navigation is checked]
+    SP -- no --> RL{Silent bucket ok?}
     RL -- no --> GH[Guest page HTTP 200]
     RL -- yes --> T[Silent tx replaces any interactive tx; 303 authorize prompt=none]
     T --> CB{Callback}

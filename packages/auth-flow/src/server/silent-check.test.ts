@@ -276,8 +276,6 @@ describe("003 EARS-63: the silent check starts only on a checkable request", () 
     ],
     ["a non-GET", nav("/", {}, { method: "POST", body: "x" })],
     ["a HEAD", nav("/", {}, { method: "HEAD" })],
-    ["a prefetch (Sec-Purpose)", nav("/", { "sec-purpose": "prefetch" })],
-    ["a prefetch (Purpose)", nav("/", { purpose: "prefetch" })],
     ["a Next.js router request (RSC)", nav("/", { rsc: "1" })],
     ["a Next.js router prefetch", nav("/", { "next-router-prefetch": "1" })],
     ["a frame", nav("/", { "sec-fetch-dest": "iframe" })],
@@ -376,6 +374,177 @@ describe("003 EARS-63: the silent check starts only on a checkable request", () 
     });
     expect(rendered(outcome)).toEqual([]);
     expect(api.calls).toEqual([]);
+  });
+});
+
+/** Chrome's prerender (omnibox / speculation rules): a document navigation. */
+const PRERENDER = { "sec-purpose": "prefetch;prerender" };
+
+describe("003 EARS-63 (d): a speculative load is never shown as an unchecked guest page", () => {
+  it.each([
+    ["a prerender", PRERENDER],
+    // Chromium before 139 (and the forks that lag it) sends the legacy
+    // `Purpose: prefetch` beside `Sec-Purpose` on every prefetch and prerender.
+    [
+      "a prerender that also carries the legacy Purpose header",
+      { ...PRERENDER, purpose: "prefetch" },
+    ],
+    [
+      "a speculation-rules navigational prefetch (Sec-Purpose)",
+      { "sec-purpose": "prefetch" },
+    ],
+    [
+      "a cross-site navigational prefetch",
+      { "sec-purpose": "prefetch;anonymous-client-ip" },
+    ],
+    [
+      "a prefetch signalled only by the legacy Purpose",
+      { purpose: "prefetch" },
+    ],
+    ["a prefetch signalled by X-Moz", { "x-moz": "prefetch" }],
+  ] as const)(
+    "EARS-63: (d) %s of a checkable page is refused with 503, no transaction, no cookie",
+    async (_name, headers) => {
+      const api = fakeApi();
+      const res = redirected(await check(nav("/", headers), api, DOCTOR));
+      expect(res.status).toBe(503);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("set-cookie")).toBeNull();
+      expect(api.starts()).toEqual([]);
+    },
+  );
+
+  it("EARS-63: (d) a checkable prerender is refused with a non-2xx, so the browser discards it and the real navigation runs the check", async () => {
+    const api = fakeApi();
+    const res = redirected(await check(nav("/", PRERENDER), api, DOCTOR));
+    expect(res.status).toBe(503);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(res.headers.get("location")).toBeNull();
+    // No transaction starts for a page the person may never open.
+    expect(api.starts()).toEqual([]);
+    // The same navigation, made for real after the discard, is checked.
+    expect(redirected(await check(nav("/"), api, DOCTOR)).status).toBe(303);
+    expect(api.starts()).toHaveLength(1);
+  });
+
+  it("EARS-63: (d) a prerender with a live storefront session renders signed in", async () => {
+    const api = fakeApi({ signedIn: true });
+    expect(
+      rendered(
+        await check(
+          nav("/", { ...PRERENDER, cookie: "__Host-ds_session=sid" }),
+          api,
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("EARS-63: (d) a prerender with a valid marker renders the guest page (the check already ran)", async () => {
+    const api = fakeApi();
+    expect(
+      rendered(
+        await check(nav("/", { ...PRERENDER, cookie: await marker() }), api),
+      ),
+    ).toEqual([]);
+    expect(api.starts()).toEqual([]);
+  });
+
+  it("EARS-63: (d) Safari's X-Purpose: preview is not a speculative load: the navigation is checked as usual", async () => {
+    const api = fakeApi();
+    const res = redirected(
+      await check(nav("/", { "x-purpose": "preview" }), api, DOCTOR),
+    );
+    expect(res.status).toBe(303);
+    expect(api.starts()).toHaveLength(1);
+  });
+
+  it("EARS-63: (d) a navigational prefetch with a valid marker renders the guest page", async () => {
+    const api = fakeApi();
+    expect(
+      rendered(
+        await check(
+          nav("/", { "sec-purpose": "prefetch", cookie: await marker() }),
+          api,
+        ),
+      ),
+    ).toEqual([]);
+    expect(api.starts()).toEqual([]);
+  });
+});
+
+describe("003 EARS-63: one log line per proxy decision, no personal data", () => {
+  async function logged(
+    request: Request,
+    api: ReturnType<typeof fakeApi>,
+    env: Record<string, string> = ENV,
+  ): Promise<string[]> {
+    const lines: string[] = [];
+    await storefrontSilentCheck(request, DOCTOR, {
+      fetchImpl: api.fetchImpl,
+      env,
+      now: () => NOW,
+      log: (line) => lines.push(line),
+    });
+    return lines;
+  }
+
+  it.each([
+    ["303", () => nav("/", { cookie: "__Host-ds_session=gone" }), {}],
+    ["speculative", () => nav("/", PRERENDER), {}],
+    ["speculative", () => nav("/", { "sec-purpose": "prefetch" }), {}],
+    [
+      "session",
+      () => nav("/", { cookie: "__Host-ds_session=sid" }),
+      { signedIn: true },
+    ],
+    ["limited", () => nav("/"), { silentCheck: 429 }],
+    ["guard", () => nav("/", { cookie: `${CHECK_GUARD_COOKIE}=1` }), {}],
+    ["not-candidate reason=router", () => nav("/", { rsc: "1" }), {}],
+    [
+      "not-candidate reason=crawler",
+      () =>
+        nav("/", { "user-agent": "Mozilla/5.0 (compatible; YandexBot/3.0)" }),
+      {},
+    ],
+    ["not-candidate reason=guest-return", () => nav("/?ds_guest=1"), {}],
+    ["not-candidate reason=route", () => nav("/login"), {}],
+  ] as const)(
+    "EARS-63: the decision %s logs exactly one line",
+    async (outcome, request, opts) => {
+      const lines = await logged(request(), fakeApi(opts));
+      expect(lines).toEqual([
+        `[silent-check] client=doctor outcome=${outcome}`,
+      ]);
+    },
+  );
+
+  it("EARS-63: the marker and the silent-transaction outcomes are logged by name", async () => {
+    expect(
+      await logged(nav("/", { cookie: await marker() }), fakeApi()),
+    ).toEqual(["[silent-check] client=doctor outcome=marker"]);
+    const tx = await silentTransactionCookieValue(TOKEN, SILENT_TX_ID);
+    expect(
+      await logged(nav("/", { cookie: `${OIDC_TX_COOKIE}=${tx}` }), fakeApi()),
+    ).toEqual(["[silent-check] client=doctor outcome=tx"]);
+    expect(await logged(nav("/"), fakeApi(), {})).toEqual([
+      "[silent-check] client=doctor outcome=no-credential",
+    ]);
+  });
+
+  it("EARS-63: a request that is not a document navigation logs nothing", async () => {
+    expect(
+      await logged(
+        nav("/_next/static/x.js", {
+          "sec-fetch-dest": "script",
+          "sec-fetch-mode": "no-cors",
+        }),
+        fakeApi(),
+      ),
+    ).toEqual([]);
+    expect(
+      await logged(nav("/", {}, { method: "POST", body: "x" }), fakeApi()),
+    ).toEqual([]);
   });
 });
 

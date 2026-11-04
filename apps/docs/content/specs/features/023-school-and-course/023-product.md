@@ -1,6 +1,6 @@
 ---
 title: "Feature 023 — The school and the course (PRD)"
-description: "Product requirements for the structure a doctor learns in on `doctor.school`: a direction has several schools, one per expert; a school holds courses; a course is made of modules — module size, the closing club and separate sale of a module are course-level settings (by default six lessons, a club, sold separately); a module holds lessons. The school screen, the course and module program view, graduate reviews, mentoring and internship at school level, partner/advertising labelling, the «start anywhere, certificate only for the whole course» rule as a preset of the 024 rules constructor, and the entry into document verification on completion. Wave 2, `blocked_by` 024; source of the 023 EARS triplet (ADR-0014)."
+description: "Product requirements for the structure a doctor learns in on `doctor.school`: a direction has several schools, one per expert; a school holds courses; a course is made of modules — module size and the closing club are course-level settings (by default six lessons and a club); a module holds lessons; for the doctor all content is free and nothing is bought. The school screen, the course and module program view, graduate reviews, mentoring and internship at school level, partner/advertising labelling, the «start anywhere, certificate only for the whole course» rule as a preset of the 024 rules constructor, and the entry into document verification on completion. Wave 2, `blocked_by` 024; source of the 023 EARS triplet (ADR-0014)."
 slug: two-site-ia-023-school-and-course-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
@@ -14,14 +14,15 @@ lang: en
 
 > Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · **Wave 2** (022, 023, 024, 025, 044). 023 is `blocked_by` **024** — the school and course are containers over the modules and lessons defined in [024](../024-learning-module-path/024-product.md), and building the container before its contents means rebuilding both. Domain canon: [ADR-0016](../../../adr/0016-core-domain-model-en.md) §4 (school, course and module are project results), §5 (a school is tied to a direction). Discovery record: Issue #1792 (owner decisions P0, D1–D9).
 
-**Provenance legend.** **[owner]** — owner-approved: the principle P0 («a constructor, not code»), decisions D1–D9 and the five-point constructor direction the owner confirmed on 2026-11-04. **[proposed]** — `agent-proposed — UNCONFIRMED`: everything else, including every concrete setting, default value and interface element below. D4, D6 and D9 are **defaults of settings or presets, never hard rules** [owner, P0].
+**Provenance legend.** **[owner]** — owner-approved: the principle P0 («a constructor, not code»), decisions D1–D10 (D10, 2026-11-04: doctors buy nothing) and the five-point constructor direction the owner confirmed on 2026-11-04. **[proposed]** — `agent-proposed — UNCONFIRMED`: everything else, including every concrete setting, default value and interface element below. D4, D6 and D9 are **defaults of settings or presets, never hard rules** [owner, P0].
 
 ## Feature summary
 
 Doctor.School is a «school of schools». On the doctor storefront the end product a doctor chooses is a **school** — not an Academy project, which a doctor never sees (REQ-50, ADR-0016 §4). 023 defines that product and its structure:
 
 - **Direction → school → course → module → lesson** [owner, D1]. A direction can have **several schools, one per expert**; a course always lives inside a school [owner, D2]. A lesson always lives inside a course and its module; the feed's «lesson of the day» is a lesson of a course with a link to that course [owner, D3].
-- **Modules group a course's lessons; every course has at least one module** [owner, D3; direction]. The module size (six lessons), the closing club and the separate sale of a module are **course-level settings** of the 024 constructor, inherited and overridden as in [024](../024-learning-module-path/024-product.md) (Product acceptance criteria, «Settings inherit»), with defaults [proposed default per D4]; the sale setting is consumed by 025 (#1794). The reference course (an ДПО block of 36 hours) is three modules × six lessons = 18 lessons + 18 podcasts + 3 clubs — an example, not a norm [proposed, from the methodology research on #1792].
+- **Modules group a course's lessons; every course has at least one module** [owner, D3; direction]. The module size and the closing club are **course-level settings** of the 024 constructor, inherited and overridden as in [024](../024-learning-module-path/024-product.md) (Product acceptance criteria, «Settings inherit»); by default a module is six lessons + a club [owner, D4 as a default]. The reference course (an ДПО block of 36 hours) is three modules × six lessons = 18 lessons + 18 podcasts + 3 clubs — an example, not a norm [proposed, from the methodology research on #1792].
+- **For the doctor all content is free; nothing is bought** [owner, D10]. No school, course, module or lesson has a price for the doctor, and no doctor screen offers a purchase. «Sold separately» in the CP is a deal with a sponsor (B2B), not a doctor purchase [owner, D10].
 - **A single-module course hides its module level** in the interface, so a short course (including the single lesson from the 033 author application) reads as a course of lessons, not as «module 1 of 1» [proposed — the constructor direction's resolution of the 033 case].
 
 The school screen shows a school as a product of its direction: who leads it, which courses it offers and what they lead to, what graduates say (REQ-118), and what the school gives beyond lessons — **mentoring and internships as school-level functions** (REQ-119). A course page shows its **program**: modules, their lessons, the clubs, the duration in academic hours, and what document the course leads to. A course is still presented to the doctor as a **series** (REQ-16, as on the 018 feed).
@@ -35,7 +36,7 @@ On completion, a course leads to a **document**: 023 shows the doctor what the c
 - **US-1** — As a **doctor**, I see the **schools of my direction** and understand that each is led by its own expert, so I choose a school as I would choose a teacher.
 - **US-2** — As a **doctor**, I open a **school** and see who leads it, which courses it offers, what they lead to and what else the school gives — mentoring, internships.
 - **US-3** — As a **doctor**, I open a **course** and see its **program**: modules, the lessons in each, the club that closes each module, the total in academic hours and the document at the end.
-- **US-4** — As a **doctor**, I understand that a **module can be taken on its own** — and what I get for finishing a module versus finishing the whole course.
+- **US-4** — retired 2026-11-04: doctors buy nothing (D10).
 - **US-5** — As a **doctor**, I can **start a course from any lesson** where the course's rules allow it, and I see clearly that **the certificate needs the whole course**.
 - **US-6** — As a **doctor in the middle of a course**, the course and its modules show **my progress** as computed by the rules in force, and the next step is one action away.
 - **US-7** — As a **doctor**, I read **graduate reviews** of a school or course before I commit my time.
@@ -62,8 +63,6 @@ On completion, a course leads to a **document**: 023 shows the doctor what the c
 2. The program shows lessons 1–4 as not yet done, and the document block says the certificate needs every module done.
 3. When the course's completion rule is met, the document block leads to issuance (feature 038).
 
-**Buying a module (US-4):** the doctor opens a module on its own → its price and what it unlocks are shown in the doctor's terms → the purchase itself is feature 025 [proposed]; after it, the module's lessons follow their unlock rules.
-
 **Verification at any time (US-10):** the doctor opens «Документы» from a course → the verification entry (REQ-22) leads to the document upload of 037 → the course shows the verification status where the document requires it.
 
 **A guest (US-13):** a guest opens a school or course → everything descriptive is readable → starting a lesson shows the registration gate (021) and returns the doctor to the same place.
@@ -71,7 +70,7 @@ On completion, a course leads to a **document**: 023 shows the doctor what the c
 ## Product acceptance criteria
 
 - **The structure is direction → school → course → module → lesson** [owner, D1]; a direction may have several schools, each led by one expert; a course belongs to exactly one school [owner, D2]; a lesson belongs to exactly one module of one course [owner, D3; direction].
-- **Every course has at least one module** [owner, D3; direction]. The module size (six lessons), the closing club and the separate sale of a module are course-level settings of the 024 constructor, inherited and overridden as in [024](../024-learning-module-path/024-product.md) (Product acceptance criteria, «Settings inherit»), with defaults [proposed default per D4]; the sale setting is consumed by 025 (#1794); they are settings, not constraints [owner, P0].
+- **Every course has at least one module** [owner, D3; direction]. The module size and the closing club are course-level settings of the 024 constructor, inherited and overridden as in [024](../024-learning-module-path/024-product.md) (Product acceptance criteria, «Settings inherit»); by default a module is six lessons + a club [owner, D4 as a default]; they are settings, not constraints [owner, P0].
 - **A single-module course hides its module level** in the doctor's interface [proposed].
 - The **school screen** presents a school as the doctor's end product: its expert, its courses with what they lead to, graduate reviews (REQ-118), mentoring and internships as school-level functions (REQ-119). The word «проект» never appears in the doctor's interface (REQ-50).
 - The **course program** lists modules, their lessons and closing clubs, the duration in academic hours and the document at the end; a course keeps its **series** framing with the episode count (REQ-16).
@@ -82,13 +81,13 @@ On completion, a course leads to a **document**: 023 shows the doctor what the c
 - **Document entry:** the course shows which document it leads to and its prerequisites; document verification can be entered at any time from the course (REQ-17, REQ-22); issuing the document is 038 and the verification record is 037.
 - A **guest** reads schools and programs before registering; gated steps show an honest gate, and no gated content is served to a guest.
 - **A live event recording (014) is neither a lesson nor a course episode** [owner, D8].
-- Prices and purchase are shown and performed through feature **025**; interface copy never says «бесплатно» next to points.
+- **No price, purchase or sale** appears anywhere on the doctor's school, course, module or lesson screens: for the doctor all content is free and nothing is bought [owner, D10]. Interface copy never says «бесплатно» next to points.
 - The screens work at the **mobile breakpoint**, meet the platform accessibility bar, and show the same progress as the mobile application (REQ-53).
 
 ## Out of scope
 
 - **What happens inside a module and a lesson** — the path, lesson composition, the rules constructor, tests, presets — feature **024**.
-- **Points, prices, purchase of a module or course, the specialty top** — feature **025** (#1794) [owner, D7 for the top].
+- **Points and the specialty top** — feature **025** (#1794) [owner, D7 for the top]; points are earned, never bought.
 - **Issuing the document** (certificate, НМО) — feature **038**; document verification storage and statuses — **037**.
 - **The authoring/administration screens** for schools and courses — no feature owns them yet (research point 6 on #1792); 023 states the author story the admin surface must satisfy [proposed].
 - **The Academy's backstage** — projects and their results (feature 030); the doctor never sees a project.
@@ -98,7 +97,7 @@ On completion, a course leads to a **document**: 023 shows the doctor what the c
 
 From the Issue #1792 «Open / agent-proposed — UNCONFIRMED» list:
 
-- **«Money and points are counted per lesson»** — the 03:45 note came with the cancelled «module is optional» variant; units of purchase are now the course and the module; points are decided in **025 (#1794)**.
+- **«Money and points are counted per lesson»** — the 03:45 note came with the cancelled «module is optional» variant; doctors buy nothing [owner, D10], so no money is counted for the doctor; how points are counted is decided in **025 (#1794)**.
 - **A single lesson from the 033 application** — course → one module → one lesson conflicts with «six lessons per module». This PRD proposes: six is a preset default, and a single-module course hides its module level [proposed].
 - **What «viewed» means per material type, test retakes, whether the entry test counts** — settings of the 024 constructor (see 024).
 

@@ -45,10 +45,12 @@ const buttonVariants = cva(
         // On primary — THE header chip: the canvas white control on the
         // invariant navy band (`ds-shell.dc.html` line 37 — `background:#fff`,
         // navy `#114D9E` ink, NO border, a 3px offset cast that shrinks as the
-        // control slides 1px into it). It is the single definition BOTH
-        // storefronts and the webinar room compose from — the guest chip, the
-        // profile chip and the mobile `≡` are this variant at a different size,
-        // never a second class-string constant (#2180).
+        // control slides 1px into it). It is the one interactive header-chip
+        // definition: the webinar room's profile chip and the storefront `≡`
+        // toggle are this variant at a different size, never a second
+        // class-string constant (#2180). The storefront auth chip is
+        // `header-action` below, whose `layout` half is this variant class for
+        // class (pinned by its unit test).
         //
         // The surface is {@link HEADER_CHIP_SURFACE}, declared once: its
         // `shadow-header-chip` cast is the theme-INVARIANT dark ink offset, NOT
@@ -76,10 +78,13 @@ const buttonVariants = cva(
         // `on-primary` white chip above, class for class under `layout:`, so
         // the desktop bar is the chip it always was. Two looks on one element
         // because 017 EARS-1 allows exactly one auth cluster in the DOM —
-        // never a hidden second copy per width.
+        // never a hidden second copy per width. The ring carries its own
+        // `layout:` copy so it outranks the `layout:hover` cast on a focused
+        // chip under the pointer, as it does on `on-primary`.
         "header-action": cn(
           "font-extrabold bg-primary-action text-primary-foreground",
           "hover:bg-primary-hover focus-visible:shadow-focus disabled:opacity-40",
+          "layout:focus-visible:shadow-focus",
           "layout:flex-none layout:bg-header-foreground layout:text-header-chip-foreground layout:shadow-header-chip",
           "layout:hover:bg-header-foreground layout:hover:no-underline layout:hover:translate-x-px layout:hover:translate-y-px layout:hover:shadow-header-chip-hover",
           "layout:active:translate-x-0.5 layout:active:translate-y-0.5 layout:active:shadow-none layout:active:text-header-chip-foreground",

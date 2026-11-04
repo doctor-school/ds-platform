@@ -136,6 +136,14 @@ describe("Button header-action variant (#3629)", () => {
     }
   });
 
+  it("017 EARS-14: from layout up the focus ring outranks the hover cast", () => {
+    // `layout:hover:shadow-header-chip-hover` is emitted after an unscoped
+    // `focus-visible:shadow-focus` at equal specificity, so the ring needs its
+    // own `layout:` copy to win on a focused chip under the pointer.
+    const cls = buttonVariants({ variant: "header-action" }).split(" ");
+    expect(cls).toContain("layout:focus-visible:shadow-focus");
+  });
+
   it("017 EARS-14: the menu-chip size is the menu row below layout and the chip geometry from layout up", () => {
     const cls = buttonVariants({
       variant: "header-action",

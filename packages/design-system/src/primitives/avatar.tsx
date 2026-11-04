@@ -15,7 +15,9 @@ import { HEADER_CHIP_SURFACE } from "./header-chip";
  *     app-shell header carries; it is STATIC (no hover, no press) because the
  *     variant exists for chips that are not links — an interactive header chip
  *     is the `on-primary` Button instead. Both derive from the one
- *     {@link HEADER_CHIP_SURFACE} constant, so they cannot drift.
+ *     {@link HEADER_CHIP_SURFACE} constant, so they cannot drift; the
+ *     storefront `header-action` chip's literal `layout:` copy is held to
+ *     `on-primary` by `button.test.tsx`.
  * Token-only, both themes. Purely presentational — pass an `aria-label` (or wrap
  * with visible text) if the initials must be announced.
  */

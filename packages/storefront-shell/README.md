@@ -66,7 +66,12 @@ const SHELL: StorefrontShellConfig = {
 `{ status: "doctor"; profileHref; label; initials?; links? }`. The package renders it
 itself (`ShellAuthCluster`), so the chip's geometry, surface and press chain come
 from the ONE design-system definition
-(`buttonVariants({ variant: "on-primary", size: "chip" })`) on every host. A host
+(`buttonVariants({ variant: "header-action", size: "menu-chip" })`, the profile
+chip at `size: "menu-avatar"`) on every host. The cluster is rendered once and
+placed by width: from `layout` up it is the bar's white chip after the theme
+control (the variant's `layout` half is the `on-primary` chip class for class);
+below `layout` it is the last item of the `≡` menu panel, the full-width filled
+primary (canvas `ds-shell.dc.html` line 53). A host
 that handed in its own node would re-open the divergence #2180 closed: two
 storefronts drew two different chips into the same bar and the header itself came
 out 4px taller on one of them.

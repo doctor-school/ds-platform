@@ -270,7 +270,9 @@ function BecomePartner() {
             странице для партнёров.
           </p>
         </div>
-        <Button asChild>
+        {/* The DS Button is `whitespace-nowrap`; at 320 this label is wider
+            than the phone column, so it wraps instead (#3597). */}
+        <Button asChild className="max-w-full whitespace-normal text-center">
           <NextLink href="/#partner-form">
             Стать партнёром — как это работает
           </NextLink>

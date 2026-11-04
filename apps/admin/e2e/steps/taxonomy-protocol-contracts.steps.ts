@@ -946,7 +946,7 @@ async function mediaTarget(
           ...(kind === "project"
             ? {
                 defaultAudience: "doctors",
-                kind: "program",
+                stage: "running",
                 description: "Образовательная программа.",
               }
             : {}),

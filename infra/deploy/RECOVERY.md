@@ -105,6 +105,18 @@ and `outputs/2026-11-04-backup-implementation-plan/plan.json` (BBM workspace),
 
 ## 2. Recovery bundle (owner-run)
 
+**Automated: `pnpm recovery init-keys` (§2.1, once) and `pnpm recovery bundle`
+(§2.2–§2.3); `pnpm recovery doctor` checks the prerequisites first, and `pnpm recovery
+all` runs doctor → bundle → restore proof (§3).** The manual commands below are the
+reference and the fallback. The tool (`tools/deploy/recovery.mjs`, from the repository
+root in Git Bash inside Windows Terminal) works in `~/ds-recovery` by default and
+refuses a directory inside a git repository or an existing identity. What stays manual:
+unlocking the `breakglass` key (ssh-agent or `--identity <key>`), typing the identity-A
+passphrase when `age` asks for it, writing custody B onto paper and typing it back
+(hidden input; B is shown once and never written to disk), putting `identity-A.age` and
+its passphrase into the password manager, storing the bundles (§2.4), and sealing paper
+B and handing it to the second custodian.
+
 The bundle is the set of `/etc/ds-platform/*.env` files of both hosts, encrypted with
 [`age`](https://age-encryption.org) to **two independent recipients**:
 
@@ -239,6 +251,14 @@ in the same session.
 
 ## 3. Restore proof (owner-run, ds-data-prod)
 
+**Automated: `pnpm recovery restore-proof --bundle <out>/ds-recovery-<date>-data-prod.tar.age`.**
+The manual commands below are the reference and the fallback. The tool stages the
+bundle's `data.env` on tmpfs, runs §3.2–§3.4 as root scripts fed over ssh stdin (the
+image IDs come from the state file, SEG from `check`), always tears down (container,
+scratch directory, tmpfs file) and writes the sanitised §3.5 report to
+`<out>/reports/restore-proof-<UTC>.md`. What stays manual: the identity-A passphrase,
+and posting the report to #3662.
+
 Proves that the bundle's `PGBACKREST_REPO1_CIPHER_PASS` opens the live repository by
 completing a real restore into a throw-away cluster. An S3 listing or an object
 checksum is not a proof. The run stays on ds-data-prod, so restored personal data
@@ -266,7 +286,7 @@ age -d -i identity-A.age "ds-recovery-$D-data-prod.tar.age" | tar -xOf - data.en
 ```bash
 ENVF=/run/ds-recovery/restore.env
 CONF=/home/deploy/ds-platform/infra/deploy/compose/data-prod/pgbackrest/pgbackrest.conf
-SCRATCH=/var/lib/ds-platform/recovery-proof/$(date -u +%Y%m%dT%H%M%SZ)
+SCRATCH=/var/lib/ds-platform/recovery-proof/ds-recovery-$(date -u +%Y%m%dT%H%M%SZ)
 # The recorded image IDs: the postgres and pgbackrest entries under `images`
 # (read by eye; jq is not assumed on the host).
 sudo cat /home/deploy/ds-platform-postgres-state.json

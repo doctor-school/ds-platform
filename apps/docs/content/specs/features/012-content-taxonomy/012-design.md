@@ -57,10 +57,12 @@ erDiagram
   PROJECTS {
     uuid id PK
     text slug UK
-    project_kind kind
     text title
     text description
     text cover_ref
+    project_stage stage
+    text stage_note
+    project_kind legacy_kind
     timestamptz first_published_at
     taxonomy_status status
     timestamptz deleted_at
@@ -129,18 +131,18 @@ The omitted joins use the same envelope: UUID id, their two endpoint FKs, `activ
 
 ### 2.1 Database constraints
 
-- `taxonomy_status = draft | published | retired`; `relationship_status = active | retired`; `project_kind = school | media | program`; `project_expert_role = curator | member`.
+- `taxonomy_status = draft | published | retired`; `relationship_status = active | retired`; `project_expert_role = curator | member`. A project's `stage` / `stage_note` and its results are 030's (030 EARS-1, EARS-2); `project_kind = school | media | program` types only the read-only `legacy_kind` hint (030 EARS-17) and no write sets it.
 - CHECK constraints bind lifecycle to deletion timestamp: top rows `(status = 'retired') = (deleted_at IS NOT NULL)`; joins `(status = 'retired') = (deleted_at IS NOT NULL)`.
 - Every FK is the default `NO ACTION` or explicit `RESTRICT`; no cascade appears in generated migration SQL.
 - Unique `(project_id, expert_id)`, `(event_id, project_id)`, `(event_id, expert_id)`, `(project_id, partner_id)`, `(event_id, topic_id)` include retained rows while their endpoints are present. A partial unique index permits at most one active `project_experts(role='curator')` per project; another permits at most one active `project_partners(is_primary=true)` per project.
-- Publishing a project additionally requires exactly one active curator whose expert is `published` and non-retired; drafts may be incomplete.
+- Publishing a project additionally requires exactly one active curator whose expert is `published` and non-retired and at least one result (the full project publish set is 030 EARS-6); drafts may be incomplete.
 - Slug identity is plain per-kind uniqueness over retained rows. Every project/expert/topic/partner create mutation generates a collision-safe canonical slug server-side; no mutation schema or form accepts a slug. Canonical UUID text is never generated, keeping `/:idOrSlug` unambiguous. A removed row permanently reserves its slug.
 - `experts.user_id` has a nullable unique index and restrictive FK to Users. `content_removed_at IS NOT NULL` implies `status='retired'`, non-null `deleted_at`, and null structured names, photo, role, credentials, affiliation and bio; audit/admin derive `[удалён]` rather than storing sentinel text.
 - `version` starts at 1 and is incremented atomically by every successful update or lifecycle command.
 
 ### 2.2 Authoring fields and validation
 
-The Zod schemas encode project title/kind/description; Expert `familyName` and `givenName` (1–80 each), optional `patronymic` (≤80), role, credentials, affiliation and bio; Topic title; Partner title and optional HTTPS website. Display labels are derived where needed. PATCH omission means unchanged; explicit null is accepted only for optional fields or incomplete drafts.
+The Zod schemas encode project title/description (stage, stage note and results are 030's: 030 EARS-1, EARS-2; the former kind is only the admin detail's read-only `legacyKind` hint, 030 EARS-17); Expert `familyName` and `givenName` (1–80 each), optional `patronymic` (≤80), role, credentials, affiliation and bio; Topic title; Partner title and optional HTTPS website. Display labels are derived where needed. PATCH omission means unchanged; explicit null is accepted only for optional fields or incomplete drafts.
 
 For all four entity kinds the service always generates a stable collision-safe slug with one shared lowercase-ASCII function. Client `slug` input is rejected on create and update. Forms display only the generated public URL and Copy public link. First publish still sets `first_published_at` atomically.
 
@@ -299,8 +301,8 @@ The failure order follows the existing storage policy. Authorization and canonic
 
 ### 5.2 Public reads
 
-- `GET /v1/public/{projects|experts|topics|partners}` and `/:idOrSlug` return cursor-paginated base lists / one allow-listed projection. A canonical UUID token is id-only; any other token is slug-only. Full DTOs are exact: `PublicProject { id, slug, kind, title, description, coverUrl, primaryPartner }`; `PublicExpert { id, slug, name, professionalRole, credentials, affiliation, bio, photoUrl, initials }`; `PublicTopic { id, slug, title }`; `PublicPartner { id, slug, title, logoUrl, websiteUrl }`. `primaryPartner` is `PublicPartnerSummary | null`; optional URLs are present and nullable.
-- Relationship summaries are exact: `PublicEventSummary { id, slug, title, school, startsAt, state }`; `PublicProjectSummary { id, slug, kind, title, description, coverUrl, primaryPartner }`; `PublicExpertSummary { id, slug, name, professionalRole, credentials, affiliation, photoUrl }`; `PublicTopicSummary { id, slug, title }`; `PublicPartnerSummary { id, slug, title, logoUrl, websiteUrl }`. Optional URLs are present and nullable; no status, storage key, retained-row id or admin field is present.
+- `GET /v1/public/{projects|experts|topics|partners}` and `/:idOrSlug` return cursor-paginated base lists / one allow-listed projection. A canonical UUID token is id-only; any other token is slug-only. Full DTOs are exact: `PublicProject { id, slug, title, description, coverUrl, primaryPartner }` (no kind on any public read, 030 EARS-1); `PublicExpert { id, slug, name, professionalRole, credentials, affiliation, bio, photoUrl, initials }`; `PublicTopic { id, slug, title }`; `PublicPartner { id, slug, title, logoUrl, websiteUrl }`. `primaryPartner` is `PublicPartnerSummary | null`; optional URLs are present and nullable.
+- Relationship summaries are exact: `PublicEventSummary { id, slug, title, school, startsAt, state }`; `PublicProjectSummary { id, slug, title, description, coverUrl, primaryPartner }`; `PublicExpertSummary { id, slug, name, professionalRole, credentials, affiliation, photoUrl }`; `PublicTopicSummary { id, slug, title }`; `PublicPartnerSummary { id, slug, title, logoUrl, websiteUrl }`. Optional URLs are present and nullable; no status, storage key, retained-row id or admin field is present.
 - Nested route item DTOs are fixed rather than inferred from the opposite full entity:
   - `/events/:key/projects` → `PublicProjectSummary`; `/projects/:key/events` → `PublicEventSummary`;
   - `/events/:key/experts` → `PublicEventExpertItem = PublicExpertSummary + { role, position }`; `/experts/:key/events` → `PublicExpertEventItem = PublicEventSummary + { role, position }`;

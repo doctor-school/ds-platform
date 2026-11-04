@@ -74,21 +74,21 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
 
   it("012 EARS-1: when a project create omits the title or exceeds its bound, the schema shall refuse it", () => {
     expect(
-      CreateProjectRequestSchema.safeParse({ kind: "school" }).success,
+      CreateProjectRequestSchema.safeParse({ stage: "running" }).success,
     ).toBe(false);
     expect(
-      CreateProjectRequestSchema.safeParse({ kind: "school", title: "" })
+      CreateProjectRequestSchema.safeParse({ stage: "running", title: "" })
         .success,
     ).toBe(false);
     expect(
       CreateProjectRequestSchema.safeParse({
-        kind: "school",
+        stage: "running",
         title: "x".repeat(161),
       }).success,
     ).toBe(false);
     expect(
       CreateProjectRequestSchema.safeParse({
-        kind: "school",
+        stage: "running",
         title: "Школа кардиологии",
         defaultAudience: "doctors",
       }).success,
@@ -96,7 +96,7 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
   });
 
   it("012 EARS-30: a project create requires a default audience doctors | experts", () => {
-    const body = { kind: "media", title: "Академия смыслов" };
+    const body = { stage: "running", title: "Академия смыслов" };
     expect(CreateProjectRequestSchema.safeParse(body).success).toBe(false);
     expect(
       CreateProjectRequestSchema.safeParse({ ...body, defaultAudience: "all" })
@@ -112,14 +112,18 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
     ).toBe(false);
   });
 
-  it("012 EARS-1: when a project create carries an unknown kind or an over-long description, the schema shall refuse it", () => {
+  it("030 EARS-1: when a project create carries a project kind or an over-long description, the schema shall refuse it", () => {
     expect(
-      CreateProjectRequestSchema.safeParse({ kind: "podcast", title: "Тест" })
-        .success,
+      CreateProjectRequestSchema.safeParse({
+        kind: "school",
+        stage: "running",
+        title: "Тест",
+        defaultAudience: "doctors",
+      }).success,
     ).toBe(false);
     expect(
       CreateProjectRequestSchema.safeParse({
-        kind: "media",
+        stage: "running",
         title: "Тест",
         description: "x".repeat(2001),
       }).success,
@@ -128,7 +132,7 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
 
   it("012 EARS-16: when client JSON supplies a storage reference, the schema shall refuse it rather than ignore it", () => {
     const withRef = CreateProjectRequestSchema.safeParse({
-      kind: "school",
+      stage: "running",
       title: "Тест",
       coverRef: "projects/covers/attacker.webp",
     });
@@ -142,7 +146,7 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
   it("EARS-20: when project create or update carries a slug, the schema shall reject the client-owned identity", () => {
     expect(
       CreateProjectRequestSchema.safeParse({
-        kind: "school",
+        stage: "running",
         title: "System-owned address",
         slug: "client-owned-address",
       }).success,
@@ -158,7 +162,10 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
     const parsed = ProjectAdminDetailSchema.parse({
       id: "11111111-1111-4111-8111-111111111111",
       slug: "system-owned-address",
-      kind: "school",
+      stage: "running",
+      stageNote: null,
+      legacyKind: null,
+      resultCount: 0,
       title: "System-owned address",
       description: null,
       coverUrl: null,
@@ -176,7 +183,7 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
   it("012 EARS-1: mediaAction shall be a PATCH-only verb", () => {
     expect(
       CreateProjectRequestSchema.safeParse({
-        kind: "school",
+        stage: "running",
         title: "Тест",
         mediaAction: "clear",
       }).success,
@@ -561,7 +568,7 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
       { description: "Про сердце" },
       { coverRef: "taxonomy/directions/covers/x.webp" },
       { mediaAction: "clear" },
-      { kind: "school" },
+      { stage: "running" },
     ]) {
       expect(
         CreateDirectionRequestSchema.safeParse({
@@ -761,7 +768,6 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
 const PUBLIC_PROJECT_SUMMARY_KEYS = [
   "id",
   "slug",
-  "kind",
   "title",
   "description",
   "coverUrl",
@@ -781,7 +787,6 @@ const PUBLIC_EVENT_SUMMARY_KEYS = [
 const publicProjectSummary = {
   id: "22222222-2222-4222-8222-222222222222",
   slug: "kardio-school",
-  kind: "school" as const,
   title: "Кардиошкола",
   description: null,
   coverUrl: null,

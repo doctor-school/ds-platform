@@ -12,9 +12,15 @@ import {
   sql,
 } from "drizzle-orm";
 import type { DrizzleHandle, Project, ProjectOrganisation } from "@ds/db";
-import { organisations, projectOrganisations, projects } from "@ds/db";
+import {
+  organisations,
+  projectOrganisations,
+  projects,
+  SEED_ORGANISATION_ROLES,
+} from "@ds/db";
 import type { ProjectPartnerAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { projectPubliclyVisible } from "./project-public-visibility.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { withRelationConflictMapping } from "./taxonomy.errors.js";
 import {
@@ -152,6 +158,10 @@ export class ProjectPartnersRepository {
         .values({
           projectId: values.projectId,
           organisationId: values.partnerId,
+          // 030 EARS-17: until the «Организации» panel offers a per-project
+          // role (030 EARS-4), a new link takes the investor role every
+          // absorbed link received from migration 0055.
+          roleId: SEED_ORGANISATION_ROLES.investor.id,
           isPrimary: values.isPrimary,
         })
         .returning();
@@ -277,7 +287,11 @@ export class ProjectPartnersRepository {
     return { rows: rows.map(shape), total: Number(totals?.value ?? 0) };
   }
 
-  /** Resolve a project by canonical UUID or slug; eligibility is the caller's. */
+  /**
+   * Resolve a PUBLIC project by canonical UUID or slug — `null` for an unknown
+   * one and for one that is not public alike (030 EARS-17: published with ≥1
+   * result, `projectPubliclyVisible`).
+   */
   async findPublicProject(key: {
     id?: string;
     slug?: string;
@@ -285,7 +299,10 @@ export class ProjectPartnersRepository {
     const where = key.id
       ? eq(projects.id, key.id)
       : eq(projects.slug, key.slug!);
-    const [row] = await this.db.select().from(projects).where(where);
+    const [row] = await this.db
+      .select()
+      .from(projects)
+      .where(and(where, projectPubliclyVisible));
     return row ?? null;
   }
 
@@ -389,8 +406,7 @@ export class ProjectPartnersRepository {
       eq(projectOrganisations.organisationId, partnerId),
       eq(projectOrganisations.status, "active"),
       isNull(projectOrganisations.deletedAt),
-      eq(projects.status, "published"),
-      isNull(projects.deletedAt),
+      projectPubliclyVisible,
     ];
     if (after) {
       filters.push(

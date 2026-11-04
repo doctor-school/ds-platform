@@ -1,4 +1,7 @@
-import { chooseProjectDefaultAudience } from "../support/event-classification";
+import {
+  chooseProjectDefaultAudience,
+  chooseProjectStage,
+} from "../support/event-classification";
 import { expect, type Page } from "@playwright/test";
 import { Then, When } from "../support/fixtures";
 import { selectRelationshipCombobox } from "../support/relationship-combobox";
@@ -9,6 +12,7 @@ async function createProject(page: Page, title: string): Promise<string> {
   await page.locator("#title").fill(title);
   await page.locator("#description").fill("Описание для проверки связей.");
   await chooseProjectDefaultAudience(page);
+  await chooseProjectStage(page);
   await page.getByTestId("submit-project").click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   return page.url();

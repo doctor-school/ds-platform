@@ -5,6 +5,8 @@ import {
   eventDirections,
   eventRecordings,
   events,
+  projectResults,
+  projects,
   registrationAttendance,
   registrations,
   users,
@@ -21,7 +23,8 @@ import {
   resolveGoldenSubjects,
   seedGolden,
 } from "../../../../packages/db/src/seed/golden/index.js";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, like, sql } from "drizzle-orm";
+import { projectPubliclyVisible } from "../../src/taxonomy/project-public-visibility.js";
 import { afterAll, describe, expect, it } from "vitest";
 
 // Runs in api-e2e (real migrated PostgreSQL), not the DB-less @ds/db unit job.
@@ -423,5 +426,79 @@ describe("golden seed adopts IdP-mirrored rows of a golden identity (#2875)", ()
     const message = String((failure as Error)?.message);
     expect(message).toContain("cannot adopt");
     expect(message).toContain(poolEmail);
+  }, 120_000);
+});
+
+// 030 EARS-17 (#3503) — the `public_project` predicate hides a published project
+// with no result from every public read, so the golden stand must carry results
+// on its published projects or it shows no project anywhere.
+describe("golden seed project results (030 EARS-17)", () => {
+  if (!process.env.DATABASE_URL)
+    throw new Error("DATABASE_URL is required by the e2e harness");
+  const { db, pool } = createDrizzle(process.env.DATABASE_URL);
+  const subjects = resolveGoldenSubjects(
+    Object.fromEntries(
+      GOLDEN_IDP_ACCOUNTS.map((account, i) => [
+        account.subjectEnvVar,
+        `3503-subject-${i}`,
+      ]),
+    ),
+  );
+  const pin = "2026-10-13T08:00:00.000Z";
+  const rollback = new Error("3503 fixture rollback");
+  afterAll(() => pool.end());
+
+  it("030 EARS-17: leaves every published golden project public except the dedicated no-result one, and re-seeds over an editor-replaced result set", async () => {
+    await db
+      .transaction(async (tx) => {
+        const publicSlugs = async () =>
+          (
+            await tx
+              .select({ slug: projects.slug })
+              .from(projects)
+              .where(
+                and(like(projects.slug, "golden-%"), projectPubliclyVisible),
+              )
+          ).map((row) => row.slug);
+        const published = async () =>
+          (
+            await tx
+              .select({ slug: projects.slug })
+              .from(projects)
+              .where(
+                and(
+                  like(projects.slug, "golden-%"),
+                  eq(projects.status, "published"),
+                ),
+              )
+          ).map((row) => row.slug);
+
+        await seedGolden(tx, { subjects, env: { GOLDEN_NOW: pin } });
+        const expected = (await published())
+          .filter((slug) => slug !== golden.projects.publishedNoResults.slug)
+          .sort();
+        expect(expected.length).toBeGreaterThan(1);
+        expect((await publicSlugs()).sort()).toEqual(expected);
+
+        // The result editor replaces a set with fresh ids (030 EARS-2); a
+        // re-run must meet those rows on (project, position), not abort.
+        const school = golden.projects.publishedSchool.id;
+        const held = await tx
+          .select()
+          .from(projectResults)
+          .where(eq(projectResults.projectId, school));
+        await tx
+          .delete(projectResults)
+          .where(eq(projectResults.projectId, school));
+        await tx
+          .insert(projectResults)
+          .values(held.map(({ id: _id, ...row }) => row));
+        await seedGolden(tx, { subjects, env: { GOLDEN_NOW: pin } });
+        expect((await publicSlugs()).sort()).toEqual(expected);
+        throw rollback;
+      })
+      .catch((error) => {
+        if (error !== rollback) throw error.cause ?? error;
+      });
   }, 120_000);
 });

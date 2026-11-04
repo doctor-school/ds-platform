@@ -438,3 +438,15 @@ routes:
     route: /organisation-roles/[id]
     file: apps/admin/app/organisation-roles/[id]/page.tsx
     status: product-ready
+  - app: admin
+    route: /project-output-kinds
+    file: apps/admin/app/project-output-kinds/page.tsx
+    status: product-ready
+  - app: admin
+    route: /project-output-kinds/create
+    file: apps/admin/app/project-output-kinds/create/page.tsx
+    status: product-ready
+  - app: admin
+    route: /project-output-kinds/[id]
+    file: apps/admin/app/project-output-kinds/[id]/page.tsx
+    status: product-ready

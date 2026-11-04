@@ -47,16 +47,9 @@ export default function ProjectsListPage() {
 
   const columns: DataTableColumn<ProjectAdminListItem>[] = [
     {
-      key: "kind",
-      header: t("projects.columns.kind"),
-      width: "16%",
-      overflow: "wrap",
-      render: (row) => t(`projects.kinds.${row.kind}`),
-    },
-    {
       key: "slug",
       header: t("projects.columns.slug"),
-      width: "22%",
+      width: "20%",
       // A derived address is long and rarely read in full — it ellipses, and the
       // native `title` keeps the whole value reachable (the block's rule).
       fullValue: (row) => row.slug,
@@ -65,12 +58,35 @@ export default function ProjectsListPage() {
       ),
     },
     {
-      key: "status",
-      header: t("projects.columns.status"),
-      width: "18%",
+      key: "stage",
+      header: t("projects.columns.stage"),
+      width: "16%",
       overflow: "wrap",
       render: (row) => (
-        <StatusChip status={row.status} label={statusLabels[row.status]} />
+        <span data-testid={`stage-${row.id}`}>
+          {t(`projects.stages.${row.stage}`)}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: t("projects.columns.status"),
+      width: "20%",
+      overflow: "wrap",
+      // 030 EARS-17 — a published project without results is off every public
+      // read; the list says so under its status.
+      render: (row) => (
+        <span className="flex flex-col items-start gap-1">
+          <StatusChip status={row.status} label={statusLabels[row.status]} />
+          {row.status === "published" && row.resultCount === 0 ? (
+            <span
+              className="text-xs text-muted-foreground"
+              data-testid={`off-site-${row.id}`}
+            >
+              {t("projects.offSite")}
+            </span>
+          ) : null}
+        </span>
       ),
     },
   ];

@@ -43,7 +43,11 @@ export const taxonomyStatus = pgEnum("taxonomy_status", [
   "retired",
 ]);
 
-/** The closed project-kind set (012-design §2.1). */
+/**
+ * The former closed 012 project-kind set. Since 030 EARS-17 (migration 0055) it
+ * types only the read-only `projects.legacy_kind` hint the admin form shows;
+ * no write path sets it and no public read carries it.
+ */
 export const projectKind = pgEnum("project_kind", [
   "school",
   "media",
@@ -83,6 +87,14 @@ export const TAXONOMY_SLUG_MAX = 80;
 
 export const PROJECT_TITLE_MAX = 160;
 export const PROJECT_DESCRIPTION_MAX = 2000;
+export const PROJECT_STAGE_NOTE_MAX = 80;
+
+/** 030 EARS-1 — the closed project stage set the badge vocabulary depends on. */
+export const projectStage = pgEnum("project_stage", [
+  "running",
+  "soon",
+  "completed",
+]);
 
 /**
  * `projects` — a first-class retained editorial record (012 EARS-1). A project
@@ -103,12 +115,22 @@ export const projects = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     /** The permanent public identity. Editable only while `first_published_at IS NULL`. */
     slug: text("slug").notNull(),
-    kind: projectKind("kind").notNull(),
+    /**
+     * 030 EARS-17 — the former 012 kind, kept only as a read-only admin hint
+     * («Прежний тип (012)»). Null on every project created after 0055.
+     */
+    legacyKind: projectKind("legacy_kind"),
     title: text("title").notNull(),
     /** Publish-required; null only on an incomplete draft. */
     description: text("description"),
     /** Server-generated object-storage key of the normalized WebP cover; never a client value. */
     coverRef: text("cover_ref"),
+    /** 030 EARS-1 — «Проект идёт» / «Скоро» / «Завершён»; the service defaults a new project to `soon`. */
+    stage: projectStage("stage").notNull(),
+    /** 030 EARS-1 — «Что происходит сейчас», present iff `stage = soon` (CHECK below). */
+    stageNote: text("stage_note"),
+    /** 030 EARS-5 — dense display order over non-retired rows; a new project goes last. */
+    displayPosition: integer("display_position"),
     /**
      * 012 LD-12 / EARS-30 (#2509) — the audience that prefills a new event
      * linked to this project. A prefill only: changing it never rewrites the
@@ -158,6 +180,15 @@ export const projects = pgTable(
       sql`${t.description} IS NULL OR char_length(${t.description}) BETWEEN 1 AND ${sql.raw(String(PROJECT_DESCRIPTION_MAX))}`,
     ),
     check("projects_version_positive", sql`${t.version} >= 1`),
+    // 030 EARS-1: the stage note exists exactly while the stage is `soon`.
+    check(
+      "projects_stage_note_iff_soon",
+      sql`(${t.stage} = 'soon') = (${t.stageNote} IS NOT NULL)`,
+    ),
+    check(
+      "projects_stage_note_bounds",
+      sql`${t.stageNote} IS NULL OR char_length(${t.stageNote}) BETWEEN 1 AND ${sql.raw(String(PROJECT_STAGE_NOTE_MAX))}`,
+    ),
     // A published row always carries its publication instant; a draft never
     // does until its first publish (012-design §2.1).
     check(
@@ -1012,6 +1043,15 @@ export const projectOrganisations = pgTable(
     organisationId: uuid("organisation_id")
       .notNull()
       .references(() => organisations.id, { onDelete: "restrict" }),
+    /**
+     * 030 EARS-4 / EARS-17 — the 032 role the organisation plays in this
+     * project. Migration 0055 gives every absorbed link the investor role.
+     */
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => organisationRoles.id, { onDelete: "restrict" }),
+    /** 030 EARS-4 — optional note (0–160). */
+    note: text("note"),
     /** At most one ACTIVE true per project — the index below is the backstop. */
     isPrimary: boolean("is_primary").notNull().default(false),
     status: relationshipStatus("status").notNull().default("active"),
@@ -1038,12 +1078,134 @@ export const projectOrganisations = pgTable(
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
     check("project_organisations_version_positive", sql`${t.version} >= 1`),
+    check(
+      "project_organisations_note_bounds",
+      sql`${t.note} IS NULL OR char_length(${t.note}) <= ${sql.raw(String(PROJECT_ORGANISATION_NOTE_MAX))}`,
+    ),
     index("project_organisations_organisation_id_idx").on(t.organisationId),
+    index("project_organisations_role_id_idx").on(t.roleId),
   ],
 );
 
 export type ProjectOrganisation = typeof projectOrganisations.$inferSelect;
 export type NewProjectOrganisation = typeof projectOrganisations.$inferInsert;
+
+export const PROJECT_ORGANISATION_NOTE_MAX = 160;
+export const PROJECT_OUTPUT_KIND_TITLE_MAX = 60;
+export const PROJECT_RESULT_TITLE_MAX = 120;
+export const PROJECT_RESULT_DESCRIPTION_MAX = 300;
+export const PROJECT_RESULT_URL_MAX = 2048;
+
+/** 030 EARS-3 — an output kind is `active` or `retired`. */
+export const projectOutputKindStatus = pgEnum("project_output_kind_status", [
+  "active",
+  "retired",
+]);
+
+/**
+ * `project_output_kinds` — the operator-extensible «Виды результатов» reference
+ * book (030 EARS-3). A reference table, not an enum: adding a kind changes no
+ * page (US-11). Seeded by migration 0055 with Школа, Курс, Подкаст, Событие,
+ * Конгресс, Клуб. Title unique among ACTIVE kinds, case-insensitively.
+ */
+export const projectOutputKinds = pgTable(
+  "project_output_kinds",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** System-generated, permanent. */
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    status: projectOutputKindStatus("status").notNull().default("active"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the admin ETag. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("project_output_kinds_slug_key").on(t.slug),
+    uniqueIndex("project_output_kinds_active_title_key")
+      .on(sql`lower(${t.title})`)
+      .where(sql`${t.status} = 'active'`),
+    check(
+      "project_output_kinds_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check(
+      "project_output_kinds_slug_pattern",
+      sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`,
+    ),
+    check(
+      "project_output_kinds_slug_bounds",
+      sql`char_length(${t.slug}) BETWEEN 1 AND ${sql.raw(String(TAXONOMY_SLUG_MAX))}`,
+    ),
+    check(
+      "project_output_kinds_title_bounds",
+      sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(PROJECT_OUTPUT_KIND_TITLE_MAX))}`,
+    ),
+    check("project_output_kinds_version_positive", sql`${t.version} >= 1`),
+  ],
+);
+
+export type ProjectOutputKind = typeof projectOutputKinds.$inferSelect;
+export type NewProjectOutputKind = typeof projectOutputKinds.$inferInsert;
+
+/**
+ * `project_results` — the ordered result set of one project (030 EARS-2). Child
+ * rows replaced as ONE set under the project's version (the 032 role-set
+ * pattern): no lifecycle of their own, so `projects.version` stays the one ETag
+ * of the form. `position` is dense 0..n-1 per project.
+ */
+export const projectResults = pgTable(
+  "project_results",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "restrict" }),
+    outputKindId: uuid("output_kind_id")
+      .notNull()
+      .references(() => projectOutputKinds.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    /** Absolute HTTPS URL on the configured doctor-storefront origin, or null. */
+    storefrontUrl: text("storefront_url"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("project_results_project_position_key").on(
+      t.projectId,
+      t.position,
+    ),
+    index("project_results_output_kind_id_idx").on(t.outputKindId),
+    check("project_results_position_nonnegative", sql`${t.position} >= 0`),
+    check(
+      "project_results_title_bounds",
+      sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(PROJECT_RESULT_TITLE_MAX))}`,
+    ),
+    check(
+      "project_results_description_bounds",
+      sql`${t.description} IS NULL OR char_length(${t.description}) BETWEEN 1 AND ${sql.raw(String(PROJECT_RESULT_DESCRIPTION_MAX))}`,
+    ),
+    check(
+      "project_results_storefront_url_https",
+      sql`${t.storefrontUrl} IS NULL OR (${t.storefrontUrl} ~ '^https://' AND char_length(${t.storefrontUrl}) <= ${sql.raw(String(PROJECT_RESULT_URL_MAX))})`,
+    ),
+  ],
+);
+
+export type ProjectResult = typeof projectResults.$inferSelect;
+export type NewProjectResult = typeof projectResults.$inferInsert;
 
 // ── ADR-0016 §2.8 / §5 — the direction reference relations ──────────────────
 //

@@ -25,6 +25,7 @@ import {
   GOLDEN_ACCOUNT_KEYS,
   goldenUuid,
   SEED_EVENT_KINDS,
+  SEED_PROJECT_OUTPUT_KINDS,
 } from "./ids.js";
 import {
   GOLDEN_IDP_ACCOUNTS,
@@ -478,7 +479,8 @@ describe("#2063 golden seed plan", () => {
       expect(step.conflictKeys.length).toBeGreaterThan(0);
       for (const key of step.conflictKeys) {
         expect(step.updateKeys).not.toContain(key);
-        for (const row of step.rows) expect(row[key]).toBeTruthy();
+        // Set on every row — a `position` of 0 is a value, not a missing key.
+        for (const row of step.rows) expect(row[key] ?? null).not.toBeNull();
       }
     }
   });
@@ -2098,6 +2100,61 @@ describe("#2213 golden taxonomy and targeting", () => {
       expect(step.updateKeys).not.toContain("firstPublishedAt");
       expect(step.updateKeys).toContain("updatedAt");
     }
+  });
+
+  it("030 EARS-17: every published golden project carries results, except the one dedicated no-result project", () => {
+    // The `public_project` predicate (030-design) hides a published project with
+    // no result from every public read. A golden stand whose published projects
+    // carry none would show an Academy with no project anywhere, so every
+    // published project gets an ordered result set — except ONE, kept so the
+    // admin mark «Не на сайте: нет результатов» has a row to show.
+    const results = dataset.projectResults;
+    const withResults = new Set(results.map((r) => r.projectId as string));
+    const publishedWithout = dataset.projects
+      .filter((p) => p.status === "published" && !p.deletedAt)
+      .filter((p) => !withResults.has(p.id as string))
+      .map((p) => p.slug);
+    expect(publishedWithout).toEqual([golden.projects.publishedNoResults.slug]);
+    expect(golden.projects.publishedNoResults.slug).toBe(
+      "golden-project-published-no-results",
+    );
+
+    const projectIds = new Set(dataset.projects.map((p) => p.id as string));
+    const seedKinds = new Set(
+      Object.values(SEED_PROJECT_OUTPUT_KINDS).map((kind) => kind.id),
+    );
+    const positions = new Map<string, number[]>();
+    for (const row of results) {
+      expect(projectIds).toContain(row.projectId);
+      expect(seedKinds).toContain(row.outputKindId);
+      expect((row.title as string).length).toBeGreaterThan(0);
+      // A stand's doctor-storefront origin differs per stand, and the result
+      // editor refuses a link off it: a golden link would make every re-save
+      // of a golden project fail. The seed states no link.
+      expect(row.storefrontUrl ?? null).toBeNull();
+      const list = positions.get(row.projectId as string) ?? [];
+      list.push(row.position as number);
+      positions.set(row.projectId as string, list);
+    }
+    for (const [projectId, list] of positions) {
+      expect(list, projectId).toEqual(list.map((_, i) => i));
+    }
+    const ids = results.map((r) => r.id as string);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(goldenReferentialIssues(dataset)).toEqual([]);
+  });
+
+  it("030 EARS-17: writes project results after their project, keyed on the per-project position", () => {
+    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const order = plan.map((step) => step.name);
+    expect(order.indexOf("project_results")).toBeGreaterThan(
+      order.indexOf("projects"),
+    );
+    const step = plan.find((s) => s.name === "project_results")!;
+    // The editor replaces the set with fresh ids, so a re-run must meet the
+    // row on (project, position), not on a golden id the stand no longer holds.
+    expect(step.conflictKeys).toEqual(["projectId", "position"]);
+    expect(step.rows).toHaveLength(dataset.projectResults.length);
   });
 
   it("#2213: resolves direction specialties through the seeded book", () => {

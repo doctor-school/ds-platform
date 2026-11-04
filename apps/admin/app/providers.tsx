@@ -58,6 +58,15 @@ export function Providers({ children }: { children: ReactNode }) {
           edit: "/organisations/:id",
           meta: { label: t("app.nav.organisations") },
         },
+        // 030 EARS-3 — the output-kind book; read and written through `custom`
+        // (projectOutputKindsUrl), registered so the chrome knows the section.
+        {
+          name: "project-output-kinds",
+          list: "/project-output-kinds",
+          create: "/project-output-kinds/create",
+          edit: "/project-output-kinds/:id",
+          meta: { label: t("app.nav.projectOutputKinds") },
+        },
         // 032 EARS-3 — the role book; read and written through `custom`
         // (organisationRolesUrl), registered so the chrome knows the section.
         {

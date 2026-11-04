@@ -3,6 +3,7 @@ import { appendFileSync } from "node:fs";
 
 import { expect, type Page } from "@playwright/test";
 
+import { chooseProjectStage } from "../support/event-classification";
 import { selectRelationshipCombobox } from "../support/relationship-combobox";
 import {
   Before,
@@ -240,6 +241,7 @@ Given(
     await page.locator("#title").fill(title);
     await page.locator("#description").fill("Scenario-owned audience project");
     await page.getByTestId("project-default-audience").selectOption("doctors");
+    await chooseProjectStage(page);
     await page.getByTestId("submit-project").click();
     await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/u);
     state(world).projectId = new URL(page.url()).pathname.split("/").pop()!;

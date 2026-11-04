@@ -1,4 +1,7 @@
-import { chooseProjectDefaultAudience } from "./support/event-classification";
+import {
+  chooseProjectDefaultAudience,
+  chooseProjectStage,
+} from "./support/event-classification";
 import { expect, test, type Page } from "@playwright/test";
 
 type BoundingBox = { x: number; y: number; width: number; height: number };
@@ -118,6 +121,7 @@ async function createSubject(page: Page, name: string): Promise<string> {
         .locator("#description")
         .fill("Субъект измерения ширины заголовка на телефонном экране.");
       await chooseProjectDefaultAudience(page);
+      await chooseProjectStage(page);
       await page.getByTestId("submit-project").click();
       await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/, { timeout: 20_000 });
       return idFromDetailUrl(page);

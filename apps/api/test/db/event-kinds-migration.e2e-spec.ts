@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
+import { rewindToPre0055 } from "./rewind-0055.js";
+
 // 012 LD-11 / LD-12, EARS-26 / EARS-27 / EARS-29 / EARS-30 (Issue #2509) — the
 // forward migration 0046 that introduces the event-kind dictionary, the event
 // audience and the project default audience, carrying the Product Lead's
@@ -58,6 +60,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     /** Rewinds to the pre-0046 schema with an empty event/project graph. */
     async function rewindToPre0046(c: pg.PoolClient): Promise<void> {
       await c.query(`TRUNCATE "events", "projects", "event_kinds" CASCADE`);
+      await rewindToPre0055(c);
       await c.query(
         `ALTER TABLE "events" DROP CONSTRAINT "events_kind_id_event_kinds_id_fk"`,
       );

@@ -24,6 +24,7 @@ import type {
   PublicEventFacetOption,
   PublicEventFacetOptions,
 } from "@ds/schemas";
+import { projectPubliclyVisible } from "../taxonomy/project-public-visibility.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -84,8 +85,7 @@ function facetHop(key: FacetKey): FacetHop {
         eligible: [
           eq(eventProjects.status, "active"),
           isNull(eventProjects.deletedAt),
-          eq(projects.status, "published"),
-          isNull(projects.deletedAt),
+          projectPubliclyVisible,
         ],
       };
     case "expert":

@@ -34,6 +34,7 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
     | "experts.validation"
     | "organisations.validation"
     | "organisationRoles.validation"
+    | "projectOutputKinds.validation"
     | "directions.validation"
     | "eventKinds.validation"
     | "directionSpecialties.validation"
@@ -116,6 +117,19 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
     return t("required");
   }
   if (has("kind")) return t("kind");
+
+  // 030 EARS-1 / EARS-2 project container. «Что происходит сейчас» is refused
+  // empty only for a «Скоро» project (a `custom` issue the generic tail would
+  // send to `fallback`); a result's kind box is a select, so «nothing chosen»
+  // says «выберите вид»; a result link that is not an absolute https address
+  // must say so, not «проверьте значение».
+  if (has("stageNote")) {
+    return issue.code === "too_big" ? t("maxLength") : t("stageNote");
+  }
+  if (has("outputKindId")) return t("outputKind");
+  if (has("storefrontUrl")) {
+    return issue.code === "too_big" ? t("maxLength") : t("storefrontUrl");
+  }
 
   // 012 partner / 032 organisation authoring (#1286, #3492). The website box is an ABSOLUTE https
   // address (the SSOT regex — the exact twin of the DB CHECK), so a malformed

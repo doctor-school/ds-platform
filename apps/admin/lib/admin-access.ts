@@ -50,6 +50,13 @@ export interface AdminNavItem {
 export const ADMIN_SECTION_NAV: readonly AdminNavItem[] = [
   { href: "/events", testId: "nav-events", labelKey: "app.nav.events" },
   { href: "/projects", testId: "nav-projects", labelKey: "app.nav.projects" },
+  // 030 EARS-3 / EARS-18 — the output-kind book the project results draw
+  // their kinds from sits right beside the projects.
+  {
+    href: "/project-output-kinds",
+    testId: "nav-project-output-kinds",
+    labelKey: "app.nav.projectOutputKinds",
+  },
   { href: "/experts", testId: "nav-experts", labelKey: "app.nav.experts" },
   // 032 EARS-11 (#3492) — «Организации» take the place of «Партнёры», and the
   // role book they draw their roles from sits right beside them.

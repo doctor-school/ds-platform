@@ -29,6 +29,7 @@ import {
 } from "@ds/schemas";
 
 import { PUBLIC_KIND_STATUSES } from "../taxonomy/event-kinds.repository.js";
+import { projectPubliclyVisible } from "../taxonomy/project-public-visibility.js";
 
 /** A lifecycle set a feed read selects — one tense's, or the month grid's. */
 export type DoctorFeedStates =
@@ -350,9 +351,12 @@ export class DoctorEventsRepository {
   }
 
   /**
-   * 019 EARS-2 — the card's source line: the title of the PUBLISHED project an
-   * event is actively linked to (012 `event_projects`). An event with no such
-   * project falls back to its authored `school` in the service. Several links
+   * 019 EARS-2 — the card's source line: the title of the PUBLIC project an
+   * event is actively linked to (012 `event_projects`). Public is the one 030
+   * EARS-17 predicate `projectPubliclyVisible`: published, not deleted, and
+   * holding at least one result — a published project with no result is off
+   * every public read, this one included. An event with no public project
+   * falls back to its authored `school` in the service. Several links
    * resolve by title order, so the answer is deterministic.
    */
   async findProjectTitles(eventIds: string[]): Promise<Map<string, string>> {
@@ -366,8 +370,7 @@ export class DoctorEventsRepository {
           inArray(eventProjects.eventId, eventIds),
           eq(eventProjects.status, "active"),
           isNull(eventProjects.deletedAt),
-          eq(projects.status, "published"),
-          isNull(projects.deletedAt),
+          projectPubliclyVisible,
         ),
       )
       .orderBy(asc(eventProjects.eventId), asc(projects.title));

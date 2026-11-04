@@ -90,6 +90,7 @@ const WORKSPACE = workspaceFromManifests(
     "packages/db/package.json": { name: "@ds/db", dependencies: {} },
     "packages/legal-content/package.json": { name: "@ds/legal-content" },
     "packages/api-client/package.json": { name: "@ds/api-client" },
+    "packages/e2e/package.json": { name: "@ds/e2e" },
     "tools/lint/guard-tests/package.json": {
       name: "@ds/lint-guard-tests",
       devDependencies: { "@ds/schemas": "workspace:*" },
@@ -288,7 +289,11 @@ test("EARS-11: a spec .feature runs admin-e2e (bddgen taxonomy project) and noth
 
 test("EARS-12: files a job reads outside its dependency closure run that job", () => {
   // archived-speakers.e2e-spec.ts scans these; @ds/api depends on neither.
-  assert.ok(pr(["apps/portal/app/webinars/[slug]/(event-page)/page.tsx"]).jobs["api-e2e"]);
+  assert.ok(
+    pr(["apps/portal/app/webinars/[slug]/(event-page)/page.tsx"]).jobs[
+      "api-e2e"
+    ],
+  );
   assert.ok(
     pr(["packages/design-system/src/blocks/event-page-view.ts"]).jobs[
       "api-e2e"
@@ -326,4 +331,22 @@ test("EARS-14: an apps/login change runs the sign-in host's axe tier and the sta
     "playwright-axe-login",
     "standalone-boot",
   ]);
+});
+
+test("EARS-15: operational BDD inputs run api-e2e without widening storefront-step selection", () => {
+  for (const file of [
+    "packages/e2e/api-probes.config.ts",
+    "packages/e2e/api-probes/steps.ts",
+    "packages/e2e/lib/api-probe-fixtures.ts",
+    "apps/docs/content/specs/features/001-api-bootstrap-health/001-scenarios.feature",
+    "apps/docs/content/specs/features/002-api-postgres-readiness/002-scenarios.feature",
+  ]) {
+    const result = pr([file]);
+    assert.equal(result.fullRun, null, file);
+    assert.equal(result.jobs["api-e2e"], true, file);
+  }
+  assert.equal(
+    pr(["packages/e2e/steps/public-event-visibility.steps.ts"]).jobs["api-e2e"],
+    false,
+  );
 });

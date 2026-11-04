@@ -7,6 +7,7 @@
   "include": [
     "*.ts",
     "steps/**/*.ts",
+    "api-probes/**/*.ts",
     "derived/**/*.ts",
     "lib/**/*.ts",
     "sign-in-host/**/*.ts",

@@ -179,6 +179,7 @@ test("2984/2985: the rollback installs every box entrypoint, each HEAD's blob", 
       "/usr/local/lib/ds-platform/release-driver",
       "/usr/local/lib/ds-platform/postgres-artifact-probe.py",
       "/usr/local/lib/ds-platform/harden-ssh.sh",
+      "/usr/local/lib/ds-platform/ds-recovery",
     ],
   );
   for (const { source } of sources.filter(({ dest }) => !dest.endsWith(".py"))) {

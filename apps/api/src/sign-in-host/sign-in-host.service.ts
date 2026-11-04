@@ -214,6 +214,11 @@ export class SignInHostService {
       now,
       setCookies,
     );
+    // 003 EARS-63 / EARS-64 — one line per entry: which record outcome the
+    // browser met. No identifier: the storefront, the prompt kind, the outcome.
+    this.logger.log(
+      `entry storefront=${storefront} prompt=${request.prompt.includes("none") ? "none" : "interactive"} record=${live.outcome}`,
+    );
 
     // Only a fresh intent names the door: Zitadel's arrival on `/login` opens
     // the door the entry chose. A re-render's door is the auth request's own
@@ -224,12 +229,12 @@ export class SignInHostService {
     // A form-only entry — registration, reset — and the EARS-68
     // fresh-credential asks all render the form even with a record.
     const recordMayAnswer =
-      live !== null &&
+      live.record !== null &&
       door === "login" &&
       !freshCredentialAsked({
         prompt: request.prompt,
         maxAgeSeconds: request.maxAgeSeconds,
-        lastCredentialAt: live.record.lastCredentialAt,
+        lastCredentialAt: live.record.record.lastCredentialAt,
         now,
       }) &&
       // EARS-44 (amended), design lead decisions (2)/(3): a hand-off intent
@@ -243,20 +248,21 @@ export class SignInHostService {
       (!intent?.handoff ||
         (await this.auth.isOwnLoginHandoff(
           intent.handoff,
-          live.record.session.sub,
+          live.record.record.session.sub,
         )));
-    if (live && recordMayAnswer) {
+    if (live.record && recordMayAnswer) {
+      const { cookieId, record } = live.record;
       // EARS-64: a live record answers at once, without a form.
       const url = await this.hostIdp.finaliseWithSession(
         request.id,
-        live.record.session,
+        record.session,
       );
       if (url) {
-        await this.records.touchFinalised(live.cookieId, now);
+        await this.records.touchFinalised(cookieId, now);
         return { body: { action: "redirect", url }, setCookies };
       }
       // Zitadel no longer honours the session: the browser is signed out.
-      await this.drop(live.cookieId, live.record.session, setCookies);
+      await this.drop(cookieId, record.session, setCookies);
     }
 
     // EARS-68: a silent check with no usable record is `login_required`.
@@ -514,24 +520,33 @@ export class SignInHostService {
     };
   }
 
-  /** The cookie id and record behind `cookieId`, if it may answer this request. */
+  /**
+   * The cookie id and record behind `cookieId`, if it may answer this
+   * request, and the outcome the entry logs: `no-cookie`, `no-row`, `foreign`
+   * (a foreign fingerprint), `expired`, `revoked` or `record`.
+   */
   private async liveRecord(
     cookieId: string | undefined,
     fingerprint: string,
     now: Date,
     setCookies: string[],
-  ): Promise<{ cookieId: string; record: SignInHostRecord } | null> {
-    if (!cookieId) return null;
+  ): Promise<{
+    outcome:
+      "no-cookie" | "no-row" | "foreign" | "expired" | "revoked" | "record";
+    record: { cookieId: string; record: SignInHostRecord } | null;
+  }> {
+    if (!cookieId) return { outcome: "no-cookie", record: null };
     const record = await this.records.find(cookieId);
     if (!record) {
       setCookies.push(clearRecordCookie());
-      return null;
+      return { outcome: "no-row", record: null };
     }
-    if (recordVerdict(record, now, fingerprint) !== "usable") {
+    const verdict = recordVerdict(record, now, fingerprint);
+    if (verdict !== "usable") {
       // EARS-64: foreign fingerprint or expired — deleted, its Zitadel session
       // terminated, the browser treated as signed out.
       await this.drop(cookieId, record.session, setCookies);
-      return null;
+      return { outcome: verdict, record: null };
     }
     // EARS-12 / EARS-41: every session of the subject was revoked after this
     // record's credential step — a row that survived the revocation's delete
@@ -539,9 +554,9 @@ export class SignInHostService {
     const revokedAt = await this.state.subjectRevokedAt(record.session.sub);
     if (revokedAt && record.lastCredentialAt.getTime() < revokedAt.getTime()) {
       await this.drop(cookieId, record.session, setCookies);
-      return null;
+      return { outcome: "revoked", record: null };
     }
-    return { cookieId, record };
+    return { outcome: "record", record: { cookieId, record } };
   }
 
   private async drop(

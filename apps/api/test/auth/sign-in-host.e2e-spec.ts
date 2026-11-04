@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { VersioningType } from "@nestjs/common";
+import { Logger, VersioningType } from "@nestjs/common";
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -956,6 +956,39 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     expect(body.action === "redirect" && body.url).toContain(
       "error=login_required",
     );
+  });
+
+  it("EARS-63/64: each sign-in-host entry logs one line naming its record outcome (no-cookie / no-row / foreign / record), with no identifier", async () => {
+    const address = await account("entry-log");
+    const signedIn = new Jar();
+    await signIn(signedIn, address);
+    const noRow = new Jar();
+    noRow.values.set(RECORD_COOKIE_NAME, randomBytes(32).toString("base64url"));
+    const log = vi.spyOn(Logger.prototype, "log");
+    const entryLines = () =>
+      log.mock.calls
+        .map(([line]) => String(line))
+        .filter((line) => line.startsWith("entry "));
+    try {
+      const silent = () =>
+        hostIdp.seedAuthRequest({ clientId: DOCTOR, prompt: ["none"] });
+      await entry(new Jar(), silent());
+      await entry(noRow, silent());
+      await entry(signedIn, silent());
+      await entry(signedIn, silent(), {
+        ...DEVICE,
+        "user-agent": "OtherBrowser/2.0",
+      });
+      expect(entryLines()).toEqual([
+        "entry storefront=doctor prompt=none record=no-cookie",
+        "entry storefront=doctor prompt=none record=no-row",
+        "entry storefront=doctor prompt=none record=record",
+        "entry storefront=doctor prompt=none record=foreign",
+      ]);
+      for (const line of entryLines()) expect(line).not.toContain(address);
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("EARS-64: S166 a missing opaque record clears only its cookie on silent Academy entry and preserves independent reuse and password recovery", async () => {

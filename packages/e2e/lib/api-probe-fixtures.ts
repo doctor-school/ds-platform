@@ -80,11 +80,26 @@ export async function databaseFacts(missingVector = false) {
   });
   const { pool } = createDrizzle(url);
   try {
+    probeLog({
+      command: "SQL",
+      database: new URL(url).pathname,
+      sql: "SELECT current_database() AS name",
+    });
     const identity = await pool.query<{ name: string }>(
       "SELECT current_database() AS name",
     );
     if (`/${identity.rows[0]?.name}` !== new URL(url).pathname)
       throw new Error("Probe database identity mismatch");
+    const factsSql = `SELECT 1 AS connected, to_regtype('vector')::text AS vector,
+      to_regclass('public.idempotency_keys')::text AS initial,
+      (SELECT count(*)::int FROM drizzle.__drizzle_migrations) AS migrations,
+      (SELECT count(*)::int FROM media_cleanup_jobs) AS cleanup,
+      (SELECT count(*)::int FROM idempotency_keys) AS uploads`;
+    probeLog({
+      command: "SQL",
+      database: new URL(url).pathname,
+      sql: factsSql,
+    });
     const facts = await pool.query<{
       connected: number;
       vector: string | null;
@@ -92,11 +107,7 @@ export async function databaseFacts(missingVector = false) {
       migrations: number;
       cleanup: number;
       uploads: number;
-    }>(`SELECT 1 AS connected, to_regtype('vector')::text AS vector,
-      to_regclass('public.idempotency_keys')::text AS initial,
-      (SELECT count(*)::int FROM drizzle.__drizzle_migrations) AS migrations,
-      (SELECT count(*)::int FROM media_cleanup_jobs) AS cleanup,
-      (SELECT count(*)::int FROM idempotency_keys) AS uploads`);
+    }>(factsSql);
     const fact = facts.rows[0]!;
     if (fact.cleanup !== 0 || fact.uploads !== 0)
       throw new Error("Owned probe DB contains media/upload work");

@@ -50,6 +50,15 @@ adminUrl.pathname = "/postgres";
 const admin = createDrizzle(adminUrl.toString()).pool;
 const source = createDrizzle(sourceUrl).pool;
 const target = createDrizzle(targetUrl).pool;
+function query(
+  pool: typeof source,
+  database: string,
+  sql: string,
+  values?: unknown[],
+) {
+  log({ command: "SQL", database, sql });
+  return pool.query(sql, values);
+}
 const fingerprintSql = `SELECT json_build_object(
   'migrations', (SELECT json_agg(t ORDER BY t.id) FROM drizzle.__drizzle_migrations t),
   'columns', (SELECT json_agg(to_jsonb(t) - ARRAY['table_catalog', 'udt_catalog', 'domain_catalog', 'ordinal_position', 'dtd_identifier'] ORDER BY t.table_schema, t.table_name, t.ordinal_position)
@@ -62,7 +71,9 @@ try {
     command: "SELECT target database absence before native copy",
     target: names.target,
   });
-  const existing = await admin.query(
+  const existing = await query(
+    admin,
+    "postgres",
     "SELECT datname FROM pg_database WHERE datname = $1",
     [names.target],
   );
@@ -75,11 +86,14 @@ try {
       "SELECT source identity, vector, migrated schema and empty worker queues",
     source: names.source,
   });
-  const state =
-    await source.query(`SELECT current_database() AS name, to_regtype('vector')::text AS vector,
+  const state = await query(
+    source,
+    names.source,
+    `SELECT current_database() AS name, to_regtype('vector')::text AS vector,
     (SELECT count(*)::int FROM drizzle.__drizzle_migrations) AS migrations,
     (SELECT count(*)::int FROM media_cleanup_jobs) AS cleanup,
-    (SELECT count(*)::int FROM idempotency_keys) AS uploads`);
+    (SELECT count(*)::int FROM idempotency_keys) AS uploads`,
+  );
   if (
     state.rows[0].name !== names.source ||
     state.rows[0].vector !== "vector" ||
@@ -90,7 +104,8 @@ try {
     throw new Error(
       "Source is not the canonical migrated and empty-work owned DB",
     );
-  const sourceFacts = (await source.query(fingerprintSql)).rows[0].facts;
+  const sourceFacts = (await query(source, names.source, fingerprintSql))
+    .rows[0].facts;
   nativePg(
     [
       "bash",
@@ -115,8 +130,10 @@ try {
     command: "CREATE DATABASE exact absent owned negative target",
     target: names.target,
   });
-  await admin.query(`CREATE DATABASE ${names.target} OWNER ds`);
-  const empty = await target.query(
+  await query(admin, "postgres", `CREATE DATABASE ${names.target} OWNER ds`);
+  const empty = await query(
+    target,
+    names.target,
     "SELECT current_database() AS name, (SELECT count(*)::int FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg_toast%') AS objects",
   );
   if (empty.rows[0].name !== names.target || empty.rows[0].objects !== 0)
@@ -136,19 +153,24 @@ try {
       "SELECT restored schema/migration equivalence, table row counts and vector absence",
     target: names.target,
   });
-  const restoredFacts = (await target.query(fingerprintSql)).rows[0].facts;
+  const restoredFacts = (await query(target, names.target, fingerprintSql))
+    .rows[0].facts;
   if (JSON.stringify(sourceFacts) !== JSON.stringify(restoredFacts))
     throw new Error("Restored schema or migration history differs");
   const counts: Record<string, number> = {};
   for (const table of sourceFacts.tables as string[]) {
     const identifier = '"' + table.replaceAll('"', '""') + '"';
     const before = (
-      await source.query(
+      await query(
+        source,
+        names.source,
         `SELECT count(*)::int AS count FROM public.${identifier}`,
       )
     ).rows[0].count;
     const after = (
-      await target.query(
+      await query(
+        target,
+        names.target,
         `SELECT count(*)::int AS count FROM public.${identifier}`,
       )
     ).rows[0].count;
@@ -157,8 +179,8 @@ try {
     counts[table] = after;
   }
   if (
-    (await target.query("SELECT to_regtype('vector') AS vector")).rows[0]
-      .vector !== null
+    (await query(target, names.target, "SELECT to_regtype('vector') AS vector"))
+      .rows[0].vector !== null
   )
     throw new Error("Restored negative DB still has vector");
   writeFileSync(

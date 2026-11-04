@@ -15,7 +15,11 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     And the managed reference table links it to its directions and adjacent directions
     And the specialty has upcoming events, schools, courses and lessons
 
-  @EARS-1 @happy
+  # Amendment 2026-11-04 (#1495): the feed is additive by content type. Scenarios
+  # tagged @deferred-block:<block> assert a block whose type is not yet connected
+  # and run once the named delivery connects it (schools 023, lessons 024,
+  # leaderboard 022 consent, communities 027).
+  @EARS-1 @happy @deferred-block:schools @deferred-block:lessons @deferred-block:leaderboard @deferred-block:communities
   Scenario: The feed renders inside 017's shell with the events block first
     Given a doctor whose remembered specialty is «Травматология и ортопедия»
     When the doctor opens the specialty feed
@@ -23,6 +27,23 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     And the breadcrumbs and the specialty heading carrying «сменить специальность» are shown
     And the blocks appear in the order: события, школы и курсы, уроки, «Зачем это мне», смежные области, лидерборд, сообщества
     And «сменить специальность» re-opens feature 017's catalog
+
+  @EARS-1 @EARS-16 @happy
+  Scenario: Release 1 renders only the blocks whose content type exists, in the F-018-1 relative order
+    Given the schools, lessons, leaderboard and communities content types are not connected
+    And a doctor whose remembered specialty is «Травматология и ортопедия»
+    When the doctor opens the specialty feed
+    Then the header, navigation and footer are rendered by feature 017's shell layout
+    And the statistics line states the colleagues of that specialty only
+    And the blocks appear in the order: события, «Зачем это мне», смежные области
+    And the feed response lists only those three blocks
+
+  @EARS-16 @failure
+  Scenario: A content type that does not exist yet has no block at all
+    Given the schools, lessons, leaderboard and communities content types are not connected
+    When a visitor opens the feed
+    Then no heading, placeholder, «Готовится» or «скоро» stand-in and no empty shell is rendered for any of them
+    And the statistics line carries no schools or lessons counter, not even a zero
 
   @EARS-1 @happy
   Scenario: Two doctors of the same specialty see the same order
@@ -224,12 +245,20 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     Then the started card shows its progress
     And the finished card renders as completed
 
-  @EARS-13 @happy
+  @EARS-13 @happy @deferred-block:schools @deferred-block:lessons @deferred-block:leaderboard @deferred-block:communities
   Scenario: The whole feed works at the mobile breakpoint and passes axe
     When the feed is rendered below the mobile breakpoint in both themes
     Then the statistics line and all seven blocks render in the canvas mobile composition
     And every card is a real labelled link reachable by keyboard
     And the gate state is announced to a screen reader rather than conveyed by colour alone
+    And the axe scan reports no violation on the feed route
+
+  @EARS-13 @happy
+  Scenario: The release-1 feed works at the mobile breakpoint and passes axe
+    Given the schools, lessons, leaderboard and communities content types are not connected
+    When the feed is rendered below the mobile breakpoint in both themes
+    Then the statistics line and every rendered block render in the canvas mobile composition
+    And every event card is a real labelled link reachable by keyboard
     And the axe scan reports no violation on the feed route
 
   @EARS-14 @failure

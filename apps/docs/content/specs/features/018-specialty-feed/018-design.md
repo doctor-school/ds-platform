@@ -38,6 +38,8 @@ flowchart TD
 
 The statistics line sits between the heading and block 1. The order above is the F-018-1 constant of **LD-1**: it is a server-side value, identical for every viewer holding the same specialty, and there is no ranking input, no weighting and no per-viewer ordering anywhere in the read path.
 
+> **Amended 2026-11-04 ([#1495](https://github.com/doctor-school/ds-platform/issues/1495)).** The feed is additive by content type: a block renders only once its content type is connected, and the constant above fixes the relative order of the blocks present. Release 1 renders the statistics line (colleagues only), blocks 1, 4 and 5; blocks 2, 3, 6 and 7 join at their positions when 023, 024, 022 and 027 connect their types. Read under [`018-requirements-en.md`](./018-requirements-en.md) → «Amendment — 2026-11-04» (EARS-16).
+
 ## 2. The doctor content card unit
 
 The card is the load-bearing deliverable of 018 (**LD-2**). It lives in `@ds/design-system`, is built in variant **Б** — kicker, title, metadata row, counter — and carries **no cover-image field**, so no content-production obligation follows from the component's shape.
@@ -179,6 +181,8 @@ Every targeted block filters on `TargetingSet.directions`; the adjacent-areas bl
 All reads are `access: public` per ADR-0001; the session only changes card `state` and `viewer`. Errors are RFC 7807 Problem Details (ADR-0002) rendered as the block's Russian-language error with a retry.
 
 ## 8. Sequencing the build
+
+> **Amended 2026-11-04 ([#1495](https://github.com/doctor-school/ds-platform/issues/1495)).** Release 1 builds steps 2 (statistics with colleagues only), 3 (EARS-4 only), 4 (EARS-7 + EARS-8 only), 5, 6 and 7 over the blocks present; EARS-2 is no longer step 1 — it lands with its first consumer, EARS-5 (023) or EARS-6 (024), and precedes only those blocks and the card-state renders of EARS-12. EARS-9 waits for the 022 consent, EARS-10 for 027. Read under [`018-requirements-en.md`](./018-requirements-en.md) → «Amendment — 2026-11-04».
 
 1. **EARS-2 — the doctor content card unit** in `@ds/design-system` with all seven states and the showcase entry. Schools, lessons and later doctor-content consumers compose it; event surfaces do not.
 2. **EARS-1 + EARS-3** — the route inside exact landed 017 artifacts: shell #1478, specialty choice #1482 and targeting/adjacency #1484; breadcrumbs, specialty heading, fixed order, statistics line. Route integration #1496 consumes the doctor content card #1497 without waiting for parent-level 017 completion.

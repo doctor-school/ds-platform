@@ -270,3 +270,51 @@ These stay open; each is designed around above rather than resolved here, and ea
 > **Status:** feature 018 is live in production with the counter visible at all times, so this is recorded as an amendment rather than an inline rewrite of EARS-4 and F-018-1 (AGENTS.md §6). Those clauses remain the decision as originally taken and are read under this amendment. The RU twin is [`018-requirements-ru.md`](./018-requirements-ru.md) → «Amendment — 2026-10-13». The owner request is quoted in 019 «Amendment — 2026-10-13 — a per-event option hides the registrant count» and 007 «Amendment — 2026-10-13 — the event editor gains «Скрыть число записавшихся»».
 
 **The rule.** The nearest-events block shows the sign-up counter «at all times» except for an event whose «Скрыть число записавшихся» option (007 EARS-12) is on: its `FeedEvents` item carries `signUpCount: null` and the reused event card renders no counter line, as 019 EARS-19 states. Every other event shows the counter as before.
+
+## Amendment — 2026-11-04 — the feed is additive by content type; release 1 ships on existing content (source: [#1495](https://github.com/doctor-school/ds-platform/issues/1495), owner 2026-11-04)
+
+> **Status:** feature 018 is live in production, so this is recorded as an amendment rather than an inline rewrite of F-018-1, LD-1, LD-2, the read models, EARS-1, EARS-3, EARS-12, EARS-13 and the sequencing (AGENTS.md §6). Those clauses remain the decision as originally taken and are read under this amendment. The RU twin is [`018-requirements-ru.md`](./018-requirements-ru.md) → «Amendment — 2026-11-04». The owner decision is quoted in [#1495](https://github.com/doctor-school/ds-platform/issues/1495#issuecomment-6625397465); the release-1 composition below was approved verbatim «Да, состав верный, поехали».
+
+**The rule.** The feed is assembled from content-type blocks. A block appears only once its content type exists on the platform; until then it is absent — no placeholder, no «Готовится» stand-in for a missing type, no empty shell. A new block plugs in at its F-018-1 position without reworking the feed or the blocks already present. Release 1 ships on the content that exists today.
+
+**Release-1 composition and the deliveries that connect the rest.**
+
+| Block                                        | Clause  | Release 1 | Connected by                                                                                                          |
+| -------------------------------------------- | ------- | --------- | --------------------------------------------------------------------------------------------------------------------- |
+| Nearest events                               | EARS-4  | present   | — (events exist today)                                                                                                |
+| Schools and courses                          | EARS-5  | absent    | feature 023 — school and course ([#1792](https://github.com/doctor-school/ds-platform/issues/1792))                   |
+| Lessons                                      | EARS-6  | absent    | feature 024 — learning module path ([#1793](https://github.com/doctor-school/ds-platform/issues/1793))                |
+| «Зачем это мне»                              | EARS-7  | present   | — (editorial copy, no content type)                                                                                   |
+| Adjacent areas                               | EARS-8  | present   | — (managed adjacency of 017, [#1484](https://github.com/doctor-school/ds-platform/issues/1484))                       |
+| Specialty leaderboard                        | EARS-9  | absent    | the cabinet public-display consent of feature 022 ([#1791](https://github.com/doctor-school/ds-platform/issues/1791)) |
+| Communities                                  | EARS-10 | absent    | feature 027, the owner of community data — the DB schema has no communities entity today                              |
+| Statistics line — colleagues counter         | EARS-3  | present   | —                                                                                                                     |
+| Statistics line — schools / lessons counters | EARS-3  | absent    | 023 / 024, together with their blocks                                                                                 |
+| Doctor content card unit                     | EARS-2  | not built | lands with its first consumer — the schools (EARS-5) or lessons (EARS-6) block                                        |
+
+The release-1 feed is therefore: breadcrumbs and the specialty heading, the statistics line with colleagues only, nearest events, «Зачем это мне», adjacent areas — in that order. EARS-1, EARS-11, EARS-12, EARS-13 and EARS-14 cover what renders.
+
+**How the affected clauses are read.**
+
+- **F-018-1** — the nearest events still stand first; «schools and courses below them» holds from the delivery that connects that block.
+- **LD-1** — the order is still a fixed server-side constant, identical for every doctor of the same specialty; it fixes the **relative** order of the blocks that are present. Connecting a type inserts its block at its F-018-1 position; no other block moves.
+- **LD-2** — «delivered before the blocks that consume it» applies only to the blocks that consume the doctor content card: schools and courses (EARS-5) and lessons (EARS-6). The events block (EARS-4) composes Feature 004's `WebinarCard` from `@ds/events-storefront` and does not depend on EARS-2.
+- **LD-4** — «Готовится» remains a publication state inside a connected schools block; it is never a stand-in for the schools type before 023 connects it.
+- **LD-5** — the communities block is absent until feature 027 delivers community data; the read-only shape of LD-5 is how it renders once connected.
+- **Read models** — `SpecialtyFeed.blocks` lists only the connected types. `SpecialtyStatistics` always carries `colleagues`, `specialty` and `computedAt`; `schools` and `lessons` are optional counters, present only once their type is connected.
+- **EARS-1** — «shall lay the blocks out in the F-018-1 order» is read as the F-018-1 relative order of the blocks present; the enumerated seven are the full order once every type is connected.
+- **EARS-3** — the statistics line states only the counters whose content type exists: release 1 shows colleagues only; the schools and lessons counters join when 023 / 024 deliver. «A counter whose source is unavailable shall be omitted» keeps its meaning for a connected counter whose read fails.
+- **EARS-12** — «a block has no content» means an honest empty state for a type that **exists** but is empty for this specialty; that block stays in place with its empty or «Готовится» statement. A type that does not exist yet has **no block at all** (EARS-16). The two cases stay distinct: an absent type is never rendered as an empty block, and an existing empty type is never dropped. «Nothing at all for the specialty» is judged over the connected types.
+- **EARS-13** — «all seven blocks» is read as «every rendered block».
+- **Invariants** — «the block order is the F-018-1 order» is read as the relative order of the blocks present; «every block renders exactly one of …» is read as every rendered block.
+- **Verification rows 1, 3, 12 and 13** — prove the release-1 composition and the relative order; the seven-block proofs run once every type is connected.
+- **Dependencies and sequencing** — «EARS-2 precedes EARS-4…EARS-6 and EARS-12» is read as: EARS-2 precedes EARS-5 and EARS-6, and the card-state renders (started, completed, gate) inside EARS-12. EARS-4 and the release-1 renders of EARS-12 do not wait for EARS-2.
+- **Open question «whether the communities block belongs to 018 at all»** — answered for now by the rule: no block until 027 delivers the type.
+
+**Added.**
+
+- **EARS-16** _(realizes: US-1, US-13)_ — While a content type of the feed is not connected on the platform, the storefront shall render no block for that type — no heading, no placeholder, no «Готовится» or «скоро» stand-in and no empty shell — and the feed response shall carry no entry for it, with the blocks that are present keeping their F-018-1 relative order; when the delivery that connects the type lands, its block shall appear at its F-018-1 position without any change to the blocks already present.
+
+| EARS | Test type               | Indicative target                                                                            | Required proof                                                                                                                                                                                                                               |
+| ---- | ----------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 16   | Vitest e2e + Playwright | `apps/api/test/storefront/specialty-feed.e2e-spec.ts`, `apps/doctor/e2e/feed-layout.spec.ts` | Release 1: `blocks` lists events, «Зачем это мне» and adjacent areas only, in that order; the page renders no schools, lessons, leaderboard or communities heading, placeholder or empty shell; the statistics line carries colleagues only. |

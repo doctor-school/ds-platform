@@ -153,6 +153,11 @@ Four rules live there, each stated once for both storefronts:
   silent transaction gets `303` into a silent transaction (`prompt=none`,
   `POST /v1/internal/oidc/silent-check`, `Cache-Control: no-store`); a live
   interactive transaction is replaced, a limited start renders the guest page.
+  A checkable prerender (`Sec-Purpose: prefetch;prerender` — the browser would
+  later activate it as the navigation with no new request) gets `503 no-store`
+  with no transaction and no cookie, so the browser discards it and the real
+  navigation is checked (#3660); a plain prefetch stays exempt. Each decision
+  logs one `[silent-check] client=<storefront> outcome=<…>` line.
   The marker (`<issued s>.<HMAC>`, 10 min) and the silent transaction's cookie
   value (`<txId>.<HMAC>`) are HMACs keyed by `INTERNAL_API_TOKEN` with their
   own domain-separation labels. `storefrontCallback` sets the guard on every

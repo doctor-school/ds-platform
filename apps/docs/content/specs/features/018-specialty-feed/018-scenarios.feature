@@ -5,6 +5,12 @@
 # consent assertions that have no visual surface run in Vitest e2e.
 # Stage-A picks in force: F-018-1 = Б (events first), F-018-2 = Б (typographic
 # card with no cover image), F-018-3 = adjacent areas as their own block.
+# The feed is additive by content type (LD-1). The Background seeds only the
+# release-1 types. A scenario tagged @deferred-block:<type> asserts a block or unit
+# whose type is not connected yet, seeds it in its own Given, and runs once the
+# delivery named in «Feed composition by content type» connects it: schools (023),
+# lessons (024), leaderboard (022 consent), communities (027), content-card (with
+# its first consumer).
 
 @host:doctor
 Feature: A doctor returns to one screen that shows what to attend, what to learn and who to grow with
@@ -13,16 +19,31 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     Given feature 017's storefront shell and specialty books are in place
     And the specialty «Травматология и ортопедия» exists in specialties_minzdrav
     And the managed reference table links it to its directions and adjacent directions
-    And the specialty has upcoming events, schools, courses and lessons
+    And the specialty has upcoming events
 
   @EARS-1 @happy
-  Scenario: The feed renders inside 017's shell with the events block first
+  Scenario: The feed renders inside 017's shell with the blocks of the connected types, events first
     Given a doctor whose remembered specialty is «Травматология и ортопедия»
     When the doctor opens the specialty feed
     Then the header, navigation and footer are rendered by feature 017's shell layout
     And the breadcrumbs and the specialty heading carrying «сменить специальность» are shown
-    And the blocks appear in the order: события, школы и курсы, уроки, «Зачем это мне», смежные области, лидерборд, сообщества
+    And the blocks appear in the order: события, «Зачем это мне», смежные области
+    And the feed response lists exactly those three blocks
     And «сменить специальность» re-opens feature 017's catalog
+
+  @EARS-1 @failure
+  Scenario: A content type that is not connected has no block at all
+    When a visitor opens the feed
+    Then the feed response carries no entry for schools, lessons, leaderboard or communities
+    And the page renders no heading, placeholder, «Готовится» or «скоро» stand-in and no empty shell for any of them
+
+  @EARS-1 @happy @deferred-block:schools @deferred-block:lessons @deferred-block:leaderboard @deferred-block:communities
+  Scenario: Every connected block takes its F-018-1 position
+    Given the schools, lessons, leaderboard and communities content types are connected
+    And the specialty has schools, courses, lessons, consented leaderboard rows and communities
+    And a doctor whose remembered specialty is «Травматология и ортопедия»
+    When the doctor opens the specialty feed
+    Then the blocks appear in the order: события, школы и курсы, уроки, «Зачем это мне», смежные области, лидерборд, сообщества
 
   @EARS-1 @happy
   Scenario: Two doctors of the same specialty see the same order
@@ -39,7 +60,7 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     Then the scan reports more than one header implementation
     And the build fails review
 
-  @EARS-2 @happy
+  @EARS-2 @happy @deferred-block:content-card
   Scenario Outline: The doctor content card renders every state from one unit
     Given the doctor content card unit exported by @ds/design-system
     When the card renders in state "<state>"
@@ -57,7 +78,7 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
       | gate      |
       | soon      |
 
-  @EARS-2 @failure
+  @EARS-2 @failure @deferred-block:content-card @deferred-block:schools
   Scenario: A screen-local re-implementation of the card is a defect
     Given a build in which the schools block defines its own card component
     When the tree scan for card implementations runs
@@ -66,15 +87,33 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
 
   @EARS-3 @happy
   Scenario: The statistics line is scoped to the chosen specialty
-    Given two specialties with different numbers of colleagues, schools and lessons
+    Given two specialties with different numbers of colleagues
     When a doctor opens the feed for each specialty
-    Then each statistics line states the figures of that specialty
+    Then each statistics line states the colleagues of that specialty
     And neither line equals the platform-wide figure
+    And neither line carries a schools or lessons counter
     And the read carries its computedAt
+
+  @EARS-3 @happy @deferred-block:schools @deferred-block:lessons
+  Scenario: The schools and lessons counters join once their types are connected
+    Given the schools and lessons content types are connected
+    And two specialties with different numbers of colleagues, schools and lessons
+    When a doctor opens the feed for each specialty
+    Then each statistics line states the colleagues, schools and lessons of that specialty
+    And neither line equals the platform-wide figure
 
   @EARS-3 @failure
   Scenario: A counter with no source is omitted rather than zeroed
-    Given the lessons counter source is unavailable for the specialty
+    Given the colleagues counter source is unavailable for the specialty
+    When a doctor opens the feed
+    Then the statistics line shows no colleagues counter
+    And no counter is displayed as «0»
+    And every block of the feed still renders
+
+  @EARS-3 @failure @deferred-block:lessons
+  Scenario: An unavailable counter leaves its neighbours in place
+    Given the lessons content type is connected
+    And the lessons counter source is unavailable for the specialty
     When a doctor opens the feed
     Then the statistics line renders the remaining counters
     And no counter is displayed as «0»
@@ -87,6 +126,14 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     And «Все события по специальности →» leads into feature 019's events feed
 
   @EARS-4 @happy
+  Scenario: An event whose option hides the sign-up counter shows none
+    Given an upcoming event whose «Скрыть число записавшихся» option is on
+    When a visitor opens the feed
+    Then its nearest-events item carries signUpCount null
+    And its card renders no sign-up counter line, no «0» and no empty slot
+    And the cards of events with the option off still show the counter
+
+  @EARS-4 @happy
   Scenario: An offline meet-up is a format of the event card
     Given an offline colleagues' meet-up among the nearest events
     When a visitor opens the feed
@@ -94,9 +141,10 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     And no separate card kind is introduced for it
     And НМО appears only as an attribute of an event, never as a heading or a filter of the screen
 
-  @EARS-5 @happy
+  @EARS-5 @happy @deferred-block:schools
   Scenario: A course is presented as a series and a preparing school stays visible
-    Given a course of 9 episodes and a school in preparation for the specialty
+    Given the schools content type is connected
+    And a course of 9 episodes and a school in preparation for the specialty
     When a visitor opens the feed
     Then the course card states «9 серий»
     And the preparing school renders as «Готовится» inside the schools block
@@ -109,8 +157,10 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     And it contains no Academy project card, partner news item or Academy podcast
     And it contains no price in roubles, no cart and no subscription affordance
 
-  @EARS-6 @happy
+  @EARS-6 @happy @deferred-block:lessons @deferred-block:content-card
   Scenario: The lessons block states that the app shares the same lessons and the same points account
+    Given the lessons content type is connected
+    And the specialty has 47 lessons
     When a visitor opens the feed
     Then the lesson of the day renders through the doctor content card
     And «Все 47 уроков →» is present
@@ -146,30 +196,42 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     Then the adjacent-areas block is empty and says so
     And no item of the resembling direction appears in any block of this feed
 
-  @EARS-9 @happy
+  @EARS-9 @happy @deferred-block:leaderboard
   Scenario: The leaderboard is filtered to the specialty and contains only consented doctors
-    Given doctors of the specialty, some with a recorded public-display consent and some without
+    Given the leaderboard content type is connected
+    And doctors of the specialty, some with a recorded public-display consent and some without
     When a visitor opens the feed
     Then the leaderboard lists only the doctors who consented
     And every listed doctor belongs to the chosen specialty
     And the block states that participation is voluntary and offers «Весь лидерборд →»
 
-  @EARS-9 @failure
+  @EARS-9 @failure @deferred-block:leaderboard
   Scenario: A doctor without consent is told calmly instead of losing the block
-    Given a signed-in doctor of the specialty with no public-display consent
+    Given the leaderboard content type is connected
+    And a signed-in doctor of the specialty with no public-display consent
     When the doctor opens the feed
     Then the leaderboard block is rendered
     And the doctor has no row in it
     And the block explains that there is no row because public display was not allowed and that it is changeable in the cabinet
 
-  @EARS-10 @happy
+  @EARS-10 @happy @deferred-block:communities
   Scenario: Communities are listed read-only with a link out
+    Given the communities content type is connected
+    And the direction has communities
     When a visitor opens the feed
     Then the communities block lists each community with what it is for and its doctor count
     And each entry offers «Открыть сообщество →»
     And no joining or membership control is rendered in the block
 
   @EARS-11 @happy
+  Scenario: A guest reads the release-1 feed in full
+    Given a visitor with no account
+    When the visitor opens the feed
+    Then the events, «Зачем это мне» and adjacent-areas blocks render in full
+    And no block response carries a gate marker
+    And no card or block renders «нужна регистрация» or any other account prompt
+
+  @EARS-11 @happy @deferred-block:content-card
   Scenario: A guest reads the whole feed and sees honest gates
     Given a visitor with no account
     And content that requires an account among the cards
@@ -178,7 +240,7 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     And the gated card renders «нужна регистрация» with its public metadata
     And following the gate leads into feature 021's registration and returns to that card
 
-  @EARS-11 @failure
+  @EARS-11 @failure @deferred-block:content-card
   Scenario: The gated payload never reaches an anonymous reader
     Given a visitor with no account
     When the feed block reads are served
@@ -194,12 +256,20 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     And no empty labelled box and no unresolving spinner is shown
 
     Examples:
-      | block             | dataState | render                                     |
-      | Ближайшие события | загрузка  | its skeleton                               |
-      | Ближайшие события | пусто     | the general platform events statement      |
-      | Школы и курсы     | пусто     | «По вашей специальности пока нет школ»     |
-      | Школы и курсы     | частично  | the «Готовится» card with the block intact |
-      | Сообщества        | обычно    | the community list                         |
+      | block             | dataState | render                                |
+      | Ближайшие события | загрузка  | its skeleton                          |
+      | Ближайшие события | пусто     | the general platform events statement |
+
+    @deferred-block:schools
+    Examples:
+      | block         | dataState | render                                     |
+      | Школы и курсы | пусто     | «По вашей специальности пока нет школ»     |
+      | Школы и курсы | частично  | the «Готовится» card with the block intact |
+
+    @deferred-block:communities
+    Examples:
+      | block      | dataState | render             |
+      | Сообщества | обычно    | the community list |
 
   @EARS-12 @failure
   Scenario: A failing block is contained and retries only itself
@@ -212,20 +282,30 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
 
   @EARS-12 @failure
   Scenario: A specialty with nothing at all never renders as a blank page
-    Given a specialty with no events, schools, courses or lessons
+    Given a specialty with no upcoming events
     When a doctor opens the feed
     Then the feed states plainly that there is nothing yet for that specialty
     And it offers the adjacent areas and the general platform events
 
-  @EARS-12 @happy
+  @EARS-12 @happy @deferred-block:schools @deferred-block:content-card
   Scenario: Started and completed content shows its own state
-    Given a doctor who started one course and finished another
+    Given the schools content type is connected
+    And a doctor who started one course and finished another
     When the doctor opens the feed
     Then the started card shows its progress
     And the finished card renders as completed
 
   @EARS-13 @happy
-  Scenario: The whole feed works at the mobile breakpoint and passes axe
+  Scenario: The feed works at the mobile breakpoint and passes axe
+    When the feed is rendered below the mobile breakpoint in both themes
+    Then the statistics line and every rendered block render in the canvas mobile composition
+    And every event card is a real labelled link reachable by keyboard
+    And the axe scan reports no violation on the feed route
+
+  @EARS-13 @happy @deferred-block:schools @deferred-block:lessons @deferred-block:leaderboard @deferred-block:communities @deferred-block:content-card
+  Scenario: The full seven-block feed works at the mobile breakpoint and passes axe
+    Given the schools, lessons, leaderboard and communities content types are connected
+    And the specialty has schools, courses, lessons, consented leaderboard rows and communities
     When the feed is rendered below the mobile breakpoint in both themes
     Then the statistics line and all seven blocks render in the canvas mobile composition
     And every card is a real labelled link reachable by keyboard
@@ -238,14 +318,6 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     Then no Academy content block is rendered
     And no Academy link exists on the feed — 017's footer link remains the only crossing
     And no backstage navigation entry is present
-
-  @EARS-4 @happy
-  Scenario: An event whose option hides the sign-up counter shows none
-    Given an upcoming event whose «Скрыть число записавшихся» option is on
-    When a visitor opens the feed
-    Then its nearest-events item carries signUpCount null
-    And its card renders no sign-up counter line, no «0» and no empty slot
-    And the cards of events with the option off still show the counter
 
   @EARS-15 @happy
   Scenario: The design-system gate runs before a 018 surface is implemented

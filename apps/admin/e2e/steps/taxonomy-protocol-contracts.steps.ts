@@ -133,6 +133,15 @@ Before(
     operation("shared role before fixture", retainedRole);
     const emails = new Set<string>();
     const subjects = new Set<string>();
+    const grants = new Map<
+      string,
+      {
+        subject: string;
+        projectId: string;
+        roleKeys: string[];
+        createdAt: string;
+      }
+    >();
     globalThis.fetch = async (input, init) => {
       const url = new URL(
         typeof input === "string"
@@ -145,16 +154,27 @@ Before(
         typeof init?.body === "string"
           ? (JSON.parse(init.body) as Record<string, unknown>)
           : undefined;
-      const granting = /\/users\/([^/]+)\/grants(?:\/[^/]+)?$/u.exec(
+      const granting = /\/users\/([^/]+)\/grants(?:\/([^/]+))?$/u.exec(
         url.pathname,
       );
       if (granting && ["PUT", "POST"].includes(init?.method ?? "GET")) {
         expect(subjects.has(granting[1])).toBe(true);
-        expect(body?.projectId).toBe(project);
-        expect(body?.roleKeys).toEqual(["platform_admin"]);
+        const retained = granting[2] ? grants.get(granting[2]) : undefined;
+        if (granting[2]) {
+          expect(retained?.subject).toBe(granting[1]);
+          expect(retained?.projectId).toBe(project);
+          expect(body?.roleKeys).toEqual([
+            ...new Set([...retained!.roleKeys, "platform_admin"]),
+          ]);
+        } else {
+          expect(body?.projectId).toBe(project);
+          expect(body?.roleKeys).toEqual(["platform_admin"]);
+        }
         operation("owned grant target verified", {
           subject: granting[1],
-          projectId: body?.projectId,
+          projectId: retained?.projectId ?? body?.projectId,
+          grantId: granting[2] ?? null,
+          createdAt: retained?.createdAt ?? null,
           roleKeys: body?.roleKeys,
         });
       }
@@ -198,6 +218,37 @@ Before(
             subject: id,
             email: user.human.email.email,
             createdAt: user.details.creationDate,
+          });
+        }
+      }
+      if (
+        url.pathname === "/management/v1/users/grants/_search" &&
+        response.ok
+      ) {
+        const result = (await response.clone().json()) as {
+          result?: {
+            id: string;
+            userId: string;
+            projectId: string;
+            roleKeys?: string[];
+            details: { creationDate: string };
+          }[];
+        };
+        for (const grant of result.result ?? []) {
+          expect(subjects.has(grant.userId)).toBe(true);
+          expect(grant.projectId).toBe(project);
+          expect(Date.parse(grant.details.creationDate)).toBeGreaterThanOrEqual(
+            startedAt,
+          );
+          grants.set(grant.id, {
+            subject: grant.userId,
+            projectId: grant.projectId,
+            roleKeys: grant.roleKeys ?? [],
+            createdAt: grant.details.creationDate,
+          });
+          operation("owned grant metadata observed before mutation", {
+            id: grant.id,
+            ...grants.get(grant.id),
           });
         }
       }
@@ -1019,7 +1070,7 @@ When(
     else if (header === "blank") request.key = "";
     else if (header === "not a UUID") request.key = "not-a-uuid";
     else if (header === "non-canonical UUID text")
-    request.key = `${key().slice(0, -1)}A`;
+      request.key = `${key().slice(0, -1)}A`;
     else throw new Error(`Unrecognized original UUID example: ${header}`);
     state(world).answers = await commands(page, [request]);
   },

@@ -2,7 +2,7 @@
 title: "018 — Лента специальности"
 description: "Требования к экрану возвращения врача на doctor.school: одна смешанная лента по выбранной специальности с ближайшими событиями наверху, школы и курсы с рамкой курса-сериала, уроки, общие с мобильным приложением на одном счёте очков, блок «Зачем это мне», смежные области отдельным помеченным блоком, статистика масштаба по специальности, лидерборд по специальности только по согласию, список сообществ, чтение ленты гостем с честными состояниями гейта, пустое / частично пустое / загрузочное / поблочно-ошибочное состояния и единица «карточка контента врача», которую следующие экраны потребляют без изменений."
 slug: 018-specialty-feed-ru
-status: Draft
+status: In dev
 surface: user-facing
 storefronts: doctor-only
 storefronts_reason: "The doctor audience's specialty-targeted return screen; the spec keeps Academy content and projects out of it (EARS-5, EARS-14), and the Academy, which serves the expert audience, specifies no specialty feed. Its cross-front blocks are the shared content card unit (#1497, built under #3516) and the platform leaderboard (#1504)."

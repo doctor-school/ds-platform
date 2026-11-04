@@ -2,7 +2,7 @@
 title: "018 — The specialty feed (Design)"
 description: "Design companion to the 018 requirements: the feed route inside 017's shell, the fixed events-first block order, the doctor content card unit and its state machine, the per-block independent read topology with its dataState matrix, server-side gating for the guest read, targeting and adjacency resolution over the managed reference books, the specialty-scoped statistics and consent-gated leaderboard reads, and the build sequence that puts the card unit before its consumers."
 slug: 018-specialty-feed-design
-status: Draft
+status: In dev
 lang: en
 ---
 

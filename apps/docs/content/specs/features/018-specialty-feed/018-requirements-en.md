@@ -2,7 +2,7 @@
 title: "018 — The specialty feed"
 description: "Requirements for the doctor's return screen on doctor.school: one mixed feed targeted by the chosen specialty with the nearest events first, schools and courses with the series framing, lessons shared with the mobile application on one points account, the «Зачем это мне» value block, adjacent areas as their own labelled block, the specialty-filtered scale statistics, the consent-gated specialty leaderboard, the communities list, the guest-readable feed with honest gate states, the empty / partially empty / loading / per-block error renders, and the doctor content card unit the later screens consume unchanged."
 slug: 018-specialty-feed
-status: Draft
+status: In dev
 surface: user-facing
 storefronts: doctor-only
 storefronts_reason: "The doctor audience's specialty-targeted return screen; the spec keeps Academy content and projects out of it (EARS-5, EARS-14), and the Academy, which serves the expert audience, specifies no specialty feed. Its cross-front blocks are the shared content card unit (#1497, built under #3516) and the platform leaderboard (#1504)."

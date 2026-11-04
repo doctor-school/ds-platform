@@ -868,7 +868,14 @@ async function objectInventory(prefixes: string[]) {
   return inventory;
 }
 
-async function refusalSnapshot(prefixes: string[]) {
+async function refusalSnapshot(world: AdminWorld, prefixes: string[]) {
+  const actor = await rows<{ row: Record<string, unknown> }>(
+    "SELECT to_jsonb(t) AS row FROM users t WHERE email=$1",
+    [world.email],
+  );
+  expect(actor).toHaveLength(1);
+  const subject = actor[0].row.zitadel_sub;
+  expect(typeof subject).toBe("string");
   return {
     // The database is disposable and task-owned. Complete applicable tables
     // also detect an unexpected create whose id was never returned to us.
@@ -883,8 +890,10 @@ async function refusalSnapshot(prefixes: string[]) {
     links: await rows(
       "SELECT to_jsonb(t) AS row FROM event_experts t ORDER BY id",
     ),
+    actorUser: actor,
     audit: await rows(
-      "SELECT to_jsonb(t) AS row FROM audit_ledger t WHERE event_type LIKE ANY(ARRAY['data.projects.%','data.experts.%','data.organisations.%','data.events.%','data.event_experts.%']) ORDER BY id",
+      "SELECT to_jsonb(t) AS row FROM audit_ledger t WHERE event_type LIKE 'data.%' AND (event_type LIKE ANY(ARRAY['data.projects.%','data.experts.%','data.organisations.%','data.events.%','data.event_experts.%']) OR subject_id=$1 OR metadata->>'source'='admin-ui') ORDER BY id",
+      [subject],
     ),
     idempotency: await rows(
       "SELECT to_jsonb(t) AS row FROM idempotency_keys t ORDER BY key",
@@ -1028,7 +1037,10 @@ Given(
       commands: requests,
       prefixes: targets.map((target) => target.prefix),
     };
-    current.refusal.before = await refusalSnapshot(current.refusal.prefixes);
+    current.refusal.before = await refusalSnapshot(
+      world,
+      current.refusal.prefixes,
+    );
   },
 );
 When(
@@ -1058,7 +1070,9 @@ Then(
 );
 async function unchangedRefusal(world: AdminWorld) {
   const current = state(world).refusal!;
-  expect(await refusalSnapshot(current.prefixes)).toEqual(current.before);
+  expect(await refusalSnapshot(world, current.prefixes)).toEqual(
+    current.before,
+  );
   operation(
     "refusal has unchanged storage domain audit idempotency and retained relations",
     {
@@ -1087,7 +1101,10 @@ Given(
       ],
       prefixes: [target.prefix],
     };
-    current.refusal.before = await refusalSnapshot(current.refusal.prefixes);
+    current.refusal.before = await refusalSnapshot(
+      world,
+      current.refusal.prefixes,
+    );
   },
 );
 When(
@@ -1181,7 +1198,10 @@ Given("an event and a publishable expert exist", async ({ page, world }) => {
     expertIds: experts,
     retiredId: link.body.id as string,
   };
-  current.refusal.before = await refusalSnapshot(current.refusal.prefixes);
+  current.refusal.before = await refusalSnapshot(
+    world,
+    current.refusal.prefixes,
+  );
 });
 When(
   /^the operator submits an event_experts link with (.+)$/u,

@@ -1652,6 +1652,8 @@ jobs:
       S3_ACCESS_KEY: ci-admin-e2e
       S3_SECRET_KEY: ci-admin-e2e-secret
       S3_FORCE_PATH_STYLE: "true"
+      # This job owns only its fixtures, not a global identity reconciliation.
+      RECONCILE_SWEEP_INTERVAL_MS: "0"
       # #2619 — the Academy origin «Публичная ссылка» links to. Job-level so the
       # admin (required at request time; it refuses to render without it) and the
       # Playwright steps that assert that link read ONE value.

@@ -709,7 +709,9 @@ test.describe("047 / 049 «Доступы» — a superadministrator grants staf
       await expect(page.getByTestId("nav-events")).toBeVisible();
       await expect(page.getByTestId("nav-access")).toHaveCount(0);
       await page.goto("/access");
-      await expect(page.getByTestId("access-refused")).toBeVisible();
+      await expect(page.getByTestId("access-refused")).toHaveText(
+        "У этой учётной записи нет доступа к этому разделу.",
+      );
       await expect(page.getByTestId("staff-access-grant-open")).toHaveCount(0);
       await evidenceShot(page, "staff-access-platform-admin-refused");
     } finally {

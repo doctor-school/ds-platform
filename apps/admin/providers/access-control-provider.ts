@@ -26,7 +26,7 @@ export const accessControlProvider: AccessControlProvider = {
     const access = adminAccess(await fetchAdminSession());
     return canAccessResource(access, resource, params)
       ? { can: true }
-      : { can: false, reason: "login.errorForbidden" };
+      : { can: false, reason: "shell.sectionForbidden" };
   },
   options: {
     buttons: { enableAccessControl: true, hideIfUnauthorized: false },

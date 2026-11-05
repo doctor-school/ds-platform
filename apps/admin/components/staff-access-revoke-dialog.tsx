@@ -147,7 +147,7 @@ export function StaffAccessRevokeDialog({
       case "stepUp":
         return t("staffAccess.revoke.errors.stepUpAgain");
       case "forbidden":
-        return t("login.errorForbidden");
+        return t("shell.sectionForbidden");
       case "invalid":
         return t("staffAccess.revoke.errors.invalid");
       default:

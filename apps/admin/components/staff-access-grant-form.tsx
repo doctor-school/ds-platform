@@ -238,7 +238,7 @@ export function StaffAccessGrantForm({
       case "stepUp":
         return t("staffAccess.grant.errors.stepUpAgain");
       case "forbidden":
-        return t("login.errorForbidden");
+        return t("shell.sectionForbidden");
       case "invalid":
         return t("staffAccess.grant.errors.invalid");
       default:

@@ -479,7 +479,7 @@ export default function CongressRosterPage() {
             className="text-sm text-muted-foreground"
             data-testid="access-refused"
           >
-            {t("login.errorForbidden")}
+            {t("shell.sectionForbidden")}
           </p>
         </AppShell>
       </Authenticated>

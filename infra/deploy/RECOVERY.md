@@ -10,7 +10,8 @@ proven to open the backups (the restore proof), and the full host-loss path.
 Actions `recovery-custody.yml` over the prod read key, whose forced command allows only
 fixed verbs (README → «SSH access model (#2984)»). People act in three places only: the
 custodian ceremony (§2.1), each custodian's quarterly test decrypt (§2.2) and recovery
-after host loss (§2.3, §4). The agent has no shell on prod; every on-host step of the
+after host loss (§2.3, §4). Until CI custody is proven, the owner-run bundle and restore
+proof (`pnpm recovery`, §2.4 and §3) stay in force as the interim path. The agent has no shell on prod; every on-host step of the
 manual fallback (§3) and the host-loss path (§4) is run **by the owner** over the
 `breakglass` key: ds-api-prod as `ssh breakglass@ds-api-prod`, ds-data-prod as
 `ssh -J breakglass@ds-api-prod breakglass@192.168.0.10`. This runbook adds no key, no
@@ -84,12 +85,18 @@ not secrets; their values are in the templates or derive from the environment.
 
 ### 1.4 Gaps (2026-11-04)
 
-- **Custody not yet populated.** The custodian ceremony (§2.1) has not happened, so
-  `custodians.txt` holds no recipient and no bundle exists; until it does, a loss of
-  ds-data-prod loses `PGBACKREST_REPO1_CIPHER_PASS` and with it every backup.
+- **Custody not yet populated.** Two paths exist: the interim owner-run bundle
+  (`pnpm recovery`, §2.4) and CI custody, which produces its first bundle only after
+  the custodian ceremony (§2.1) and the next release. Neither has produced a bundle
+  yet; until one does, a loss of ds-data-prod loses `PGBACKREST_REPO1_CIPHER_PASS` and
+  with it every backup.
 - **Restore proof not yet run.** No restore has been completed with a bundle-supplied
   passphrase (§3). An S3 listing or object checksum is **not** accepted as proof: only
   a completed restore that recovers and promotes is.
+- **Interim path still in force.** The owner-run path (§2.4, §3 «Owner-run tool») is
+  retired only after the first CI-built bundle has been test-decrypted by a custodian
+  (§2.2) and a restore with a bundle-supplied `PGBACKREST_REPO1_CIPHER_PASS` has passed
+  (§3).
 - **Fresh-host DR drill not run.** §4 (recreate both boxes and restore) has never
   been exercised end to end; it, backup verification, alerts and a quarterly drill
   are #3671.
@@ -166,7 +173,7 @@ gh workflow run recovery-custody.yml --ref main -f verb=recovery-bundle
 gh workflow run recovery-custody.yml --ref main -f verb=recovery-check
 ```
 
-### 2.1 The custodian ceremony (the only human step)
+### 2.1 The custodian ceremony (the only human step of CI custody)
 
 Runs once, and again only when a custodian changes or an identity is lost or exposed.
 
@@ -273,6 +280,157 @@ console). The bucket name and endpoint are `PGBACKREST_REPO1_S3_BUCKET` /
 When done, delete the fetched ciphertext and manifests from the workstation; they open
 nothing without an identity, but they are not kept outside the bucket.
 
+### 2.4 Interim: owner-run bundle until CI custody is proven
+
+This path stays in force until the first CI-built bundle has been test-decrypted by a
+custodian (§2.2) and a restore with a bundle-supplied `PGBACKREST_REPO1_CIPHER_PASS`
+has passed (§3); only then is it retired. Until then, run it after every change under
+`/etc/ds-platform/` beside the CI dispatch of §2 «After a change».
+
+**Automated: `pnpm recovery init-keys` (§2.4.1, once) and `pnpm recovery bundle`
+(§2.4.2–§2.4.3); `pnpm recovery doctor` checks the prerequisites first, and
+`pnpm recovery all` runs doctor → bundle → restore proof (§3).** Every bundle is
+encrypted to `A.pub` and `B.pub` (public files only) and gated by the member list
+decrypted with identity A plus the fingerprints; only the first bundle after
+`init-keys` runs as `pnpm recovery bundle --test-b`, which also test-decrypts with the
+typed paper copy B before the paper is sealed (§2.4.2). The manual commands below are
+the reference and the fallback. The tool (`tools/deploy/recovery.mjs`, from the
+repository root in Git Bash inside Windows Terminal) works in `~/ds-recovery` by
+default and refuses a directory inside a git repository or an existing identity. What
+stays manual: unlocking the `breakglass` key (ssh-agent or `--identity <key>`), typing
+the identity-A passphrase when `age` asks for it, writing custody B onto paper and
+typing it back (hidden input; B is shown once and never written to disk), putting
+`identity-A.age` and its passphrase into the password manager, storing the bundles
+(§2.4.4), and sealing paper B and handing it to the second custodian.
+
+The owner-run bundle is the set of `/etc/ds-platform/*.env` files of both hosts,
+encrypted with `age` to **two independent recipients**:
+
+- **Custody A** — an `age` identity kept in the owner's password manager.
+- **Custody B** — a second identity on a sealed offline paper copy, held by a
+  **second custodian** (default: the Product Lead) in a different physical location
+  from A, so recovery survives the owner's unavailability. The owner may substitute
+  another trusted custodian; record the custodian's role (never the value) on #3662.
+
+Either identity alone opens the bundle; neither is the `breakglass` SSH key (§2).
+
+**Workstation prerequisite.** `winget install FiloSottile.age` (provides `age` and
+`age-keygen`); the commands below run in Git Bash under the rules of §2.3 «Shell».
+Plaintext secrets never land on the workstation disk: they only pass through pipes.
+`age -p` and `age-keygen -y` read the console directly like `age -d`, and a native
+Windows program ends console input on Ctrl-Z, Enter.
+
+#### 2.4.1 Generate the identities (once; again only if one is lost or exposed)
+
+```bash
+set -o pipefail
+# Custody A: the identity is passphrase-encrypted before it touches disk.
+age-keygen | age -p -o identity-A.age
+# The recipient is derived from the identity itself, through a pipe only.
+age -d identity-A.age | age-keygen -y > A.pub
+# Store identity-A.age (attachment) and its passphrase in the password manager entry.
+
+# Custody B: the identity goes to the terminal only; copy it by hand onto paper.
+age-keygen
+# Type the paper copy back in (Ctrl-Z, Enter): this both checks the transcription and
+# derives the recipient. A typo yields an error or a recipient B's paper cannot open,
+# which the test decrypt in §2.4.2 catches before the paper is sealed.
+age-keygen -y > B.pub
+# Clear the terminal scroll-back. Keep the paper unsealed until the §2.4.2 test decrypt.
+```
+
+`A.pub` / `B.pub` hold the public recipients (one `age1…` line each, no prefix). They
+are not secret, but they are not committed either: keep them beside the bundle.
+
+#### 2.4.2 Build the bundle (after every rotation or new key)
+
+One bundle per host, streamed straight from `tar` into `age`. `/etc/ds-platform` is
+`0700 root`, so the `cd`, the glob and the `tar` all run inside one root shell on the
+host; `set -e` there and `pipefail` here make any failure fail the pipe:
+
+```bash
+set -o pipefail
+D=$(date -u +%Y-%m-%d)
+TAR="sudo sh -c 'set -e; cd /etc/ds-platform && tar -cf - *.env'"
+ssh breakglass@ds-api-prod "$TAR" \
+  | age -R A.pub -R B.pub -o "ds-recovery-$D-api-prod.tar.age" \
+  || { echo "FAIL api-prod bundle"; rm -f "ds-recovery-$D-api-prod.tar.age"; }
+ssh -J breakglass@ds-api-prod breakglass@192.168.0.10 "$TAR" \
+  | age -R A.pub -R B.pub -o "ds-recovery-$D-data-prod.tar.age" \
+  || { echo "FAIL data-prod bundle"; rm -f "ds-recovery-$D-data-prod.tar.age"; }
+
+# Hard gate: the member list (names, never values) must hold every expected file.
+# Missing file, empty list or unreadable bundle = FAIL, and the bundle is discarded.
+gate() { # <bundle> <expected member>...
+  f=$1; shift
+  list=$(age -d -i identity-A.age "$f" | tar -tf -) && [ -n "$list" ] \
+    || { echo "FAIL $f: unreadable or empty"; rm -f "$f"; return 1; }
+  for m in "$@"; do
+    printf '%s\n' "$list" | grep -qx "$m" || { echo "FAIL $f: no $m"; rm -f "$f"; return 1; }
+  done
+  echo "OK $f"; printf '%s\n' "$list"
+}
+gate "ds-recovery-$D-api-prod.tar.age" api.env zitadel.env
+gate "ds-recovery-$D-data-prod.tar.age" data.env
+```
+
+`api.env` and `zitadel.env` are required in the first (`api-sign-in.env` and
+`internal.env` also appear once a release has written them), `data.env` in the second.
+On any FAIL, fix the cause and rebuild; never keep a bundle that failed the gate.
+
+**Test decrypt with B (once, when B is created, before sealing the paper; the tool's
+`bundle --test-b`).** Type B's paper copy into `age` as the identity (Ctrl-Z, Enter);
+the plaintext only goes through the pipe to `tar -tf -`, which prints names:
+
+```bash
+set -o pipefail
+age -d -i - "ds-recovery-$D-data-prod.tar.age" | tar -tf -   # expect: data.env
+```
+
+The same member list as with A = custody B proven; seal the paper and hand it to the
+second custodian. Anything else: B was mis-transcribed, so regenerate B (§2.4.1) and
+rebuild both bundles.
+
+#### 2.4.3 Fingerprint-verify each irreplaceable key
+
+Compare the `sha256` of a key's value read on the host with the same value taken from
+the decrypted bundle. The keys are high-entropy, so the hash reveals nothing usable;
+post only `match` / `mismatch`.
+
+```bash
+set -o pipefail
+fp() { sed -n "s/^$1=//p" | tr -d '\r\n' | sha256sum | cut -c1-16; }
+# host side
+ssh -J breakglass@ds-api-prod breakglass@192.168.0.10 \
+  "sudo sed -n 's/^PGBACKREST_REPO1_CIPHER_PASS=//p' /etc/ds-platform/data.env | tr -d '\r\n' | sha256sum | cut -c1-16"
+# bundle side
+age -d -i identity-A.age "ds-recovery-$D-data-prod.tar.age" | tar -xOf - data.env | fp PGBACKREST_REPO1_CIPHER_PASS
+```
+
+Repeat for `ZITADEL_MASTERKEY` (`zitadel.env`), `SIGN_IN_RECORD_KEY` and
+`AUDIT_IDENTIFIER_PEPPER` (`api.env`) against ds-api-prod. All four must match.
+Custody B is proven by the one-time test decrypt in §2.4.2; later bundles are encrypted
+to the same `B.pub` and verified with identity A and these fingerprints only, so a
+rotation never unseals paper B.
+
+#### 2.4.4 Store the ciphertext
+
+- At least **two** places, each independent of both prod hosts — for example an
+  owner-held encrypted offline drive and a personal cloud drive.
+- **Never** at the backup provider or in its account (no Timeweb S3, no future
+  `repo2` bucket), never in the password-manager vault that holds identity A, never
+  next to paper copy B: the ciphertext is never stored with an identity that opens it.
+- Never in Git, a GitHub Issue/PR/artifact, chat or a CI log.
+- Keep the previous bundle until the new one is verified (§2.4.3), then delete it.
+
+**Rebuild trigger.** Any change to a file under `/etc/ds-platform/` on either host —
+a rotation, a new key in a template, a reissue from §1.3 — is followed by
+§2.4.2–§2.4.4 in the same session.
+
+**At recovery time** an owner-run bundle opens with identity A or paper B in place of
+`<identity>.age` in §2.3 steps 3–4; it is fetched from its storage place instead of the
+bucket.
+
 ## 3. Restore proof (ds-data-prod)
 
 Proves that the bundle's `PGBACKREST_REPO1_CIPHER_PASS` opens the live repository by
@@ -283,8 +441,23 @@ stays in RF and never reaches a workstation.
 **Primary path (planned, #3662).** An automated, isolated restore drill on the #3648
 throw-away restore mechanism (`rehearse-migration`), with that mechanism's
 `--network none` limitation fixed so the copy replays archived WAL (§3.2 «Network of
-the copy»). It has not been built; until it lands, the manual fallback below is the
-only proof.
+the copy»). It has not been built; until it lands, the owner-run tool and the manual
+fallback below are the proof.
+
+**Owner-run tool (interim, §2.4):
+`pnpm recovery restore-proof --bundle <out>/ds-recovery-<date>-data-prod.tar.age`.**
+It stays in force until the first CI-built bundle has been test-decrypted by a
+custodian (§2.2) and a restore with a bundle-supplied `PGBACKREST_REPO1_CIPHER_PASS`
+has passed. The manual commands below are the reference and the fallback. The tool
+stages the bundle's `data.env` on tmpfs, runs §3.2–§3.4 as root scripts fed over ssh
+stdin (the image IDs come from the state file, SEG from `check`), tears down
+(container, scratch directory, tmpfs file) after a PASS, a failure, a Ctrl-C or a
+dropped ssh session, and writes the sanitised §3.5 report to
+`<out>/reports/restore-proof-<UTC>.md`. Only a crash of the workstation itself can
+leave leftovers; the next run then stops and names `pnpm recovery teardown`, which
+removes every `ds-recovery-*` container, scratch directory and the staged env file (and
+prints the §3.4 commands if anything remains). What stays manual: the identity-A
+passphrase, and posting the report to #3662.
 
 **Manual fallback (owner over breakglass, a custodian beside).** It reuses the
 throw-away restore mechanics of the release-pipeline spec
@@ -297,7 +470,8 @@ its `data.env` equals the live one.
 
 ### 3.1 Stage the bundle's data.env on tmpfs
 
-A custodian fetches and verifies the latest data-prod bundle (§2.3 steps 1–3). The
+A custodian fetches and verifies the latest data-prod bundle (§2.3 steps 1–3); on the
+interim path, the owner uses the owner-run data-prod bundle and identity A (§2.4). The
 passphrase comes **from the bundle**, not from `/etc/ds-platform/data.env`:
 
 ```bash
@@ -439,6 +613,10 @@ Limitations: <e.g. recovery to backup end only; fresh-host drill not run>
 Verdict: PASS | PARTIAL (<reason>) | FAIL (<reason>)
 ```
 
+The owner-run tool's report (§2.4) carries the same lines, with the header
+`… — owner-run over breakglass (pnpm recovery)` and the passphrase source
+`recovery bundle <date> (custody A); key fingerprints matched: <n>/4`.
+
 No key value, row content or personal data goes into the report.
 
 ## 4. Full host-loss path
@@ -449,8 +627,9 @@ Each step is an existing section; this list only orders them.
    owner-local tfstate/tfvars (§1.1), then README → «Apply order» up to step 5
    (cloud-init, SSH access model, Docker Hub login, the tree).
 2. **Secrets.** «Apply order» step 6, each file filled **from the recovery bundle**
-   by a custodian (§2.3: fetch, verify, decrypt into a pipe to the new box).
-   The four keys of §1.2 must be the old values; reissue only what §1.3 allows.
+   by a custodian (§2.3: fetch, verify, decrypt into a pipe to the new box), or, on
+   the interim path, by the owner from the owner-run bundle (§2.4) with identity A or
+   paper B. The four keys of §1.2 must be the old values; reissue only what §1.3 allows.
 3. **Data before the first postgres boot** (ds-data-prod lost). Build the data images
    («Apply order» step 7), then restore into the empty `pgdata` volume **before**
    `postgres` first starts: a first boot on an empty volume runs `initdb` and creates
@@ -465,8 +644,9 @@ Each step is an existing section; this list only orders them.
    then README → «Verify-on-box». The `ds` role keeps its restored password (§1.3).
 5. **Afterwards.** Dispatch `recovery-bundle`, then `recovery-check` (§2): a rebuilt
    box has a new fingerprint key, so its first check after the rebuild reports
-   `MISMATCH fingerprint-key` until it has bundled once. Record the drill outcome on
-   #3671.
+   `MISMATCH fingerprint-key` until it has bundled once. While the interim path is in
+   force, also rebuild the owner-run bundle (§2.4.2–§2.4.4). Record the drill outcome
+   on #3671.
 
 Related: `infra/deploy/README.md` («Apply order», «Rollback»),
 `infra/deploy/compose/data-prod/README.md` («Secrets»),

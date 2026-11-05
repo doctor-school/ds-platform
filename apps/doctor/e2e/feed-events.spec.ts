@@ -46,20 +46,6 @@ test("EARS-4: the nearest-events block stands first, every card from the shared 
     });
 });
 
-test("EARS-4: an event whose option hides the counter renders no counter line, no «0» and no empty slot — its neighbours keep theirs", async ({
-  page,
-}) => {
-  await page.goto(FEED);
-  const cards = page
-    .getByTestId("specialty-feed-events")
-    .locator("[data-webinar-card]");
-  const hidden = cards.filter({ hasText: "Остеоартроз: что нового" });
-  await expect(hidden).toHaveCount(1);
-  await expect(hidden.locator("[data-signup-count]")).toHaveCount(0);
-  await expect(hidden).not.toContainText(/записал/i);
-  await expect(cards.locator("[data-signup-count]")).toHaveCount(2);
-});
-
 test("EARS-4: an offline meet-up is a format of the same event card, and НМО is only its attribute — never a heading or a filter of the screen", async ({
   page,
 }) => {

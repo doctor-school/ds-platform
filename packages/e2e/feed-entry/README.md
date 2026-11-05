@@ -90,3 +90,13 @@ screen headings and filters. It does not prove positive НМО authoring/renderi
 The distinct mocked positive-chip test in `apps/doctor/e2e/feed-events.spec.ts`
 and mapper `nmo: true` boundary remain. The layout mock also retains its
 unmatched personalization assertion; API owning-layer tests remain.
+
+The previous `feed-events.spec.ts` hidden-counter case is the one exact local
+duplicate removed after committed real proof. Its no-line/no-zero/no-slot and
+visible-neighbor assertions now belong to canonical 018:129 via
+`public-feed-states.steps.ts`. Canonical 018:35 also checks the real envelope;
+its local layout case remains because it additionally checks the absence of a
+personalization claim. Canonical 018:137 checks real offline projection and
+same-card rendering; its local case remains for the otherwise unavailable
+positive НМО chip. First-block ordering, all-events navigation, failed-read
+retry, axe and API tests retain their separate boundaries.

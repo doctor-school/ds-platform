@@ -67,7 +67,7 @@ import { fileURLToPath } from "node:url";
 
 import { cutDeployRelease } from "../release/cut-release.mjs";
 import {
-  DEPLOY_PROD_WORKFLOW_PATH,
+  NON_CI_WORKFLOW_PATHS,
   ciVerdictProblem,
   classifyDeployCheckRuns,
   fetchDeployCiBoard,
@@ -346,7 +346,7 @@ export function preflightChecks({ sha, repo, cwd = process.cwd() }) {
         board.checkRuns,
         board.workflowRuns,
         {
-          ignoreWorkflowPaths: [DEPLOY_PROD_WORKFLOW_PATH],
+          ignoreWorkflowPaths: NON_CI_WORKFLOW_PATHS,
         },
       );
       const problem = ciVerdictProblem(verdict, sha);

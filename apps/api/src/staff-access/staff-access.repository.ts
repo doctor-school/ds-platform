@@ -63,7 +63,8 @@ export interface StaffMirrorRow {
 export interface GrantCommit {
   sub: string;
   email: string;
-  fullName: string;
+  /** ФИО for a mirror row the grant inserts; `null` when unknown (the 049 operator command). */
+  fullName: string | null;
   /** `users.role` — `mirrorRoleFromClaims` of the account's role set after the grant. */
   mirrorRole: string;
   role: string;

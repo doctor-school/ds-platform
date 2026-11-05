@@ -15,6 +15,7 @@
     "seed:events": "tsx scripts/seed-events.ts",
     "recordings:backfill": "tsx scripts/recordings-backfill.ts",
     "break-glass:remove-mfa": "tsx scripts/break-glass-remove-mfa.ts",
+    "superadmin": "tsx scripts/superadmin.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",

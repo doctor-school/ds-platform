@@ -1,4 +1,5 @@
 import {
+  AUTH_SESSION_PATH,
   type ForwardedSession,
   type SessionClaims,
   forwardedHeaders,
@@ -94,7 +95,7 @@ export async function fetchSessionClaims(
   session: ForwardedSession,
   fetchImpl: typeof fetch = fetch,
 ): Promise<SessionClaims | null> {
-  const res = await fetchImpl(`${serverApiBase()}/v1/auth/session`, {
+  const res = await fetchImpl(`${serverApiBase()}${AUTH_SESSION_PATH}`, {
     headers: forwardedHeaders(session),
     cache: "no-store",
   });
@@ -114,8 +115,7 @@ export async function fetchSessionClaims(
  * an initials square, and that is the one honest difference between them.
  */
 export type ServerAuth =
-  | { status: "guest" }
-  | { status: "doctor"; claims: SessionClaims };
+  { status: "guest" } | { status: "doctor"; claims: SessionClaims };
 
 /**
  * Resolve the branch from an incoming request headers. Three paths, all landing

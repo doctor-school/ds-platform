@@ -171,6 +171,7 @@ describe("006 EARS-2 / EARS-14: a granted doctor gets the room, or the name prom
         accountEvents: "/account/events",
       },
       displayName: "Иван Петров",
+      guestBounce: "/login?returnTo=%2Fwebinars%2Fcardio-live%2Froom",
     });
   });
 

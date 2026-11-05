@@ -1,6 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { AUTH_SESSION_PATH } from "@ds/schemas";
 
 import type { RoomShellProps } from "@ds/room";
 import { ROOM_COPY_RU, ROOM_FORMATTERS_RU } from "@ds/room/copy";
@@ -19,6 +21,23 @@ import { ROOM_COPY_RU, ROOM_FORMATTERS_RU } from "@ds/room/copy";
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh }),
+}));
+
+// `next/link` becomes a marked anchor, so a client-router link and a plain
+// document link (003 EARS-74) are told apart in the DOM.
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: string;
+    children: ReactNode;
+  }) => (
+    <a href={href} data-next-link="" {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 let shellProps: RoomShellProps | null = null;
@@ -50,6 +69,7 @@ const PROPS: Omit<RoomClientProps, "displayName"> = {
     eventPage: "/webinars/cardio-live",
     accountEvents: "/account/events",
   },
+  guestBounce: "/login?returnTo=%2Fwebinars%2Fcardio-live%2Froom",
 };
 
 beforeEach(() => {
@@ -97,5 +117,53 @@ describe("006 EARS-11: a saved name — the room composes with the host values",
     expect(
       screen.getByRole("button", { name: "Переключить тему" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("003 EARS-73 / EARS-74: the room is a signed-in storefront document", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    Reflect.deleteProperty(document, "visibilityState");
+  });
+
+  it("003 EARS-74: the room's profile chip is a plain document link to /account", () => {
+    render(<RoomClient {...PROPS} displayName="Иван Петров" />);
+    const chip = screen.getByTestId("room-avatar");
+    expect(chip.tagName).toBe("A");
+    expect(chip).toHaveAttribute("href", "/account");
+    expect(chip).not.toHaveAttribute("data-next-link");
+  });
+
+  it("003 EARS-73: the room declares its own guest bounce for the return re-check", () => {
+    const { container } = render(
+      <RoomClient {...PROPS} displayName="Иван Петров" />,
+    );
+    expect(container.querySelector("[data-guest-bounce]")).toHaveAttribute(
+      "data-guest-bounce",
+      PROPS.guestBounce,
+    );
+  });
+
+  it("003 EARS-73: the room's signed-in cluster mounts the return re-check — one session read per return", async () => {
+    let visibility: DocumentVisibilityState = "visible";
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => visibility,
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RoomClient {...PROPS} displayName="Иван Петров" />);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await act(async () => {
+      visibility = "hidden";
+      document.dispatchEvent(new Event("visibilitychange"));
+      visibility = "visible";
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(AUTH_SESSION_PATH);
   });
 });

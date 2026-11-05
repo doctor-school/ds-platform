@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { UserRound } from "lucide-react";
 import { cn } from "@ds/design-system/lib/utils";
 import { Link as DsLink } from "@ds/design-system/link";
 import { buttonVariants } from "@ds/design-system/button";
 
+import { SessionRecheck } from "./session-recheck";
 import { ThemeToggle, type ThemeToggleLabels } from "./theme-toggle";
 
 /**
@@ -48,7 +48,9 @@ const avatarFallbackIcon = <UserRound aria-hidden="true" className="size-5" />;
 
 /** The profile chip on its own — the initials-or-silhouette icon-link to the
  *  profile. Exported so a surface that needs the chip WITHOUT the toggle can
- *  reuse the identical presentation. */
+ *  reuse the identical presentation. A plain document link, never a client-
+ *  router one (003 EARS-74): `/account` bounces a guest on the server, and a
+ *  router navigation would commit that `redirect()` as an empty page. */
 export function HeaderProfileChip({
   label,
   initials,
@@ -68,15 +70,16 @@ export function HeaderProfileChip({
 }) {
   return (
     <DsLink asChild className={cn(AVATAR_CHIP, className)}>
-      <Link href={href} aria-label={label} data-testid={testId}>
+      <a href={href} aria-label={label} data-testid={testId}>
         {initials ? initials : avatarFallbackIcon}
-      </Link>
+      </a>
     </DsLink>
   );
 }
 
 /** The theme-toggle + profile-chip pair — the same two-button unit in every
- *  chrome bar (toggle left, chip rightmost). */
+ *  chrome bar (toggle left, chip rightmost). It renders only for a signed-in
+ *  doctor (the room), so it also mounts the return re-check (003 EARS-73). */
 export function HeaderUserCluster({
   themeToggleLabels,
   profileLabel,
@@ -100,6 +103,7 @@ export function HeaderUserCluster({
 }) {
   return (
     <div className={cn("flex items-center", className)}>
+      <SessionRecheck />
       <ThemeToggle labels={themeToggleLabels} />
       <HeaderProfileChip
         label={profileLabel}

@@ -2,22 +2,19 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { declaredGuestBounce } from "@ds/schemas";
-
-/**
- * The read the shell's auth state already rests on — the endpoint
- * `resolveServerAuth` (`@ds/auth-flow/server`) reads on the server. From the
- * browser it is relative: each storefront proxies `/v1/*` same-origin, so the
- * `__Host-` session cookie travels and no token reaches script. (The literal
- * lives here because the §4 package graph allows this package `@ds/schemas`
- * and `@ds/design-system` only.)
- */
-export const SESSION_READ_PATH = "/v1/auth/session";
+import { AUTH_SESSION_PATH, declaredGuestBounce } from "@ds/schemas";
 
 /**
  * 003 EARS-73 — a returned-to signed-in tab re-checks its session (design
- * amendment 2026-11-05). Mounted by the signed-in cluster only, so a guest
- * render never listens and never reads.
+ * amendment 2026-11-05). Mounted by the signed-in clusters only — the
+ * storefront header's `ShellAuthCluster` and the room's `HeaderUserCluster` —
+ * so a guest render never listens and never reads.
+ *
+ * The read is `AUTH_SESSION_PATH` (`@ds/schemas`), the endpoint
+ * `resolveServerAuth` (`@ds/auth-flow/server`) reads on the server; from the
+ * browser it is relative, through each storefront's same-origin `/v1/*` proxy,
+ * so the `__Host-` session cookie travels and no token reaches script. (The
+ * shell may not import `@ds/auth-flow` — §4 package graph.)
  *
  * One hidden → visible transition is ONE return: `visibilitychange` to
  * `visible` and a bfcache `pageshow` (`persisted`) of that return share one
@@ -44,13 +41,17 @@ export function SessionRecheck() {
       if (inFlight) return;
       inFlight = true;
       try {
-        const res = await fetch(SESSION_READ_PATH, {
+        const res = await fetch(AUTH_SESSION_PATH, {
           credentials: "include",
           cache: "no-store",
           headers: { accept: "application/json" },
         });
         if (res.status !== 401) return;
-        const bounce = declaredGuestBounce(document);
+        // Only a same-origin bounce is followed; anything else re-renders in place.
+        const bounce = declaredGuestBounce(document, {
+          origin: window.location.origin,
+          originOf: (href) => new URL(href, window.location.origin).origin,
+        });
         if (bounce) window.location.assign(bounce);
         else router.refresh();
       } catch {

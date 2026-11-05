@@ -83,6 +83,7 @@ export async function RoomPage({ config, params }: RoomPageProps) {
       copy={{ ...ROOM_COPY_RU, brandHome: config.copy.brandHome }}
       routes={routes.room}
       displayName={displayName}
+      guestBounce={routes.entry.auth}
     />
   );
 }

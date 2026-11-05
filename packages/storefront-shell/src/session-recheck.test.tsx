@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render } from "@testing-library/react";
-import { guestBounceMarker } from "@ds/schemas";
+import { AUTH_SESSION_PATH, guestBounceMarker } from "@ds/schemas";
 
 /**
  * 003 EARS-73 — a returned-to signed-in tab re-checks its session (design
@@ -20,7 +20,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { ShellAuthCluster } from "./auth-cluster";
-import { SESSION_READ_PATH, SessionRecheck } from "./session-recheck";
+import { SessionRecheck } from "./session-recheck";
 
 let visibility: DocumentVisibilityState = "visible";
 const fetchMock = vi.fn();
@@ -90,10 +90,10 @@ describe("003 EARS-73: the return re-check", () => {
     await flush();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
-      SESSION_READ_PATH,
+      AUTH_SESSION_PATH,
       expect.objectContaining({ credentials: "include", cache: "no-store" }),
     );
-    expect(SESSION_READ_PATH).toBe("/v1/auth/session");
+    expect(AUTH_SESSION_PATH).toBe("/v1/auth/session");
 
     // A second return is a second read.
     setVisibility("hidden");
@@ -186,6 +186,28 @@ describe("003 EARS-73: the return re-check", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(refresh).not.toHaveBeenCalled();
       expect(assign).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["an absolute URL", "https://evil.example/login"],
+    ["a protocol-relative URL", "//evil.example/login"],
+    ["a javascript: URL", "javascript:alert(1)"],
+  ])(
+    "003 EARS-73: a 401 under a marker carrying %s never follows it and re-renders in place",
+    async (_name, bounce) => {
+      respond(401);
+      render(
+        <>
+          <span {...guestBounceMarker(bounce)} />
+          <SessionRecheck />
+        </>,
+      );
+      setVisibility("hidden");
+      setVisibility("visible");
+      await flush();
+      expect(assign).not.toHaveBeenCalled();
+      expect(refresh).toHaveBeenCalledTimes(1);
     },
   );
 

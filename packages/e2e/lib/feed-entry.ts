@@ -189,7 +189,7 @@ export function verifyFeedEntryProvenance() {
   }
   expect(read("design-source/doctor-home.dc.html")).toContain("ds-shell");
   expect(read("design-source/ds-shell.dc.html")).toContain("doctor");
-  const shell = read("apps/doctor/app/(storefront)/layout.tsx");
+  const shell = read("apps/doctor/components/storefront-frame.tsx");
   expect(shell).toContain('from "@ds/storefront-shell"');
   expect(shell).toContain("<StorefrontHeader");
   expect(shell).toContain("<StorefrontFooter");

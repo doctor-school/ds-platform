@@ -1283,7 +1283,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     readBoxes({ cert: false });
     const r = readRun("capabilities");
     assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema", "observe", "rehearse", "rehearsal-status", "recovery-bundle", "recovery-check"] });
+    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema", "observe", "rehearse", "rehearse-restore", "rehearsal-status", "recovery-bundle", "recovery-check"] });
     assert.match(log("logger"), /auth\.info accepted: capabilities/);
   });
 
@@ -1312,6 +1312,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     "rehearse",
     `rehearse ${SHA.slice(0, 12)}`,
     `rehearse ${SHA} now`,
+    "rehearse-restore",
+    `rehearse-restore ${SHA.slice(0, 12)}`,
+    `rehearse-restore ${SHA} now`,
+    `rehearse-restore --apply ${SHA}`,
     `rehearsal-status`,
     "read-schema",
     "check",
@@ -1578,6 +1582,33 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.ok(unit.args.includes(`--unit=ds-rehearse-${SHA.slice(0, 12)}`));
   });
 
+  it("3648: rehearse-restore with nothing pending checks the SHA, ships the migrations and starts the restore-only unit", () => {
+    rehearseBoxes();
+    const r = readRun(`rehearse-restore ${SHA}`, { env: rehearseEnv() });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, "ds-read-entrypoint: state started\n");
+    assert.deepEqual(decrypt(r.stdout), { verb: "rehearse-restore", sha: SHA, state: "started", pending: 0 });
+    assert.match(log("curl").split("\n")[0], new RegExp(`/compare/refs/heads/main\\.\\.\\.${SHA}$`));
+    assert.equal(log("ds-release"), "ds-release-called check prod\ndata-ds-release check prod\n");
+    const hops = log("ssh").trimEnd().split("\n").map((l) => l.split("deploy@192.168.0.10 ")[1]);
+    assert.deepEqual(hops, ["check", `rehearse-restore ${SHA}`]);
+    // The same lock as `rehearse`; the harness's restore-only start.
+    assert.match(log("flock"), new RegExp(`^flock -n -E 75 \\S*/run/ds-platform/ds-rehearsal\\.lock python3 -I \\S*rehearse-migration\\.py start ${SHA} \\S+ --restore-only$`, "m"));
+    const unit = readFileSync(join(dir, "fake.log"), "utf8").trimEnd().split("\n").map((l) => JSON.parse(l)).find((c) => c.tool === "systemd-run");
+    assert.ok(unit.args.includes(`--unit=ds-rehearse-${SHA.slice(0, 12)}`), "the same unit");
+  });
+
+  for (const [label, compare] of [["ahead of main", "ahead"], ["diverged from main", "diverged"], ["unknown to GitHub", null]]) {
+    it(`3648: rehearse-restore rejects (exit 2) a SHA ${label}, before any download or hop`, () => {
+      rehearseBoxes({ compare });
+      const r = readRun(`rehearse-restore ${SHA}`, { env: rehearseEnv() });
+      assert.equal(r.status, 2, r.stderr);
+      assert.match(r.stderr, /contained in main/);
+      assert.ok(!log("curl").includes("codeload"), "no download");
+      assert.ok(!log("ssh").includes("rehearse"), "no data verb");
+    });
+  }
+
   for (const [label, compare] of [["ahead of main", "ahead"], ["diverged from main", "diverged"], ["unknown to GitHub", null]]) {
     it(`3648: rehearse rejects (exit 2) a SHA ${label}, before any download or hop`, () => {
       rehearseBoxes({ compare });
@@ -1621,6 +1652,22 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     });
     assert.equal(r.status, 2, String(r.stderr));
     assert.match(String(r.stderr), /the migration archive exceeds 16777216 bytes/);
+    assert.equal(log("flock"), "");
+  });
+
+  it("3648: the data box's rehearse-restore takes the archive like rehearse and rejects a bad arity", () => {
+    rehearseBoxes();
+    const data = (command, input) =>
+      spawnSync("bash", [ENTRYPOINT], {
+        env: { ...process.env, PATH: `${stubs}${delimiter}${process.env.PATH}`, STUB_DIR: dir, DS_ENTRYPOINT_ROOT: dataRoot(), SSH_ORIGINAL_COMMAND: command, ...rehearseEnv() },
+        input,
+      });
+    const big = data(`rehearse-restore ${SHA}`, Buffer.alloc(16 * 1024 * 1024 + 1));
+    assert.equal(big.status, 2, String(big.stderr));
+    assert.match(String(big.stderr), /the migration archive exceeds 16777216 bytes/);
+    for (const command of ["rehearse-restore", `rehearse-restore ${SHA} --apply`, `rehearse-restore ${SHA.slice(0, 12)}`]) {
+      assert.equal(data(command, Buffer.alloc(0)).status, 2, command);
+    }
     assert.equal(log("flock"), "");
   });
 

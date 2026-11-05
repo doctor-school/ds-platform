@@ -78,6 +78,11 @@ describe("3646: the runner-side input shape check", () => {
       checkInputs({ verb: "rehearse", sha: SHA, params: "{}" }),
       { ok: true, command: `rehearse ${SHA}`, stdin: null },
     );
+    assert.deepEqual(checkInputs({ verb: "rehearse-restore", sha: SHA }), {
+      ok: true,
+      command: `rehearse-restore ${SHA}`,
+      stdin: null,
+    });
     assert.deepEqual(checkInputs({ verb: "rehearsal-status", sha: SHA }), {
       ok: true,
       command: `rehearsal-status ${SHA}`,
@@ -232,6 +237,22 @@ describe("3646: status lines only — verb, rc, size and sha256, or one fixed re
     const failed = statusLine({ verb: "rehearse", rc: 1, cms: Buffer.alloc(0), stderr: "ds-read-entrypoint: insufficient headroom (disk)\n" });
     assert.equal(failed.line, "prod-observe: verb=rehearse rc=1 reason=insufficient headroom (disk)");
   });
+  it("3648: a rehearsal whose final state is `failed` uploads its report and fails the job, for every rehearsal verb", () => {
+    for (const verb of ["rehearse", "rehearse-restore", "rehearsal-status"]) {
+      const r = statusLine({ verb, rc: 0, cms, stderr: "ds-read-entrypoint: state running\nds-read-entrypoint: state failed\n" });
+      assert.deepEqual(r, {
+        upload: true,
+        failed: true,
+        line: `prod-observe: verb=${verb} rc=0 state=failed bytes=5 sha256=${sha256(cms)}`,
+      }, verb);
+      const ok = statusLine({ verb, rc: 0, cms, stderr: "ds-read-entrypoint: state succeeded\n" });
+      assert.equal(ok.failed, false, verb);
+    }
+    const started = statusLine({ verb: "rehearse-restore", rc: 0, cms, stderr: "ds-read-entrypoint: state started\n" });
+    assert.equal(started.failed, true, "a restore-only rehearsal still started after the poll's cap");
+    const stateless = statusLine({ verb: "rehearse-restore", rc: 0, cms, stderr: "" });
+    assert.equal(stateless.upload, false);
+  });
 });
 
 describe("3646: prod-observe.yml", () => {
@@ -249,6 +270,7 @@ describe("3646: prod-observe.yml", () => {
       "schema",
       "observe",
       "rehearse",
+      "rehearse-restore",
       "rehearsal-status",
     ]);
     assert.equal(inputs.params.default, "{}");
@@ -288,16 +310,17 @@ describe("3646: prod-observe.yml", () => {
     );
     assert.ok(names.indexOf("Ask capabilities") < names.indexOf("Read"));
     const upload = job.steps.find((s) => s.name === "Upload the ciphertext");
-    assert.equal(upload.if, "steps.read.outputs.upload == 'true'");
+    // A failed rehearsal fails the Read step and still uploads its report.
+    assert.equal(upload.if, "!cancelled() && steps.read.outputs.upload == 'true'");
     assert.equal(upload.with.name, "prod-read-${{ github.run_id }}");
     assert.match(upload.with.path, /result\/result\.cms$/);
     assert.equal(upload.with["retention-days"], 1);
   });
   it("3648: a rehearse polls rehearsal-status up to the runtime cap and prints only the state word", () => {
     const read = job.steps.find((s) => s.name === "Read");
-    assert.match(read.run, /if \[ "\$VERB" = rehearse \] && \[ "\$rc" -eq 0 \]; then/);
+    assert.match(read.run, /if \{ \[ "\$VERB" = rehearse \] \|\| \[ "\$VERB" = rehearse-restore \]; \} && \[ "\$rc" -eq 0 \]; then/);
     assert.ok(read.run.includes(`deadline=$(( $(date +%s) + ${REHEARSAL_POLL_CAP_SEC} ))`), "the poll stops at the cap");
-    assert.match(read.run, /"rehearsal-status \$\{COMMAND#rehearse \}" <\/dev\/null/);
+    assert.match(read.run, /"rehearsal-status \$\{COMMAND#\* \}" <\/dev\/null/);
     assert.match(read.run, /prod-read\.mjs state "\$RUNNER_TEMP\/read\.err"/);
     assert.match(read.run, /echo "prod-observe: rehearsal state=\$state"/);
     assert.ok(job["timeout-minutes"] * 60 > REHEARSAL_POLL_CAP_SEC + 5 * 60, "the job outlives the poll");

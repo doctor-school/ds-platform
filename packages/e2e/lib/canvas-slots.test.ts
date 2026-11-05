@@ -5,7 +5,13 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { diffSlots, extractCanvasSlots, type SlotStructure } from "./canvas-slots.js";
+import {
+  applySlotAllowlist,
+  diffSlots,
+  extractCanvasSlots,
+  maskSlotDigits,
+  type SlotStructure,
+} from "./canvas-slots.js";
 
 const REPO = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 const DOCTOR_FEED = join(REPO, "design-source/doctor-feed.dc.html");
@@ -155,5 +161,176 @@ describe("canvas-slots · diffSlots", () => {
     expect(diffSlots(canvas, { chrome: canvas.chrome, cards: [] })).toEqual([
       "cards: the canvas repeats cards here, the app renders none",
     ]);
+  });
+});
+
+describe("canvas-slots · #3757 repeats (sc-for iterations as cards)", () => {
+  const PAGE_REPEATS = `
+    <dc-import name="ds-shell" embedded="{{ true }}">
+      <section data-screen-label="catalog">
+        <input placeholder="Начните вводить название">
+        <div>
+          <sc-for list="{{ tiles }}" as="t"><a href="#">{{ t }}</a></sc-for>
+        </div>
+        <sc-for list="{{ rows }}" as="row">
+          <sc-if value="{{ row.ready }}"><a href="#">{{ row.title }}</a></sc-if>
+          <sc-if value="{{ !row.ready }}"><div>{{ row.title }}</div><button>Сообщить</button></sc-if>
+        </sc-for>
+        <button>Показать весь список — 105 ▾</button>
+      </section>
+    </dc-import>`;
+  const LOGIC = `renderVals() { return { tiles: ['Терапия', 'Педиатрия', 'Другое'],
+    rows: [{ title: 'Политика', ready: true }, { title: 'Оферта', ready: false }] }; }`;
+
+  it("reads each iteration of a listed alias as one card, its elements together; the rest stays chrome", () => {
+    const file = fixtures(PAGE_REPEATS, LOGIC, "<div></div>", "");
+    const slots = extractCanvasSlots(
+      file,
+      {},
+      {
+        section: ["data-screen-label", "catalog"],
+        repeats: ["t", "row"],
+      },
+    );
+    expect(slots.chrome).toEqual([
+      { kind: "input", label: "Начните вводить название" },
+      { kind: "button", label: "Показать весь список — 105 ▾" },
+    ]);
+    expect(slots.cards).toEqual([
+      ["link"],
+      ["link"],
+      ["link"],
+      ["link"],
+      ["button"],
+    ]);
+  });
+
+  it("keeps an unlisted alias's controls in the chrome by label", () => {
+    const file = fixtures(PAGE_REPEATS, LOGIC, "<div></div>", "");
+    const slots = extractCanvasSlots(
+      file,
+      {},
+      {
+        section: ["data-screen-label", "catalog"],
+        repeats: ["row"],
+      },
+    );
+    expect(slots.chrome.map((i) => i.label)).toEqual([
+      "Начните вводить название",
+      "Терапия",
+      "Педиатрия",
+      "Другое",
+      "Показать весь список — 105 ▾",
+    ]);
+    expect(slots.cards).toEqual([["link"], ["button"]]);
+  });
+});
+
+describe("canvas-slots · #3757 digit masking", () => {
+  const canvas: SlotStructure = {
+    chrome: [
+      { kind: "button", label: "Показать весь список — 105" },
+      { kind: "link", label: "Все 47 уроков →" },
+      { kind: "link", label: null },
+    ],
+    cards: [["link"]],
+  };
+
+  it("reads every digit run of a chrome label as # and leaves cards and icon items alone", () => {
+    expect(maskSlotDigits(canvas)).toEqual({
+      chrome: [
+        { kind: "button", label: "Показать весь список — #" },
+        { kind: "link", label: "Все # уроков →" },
+        { kind: "link", label: null },
+      ],
+      cards: [["link"]],
+    });
+  });
+
+  it("passes the canvas's sample count against the app's live one when the section opts in", () => {
+    const app: SlotStructure = {
+      chrome: [
+        { kind: "button", label: "Показать весь список — 118" },
+        { kind: "link", label: "Все 1204 уроков →" },
+        { kind: "link", label: null },
+      ],
+      cards: [["link"]],
+    };
+    expect(diffSlots(canvas, app, { maskDigits: true })).toEqual([]);
+  });
+
+  it("RED: without the opt-in the different count is a difference", () => {
+    const app: SlotStructure = {
+      ...canvas,
+      chrome: [
+        { kind: "button", label: "Показать весь список — 118" },
+        ...canvas.chrome.slice(1),
+      ],
+    };
+    expect(diffSlots(canvas, app)).not.toEqual([]);
+  });
+
+  it("RED: a label whose WORDS differ still fails with the opt-in", () => {
+    const app: SlotStructure = {
+      ...canvas,
+      chrome: [
+        { kind: "button", label: "Показать все — 118" },
+        ...canvas.chrome.slice(1),
+      ],
+    };
+    const lines = diffSlots(canvas, app, { maskDigits: true });
+    expect(lines.join(" | ")).toContain("Показать все — #");
+    expect(lines.join(" | ")).toContain("Показать весь список — #");
+  });
+});
+
+describe("canvas-slots · #3757 applySlotAllowlist", () => {
+  const entry = {
+    canvas: "page.dc.html",
+    props: {},
+    regions: ["contacts"],
+    delta: "missing" as const,
+    item: { kind: "link" as const, label: "Academy ↗" },
+    decision: "test",
+    source: "test",
+  };
+  const canvas: SlotStructure = {
+    chrome: [
+      { kind: "link", label: "Telegram" },
+      { kind: "link", label: "Academy ↗" },
+    ],
+    cards: [["link"]],
+  };
+  const app: SlotStructure = {
+    chrome: [{ kind: "link", label: "Telegram" }],
+    cards: [["link"]],
+  };
+
+  it("removes a decided chrome item of the named section, then the section matches", () => {
+    const decided = applySlotAllowlist(
+      [entry],
+      { canvas: "page.dc.html", props: {}, region: "contacts" },
+      canvas,
+      app,
+    );
+    expect(decided.stale).toEqual([]);
+    expect(diffSlots(decided.canvas, decided.app)).toEqual([]);
+  });
+
+  it("does not apply an entry scoped to another section, and reports an entry that matches nothing as stale", () => {
+    const other = applySlotAllowlist(
+      [entry],
+      { canvas: "page.dc.html", props: {}, region: "docs" },
+      canvas,
+      app,
+    );
+    expect(diffSlots(other.canvas, other.app)).not.toEqual([]);
+    const stale = applySlotAllowlist(
+      [entry],
+      { canvas: "page.dc.html", props: {}, region: "contacts" },
+      app,
+      app,
+    );
+    expect(stale.stale).toEqual([entry]);
   });
 });

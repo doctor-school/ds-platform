@@ -58,7 +58,7 @@ export function runSuperadminCommand(
 
 /**
  * Boot an HTTP-less Nest application context, run one command, close it. The
- * entry script (`apps/api/scripts/superadmin.ts`) calls this.
+ * entry (`superadmin-main.ts`, compiled into `dist/`) calls this.
  */
 export async function bootstrapAndRunSuperadmin(
   command: SuperadminCommand,

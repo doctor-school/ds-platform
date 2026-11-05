@@ -250,13 +250,28 @@ administrator); no separate tracker record of the offboarding is needed.
 `superadmin` (feature 049) is never granted or revoked in «Доступы»: the
 superadmin operator command is the only path that gives or removes it. Run it
 when the platform needs its first superadministrator, when another person is
-to become one, or when one leaves the role. It needs shell access to the API
-host with that environment's API configuration loaded; there is no
-second-factor confirmation, so the post-action note below is the record of
-who acted and why.
+to become one, or when one leaves the role. It runs inside the environment's
+running `api` container, which already holds that environment's API
+configuration; there is no second-factor confirmation, so the post-action note
+below is the record of who acted and why.
+
+**Production** (ds-api-prod, from a `breakglass` session — `deploy` has no shell
+there). The api image carries the compiled command in `dist/`, so it runs with
+plain `node`; no pnpm, tsx or repository checkout is needed:
 
 ```bash
-set -a; source ~/.ds-platform/.env.local; set +a   # or the target environment's API env
+cd /home/deploy/ds-platform/infra/deploy/compose/api-prod
+sudo docker compose exec -T api node dist/staff-access/superadmin-main.js grant  --email <account email> --by-admin <operator IdP sub>
+sudo docker compose exec -T api node dist/staff-access/superadmin-main.js remove --email <account email> --by-admin <operator IdP sub>
+```
+
+A stage PR slot runs the same `node dist/staff-access/superadmin-main.js …` in
+its own `api` container.
+
+**Workstation, against the dev stand:**
+
+```bash
+set -a; source ~/.ds-platform/.env.local; set +a
 pnpm --filter @ds/api superadmin -- grant  --email <account email> --by-admin <operator IdP sub>
 pnpm --filter @ds/api superadmin -- remove --email <account email> --by-admin <operator IdP sub>
 ```

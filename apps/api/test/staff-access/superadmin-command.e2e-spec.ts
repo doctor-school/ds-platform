@@ -240,6 +240,79 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(await roleRows(target.sub, since)).toHaveLength(0);
     });
 
+    it("049 EARS-6: a grant retry after a run that failed past its IdP write marks both roles it added, platform_admin first", async () => {
+      const operator = account();
+      // The IdP already holds both roles (the failed run's `PUT` landed), but
+      // neither `auth.role.granted` row was written.
+      const target = account(["doctor_guest", "platform_admin", "superadmin"]);
+      const writes = idpWriteSpies();
+      const since = await dbNow();
+
+      const result = await run({
+        verb: "grant",
+        email: target.email,
+        byAdmin: operator.sub,
+      });
+
+      expect(result.changed).toEqual([]);
+      for (const spy of writes) expect(spy).not.toHaveBeenCalled();
+      const rows = await roleRows(target.sub, since);
+      expect(rows.map((r) => r.event_type)).toEqual([
+        "auth.role.granted",
+        "auth.role.granted",
+      ]);
+      expect(rows.map((r) => r.metadata.role).sort()).toEqual([
+        "platform_admin",
+        "superadmin",
+      ]);
+      for (const row of rows) {
+        expect(row.metadata).toMatchObject({ by_admin: operator.sub });
+      }
+
+      await run({ verb: "grant", email: target.email, byAdmin: operator.sub });
+      expect(await roleRows(target.sub, since)).toHaveLength(2);
+    });
+
+    it("049 EARS-6: two concurrent removals of the last two holders leave one superadmin — the second is refused", async () => {
+      const operator = account();
+      const first = account();
+      const second = account();
+      await run({ verb: "grant", email: first.email, byAdmin: operator.sub });
+      await run({ verb: "grant", email: second.email, byAdmin: operator.sub });
+      const holders = await fake.listProjectGrantsWithRoles(["superadmin"]);
+      for (const h of holders) {
+        if (h.sub !== first.sub && h.sub !== second.sub)
+          await fake.revokeProjectRole(h.sub, "superadmin");
+      }
+      // Widen the window between the holder count and the IdP write, so two
+      // unserialized removals both count the other as a holder.
+      const list = fake.listProjectGrantsWithRoles.bind(fake);
+      vi.spyOn(fake, "listProjectGrantsWithRoles").mockImplementation(
+        async (roles) => {
+          const read = await list(roles);
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          return read;
+        },
+      );
+
+      const outcomes = await Promise.allSettled(
+        [first, second].map((t) =>
+          run({ verb: "remove", email: t.email, byAdmin: operator.sub }),
+        ),
+      );
+
+      expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(1);
+      const refused = outcomes.filter((o) => o.status === "rejected");
+      expect(refused).toHaveLength(1);
+      expect((refused[0] as PromiseRejectedResult).reason).toMatchObject({
+        code: "LAST_SUPERADMIN",
+      });
+      const left = [first, second].filter((t) =>
+        fake.grantedRoles(t.sub).includes("superadmin"),
+      );
+      expect(left).toHaveLength(1);
+    });
+
     it.each([
       ["an unknown email", "EMAIL_UNKNOWN"],
       ["an unverified email", "EMAIL_UNVERIFIED"],

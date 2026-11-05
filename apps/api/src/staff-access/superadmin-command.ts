@@ -132,7 +132,8 @@ async function verifiedSubOf(idp: IdpClient, email: string): Promise<string> {
  * only when absent, keeping every other role; one `auth.role.granted` per role
  * added, written after the IdP holds it. A repeat finds both present and writes
  * nothing. A held `superadmin` with no grant mark of its own (a run that failed
- * after its IdP write) gets the mark, so a retry closes the ledger.
+ * after its IdP write) is finished by the retry: each of the two roles whose
+ * latest mark is not `auth.role.granted` gets it, `platform_admin` first.
  */
 async function grantLocked(
   { idp, repo }: SuperadminCommandDeps,
@@ -156,10 +157,15 @@ async function grantLocked(
   const toMark = [...added];
   if (
     !added.includes(SUPERADMIN_ROLE) &&
-    (await repo.latestRoleEvent(sub, SUPERADMIN_ROLE, null)) !==
-      "auth.role.granted"
+    !(await hasGrantMark(repo, sub, SUPERADMIN_ROLE))
   ) {
-    toMark.push(SUPERADMIN_ROLE);
+    // A run that failed past its IdP write: the retry closes the ledger for
+    // every role the command adds, not only the completion mark.
+    for (const role of [PLATFORM_ADMIN_ROLE, SUPERADMIN_ROLE]) {
+      if (!toMark.includes(role) && !(await hasGrantMark(repo, sub, role))) {
+        toMark.push(role);
+      }
+    }
   }
 
   const mirror = await repo.findMirrorBySub(sub);
@@ -192,9 +198,22 @@ async function removeSuperadmin(
   command: SuperadminCommand,
 ): Promise<SuperadminCommandResult> {
   const sub = await verifiedSubOf(deps.idp, command.email);
-  return deps.repo.withRevokeLock(sub, () =>
-    removeLocked(deps, sub, command.byAdmin),
+  // One global lock around the per-account one: the last-holder count and the
+  // IdP write of two removals never interleave, so two concurrent removals of
+  // the last two holders cannot both pass the count.
+  return deps.repo.withSuperadminRemovalLock(() =>
+    deps.repo.withRevokeLock(sub, () =>
+      removeLocked(deps, sub, command.byAdmin),
+    ),
   );
+}
+
+async function hasGrantMark(
+  repo: StaffAccessRepository,
+  sub: string,
+  role: string,
+): Promise<boolean> {
+  return (await repo.latestRoleEvent(sub, role, null)) === "auth.role.granted";
 }
 
 async function removeLocked(

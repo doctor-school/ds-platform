@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e:ci": "playwright test --config=playwright.ci.config.ts"
+    "test:e2e:ci": "bddgen --config=playwright.ci.config.ts && playwright test --config=playwright.ci.config.ts"
   },
   "dependencies": {
     "@ds/auth-flow": "workspace:*",
@@ -32,6 +32,7 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "jsdom": "^30.0.1",
+    "playwright-bdd": "^9.2.0",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",

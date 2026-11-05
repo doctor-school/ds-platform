@@ -86,7 +86,17 @@ export const HEAVY_JOBS = {
       /^design-source\/account-profile\.dc\.html$/,
     ],
   },
-  "playwright-axe-login": { packages: ["@ds/login"], extraInputs: [] },
+  "playwright-axe-login": {
+    // @ds/e2e (the shared steps) is a devDependency, so its edits reach the job
+    // through the graph. apps/login/playwright.ci.config.ts `door-scenarios`
+    // (#3345 item 4) generates the 003 bindings tagged `@pr-ci:login`, and the
+    // scenario-coverage lint decides which bindings carry that tag.
+    packages: ["@ds/login"],
+    extraInputs: [
+      /^apps\/docs\/content\/specs\/features\/003-user-authentication\/003-scenarios\.feature$/,
+      /^tools\/lint\/scenario-coverage-lint\.ts$/,
+    ],
+  },
   "playwright-axe-portal": {
     packages: ["@ds/portal"],
     // apps/portal/e2e/header-canvas-structure.e2e.spec.ts (#3682) reads the canvas.

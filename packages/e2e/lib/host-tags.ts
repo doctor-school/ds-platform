@@ -128,6 +128,19 @@ export function signInHostTags(): string {
   return `${SIGN_IN_HOST_BINDING_TAG} and not @default-auth-limits and not @public-feed-entry`;
 }
 
+/**
+ * #3345 item 4 — the binding the `apps/login` PR-CI tier runs against its API
+ * double (`apps/login/playwright.ci.config.ts`, project `door-scenarios`).
+ * `scenario-coverage-lint.ts` requires every `@host:login` scenario to carry it
+ * or a `@stage-only:login(<class>)`; the stage `login` project runs both.
+ */
+export const PR_CI_DOOR_RUN_TAG = "@pr-ci:login";
+
+/** The PR-CI door tier's selection: the bound scenarios tagged for it. */
+export function prCiDoorTags(): string {
+  return `${signInHostTags()} and ${PR_CI_DOOR_RUN_TAG}`;
+}
+
 export function ordinaryStorefrontTagsFor(expression: string): string {
   // The dedicated 017 contour needs owned resources that ordinary stage runs do not provision.
   return (

@@ -57,6 +57,8 @@ const WORKSPACE = workspaceFromManifests(
         "@ds/design-system": "workspace:*",
         "@ds/schemas": "workspace:*",
       },
+      // Its PR-CI door tier runs the shared steps (#3345 item 4).
+      devDependencies: { "@ds/e2e": "workspace:*" },
     },
     "apps/admin/package.json": {
       name: "@ds/admin",
@@ -331,6 +333,26 @@ test("EARS-14: an apps/login change runs the sign-in host's axe tier and the sta
     "playwright-axe-login",
     "standalone-boot",
   ]);
+});
+
+test("EARS-16: the 003 catalog, the shared steps and the binding lint run the sign-in host's PR-CI door tier", () => {
+  // #3345 item 4: `door-scenarios` in apps/login/playwright.ci.config.ts.
+  for (const file of [
+    "apps/docs/content/specs/features/003-user-authentication/003-scenarios.feature",
+    "packages/e2e/steps/password-hint.steps.ts",
+    "tools/lint/scenario-coverage-lint.ts",
+  ]) {
+    const result = pr([file]);
+    assert.equal(result.fullRun, null, file);
+    assert.equal(result.jobs["playwright-axe-login"], true, file);
+  }
+  // Another feature's catalog is not this tier's input.
+  assert.equal(
+    pr([
+      "apps/docs/content/specs/features/012-content-taxonomy/012-scenarios.feature",
+    ]).jobs["playwright-axe-login"],
+    false,
+  );
 });
 
 test("EARS-15: operational BDD inputs run api-e2e without widening storefront-step selection", () => {

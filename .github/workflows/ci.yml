@@ -1765,13 +1765,23 @@ jobs:
   # `API_PROXY_TARGET` pointing at it — exactly how the host addresses the api
   # in production. The real entry decision (Zitadel auth request, client map,
   # form state) is proven by `apps/api/test/auth/sign-in-host.e2e-spec.ts` in
-  # `api-e2e`; this tier scans the composed forms both storefronts' configs
-  # render for WCAG 2 A/AA + landmark/heading structure.
+  # `api-e2e`; this tier drives the composed doors both storefronts' configs
+  # render: WCAG 2 A/AA + landmark/heading structure, door stability, entry
+  # refusal, host history and the doctor doors (`apps/login/e2e/*.e2e.spec.ts`).
   #
-  # PATH-GATED (#1251), same rationale as the siblings: no docs-class file feeds it.
+  # Beside the app-local door specs it runs the 003 catalog's own sign-in-host
+  # bindings tagged `@pr-ci:login` (#3345 item 4): `test:e2e:ci` runs `bddgen`
+  # on the `door-scenarios` project (`missingSteps: "fail-on-gen"`) and then
+  # the shared `packages/e2e` steps against the same double. The bindings the
+  # double cannot serve carry `@stage-only:login(<class>)` and run in the stage
+  # suite only (`tools/lint/scenario-coverage-lint.ts`).
+  #
+  # PATH-GATED (#1251), same rationale as the siblings — except the one docs-class
+  # file that feeds it: the 003 `.feature` is the `door-scenarios` input, so a
+  # `.feature`-only diff (`scenarios`) that `affected-areas` routes here runs it.
   playwright-axe-login:
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.run-playwright-axe-login == 'true'
+    if: (needs.changes.outputs.code == 'true' || needs.changes.outputs.scenarios == 'true') && needs.changes.outputs.run-playwright-axe-login == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

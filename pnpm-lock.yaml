@@ -549,6 +549,9 @@ importers:
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@1.8.0)
+      playwright-bdd:
+        specifier: ^9.2.0
+        version: 9.2.1(@playwright/test@1.63.0)
       postcss:
         specifier: ^8.5.28
         version: 8.5.28

@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { guestBounceMarker } from "@ds/schemas";
 import { resolveServerAuth, withReturnContext } from "@ds/auth-flow/server";
 
 import type { AccountHostConfig } from "../host-config";
@@ -20,7 +21,9 @@ export interface AccountPageProps {
  * see the cabinet never sees a frame of it. ONE session read, the shared one
  * (`resolveServerAuth`), and the guest bounce carries the host's account route
  * as its return target through the shared `withReturnContext` (gate D3), so
- * signing in brings the doctor back to the cabinet they asked for.
+ * signing in brings the doctor back to the cabinet they asked for. The signed-in
+ * render declares that same bounce (`guestBounceMarker`, 003 EARS-73), so a tab
+ * returned to after a sign-out takes it by document instead of a router refresh.
  *
  * Everything the browser genuinely owns stays in {@link AccountCabinet}: the
  * EARS-27 self-read, the inline display-name write, the EARS-9 silent refresh
@@ -33,11 +36,16 @@ export interface AccountPageProps {
  * to everyone.
  */
 export async function AccountPage({ config }: AccountPageProps) {
+  const { login, account } = config.authFlow.routes;
+  const bounce = withReturnContext(config.authFlow, login, account);
   const auth = await resolveServerAuth(await headers());
-  if (auth.status !== "doctor") {
-    const { login, account } = config.authFlow.routes;
-    redirect(withReturnContext(config.authFlow, login, account));
-  }
+  if (auth.status !== "doctor") redirect(bounce);
 
-  return <AccountCabinet {...accountCabinetProps(config)} />;
+  // 003 EARS-73 — the same bounce, declared for the shell's return re-check.
+  return (
+    <>
+      <span {...guestBounceMarker(bounce)} />
+      <AccountCabinet {...accountCabinetProps(config)} />
+    </>
+  );
 }

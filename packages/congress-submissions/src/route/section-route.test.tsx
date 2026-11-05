@@ -62,10 +62,11 @@ describe("CongressSectionRoute", () => {
   it("046 EARS-4: a signed-in account gets the section with the same door as its sign-in link", async () => {
     resolveServerAuth.mockResolvedValue({ status: "doctor", claims: {} });
 
-    const el = (await CongressSectionRoute({
+    const tree = (await CongressSectionRoute({
       auth: AUTH,
       host: HOST,
-    })) as ReactElement<{ host: unknown }>;
+    })) as ReactElement<{ children: ReactElement[] }>;
+    const el = tree.props.children[1] as ReactElement<{ host: unknown }>;
 
     expect(isValidElement(el)).toBe(true);
     expect(el.type).toBe(CongressSection);
@@ -76,5 +77,23 @@ describe("CongressSectionRoute", () => {
       signInHref: "/login?returnTo=%2Faccount%2Fcongress",
     });
     expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("003 EARS-73: the signed-in render declares the section's own guest bounce for the return re-check", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "doctor", claims: {} });
+
+    const tree = (await CongressSectionRoute({
+      auth: AUTH,
+      host: HOST,
+    })) as ReactElement<{ children: ReactElement[] }>;
+    const marker = tree.props.children[0] as ReactElement<
+      Record<string, unknown>
+    >;
+
+    expect(marker.type).toBe("span");
+    expect(marker.props).toEqual({
+      "data-guest-bounce": "/login?returnTo=%2Faccount%2Fcongress",
+      hidden: true,
+    });
   });
 });

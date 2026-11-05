@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import type { AuthFlowHostConfig } from "@ds/auth-flow/host-config";
 import { resolveServerAuth, withReturnContext } from "@ds/auth-flow/server";
+import { guestBounceMarker } from "@ds/schemas";
 
 import { CongressSection, type CongressSectionHost } from "../ui";
 
@@ -37,5 +38,11 @@ export async function CongressSectionRoute({
   const session = await resolveServerAuth(await headers());
   if (session.status === "guest") redirect(signInHref);
 
-  return <CongressSection host={{ ...links, signInHref }} />;
+  // 003 EARS-73 — the same bounce, declared for the shell's return re-check.
+  return (
+    <>
+      <span {...guestBounceMarker(signInHref)} />
+      <CongressSection host={{ ...links, signInHref }} />
+    </>
+  );
 }

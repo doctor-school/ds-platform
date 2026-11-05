@@ -1,4 +1,7 @@
 {
+  "shell": {
+    "sectionForbidden": "У этой учётной записи нет доступа к этому разделу."
+  },
   "app": {
     "title": "Doctor.School — Администрирование",
     "brand": "Doctor.School",

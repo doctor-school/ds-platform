@@ -168,7 +168,7 @@ test.describe("044 EARS-20 / EARS-38 — the registrar's admin is its event's ro
     ]) {
       await desk.goto(route);
       await expect(desk.getByTestId("access-refused")).toHaveText(
-        "У этой учётной записи нет прав администратора.",
+        "У этой учётной записи нет доступа к этому разделу.",
       );
       await expect(headerLinks(desk)).toHaveCount(1);
       expect(new URL(desk.url()).pathname).toBe(route);
@@ -264,7 +264,7 @@ test.describe("044 EARS-20 / EARS-38 — the registrar's admin is its event's ro
       // A direct navigation elsewhere keeps the refusal (EARS-38.7).
       await both.goto(`/events/${eventB}/roster`);
       await expect(both.getByTestId("access-refused")).toHaveText(
-        "У этой учётной записи нет прав администратора.",
+        "У этой учётной записи нет доступа к этому разделу.",
       );
     } finally {
       await context.close();

@@ -510,7 +510,7 @@ test.describe("044 EARS-35 — the registrar's desk entry on the roster screen",
     // The refusal screen, not the panel's «попробуйте ещё раз»: nothing to retry.
     await expect(panel).toHaveCount(0);
     await expect(desk.getByTestId("access-refused")).toHaveText(
-      "У этой учётной записи нет прав администратора.",
+      "У этой учётной записи нет доступа к этому разделу.",
     );
     await expect(desk.getByTestId("desk-entry-open")).toHaveCount(0);
     await expect(desk.getByTestId("desk-entry-submit")).toHaveCount(0);

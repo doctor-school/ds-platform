@@ -387,8 +387,13 @@ digests changed). Two mechanisms in `runtime-images.yml` hold the rule:
 - **Reproducible layers.** The build job sets a constant `SOURCE_DATE_EPOCH=0` (never
   the commit time) and both exporters run with `rewrite-timestamp=true`, so a rebuilt
   layer with identical content gets the identical digest and the registry stores only
-  the layers that actually changed. Content that a build itself makes
-  non-deterministic still differs per build (#3701 records what remains).
+  the layers that actually changed. The API Dockerfile drops pnpm's
+  `node_modules/.modules.yaml` from both `pnpm deploy` trees, the one file pnpm writes
+  in a per-run order. What a build itself randomises still differs per build: every
+  Next.js app (`portal`, `admin`, `doctor`, `login`) gets a fresh `BUILD_ID` and
+  server-action ids/keys, so its `.next` layers are re-stored on every build
+  (measured on PR #3704: 15 of portal's 96 MB); its base and dependency layers are
+  shared.
 - **PR images on demand.** An internal PR pushes its `pr/*` set only while it carries
   the `stage-slot` label — the only consumer is a `pr-<N>` stage slot
   (`tools/staging/README.md`); `pnpm stage:slot up pr-<N>` names the label when the

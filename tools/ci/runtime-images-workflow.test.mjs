@@ -109,3 +109,17 @@ it("layers are reproducible: a constant SOURCE_DATE_EPOCH and rewritten file tim
   );
   assert.equal(buildStep.with.push, undefined);
 });
+
+it("every `pnpm deploy` tree drops .modules.yaml, the one file pnpm writes in a per-run order", () => {
+  // Measured on PR #3704: two builds of identical content differed in exactly this
+  // file (its hoisted-dependency map is written in resolution order), which re-stored
+  // the whole node_modules layer of api and api-migrate. Nothing in either image
+  // reads it: node resolves through node_modules, `pnpm run` does not verify it.
+  const dockerfile = readFileSync(new URL("../../apps/api/Dockerfile", import.meta.url), "utf8");
+  const deploys = dockerfile.split("\n").filter((line) => /^RUN pnpm .*\bdeploy\b/.test(line));
+  assert.equal(deploys.length, 2);
+  for (const line of deploys) {
+    const target = line.match(/--legacy (\S+)/)[1];
+    assert.ok(line.endsWith(`&& rm ${target}/node_modules/.modules.yaml`), line);
+  }
+});

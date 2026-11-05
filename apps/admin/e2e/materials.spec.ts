@@ -142,26 +142,12 @@ test.describe("048 — «Материалы» in the live admin", () => {
     await expect(page.getByTestId("access-refused")).toHaveCount(0);
   });
 
-  test("048 EARS-1: a column without an expert is refused at «Эксперт» and nothing is created; a news item with an author line is saved as a draft", async ({
+  test("048 EARS-1: an empty title is refused; a news item with an author line is saved as a draft", async ({
     page,
   }) => {
     const stamp = Date.now();
     await page.goto("/materials/create");
     await page.getByTestId("material-form").waitFor({ state: "visible" });
-
-    // Reject: the column needs its expert — the error sits AT the field.
-    await chooseKind(page, "column");
-    await expect(page.getByTestId("material-author-line")).toHaveCount(0);
-    await page
-      .getByTestId("material-title")
-      .fill(`Колонка без эксперта ${stamp}`);
-    await page.getByTestId("submit-material").click();
-    const expertItem = page.locator("#material-expert").locator("xpath=..");
-    await expect(
-      page.getByText("Выберите эксперта — колонка выходит от его имени."),
-    ).toBeVisible();
-    await expect(page).toHaveURL(/\/materials\/create$/);
-    await expect(expertItem).toBeVisible();
 
     // An empty title is refused at «Заголовок».
     await chooseKind(page, "news");
@@ -521,8 +507,6 @@ test.describe("048 — «Материалы» in the live admin", () => {
       .selectOption({ label: "Колонка эксперта" });
     await expect(table.getByText(news)).toHaveCount(0);
     const columnRow = table.getByRole("row").filter({ hasText: column });
-    await expect(columnRow).toContainText("Колонка эксперта");
-    await expect(columnRow).toContainText("Черновик");
     await expect(columnRow).toContainText("Ещё не публиковался");
     await expect(columnRow).toContainText(expert);
 

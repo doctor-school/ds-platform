@@ -11,6 +11,7 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect } from "@playwright/test";
+import ts from "typescript";
 
 export const feedEntryRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -176,6 +177,166 @@ export function verifyOwnedFeedEntryListeners() {
   }
 }
 
+export function assertFeedEntryComposition(source: {
+  layout: string;
+  frame: string;
+}) {
+  // Read real imports and returned JSX; comments and unused look-alikes cannot establish provenance.
+  const parse = (name: string, text: string) =>
+    ts.createSourceFile(
+      name,
+      text,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+  const layout = parse("layout.tsx", source.layout);
+  const frame = parse("storefront-frame.tsx", source.frame);
+  function imported(file: ts.SourceFile, module: string, exported: string) {
+    const declaration = file.statements
+      .filter(ts.isImportDeclaration)
+      .find(
+        (node) =>
+          ts.isStringLiteral(node.moduleSpecifier) &&
+          node.moduleSpecifier.text === module,
+      );
+    const clause = declaration?.importClause;
+    const bindings = clause?.namedBindings;
+    const binding =
+      bindings && ts.isNamedImports(bindings)
+        ? bindings.elements.find(
+            (node) =>
+              !node.isTypeOnly &&
+              (node.propertyName ?? node.name).text === exported,
+          )
+        : undefined;
+    expect(
+      clause?.isTypeOnly,
+      `${exported} must be a value import from ${module}`,
+    ).toBe(false);
+    expect(
+      binding,
+      `${exported} must be imported from ${module}`,
+    ).toBeDefined();
+    return binding!.name.text;
+  }
+  function component(file: ts.SourceFile, name?: string) {
+    const declaration = file.statements
+      .filter(ts.isFunctionDeclaration)
+      .find(
+        (node) =>
+          node.modifiers?.some(
+            (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+          ) &&
+          (name
+            ? node.name?.text === name
+            : node.modifiers?.some(
+                (modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword,
+              )),
+      );
+    expect(
+      declaration?.body,
+      "The mounted component must have an exported body",
+    ).toBeDefined();
+    const returned = declaration!.body!.statements.find(
+      ts.isReturnStatement,
+    )?.expression;
+    let root = returned;
+    while (root && ts.isParenthesizedExpression(root)) root = root.expression;
+    expect(
+      root && ts.isJsxElement(root),
+      "The component must return its mounted JSX tree",
+    ).toBe(true);
+    return { declaration: declaration!, root: root as ts.JsxElement };
+  }
+  const hasChildren = (node: ts.JsxElement) =>
+    node.children.some(
+      (child) =>
+        ts.isJsxExpression(child) &&
+        child.expression &&
+        ts.isIdentifier(child.expression) &&
+        child.expression.text === "children",
+    );
+  const frameName = imported(
+    layout,
+    "@/components/storefront-frame",
+    "DoctorStorefrontFrame",
+  );
+  const layoutRoot = component(layout).root;
+  expect(layoutRoot.openingElement.tagName.getText(layout)).toBe(frameName);
+  expect(
+    hasChildren(layoutRoot),
+    "The layout must pass route children to the frame",
+  ).toBe(true);
+
+  const header = imported(frame, "@ds/storefront-shell", "StorefrontHeader");
+  const footer = imported(frame, "@ds/storefront-shell", "StorefrontFooter");
+  const hostConfig = imported(frame, "@/lib/shell-config", "doctorShellConfig");
+  const siblingOrigin = imported(
+    frame,
+    "@ds/storefront-shell/sibling-origin",
+    "readSiblingOrigin",
+  );
+  const mounted = component(frame, "DoctorStorefrontFrame");
+  const locals = mounted.declaration
+    .body!.statements.filter(ts.isVariableStatement)
+    .flatMap((node) => [...node.declarationList.declarations]);
+  const importedNames = [header, footer, hostConfig, siblingOrigin];
+  expect(
+    locals.filter(
+      (node) =>
+        ts.isIdentifier(node.name) && importedNames.includes(node.name.text),
+    ),
+    "The frame must not replace imported shell components or host config locally",
+  ).toEqual([]);
+  const children = mounted.root.children.filter(
+    (child) => ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child),
+  );
+  const opening = (node: ts.JsxElement | ts.JsxSelfClosingElement) =>
+    ts.isJsxElement(node) ? node.openingElement : node;
+  expect(
+    children.map((child) => opening(child).tagName.getText(frame)),
+  ).toEqual([header, "main", footer]);
+  expect(
+    ts.isJsxElement(children[1]!) && hasChildren(children[1]!),
+    "The frame must render route children in main",
+  ).toBe(true);
+
+  const config = locals.find(
+    (node) =>
+      node.initializer &&
+      ts.isCallExpression(node.initializer) &&
+      ts.isIdentifier(node.initializer.expression) &&
+      node.initializer.expression.text === hostConfig,
+  );
+  expect(
+    config && ts.isIdentifier(config.name),
+    "The frame must use the imported Doctor host config",
+  ).toBe(true);
+  const configCall = config!.initializer as ts.CallExpression;
+  const origin = configCall.arguments[0];
+  expect(
+    origin && ts.isCallExpression(origin),
+    "The Doctor sibling origin must reach the host config",
+  ).toBe(true);
+  const originCall = origin as ts.CallExpression;
+  expect(originCall.expression.getText(frame)).toBe(siblingOrigin);
+  expect(originCall.arguments[0]?.getText(frame)).toBe("process.env");
+  const host = originCall.arguments[1];
+  expect(host && ts.isStringLiteral(host) && host.text).toBe("doctor");
+  for (const child of [children[0]!, children[2]!]) {
+    const prop = opening(child).attributes.properties.find(
+      (node) =>
+        ts.isJsxAttribute(node) && node.name.getText(frame) === "config",
+    ) as ts.JsxAttribute | undefined;
+    const value = prop?.initializer;
+    expect(
+      value && ts.isJsxExpression(value) && value.expression?.getText(frame),
+      "Shared shell components must receive that Doctor config",
+    ).toBe(config!.name.getText(frame));
+  }
+}
+
 export function verifyFeedEntryProvenance() {
   const read = (path: string) =>
     readFileSync(resolve(feedEntryRoot, path), "utf8");
@@ -192,10 +353,10 @@ export function verifyFeedEntryProvenance() {
   }
   expect(read("design-source/doctor-home.dc.html")).toContain("ds-shell");
   expect(read("design-source/ds-shell.dc.html")).toContain("doctor");
-  const shell = read("apps/doctor/components/storefront-frame.tsx");
-  expect(shell).toContain('from "@ds/storefront-shell"');
-  expect(shell).toContain("<StorefrontHeader");
-  expect(shell).toContain("<StorefrontFooter");
+  assertFeedEntryComposition({
+    layout: read("apps/doctor/app/(storefront)/layout.tsx"),
+    frame: read("apps/doctor/components/storefront-frame.tsx"),
+  });
   expect(read("packages/storefront-shell/package.json")).toContain(
     '"@ds/design-system"',
   );

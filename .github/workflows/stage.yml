@@ -24,6 +24,11 @@ name: Stage main
 # Commit status `stage-suite` on the SHA: pending when the converge starts, then
 # success / failure with counts only. It is the check the release gate requires.
 
+# The title ends with the SHA under test: registry retention reads it from a queued or
+# running run to keep that SHA's images (#3752) — a workflow_run run's own head_sha is
+# the default branch head, not the triggering run's.
+run-name: Stage main ${{ github.event.workflow_run.head_sha }}
+
 on:
   workflow_run:
     workflows: ["Runtime images"]

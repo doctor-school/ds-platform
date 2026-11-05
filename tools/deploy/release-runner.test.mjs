@@ -52,7 +52,13 @@ describe("parseRunnerArgs", () => {
         "--previous-sha",
         PREV,
       ]),
-      { command: "record", sha: SHA, state: "failed", previousSha: PREV, failure: null },
+      {
+        command: "record",
+        sha: SHA,
+        state: "failed",
+        previousSha: PREV,
+        failure: null,
+      },
     );
   });
 
@@ -175,6 +181,7 @@ describe("runPreflight", () => {
       "release-gate",
       "live-broadcast",
       "recorded-images",
+      "registry-images",
     ]);
   });
 
@@ -519,35 +526,81 @@ describe("3219: the rollback's real outcome after lost contact", () => {
 
   it("reads --why on rollback-record / rollback-notice, --start on rollback-record, --since on rollback-verdict", () => {
     const rec = parseRunnerArgs([
-      "rollback-record", "--sha", SHA, "--state", "unknown",
-      "--why", "timeout", "--start", "ssh-lost",
+      "rollback-record",
+      "--sha",
+      SHA,
+      "--state",
+      "unknown",
+      "--why",
+      "timeout",
+      "--start",
+      "ssh-lost",
     ]);
     assert.equal(rec.why, "timeout");
     assert.equal(rec.start, "ssh-lost");
     for (const why of ["lost-contact", "timeout", "not-started"]) {
       assert.equal(
-        parseRunnerArgs(["rollback-notice", "--sha", SHA, "--state", "unknown", "--why", why]).why,
+        parseRunnerArgs([
+          "rollback-notice",
+          "--sha",
+          SHA,
+          "--state",
+          "unknown",
+          "--why",
+          why,
+        ]).why,
         why,
       );
     }
     assert.equal(
-      parseRunnerArgs(["rollback-notice", "--sha", SHA, "--state", "unknown", "--why", ""]).why,
+      parseRunnerArgs([
+        "rollback-notice",
+        "--sha",
+        SHA,
+        "--state",
+        "unknown",
+        "--why",
+        "",
+      ]).why,
       null,
     );
     assert.match(
-      parseRunnerArgs(["rollback-notice", "--sha", SHA, "--state", "unknown", "--why", "nope"]).error,
+      parseRunnerArgs([
+        "rollback-notice",
+        "--sha",
+        SHA,
+        "--state",
+        "unknown",
+        "--why",
+        "nope",
+      ]).error,
       /--why must be/,
     );
     assert.match(
-      parseRunnerArgs(["rollback-record", "--sha", SHA, "--state", "succeeded", "--start", "nope"]).error,
+      parseRunnerArgs([
+        "rollback-record",
+        "--sha",
+        SHA,
+        "--state",
+        "succeeded",
+        "--start",
+        "nope",
+      ]).error,
       /--start must be/,
     );
     assert.equal(
-      parseRunnerArgs(["rollback-verdict", "--sha", SHA, "--since", "1761600000"]).since,
+      parseRunnerArgs([
+        "rollback-verdict",
+        "--sha",
+        SHA,
+        "--since",
+        "1761600000",
+      ]).since,
       1761600000,
     );
     assert.match(
-      parseRunnerArgs(["rollback-verdict", "--sha", SHA, "--since", "soon"]).error,
+      parseRunnerArgs(["rollback-verdict", "--sha", SHA, "--since", "soon"])
+        .error,
       /--since must be/,
     );
   });
@@ -558,8 +611,14 @@ describe("3219: the rollback's real outcome after lost contact", () => {
       assert.equal(v.absent, true, active);
       assert.equal(v.terminal, "failed", active);
     }
-    assert.equal(rollbackVerdict(reply("active", null, null), SHA).absent, false);
-    const ran = rollbackVerdict(reply("inactive", 0, { state: "succeeded" }), SHA);
+    assert.equal(
+      rollbackVerdict(reply("active", null, null), SHA).absent,
+      false,
+    );
+    const ran = rollbackVerdict(
+      reply("inactive", 0, { state: "succeeded" }),
+      SHA,
+    );
     assert.equal(ran.absent, false);
   });
 
@@ -632,7 +691,9 @@ describe("3219: the rollback's real outcome after lost contact", () => {
         rollback: { reason: "x", unknownReason: why },
       });
       descriptions.add(status.description);
-      notices.add(buildRollbackNotice({ sha: SHA, state: "unknown", reason: "x", why }));
+      notices.add(
+        buildRollbackNotice({ sha: SHA, state: "unknown", reason: "x", why }),
+      );
     }
     assert.equal(descriptions.size, 3);
     assert.equal(notices.size, 3);
@@ -656,11 +717,21 @@ describe("3219: the rollback's real outcome after lost contact", () => {
       /no rollback of this run appeared within 2 min$/,
     );
     assert.match(
-      buildRollbackNotice({ sha: SHA, state: "unknown", reason: "x", why: "timeout" }),
+      buildRollbackNotice({
+        sha: SHA,
+        state: "unknown",
+        reason: "x",
+        why: "timeout",
+      }),
       /30 минут/,
     );
     assert.match(
-      buildRollbackNotice({ sha: SHA, state: "unknown", reason: "x", why: "not-started" }),
+      buildRollbackNotice({
+        sha: SHA,
+        state: "unknown",
+        reason: "x",
+        why: "not-started",
+      }),
       /за 2 минуты откат на прод-сервере не появился/,
     );
   });
@@ -676,7 +747,12 @@ describe("3219: the rollback's real outcome after lost contact", () => {
       create: (a) => (calls.push(a), { ok: true, deploymentId: 1 }),
       log: () => {},
     });
-    assert.deepEqual(calls[0].rollback, { reason: "x", from: LIVE, unknownReason: null, recovered: true });
+    assert.deepEqual(calls[0].rollback, {
+      reason: "x",
+      from: LIVE,
+      unknownReason: null,
+      recovered: true,
+    });
     const { status } = buildDeploymentPayload({
       sha: SHA,
       notesText: "",
@@ -708,8 +784,10 @@ describe("rollbackPreflightChecks", () => {
       deployments: [{ id: 2, sha: LIVE }],
       statuses: { 2: [{ state: "success" }] },
       compare: "behind",
+      unserved: async () => [],
       images: async () => ({
         ref: "main",
+        images: { api: "reg/api@sha256:1" },
         run: { url: "https://example.test/run/7", databaseId: 7 },
       }),
       calls: [],
@@ -736,6 +814,7 @@ describe("rollbackPreflightChecks", () => {
         reason: w.reason,
         gh: w.gh,
         resolveImages: w.images,
+        unserved: w.unserved,
       }),
       log: () => {},
     });
@@ -746,6 +825,7 @@ describe("rollbackPreflightChecks", () => {
       "recent-release",
       "behind-live",
       "recorded-images",
+      "registry-images",
     ]);
     const names = rollbackPreflightChecks({ sha: SHA, repo: "o/r" }).map(
       (c) => c.name,
@@ -1115,8 +1195,10 @@ describe("redeployPreflightChecks", () => {
       ownerQuote: "перезапусти прод с капчей",
       deployments: [{ id: 5, sha: SHA }],
       statuses: { 5: [{ state: "inactive" }, { state: "success" }] },
+      unserved: async () => [],
       images: async () => ({
         ref: "main",
+        images: { api: "reg/api@sha256:1" },
         run: { url: "https://example.test/run/9", databaseId: 9 },
       }),
       calls: [],
@@ -1141,6 +1223,7 @@ describe("redeployPreflightChecks", () => {
         ownerQuote: w.ownerQuote,
         gh: w.gh,
         resolveImages: w.images,
+        unserved: w.unserved,
       }),
       log: () => {},
     });
@@ -1150,6 +1233,7 @@ describe("redeployPreflightChecks", () => {
       "owner-quote",
       "released",
       "recorded-images",
+      "registry-images",
     ]);
     const names = redeployPreflightChecks({ sha: SHA, repo: "o/r" }).map(
       (c) => c.name,
@@ -1309,7 +1393,13 @@ describe("3439: the failing phase and reason", () => {
     JSON.stringify({
       release: { step: "prune", state: "failed" },
       unitAlive: false,
-      driver: { unit: "u", active: "failed", rc: 1, previousSha: null, failure },
+      driver: {
+        unit: "u",
+        active: "failed",
+        rc: 1,
+        previousSha: null,
+        failure,
+      },
       ...over,
     });
 
@@ -1318,7 +1408,8 @@ describe("3439: the failing phase and reason", () => {
       releaseStatusLine(
         reply({
           phase: "smoke",
-          reason: "prod smoke RED (exit 1): failed probes api /v1/health — the new build is unhealthy",
+          reason:
+            "prod smoke RED (exit 1): failed probes api /v1/health — the new build is unhealthy",
         }),
       ),
       "driver=failed rc=1 step=prune state=failed phase=smoke reason=prod smoke RED (exit 1): failed probes api /v1/health — the new build is unhealthy",
@@ -1339,17 +1430,28 @@ describe("3439: the failing phase and reason", () => {
 
   it("no note (a running unit, an older driver) keeps the line it always was; garbage is unreadable", () => {
     assert.equal(
-      releaseStatusLine(JSON.stringify({ release: { step: "migrate", state: "running" }, driver: { active: "active", rc: null } })),
+      releaseStatusLine(
+        JSON.stringify({
+          release: { step: "migrate", state: "running" },
+          driver: { active: "active", rc: null },
+        }),
+      ),
       "driver=active rc=- step=migrate state=running",
     );
-    assert.equal(releaseStatusLine(reply(null)), "driver=failed rc=1 step=prune state=failed");
+    assert.equal(
+      releaseStatusLine(reply(null)),
+      "driver=failed rc=1 step=prune state=failed",
+    );
     assert.equal(releaseStatusLine("not json"), null);
     assert.equal(releaseStatusLine("null"), null);
   });
 
   it("bounds the note again on this side of the public log", () => {
     assert.equal(releaseFailure({ phase: "Smoke;rm", reason: "" }), null);
-    assert.deepEqual(releaseFailure({ phase: "idp", reason: "a\u0007b\r\nc" }), { phase: "idp", reason: "a b c" });
+    assert.deepEqual(
+      releaseFailure({ phase: "idp", reason: "a\u0007b\r\nc" }),
+      { phase: "idp", reason: "a b c" },
+    );
     const long = releaseFailure({ phase: null, reason: "x".repeat(400) });
     assert.equal(long.reason.length, FAILURE_REASON_MAX);
     assert.match(long.reason, /…$/);
@@ -1359,21 +1461,50 @@ describe("3439: the failing phase and reason", () => {
   it("record and redeploy-record take --failed-phase / --failed-reason, empty meaning none", () => {
     assert.deepEqual(
       parseRunnerArgs([
-        "record", "--sha", SHA, "--state", "failed", "--previous-sha", "",
-        "--failed-phase", "smoke", "--failed-reason", "prod smoke RED (exit 1)",
+        "record",
+        "--sha",
+        SHA,
+        "--state",
+        "failed",
+        "--previous-sha",
+        "",
+        "--failed-phase",
+        "smoke",
+        "--failed-reason",
+        "prod smoke RED (exit 1)",
       ]).failure,
       { phase: "smoke", reason: "prod smoke RED (exit 1)" },
     );
     assert.equal(
-      parseRunnerArgs(["redeploy-record", "--sha", SHA, "--state", "failed", "--failed-phase", "", "--failed-reason", ""]).failure,
+      parseRunnerArgs([
+        "redeploy-record",
+        "--sha",
+        SHA,
+        "--state",
+        "failed",
+        "--failed-phase",
+        "",
+        "--failed-reason",
+        "",
+      ]).failure,
       null,
     );
-    assert.deepEqual(parseRunnerArgs(["release-status", "--sha", SHA]), { command: "release-status", sha: SHA });
-    assert.match(parseRunnerArgs(["release-status", "--sha", SHA, "--failed-phase", "x"]).error, /unknown argument/);
+    assert.deepEqual(parseRunnerArgs(["release-status", "--sha", SHA]), {
+      command: "release-status",
+      sha: SHA,
+    });
+    assert.match(
+      parseRunnerArgs(["release-status", "--sha", SHA, "--failed-phase", "x"])
+        .error,
+      /unknown argument/,
+    );
   });
 
   it("the failure Deployment record's status description names the phase and reason", async () => {
-    const failure = { phase: "smoke", reason: "prod smoke RED (exit 1): failed probes api /v1/health" };
+    const failure = {
+      phase: "smoke",
+      reason: "prod smoke RED (exit 1): failed probes api /v1/health",
+    };
     const { status, deployment } = buildDeploymentPayload({
       sha: SHA,
       releaseTag: null,
@@ -1390,14 +1521,34 @@ describe("3439: the failing phase and reason", () => {
     );
     assert.deepEqual(deployment.payload.failure, failure);
     const redeploy = buildDeploymentPayload({
-      sha: SHA, releaseTag: null, notesText: "", healthUrl: "h", nowIso: "n",
-      state: "failure", ownerQuote: "q", redeploy: true, failure: { phase: "up", reason: null },
+      sha: SHA,
+      releaseTag: null,
+      notesText: "",
+      healthUrl: "h",
+      nowIso: "n",
+      state: "failure",
+      ownerQuote: "q",
+      redeploy: true,
+      failure: { phase: "up", reason: null },
     });
-    assert.equal(redeploy.status.description, `redeploy failed @ ${SHA.slice(0, 12)} in up`);
+    assert.equal(
+      redeploy.status.description,
+      `redeploy failed @ ${SHA.slice(0, 12)} in up`,
+    );
     const ok = buildDeploymentPayload({
-      sha: SHA, releaseTag: null, notesText: "x", healthUrl: "h", nowIso: "n", state: "success", failure,
+      sha: SHA,
+      releaseTag: null,
+      notesText: "x",
+      healthUrl: "h",
+      nowIso: "n",
+      state: "success",
+      failure,
     });
-    assert.equal(ok.deployment.payload.failure, undefined, "a success carries no note");
+    assert.equal(
+      ok.deployment.payload.failure,
+      undefined,
+      "a success carries no note",
+    );
 
     const calls = [];
     await runRecord({
@@ -1421,5 +1572,79 @@ describe("3439: the failing phase and reason", () => {
       log: () => {},
     });
     assert.deepEqual(created[0].failure, failure);
+  });
+});
+
+// --- #3654: the registry still serves the recorded images ----------------------
+
+describe("registry-images pre-flight check (#3654)", () => {
+  const IMAGES = { api: "reg/api@sha256:1", admin: "reg/admin@sha256:2" };
+  const resolveImages = async () => ({
+    ref: "main",
+    images: IMAGES,
+    run: { url: "https://example.test/run/7", databaseId: 7 },
+  });
+  const run = async (factory, unserved, extra = {}) => {
+    const seen = [];
+    const checks = factory({
+      sha: SHA,
+      repo: "o/r",
+      resolveImages,
+      unserved: async (args) => {
+        seen.push(args);
+        return unserved(args);
+      },
+      ...extra,
+    }).filter((c) => ["recorded-images", "registry-images"].includes(c.name));
+    const res = await runPreflight({ checks, log: () => {} });
+    return { res, seen };
+  };
+  const factories = {
+    release: preflightChecks,
+    rollback: rollbackPreflightChecks,
+    redeploy: redeployPreflightChecks,
+  };
+
+  for (const [mode, factory] of Object.entries(factories)) {
+    it(`${mode}: refuses a target whose recorded digests the registry no longer serves, naming them`, async () => {
+      const { res, seen } = await run(factory, async () => [
+        {
+          name: "admin",
+          problem: "the registry serves no admin:aaaaaaaaaaaa manifest",
+        },
+        {
+          name: "portal",
+          problem: "the registry serves no portal:aaaaaaaaaaaa manifest",
+        },
+      ]);
+      assert.equal(res.ok, false);
+      assert.equal(res.failed, "registry-images");
+      assert.match(res.reason, /no longer serves .*admin, portal/);
+      assert.match(res.reason, /serves no admin:aaaaaaaaaaaa manifest/);
+      assert.deepEqual(seen, [{ images: IMAGES, sha: SHA }]);
+    });
+
+    it(`${mode}: passes when the registry serves every recorded digest`, async () => {
+      const { res } = await run(factory, async () => []);
+      assert.deepEqual(res, { ok: true, imagesRunId: 7 });
+    });
+  }
+
+  it("refuses without the pull-only REGISTRY_PULL_TOKEN — the check cannot run", async () => {
+    const saved = process.env.REGISTRY_PULL_TOKEN;
+    delete process.env.REGISTRY_PULL_TOKEN;
+    try {
+      const checks = preflightChecks({
+        sha: SHA,
+        repo: "o/r",
+        resolveImages,
+      }).filter((c) => ["recorded-images", "registry-images"].includes(c.name));
+      const res = await runPreflight({ checks, log: () => {} });
+      assert.equal(res.ok, false);
+      assert.equal(res.failed, "registry-images");
+      assert.match(res.reason, /REGISTRY_PULL_TOKEN is not set/);
+    } finally {
+      if (saved !== undefined) process.env.REGISTRY_PULL_TOKEN = saved;
+    }
   });
 });

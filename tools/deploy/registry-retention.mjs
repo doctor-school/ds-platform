@@ -7,7 +7,7 @@
 //   REGISTRY_TOKEN     the push token (push + pull + delete); required
 //   GITHUB_REPOSITORY  owner/name whose releases, production deployments, hotfix
 //                      branches and open PRs set the keep-set
-//   GH_TOKEN           for `gh api` (contents, pull-requests, deployments,
+//   GH_TOKEN           for `gh api` (actions, contents, pull-requests, deployments,
 //                      statuses: read)
 //   DRY_RUN            "true" prints the plan only; anything else deletes
 //   TWC_READ_TOKEN     optional; read-only, project-scoped Timeweb API token for the
@@ -40,13 +40,13 @@ import {
   latestProductionSha,
   stageSuiteState,
 } from "./lib/github-release-facts.mjs";
-import { IMAGE_REGISTRY } from "./lib/registry.mjs";
+import { MANIFEST_ACCEPT, registryClient } from "./lib/registry-client.mjs";
 import {
   RetentionError,
+  activeRunTargets,
   assessRegistryDisk,
   findGreenStageSuite,
   nextTagRequest,
-  parseBearerChallenge,
   parseNextLink,
   planRetention,
   renderPlanSummary,
@@ -54,13 +54,6 @@ import {
   retentionRepos,
 } from "./lib/registry-retention.mjs";
 
-const MANIFEST_ACCEPT = [
-  "application/vnd.oci.image.index.v1+json",
-  "application/vnd.oci.image.manifest.v1+json",
-  "application/vnd.docker.distribution.manifest.list.v2+json",
-  "application/vnd.docker.distribution.manifest.v2+json",
-].join(", ");
-const REGISTRY_USER = "ds-platform";
 const LOOKUP_CONCURRENCY = 8;
 const TAG_PAGE_SIZE = 100;
 
@@ -68,50 +61,6 @@ function env(name) {
   const value = process.env[name];
   if (!value) throw new RetentionError(`${name} is not set`);
   return value;
-}
-
-/** Docker Registry v2 client: Basic or Bearer, whichever the registry challenges with. */
-function registryClient(token) {
-  const base = `https://${IMAGE_REGISTRY}`;
-  const basic = `Basic ${Buffer.from(`${REGISTRY_USER}:${token}`).toString("base64")}`;
-  const bearerByScope = new Map();
-
-  async function authorize(challenge) {
-    const bearer = parseBearerChallenge(challenge);
-    if (!bearer) return basic;
-    const key = bearer.scope ?? "";
-    if (!bearerByScope.has(key)) {
-      const url = new URL(bearer.realm);
-      if (bearer.service) url.searchParams.set("service", bearer.service);
-      if (bearer.scope) url.searchParams.set("scope", bearer.scope);
-      const res = await fetch(url, { headers: { Authorization: basic } });
-      if (!res.ok)
-        throw new RetentionError(
-          `registry token request for ${key || "(no scope)"} answered HTTP ${res.status}`,
-        );
-      const body = await res.json();
-      const value = body.token ?? body.access_token;
-      if (!value)
-        throw new RetentionError(
-          `registry token response for ${key || "(no scope)"} carries no token`,
-        );
-      bearerByScope.set(key, `Bearer ${value}`);
-    }
-    return bearerByScope.get(key);
-  }
-
-  return async function request(path, { method = "GET", headers = {} } = {}) {
-    const url = path.startsWith("http") ? path : `${base}${path}`;
-    let res = await fetch(url, { method, headers });
-    if (res.status === 401) {
-      const auth = await authorize(res.headers.get("www-authenticate"));
-      res = await fetch(url, {
-        method,
-        headers: { ...headers, Authorization: auth },
-      });
-    }
-    return res;
-  };
 }
 
 async function failure(res, what) {
@@ -231,6 +180,31 @@ async function listHotfixHeads(repo) {
   ]);
 }
 
+/** Every run status GitHub reports before `completed`. */
+const ACTIVE_RUN_STATUSES = [
+  "queued",
+  "in_progress",
+  "waiting",
+  "requested",
+  "pending",
+];
+
+/** The queued or in-progress runs of `workflow`, as `{id, title, url}`. */
+async function listActiveRuns(repo, workflow) {
+  const runs = [];
+  for (const status of ACTIVE_RUN_STATUSES) {
+    const lines = await ghLines([
+      "api",
+      "--paginate",
+      `repos/${repo}/actions/workflows/${workflow}/runs?status=${status}&per_page=100`,
+      "--jq",
+      ".workflow_runs[] | {id, title: .display_title, url: .html_url}",
+    ]);
+    runs.push(...lines.map((line) => JSON.parse(line)));
+  }
+  return runs;
+}
+
 /** First-parent `main` history, newest first. CI-only: registry-retention.yml checks
  *  out `main` as a `filter: tree:0` partial clone, so this filtered fetch refreshes
  *  FETCH_HEAD and changes no clone config there. On a full workstation clone the same
@@ -283,14 +257,23 @@ async function prune() {
   const request = registryClient(token);
 
   const tags = await snapshotRegistry(request);
-  const [releases, openPrHeads, hotfixHeads, productionSha, history] =
-    await Promise.all([
-      listReleases(repo),
-      listOpenPrHeads(repo),
-      listHotfixHeads(repo),
-      latestProductionSha(repo),
-      mainHistory(),
-    ]);
+  const [
+    releases,
+    openPrHeads,
+    hotfixHeads,
+    productionSha,
+    history,
+    stageRuns,
+    deployRuns,
+  ] = await Promise.all([
+    listReleases(repo),
+    listOpenPrHeads(repo),
+    listHotfixHeads(repo),
+    latestProductionSha(repo),
+    mainHistory(),
+    listActiveRuns(repo, "stage.yml"),
+    listActiveRuns(repo, "deploy-prod.yml"),
+  ]);
   const stageSuite = await findGreenStageSuite(history, (sha) =>
     stageSuiteState(repo, sha),
   );
@@ -302,6 +285,8 @@ async function prune() {
     hotfixHeads,
     productionSha,
     stageSuite,
+    activeStageShas: activeRunTargets(stageRuns, "Stage main"),
+    deployTargets: activeRunTargets(deployRuns, "deploy-prod"),
   });
   summarize(renderPlanSummary(plan, { dryRun }));
   if (dryRun) return;

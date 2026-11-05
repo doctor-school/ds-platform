@@ -54,6 +54,33 @@ Everything here is Phase B: nothing in this file runs on a developer machine.
    `STAGE_BASIC_AUTH_HASH` — MUST be single-quoted: the box sources the file with
    `set -a; . stage.env`, which expands `$2a`/`$14` and silently truncates a bcrypt
    hash (see the comment above that key in `infra/deploy/stage.env.example`).
+5. Alloy pushes the box's node metrics and journald to BBM's mon (`instance=ds-stage-1`,
+   `tenant=ds`). It is a provisioning step on the running box, not cloud-init: the push
+   credential cannot exist at first boot and the download would break the #2121 window.
+   A box rebuild loses it; repeat this step, or `HostTelemetryStale-ds-stage-1` fires
+   (warning, stage only). The installer's source of truth is the `bbm` repo at
+   `origin/main`; from a checkout of it:
+
+   ```bash
+   cd infra/monitoring
+   scp alloy/host-config.alloy.tpl scripts/install-alloy-host.sh ds-stage-1:~/
+   ```
+
+   On the box, write `~/alloy.env` (mode `0600`) with the keys the installer's header
+   names: `ALLOY_INSTANCE=ds-stage-1`, `ALLOY_TENANT=ds`, `ALLOY_VERSION=v1.19.2`,
+   `MON_PUSH_URL_PROM` / `MON_PUSH_URL_LOKI`, `ALLOW_MON_PUSH_CREDENTIAL_CHANGE=0` and
+   the shared `MON_PUSH_USER` / `MON_PUSH_PASSWORD`. The operator types the credential
+   on the box — never in chat, a repo or this file. Then:
+
+   ```bash
+   sudo bash ~/install-alloy-host.sh ~/host-config.alloy.tpl ~/alloy.env
+   systemctl is-active alloy        # expected: active
+   ```
+
+   Then confirm the series on mon: `node_boot_time_seconds{instance="ds-stage-1"}` is
+   present in Grafana Explore, and `HostTelemetryStale-ds-stage-1` is Normal. The mon
+   push allowlist already holds this box's egress IP (`200.169.178.154`, bbm #189); a
+   rebuild that changes the IP needs that allowlist updated in bbm too (push gets `403`).
 
 ## Bring-up order
 

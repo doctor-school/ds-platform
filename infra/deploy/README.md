@@ -1929,7 +1929,9 @@ As-built (OBS-трек, живьём верифицировано):
   node-метрики + journald, без docker-логов. Поставлен тем же штатным установщиком
   bbm, что и на проде (`infra/monitoring/scripts/install-alloy-host.sh` +
   `host-config.alloy.tpl`), а не через converge/cloud-init; креды push — тот же
-  общий `~/alloy.env` (chmod 600).
+  общий `~/alloy.env` (chmod 600). Пересборка бокса Alloy не возвращает: его ставит
+  заново шаг провижининга на живом боксе —
+  `compose/stg-infra/README.md` → «Prerequisites (owner, once)», шаг 5.
 - **Egress data-prod** к mon идёт через router-NAT, source-IP `72.56.14.72`
   (в `mon-push-allow.conf` на mon). Egress ds-stage-1 — `200.169.178.154`
   (`DS_STAGE_IP` в `.env` mon, там же в `mon-push-allow.conf`; bbm #189).
@@ -1938,7 +1940,9 @@ As-built (OBS-трек, живьём верифицировано):
   `ds-prod-pgbackrest` >26ч), `ExternalHttpProbeFailed` (пробы `probe_scope=user_path`)
   и `ApplicationHealthProbeFailed` (`probe_scope=app_health`), `CertExpirySoon-warning`
   /`-critical`, `HostTelemetryStale-api-prod`/`-data-prod`, `DiskFillHigh` (>85/92%;
-  покрывает и ds-stage-1). Stale-telemetry-алерта для ds-stage-1 нет.
+  покрывает и ds-stage-1), `HostTelemetryStale-ds-stage-1` (warning, «стейдж, не
+  прод»: пропуск шага провижининга после пересборки или упавший Alloy даёт алерт, а
+  не тишину; bbm uid `host-stale-ds-stage`, #3767).
   Правила — Grafana-managed (`grafana/provisioning/alerting/rules.yaml`), не
   Prometheus-rule-файлы: у Prometheus на mon `rule_files` пуст, поэтому
   `/api/v1/alerts` там всегда пустой — состояние алертов читается из Grafana

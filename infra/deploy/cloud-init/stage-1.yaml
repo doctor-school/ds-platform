@@ -20,6 +20,12 @@
 # project is brought up separately from infra/deploy/compose/stg-infra/ once the box
 # env is provisioned into /etc/ds-platform/stage.env (see that directory's README).
 #
+# Alloy (telemetry push to BBM's mon) is NOT installed here either: its push credential
+# cannot exist at first boot and the download would run past the #2121 window. It is a
+# provisioning step on the running box — infra/deploy/compose/stg-infra/README.md ->
+# "Prerequisites (owner, once)", step 5. A rebuild without it fires
+# HostTelemetryStale-ds-stage-1 (#3767).
+#
 # Rendered by templatefile() from stage-1.tf with ONE variable:
 #   deploy_ssh_pubkey — the operator public key at var.stage_1_ssh_pubkey_path,
 #   the same key Timeweb installs for root, so the `deploy` user is reachable

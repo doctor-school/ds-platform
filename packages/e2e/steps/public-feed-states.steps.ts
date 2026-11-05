@@ -237,6 +237,7 @@ Then(
           item.id ===
           state(page).fixture!.events.find((event) => event.name === name)!.id,
       )!;
+      expect(typeof item.nmo).toBe("boolean");
       await expect(card(page, name).locator("[data-event-nmo]")).toHaveCount(
         item.nmo ? 1 : 0,
       );

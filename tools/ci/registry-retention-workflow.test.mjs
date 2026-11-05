@@ -16,10 +16,11 @@ const lock = {
 
 // runtime-images.yml: main / hotfix / dispatch runs hold the lock; a pull_request run
 // takes a per-PR cancelling group (#3561) and is safe outside the lock only because
-// its digests are unique to one head (the revision label below).
+// its digests are unique to one head (the revision label below). A `labeled` event for
+// any label but `stage-slot` builds nothing and takes a group of its own (#3701).
 const publisherConcurrency = {
   group:
-    "${{ github.event_name == 'pull_request' && format('runtime-images-pr-{0}', github.event.pull_request.number) || 'registry-images' }}",
+    "${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name == 'stage-slot') && format('runtime-images-pr-{0}', github.event.pull_request.number) || github.event_name == 'pull_request' && format('runtime-images-pr-label-{0}', github.run_id) || 'registry-images' }}",
   queue: "${{ github.event_name == 'pull_request' && 'single' || 'max' }}",
   "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
 };

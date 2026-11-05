@@ -3,9 +3,10 @@
 #
 # Built with the REPO ROOT as build context, in two places today:
 #   - GitHub Actions (`.github/workflows/runtime-images.yml`) builds every image once
-#     per `main` merge / internal PR and pushes it to the container registry
-#     (infra/deploy/README.md → Container registry), with its digest recorded in the
-#     run's `images-<sha>.json` artifact;
+#     per `main` merge / PR head; a `main` build and a `stage-slot`-labelled internal
+#     PR head push it to the container registry (infra/deploy/README.md → Container
+#     registry), its digest recorded in the run's `images-<sha>.json` artifact — any
+#     other PR builds and boots it from a tar only;
 #   - ON-BOX, by infra/deploy/compose/api-prod/compose.yml (`build.context` = repo
 #     root, `dockerfile` = apps/api/Dockerfile) — production only, until it too
 #     switches to pulling by digest (#2981). Stage slots already pull the recorded
@@ -46,14 +47,17 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lo
 FROM deps AS build
 # Build @ds/api and everything it depends on, in dependency order (turbo ^build).
 RUN pnpm turbo run build --filter=@ds/api
-# Assemble a self-contained, prod-only deployment of @ds/api into /out.
-RUN pnpm --filter=@ds/api deploy --prod --legacy /out
+# Assemble a self-contained, prod-only deployment of @ds/api into /out. pnpm writes
+# node_modules/.modules.yaml in a per-run order, which alone gave identical content a
+# new layer digest (#3701); nothing in the image reads it, so it is not shipped.
+RUN pnpm --filter=@ds/api deploy --prod --legacy /out && rm /out/node_modules/.modules.yaml
 
 # Migration tree: a self-contained deployment of @ds/db WITH its devDependencies
 # (drizzle-kit is one), not the whole workspace install. Deployed at the SAME absolute
 # path the `migrate` image uses, so pnpm's bin shims and hoisted store resolve as built.
+# Its .modules.yaml is dropped like /out's above (`pnpm run` does not read it).
 FROM deps AS migrate-tree
-RUN pnpm --filter=@ds/db deploy --legacy /migrate/packages/db
+RUN pnpm --filter=@ds/db deploy --legacy /migrate/packages/db && rm /migrate/packages/db/node_modules/.modules.yaml
 
 # One-shot migration runner (deploy-time; NOT a long-running service). Layout mirrors
 # the repo so the committed config's CWD-relative paths hold: CWD = apps/api,

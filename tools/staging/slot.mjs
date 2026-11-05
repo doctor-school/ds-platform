@@ -908,6 +908,7 @@ function slotManifestPolicy(slot) {
     consumer: `slot ${slot}`,
     mainOnly: slot === "main",
     purpose: "stage",
+    pr: slot === "main" ? undefined : slot.slice("pr-".length),
   };
 }
 

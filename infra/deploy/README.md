@@ -355,19 +355,50 @@ join the same lock — the one exception is the `pull_request` run below. The re
 runner must never be run standalone, and out-of-workflow registry writes are outside
 this coordination boundary.
 
-A `pull_request` run (pushing `pr/*` only) takes the per-PR group
+A `pull_request` run takes the per-PR group
 `runtime-images-pr-<N>` with `cancel-in-progress: true` instead (#3561): a newer
-head cancels the superseded build, and `main` never waits behind PR builds. It is
-safe outside the lock because its images carry the label
-`org.opencontainers.image.revision=<head-sha>`, so a PR digest belongs to one head
-and an image-neutral push never re-tags a digest retention may be deleting. `main`
-images carry no such label, so an unchanged service keeps its digest across SHAs.
+head cancels the superseded build, and `main` never waits behind PR builds. It
+pushes `pr/*` only while the PR carries the `stage-slot` label (below); otherwise it
+builds and boots from a tar like a fork PR. It is safe outside the lock because its
+images carry the label `org.opencontainers.image.revision=<head-sha>`, so a PR digest
+belongs to one head and an image-neutral push never re-tags a digest retention may be
+deleting (only the config differs; the layers are shared). `main` images carry no
+such label, so with reproducible layers (below) an image whose inputs a commit does
+not change keeps its digest across SHAs. A `labeled` event for any other label takes
+a group of its own and builds nothing, so it cancels no build.
 GitHub keeps up to 100 pending runs with `queue: max`; additional arrivals are
 cancelled when full. Queue order follows when a run starts waiting, so dispatch
 order is not guaranteed. See
 [GitHub's concurrency contract](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
 `pnpm release:lane` prints the image-build, Stage main and deploy queues with the
 release candidate.
+
+**Quota sizing (#3701).** The registry quota is 50 GB (preset 1945, 260 ₽/mo; a
+preset can only grow, never shrink), and a DELETE frees
+bytes only at the provider's nightly garbage collection. The binding rule is therefore
+**unique bytes pushed in one day + the retention keep-set ≤ the quota** — retention
+running more often does not raise it. Measured on 2026-11-04 before this rule was
+enforced: 28 `main` pushes + ~49 internal-PR pushes ≈ 77 full sets of six images,
+which filled the then 25 GB preset within the day, because no push was deduplicated: every
+Dockerfile runs `COPY . .` before the install/build, so every commit rebuilds every
+later layer, and BuildKit wrote fresh file mtimes into them — identical content, new
+layer digest, stored again (aef63ad92 changed only `tools/deploy/`, yet all six
+digests changed). Two mechanisms in `runtime-images.yml` hold the rule:
+
+- **Reproducible layers.** The build job sets a constant `SOURCE_DATE_EPOCH=0` (never
+  the commit time) and both exporters run with `rewrite-timestamp=true`, so a rebuilt
+  layer with identical content gets the identical digest and the registry stores only
+  the layers that actually changed. The API Dockerfile drops pnpm's
+  `node_modules/.modules.yaml` from both `pnpm deploy` trees, the one file pnpm writes
+  in a per-run order. What a build itself randomises still differs per build: every
+  Next.js app (`portal`, `admin`, `doctor`, `login`) gets a fresh `BUILD_ID` and
+  server-action ids/keys, so its `.next` layers are re-stored on every build
+  (measured on PR #3704: 15 of portal's 96 MB); its base and dependency layers are
+  shared.
+- **PR images on demand.** An internal PR pushes its `pr/*` set only while it carries
+  the `stage-slot` label — the only consumer is a `pr-<N>` stage slot
+  (`tools/staging/README.md`); `pnpm stage:slot up pr-<N>` names the label when the
+  head has no record.
 
 **Activation boundary.** Runs using old workflow revisions (including reruns) retain
 their old concurrency configuration. After this fix merges, observe existing old
@@ -390,8 +421,8 @@ post-merge acceptance remains tracked by #3144 until that observation is recorde
   The push token is being removed from ds-stage-1 (`/etc/ds-platform/registry-push-token`)
   under #2981 now that the box only pulls; after that it lives only in Environment `build`.
 
-  The registry has no per-repository scopes, so an internal PR head could still push
-  outside `pr/` with the push token. Accepted: a release takes only the digests a `main`
+  The registry has no per-repository scopes, so a `stage-slot`-labelled internal PR head (the only
+  PR run that logs in with it) could still push outside `pr/` with the push token. Accepted: a release takes only the digests a `main`
   build recorded in its `images-<sha>.json`, never a tag. Fork PRs get neither token.
 
   Login: `docker login ds-platform.registry.twcstorage.ru -u ds-platform --password-stdin`
@@ -399,14 +430,16 @@ post-merge acceptance remains tracked by #3144 until that observation is recorde
   Neither token is ever written into this repo, an env file or chat.
 
 - **Image naming.** Every `main` merge pushes `ds-platform.registry.twcstorage.ru/<image>:<sha>`;
-  an internal pull request pushes `ds-platform.registry.twcstorage.ru/pr/<image>:<head-sha>`;
-  a fork pull request builds and boots its images but never logs in or pushes.
-  `<image>` ∈ `api`, `api-migrate`, `portal`, `admin`, `doctor`. The run's
+  an internal pull request carrying the `stage-slot` label pushes
+  `ds-platform.registry.twcstorage.ru/pr/<image>:<head-sha>`; any other pull request
+  (internal unlabelled or fork) builds and boots its images from a tar and never pushes.
+  `<image>` ∈ `api`, `api-migrate`, `portal`, `admin`, `doctor`, `login`. The run's
   `images-<sha>.json` artifact (90 days) maps each image to its pushed `@sha256:` digest
   — a deploy pulls by digest, never by tag. The data-prod images (`ds-postgres`,
   `ds-pgbackrest`) are not in the registry.
 - **Retention — the registry keeps production and its rollback targets only** (#3110).
-  The registry has a fixed quota (25 GB); once full, every push fails. Workflow
+  The registry has a fixed quota (50 GB, sized by the rule under «Quota sizing»);
+  once full, every push fails. Workflow
   `registry-retention.yml` (Environment `build`, the push token) prunes it to:
   - per release repo (`<image>`): the target SHAs of the latest 3 `release-*`
     GitHub Releases (production + 2 rollback targets) ∪ the SHA of the latest

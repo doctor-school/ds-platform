@@ -181,6 +181,7 @@ HTTPS and no real IdP, and cannot be opened from a phone.
 ```bash
 export STAGE_BASIC_AUTH_PASS="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^password=//p" /etc/ds-platform/stage-basic-auth.txt' | tr -d '
 ')"
+gh pr edit <N> --add-label stage-slot   # once per PR, then wait for the Runtime images run it starts
 pnpm stage:slot up pr-<N> --ref "$(git rev-parse <branch>)"
 # → https://academy-pr-<N>.stage.doctor.school  (basic auth: stage / $STAGE_BASIC_AUTH_PASS)
 #   https://doctor-pr-<N>.stage.doctor.school
@@ -188,8 +189,13 @@ pnpm stage:slot up pr-<N> --ref "$(git rev-parse <branch>)"
 #   https://api-pr-<N>.stage.doctor.school/v1/health
 ```
 
-Three prerequisites the commands do NOT solve for you, in the order they bite:
+Four prerequisites the commands do NOT solve for you, in the order they bite:
 
+0. **The PR must carry the `stage-slot` label** (#3701). An unlabelled PR's Runtime
+   images run builds and boots from a tar and pushes nothing, so its head has no
+   `pr/<N>` images record and `slot up` refuses, naming the label. Adding the label
+   starts a pushing run for the current head; every later head of the PR pushes too.
+   Remove the label with the slot's teardown.
 1. **`ds_golden` must already exist on the box.** `slot up` only CLONES the template; it
    never builds it. On a box where it was never built the converge dies at
    `[clone database]` with a raw `ERROR: template database "ds_golden" does not exist` —
@@ -463,12 +469,14 @@ the single authority on which slots are live; there is no registry file and noth
 cached. `up`/`sync` first resolve, **on the operator's machine**, the images
 `.github/workflows/runtime-images.yml` recorded for `--ref <sha>`: `gh run list --workflow
 runtime-images.yml --commit <sha>` → `gh run download <run> -n images-<sha>` → validate
-`images-<sha>.json` (its `sha` is the ref; all five of `api`, `api-migrate`, `portal`,
-`admin`, `doctor` are `ds-platform.registry.twcstorage.ru/[pr/]<image>@sha256:…`). Slot
+`images-<sha>.json` (its `sha` is the ref; all six of `api`, `api-migrate`, `portal`,
+`admin`, `doctor`, `login` are `ds-platform.registry.twcstorage.ru/[pr/]<image>@sha256:…`). Slot
 `main` accepts only a release build — `main`, or the `hotfix/<N>-<slug>` build a `--ref`
 release pre-flight converges it to; `pr-<N>` accepts its own `pr/<N>` build or a `main`
-one for the same SHA. No run, a run still in progress, a failed run or an expired
-artifact stops the converge **before the box is touched** — there is no build fallback
+one for the same SHA. A `pr/<N>` build is pushed and recorded only while the PR carries
+the `stage-slot` label (`PR_IMAGES_LABEL`, `tools/deploy/lib/registry.mjs`); a PR run
+without it records nothing and the refusal names the label. No run, a run still in
+progress, a failed run or an expired artifact stops the converge **before the box is touched** — there is no build fallback
 («the PR head changes no image input, so runtime-images did not run — nothing to stage»).
 Then they ship the tree (a `main` converge of a SHA on `main` then installs the stg-infra
 edge config from it — the Caddyfile the stg-infra compose mounts into caddy, validated

@@ -7,7 +7,12 @@ name: Runtime images
 #   - push to `hotfix/<N>-<slug>` (the `pnpm deploy:prod --ref` target, cut from the
 #     live prod SHA): pushed like `main`, manifest ref `hotfix/<N>-<slug>`. Any other
 #     `hotfix/` branch name fails the plan — production refuses it anyway.
-#   - internal pull_request: pushed as `<registry>/pr/<image>:<head-sha>`.
+#   - internal pull_request: built and booted from a tar, never pushed — unless the
+#     PR carries the `stage-slot` label (PR_IMAGES_LABEL, tools/deploy/lib/registry.mjs):
+#     then pushed as `<registry>/pr/<image>:<head-sha>` with an `images-<sha>` record
+#     for a `pr-<N>` stage slot. Adding the label starts a pushing run for the current
+#     head; later heads of a labelled PR keep pushing (#3701: the quota cannot carry a
+#     full image set per PR push).
 #   - fork pull_request: built and booted, never logged in, never pushed.
 #   - workflow_dispatch: pushes like `main` only when dispatched on `main` or on a
 #     `hotfix/<N>-<slug>` branch.
@@ -19,6 +24,7 @@ on:
     branches: [main, "hotfix/**"]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - ".nvmrc"
       - "package.json"
@@ -48,9 +54,11 @@ permissions:
 # outside the lock and safe without it: its images carry the head SHA as a label, so
 # every PR digest is unique to one head and no new tag can alias a digest retention
 # is about to delete. GitHub refuses queue:max with cancel-in-progress:true, hence
-# queue:single for the PR group (its single pending slot is the newest head).
+# queue:single for the PR group (its single pending slot is the newest head). A
+# `labeled` event for any other label (e.g. the track:* pr-track-sync adds right
+# after open) takes a group of its own so it cancels no build, and its plan is skipped.
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('runtime-images-pr-{0}', github.event.pull_request.number) || 'registry-images' }}
+  group: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name == 'stage-slot') && format('runtime-images-pr-{0}', github.event.pull_request.number) || github.event_name == 'pull_request' && format('runtime-images-pr-label-{0}', github.run_id) || 'registry-images' }}
   queue: ${{ github.event_name == 'pull_request' && 'single' || 'max' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -59,6 +67,7 @@ env:
 
 jobs:
   plan:
+    if: github.event.action != 'labeled' || github.event.label.name == 'stage-slot'
     runs-on: ubuntu-latest
     outputs:
       push: ${{ steps.plan.outputs.push }}
@@ -74,13 +83,15 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_IMAGES_LABELED: ${{ contains(github.event.pull_request.labels.*.name, 'stage-slot') }}
           REPO: ${{ github.repository }}
         run: |
           push=false; prefix=""; ref=""; sha="$SHA"
           if [ "$EVENT" = pull_request ]; then
             # The image is the PR head, so a slot for pr-<N> at <head-sha> pulls it.
             sha="$PR_HEAD_SHA"; ref="pr/$PR_NUMBER"; prefix="pr/"
-            if [ "$PR_HEAD_REPO" = "$REPO" ]; then push=true; fi
+            # Only an internal head with the label pushes; a fork never logs in.
+            if [ "$PR_HEAD_REPO" = "$REPO" ] && [ "$PR_IMAGES_LABELED" = true ]; then push=true; fi
           elif [ "$GIT_REF" = refs/heads/main ]; then
             push=true; ref=main
           elif [ "${GIT_REF#refs/heads/hotfix/}" != "$GIT_REF" ]; then
@@ -150,6 +161,12 @@ jobs:
             }
     env:
       PUSH: ${{ needs.plan.outputs.push }}
+      # Reproducible layers (#3701): every build clamps file mtimes and the image
+      # `created` to this CONSTANT (never the commit time), and the exporter rewrites
+      # the timestamps of rebuilt layers to it. `COPY . .` precedes the install/build in
+      # every Dockerfile, so any commit rebuilds every later layer; with identical
+      # content those now get identical digests and the registry stores nothing new.
+      SOURCE_DATE_EPOCH: 0
       # The registry host is spelled out: `env` is not available in jobs.<id>.env, so
       # a change to env.REGISTRY must change this line too.
       TAG: ${{ format('ds-platform.registry.twcstorage.ru/{0}{1}:{2}', needs.plan.outputs.prefix, matrix.image, needs.plan.outputs.sha) }}
@@ -178,12 +195,15 @@ jobs:
           target: ${{ matrix.target }}
           build-args: ${{ matrix.build-args }}
           tags: ${{ env.TAG }}
-          # A PR digest is unique to its head (see `concurrency`); main digests stay
-          # content-addressed so an unchanged service keeps its digest across SHAs.
+          # A PR digest is unique to its head (see `concurrency`) — only its config
+          # differs, its layers are shared. A main digest is content-addressed and,
+          # with reproducible layers (SOURCE_DATE_EPOCH above), an image whose inputs
+          # a commit does not change keeps its digest across SHAs.
           labels: ${{ github.event_name == 'pull_request' && format('org.opencontainers.image.revision={0}', needs.plan.outputs.sha) || '' }}
-          push: ${{ needs.plan.outputs.push == 'true' }}
-          # Without a push the image travels to the verify job as a tar.
-          outputs: ${{ needs.plan.outputs.push != 'true' && format('type=docker,dest={0}/image.tar', runner.temp) || '' }}
+          # The push rides `outputs` (not `push:`, which would add a second exporter)
+          # so rewrite-timestamp applies to it; without a push the image travels to
+          # the verify job as a tar.
+          outputs: ${{ needs.plan.outputs.push == 'true' && 'type=image,push=true,rewrite-timestamp=true' || format('type=docker,dest={0}/image.tar,rewrite-timestamp=true', runner.temp) }}
           provenance: false
           sbom: false
           cache-from: type=gha,scope=${{ matrix.image }}

@@ -2,7 +2,7 @@
 @host:academy
 Feature: 036 Sign-in doors
 
-  @EARS-1 @happy @door:login @host:login
+  @EARS-1 @happy @door:login @host:login @pr-ci:login
   Scenario: A guest signs in through the sign-in host
     Given a guest on the Academy
     When the guest signs in
@@ -27,4 +27,11 @@ Feature: 036 Sign-in doors
   Scenario: A guest resets the password
     Given a registered guest
     When the guest resets the password
+    Then the guest is signed in
+
+  # The double serves no mail: this binding runs in the stage suite only.
+  @EARS-1 @happy @door:login @host:login @stage-only:login(mail)
+  Scenario: A guest signs in by the mailed code
+    Given a guest on the Academy
+    When the guest signs in by the mailed code
     Then the guest is signed in

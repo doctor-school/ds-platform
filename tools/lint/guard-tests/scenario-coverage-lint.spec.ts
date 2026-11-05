@@ -150,9 +150,44 @@ describe("scenario-coverage-lint", () => {
     // read as the ordinary quarantine, EARS-2 would be uncovered in a touched spec.
     expect(code).toBe(0);
     expect(stdout).toContain(
-      "2 mounted-door scenario(s): 1 bound to the sign-in host, 1 host-quarantined",
+      "3 mounted-door scenario(s): 2 bound to the sign-in host, 1 host-quarantined",
+    );
+    // #3345 item 4 — each binding names where it runs: the PR-CI door tier or,
+    // for a reason class from the fixed list, the stage suite only.
+    expect(stdout).toContain(
+      "2 sign-in-host binding(s): 1 on the PR-CI door tier (@pr-ci:login), 1 stage-only (mail: 1)",
     );
     expect(stdout).toContain("PASS");
+  });
+
+  // #3345 item 4 — a `@host:login` scenario runs EITHER on the `apps/login` PR-CI
+  // tier against its API double (`@pr-ci:login`, generated there by bddgen with
+  // `fail-on-gen`) OR in the stage suite only, for a reason class from the fixed
+  // list (`@stage-only:login(<class>)`); a comment is no run class.
+  it("red: a binding with no run class, an unlisted or missing reason class, both classes, a class without the binding → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-host-run"),
+      seams("red-host-run"),
+    );
+    expect(code).toBe(1);
+    const feature =
+      "apps/docs/content/specs/features/036-sign-in/036-scenarios.feature";
+    expect(stderr).toContain(
+      `${feature}:6 -> @host:login names no run: tag it @pr-ci:login (the apps/login PR-CI door tier runs it) or @stage-only:login(<class>)`,
+    );
+    expect(stderr).toContain(
+      `${feature}:13 -> @stage-only:login(slow) names no reason class from the list (live-idp, mail, sms, captcha, cross-host-session)`,
+    );
+    expect(stderr).toContain(
+      `${feature}:19 -> @stage-only:login names no reason class from the list`,
+    );
+    expect(stderr).toContain(
+      `${feature}:25 -> @pr-ci:login and @stage-only:login(mail) on one scenario`,
+    );
+    expect(stderr).toContain(
+      `${feature}:31 -> @pr-ci:login without @host:login`,
+    );
   });
 
   it("green: a Feature-level @host: tag does not cost a handler its coverage", () => {

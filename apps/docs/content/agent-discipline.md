@@ -61,6 +61,8 @@ Use a literal UTF-8 `--body-file` for GitHub multiline text. On secret exposure 
 
 TDD: meaningful RED before production/guard logic, then GREEN; prose needs no new tests. Select local checks for the affected behavior and reuse valid evidence. Repository PRs still run full lint, applicable static guards and `pnpm pr:preflight <N>`; direct tasks need no install or repo checks. Cite unrelated baseline failures without absorbing their repair; required CI stays blocking. Independent review where applicable + fresh CI + owner evidence precede canonical landing.
 
+Capacity incidents (disk, quota, limit) close on the measured consumer, not the relief: measure what fills the resource and check each documented claim about that consumption against live data; a repeat of the same class means the previous fix was relief.
+
 Hooks are configured, trusted and observed separately: `tools/hooks/README.md` (`pnpm agent:doctor`, owner review/trust, then `pnpm agent:smoke --project`). Fixtures and synthetic logs prove neither live execution nor persisted trust.
 
 ## Memory

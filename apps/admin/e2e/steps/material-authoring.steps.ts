@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
 
 import { bootstrapAdminSession, signInAsAdmin } from "@ds/e2e/admin-events";
-import { PublicFeedPageSchema } from "@ds/schemas";
+import { PublicFeedPageSchema, type PublicFeedPage } from "@ds/schemas";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { createBdd } from "playwright-bdd";
 import { Pool, type QueryResultRow } from "pg";
@@ -12,7 +12,13 @@ import { selectRelationshipCombobox } from "../support/relationship-combobox";
 
 const { Given, When, Then, Before, After } = createBdd(test);
 type Actor = { id: string; zitadel_sub: string };
-type Material = { id: string; title: string; status: string; version: number };
+type Material = {
+  id: string;
+  slug: string;
+  title: string;
+  status: string;
+  version: number;
+};
 type State = {
   actors: Actor[];
   contexts: BrowserContext[];
@@ -401,7 +407,7 @@ Then("the list does not show {string}", async ({ page }, title: string) => {
   ).toHaveCount(0);
 });
 
-async function publicFeed(page: Page): Promise<unknown> {
+async function publicFeed(page: Page): Promise<PublicFeedPage> {
   const answer = await page.evaluate(async () => {
     const response = await fetch("/v1/public/feed?limit=24", {
       headers: { accept: "application/json" },
@@ -481,11 +487,29 @@ Then("{string} stays a draft", async ({ page, world }, title: string) => {
 Then(
   "the rail has no card {string}",
   async ({ page, world }, title: string) => {
+    const current = state(world);
     const feed = await publicFeed(page);
-    expect(JSON.stringify(feed)).not.toContain(title);
-    expect(feed).toEqual(state(world).feedBefore);
+    expect(feed.data.map((card) => card.title)).not.toContain(title);
+    expect(feed.data.map((card) => card.href)).not.toContain(
+      `/materials/${current.material!.slug}`,
+    );
+    expect(
+      await rows(
+        "SELECT id FROM feed_entries WHERE source_platform='academy' AND source_ref=$1",
+        [current.material!.id],
+      ),
+    ).toEqual([]);
+    operation("material feed absence", {
+      materialId: current.material!.id,
+      slug: current.material!.slug,
+      title,
+      similarlyNamedPublishedCards: feed.data
+        .filter((card) => card.title !== title && card.title.startsWith(title))
+        .map((card) => ({ id: card.id, title: card.title, href: card.href })),
+    });
+    expect(feed).toEqual(current.feedBefore);
     expect(await rows("SELECT * FROM feed_entries ORDER BY id")).toEqual(
-      state(world).feedRowsBefore,
+      current.feedRowsBefore,
     );
   },
 );
@@ -587,6 +611,8 @@ Then(
     expect(await rows("SELECT * FROM feed_entries ORDER BY id")).toEqual(
       current.feedRowsBefore,
     );
-    expect(JSON.stringify(feed)).not.toContain(current.previewTitle);
+    expect(feed.data.map((card) => card.title)).not.toContain(
+      current.previewTitle,
+    );
   },
 );

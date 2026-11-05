@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * The ways INTO the 018 specialty feed (#3674): a choice on the home catalog
- * (017 EARS-7) and the header item «Моя лента» (017 EARS-1). The upstream is
+ * Residual 017 EARS-1 transport boundaries after the canonical choice and
+ * remembered-header originals moved to packages/e2e (#3751). The upstream is
  * the events tier's fixed stand-in `e2e/support/doctor-events-api.mjs`, which
  * serves a feed envelope for every entry of its book and the guest half of the
  * choose/change contract (`/v1/public/specialty-choice`).
@@ -14,12 +14,6 @@ import { expect, test, type Page } from "@playwright/test";
  * answer names.
  */
 const CARDIOLOGY_ID = "00000000-0000-4000-8000-000000000001";
-const FEED_SPECIALTY = {
-  id: "0b8f1c52-5d0e-4c55-9d1f-1a2b3c4d5e6f",
-  code: "travmatologiya-i-ortopediya",
-  name: "Травматология и ортопедия",
-};
-
 function myFeed(page: Page) {
   return page
     .getByTestId("shell-nav-desktop")
@@ -33,35 +27,6 @@ async function expectFeedOf(page: Page, code: string, name: string) {
     page.getByRole("heading", { level: 1, name, exact: true }),
   ).toBeVisible();
 }
-
-test("017 EARS-7: choosing a specialty on the home catalog opens that specialty's feed", async ({
-  page,
-}) => {
-  await page.goto("/");
-  await expect(page.getByTestId("specialty-catalog")).toHaveAttribute(
-    "data-state",
-    "open",
-  );
-  await page
-    .getByTestId("specialty-catalog")
-    .getByRole("button", { name: "Кардиология", exact: true })
-    .click();
-
-  await expectFeedOf(page, "kardiologiya", "Кардиология");
-});
-
-test("017 EARS-1: «Моя лента» opens the remembered specialty's feed", async ({
-  page,
-}) => {
-  await page.setExtraHTTPHeaders({
-    cookie: `__Host-ds_specialty=${FEED_SPECIALTY.id}`,
-  });
-  await page.goto("/");
-  await expect(myFeed(page)).toHaveAttribute("href", "/feed");
-  await myFeed(page).click();
-
-  await expectFeedOf(page, FEED_SPECIALTY.code, FEED_SPECIALTY.name);
-});
 
 test("017 EARS-1: «Моя лента» with a different remembered specialty follows THAT choice", async ({
   page,

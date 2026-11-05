@@ -9,6 +9,8 @@ import {
   hostTagViolation,
   tagExpressionFor,
   ordinaryStorefrontTagsFor,
+  SIGN_IN_HOST_BINDING_TAG,
+  signInHostTags,
 } from "./host-tags.js";
 
 /**
@@ -69,6 +71,62 @@ describe("ordinary storefront selection", () => {
     );
     expect(dedicated.evaluate(["@host:academy", "@public-feed-entry"])).toBe(
       false,
+    );
+  });
+});
+
+describe("the sign-in-host binding (#3345)", () => {
+  const require = createRequire(import.meta.url);
+  const parse = createRequire(require.resolve("playwright-bdd"))(
+    "@cucumber/tag-expressions",
+  ).default as (value: string) => { evaluate(tags: string[]): boolean };
+
+  it("the login project selects exactly the bound scenarios of the ordinary contour", () => {
+    expect(SIGN_IN_HOST_BINDING_TAG).toBe("@host:login");
+    const login = parse(signInHostTags());
+    expect(login.evaluate(["@host:academy", "@host:login"])).toBe(true);
+    expect(login.evaluate(["@host:academy"])).toBe(false);
+    expect(login.evaluate(["@host:academy", "@quarantine:login(#3771)"])).toBe(
+      false,
+    );
+    // The dedicated contours stay where they are provisioned.
+    expect(
+      login.evaluate(["@host:academy", "@host:login", "@default-auth-limits"]),
+    ).toBe(false);
+    expect(
+      login.evaluate(["@host:academy", "@host:login", "@public-feed-entry"]),
+    ).toBe(false);
+  });
+
+  it("a storefront project no longer runs a bound scenario twice, except on the default-auth-limits contour", () => {
+    const ordinary = parse(
+      ordinaryStorefrontTagsFor(authLimitTagsFor("academy", {})),
+    );
+    expect(ordinary.evaluate(["@host:academy", "@host:login"])).toBe(false);
+    expect(ordinary.evaluate(["@host:academy"])).toBe(true);
+    expect(
+      ordinary.evaluate(["@host:academy", "@quarantine:login(#3771)"]),
+    ).toBe(true);
+    const contour = parse(
+      ordinaryStorefrontTagsFor(
+        authLimitTagsFor("academy", {
+          E2E_AUTH_LIMIT_TIER: "default",
+          E2E_PORTAL_URL: "http://localhost:3101",
+        }),
+      ),
+    );
+    expect(
+      contour.evaluate([
+        "@host:academy",
+        "@host:login",
+        "@default-auth-limits",
+      ]),
+    ).toBe(true);
+  });
+
+  it("is a SCENARIO-level binding — no Feature is declared on the sign-in host", () => {
+    expect(hostTagViolation(feature("@host:login\nFeature: X\n"))).toContain(
+      "unknown host tag @host:login",
     );
   });
 });

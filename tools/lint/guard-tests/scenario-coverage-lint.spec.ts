@@ -101,6 +101,60 @@ describe("scenario-coverage-lint", () => {
     expect(stdout).toContain("uncovered handler(s): EARS-2");
   });
 
+  // #3345 item 3 — the sign-in-host dimension. A scenario that names a door
+  // (`@door:<name>`) the route-mount registry marks `mounted` on the sign-in host
+  // (`apps/login/app/<name>/page.tsx`) must be bound to it (`@host:login`) or carry
+  // a tracked host quarantine (`@quarantine:login(#N)`); a comment is no exclusion.
+  it("red: an unbound mounted-door scenario, a comment-only exclusion, an unknown door, a bad host quarantine and a binding no project runs → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-door-binding"),
+      seams("red-door-binding"),
+    );
+    expect(code).toBe(1);
+    const feature =
+      "apps/docs/content/specs/features/036-sign-in/036-scenarios.feature";
+    expect(stderr).toContain(
+      `${feature}:6 -> @door:login is mounted on the sign-in host, but the scenario has no @host:login binding`,
+    );
+    expect(stderr).toContain(
+      `${feature}:13 -> @door:register is mounted on the sign-in host, but the scenario has no @host:login binding`,
+    );
+    expect(stderr).toContain(
+      `${feature}:11 -> a comment-only sign-in-host exclusion`,
+    );
+    expect(stderr).toContain(`${feature}:19 -> unknown door @door:lgoin`);
+    expect(stderr).toContain(
+      `${feature}:25 -> @host:login and @quarantine:login(#9003) on one scenario`,
+    );
+    expect(stderr).toContain(
+      `${feature}:31 -> @quarantine:login names no Issue`,
+    );
+    expect(stderr).toContain(
+      "apps/docs/content/specs/features/037-doctor-doors/037-scenarios.feature:6 -> @host:login outside an Academy feature",
+    );
+    // The `login` project excludes `@default-auth-limits` (`signInHostTags()`), so
+    // such a binding would be counted bound while no project executes it.
+    expect(stderr).toContain(
+      `${feature}:37 -> @host:login on a @default-auth-limits scenario; no e2e project runs that binding`,
+    );
+  });
+
+  it("green: a bound door, a tracked host quarantine that keeps EARS coverage, an unmounted door → exit 0", () => {
+    const { code, stdout } = runGuard(
+      GUARD,
+      dir("green-door-binding"),
+      seams("green-door-binding"),
+    );
+    // EARS-2 lives only on the host-quarantined scenario: were `@quarantine:login`
+    // read as the ordinary quarantine, EARS-2 would be uncovered in a touched spec.
+    expect(code).toBe(0);
+    expect(stdout).toContain(
+      "2 mounted-door scenario(s): 1 bound to the sign-in host, 1 host-quarantined",
+    );
+    expect(stdout).toContain("PASS");
+  });
+
   it("green: a Feature-level @host: tag does not cost a handler its coverage", () => {
     const feature = readFileSync(
       resolve(

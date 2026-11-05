@@ -174,7 +174,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the displaced requester submits six digits for that unavailable phone confirmation
     Then Academy refuses that code generically while both owned profiles retain their post-request phone states
 
-  @EARS-53 @EARS-12 @EARS-35 @happy @sms-reset
+  @EARS-53 @EARS-12 @EARS-35 @happy @sms-reset @door:reset @host:login
   Scenario: Password reset by a confirmed phone delivers the code by SMS
     Given an account with a unique confirmed phone and a verified email
     When a visitor requests a password reset with that confirmed phone as the identifier
@@ -186,7 +186,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # Academy projection of existing identifier-bound reset checks (#3139).
   # App-local test: none -> 003 EARS-12/16/41/53 -> dedicated shared steps;
   # deleted duplicate: none. Actual delivered codes remain live for both owners.
-  @EARS-12 @EARS-16 @EARS-41 @EARS-53 @failure @sms-reset-account-isolation
+  @EARS-12 @EARS-16 @EARS-41 @EARS-53 @failure @sms-reset-account-isolation @door:reset @host:login
   Scenario: Academy rejects another doctor's live SMS reset code and preserves both rightful reset challenges
     Given two owned Academy doctors retain distinct live SMS password reset codes for their confirmed phones
     When the second doctor's reset form submits the first doctor's retained SMS code with a different password
@@ -194,7 +194,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When each SMS reset owner submits their own same retained code and a new password without requesting another challenge
     Then both new passwords sign in only their original phone-confirmed doctors before all owned SMS isolation sessions are logged out
 
-  @EARS-53 @EARS-16 @EARS-56 @failure @sms-reset
+  @EARS-53 @EARS-16 @EARS-56 @failure @sms-reset @door:reset @quarantine:login(#3771)
   Scenario: Reset by an unconfirmed or unknown phone is indistinguishable and sends nothing
     Given a phone that is unknown, a phone only typed in a congress form, and a phone awaiting confirmation on the IdP
     When a visitor requests a password reset with each
@@ -205,13 +205,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # Academy delivery/UI projection only (#3018); retain the native case above.
   # Native status/body/timing against confirmed phones, counter and absent audit:
   # apps/api/test/auth/password-reset.e2e-spec.ts EARS-53/16/56.
-  @EARS-53 @EARS-16 @failure @reset-unconfirmed-phones
+  @EARS-53 @EARS-16 @failure @reset-unconfirmed-phones @door:reset @host:login
   Scenario: Academy silently accepts reset for unknown, congress-contact and pending phones
     Given Academy owns distinct unknown, congress-contact and pending-confirmation phones for reset
     When independent Academy guests request password reset through the actual form for all three phones
     Then all three Academy reset guests remain private-session-free and receive no addressed delivery throughout twenty seconds
 
-  @EARS-53 @EARS-58 @failure @sms-reset
+  @EARS-53 @EARS-58 @failure @sms-reset @door:reset @quarantine:login(#3771)
   Scenario: A mirror that still confirms a number the IdP no longer holds verified sends nothing
     Given the mirror holds "+79991234567" as a confirmed phone of an account
     And the IdP user of that account holds a different, unverified phone
@@ -221,7 +221,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the mirror is next reconciled from the IdP
     Then the account holds no confirmed phone in the mirror
 
-  @EARS-53 @happy @sms-reset
+  @EARS-53 @happy @sms-reset @door:reset @quarantine:login(#3771)
   Scenario: Reset by email is unchanged for an account that also has a confirmed phone
     Given an account with a confirmed phone and the email "owner@example.org"
     When a visitor requests a password reset with "owner@example.org"
@@ -229,13 +229,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   # Academy projection of the preceding EARS-53 delivery clause (#2962).
   # The fixed-identity native case above and full reset completion stay retained.
-  @EARS-53 @happy @email-reset-with-phone
+  @EARS-53 @happy @email-reset-with-phone @door:reset @host:login
   Scenario: Academy keeps email reset delivery when the account also confirms a phone
     Given a uniquely owned verified Academy account has confirmed a fresh phone in its profile
     When an independent guest requests reset using that Academy account's email
     Then Academy delivers one fresh six-digit email reset code, shows the email step and sends no SMS for twenty seconds
 
-  @EARS-54 @EARS-55 @happy @hint
+  @EARS-54 @EARS-55 @happy @hint @door:reset @quarantine:login(#3771)
   Scenario: The reset step and the hint tell the truth about the SMS
     When a visitor types a phone into the identifier field of "/reset"
     Then the static hint «SMS-код приходит только на номер, подтверждённый в профиле; иначе используйте почту» is shown
@@ -246,7 +246,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # Academy projection of EARS-54/55 above (#2989); native declaration retained.
   # No-email/timing/counter/audit: apps/api/test/auth/password-reset.e2e-spec.ts EARS-53/56.
   # Confirmed-phone delivery/completion: packages/e2e/steps/password-reset-sms.steps.ts.
-  @EARS-54 @EARS-55 @happy @reset-sms-hint
+  @EARS-54 @EARS-55 @happy @reset-sms-hint @door:reset @host:login
   Scenario: Academy reset explains SMS eligibility and returns to email without claiming delivery
     Given an Academy guest opens reset with a fresh unknown phone and a readable SMS sink
     When the Academy guest types that unknown phone in the real reset identifier field
@@ -256,7 +256,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the Academy guest uses start over and types the owned email instead
     Then the reset email field has no SMS hint and the transition grants no private access or extra auth command
 
-  @EARS-55 @EARS-56 @happy @hint
+  @EARS-55 @EARS-56 @happy @hint @door:login @quarantine:login(#3771)
   Scenario: Sign-in under the SMS switch shows the hint and counts a request for an unconfirmed number
     Given the visitor opens "/login" with the "По коду" method and selects «SMS»
     Then the same static hint is shown, for every visitor alike
@@ -268,7 +268,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # Native counter/audit/timing: apps/api/test/auth/login-otp.e2e-spec.ts EARS-56/16.
   # Shared hint: packages/auth-flow/src/login/login-door.channels.test.tsx EARS-55.
   # EARS-55 is under the channel switch; the EARS-42 code step is unchanged.
-  @EARS-55 @EARS-56 @EARS-16 @happy @signin-sms-hint
+  @EARS-55 @EARS-56 @EARS-16 @happy @signin-sms-hint @door:login @host:login
   Scenario: Academy shows the static SMS sign-in hint and neutrally accepts an unconfirmed phone
     Given a fresh Academy guest opens login by code with a unique unconfirmed phone
     When the Academy guest selects the real SMS sign-in channel
@@ -276,7 +276,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the Academy guest requests an SMS sign-in code for that phone
     Then Academy offers the unchanged SMS code step without a private session or addressed SMS for twenty seconds
 
-  @EARS-1 @EARS-20 @EARS-19 @happy @registration-before-confirmation
+  @EARS-1 @EARS-20 @EARS-19 @happy @registration-before-confirmation @door:register @host:login
   Scenario: Register with email and password
     Given an Academy visitor with a unique never-registered email
     When the visitor submits the Academy registration form with a policy-conforming password and accepted consent versions
@@ -290,7 +290,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # "003 EARS-1/41/10" registration/verify arrival/mail -> registration.steps.ts.
     # Keep that full test: its confirmation/session/logout assertions are distinct.
 
-  @EARS-20 @failure @consent-refusal
+  @EARS-20 @failure @consent-refusal @door:register @host:login
   Scenario: Registration is refused without consent
     Given an Academy visitor with unique owned credentials for the consent-refusal request
     When that browser sends a real Academy BFF registration request without any accepted consent version
@@ -303,14 +303,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # -> consent-refusal.steps.ts: real BFF refusal + exact owned mirror count.
     # Keep broader portal registration/confirmation journeys and the API test.
 
-  @EARS-1 @EARS-16 @failure
+  @EARS-1 @EARS-16 @failure @door:register @quarantine:login(#3771)
   Scenario: Registration with an already-registered email is enumeration-resistant
     Given an email that is already registered
     When a visitor submits the registration form with that email
     Then the response is indistinguishable in status, body, and timing from the never-registered case
     And no duplicate account is created
 
-  @EARS-23 @EARS-16 @happy
+  @EARS-23 @EARS-16 @happy @door:register @quarantine:login(#3771)
   Scenario: Already-registered email receives a code mail and nothing is written before the code
     # Production amendment 2026-10-02 (#2553): the owner receives a code, never a
     # dead-end notice; the API response is identical to the never-registered case.
@@ -320,7 +320,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And no account, consent, or audit_ledger row is written before a code is accepted
     And the API response is indistinguishable in status, body, and timing from the never-registered case
 
-  @EARS-23 @EARS-41 @happy
+  @EARS-23 @EARS-41 @happy @door:register @quarantine:login(#3771)
   Scenario: A verified password holder who re-registers is signed in by the code and keeps the password
     Given a verified account with a password for "owner@example.org"
     When a visitor submits the registration form for "owner@example.org" with a different password and a display name
@@ -330,7 +330,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the original password still signs in and the submitted one does not
     And the display name is written only if the account had none
 
-  @EARS-23 @EARS-41 @happy @registration-verified-password
+  @EARS-23 @EARS-41 @happy @registration-verified-password @door:register @host:login
   Scenario: Academy verified re-registration preserves the original password and display name
     Given a uniquely owned verified Academy password holder has saved an original display name and logged out
     When an independent Academy guest re-registers that verified address with a distinct password and the account return target
@@ -343,7 +343,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain the broader scenario above, auth.service.spec.ts EARS-23 verified-
     # credential preservation proof, and app-local auth journeys.
 
-  @EARS-23 @EARS-41 @happy @registration-abandoned
+  @EARS-23 @EARS-41 @happy @registration-abandoned @door:register @host:login
   Scenario: An abandoned registrant who registers again gets the new password, not the abandoned one
     Given a uniquely owned Academy account remains unverified after registration with an abandoned password
     When the abandoned registrant submits the real Academy registration form again for the same address with a distinct new password
@@ -355,7 +355,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain apps/api/src/auth/auth.service.spec.ts EARS-23/41 and the IdP
     # password-replacement tests; broader registration/confirmation journeys stay.
 
-  @EARS-41 @failure
+  @EARS-41 @failure @door:register @quarantine:login(#3771)
   Scenario: A password set before verification does not survive the owner's first code
     # Lead security decision 2026-10-02: a squatter who registered the owner's address
     # with their own password loses it at the owner's first accepted code.
@@ -365,7 +365,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the pre-verification password no longer signs in
     And every session the account held before the code is revoked
 
-  @EARS-41 @failure @signin-first-code
+  @EARS-41 @failure @signin-first-code @door:register @host:login
   Scenario: Academy refuses the preverification password after the owner's first sign-in code
     Given a uniquely owned Academy account has its original registration password and an unconsumed verification code
     When the mailbox owner requests a fresh sign-in code through the ordinary Academy email method
@@ -381,7 +381,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Native apps/api/src/auth/auth.service.spec.ts:1402 owns revoke-all sessions.
     # This browser case establishes no pre-code session and claims no revoke-all proof.
 
-  @EARS-23 @EARS-41 @happy @congress-registration
+  @EARS-23 @EARS-41 @happy @congress-registration @door:register @host:login
   Scenario: A password-less congress account that registers gets the entered password after the code
     Given a uniquely owned passwordless unverified congress signup has its original profile and congress consent observed
     When that congress account registers through Academy with a new policy-conforming password and the accepted platform terms
@@ -395,7 +395,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # consent unit proofs; the native portal EARS-44 congress hand-off journey
     # remains distinct. Academy records platform terms from its read-only statement.
 
-  @EARS-23 @EARS-41 @happy @registration-consent-preservation
+  @EARS-23 @EARS-41 @happy @registration-consent-preservation @door:register @host:login
   Scenario: Re-registration never overwrites an existing platform consent
     Given a uniquely owned verified Academy account is logged out with its existing platform consent observed
     When that verified account re-registers through Academy with its mixed-case email, a different password and the read-only accepted terms
@@ -407,7 +407,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain auth.service.spec.ts EARS-23/41 recordMissingConsent proof and the
     # broader app-local registration/mail/accepted-code/session journeys.
 
-  @EARS-23 @failure @registration-duplicate-mail
+  @EARS-23 @failure @registration-duplicate-mail @door:register @host:login
   Scenario: Repeated duplicate registrations do not flood the inbox
     Given an Academy email registered by this scenario with a never-registered response observed
     And a fresh re-registration code mail was delivered for the first duplicate Academy submission
@@ -419,7 +419,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # apps/api/test/auth/register.e2e-spec.ts / email-timing.e2e-spec.ts
     # native enumeration/timing proof; the browser changes no throttle lifetime.
 
-  @EARS-24 @EARS-42 @EARS-16 @happy @registration-code-screen
+  @EARS-24 @EARS-42 @EARS-16 @happy @registration-code-screen @door:register @host:login
   Scenario: The post-registration screen is the one code step for new and existing visitors
     Given a new Academy visitor and an already-verified owned visitor with fresh guest browsers
     When both owned visitors submit the Academy registration form and reach its code step
@@ -432,7 +432,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # registration privacy proof. The broader app-local re-registration/mail/
     # accepted-code/session journey in auth-journeys.e2e.spec.ts remains intact.
 
-  @EARS-25 @EARS-16 @happy
+  @EARS-25 @EARS-16 @happy @door:register @quarantine:login(#3771)
   Scenario: Resending a code is enumeration-resistant and fits the account state
     # Production amendment 2026-10-02 (#2553): a resend from any code step re-issues
     # the code that fits the account state for any existing account.
@@ -444,7 +444,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And an otp.sent audit_ledger row is appended only when a code is actually issued
     And the resend is subject to the EARS-13 rate limits and writes no users or consent row
 
-  @EARS-25 @EARS-16 @happy @verification-resend
+  @EARS-25 @EARS-16 @happy @verification-resend @door:register @host:login
   Scenario: Academy resend delivers the code fitting each account state without a private session
     Given three guest Academy code screens for unique unknown, unverified and verified owned addresses
     When each guest waits for the real cooldown and clicks the actual Academy verification resend control
@@ -458,7 +458,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # packages/auth-flow/src/verify/verify-door.test.tsx retains native resend
     # control/cooldown contracts; accepted-code/session journeys remain distinct.
 
-  @EARS-2 @EARS-16 @failure @phone-only-registration
+  @EARS-2 @EARS-16 @failure @phone-only-registration @door:register @host:login
   Scenario: Phone-only registration is not offered and never 500s
     # Zitadel cannot create a login-capable human without an email (GH #202);
     # email is the primary registration identifier, phone is a post-registration
@@ -479,7 +479,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # apps/api/test/auth/register.e2e-spec.ts EARS-2 actual-phone SELECT absence
     # plus DTO/IdP robustness. These native proofs own upstream IdP behavior.
 
-  @EARS-3 @EARS-41 @happy @email-confirmation
+  @EARS-3 @EARS-41 @happy @email-confirmation @door:verify @host:login
   Scenario: Verify email with the OTP code
     Given an Academy visitor with a unique never-registered email
     When the visitor submits the Academy registration form with a policy-conforming password and accepted consent versions
@@ -507,7 +507,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # wrong-code scenario below. OTP attempt-limit accounting stays separate HTTP
   # boundary evidence: apps/api/test/auth/abuse-limits.e2e-spec.ts EARS-13.
 
-  @EARS-5 @EARS-8 @happy
+  @EARS-5 @EARS-8 @happy @door:login @host:login
   Scenario: Log in with password and establish a BFF session
     Given the golden doctor "verified-cardiologist" is available for password sign-in
     When that doctor signs in through the Academy password form
@@ -525,7 +525,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then a fresh browser sending that copied cookie with a different user agent receives only generic private-read refusals
     And the original Academy browser still reads the same owner and profile with its unchanged secure session
 
-  @EARS-5 @EARS-16 @failure
+  @EARS-5 @EARS-16 @failure @door:login @host:login
   Scenario: Wrong password returns a generic error without a private session
     Given the golden doctor "verified-cardiologist" is available for password sign-in
     When that doctor submits a wrong password through the Academy password form
@@ -535,7 +535,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # API EARS-5 test owns the IdP failed-attempt increment assertion. The browser
     # verifies the live refusal without claiming to read Zitadel's native counter.
 
-  @EARS-5 @EARS-8 @EARS-16 @failure @password-owner-preservation
+  @EARS-5 @EARS-8 @EARS-16 @failure @password-owner-preservation @door:login @host:login
   Scenario: Academy refuses a wrong password without disturbing the independently authenticated owner
     Given a uniquely owned verified Academy password account keeps its original private session
     When an independent Academy guest submits one wrong password while that owner remains signed in
@@ -543,7 +543,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain the generic wrong-password declaration and native EARS-5/8/16 contracts.
     # This browser projection asserts owner continuity, not provider counters.
 
-  @EARS-8 @EARS-43 @happy @login-unsafe-return
+  @EARS-8 @EARS-43 @happy @login-unsafe-return @door:login @host:login
   Scenario: Academy discards an external return target after successful owned-account password login
     Given a uniquely owned verified Academy account has logged out before the unsafe-return login
     When that owner signs in through the actual Academy password form carrying an external HTTPS return target
@@ -553,7 +553,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # and packages/auth-flow/src/verify/verify-door.test.tsx return-target tests.
     # They own parser/door branches; this real browser proves the shipped path.
 
-  @EARS-6 @EARS-8 @EARS-41 @happy
+  @EARS-6 @EARS-8 @EARS-41 @happy @door:login @host:login
   Scenario: Passwordless login with an email OTP code
     Given the golden doctor "verified-cardiologist" has a verified email for code sign-in
     When that doctor requests an email login code and submits the delivered code through Academy
@@ -562,7 +562,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the doctor's own profile is readable through the BFF
     And neither the login response nor JavaScript-readable browser stores expose access or refresh tokens
 
-  @EARS-34 @EARS-41 @EARS-16 @happy @login-email-unverified
+  @EARS-34 @EARS-41 @EARS-16 @happy @login-email-unverified @door:login @host:login
   Scenario: An unverified account signs in with the code from the sign-in mail
     # Production amendment 2026-10-02 (#2553): Zitadel cannot arm otp_email for an
     # unverified address, so the verification code travels in the same sign-in mail
@@ -583,7 +583,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # status/body and interleaved triad median timing within 50 ms (30 ms floor).
     # Keep the distinct verified golden EARS-6 browser journey above intact.
 
-  @EARS-34 @EARS-16 @EARS-41 @EARS-8 @EARS-22 @happy @verified-login-email-code
+  @EARS-34 @EARS-16 @EARS-41 @EARS-8 @EARS-22 @happy @verified-login-email-code @door:login @host:login
   Scenario: A login-email-code request for a verified account arms the challenge unchanged
     Given a uniquely registered and verified Academy doctor_guest account is logged out for an email-code request
     When the owned verified account requests its email login code through the Academy form
@@ -600,7 +600,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # login mail, absent verification mail and acceptance, not native IdP reads
     # or statistical timing. Keep the golden verified EARS-6 journey distinct.
 
-  @EARS-6 @EARS-17 @EARS-34 @EARS-41 @EARS-42 @happy @login-email-resend
+  @EARS-6 @EARS-17 @EARS-34 @EARS-41 @EARS-42 @happy @login-email-resend @door:login @host:login
   Scenario: Academy resends the email login code and accepts the newest delivery for the same owner
     Given a uniquely registered and verified Academy doctor_guest account is logged out for an email-code resend
     When the resend owner requests an initial real Academy email login code with its resend button disabled
@@ -609,7 +609,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Actual recipient-bound mail IDs project EARS-6/17; only browser cooldown
     # time advances. No server/provider clock, quota or old-code expiry claim.
 
-  @EARS-6 @EARS-41 @EARS-16 @failure @login-email-code-reuse
+  @EARS-6 @EARS-41 @EARS-16 @failure @login-email-code-reuse @door:login @host:login
   Scenario: Academy refuses a consumed email login code without disturbing its original session
     Given a uniquely registered and verified Academy doctor_guest account is logged out for an email-code request for consumed-code replay
     When the owned verified account requests its email login code through the Academy form for consumed-code replay
@@ -622,14 +622,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain zitadel.idp.spec.ts EARS-6 consumed-challenge native proof and
     # the broader wrong-code/timing and verified-account request journeys.
 
-  @host:academy @EARS-6 @EARS-8 @EARS-16 @EARS-41 @failure @login-email-code-isolation
+  @host:academy @EARS-6 @EARS-8 @EARS-16 @EARS-41 @failure @login-email-code-isolation @door:login @host:login
   Scenario: Academy isolates two live email login codes by their rightful accounts
     Given two owned Academy doctors verify fresh registrations for email login isolation
     When both owned doctors retain distinct actual email login codes requested through Academy
     And doctor B submits doctor A's live email login code and receives a generic refusal without a session
     Then both retained email login codes still authenticate their rightful owners and preserve their identities through reload
 
-  @EARS-34 @EARS-16 @failure @login-email-nonexistent
+  @EARS-34 @EARS-16 @failure @login-email-nonexistent @door:login @host:login
   Scenario: A login-email-code request for a nonexistent identifier is a silent no-op
     Given a unique unknown Academy address and owned unverified and verified login-code observations
     When the fresh Academy visitor requests an email login code for the unique unknown address
@@ -645,21 +645,21 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # public UI, absent addressed mail and private access, without native reads or
     # statistical timing probes. Keep the golden verified EARS-6 journey intact.
 
-  @EARS-7 @EARS-14 @happy
+  @EARS-7 @EARS-14 @happy @door:login @quarantine:login(#3771)
   Scenario: Login with an SMS OTP code within the toll-fraud budget
     Given a verified doctor_guest user whose phone is under all SMS thresholds
     When the user requests an SMS login code and submits the correct code
     Then Zitadel otp_sms verifies it
     And a BFF session is established
 
-  @host:academy @EARS-7 @EARS-8 @EARS-16 @EARS-41 @failure @login-sms-code-reuse
+  @host:academy @EARS-7 @EARS-8 @EARS-16 @EARS-41 @failure @login-sms-code-reuse @door:login @host:login
   Scenario: Academy refuses a consumed SMS login code without disturbing its confirmed-phone owner
     Given an owned Academy consumed-code doctor verifies email and confirms a fresh phone through the account UI
     When that consumed-code doctor logs out and requests one delivered SMS login code as an Academy guest
     And the consumed-code guest enters the actual six-digit SMS login code and it auto-submits
     Then an independent Academy guest cannot reuse the consumed SMS login code and its confirmed-phone owner survives reload
 
-  @EARS-7 @EARS-8 @happy @login-sms-confirmed
+  @EARS-7 @EARS-8 @happy @login-sms-confirmed @door:login @host:login
   Scenario: Academy signs in the same owned doctor with the confirmed phone SMS code
     Given an owned Academy doctor verifies email and confirms a fresh phone through the real account UI
     When that doctor logs out and requests an SMS sign-in code as a genuine Academy guest
@@ -672,14 +672,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # sms-budget.service.spec.ts owns EARS-14 per-phone, IP and ASN thresholds.
     # This journey neither exhausts nor claims to inspect fraud-budget counters.
 
-  @host:academy @EARS-7 @EARS-8 @EARS-16 @EARS-41 @EARS-58 @failure @login-sms-code-isolation
+  @host:academy @EARS-7 @EARS-8 @EARS-16 @EARS-41 @EARS-58 @failure @login-sms-code-isolation @door:login @host:login
   Scenario: Academy refuses another doctor's live SMS login code and preserves both rightful codes
     Given two owned Academy doctors verify email and confirm distinct phones for SMS login isolation
     When both owned doctors retain distinct actual SMS login codes requested through Academy
     And doctor B submits doctor A's live SMS login code and receives a generic refusal without a session
     Then both retained SMS login codes still authenticate their rightful owners and preserve their identities through reload
 
-  @EARS-7 @EARS-8 @EARS-41 @EARS-16 @failure @login-sms-code-refusal
+  @EARS-7 @EARS-8 @EARS-41 @EARS-16 @failure @login-sms-code-refusal @door:login @host:login
   Scenario: Academy refuses a wrong SMS login code and accepts the retained real code for the same owner
     Given an owned Academy SMS-code refusal doctor verifies email and confirms a fresh phone
     When that owned refusal doctor logs out and retains the newly delivered SMS login code
@@ -691,14 +691,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Native apps/api/test/auth/login-otp.e2e-spec.ts owns IdP delegation and timing;
     # sms-budget.service.spec.ts owns EARS-14 thresholds. No exhaustion or expiry claim.
 
-  @EARS-14 @failure
+  @EARS-14 @failure @door:login @quarantine:login(#3771)
   Scenario: SMS send refused when the daily budget circuit-breaker is open
     Given the global daily SMS budget has been exhausted
     When a user requests an SMS login code
     Then no SMS is sent to the provider
     And a generic "try again later" response is returned
 
-  @EARS-17 @happy @implemented @captcha-on-demand
+  @EARS-17 @happy @implemented @captcha-on-demand @door:login @host:login
   Scenario: A protected auth send executes an invisible challenge only on demand
     Given no permanent CAPTCHA checkbox is rendered in the auth form
     When a visitor submits registration, requests an initial login or reset code, or clicks any code resend
@@ -711,7 +711,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # and proves fresh per-send execution/instance. Synthetic provider interaction
     # proves frontend orchestration, not Yandex challenge UI or token freshness.
 
-  @EARS-17 @happy @implemented @captcha-threshold @default-auth-limits
+  @EARS-17 @happy @implemented @captcha-threshold @default-auth-limits @door:login @quarantine:login(#3780)
   Scenario: Password login challenges only after the backend threshold
     Given a visitor has entered an identifier and password
     When the visitor submits password login before the failed-login threshold
@@ -721,7 +721,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And a successful solve retries the captured original login values exactly once
 
   @EARS-17 @happy
-  @implemented @captcha-confirmation
+  @implemented @captcha-confirmation @door:login @host:login
   Scenario: Proving a code or completing reset is not challenged again
     Given a visitor already requested a verification, login, or reset code through a protected action
     When the visitor submits that verification code or login OTP, or completes password reset
@@ -729,7 +729,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the visitor explicitly asks to resend a code
     Then the portal executes a new invisible check and uses a fresh token for that resend
 
-  @EARS-17 @failure @captcha-failure @default-auth-limits
+  @EARS-17 @failure @captcha-failure @default-auth-limits @door:login @quarantine:login(#3780)
   # S067: deterministic provider lifecycle; application requests stay real.
   Scenario: CAPTCHA failure is truthful, terminal, theme-aware, and non-destructive
     Given the invisible widget uses the portal's resolved light or dark theme and follows a live theme change
@@ -780,13 +780,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Native session-service tests retain server-side revocation/audit contracts.
     # Retain the broader account-control logout scenario above.
 
-  @EARS-11 @EARS-16 @happy
+  @EARS-11 @EARS-16 @happy @door:reset @host:login
   Scenario: Password reset request is enumeration-resistant
     When a guest requests password resets through Academy for a seeded and a unique unregistered email
     Then both reset requests have identical acknowledgements and complete-step controls without a private session
     And fresh reset mail reaches only the seeded email while the unregistered email receives no mail for 15 seconds
 
-  @EARS-12 @happy @password-reset-complete
+  @EARS-12 @happy @password-reset-complete @door:reset @host:login
   Scenario: Completing a password reset revokes existing sessions and auto-logs-in
     Given a uniquely registered Academy account has two independently authenticated sessions
     When that account completes the Academy reset form with its fresh delivered code and a new password
@@ -795,7 +795,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # PasswordResetCompleted evidence: apps/api/src/auth/auth.service.spec.ts EARS-12.
     # API session proof: apps/api/test/auth/password-reset.e2e-spec.ts EARS-12.
 
-  @EARS-12 @EARS-16 @failure @password-reset-code-reuse
+  @EARS-12 @EARS-16 @failure @password-reset-code-reuse @door:reset @host:login
   Scenario: Academy refuses a consumed password reset code and preserves the accepted password
     Given a uniquely owned verified Academy account completes a delivered password reset once
     When a guest Academy browser replays that consumed reset code with a different private password
@@ -803,7 +803,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # One-time delivered-code proof; native EARS-12 reset/session and EARS-16
     # generic failure contracts remain in apps/api/test/auth/password-reset.e2e-spec.ts.
 
-  @EARS-35 @EARS-12 @happy @password-reset-complete
+  @EARS-35 @EARS-12 @happy @password-reset-complete @door:reset @host:login
   Scenario: A proven password reset marks the email verified and unblocks login-by-code
     Given a uniquely registered Academy account remains on verification with its confirmation code unconsumed
     When that account completes the Academy reset form with its fresh delivered code and a new password
@@ -815,7 +815,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # apps/api/src/auth/idp/zitadel.idp.spec.ts EARS-35 wire-shape tests.
     # EARS-41 also verifies on code login; the pre-login profile read isolates reset.
 
-  @EARS-35 @EARS-16 @failure @password-reset-complete
+  @EARS-35 @EARS-16 @failure @password-reset-complete @door:reset @host:login
   Scenario: A failed reset mutates nothing, including verification state
     Given a uniquely registered Academy account remains on verification with its confirmation code unconsumed
     When that account completes the Academy reset form with its guaranteed different six-digit code and a new password
@@ -828,7 +828,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Mirror persistence: apps/api/test/auth/password-reset.e2e-spec.ts EARS-35/16.
     # This case proves a bad code, not expiry or a browser timing bound.
 
-  @EARS-13 @happy
+  @EARS-13 @happy @door:login @quarantine:login(#3771)
   Scenario: A successful login forgives the per-user rate-limit window
     Given a user who has made several failed login attempts within the per-user window
     When the user then submits the correct credentials within the window and succeeds
@@ -836,7 +836,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And a subsequent attempt for that identifier is not throttled
     But the per-IP and per-ASN windows are not forgiven
 
-  @EARS-13 @EARS-5 @EARS-8 @EARS-16 @happy @login-counter-reset @default-auth-limits
+  @EARS-13 @EARS-5 @EARS-8 @EARS-16 @happy @login-counter-reset @default-auth-limits @door:login @quarantine:login(#3780)
   Scenario: Academy successful password login clears the same identifier's real rate window
     Given a unique verified Academy account starts the real login-counter journey as a guest
     When two real Academy password refusals are followed by the owner's successful password login
@@ -844,7 +844,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Default-limit local contour only; stage raises the per-account ceiling.
     # Native per-IP/per-ASN no-forgiveness: apps/api/test/auth/abuse-limits.e2e-spec.ts EARS-13.
 
-  @EARS-13 @EARS-12 @EARS-8 @EARS-16 @happy @reset-counter-forgiveness @default-auth-limits
+  @EARS-13 @EARS-12 @EARS-8 @EARS-16 @happy @reset-counter-forgiveness @default-auth-limits @door:reset @quarantine:login(#3780)
   Scenario: Academy password reset completion clears the same identifier rate window
     Given a unique verified Academy reset-forgiveness owner starts as a guest
     When two real Academy password refusals precede that owner's delivered email reset completion
@@ -852,7 +852,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Native default-limit local contour; ordinary stage C6 excludes this tag.
     # Per-IP/per-ASN coverage stays in abuse-limits.e2e-spec.ts EARS-13.
 
-  @EARS-15 @failure
+  @EARS-15 @failure @door:login @quarantine:login(#3771)
   Scenario: Repeated wrong passwords are throttled, never locked
     Given a doctor_guest user signed in on another device
     When a wrong password is submitted for the user more often than the per-user window allows
@@ -927,24 +927,24 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # trimming, Enter/Escape, header and accessibility coverage; an optimistic
     # render alone does not prove persistence after a real document reload.
 
-  # Retained Academy baseline projection (#3220), not shared-sign-in-host acceptance.
+  # Retained Academy baseline projection (#3220).
   # Native account-cabinet.test.tsx and display-name.e2e-spec.ts remain retained.
-  @host:academy @EARS-16 @EARS-27 @EARS-28 @happy @display-name-cancel
+  @host:academy @EARS-16 @EARS-27 @EARS-28 @happy @display-name-cancel @host:login
   Scenario: Academy Escape cancels an unsaved profile name without a write
     Given a uniquely registered verified Academy account has an original display name saved through its account form
     When that Academy owner enters a different inline display-name draft and presses Escape
     Then Escape restores the saved name without a display-name PUT and fresh profile and document reload preserve the original identity
 
-  # Retained Academy baseline projection (#3221), not shared-sign-in-host acceptance.
+  # Retained Academy baseline projection (#3221).
   # Native account-cabinet Enter/Escape and display-name API trim/no-write tests stay retained.
-  @EARS-16 @EARS-27 @EARS-28 @happy @host:academy @display-name-trim
+  @EARS-16 @EARS-27 @EARS-28 @happy @host:academy @display-name-trim @host:login
   Scenario: Academy persists the trimmed Unicode profile name after Enter and reload
     Given a uniquely registered verified Academy account is ready to submit a padded Unicode name by Enter
     When the owned Academy user submits a space-padded Unicode display name with Enter
     Then exactly one authenticated display-name PUT carries only the trimmed Unicode name and is accepted
     And fresh profile and real account reload preserve the trimmed name, owner identity and Unicode initials
 
-  @EARS-29 @happy @verification-mail
+  @EARS-29 @happy @verification-mail @door:register @host:login
   Scenario: The verification code email is composed and sent by the BFF mailer, code-only
     Given a fresh owned Academy registration is completed in its requesting tab without consuming a code
     When the real BFF verification mail arrives for that owned Academy registration
@@ -960,7 +960,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # no-second-mail horizon; it observes no provider HTTP or internal SMTP.
     # Keep the broader portal registration/confirmation/session journeys intact.
 
-  @EARS-29 @happy
+  @EARS-29 @happy @door:reset @quarantine:login(#3771)
   Scenario: The password-reset code email is BFF-sent and link-free
     Given a user requests a password reset for an existing identifier
     When Zitadel returns the reset code to the BFF via returnCode
@@ -971,7 +971,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # Academy projection of existing identifier-bound reset checks (#3162).
   # App-local test: none -> 003 EARS-11/12/16/35 -> dedicated shared steps;
   # deleted duplicate: none. Both original addressed challenges are retained.
-  @EARS-11 @EARS-12 @EARS-16 @EARS-35 @failure @email-reset-account-isolation
+  @EARS-11 @EARS-12 @EARS-16 @EARS-35 @failure @email-reset-account-isolation @door:reset @host:login
   Scenario: Academy rejects another doctor's live email reset code and preserves both rightful reset challenges
     Given two owned verified Academy doctors retain distinct live email password reset codes
     When the second doctor's reset form submits the first doctor's retained email code with a different password
@@ -979,7 +979,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When each email reset owner submits their own same retained code and a new password without requesting another challenge
     Then both new passwords sign in only their original verified doctors before all owned email reset isolation sessions are logged out
 
-  @EARS-11 @EARS-12 @EARS-17 @EARS-35 @happy @reset-email-resend
+  @EARS-11 @EARS-12 @EARS-17 @EARS-35 @happy @reset-email-resend @door:reset @host:login
   Scenario: Academy resends the email password-reset code and completes the newest delivery for the same owner
     Given a uniquely registered verified Academy doctor is logged out for an email reset resend
     When the reset resend owner requests a real email password reset and observes disabled resend
@@ -988,7 +988,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retained Academy baseline only; delivery freshness uses recipient-bound IDs.
     # Browser time advances, never server/provider clocks or quota counters.
 
-  @EARS-29 @EARS-12 @happy @password-reset-mail
+  @EARS-29 @EARS-12 @happy @password-reset-mail @door:reset @host:login
   Scenario: Academy receives the code-only password-reset mail and completes the real reset
     Given a uniquely registered verified Academy account is owned for a reset-mail journey with its original password
     When that owned account requests a reset through the real Academy form with the account return target
@@ -1002,7 +1002,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # native wire proof in apps/api/src/auth/idp/zitadel.idp.spec.ts:895.
     # Reset/session ownership remains in apps/api/test/auth/password-reset.e2e-spec.ts.
 
-  @EARS-29 @EARS-34 @happy
+  @EARS-29 @EARS-34 @happy @door:login @quarantine:login(#3771)
   Scenario: Unverified-account sign-in receives the sign-in code mail
     Given an existing account has an unverified email
     When its owner requests an email sign-in code
@@ -1011,7 +1011,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And no link, button or navigation URL appears in any email block
     And the code is six digits, its lifetime owned by Zitadel
 
-  @EARS-23 @EARS-29 @happy
+  @EARS-23 @EARS-29 @happy @door:register @quarantine:login(#3771)
   Scenario: The re-registration mail is a code mail on the shared layout
     Given registration targets an existing account
     When the BFF composes the re-registration mail
@@ -1204,7 +1204,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the received-header investigation remains separate from synchronous acceptance
     And TrustedSenderList-assisted Inbox placement is not counted as an unassisted pass
 
-  @EARS-6 @EARS-31 @happy
+  @EARS-6 @EARS-31 @happy @door:login @quarantine:login(#3771)
   Scenario: Login OTP uses the existing BFF mailer and shared code-only layout
     Given a verified account and the existing mailer delivery configuration
     When a verified user requests an email login OTP
@@ -1271,7 +1271,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then both sends proceed to the transport chain unchanged
     And no send is suppressed, regardless of the recipient tag
 
-  @EARS-36 @happy @password-minimum
+  @EARS-36 @happy @password-minimum @door:register @host:login
   Scenario: A password of eight characters with no character classes is accepted
     Given the IdP instance complexity policy is provisioned as minimum length 8 with every character-class flag off
     And an Academy length-only registrant with a unique never-registered email
@@ -1279,7 +1279,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the length-only registrant enters that fresh delivered confirmation code once
     Then that one confirmation opens the verified length-only account with a secure session and no additional sign-in
 
-  @EARS-36 @failure @password-refusal
+  @EARS-36 @failure @password-refusal @door:register @host:login
   Scenario: A password shorter than the minimum length is rejected by the single rule
     Given an Academy short-password registrant with a unique never-registered email and the account return target
     When that registrant enters seven lowercase letters, blurs the password and attempts the normal registration submit
@@ -1290,14 +1290,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # identifier-validation.e2e.spec.ts blur-only copy checks: neither proves
     # the normal submit refusal and correction on the shared live Academy flow.
 
-  @EARS-36 @happy
+  @EARS-36 @happy @door:login @quarantine:login(#3771)
   Scenario: A credential created under the previous four-class policy still signs in
     Given an account whose password was created under the previous four-class policy
     When the owner signs in with that unchanged password
     Then the sign-in succeeds
     And the owner is never asked to rotate or re-validate the password
 
-  @EARS-37 @happy @password-hint
+  @EARS-37 @happy @password-hint @door:register @host:login
   Scenario: The single password rule is visible before submission
     Given a visitor opens the registration form
     When the password field is rendered and before any interaction
@@ -1308,7 +1308,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # one-slot unit contract and apps/portal/e2e/identifier-validation.e2e.spec.ts
     # blur/error copy checks; neither is this untouched live registration proof.
 
-  @EARS-37 @failure @password-message-slot
+  @EARS-37 @failure @password-message-slot @door:register @host:login
   Scenario: The validation error replaces the hint in the one message slot
     Given an Academy visitor captures the untouched registration password message and its single rule
     When that visitor attempts the normal registration submit with a seven-character password
@@ -1318,7 +1318,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain PasswordField one-slot unit coverage, identifier-validation blur
     # checks, and password-hint/password-refusal journeys; their triggers differ.
 
-  @EARS-38 @happy @password-reveal
+  @EARS-38 @happy @password-reveal @door:register @host:login
   Scenario Outline: Every password field carries a keyboard-operable reveal toggle
     Given an Academy guest on the <surface> password-reveal form
     When the reveal visitor enters a password and selects a caret range
@@ -1335,7 +1335,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
       | reset-complete |
       | password login |
 
-  @EARS-38 @failure @password-reveal-reload
+  @EARS-38 @failure @password-reveal-reload @door:register @host:login
   Scenario: Revealing a password has no side effect and never survives a reload
     Given a clean Academy guest has entered an owned password on the ready registration form with the account return target
     When the ready guest reveals that password during a bounded side-effect observation
@@ -1346,7 +1346,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain the preceding three-surface keyboard outline and PasswordField unit
     # invariants; this case owns only the side-effect and hard-reload trigger.
 
-  @host:academy @EARS-3 @EARS-16 @EARS-39 @EARS-41 @failure @verification-code-isolation
+  @host:academy @EARS-3 @EARS-16 @EARS-39 @EARS-41 @failure @verification-code-isolation @door:verify @host:login
   Scenario: Academy binds live registration codes to their own unverified accounts
     Given two owned Academy registrants retain distinct actually delivered live confirmation codes
     When the second registrant submits the first registrant's live confirmation code
@@ -1356,7 +1356,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the second account's original password still authenticates the same verified owner
     # Existing account-bound EARS-3/16/41 projection; no new auth behavior.
 
-  @EARS-3 @EARS-8 @EARS-16 @EARS-41 @failure @verification-code-reuse
+  @EARS-3 @EARS-8 @EARS-16 @EARS-41 @failure @verification-code-reuse @door:verify @host:login
   Scenario: Academy refuses a consumed registration code and preserves its verified owner
     Given a uniquely registered Academy account accepts its actually delivered registration code once
     When a cookie-free Academy guest submits that exact consumed registration code without requesting another challenge
@@ -1366,7 +1366,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Browser projection of 003 EARS-41 already-used-code refusal; native generic
     # refusal/timing coverage and cold-verification password invalidation remain.
 
-  @EARS-39 @EARS-41 @happy @cold-email-confirmation
+  @EARS-39 @EARS-41 @happy @cold-email-confirmation @door:verify @host:login
   Scenario: A cold verification step still signs in by the code
     Given a uniquely registered Academy account awaits its fresh unconsumed confirmation code with the account return target
     When the registrant hard reloads the Academy verification step with the sign-in host's form state cleared before entering any code
@@ -1383,7 +1383,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Internal password invalidation: apps/api/src/auth/idp/zitadel.idp.spec.ts
     # EARS-41; retain both mocked contracts, which are not this live browser proof.
 
-  @EARS-39 @EARS-41 @failure @email-confirmation
+  @EARS-39 @EARS-41 @failure @email-confirmation @door:verify @host:login
   Scenario: A refused code keeps the registrant on the verification step
     Given an Academy visitor with a unique never-registered email
     When the visitor submits the Academy registration form with a policy-conforming password and accepted consent versions
@@ -1397,7 +1397,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Internal mirror proof: apps/api/test/auth/verify.e2e-spec.ts EARS-3.
     # Its EARS-41 test owns the identifier-triad timing proof, not this browser case.
 
-  @EARS-39 @failure @registration-password-memory
+  @EARS-39 @failure @registration-password-memory @door:register @host:login
   Scenario: The held registration password is never persisted anywhere
     Given a uniquely owned Academy registrant whose password persistence is observed before registration
     When the observed registrant submits the Academy registration form and reaches the unconsumed code step
@@ -1407,7 +1407,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain pending-registration.test.ts isolated memory/storage snapshots and
     # registration.steps.ts / cold-verification.steps.ts confirmation contracts.
 
-  @EARS-40 @failure @bare-verification
+  @EARS-40 @failure @bare-verification @door:verify @host:login
   Scenario: A /verify opened with no address goes to the registration door
     Given a clean Academy browser with no private session for an address-less verification arrival
     When that visitor opens bare /verify and the route mounts
@@ -1419,7 +1419,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # EARS-40 cases -> bare-verification.steps.ts, including HTML and history.
     # Retain fragment and positive ?email= cases plus auth-flow unit contracts.
 
-  @EARS-41 @EARS-16 @failure @wrong-verification-code
+  @EARS-41 @EARS-16 @failure @wrong-verification-code @door:verify @host:login
   Scenario: A wrong code fails identically for every identifier
     Given a verified account, an unverified account and an unknown identifier
     When a wrong six-digit code is submitted for each
@@ -1431,13 +1431,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain apps/api/test/auth/verify.e2e-spec.ts EARS-41 deterministic timing
     # and apps/api/src/auth/auth.service.spec.ts refusal/IdP mutation contracts.
 
-  @EARS-42 @happy
+  @EARS-42 @happy @door:verify @quarantine:login(#3771)
   Scenario: No eight-cell code step exists on either storefront
     When a user reaches the code step from login by code, registration or re-registration
     Then the step shows six code cells, the address exactly as typed and a resend with cooldown
     And the back link reads «← Изменить способ» in login and «← Изменить почту» in registration
 
-  @EARS-43 @happy
+  @EARS-43 @happy @door:login @host:login
   Scenario: The code method opens directly from a link
     Given the golden doctor "verified-cardiologist" has a verified email for code sign-in
     And a guest opens the Academy code-method link with the account return target
@@ -1448,7 +1448,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the doctor's own profile is readable through the BFF
     And neither the login response nor JavaScript-readable browser stores expose access or refresh tokens
 
-  @EARS-43 @happy @identifier-switch
+  @EARS-43 @happy @identifier-switch @door:login @host:login
   Scenario: The typed address survives a switch between the sign-in methods
     Given a guest on /login with the «Пароль» method
     When the guest types their email and a password, then switches to «По коду»
@@ -1467,7 +1467,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # Amendment 2026-10-21 (#3006, EARS-43/44 amended): the storefront /login is an
   # entry that redirects; the code step of the hand-off scenarios below renders on
   # the sign-in host, and the reference rides only the server-held entry intent.
-  @EARS-44 @happy @valid-handoff
+  @EARS-44 @happy @valid-handoff @door:login @host:login
   Scenario: A valid hand-off reference opens the code step with the code already sent
     Given a uniquely owned Academy congress sign-up was accepted and returned a real hand-off reference
     When the visitor opens that valid Academy hand-off link with the account return target
@@ -1482,7 +1482,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # -> valid-handoff.steps.ts. Retain the app-local journey until equivalent
     # host-suite migration; native expiry/redemption/other-account tests remain.
 
-  @EARS-44 @happy
+  @EARS-44 @happy @door:login @quarantine:login(#3771)
   Scenario: A hand-off link opened while signed in as its own account goes straight to the target
     Given a congress sign-up was accepted for an account and returned a hand-off reference
     And the browser already holds that account's session
@@ -1490,7 +1490,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then no code is sent and no redemption of the reference is counted
     And the visitor is taken to "/account/congress" without seeing a sign-in form
 
-  @EARS-44 @happy @handoff-own-account
+  @EARS-44 @happy @handoff-own-account @door:login @host:login
   Scenario: Academy bypasses a hand-off while signed in as its own congress account
     Given a uniquely owned Academy congress account has a real hand-off reference and an independent ordinary-code session
     When that signed-in congress account opens its own Academy hand-off with the account return target
@@ -1505,7 +1505,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Migration mapping: handoff-own-account.steps.ts adds this narrow host proof;
     # keep native budget and app-local broader handoff journeys.
 
-  @EARS-44 @happy
+  @EARS-44 @happy @door:login @quarantine:login(#3771)
   Scenario: A hand-off link opened while signed in as another account signs in the reference's account
     Given a congress sign-up was accepted for account Y and returned a hand-off reference
     And the browser already holds account X's session
@@ -1515,7 +1515,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then X's session is revoked, the browser holds only Y's session
     And the visitor is returned to "/account/congress" as Y
 
-  @EARS-44 @happy @handoff-other-account
+  @EARS-44 @happy @handoff-other-account @door:login @host:login
   Scenario: Academy switches from another signed-in account to the hand-off account
     Given a uniquely owned Academy congress account Y has a real hand-off reference
     And that Academy browser holds a different uniquely owned verified account X session
@@ -1529,7 +1529,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain apps/api/test/auth/login-handoff.e2e-spec.ts «signed in as ANOTHER account»: native session
     # replacement remains complementary to this independent-cookie browser proof.
 
-  @EARS-44 @EARS-16 @failure
+  @EARS-44 @EARS-16 @failure @door:login @quarantine:login(#3771)
   Scenario: An expired, unknown or exhausted reference falls back to the plain code entry
     Given an expired reference, an unknown reference and a reference already redeemed three times
     When the visitor opens /login?method=code&handoff=<ref> with each
@@ -1541,13 +1541,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # Narrow Academy projection (#3026); retain the broader native case above.
   # Native expiry/exhaustion/statistical timing: apps/api/test/auth/login-handoff.e2e-spec.ts EARS-44 «past its 24 h», «the 4th gets the fallback», «one identical response».
   # Native fallback and malformed zero-call contract: packages/auth-flow/src/login/login-door.handoff.test.tsx:145/181.
-  @EARS-44 @EARS-16 @failure @handoff-unusable
+  @EARS-44 @EARS-16 @failure @handoff-unusable @door:login @host:login
   Scenario: Academy falls back silently for unknown, malformed and exhausted handoff references
     Given an owned Academy congress reference has sent three fresh addressed code mails through three legitimate guest page loads
     When Academy guests open a unique unknown reference, a malformed reference and the exhausted reference with the account return target
     Then all three unusable handoffs leave ordinary empty email-code entry with a password option and no mail, private access or reference in history
 
-  @EARS-44 @EARS-13 @failure
+  @EARS-44 @EARS-13 @failure @door:login @quarantine:login(#3771)
   Scenario: A rate-limited redemption is refused like any code request
     Given the per-account or per-IP code-request window is exhausted
     When the visitor opens a valid hand-off link
@@ -1556,13 +1556,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   # Narrow default-limit Academy projection (#3037); broader native case retained.
   # Native expiry/redemption/per-IP coverage: apps/api/test/auth/login-handoff.e2e-spec.ts.
-  @EARS-44 @EARS-13 @EARS-16 @failure @default-auth-limits @handoff-throttled
+  @EARS-44 @EARS-13 @EARS-16 @failure @default-auth-limits @handoff-throttled @door:login @quarantine:login(#3780)
   Scenario: Academy refuses a live handoff with the ordinary generic account throttle
     Given a fresh owned Academy congress reference remains unused while nine legitimate ordinary email-code requests exhaust its account window
     When a guest opens that still-live reference through the Academy code door with the account return target
     Then the throttled handoff leaves empty email-code entry with generic refusal and no new mail, private access or reference in history
 
-  @EARS-5 @EARS-8 @EARS-58 @happy @login-phone-password
+  @EARS-5 @EARS-8 @EARS-58 @happy @login-phone-password @door:login @host:login
   Scenario: Academy signs in the same owned doctor with the confirmed phone and password
     Given an owned Academy password account verifies email and confirms its fresh phone
     When that doctor logs out and submits the confirmed phone and password through Academy's password form
@@ -1573,7 +1573,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   # Narrow wrong-email-code recovery projection (#3100); broader declarations retained.
   # Native provider/timing proof: apps/api/test/auth/login-otp.e2e-spec.ts EARS-6/16.
-  @EARS-6 @EARS-8 @EARS-16 @EARS-34 @EARS-41 @failure @login-email-code-refusal
+  @EARS-6 @EARS-8 @EARS-16 @EARS-34 @EARS-41 @failure @login-email-code-refusal @door:login @host:login
   Scenario: Academy refuses a wrong email login code and accepts the retained real code for the same owner
     Given an owned Academy email-code refusal doctor verifies a fresh registration
     When that owned refusal doctor logs out and retains the newly delivered email login code
@@ -1581,13 +1581,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the refused email login guest enters the retained actual code without requesting another
     Then the recovered email login session persists for the same verified doctor through reload
 
-  @host:academy @EARS-12 @EARS-16 @EARS-53 @failure @reset-sms-code-reuse
+  @host:academy @EARS-12 @EARS-16 @EARS-53 @failure @reset-sms-code-reuse @door:reset @host:login
   Scenario: A consumed SMS reset code cannot replace the recovered owner password
     Given a uniquely owned phone-confirmed Academy account consumes its delivered SMS password reset code once
     When a guest Academy browser replays that consumed SMS reset code with a different private password
     Then the accepted SMS reset password still opens the same phone-confirmed Academy account while the replay password cannot sign in
 
-  @EARS-12 @EARS-16 @EARS-35 @EARS-53 @EARS-58 @failure @sms-reset-code-refusal
+  @EARS-12 @EARS-16 @EARS-35 @EARS-53 @EARS-58 @failure @sms-reset-code-refusal @door:reset @host:login
   Scenario: Academy refuses a wrong SMS reset code and accepts the retained real code without losing the owner
     Given an owned Academy SMS-reset refusal account verifies email and confirms a fresh phone while staying signed in
     When an independent Academy guest retains the real addressed SMS reset code and submits different valid digits with a new password
@@ -1604,7 +1604,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # no new user-visible text. Cross-storefront journeys run from the Academy here;
   # the doctor direction is 020 EARS-18 (@host:both).
 
-  @EARS-61 @EARS-62 @EARS-5 @EARS-8 @happy @sign-in-host
+  @EARS-61 @EARS-62 @EARS-5 @EARS-8 @happy @sign-in-host @door:login @quarantine:login(#3771)
   Scenario: A sign-in from the Academy entry runs on the sign-in host and ends signed in on the stored page
     Given a signed-out browser on the Academy with no shared sign-in-host session
     When the guest follows the Academy sign-in entry from "/webinars/some-event"
@@ -1614,7 +1614,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the Academy callback mints a fresh session and answers 303 to "/webinars/some-event#"
     And the authorization code never appears in a rendered document
 
-  @EARS-61 @EARS-62 @failure @return-path-hardening
+  @EARS-61 @EARS-62 @failure @return-path-hardening @door:login @quarantine:login(#3771)
   Scenario: A hostile return path or redirect URI never leaves the storefront
     Given a signed-out browser on the Academy
     When the guest opens the Academy sign-in entry with a returnTo of "//evil.example", "https://evil.example" or "/\evil.example"
@@ -1626,7 +1626,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When an authorize request names a look-alike redirect_uri for the Academy client
     Then no authorization code is issued to it
 
-  @EARS-60 @failure @sign-in-host-client-map
+  @EARS-60 @failure @sign-in-host-client-map @door:login @quarantine:login(#3771)
   Scenario: The sign-in host refuses an admin or unknown client and renders no form
     Given an auth request created for the admin client and one for an unknown client
     When each auth request reaches the sign-in host
@@ -1634,7 +1634,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And no sign-in form is rendered for either
     And a storefront auth request renders that storefront's own registration fields, consents and brand panel
 
-  @EARS-63 @EARS-64 @happy @silent-check
+  @EARS-63 @EARS-64 @happy @silent-check @door:login @host:login
   Scenario: A doctor signed in on the doctor storefront is signed in on the Academy with no form and no guest flash
     Given a doctor signed in on the doctor storefront in this browser
     When the doctor's browser requests an Academy event page as a document
@@ -1706,7 +1706,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the silent-check bucket for the client address is exhausted and a document request arrives
     Then the Academy answers HTTP 200 with the guest render and no redirect
 
-  @EARS-63 @EARS-62 @failure @silent-check-abandoned-form
+  @EARS-63 @EARS-62 @failure @silent-check-abandoned-form @door:login @host:login
   Scenario: An abandoned sign-in form does not hold back the silent check
     Given a guest started the Academy sign-in entry and left the sign-in host form unfinished
     And the same person then signed in on the doctor storefront in another tab
@@ -1714,7 +1714,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the silent check starts and replaces the abandoned interactive transaction
     And the Academy page renders signed in
 
-  @EARS-62 @failure @callback-stale-transaction
+  @EARS-62 @failure @callback-stale-transaction @door:login @quarantine:login(#3771)
   Scenario: A sign-in finished after the 60-minute transaction ends signed in by the landing rules
     Given a guest started the Academy sign-in entry from "/webinars/some-event" more than 60 minutes ago
     When the guest finishes the sign-in on the sign-in host now
@@ -1722,7 +1722,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And a fresh silent transaction signs the guest in through the shared session
     And the guest is signed in on the Academy landing rather than on "/webinars/some-event"
 
-  @EARS-62 @EARS-70 @failure @callback-hardening
+  @EARS-62 @EARS-70 @failure @callback-hardening @door:login @quarantine:login(#3771)
   Scenario: A form_post or foreign-state callback yields no session
     Given an attacker prepared an authorize request with their own transaction
     When the victim's browser completes it and the attacker presents the code
@@ -1737,7 +1737,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the doctor storefront's next document request renders signed out
     And its silent check ends in login_required
 
-  @EARS-65 @EARS-12 @happy @credential-event-revocation
+  @EARS-65 @EARS-12 @happy @credential-event-revocation @door:reset @quarantine:login(#3771)
   Scenario: A password reset ends every session of the person on both storefronts
     Given a doctor signed in on both storefronts in one browser and on the Academy in a second browser
     When the doctor completes a password reset on the sign-in host in a third browser
@@ -1752,7 +1752,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the API receives a valid logout token for the doctor's Zitadel session
     Then every storefront session linked to that sid is revoked
 
-  @EARS-64 @EARS-68 @failure @shared-session-strength
+  @EARS-64 @EARS-68 @failure @shared-session-strength @door:login @quarantine:login(#3771)
   Scenario: The shared session is not reused from another fingerprint or when a fresh credential is asked
     Given a live sign-in-host session created in one browser
     When its __Host-ds_login cookie is presented from a different client fingerprint with prompt=none
@@ -1760,7 +1760,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When an auth request with prompt=login arrives in the original browser
     Then the sign-in form is shown even though the shared session is live
 
-  @EARS-39 @EARS-41 @EARS-66 @failure @sign-in-host-cold-code-step
+  @EARS-39 @EARS-41 @EARS-66 @failure @sign-in-host-cold-code-step @door:verify @quarantine:login(#3771)
   Scenario: A cold registration code step on the sign-in host signs in while the auth request lives and returns to the storefront when it is stale
     Given a guest registered from the Academy entry and reached the code step on the sign-in host
     When the guest reloads the code step while the auth request is live and enters the code
@@ -1771,7 +1771,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the sign-in host treats it as a stale request and redirects to the Academy "/login" entry
     And the Academy entry starts a new interactive transaction with no error shown
 
-  @EARS-66 @EARS-67 @failure @sign-in-host-stale
+  @EARS-66 @EARS-67 @failure @sign-in-host-stale @door:login @quarantine:login(#3771)
   Scenario: A stale auth request returns to its storefront and a direct visit goes to the doctor storefront
     Given an Academy auth request this browser opened that Zitadel no longer returns
     When the browser reloads the sign-in host page of that auth request
@@ -1779,21 +1779,21 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When a browser with no auth request visits the sign-in host directly
     Then it is redirected to the configured doctor storefront "/login" entry
 
-  @EARS-69 @failure @no-weaker-factor
+  @EARS-69 @failure @no-weaker-factor @door:login @quarantine:login(#3771)
   Scenario: A code finalised by any other login UI yields no storefront session
     Given a storefront auth request finalised through Zitadel's hosted login
     When the storefront callback redeems its code
     Then the redeem refuses it because the sid names no live sign-in-host record
     And no storefront session exists
 
-  @EARS-70 @happy @sign-in-host-cookies
+  @EARS-70 @happy @sign-in-host-cookies @door:login @quarantine:login(#3771)
   Scenario: Every session and check cookie is host-only and never shared across hosts
     Given a completed sign-in through the sign-in host and a completed silent check
     Then __Host-ds_login, __Host-ds_oidc_tx, __Host-ds_session, __Host-ds_guest and __Host-ds_check are host-only, HttpOnly, Secure and SameSite=Lax
     And none of them carries Domain=.doctor.school
     And a cross-site post of an attacker's credentials to the sign-in host creates no session
 
-  @EARS-24 @EARS-41 @happy @register-on-sign-in-host
+  @EARS-24 @EARS-41 @happy @register-on-sign-in-host @door:register @quarantine:login(#3771)
   Scenario: A registration on the sign-in host ends signed in on both storefronts
     Given a guest on the Academy with no account
     When the guest follows the Academy registration entry
@@ -1802,7 +1802,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the guest is signed in on the Academy at the stored return path
     And a later document navigation on the doctor storefront is signed in through the silent check
 
-  @EARS-43 @EARS-44 @happy @entry-intent
+  @EARS-43 @EARS-44 @happy @entry-intent @door:login @quarantine:login(#3771)
   Scenario: The code method and the congress hand-off survive the redirect to the sign-in host
     Given a congress sign-up was accepted and returned a hand-off reference
     When the visitor follows "/login?method=code&handoff=<ref>&returnTo=/account" on the Academy
@@ -1811,7 +1811,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the visitor reloads the sign-in host page
     Then no second code is sent and the code method is shown without a hand-off
 
-  @EARS-44 @happy @handoff-live-record
+  @EARS-44 @happy @handoff-live-record @door:login @quarantine:login(#3771)
   Scenario: A hand-off met by a live sign-in-host record sends no code and keeps the page in the link
     Given the browser holds a live sign-in-host record of the doctor named by a hand-off reference
     And the browser has no storefront session on the Academy
@@ -1819,7 +1819,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the sign-in host finalises with that record, sends no code and shows no form
     And the visitor lands signed in on "/account" with no more authentication than the record already had
 
-  @EARS-44 @EARS-64 @failure @handoff-refused-live-record
+  @EARS-44 @EARS-64 @failure @handoff-refused-live-record @door:login @quarantine:login(#3771)
   Scenario: An expired hand-off in a browser holding a colleague's session opens the code form, never the colleague's cabinet
     Given the browser holds a live sign-in-host record of a colleague's account
     And the browser has no storefront session on the Academy
@@ -1832,14 +1832,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the colleague's record and every storefront session linked to it are ended
     And the participant lands signed in on "/account" in their own account
 
-  @EARS-71 @failure @entry-intent-id
+  @EARS-71 @failure @entry-intent-id @door:login @quarantine:login(#3771)
   Scenario: An unknown, spent or foreign entry-intent id opens the plain sign-in form
     Given an auth request for the Academy client whose login hint is an entry-intent id
     When the id is unknown, already spent, expired or was created for the doctor storefront client
     Then the sign-in host renders the plain sign-in form with no error
     And no user is looked up from the login hint
 
-  @EARS-71 @happy @entry-intent-event-target
+  @EARS-71 @happy @entry-intent-event-target @door:login @quarantine:login(#3771)
   Scenario: A guest signing in from an event page sees that event's card on the sign-in form
     Given a guest on the page of a published эфир on the Academy
     When the guest follows the sign-in link to "/login?returnTo=/webinars/<slug>"
@@ -1852,7 +1852,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # apps/login/e2e/host-history.e2e.spec.ts EARS-71 (both storefronts, the hop,
   # each reload; the code step's reload on /verify) and
   # apps/api/test/auth/sign-in-host.e2e-spec.ts A001 (the form-state re-read).
-  @EARS-71 @happy @entry-intent-event-target-door-hop
+  @EARS-71 @happy @entry-intent-event-target-door-hop @door:login @quarantine:login(#3771)
   Scenario Outline: A guest from an event page keeps that event's card while switching between the sign-in and registration forms
     Given a guest on the page of a published эфир on the <storefront> storefront
     When the guest follows the registration link from that page
@@ -1875,7 +1875,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # apps/login/e2e/host-history.e2e.spec.ts EARS-71 reset entry,
   # packages/auth-flow/src/server/storefront-oidc.test.ts (the recorded intent) and
   # apps/api/test/auth/sign-in-host.e2e-spec.ts (the kept target, the sign-in door).
-  @EARS-71 @happy @entry-intent-event-target-reset
+  @EARS-71 @happy @entry-intent-event-target-reset @door:reset @quarantine:login(#3771)
   Scenario Outline: A guest who opened password recovery from an event returns to the sign-in form with that event's card
     Given a guest on the page of a published эфир on the <storefront> storefront
     When the guest opens password recovery with that эфир as the return target
@@ -1892,7 +1892,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   # #3379. App-local tests: apps/{portal,doctor}/e2e/storefront-entry-refusal*.spec.ts
   # and apps/login/e2e/entry-refusal.e2e.spec.ts (backend-free tiers, refusing doubles).
-  @EARS-72 @failure @entry-refusal-rate-limited
+  @EARS-72 @failure @entry-refusal-rate-limited @door:login @quarantine:login(#3771)
   Scenario Outline: A guest whose entry hits the per-address limit waits out the countdown on the refusal page
     Given the API refuses the <storefront> storefront's entry with 429 and "Retry-After: 105"
     When a guest on the page of a published эфир follows the sign-in link
@@ -1910,7 +1910,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
       | Academy    |
       | doctor     |
 
-  @EARS-72 @failure @entry-refusal-unavailable
+  @EARS-72 @failure @entry-refusal-unavailable @door:login @quarantine:login(#3771)
   Scenario Outline: A guest whose entry the API cannot answer can retry at once
     Given the API does not answer the <storefront> storefront's entry
     When a guest opens "/register"
@@ -1923,7 +1923,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
       | Academy    |
       | doctor     |
 
-  @EARS-72 @failure @entry-refusal-sign-in-host
+  @EARS-72 @failure @entry-refusal-sign-in-host @door:login @quarantine:login(#3771)
   Scenario: A refused entry on the sign-in host is the refusal page with both storefronts as the way out
     Given the API refuses the sign-in host's entry read with 429 and no "Retry-After"
     When the person arrives on the sign-in host's "/login" with that auth request
@@ -1931,44 +1931,44 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the button reads «Попробовать ещё раз» and is enabled at once
     And the way out reads «Или перейдите на сайт Академии или на витрину врача», each name a link to that storefront
 
-  # Academy retained-baseline projection (#3180), not shared-sign-in-host acceptance.
+  # Academy retained-baseline projection (#3180).
   # Existing native login and SMS-budget contracts remain retained; no expiry proof.
-  @EARS-7 @EARS-8 @EARS-17 @EARS-41 @EARS-42 @happy @login-sms-resend
+  @EARS-7 @EARS-8 @EARS-17 @EARS-41 @EARS-42 @happy @login-sms-resend @door:login @host:login
   Scenario: Academy resends the SMS login code and accepts the newest delivery for the same owner
     Given a uniquely registered and verified Academy doctor_guest account is logged out for an SMS-code resend
     When the resend owner requests an initial real Academy SMS login code with its resend button disabled
     When only that browser's thirty-second login cooldown advances before the actual SMS resend click
     Then the newest actual SMS delivery authenticates the same Academy owner through reload and exact logout
 
-  # Retained Academy baseline projection (#3182), not shared-sign-in-host acceptance.
+  # Retained Academy baseline projection (#3182).
   # App-local test: none -> 003 EARS-12/17/53/58 -> reset-sms-resend.steps.ts;
   # deleted duplicate: none. Native API delivery/rate-limit coverage stays retained.
-  @EARS-12 @EARS-17 @EARS-53 @EARS-58 @happy @reset-sms-resend
+  @EARS-12 @EARS-17 @EARS-53 @EARS-58 @happy @reset-sms-resend @door:reset @host:login
   Scenario: Academy resends the actual SMS reset code and accepts its newest delivery for the same owner
     Given an owned verified Academy doctor with a confirmed phone is prepared for an SMS reset resend
     When the SMS reset resend guest requests an actual reset code and observes disabled resend
     And only that browser's thirty-second reset cooldown advances before the actual SMS resend click
     Then the newest actual reset SMS changes only that owner's password and preserves identity through sign-in reload and logout
 
-  # Retained Academy baseline projection (#3202), not shared-sign-in-host acceptance.
+  # Retained Academy baseline projection (#3202).
   # Native profile.e2e-spec.ts generic refusal and no-write coverage stay retained.
-  @EARS-27 @EARS-16 @failure @guest-profile-parity
+  @EARS-27 @EARS-16 @failure @guest-profile-parity @host:login
   Scenario: Academy guest profile reads match generic sibling refusals without identity disclosure
     Given a cookie-free Academy browser opens the ordinary login page for guest profile reads
     When that Academy guest reads its profile and display-name through the actual browser origin
     Then both guest reads retain the same generic refusal and account navigation exposes no private profile or session
 
-  # Retained Academy baseline projection (#3222), not shared-sign-in-host acceptance.
+  # Retained Academy baseline projection (#3222).
   # Native display-name.e2e-spec.ts unauthenticated/no-write coverage stays retained.
-  @EARS-16 @EARS-27 @EARS-28 @failure @guest-name-write
+  @EARS-16 @EARS-27 @EARS-28 @failure @guest-name-write @host:login
   Scenario: Academy refuses a guest display-name write and preserves the authenticated owner's name
     Given a verified Academy owner has a saved name before a separate guest write attempt
     When the separate cookie-free Academy guest submits a valid display-name PUT
     Then the guest write exposes no private access and the owner's fresh profile and reloaded account retain the saved name
 
-  # Retained Academy baseline (#3256), not shared-sign-in-host acceptance.
+  # Retained Academy baseline (#3256).
   # Existing staff account amendment #2456; no statistics or grant-policy change.
-  @EARS-27 @EARS-28 @EARS-16 @EARS-10 @happy @staff-own-profile @default-auth-limits
+  @EARS-27 @EARS-28 @EARS-16 @EARS-10 @happy @staff-own-profile @default-auth-limits @quarantine:login(#3780)
   Scenario: Academy staff own-profile access preserves registrar confinement
     Given two uniquely owned verified Academy users are prepared for staff-profile role checks
     When the platform-admin-only Academy owner opens and edits their own profile then signs out

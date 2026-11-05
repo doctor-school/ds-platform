@@ -108,7 +108,30 @@ export function tagExpressionFor(hostId: StorefrontHostId): string {
   return `@host:${hostId} or @host:both`;
 }
 
+/**
+ * The sign-in-host dimension (ADR-0015 §4, #3345). The sign-in host has no entry
+ * of its own and declares no Feature, so it is not a Feature-level value: a door
+ * scenario is BOUND to it at scenario level, and `scenario-coverage-lint.ts`
+ * requires that binding for every scenario of a door the route-mount registry
+ * marks `mounted` on `apps/login`. The bound scenario keeps its Feature-level
+ * storefront — that is where its journey starts — and runs in the `login`
+ * project instead of the storefront's, so it is driven once, not twice.
+ */
+export const SIGN_IN_HOST_BINDING_TAG = "@host:login";
+
+/**
+ * The `login` project's selection: the bound scenarios of the ordinary contour.
+ * `@default-auth-limits` scenarios stay on the loopback storefront contour that
+ * provisions those limits, and the 017 public-feed contour stays dedicated.
+ */
+export function signInHostTags(): string {
+  return `${SIGN_IN_HOST_BINDING_TAG} and not @default-auth-limits and not @public-feed-entry`;
+}
+
 export function ordinaryStorefrontTagsFor(expression: string): string {
   // The dedicated 017 contour needs owned resources that ordinary stage runs do not provision.
-  return `(${expression}) and not @public-feed-entry`;
+  return (
+    `(${expression}) and not @public-feed-entry` +
+    ` and not (${SIGN_IN_HOST_BINDING_TAG} and not @default-auth-limits)`
+  );
 }

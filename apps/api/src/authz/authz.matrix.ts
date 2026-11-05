@@ -15,6 +15,17 @@ const ACCESS = new Set(["public", "authenticated", "pending-auth", "internal"]);
 const CHECK = new Set(["none", "fast-path", "policy"]);
 const AUDIT = new Set(["none", "low-stakes", "high-stakes"]);
 const ROLE_SET = new Set<string>(ROLES);
+/**
+ * The roles a live / step-up row may be revalidated against on its own: the
+ * row must name at least one (#1304; 049 adds `superadmin` and
+ * `broadcast_director` under ADR-0001 A4).
+ */
+const REVALIDATION_ANCHOR_ROLES = new Set<string>([
+  "platform_admin",
+  "pd_officer",
+  "superadmin",
+  "broadcast_director",
+]);
 
 const EM_DASH = "—";
 
@@ -131,13 +142,15 @@ export function validateRow(
   }
   // The live check asks the IdP whether `sub` still holds ONE named role, so a
   // revalidated row must name a role the revalidation vocabulary covers.
+  // 049 (ADR-0001 A4): `superadmin` and `broadcast_director` rows are
+  // revalidated against their own grant.
   if (
     (revalidate === "live" || stepUp === true) &&
     hasRoles &&
-    !roles.some((r) => r === "platform_admin" || r === "pd_officer")
+    !roles.some((r) => REVALIDATION_ANCHOR_ROLES.has(r))
   ) {
     at(
-      "`revalidate: live` / `step_up` requires `required_roles` to include `platform_admin` or `pd_officer`",
+      "`revalidate: live` / `step_up` requires `required_roles` to include `platform_admin`, `pd_officer`, `superadmin` or `broadcast_director`",
     );
   }
 

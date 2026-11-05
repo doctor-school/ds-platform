@@ -19,10 +19,16 @@ const ADMIN_ROLE = "platform_admin";
 export const REGISTRAR_ROLE = "event-registrar";
 /** 046 EARS-26: the programme committee project role (seeded by `provision.sh`). */
 export const COMMITTEE_ROLE = "congress-program-committee";
+/** 049 EARS-1: the superadministrator project role (seeded by `provision.sh`). */
+export const SUPERADMIN_ROLE = "superadmin";
+/** 049 EARS-1: the broadcast director project role (seeded by `provision.sh`). */
+export const DIRECTOR_ROLE = "broadcast_director";
 const ROLE_DISPLAY_NAMES: Record<string, string> = {
   [ADMIN_ROLE]: "Platform Admin",
   [REGISTRAR_ROLE]: "Event Registrar",
   [COMMITTEE_ROLE]: "Congress Program Committee",
+  [SUPERADMIN_ROLE]: "Superadmin",
+  [DIRECTOR_ROLE]: "Broadcast Director",
 };
 
 export interface BootstrapResult {
@@ -255,6 +261,40 @@ export async function bootstrapRegistrarCommitteeAccount(
   const sub = await resolveSub(email);
   await grantProjectRole(sub, REGISTRAR_ROLE);
   await grantProjectRole(sub, COMMITTEE_ROLE);
+  await new Promise((r) => setTimeout(r, 2500));
+  return { email, password: E2E_PASSWORD };
+}
+
+/**
+ * Provision a superadministrator (049 EARS-1): register → grant `superadmin`
+ * AND `platform_admin` on the IdP — a superadministrator always holds both
+ * (049 design, «Role keys» invariant), so no superadmin-only account exists.
+ * Signs in through `signInAsAdmin`.
+ */
+export async function bootstrapSuperadminAccount(
+  adminOrigin: string,
+): Promise<BootstrapResult> {
+  const email = uniqueEmail("superadmin");
+  await register(adminOrigin, email, E2E_PASSWORD);
+  const sub = await resolveSub(email);
+  await grantProjectRole(sub, ADMIN_ROLE);
+  await grantProjectRole(sub, SUPERADMIN_ROLE);
+  await new Promise((r) => setTimeout(r, 2500));
+  return { email, password: E2E_PASSWORD };
+}
+
+/**
+ * Provision a broadcast director (049 EARS-1): register → grant only the
+ * `broadcast_director` project role on the IdP (no `platform_admin`). Signs in
+ * through `signInAsAdmin`.
+ */
+export async function bootstrapDirectorAccount(
+  adminOrigin: string,
+): Promise<BootstrapResult> {
+  const email = uniqueEmail("director");
+  await register(adminOrigin, email, E2E_PASSWORD);
+  const sub = await resolveSub(email);
+  await grantProjectRole(sub, DIRECTOR_ROLE);
   await new Promise((r) => setTimeout(r, 2500));
   return { email, password: E2E_PASSWORD };
 }

@@ -16,10 +16,7 @@ import {
   type AdminAuthorityRole,
   type IdpClient,
 } from "../idp/idp.types.js";
-import {
-  AUTH_AUDIT,
-  type AuthAuditLog,
-} from "../session/auth-audit.types.js";
+import { AUTH_AUDIT, type AuthAuditLog } from "../session/auth-audit.types.js";
 import {
   AdminAuthorityException,
   type AdminAuthorityErrorCode,
@@ -192,14 +189,25 @@ export class AdminAuthorityGuard implements CanActivate {
  * the same way — a committee-only principal is asked about the committee grant
  * and answered `403 PROGRAM_COMMITTEE_REQUIRED` once the IdP withdrew it.
  *
+ * 049 (ADR-0001 A4): a row naming `superadmin` (the «Доступы» rows) is asked
+ * about `superadmin` whatever else the session holds — a superadministrator also
+ * holds `platform_admin`, and that broader-held key must not stand in for the
+ * grant the row relies on. A row admitting `broadcast_director`, for a session
+ * without `platform_admin` that holds the director role, is asked about
+ * `broadcast_director` and answered `403 BROADCAST_DIRECTOR_REQUIRED` once the
+ * IdP withdrew it. Revalidation only chooses which grant is asked about; the
+ * route `roles` check decides admission (A1).
+ *
  * The matrix validator already refuses a `revalidate: "live"` row that names
- * neither `platform_admin` nor `pd_officer`, so the `platform_admin` fallback is
- * reached only by rows that genuinely require it.
+ * none of `platform_admin`, `pd_officer`, `superadmin`, `broadcast_director`,
+ * so the `platform_admin` fallback is reached only by rows that genuinely
+ * require it.
  */
 function requiredAuthorityRole(
   meta: AuthzMeta,
   principal: AdminSessionPrincipal,
 ): AdminAuthorityRole {
+  if (meta.roles?.includes("superadmin")) return "superadmin";
   if (meta.roles?.includes("pd_officer")) return "pd_officer";
   if (principal.roles?.includes("platform_admin")) return "platform_admin";
   if (
@@ -216,6 +224,14 @@ function requiredAuthorityRole(
   ) {
     return "congress-program-committee";
   }
+  // 049 (ADR-0001 A4): a director-only session on a row admitting the director
+  // is revalidated against the director grant it acts under.
+  if (
+    meta.roles?.includes("broadcast_director") &&
+    principal.roles?.includes("broadcast_director")
+  ) {
+    return "broadcast_director";
+  }
   if (meta.roles?.includes("event-registrar")) return "event-registrar";
   return "platform_admin";
 }
@@ -228,6 +244,8 @@ const REVOKED_CODE: Readonly<
   pd_officer: "PD_OFFICER_REQUIRED",
   "event-registrar": "EVENT_REGISTRAR_REQUIRED",
   "congress-program-committee": "PROGRAM_COMMITTEE_REQUIRED",
+  superadmin: "SUPERADMIN_REQUIRED",
+  broadcast_director: "BROADCAST_DIRECTOR_REQUIRED",
 };
 
 /**

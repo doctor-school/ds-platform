@@ -241,6 +241,27 @@ The `unavailable` row is load-bearing, not defensive boilerplate. Every provider
 
 **Affects.** 046 EARS-26 / EARS-28 / EARS-31; `apps/api/src/auth/admin-session/admin-authority.guard.ts`; `apps/api/src/auth/README.md`; `apps/api/docs/endpoint-authz-matrix.md` (`revalidate` column); `infra/dev-stand/idp/provision.sh` (project role seed).
 
+### A4 — The superadministrator and the broadcast director are revalidated under their own grants; `403 SUPERADMIN_REQUIRED`, `403 BROADCAST_DIRECTOR_REQUIRED` (2026-11-05, #3739)
+
+**Context.** A1 and A3 are running in production: a live row asks the IdP about the grant the session acts under — `pd_officer` when the row names it, else `platform_admin` when the session holds it, else the event-scoped registrar or committee grant the row admits. Feature 049 adds two global staff roles: `superadmin` (owns «Доступы»; a holder always also holds `platform_admin`) and `broadcast_director` (the event and broadcast lifecycle without `platform_admin`). The «Доступы» rows become `[superadmin]` live rows, and a director-only session reaches live event writes. Under the A1/A3 rule a superadministrator would be asked about its `platform_admin` key, so a withdrawn `superadmin` grant would keep «Доступы» open, and a director-only session would be asked about a `platform_admin` it never held.
+
+**Decision.**
+
+- **Which grant is revalidated.** A row naming `superadmin` asks the IdP about `superadmin`, whatever else the session holds; this rule is checked first. On a row that admits `broadcast_director`, a session holding `platform_admin` is asked about `platform_admin`; a session without it that holds `broadcast_director` is asked about `broadcast_director`. The A1 `pd_officer` and registrar rules and the A3 committee rule stand unchanged.
+- **New verdict-table rows.** Grant revoked, `superadmin` case → `403` `errorCode: SUPERADMIN_REQUIRED`; `broadcast_director` case → `403` `errorCode: BROADCAST_DIRECTOR_REQUIRED`, beside `PLATFORM_ADMIN_REQUIRED`, `PD_OFFICER_REQUIRED`, `EVENT_REGISTRAR_REQUIRED` and `PROGRAM_COMMITTEE_REQUIRED`.
+- **Matrix validator.** A `revalidate: "live"` / `step_up` row is valid when its roles include `platform_admin`, `pd_officer`, `superadmin` or `broadcast_director`.
+- **Revalidation never widens reach.** As in A1: the route `roles` check decides admission; the guard has no role hierarchy, and a superadministrator reaches `[platform_admin]` rows through its `platform_admin` key.
+- **Second-factor floor.** Both roles require TOTP (`MFA_REQUIRED_BY_ROLE`), like every staff role.
+- **Unchanged.** `401 ADMIN_SESSION_REQUIRED`, `503 IDP_REVALIDATION_UNAVAILABLE`, and the authority-before-presence order.
+
+**Consequences.** Withdrawing `superadmin` at the IdP closes «Доступы» on the next request even though `platform_admin` remains; a director's live writes are revalidated against the director grant at no widening of access. The admin console MUST treat both `403` codes as a credential refusal (no-access), never as a retry, and `503 IDP_REVALIDATION_UNAVAILABLE` as a retry.
+
+**Why now.** #3739 ships the role keys and the guard branches; the `[superadmin]` «Доступы» rows and the director's live event writes (049 EARS-3, EARS-7) consume them.
+
+**Open follow-up.** None — the admin console already maps every `403` to no-access (`admin-query-retry.ts`, `staff-access.ts`).
+
+**Affects.** 049 EARS-1 / EARS-3 / EARS-7; `apps/api/src/auth/admin-session/admin-authority.guard.ts`; `apps/api/src/authz/authz.matrix.ts`; `apps/api/src/authz/README.md` (live revalidation table); `apps/api/docs/endpoint-authz-matrix.md`; `infra/dev-stand/idp/provision.sh` (project role seed).
+
 ## Consequences
 
 ### Positive

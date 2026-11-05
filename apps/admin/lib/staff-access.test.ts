@@ -323,6 +323,22 @@ describe("047 EARS-7 revoke — the request and how a refusal reads", () => {
     ).toEqual({ kind: "stepUp", stepUpUrl: "/mfa/challenge?mode=reverify" });
   });
 
+  it("049 EARS-1: a withdrawn superadmin or director grant (ADR-0001 A4) is no-access at the grant form and the revoke dialog", () => {
+    for (const errorCode of [
+      "SUPERADMIN_REQUIRED",
+      "BROADCAST_DIRECTOR_REQUIRED",
+    ]) {
+      expect(
+        grantRefusal({ statusCode: 403, errorCode }, { email: "", rows: [] }),
+      ).toEqual({
+        kind: "forbidden",
+      });
+      expect(revokeRefusal({ statusCode: 403, errorCode })).toEqual({
+        kind: "forbidden",
+      });
+    }
+  });
+
   it("047 EARS-7: an already-complete revocation closes the dialog; the last platform administrator's own row is refused by name", () => {
     expect(
       revokeRefusal({ statusCode: 409, errorCode: "REVOKE_ALREADY_COMPLETE" }),

@@ -371,6 +371,83 @@ describe("AdminAuthorityGuard (#1304)", () => {
       await expectRefusal(h, "PLATFORM_ADMIN_REQUIRED", 403);
     });
 
+    // 049 (ADR-0001 A4): a row naming `superadmin` is revalidated against the
+    // superadmin grant whatever else the session holds; a row admitting
+    // `broadcast_director` revalidates a director-only session against the
+    // director grant.
+    it("049 EARS-1: a [superadmin] live row asks the IdP about superadmin even for a session holding platform_admin", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: ["superadmin"] }),
+        principal: { sid: SID, roles: ["superadmin", "platform_admin"] },
+        verdict: {
+          outcome: "active",
+          sub: SUB,
+          roles: ["superadmin", "platform_admin"],
+        },
+      });
+      await expect(h.guard.canActivate(h.context)).resolves.toBe(true);
+      expect(h.revalidate).toHaveBeenCalledWith({
+        zitadelSessionId: ZITADEL_SESSION_ID,
+        sub: SUB,
+        requiredRole: "superadmin",
+      });
+    });
+
+    it("049 EARS-1: 403 SUPERADMIN_REQUIRED — the superadmin grant was withdrawn at the IdP", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: ["superadmin"] }),
+        principal: { sid: SID, roles: ["superadmin", "platform_admin"] },
+        verdict: { outcome: "role_revoked", roles: ["platform_admin"] },
+      });
+      await expectRefusal(h, "SUPERADMIN_REQUIRED", 403);
+    });
+
+    const DIRECTOR_ROLES: AuthzMeta["roles"] = [
+      "platform_admin",
+      "broadcast_director",
+    ];
+
+    it("049 EARS-1: a director-only session on a live row admitting the director is asked about broadcast_director", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: DIRECTOR_ROLES }),
+        principal: { sid: SID, roles: ["broadcast_director"] },
+        verdict: {
+          outcome: "active",
+          sub: SUB,
+          roles: ["broadcast_director"],
+        },
+      });
+      await expect(h.guard.canActivate(h.context)).resolves.toBe(true);
+      expect(h.revalidate).toHaveBeenCalledWith({
+        zitadelSessionId: ZITADEL_SESSION_ID,
+        sub: SUB,
+        requiredRole: "broadcast_director",
+      });
+    });
+
+    it("049 EARS-1: 403 BROADCAST_DIRECTOR_REQUIRED — the director grant was withdrawn at the IdP", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: DIRECTOR_ROLES }),
+        principal: { sid: SID, roles: ["broadcast_director"] },
+        verdict: { outcome: "role_revoked", roles: [] },
+      });
+      await expectRefusal(h, "BROADCAST_DIRECTOR_REQUIRED", 403);
+    });
+
+    it("049 EARS-1: a platform_admin on a row admitting the director is asked about platform_admin", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: DIRECTOR_ROLES }),
+        principal: {
+          sid: SID,
+          roles: ["platform_admin", "broadcast_director"],
+        },
+      });
+      await expect(h.guard.canActivate(h.context)).resolves.toBe(true);
+      expect(h.revalidate).toHaveBeenCalledWith(
+        expect.objectContaining({ requiredRole: "platform_admin" }),
+      );
+    });
+
     it("#1304: 503 IDP_REVALIDATION_UNAVAILABLE — a provider fault is never a credential denial", async () => {
       const h = harness({
         meta: metaOf({ revalidate: "live" }),

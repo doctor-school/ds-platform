@@ -110,6 +110,8 @@ export default [
         // Node 18+ runtime globals (also global in browsers).
         fetch: "readonly",
         AbortController: "readonly",
+        AbortSignal: "readonly",
+        Response: "readonly",
       },
     },
   },

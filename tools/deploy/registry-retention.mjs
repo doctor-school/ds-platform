@@ -10,6 +10,10 @@
 //   GH_TOKEN           for `gh api` (contents, pull-requests, deployments,
 //                      statuses: read)
 //   DRY_RUN            "true" prints the plan only; anything else deletes
+//   TWC_READ_TOKEN     optional; read-only, project-scoped Timeweb API token for the
+//                      registry's disk usage (#3724). Missing or refused: a warning
+//                      that never blocks or alters the prune; at >= 90 % the run
+//                      fails after the prune has finished
 //   GITHUB_STEP_SUMMARY optional; the plan and the result are appended to it
 //
 // Execution prerequisite: registry-retention.yml holds the shared registry-images
@@ -39,12 +43,14 @@ import {
 import { IMAGE_REGISTRY } from "./lib/registry.mjs";
 import {
   RetentionError,
+  assessRegistryDisk,
   findGreenStageSuite,
   nextTagRequest,
   parseBearerChallenge,
   parseNextLink,
   planRetention,
   renderPlanSummary,
+  readRegistryDisk,
   retentionRepos,
 } from "./lib/registry-retention.mjs";
 
@@ -247,7 +253,30 @@ function summarize(text) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`);
 }
 
+/** Summary line + annotation for the disk usage; returns the verdict. */
+function reportDisk(disk) {
+  const verdict = assessRegistryDisk(disk);
+  summarize(`${verdict.line}
+`);
+  if (verdict.level === "warn") console.log(`::warning::${verdict.message}`);
+  return verdict;
+}
+
 async function main() {
+  // Started first, awaited after the prune: the usage read never delays, blocks or
+  // alters pruning, and it is reported even when the prune fails.
+  const disk = readRegistryDisk({ token: process.env.TWC_READ_TOKEN });
+  let verdict;
+  try {
+    await prune();
+  } finally {
+    verdict = reportDisk(await disk);
+  }
+  // At the fail ratio the run goes red only now, after the prune has finished.
+  if (verdict.level === "fail") throw new RetentionError(verdict.message);
+}
+
+async function prune() {
   const token = env("REGISTRY_TOKEN");
   const repo = env("GITHUB_REPOSITORY");
   const dryRun = process.env.DRY_RUN === "true";

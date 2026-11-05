@@ -22,7 +22,8 @@
 // kept or non-SHA tag of the same repo resolves to is never deleted. Every unusable
 // input throws a `RetentionError`, so the caller deletes nothing (fail closed).
 //
-// Pure: the I/O lives in `tools/deploy/registry-retention.mjs`.
+// Pure: the I/O lives in `tools/deploy/registry-retention.mjs`; `readRegistryDisk`
+// takes its `fetch` from the caller.
 
 import { RECORDED_IMAGE_NAMES } from "./registry.mjs";
 
@@ -397,4 +398,99 @@ export function parseBearerChallenge(header) {
   const out = {};
   for (const m of text.matchAll(/(\w+)="([^"]*)"/g)) out[m[1]] = m[2];
   return out;
+}
+
+// ── Registry disk usage (#3724) ─────────────────────────────────────────────────
+// The quota fills silently: a full registry surfaces only as a failed `main` push
+// (`403 no_free_space_left_in_registry`), and a DELETE frees space only at the
+// provider's nightly GC. So every retention run reads `disk_stats` from the Timeweb
+// API with a read-only, project-scoped token and reports it. The read is advisory:
+// it never blocks or alters the prune; the runner fails the run at the fail ratio
+// only after the prune has finished.
+
+/** Timeweb Cloud id of the `ds-platform` registry (infra/deploy/README.md). */
+export const TIMEWEB_REGISTRY_ID = 31207;
+export const REGISTRY_DISK_WARN_RATIO = 0.7;
+export const REGISTRY_DISK_FAIL_RATIO = 0.9;
+const TIMEWEB_API = "https://api.timeweb.cloud/api/v1";
+const DISK_READ_TIMEOUT_MS = 15_000;
+
+/**
+ * Read the registry's `disk_stats` (GB). Never throws and never puts the token in
+ * a reason: a failed read is `{ok: false, reason}` for the caller to warn about.
+ *
+ * @returns {Promise<{ok: true, used: number, size: number} | {ok: false, reason: string}>}
+ */
+export async function readRegistryDisk({
+  token,
+  fetchImpl = fetch,
+  registryId = TIMEWEB_REGISTRY_ID,
+}) {
+  if (!token) return { ok: false, reason: "TWC_READ_TOKEN is not set" };
+  const redact = (text) => String(text).split(token).join("***");
+  const url = `${TIMEWEB_API}/container-registry/${registryId}`;
+  try {
+    const res = await fetchImpl(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(DISK_READ_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return {
+        ok: false,
+        reason: redact(
+          `GET ${url} answered HTTP ${res.status}: ${body.slice(0, 200)}`,
+        ),
+      };
+    }
+    const stats = (await res.json())?.container_registry?.disk_stats;
+    const { used, size } = stats ?? {};
+    if (
+      !Number.isFinite(used) ||
+      !Number.isFinite(size) ||
+      size <= 0 ||
+      used < 0
+    )
+      return {
+        ok: false,
+        reason: `GET ${url} carries no usable disk_stats: ${redact(JSON.stringify(stats ?? null)).slice(0, 200)}`,
+      };
+    return { ok: true, used, size };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: redact(`GET ${url} failed: ${error?.message ?? error}`),
+    };
+  }
+}
+
+/**
+ * The verdict on a `readRegistryDisk` result: `line` for the step summary,
+ * `level` ok | warn | fail, `message` for the warning or the failure. A failed read
+ * is a warning, never a failure.
+ */
+export function assessRegistryDisk(disk) {
+  if (!disk.ok)
+    return {
+      level: "warn",
+      line: "registry disk: unknown (usage read failed)",
+      message: `registry disk usage could not be read: ${disk.reason}`,
+    };
+  const ratio = disk.used / disk.size;
+  const line = `registry disk: ${disk.used}/${disk.size} GB (${Math.round(ratio * 100)}%)`;
+  const pct = (r) => `${Math.round(r * 100)}%`;
+  if (ratio >= REGISTRY_DISK_FAIL_RATIO)
+    return {
+      level: "fail",
+      line,
+      message: `${line} is at or above ${pct(REGISTRY_DISK_FAIL_RATIO)} — the next pushes may fail; free space or grow the preset`,
+    };
+  if (ratio >= REGISTRY_DISK_WARN_RATIO)
+    return {
+      level: "warn",
+      line,
+      message: `${line} is at or above ${pct(REGISTRY_DISK_WARN_RATIO)}`,
+    };
+  return { level: "ok", line, message: line };
 }

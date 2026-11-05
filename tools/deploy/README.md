@@ -55,8 +55,9 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
   `pnpm deploy:prod` (break-glass); the rollback runs here in rollback mode
   (below), and `pnpm deploy:prod --rollback` stays its break-glass twin. The CI check drops the
   check-runs of `deploy-prod.yml` itself (an earlier failed attempt on the same
-  SHA is not CI) and of the changesets `release.yml` (#3684) by workflow path;
-  `ci.yml` and `runtime-images.yml` keep gating.
+  SHA is not CI), of the changesets `release.yml` and of `registry-retention.yml`
+  (#3684) by workflow path; every other repo workflow (`ci.yml`, `stage.yml`,
+  `runtime-images.yml`) keeps gating.
 - **One release at a time.** `concurrency: deploy-prod`, never cancelled — its own
   group, not the changesets workflow's `release`. A re-dispatch of the same SHA
   reattaches to the running driver unit (`attached`) or reports

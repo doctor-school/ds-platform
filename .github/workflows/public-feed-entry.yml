@@ -60,10 +60,12 @@ jobs:
       E2E_DOCTOR_URL: http://localhost:3004
       E2E_FEED_ENTRY_DATABASE_URL: postgres://ds:ds@127.0.0.1:5432/ds_probe_3751
       E2E_FEED_ENTRY_BOOT: "1"
-      E2E_FEED_ENTRY_LOG: ${{ runner.temp }}/public-feed-entry/stand-ops-3751.log
-      E2E_FEED_ENTRY_ARTIFACT_DIR: ${{ runner.temp }}/public-feed-entry
-      E2E_REPORT_DIR: ${{ runner.temp }}/public-feed-entry/report
     steps:
+      - name: Resolve task-owned receipt paths on the runner
+        run: |
+          echo "E2E_FEED_ENTRY_LOG=$RUNNER_TEMP/public-feed-entry/stand-ops-3751.log" >> "$GITHUB_ENV"
+          echo "E2E_FEED_ENTRY_ARTIFACT_DIR=$RUNNER_TEMP/public-feed-entry" >> "$GITHUB_ENV"
+          echo "E2E_REPORT_DIR=$RUNNER_TEMP/public-feed-entry/report" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}

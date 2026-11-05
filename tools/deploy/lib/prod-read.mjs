@@ -24,7 +24,19 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export const READ_VERBS = ["schema", "observe", "rehearse", "rehearsal-status"];
+export const READ_VERBS = [
+  "schema",
+  "observe",
+  "rehearse",
+  "rehearse-restore",
+  "rehearsal-status",
+];
+/** #3648: the verbs whose answer carries a rehearsal state word. */
+export const REHEARSAL_VERBS = [
+  "rehearse",
+  "rehearse-restore",
+  "rehearsal-status",
+];
 // The fixed failure reasons of a read (exit 1): ds-read-entrypoint READ_REASONS.
 export const READ_REASONS = [
   "a release step is running",
@@ -178,15 +190,17 @@ export function isCiphertext(buf) {
  * sha256, and for a failure the fixed reason. `upload` says the ciphertext may go.
  */
 export function statusLine({ verb, rc, cms, stderr }) {
-  const rehearsal = verb === "rehearse" || verb === "rehearsal-status";
+  const rehearsal = REHEARSAL_VERBS.includes(verb);
   const state = rehearsal ? stateWord(stderr) : null;
   if (rc === 0 && isCiphertext(cms) && (!rehearsal || state !== null)) {
     const sum = createHash("sha256").update(cms).digest("hex");
-    // #3648: a rehearsal still `running` after the poll's cap is not an answer.
+    // #3648: a rehearsal still `running` after the poll's cap is not an answer, and a
+    // `failed` one fails the job: green from prod-observe.yml means a green rehearsal.
+    // Either way the report is uploaded.
     const done = !rehearsal || !["started", "running"].includes(state);
     return {
       upload: true,
-      failed: !done,
+      failed: !done || state === "failed",
       line: `prod-observe: verb=${verb} rc=0${state ? ` state=${state.replaceAll(" ", "-")}` : ""} bytes=${cms.length} sha256=${sum}`,
     };
   }

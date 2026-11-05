@@ -13,18 +13,22 @@
 # arguments and would serve the full deploy verb set to the read key. Old trees never
 # write this path, and this file never execs or sources ds-deploy-entrypoint; the only
 # box programs it runs are `ds-release check prod` (fixed words) and, over the hop key,
-# the data entrypoint's `check`, `read-schema`, `read-observe`, `rehearse`, `rehearsal-status` and the
+# the data entrypoint's `check`, `read-schema`, `read-observe`, `rehearse`, `rehearse-restore`,
+# `rehearsal-status` and the
 # recovery verbs (an older data entrypoint rejects them: fail-closed), and ds-recovery
 # (#3662).
 #
 # It serves READ_VERBS below on the prod box only and rejects every other verb with
-# exit 2. `schema`, `observe`, `rehearse` and `rehearsal-status` leave as CMS ciphertext to the recipient certificate installed
+# exit 2. `schema`, `observe`, `rehearse`, `rehearse-restore` and `rehearsal-status` leave as CMS ciphertext to the recipient certificate installed
 # with the tooling tree (READ_RECIPIENT), never plaintext: the client's stdout is a
 # public Actions artifact. `capabilities` answers its verb list; `recovery-bundle` and
 # `recovery-check` (#3662) answer status lines only (RECOVERY_LINE_RE): no value, no
 # fingerprint, no ciphertext — the bundle's ciphertext goes to the pgBackRest bucket.
-# `rehearse` / `rehearsal-status` (#3648) add one plaintext line on stderr, the state
-# word (REHEARSAL_STATE_RE) prod-observe.yml prints; everything else stays encrypted.
+# `rehearse` / `rehearse-restore` / `rehearsal-status` (#3648) add one plaintext line on
+# stderr, the state word (REHEARSAL_STATE_RE) prod-observe.yml prints; everything else
+# stays encrypted. `rehearse-restore <sha>` takes the input of `rehearse <sha>` and
+# restores prod onto the throw-away copy with no migration applied: the restore path
+# and its measured headroom, on demand, with nothing pending.
 #
 # Installed as /usr/local/bin/ds-read-entrypoint beside ds-release and
 # ds-deploy-entrypoint, by the same install step (tools/deploy/lib/remote.mjs).
@@ -68,7 +72,7 @@ accepted() { logger -t "$TAG" -p auth.info "accepted: $(sanitised)" || true; }
 # The verbs it serves (spec §8 (g): S1 serves `capabilities` and `schema`; #3662 adds
 # the key custody); prod-observe.yml / recovery-custody.yml refuse a verb
 # `capabilities` does not name.
-READ_VERBS='capabilities schema observe rehearse rehearsal-status recovery-bundle recovery-check'
+READ_VERBS='capabilities schema observe rehearse rehearse-restore rehearsal-status recovery-bundle recovery-check'
 # #3647: `observe <name>` — the name of a PROD_OBSERVATIONS entry (the data entrypoint's
 # catalogue checks it and every parameter again), the parameters one JSON object of at
 # most MAX_OBSERVE_PARAMS_BYTES on stdin. The data box's rejections of a name or a
@@ -191,7 +195,8 @@ read_encrypted() {
     *) read_fail "the read failed" ;;
   esac
   [[ -s $read_work/answer.json ]] || read_fail "the read failed"
-  [[ $data_verb != rehearse && $data_verb != rehearsal-status ]] || rehearsal_state "$read_work/answer.json"
+  [[ $data_verb != rehearse && $data_verb != rehearse-restore && $data_verb != rehearsal-status ]] ||
+    rehearsal_state "$read_work/answer.json"
   openssl cms -encrypt -binary -aes-256-gcm -outform DER -in "$read_work/answer.json" \
     -out "$read_work/result.cms" "$READ_RECIPIENT" >/dev/null 2>&1 ||
     refuse "openssl cannot encrypt to the recipient certificate"
@@ -387,7 +392,7 @@ case "$verb" in
   capabilities | schema | recovery-bundle | recovery-check) [[ ${#words[@]} -eq 1 ]] || reject "usage: $verb" ;;
   observe)
     [[ ${#words[@]} -eq 2 && ${words[1]} =~ $OBSERVE_NAME_RE ]] || reject "usage: observe <name>" ;;
-  rehearse | rehearsal-status)
+  rehearse | rehearse-restore | rehearsal-status)
     [[ ${#words[@]} -eq 2 && ${words[1]} =~ $SHA_RE ]] || reject "usage: $verb <sha> (the full 40-hex commit id)" ;;
   *) reject "unknown read command (allowed: ${READ_VERBS// /, })" ;;
 esac
@@ -406,12 +411,12 @@ case "$verb" in
     observe_params
     read_release_check
     read_encrypted "read-observe ${words[1]}" "$read_work/params.json" </dev/null ;;
-  rehearse)
+  rehearse | rehearse-restore)
     sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
     read_release_check
     rehearse_on_main "${words[1]}"
     rehearse_archive "${words[1]}"
-    read_encrypted "rehearse ${words[1]}" "$read_work/drizzle.tar.gz" </dev/null ;;
+    read_encrypted "$verb ${words[1]}" "$read_work/drizzle.tar.gz" </dev/null ;;
   rehearsal-status)
     # Reads no database: no release check; it always answers.
     sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"

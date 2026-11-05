@@ -12,7 +12,11 @@
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
 
-import { DS_DEPLOY_ENTRYPOINT_BIN, HARDEN_SSH_BIN, boxSpawnArgs } from "./remote.mjs";
+import {
+  DS_DEPLOY_ENTRYPOINT_BIN,
+  HARDEN_SSH_BIN,
+  boxSpawnArgs,
+} from "./remote.mjs";
 
 /** The verbs the entrypoint serves on the data box; pinned equal to its DATA_VERBS. */
 export const DATA_VERBS = [
@@ -45,6 +49,7 @@ export const DATA_READ_VERBS = [
   "read-observe",
   // #3648: the migration rehearsal (spec §5 «Migration rehearsal.»).
   "rehearse",
+  "rehearse-restore",
   "rehearsal-status",
   // #3662: the key custody (spec §5 «Prod read verbs.» → recovery-bundle / recovery-check).
   "recovery-bundle",
@@ -72,7 +77,8 @@ export function dataVerbCommand(request, form) {
     throw new Error(`ds-data-prod serves no ${verb} verb`);
   }
   if (form === "forced") return request;
-  if (form === "sudo") return `sudo -n env SSH_ORIGINAL_COMMAND='${request}' ${DS_DEPLOY_ENTRYPOINT_BIN}`;
+  if (form === "sudo")
+    return `sudo -n env SSH_ORIGINAL_COMMAND='${request}' ${DS_DEPLOY_ENTRYPOINT_BIN}`;
   throw new Error(`unknown data-prod command form ${JSON.stringify(form)}`);
 }
 
@@ -80,7 +86,10 @@ export function dataVerbCommand(request, form) {
 export function servesDataVerbs(stdout) {
   try {
     const answer = JSON.parse(String(stdout).trim());
-    return answer?.role === "data" && DATA_VERBS.every((v) => answer.verbs?.includes(v));
+    return (
+      answer?.role === "data" &&
+      DATA_VERBS.every((v) => answer.verbs?.includes(v))
+    );
   } catch {
     return false;
   }
@@ -94,7 +103,14 @@ export function servesDataVerbs(stdout) {
 export function runBoxCommand(
   host,
   remoteCommand,
-  { input = "", inputFile, stream = false, sshOptions = [], label = "data-prod", spawnImpl = spawn } = {},
+  {
+    input = "",
+    inputFile,
+    stream = false,
+    sshOptions = [],
+    label = "data-prod",
+    spawnImpl = spawn,
+  } = {},
 ) {
   return new Promise((resolve, reject) => {
     const child = spawnImpl(...boxSpawnArgs(host, remoteCommand, sshOptions), {
@@ -108,7 +124,11 @@ export function runBoxCommand(
     child.on("close", (code) => {
       if (code === 0) return resolve(out.trim());
       const detail = err.trim().split(/\r?\n/)[0];
-      reject(new Error(`${label} on ${host} exited ${code}${detail ? `: ${detail}` : ""}`));
+      reject(
+        new Error(
+          `${label} on ${host} exited ${code}${detail ? `: ${detail}` : ""}`,
+        ),
+      );
     });
     child.stdin.on("error", () => {}); // a refused request closes stdin early; the exit code tells
     if (inputFile) createReadStream(inputFile).pipe(child.stdin);
@@ -124,14 +144,24 @@ export function runBoxCommand(
  * first use; a form that does not answer refuses the run — the other form is never
  * tried, so a hop whose forced command stopped answering is not served through sudo.
  */
-export function createDataProdClient({ host, form, run = runBoxCommand, log = (line) => console.log(line) }) {
-  if (form !== "forced" && form !== "sudo") throw new Error(`unknown data-prod command form ${JSON.stringify(form)}`);
+export function createDataProdClient({
+  host,
+  form,
+  run = runBoxCommand,
+  log = (line) => console.log(line),
+}) {
+  if (form !== "forced" && form !== "sudo")
+    throw new Error(`unknown data-prod command form ${JSON.stringify(form)}`);
   const through = form === "forced" ? "the forced command" : "sudo -n";
   let answered = false;
   let unreachable = null; // set by a converge after which the forced command does not answer
   const ask = async () => {
     try {
-      return servesDataVerbs(await run(host, dataVerbCommand("capabilities", form), { label: "capabilities" }));
+      return servesDataVerbs(
+        await run(host, dataVerbCommand("capabilities", form), {
+          label: "capabilities",
+        }),
+      );
     } catch {
       return false;
     }
@@ -145,7 +175,8 @@ export function createDataProdClient({ host, form, run = runBoxCommand, log = (l
       if (unreachable) throw unreachable;
       if (answered) return form;
       answered = await ask();
-      if (!answered) throw new Error(`${host} serves no data-prod verbs through ${through}`);
+      if (!answered)
+        throw new Error(`${host} serves no data-prod verbs through ${through}`);
       return form;
     },
     /** The ssh command of `words`, once the form answered. */
@@ -168,27 +199,42 @@ export function createDataProdClient({ host, form, run = runBoxCommand, log = (l
      * still answers.
      */
     async converge(sha) {
-      if (form !== "forced") throw new Error(`${host}: only the hop's forced command converges ds-data-prod`);
+      if (form !== "forced")
+        throw new Error(
+          `${host}: only the hop's forced command converges ds-data-prod`,
+        );
       await client.ready();
-      log(`  ↻ ${host}: converge ${sha.slice(0, 12)}: ${HARDEN_SSH_BIN} --role data --from-release, through ${through}`);
+      log(
+        `  ↻ ${host}: converge ${sha.slice(0, 12)}: ${HARDEN_SSH_BIN} --role data --from-release, through ${through}`,
+      );
       try {
         await client.call(["converge", sha], { stream: true });
       } catch (error) {
         // Re-probe, so the run's `finish … failed` still lands when the box answers.
         answered = await ask();
-        if (!answered) unreachable = new Error(`${host}: the forced command does not answer after the failed converge`);
+        if (!answered)
+          unreachable = new Error(
+            `${host}: the forced command does not answer after the failed converge`,
+          );
         throw error;
       }
       answered = await ask();
       if (!answered) {
-        unreachable = new Error(`${host}: the forced command does not answer after the converge`);
+        unreachable = new Error(
+          `${host}: the forced command does not answer after the converge`,
+        );
         throw unreachable;
       }
-      log(`  ✓ ${host}: converged: capabilities answers through the forced command`);
+      log(
+        `  ✓ ${host}: converged: capabilities answers through the forced command`,
+      );
     },
     /** Run one verb; `options` as runBoxCommand's. */
     async call(words, options = {}) {
-      return run(host, await client.command(words), { label: words[0], ...options });
+      return run(host, await client.command(words), {
+        label: words[0],
+        ...options,
+      });
     },
   };
   return client;

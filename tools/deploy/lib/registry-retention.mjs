@@ -1,7 +1,8 @@
 // tools/deploy/lib/registry-retention.mjs — what the container registry keeps (#3110).
 //
-// The registry has a fixed quota; every `main` merge and every internal PR head
-// pushes five images (`registry.mjs`), so without retention it fills and every
+// The registry has a fixed quota; every `main` merge and every head of a
+// `stage-slot`-labelled internal PR pushes six images (`RECORDED_IMAGE_NAMES`,
+// `registry.mjs`), so without retention it fills and every
 // push fails. The owner's policy (2026-10-20, #3110): keep the production build
 // and at most a couple of previous ones for rollback. Concretely, per release repo
 // (`RECORDED_IMAGE_NAMES`): the targets of the latest

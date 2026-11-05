@@ -469,8 +469,8 @@ the single authority on which slots are live; there is no registry file and noth
 cached. `up`/`sync` first resolve, **on the operator's machine**, the images
 `.github/workflows/runtime-images.yml` recorded for `--ref <sha>`: `gh run list --workflow
 runtime-images.yml --commit <sha>` → `gh run download <run> -n images-<sha>` → validate
-`images-<sha>.json` (its `sha` is the ref; all five of `api`, `api-migrate`, `portal`,
-`admin`, `doctor` are `ds-platform.registry.twcstorage.ru/[pr/]<image>@sha256:…`). Slot
+`images-<sha>.json` (its `sha` is the ref; all six of `api`, `api-migrate`, `portal`,
+`admin`, `doctor`, `login` are `ds-platform.registry.twcstorage.ru/[pr/]<image>@sha256:…`). Slot
 `main` accepts only a release build — `main`, or the `hotfix/<N>-<slug>` build a `--ref`
 release pre-flight converges it to; `pr-<N>` accepts its own `pr/<N>` build or a `main`
 one for the same SHA. A `pr/<N>` build is pushed and recorded only while the PR carries

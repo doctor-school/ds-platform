@@ -373,12 +373,13 @@ order is not guaranteed. See
 `pnpm release:lane` prints the image-build, Stage main and deploy queues with the
 release candidate.
 
-**Quota sizing (#3701).** The registry has a fixed 25 GB quota, and a DELETE frees
+**Quota sizing (#3701).** The registry quota is 50 GB (preset 1945, 260 ₽/mo; a
+preset can only grow, never shrink), and a DELETE frees
 bytes only at the provider's nightly garbage collection. The binding rule is therefore
 **unique bytes pushed in one day + the retention keep-set ≤ the quota** — retention
 running more often does not raise it. Measured on 2026-11-04 before this rule was
 enforced: 28 `main` pushes + ~49 internal-PR pushes ≈ 77 full sets of six images,
-which filled 25 GB within the day, because no push was deduplicated: every
+which filled the then 25 GB preset within the day, because no push was deduplicated: every
 Dockerfile runs `COPY . .` before the install/build, so every commit rebuilds every
 later layer, and BuildKit wrote fresh file mtimes into them — identical content, new
 layer digest, stored again (aef63ad92 changed only `tools/deploy/`, yet all six
@@ -420,8 +421,8 @@ post-merge acceptance remains tracked by #3144 until that observation is recorde
   The push token is being removed from ds-stage-1 (`/etc/ds-platform/registry-push-token`)
   under #2981 now that the box only pulls; after that it lives only in Environment `build`.
 
-  The registry has no per-repository scopes, so an internal PR head could still push
-  outside `pr/` with the push token. Accepted: a release takes only the digests a `main`
+  The registry has no per-repository scopes, so a `stage-slot`-labelled internal PR head (the only
+  PR run that logs in with it) could still push outside `pr/` with the push token. Accepted: a release takes only the digests a `main`
   build recorded in its `images-<sha>.json`, never a tag. Fork PRs get neither token.
 
   Login: `docker login ds-platform.registry.twcstorage.ru -u ds-platform --password-stdin`
@@ -429,14 +430,16 @@ post-merge acceptance remains tracked by #3144 until that observation is recorde
   Neither token is ever written into this repo, an env file or chat.
 
 - **Image naming.** Every `main` merge pushes `ds-platform.registry.twcstorage.ru/<image>:<sha>`;
-  an internal pull request pushes `ds-platform.registry.twcstorage.ru/pr/<image>:<head-sha>`;
-  a fork pull request builds and boots its images but never logs in or pushes.
-  `<image>` ∈ `api`, `api-migrate`, `portal`, `admin`, `doctor`. The run's
+  an internal pull request carrying the `stage-slot` label pushes
+  `ds-platform.registry.twcstorage.ru/pr/<image>:<head-sha>`; any other pull request
+  (internal unlabelled or fork) builds and boots its images from a tar and never pushes.
+  `<image>` ∈ `api`, `api-migrate`, `portal`, `admin`, `doctor`, `login`. The run's
   `images-<sha>.json` artifact (90 days) maps each image to its pushed `@sha256:` digest
   — a deploy pulls by digest, never by tag. The data-prod images (`ds-postgres`,
   `ds-pgbackrest`) are not in the registry.
 - **Retention — the registry keeps production and its rollback targets only** (#3110).
-  The registry has a fixed quota (25 GB); once full, every push fails. Workflow
+  The registry has a fixed quota (50 GB, sized by the rule under «Quota sizing»);
+  once full, every push fails. Workflow
   `registry-retention.yml` (Environment `build`, the push token) prunes it to:
   - per release repo (`<image>`): the target SHAs of the latest 3 `release-*`
     GitHub Releases (production + 2 rollback targets) ∪ the SHA of the latest

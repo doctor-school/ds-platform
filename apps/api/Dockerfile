@@ -3,9 +3,10 @@
 #
 # Built with the REPO ROOT as build context, in two places today:
 #   - GitHub Actions (`.github/workflows/runtime-images.yml`) builds every image once
-#     per `main` merge / internal PR and pushes it to the container registry
-#     (infra/deploy/README.md → Container registry), with its digest recorded in the
-#     run's `images-<sha>.json` artifact;
+#     per `main` merge / PR head; a `main` build and a `stage-slot`-labelled internal
+#     PR head push it to the container registry (infra/deploy/README.md → Container
+#     registry), its digest recorded in the run's `images-<sha>.json` artifact — any
+#     other PR builds and boots it from a tar only;
 #   - ON-BOX, by infra/deploy/compose/api-prod/compose.yml (`build.context` = repo
 #     root, `dockerfile` = apps/api/Dockerfile) — production only, until it too
 #     switches to pulling by digest (#2981). Stage slots already pull the recorded

@@ -54,6 +54,11 @@ export function assertOperationalReport(
 }
 
 export const operationalOriginals = {
+  feedEntry: [
+    "A choice opens the chosen specialty's feed",
+    "«Моя лента» opens the remembered specialty's feed",
+    "«Моя лента» with nothing chosen opens the home specialty catalog, never an empty feed",
+  ],
   api: [
     "Health endpoint reports ok on a running process",
     "Readiness endpoint reports ok when Postgres, pgvector and object storage all respond",

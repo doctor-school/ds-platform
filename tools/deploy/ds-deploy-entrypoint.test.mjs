@@ -43,6 +43,51 @@ const toolsPresent =
   }).status === 0;
 const SKIP = !toolsPresent && "needs Linux bash, python3, find and install";
 
+// #3647: the PostgreSQL server binaries of the fixture database (the CI Linux runner
+// ships them unstarted); null where absent.
+const PG_BIN = (() => {
+  if (process.platform === "win32") return null;
+  const cfg = spawnSync("pg_config", ["--bindir"], { encoding: "utf8" });
+  const versions = existsSync("/usr/lib/postgresql") ? readdirSync("/usr/lib/postgresql").sort().reverse() : [];
+  return (
+    [cfg.status === 0 ? cfg.stdout.trim() : "", ...versions.map((v) => `/usr/lib/postgresql/${v}/bin`)].find(
+      (d) => d && ["initdb", "pg_ctl", "psql"].every((b) => existsSync(join(d, b))),
+    ) ?? null
+  );
+})();
+const PYTHON = ["python3", "python"].find(
+  (p) => spawnSync(p, ["-c", "import sys; assert sys.version_info >= (3, 8)"]).status === 0,
+);
+
+/** Run `code` with READ_OBSERVE_PY imported as `m` (its entry point does not run); its JSON stdout. */
+function readObservePy(code) {
+  const text = readFileSync(ENTRYPOINT, "utf8").replace(/\r\n/g, "\n");
+  const body = text.match(/\nread -r -d '' READ_OBSERVE_PY <<'PY' \|\| true\n([\s\S]*?)\nPY\n/);
+  assert.ok(body, "the entrypoint defines READ_OBSERVE_PY");
+  const work = mkdtempSync(join(tmpdir(), "ds-observe-"));
+  try {
+    writeFileSync(join(work, "read_observe.py"), body[1]);
+    const prelude = [
+      "import importlib.util, json, sys",
+      "spec = importlib.util.spec_from_file_location('read_observe', sys.argv[1])",
+      "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)",
+    ];
+    const r = spawnSync(PYTHON, ["-I", "-X", "utf8", "-c", [...prelude, code].join("\n"), join(work, "read_observe.py")], {
+      encoding: "utf8",
+      input: "",
+    });
+    assert.equal(r.status, 0, r.stderr);
+    return JSON.parse(r.stdout);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+/** PROD_OBSERVATIONS as data: name -> {result, sql, params: key -> [kind, var, pattern | names]}. */
+const prodObservations = () =>
+  readObservePy(
+    "print(json.dumps({n: {'result': e['result'], 'sql': e['sql'], 'params': {k: [p[0], p[1], p[2].pattern if p[0] == 'value' else list(p[2])] for k, p in e['params'].items()}} for n, e in m.PROD_OBSERVATIONS.items()}))",
+  );
+
 test("2984: the entrypoint checks env and sha with ds-release's own regexes", () => {
   const pick = (file, name) => {
     const line = readFileSync(file, "utf8")
@@ -1220,7 +1265,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       SSH_ORIGINAL_COMMAND: command,
       ...(opts.env ?? {}),
     };
-    const r = spawnSync("bash", [opts.bin ?? READ_ENTRYPOINT, ...(opts.args ?? [])], { env, input: "" });
+    const r = spawnSync("bash", [opts.bin ?? READ_ENTRYPOINT, ...(opts.args ?? [])], { env, input: opts.input ?? "" });
     return { status: r.status, stdout: r.stdout, stderr: String(r.stderr) };
   };
   const decrypt = (ciphertext) => {
@@ -1238,7 +1283,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     readBoxes({ cert: false });
     const r = readRun("capabilities");
     assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema", "rehearse", "rehearsal-status", "recovery-bundle", "recovery-check"] });
+    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema", "observe", "rehearse", "rehearsal-status", "recovery-bundle", "recovery-check"] });
     assert.match(log("logger"), /auth\.info accepted: capabilities/);
   });
 
@@ -1260,7 +1305,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     `rollback prod ${SHA}`,
     `rollback-status prod ${SHA}`,
     `redeploy prod ${SHA}`,
-    "observe academy-host",
+    "observe",
+    "observe table-rows now",
+    "observe 9-rows",
+    "read-observe table-rows",
     "rehearse",
     `rehearse ${SHA.slice(0, 12)}`,
     `rehearse ${SHA} now`,
@@ -1576,10 +1624,240 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(log("flock"), "");
   });
 
+  // --- 3647: observe <name> → read-observe <name> → PROD_OBSERVATIONS ----------------
+  const EVENT = "11111111-2222-4333-8444-555555555555";
+  const observeEnvelope = (rows, extra = {}) => JSON.stringify({ database: "ds_prod", readOnly: true, rows, ...extra });
+  const hops = () => log("ssh").split("\n").filter(Boolean).map((l) => l.split(" ").slice(-2).join(" "));
+
+  it("3647: observe answers one PROD_OBSERVATIONS entry, encrypted, its parameters psql variables in a read-only transaction", () => {
+    readBoxes({ envelope: observeEnvelope([{ bucket: "sent", count: 12 }, { bucket: "failed", count: 3 }, { bucket: "none", count: 4 }]) });
+    const r = readRun("observe registrations-by-mail-status", { input: JSON.stringify({ eventId: EVENT }) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.doesNotMatch(String(r.stdout), /sent|suppressed/, "only ciphertext on stdout");
+    const answer = decrypt(r.stdout);
+    assert.deepEqual(Object.keys(answer), ["verb", "name", "takenAt", "result"]);
+    assert.equal(answer.verb, "observe");
+    assert.equal(answer.name, "registrations-by-mail-status");
+    assert.match(answer.takenAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+    assert.deepEqual(answer.result, { buckets: [{ bucket: "sent", count: 12 }, { bucket: "suppressed", count: "<10" }] });
+    assert.deepEqual(hops().map((h) => h.split(" ").at(-1)), ["check", "registrations-by-mail-status"]);
+    assert.ok(log("ssh").includes("read-observe registrations-by-mail-status"), log("ssh"));
+    const psql = log("docker").split("\n").find((l) => l.includes(" psql "));
+    assert.ok(psql.includes(`-v event_id=${EVENT}`) && psql.includes("-U ds -d ds_prod -f -"), psql);
+    const sql = log("psql-stdin");
+    assert.match(sql, /^BEGIN READ ONLY;\nSET LOCAL statement_timeout = '5s';\nSET LOCAL lock_timeout = '2s';/);
+    assert.match(sql, /event_id = :'event_id'::uuid/);
+    assert.ok(!sql.includes(EVENT), "the value never reaches the SQL text");
+    assert.match(sql, /ROLLBACK;\n$/);
+  });
+
+  for (const [label, command, input, reason] of [
+    ["an unknown name", "observe no-such-entry", "{}", /rejected: unknown observation/],
+    ["a missing parameter", "observe event-registrations", JSON.stringify({ eventId: EVENT }), /bad parameters for event-registrations/],
+    ["an extra parameter", "observe registrations-by-mail-status", JSON.stringify({ eventId: EVENT, x: 1 }), /bad parameters for/],
+    ["an email for an id", "observe registrations-by-mail-status", JSON.stringify({ eventId: "a@example.test" }), /bad parameters for/],
+    ["a number for an id", "observe registrations-by-mail-status", JSON.stringify({ eventId: 7 }), /bad parameters for/],
+    ["a table outside the entry's list", "observe table-rows", JSON.stringify({ table: "pg_authid" }), /bad parameters for table-rows/],
+    ["an impossible date", "observe event-registrations", JSON.stringify({ eventId: EVENT, since: "2026-02-31" }), /bad parameters for/],
+    ["a JSON array", "observe table-rows", "[1]", /the parameters are not one JSON object/],
+    ["not JSON", "observe table-rows", "{table", /the parameters are not one JSON object/],
+    ["over 4 KiB", "observe table-rows", JSON.stringify({ table: "x".repeat(4096) }), /the parameters exceed 4096 bytes/],
+  ]) {
+    it(`3647: observe rejects ${label} (exit 2), nothing read`, () => {
+      readBoxes({ envelope: observeEnvelope([{ rows: 30 }]) });
+      const r = readRun(command, { input });
+      assert.equal(r.status, 2, r.stderr);
+      assert.match(r.stderr, reason);
+      assert.equal(String(r.stdout), "");
+      assert.ok(!log("docker").includes(" psql "), "no read");
+      assert.match(log("logger"), /auth\.warning rejected:/);
+    });
+  }
+
+  for (const [label, opts, reason] of [
+    ["a ds-prod-* unit runs on ds-api-prod", { env: { STUB_CHECK_RC: "3" } }, "a release step is running"],
+    ["a ds-prod-* unit runs on ds-data-prod", { env: { STUB_HOP_CHECK_RC: "3" } }, "a release step is running"],
+    ["psql times out", { env: { STUB_PSQL_ERR: "ERROR:  canceling statement due to statement timeout" } }, "the read timed out"],
+    ["a lock waits too long", { env: { STUB_PSQL_ERR: "ERROR:  canceling statement due to lock timeout" } }, "the read timed out"],
+    ["psql fails", { env: { STUB_PSQL_ERR: "ERROR:  relation does not exist" } }, "the read failed"],
+    ["the transaction was not read-only", { envelope: observeEnvelope([{ rows: 30 }], { readOnly: false }) }, "the read-only transaction check failed"],
+    ["another database answered", { envelope: observeEnvelope([{ rows: 30 }], { database: "postgres" }) }, "the read-only transaction check failed"],
+    ["an undeclared column", { envelope: observeEnvelope([{ rows: 30, email: "a@example.test" }]) }, "the read failed"],
+    ["a non-integer count", { envelope: observeEnvelope([{ rows: "30" }]) }, "the read failed"],
+    ["two rows for one", { envelope: observeEnvelope([{ rows: 30 }, { rows: 31 }]) }, "the read failed"],
+  ]) {
+    it(`3647: observe fails (exit 1, one fixed reason) when ${label}, and prints nothing`, () => {
+      readBoxes({ envelope: opts.envelope ?? observeEnvelope([{ rows: 30 }]) });
+      const r = readRun("observe table-rows", { input: JSON.stringify({ table: "users" }), env: opts.env });
+      assert.equal(r.status, 1, r.stderr);
+      assert.equal(r.stderr.trim().split("\n").at(-1), `ds-read-entrypoint: ${reason}`);
+      assert.equal(String(r.stdout), "");
+      assert.doesNotMatch(r.stderr, /a@example|relation/);
+      if (reason === "a release step is running") assert.ok(!log("ssh").includes("read-observe"), "no read");
+    });
+  }
+
+  it("3647: read-observe on the data box takes a catalogue name only, and is no verb elsewhere", () => {
+    setRole("prod");
+    assert.equal(run("read-observe table-rows", { input: "{}" }).status, 3);
+    setRole("data");
+    for (const command of ["read-observe", "read-observe table-rows now", "read-observe 9-rows"]) {
+      const r = run(command, { input: "{}" });
+      assert.equal(r.status, 2, command);
+      assert.match(r.stderr, /usage: read-observe <name>/);
+    }
+  });
+
+  // The aggregate guard of spec §5 `observe <name>`: every entry runs against a fixture
+  // database (a throw-away PostgreSQL cluster) through the real entrypoints, and its
+  // answer is aggregates only, the small buckets and counts suppressed.
+  it("3647: every PROD_OBSERVATIONS entry runs against a fixture database and answers aggregates only", { skip: !PG_BIN && !process.env.CI && "needs PostgreSQL server binaries" }, () => {
+    assert.ok(PG_BIN, "CI Linux has the PostgreSQL server binaries (initdb, pg_ctl)");
+    readBoxes();
+    const data = join(dir, "pg");
+    const sock = mkdtempSync(join(tmpdir(), "pgs-"));
+    const pg = (bin, args) => {
+      const r = spawnSync(join(PG_BIN, bin), args, { encoding: "utf8" });
+      assert.equal(r.status, 0, `${bin}: ${r.stderr}`);
+      return r.stdout;
+    };
+    const psql = (db, sql) => pg("psql", ["-X", "-q", "-v", "ON_ERROR_STOP=1", "-h", sock, "-p", "54329", "-U", "ds", "-d", db, "-c", sql]);
+    pg("initdb", ["-D", data, "-U", "ds", "-A", "trust", "-E", "UTF8", "--no-locale"]);
+    pg("pg_ctl", ["-D", data, "-l", join(dir, "pg.log"), "-w", "-o", `-c listen_addresses='' -k ${sock} -p 54329 -c fsync=off`, "start"]);
+    try {
+      psql("postgres", "CREATE DATABASE ds_prod");
+      const id = (n) => `('00000000-0000-4000-8000-' || lpad((${n})::text, 12, '0'))::uuid`;
+      psql("ds_prod", [
+        "CREATE TYPE confirmation_mail_status AS ENUM ('sent', 'failed')",
+        "CREATE TABLE users (id uuid PRIMARY KEY, email text)",
+        "CREATE TABLE events (id uuid PRIMARY KEY)",
+        "CREATE TABLE consent_records (id serial PRIMARY KEY)",
+        "CREATE TABLE registrations (id serial PRIMARY KEY, user_id uuid NOT NULL, event_id uuid NOT NULL, registered_at timestamptz NOT NULL, deleted_at timestamptz, confirmation_mail_status confirmation_mail_status)",
+        `INSERT INTO users SELECT ${id("i")}, 'doctor' || i || '@example.test' FROM generate_series(1, 25) i`,
+        `INSERT INTO events VALUES ('${EVENT}'), (${id(99)})`,
+        "INSERT INTO consent_records (id) SELECT i FROM generate_series(1, 3) i",
+        // EVENT: 12 sent (users 1-12, Oct 1), 3 failed (users 1-3, Oct 5), 4 with no mail
+        // (users 13-16, Oct 5), 2 deleted; the other event 5 sent.
+        `INSERT INTO registrations (user_id, event_id, registered_at, confirmation_mail_status) SELECT ${id("i")}, '${EVENT}', '2026-10-01', 'sent' FROM generate_series(1, 12) i`,
+        `INSERT INTO registrations (user_id, event_id, registered_at, confirmation_mail_status) SELECT ${id("i")}, '${EVENT}', '2026-10-05', 'failed' FROM generate_series(1, 3) i`,
+        `INSERT INTO registrations (user_id, event_id, registered_at) SELECT ${id("i")}, '${EVENT}', '2026-10-05' FROM generate_series(13, 16) i`,
+        `INSERT INTO registrations (user_id, event_id, registered_at, deleted_at, confirmation_mail_status) SELECT ${id("i")}, '${EVENT}', '2026-10-05', now(), 'sent' FROM generate_series(20, 21) i`,
+        `INSERT INTO registrations (user_id, event_id, registered_at, confirmation_mail_status) SELECT ${id("i")}, ${id(99)}, '2026-10-01', 'sent' FROM generate_series(1, 5) i`,
+      ].join(";\n"));
+      writeFileSync(
+        join(stubs, "docker"),
+        [
+          "#!/usr/bin/env bash",
+          'printf "%s\\n" "$*" >> "$STUB_DIR/docker.log"',
+          'args=("$@"); i=0',
+          'while [[ ${args[$i]} != psql ]]; do i=$((i + 1)); done',
+          `exec env PGCLIENTENCODING=UTF8 "${join(PG_BIN, "psql")}" -h "${sock}" -p 54329 "\${args[@]:$((i + 1))}"`,
+        ].join("\n") + "\n",
+      );
+      chmodSync(join(stubs, "docker"), 0o755);
+      const cases = [
+        ["table-rows", { table: "users" }, { rows: 25 }],
+        ["table-rows", { table: "consent_records" }, { rows: "<10" }],
+        ["table-rows", { table: "registrations" }, { rows: 26 }],
+        ["table-rows", { table: "events" }, { rows: "<10" }],
+        ["event-registrations", { eventId: EVENT, since: "2026-01-01" }, { registrations: 19, doctors: 16 }],
+        ["event-registrations", { eventId: EVENT, since: "2026-10-02" }, { registrations: "<10", doctors: "<10" }],
+        ["registrations-by-mail-status", { eventId: EVENT }, { buckets: [{ bucket: "sent", count: 12 }, { bucket: "suppressed", count: "<10" }] }],
+        ["registrations-by-mail-status", { eventId: "00000000-0000-4000-8000-000000000099" }, { buckets: [{ bucket: "suppressed", count: "<10" }] }],
+      ];
+      for (const [name, params, result] of cases) {
+        const r = readRun(`observe ${name}`, { input: JSON.stringify(params) });
+        assert.equal(r.status, 0, `${name} ${JSON.stringify(params)}: ${r.stderr}`);
+        const answer = decrypt(r.stdout);
+        assert.equal(answer.name, name);
+        assert.deepEqual(answer.result, result, `${name} ${JSON.stringify(params)}`);
+        assert.doesNotMatch(JSON.stringify(answer), /@example\.test|00000000-0000-4000-8000/, "no row data");
+      }
+      assert.deepEqual(
+        [...new Set(cases.map(([name]) => name))].sort(),
+        Object.keys(prodObservations()).sort(),
+        "every catalogue entry runs against the fixture database",
+      );
+    } finally {
+      spawnSync(join(PG_BIN, "pg_ctl"), ["-D", data, "-m", "immediate", "-w", "stop"]);
+      rmSync(sock, { recursive: true, force: true });
+    }
+  });
+
   it("3646: read-schema on the data box answers plaintext over the hop only to ds-read-entrypoint; elsewhere it is the data box's verb", () => {
     setRole("prod");
     const r = run("read-schema");
     assert.equal(r.status, 3, "a data verb on a non-data box");
     assert.match(r.stderr, /is served by the data box only/);
+  });
+});
+
+// --- 3647: PROD_OBSERVATIONS, the prod catalogue of `observe` (spec §5 «Prod read verbs.»)
+// Static over the catalogue and its folding code; every entry also runs against a
+// fixture database above (CI Linux).
+describe("3647: PROD_OBSERVATIONS", { skip: !PYTHON && "needs python3" }, () => {
+  const catalogue = () => prodObservations();
+
+  it("3647: every entry declares aggregate result columns only, its parameters typed, its tables its own list", () => {
+    const schemaDir = resolve(here, "../../packages/db/src/schema");
+    const tables = new Set(
+      readdirSync(schemaDir).flatMap((f) =>
+        [...readFileSync(join(schemaDir, f), "utf8").matchAll(/pgTable\(\s*"([a-z_]+)"/g)].map((m) => m[1]),
+      ),
+    );
+    const entries = Object.entries(catalogue());
+    assert.ok(entries.length >= 2, "the catalogue has entries");
+    for (const [name, { result, sql, params }] of entries) {
+      assert.match(name, /^[a-z][a-z0-9-]{0,39}$/, name);
+      if (result !== "bucket") {
+        assert.ok(Object.keys(result).length > 0, name);
+        for (const kind of Object.values(result)) assert.ok(["count", "distinct"].includes(kind), `${name}: ${kind}`);
+      }
+      assert.ok(!sql.includes(";"), `${name}: one statement, inside the envelope`);
+      const values = new Set([...sql.matchAll(/:'([a-z_]+)'/g)].map((m) => m[1]));
+      const idents = new Set([...sql.matchAll(/:"([a-z_]+)"/g)].map((m) => m[1]));
+      const declared = Object.values(params);
+      assert.deepEqual([...values].sort(), declared.filter(([k]) => k === "value").map(([, v]) => v).sort(), `${name}: value variables`);
+      assert.deepEqual([...idents].sort(), declared.filter(([k]) => k === "identifier").map(([, v]) => v).sort(), `${name}: identifier variables`);
+      for (const [kind, , names] of declared) {
+        assert.ok(["value", "identifier"].includes(kind), `${name}: ${kind}`);
+        if (kind === "identifier") for (const t of names) assert.ok(tables.has(t), `${name}: ${t} is a table of packages/db`);
+      }
+    }
+  });
+
+  it("3647: no value parameter admits an email or a phone", () => {
+    const admitted = readObservePy(
+      [
+        "samples = ['a@example.test', 'doctor@doctor.school', '+79991234567', '79991234567', '89991234567', '+1 999 123 45 67', 'Иванова Мария', '']",
+        "print(json.dumps([[n, s] for n, e in m.PROD_OBSERVATIONS.items() for p in e['params'].values() if p[0] == 'value' for s in samples if m.checked(p, s) is not None]))",
+      ].join("\n"),
+    );
+    assert.deepEqual(admitted, []);
+  });
+
+  it("3647: buckets under 10 fold into one suppressed bucket; counts under 10 read <10; anything undeclared is refused", () => {
+    const cases = [
+      ["bucket", [{ bucket: "a", count: 12 }, { bucket: "b", count: 3 }, { bucket: "c", count: 9 }], { buckets: [{ bucket: "a", count: 12 }, { bucket: "suppressed", count: 12 }] }],
+      ["bucket", [{ bucket: "b", count: 10 }, { bucket: "a", count: 40 }], { buckets: [{ bucket: "a", count: 40 }, { bucket: "b", count: 10 }] }],
+      ["bucket", [{ bucket: "a", count: 3 }], { buckets: [{ bucket: "suppressed", count: "<10" }] }],
+      ["bucket", [], { buckets: [] }],
+      [{ n: "count" }, [{ n: 9 }], { n: "<10" }],
+      [{ n: "count" }, [{ n: 0 }], { n: "<10" }],
+      [{ n: "count", d: "distinct" }, [{ n: 10, d: 11 }], { n: 10, d: 11 }],
+      [{ n: "count" }, [{ n: 10, email: "a@example.test" }], null],
+      [{ n: "count" }, [{ n: 1.5 }], null],
+      [{ n: "count" }, [{ n: "12" }], null],
+      [{ n: "count" }, [{ n: true }], null],
+      [{ n: "count" }, [{ n: -1 }], null],
+      [{ n: "count" }, [{ n: 10 }, { n: 11 }], null],
+      [{ n: "count" }, [], null],
+      ["bucket", [{ bucket: "a", count: 12, id: 1 }], null],
+      ["bucket", [{ bucket: null, count: 12 }], null],
+      ["bucket", [{ bucket: "suppressed", count: 12 }], null],
+      ["bucket", [{ bucket: "a", count: 12.5 }], null],
+    ];
+    const got = readObservePy(`print(json.dumps([m.shape(r, rows) for r, rows, _ in json.loads(${JSON.stringify(JSON.stringify(cases))})]))`);
+    assert.deepEqual(got, cases.map(([, , want]) => want));
   });
 });

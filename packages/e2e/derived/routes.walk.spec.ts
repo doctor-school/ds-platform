@@ -6,8 +6,11 @@ import {
   HostConfigError,
   MANIFEST_PATH,
   baseUrlFor,
+  loadNavigationModel,
   type HostConfig,
 } from "../hosts.js";
+import { assertLanding } from "../lib/landing-evidence.js";
+import { redirectingItemFor } from "../navigation-model.js";
 import { isDynamic, pageRoutesFrom } from "../lib/routes.js";
 import type { AppPathsManifest } from "../lib/routes.js";
 import { directVisitAnswer, resolveRoute } from "../route-params.js";
@@ -118,6 +121,11 @@ async function routesFor(host: HostConfig): Promise<HostRoutes> {
 for (const hostId of HOST_IDS) {
   const host = HOSTS[hostId];
   const resolved = await routesFor(host);
+  // The host's own navigation model: a static address its chrome links to and
+  // declares as a redirect by design (`landing.redirectsTo`, e.g. the doctor
+  // `/feed`, #3674) passes on its declared targets only — every other address
+  // keeps the strict «stays on its own pathname» rule below.
+  const model = await loadNavigationModel(host);
 
   test.describe(`${hostId} routes`, () => {
     if (resolved.kind === "unavailable") {
@@ -205,6 +213,14 @@ for (const hostId of HOST_IDS) {
             new URL(page.url()).pathname,
             `the landing after signing in from the ${address} (${pattern}) redirect`,
           ).toBe(address);
+          return;
+        }
+
+        const redirecting = isDynamic(pattern)
+          ? undefined
+          : redirectingItemFor(model, address);
+        if (redirecting) {
+          await assertLanding(page, redirecting, `${address} (${pattern})`);
           return;
         }
 

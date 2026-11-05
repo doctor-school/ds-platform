@@ -149,6 +149,23 @@ export function landingEvidenceAt(
 }
 
 /**
+ * The model item whose href IS `address` and redirects by design, or
+ * `undefined`. The route walk opens every static address the slot mounts and
+ * demands it stays put; an address the chrome links to and the model declares
+ * as a redirect (`landing.redirectsTo`) is the one lawful exception, and only
+ * its declared targets — resolved by {@link landingEvidenceAt} — pass. An item
+ * that lands on its own href is not returned: its address stays strict.
+ */
+export function redirectingItemFor(
+  model: NavigationModel,
+  address: string,
+): NavigationItem | undefined {
+  return model.find(
+    (item) => item.href === address && "redirectsTo" in item.landing,
+  );
+}
+
+/**
  * Index a model by route id. A duplicate id THROWS rather than letting the later
  * item shadow the earlier one: a silently dropped item is a destination the walk
  * stops visiting, which is the exact blindness this contract exists to remove.

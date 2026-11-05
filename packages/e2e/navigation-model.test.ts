@@ -4,6 +4,7 @@ import {
   itemsFor,
   landingEvidenceAt,
   byId,
+  redirectingItemFor,
   type NavigationItem,
   type NavigationModel,
 } from "./navigation-model";
@@ -116,6 +117,35 @@ describe("landingEvidenceAt", () => {
   it("a redirecting item that stays on its own href, or lands elsewhere, has no landing", () => {
     expect(landingEvidenceAt(redirecting, "/feed")).toBeNull();
     expect(landingEvidenceAt(redirecting, "/events")).toBeNull();
+  });
+});
+
+describe("redirectingItemFor", () => {
+  const feed: NavigationItem = {
+    id: "my-feed",
+    label: "Моя лента",
+    href: "/feed",
+    landing: {
+      redirectsTo: [
+        { path: "/feed/:code", landing: { surface: "specialty-feed" } },
+      ],
+    },
+    audience: "both",
+  };
+
+  it("returns the item whose href is the address and declares redirect targets", () => {
+    expect(redirectingItemFor([...model, feed], "/feed")).toBe(feed);
+  });
+
+  it("returns nothing for an item that lands on its own href, so that address stays strict", () => {
+    expect(redirectingItemFor([...model, feed], "/webinars")).toBeUndefined();
+  });
+
+  it("returns nothing for an address the model does not link to, or only a target of", () => {
+    expect(redirectingItemFor([...model, feed], "/documents")).toBeUndefined();
+    expect(
+      redirectingItemFor([...model, feed], "/feed/cardiology"),
+    ).toBeUndefined();
   });
 });
 

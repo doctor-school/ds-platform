@@ -64,7 +64,7 @@ const auditTestDir = defineBddConfig({
   missingSteps: "skip-scenario",
 });
 
-// 048 keeps its Academy host semantics; these three source originals exercise
+// 048 keeps its Academy host semantics; the selected source originals exercise
 // the Admin writer and therefore have an explicit, strict Admin contour.
 const materialsTestDir = defineBddConfig({
   features:

@@ -46,7 +46,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the card of "Открыт набор центров в исследование PRP" has no partner mark
     And the reading page of "Открыт набор центров в исследование PRP" has no partner mark
 
-  @EARS-4
+  @EARS-4 @material-admin-authoring
   Scenario: A material without a body cannot be published
     Given a platform administrator is signed in to the admin with a second factor
     And the draft news item "Пустая новость" has a title and an empty body
@@ -69,14 +69,14 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the save is refused with a field error on the text
     And the material's body is unchanged
 
-  @EARS-2
+  @EARS-2 @material-admin-authoring
   Scenario: Pasted images and tables are stripped by the editor
     Given a platform administrator is signed in to the admin with a second factor
     When the administrator pastes a fragment with a paragraph, an image and a table into the text
     Then the text holds the paragraph
     And the text holds no image and no table
 
-  @EARS-3
+  @EARS-3 @material-admin-authoring
   Scenario: The administrator previews an unsaved material
     Given a platform administrator is signed in to the admin with a second factor
     And the administrator has typed a title and a body in a new material without saving

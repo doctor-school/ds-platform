@@ -22,6 +22,9 @@ type State = {
   refusedTitle?: string;
   staleVersion?: string;
   auditIds?: string[];
+  storedDraft?: QueryResultRow[];
+  feedBefore?: unknown;
+  previewTitle?: string;
 };
 const states = new WeakMap<AdminWorld, State>();
 function state(world: AdminWorld): State {
@@ -160,6 +163,7 @@ async function createMaterial(
   page: Page,
   title: string,
   kind: "news" | "column",
+  body = "Материал о практическом применении ортобиологии.",
 ): Promise<Material> {
   await page.goto("/materials/create");
   await expect(page.getByTestId("material-form")).toBeVisible();
@@ -178,7 +182,7 @@ async function createMaterial(
   const editor = page
     .getByTestId("material-body")
     .locator('[contenteditable="true"]');
-  await editor.fill("Материал о практическом применении ортобиологии.");
+  await editor.fill(body);
   const created = page.waitForResponse(
     (r) =>
       r.request().method() === "POST" &&
@@ -394,3 +398,169 @@ Then("the list does not show {string}", async ({ page }, title: string) => {
     page.getByTestId("materials-table").getByText(title, { exact: true }),
   ).toHaveCount(0);
 });
+
+async function publicFeed(page: Page): Promise<unknown> {
+  const answer = await page.evaluate(async () => {
+    const response = await fetch("/v1/public/feed?limit=24", {
+      headers: { accept: "application/json" },
+    });
+    return { status: response.status, body: await response.json() };
+  });
+  expect(answer.status).toBe(200);
+  return answer.body;
+}
+
+Given(
+  "the draft news item {string} has a title and an empty body",
+  async ({ page, world }, title: string) => {
+    const current = state(world);
+    current.material = await createMaterial(page, title, "news", "");
+    await expect(page.getByTestId("material-status")).toHaveText("Черновик");
+    current.storedDraft = await rows("SELECT * FROM materials WHERE id=$1", [
+      current.material.id,
+    ]);
+    expect(current.storedDraft).toHaveLength(1);
+    current.feedBefore = await publicFeed(page);
+  },
+);
+When(
+  "the administrator publishes {string}",
+  async ({ page, world }, title: string) => {
+    const current = state(world);
+    expect(current.material!.title).toBe(title);
+    const published = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname ===
+          `/v1/admin/materials/${current.material!.id}/publish`,
+    );
+    await page.getByTestId("material-publish").click();
+    const response = await published;
+    expect(response.status()).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: "PUBLISH_REQUIREMENTS_NOT_MET",
+    });
+  },
+);
+Then(
+  "the publish is refused with a field error on the text",
+  async ({ page }) => {
+    await expect(page.getByTestId("material-body-error")).toContainText(
+      "Чтобы опубликовать материал, напишите текст.",
+    );
+    await expect(page.getByTestId("material-lifecycle-error")).toContainText(
+      "Материал пока нельзя опубликовать — чего не хватает, отмечено у полей.",
+    );
+  },
+);
+Then("{string} stays a draft", async ({ page, world }, title: string) => {
+  const current = state(world);
+  expect(current.material!.title).toBe(title);
+  await expect(page.getByTestId("material-status")).toHaveText("Черновик");
+  expect(
+    await rows("SELECT * FROM materials WHERE id=$1", [current.material!.id]),
+  ).toEqual(current.storedDraft);
+});
+Then(
+  "the rail has no card {string}",
+  async ({ page, world }, title: string) => {
+    const feed = await publicFeed(page);
+    expect(JSON.stringify(feed)).not.toContain(title);
+    expect(feed).toEqual(state(world).feedBefore);
+  },
+);
+When(
+  "the administrator pastes a fragment with a paragraph, an image and a table into the text",
+  async ({ page }) => {
+    await page.goto("/materials/create");
+    const editor = page
+      .getByTestId("material-body")
+      .locator('[contenteditable="true"]');
+    await expect(editor).toBeVisible();
+    await page
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.evaluate(async () => {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob(
+            [
+              '<p>Абзац текста</p><img src="https://example.org/image.png" alt="картинка">' +
+                "<table><tbody><tr><td>Ячейка таблицы</td></tr></tbody></table>",
+            ],
+            { type: "text/html" },
+          ),
+        }),
+      ]);
+    });
+    await editor.click();
+    await page.keyboard.press("Control+V");
+  },
+);
+Then("the text holds the paragraph", async ({ page }) => {
+  await expect(
+    page.getByTestId("material-body").locator('[contenteditable="true"] p'),
+  ).toContainText(["Абзац текста"]);
+});
+Then("the text holds no image and no table", async ({ page }) => {
+  const editor = page
+    .getByTestId("material-body")
+    .locator('[contenteditable="true"]');
+  await expect(editor.locator("img,table")).toHaveCount(0);
+  await expect(editor).toContainText("Абзац текста");
+});
+Given(
+  "the administrator has typed a title and a body in a new material without saving",
+  async ({ page, world }) => {
+    const current = state(world);
+    current.previewTitle = `Предпросмотр без сохранения ${randomUUID()}`;
+    current.before = await rows("SELECT id FROM materials ORDER BY id");
+    current.feedBefore = await publicFeed(page);
+    await page.goto("/materials/create");
+    await page.getByTestId("material-title").fill(current.previewTitle);
+    await page.getByTestId("material-author-line").fill("Редакция Академии");
+    await page
+      .getByTestId("material-body")
+      .locator('[contenteditable="true"]')
+      .fill("Текст, который ещё не сохранён.");
+  },
+);
+When("the administrator chooses «Предпросмотр»", async ({ page }) => {
+  await page.getByTestId("material-preview").click();
+});
+Then(
+  "the material is shown as its reading page with «Предпросмотр — материал не опубликован»",
+  async ({ page, world }) => {
+    const panel = page.getByTestId("material-preview-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel.getByTestId("material-preview-banner")).toContainText(
+      "Предпросмотр — материал не опубликован",
+    );
+    await expect(panel.getByRole("heading", { level: 1 })).toHaveText(
+      state(world).previewTitle!,
+    );
+    await expect(panel.getByText("Новость", { exact: true })).toBeVisible();
+    await expect(panel.getByTestId("material-byline")).toHaveText(
+      "Редакция Академии",
+    );
+    await expect(panel).toContainText("Текст, который ещё не сохранён.");
+  },
+);
+Then(
+  "no material is saved and the rail is unchanged",
+  async ({ page, world }) => {
+    const current = state(world);
+    await expect(page).toHaveURL(/\/materials\/create$/u);
+    expect(await rows("SELECT id FROM materials ORDER BY id")).toEqual(
+      current.before,
+    );
+    expect(
+      await rows("SELECT id FROM materials WHERE title=$1", [
+        current.previewTitle,
+      ]),
+    ).toEqual([]);
+    const feed = await publicFeed(page);
+    expect(feed).toEqual(current.feedBefore);
+    expect(JSON.stringify(feed)).not.toContain(current.previewTitle);
+  },
+);

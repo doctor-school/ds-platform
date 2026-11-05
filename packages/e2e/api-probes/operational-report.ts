@@ -68,7 +68,10 @@ export const operationalOriginals = {
     "A new table cannot silently opt out of auditing",
   ],
   materials: [
+    "A material without a body cannot be published",
     "A column without an expert is refused",
+    "Pasted images and tables are stripped by the editor",
+    "The administrator previews an unsaved material",
     "A stale edit is refused",
     "The administrator finds materials by kind",
   ],

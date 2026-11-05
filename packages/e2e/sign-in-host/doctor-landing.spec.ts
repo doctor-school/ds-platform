@@ -363,11 +363,25 @@ test.describe("021 EARS-3: LD-4 — where the direct arrival lands", () => {
       email: doctor.email,
       password: goldenDoctorPassword(doctor),
     });
-    const read = await page.request.get(`${doctorBase()}/v1/me/specialty`, {
-      headers: { accept: "application/json" },
+    // The read goes out FROM THE PAGE, as the storefront's own read does: the
+    // session is device-bound (003 EARS-64 fingerprint: UA + IP /24 +
+    // accept-language), and a `page.request` read carries neither the
+    // browser's `accept-language` nor its `origin`, so a stand that enforces
+    // the fingerprint answers it 401 while the browser is signed in.
+    expect(
+      new URL(page.url()).origin,
+      "the landing is on the doctor storefront",
+    ).toBe(new URL(doctorBase()).origin);
+    const read = await page.evaluate(async () => {
+      const res = await fetch("/v1/me/specialty", {
+        credentials: "include",
+        cache: "no-store",
+        headers: { accept: "application/json" },
+      });
+      return { status: res.status, body: res.ok ? await res.json() : null };
     });
-    expect(read.status(), "the signed-in specialty read").toBe(200);
-    const choice = (await read.json()) as {
+    expect(read.status, "the signed-in specialty read").toBe(200);
+    const choice = read.body as {
       specialty: { code: string } | null;
       storedIn: string;
     };

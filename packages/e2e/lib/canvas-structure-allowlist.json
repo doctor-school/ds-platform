@@ -42,6 +42,14 @@
       "item": { "kind": "input", "label": "Поиск по эфирам" },
       "decision": "The doctor-host search submits to the events listing (the one surface that answers a query until the results surface #1492 ships), so the placeholder names what it finds; the canvas text promises lessons and schools that this search does not return.",
       "source": "Owner decision recorded at https://github.com/doctor-school/ds-platform/issues/3682#issuecomment-6649178384: keep «Поиск по эфирам»; apps/doctor/lib/shell-config.ts search"
+    },
+    {
+      "canvas": "ds-shell.dc.html",
+      "props": { "host": "doctor" },
+      "delta": "extra",
+      "item": { "kind": "link", "label": "Моя лента" },
+      "decision": "The doctor header carries a permanent «Моя лента» item into the 018 specialty feed, added by the owner after the canvas was drawn; the canvas doctor artboard still shows «Эфиры» alone.",
+      "source": "Owner decision recorded at https://github.com/doctor-school/ds-platform/issues/3674#issuecomment-6630378173 («#3674 + пункт в шапке»), Stage-B GO on PR #3696; apps/doctor/lib/navigation-model.ts"
     }
   ]
 }

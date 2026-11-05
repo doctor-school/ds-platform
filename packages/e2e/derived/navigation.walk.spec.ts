@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { BrowserContext, Page } from "@playwright/test";
+import type { BrowserContext } from "@playwright/test";
 
 import {
   HOSTS,
@@ -8,10 +8,10 @@ import {
   loadNavigationModel,
   type HostConfig,
 } from "../hosts.js";
-import { itemsFor, landingEvidenceAt } from "../navigation-model.js";
-import type { NavigationItem } from "../navigation-model.js";
+import { itemsFor } from "../navigation-model.js";
 import { signInGoldenDoctor, signInOnHostForm } from "../lib/sign-in.js";
 import { isSignInHostForm } from "../lib/sign-in-host-api.js";
+import { assertLanding } from "../lib/landing-evidence.js";
 
 /**
  * #2805 — the signed-in doctor's cookies per host, for THIS worker process only
@@ -64,39 +64,6 @@ const workerSessions = new Map<
 
 /** The golden doctor the walk signs in as — the ordinary verified audience. */
 const WALK_DOCTOR = "verified-cardiologist";
-
-/**
- * Assert the visitor landed where `item` declares: the pathname must be the
- * item's own href (or, for an item whose href redirects by design, one of its
- * declared targets), and the page there must carry that landing's evidence.
- */
-async function assertLanding(
-  page: Page,
-  item: NavigationItem,
-  where: string,
-): Promise<void> {
-  const landed = new URL(page.url()).pathname;
-  const evidence = landingEvidenceAt(item, landed);
-  expect(
-    evidence,
-    `pathname after opening ${where} — ${landed} is not a landing the model declares for ${item.href}`,
-  ).not.toBeNull();
-  if (evidence!.kind === "h1") {
-    await expect(
-      page.getByRole("heading", {
-        level: 1,
-        name: evidence!.value,
-        exact: true,
-      }),
-      `the h1 of ${where}`,
-    ).toBeVisible();
-  } else {
-    await expect(
-      page.locator(`[data-surface="${evidence!.value}"]`),
-      `the data-surface marker of ${where}`,
-    ).toBeVisible();
-  }
-}
 
 // Top-level await: the navigation model is a MODULE the walk loads across the
 // package→app boundary, so the item list only exists after an async import. This

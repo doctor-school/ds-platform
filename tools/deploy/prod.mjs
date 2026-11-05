@@ -80,7 +80,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { cutDeployRelease } from "../release/cut-release.mjs";
 import {
-  DEPLOY_PROD_WORKFLOW_PATH,
+  NON_CI_WORKFLOW_PATHS,
   ciVerdictProblem,
   classifyDeployCheckRuns,
   fetchDeployCiBoard,
@@ -1848,9 +1848,10 @@ function assertGreenCi(sha) {
   } catch (e) {
     die(e.message);
   }
-  // #3158: the release workflow's own runs on this SHA are not CI either.
+  // #3158 / #3684: the deploy workflow's own runs and the changesets workflow
+  // on this SHA are not CI either.
   const verdict = classifyDeployCheckRuns(board.checkRuns, board.workflowRuns, {
-    ignoreWorkflowPaths: [DEPLOY_PROD_WORKFLOW_PATH],
+    ignoreWorkflowPaths: NON_CI_WORKFLOW_PATHS,
   });
   if (verdict.dropped.length)
     ok(

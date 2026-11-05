@@ -33,6 +33,24 @@ const REPO_WORKFLOW_PREFIX = ".github/workflows/";
  */
 export const DEPLOY_PROD_WORKFLOW_PATH = ".github/workflows/deploy-prod.yml";
 
+/**
+ * The changesets workflow (#3684). Its `release` job maintains the «Version
+ * Packages» PR on every push to main; a red run there is a changesets / PR-bot
+ * fault and says nothing about whether the SHA is fit for prod, so it is dropped
+ * by workflow PATH as well. `runtime-images.yml` is deliberately NOT here: it
+ * builds the images the release ships, so it keeps gating.
+ */
+export const RELEASE_WORKFLOW_PATH = ".github/workflows/release.yml";
+
+/**
+ * Repo workflows whose check-runs are not CI for the prod pre-flight — the set
+ * both callers (`prod.mjs`, `release-runner.mjs`) pass as `ignoreWorkflowPaths`.
+ */
+export const NON_CI_WORKFLOW_PATHS = Object.freeze([
+  DEPLOY_PROD_WORKFLOW_PATH,
+  RELEASE_WORKFLOW_PATH,
+]);
+
 /** Conclusions the deploy gate accepts as "not red". Unchanged from the
  *  pre-#2077 inline logic — deliberately neither tightened nor loosened. */
 const GOOD_CONCLUSIONS = new Set(["success", "neutral", "skipped"]);

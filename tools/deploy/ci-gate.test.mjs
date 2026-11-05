@@ -10,6 +10,8 @@ import {
   classifyDeployCheckRuns,
   ciVerdictProblem,
   DEPLOY_PROD_WORKFLOW_PATH,
+  RELEASE_WORKFLOW_PATH,
+  NON_CI_WORKFLOW_PATHS,
   fetchDeployCiBoard,
 } from "./ci-gate.mjs";
 
@@ -244,6 +246,64 @@ test("3158: without the option the deploy workflow's runs still block (default u
     classifyDeployCheckRuns(rows, [...WORKFLOW_RUNS, DEPLOY_RUN]).state,
     "red",
   );
+});
+
+// -- #3684: the changesets `release` workflow is not CI ------------------------
+
+const SUITE_RUNTIME_IMAGES = 92749280199;
+const RUNTIME_IMAGES_RUN = {
+  id: 34239014299,
+  name: "runtime-images",
+  path: ".github/workflows/runtime-images.yml",
+  event: "push",
+  conclusion: "failure",
+  check_suite_id: SUITE_RUNTIME_IMAGES,
+};
+
+test("3684: a red changesets `release` check-run (release.yml) no longer refuses the gate, selected by path", () => {
+  const rows = [
+    ...REPO_ROWS.filter((r) => r.name !== "release"),
+    run("release", SUITE_RELEASE, { conclusion: "failure" }),
+  ];
+  const v = classifyDeployCheckRuns(rows, WORKFLOW_RUNS, {
+    ignoreWorkflowPaths: NON_CI_WORKFLOW_PATHS,
+  });
+  assert.equal(v.state, "green");
+  assert.deepEqual(v.red, []);
+  assert.deepEqual(v.dropped, ["release (.github/workflows/release.yml)"]);
+  assert.equal(RELEASE_WORKFLOW_PATH, ".github/workflows/release.yml");
+});
+
+test("3684: with the non-CI paths ignored, a red `ci` (ci.yml) check-run still refuses", () => {
+  const rows = [
+    ...REPO_ROWS.filter((r) => r.name !== "ci"),
+    run("ci", SUITE_CI, { conclusion: "failure" }),
+  ];
+  const v = classifyDeployCheckRuns(rows, WORKFLOW_RUNS, {
+    ignoreWorkflowPaths: NON_CI_WORKFLOW_PATHS,
+  });
+  assert.equal(v.state, "red");
+  assert.deepEqual(v.red, ["ci=failure"]);
+});
+
+test("3684: with the non-CI paths ignored, a red runtime-images.yml check-run still refuses", () => {
+  const rows = [
+    ...REPO_ROWS,
+    run("build", SUITE_RUNTIME_IMAGES, { conclusion: "failure" }),
+  ];
+  const v = classifyDeployCheckRuns(rows, [...WORKFLOW_RUNS, RUNTIME_IMAGES_RUN], {
+    ignoreWorkflowPaths: NON_CI_WORKFLOW_PATHS,
+  });
+  assert.equal(v.state, "red");
+  assert.deepEqual(v.red, ["build=failure"]);
+});
+
+test("3684: the non-CI workflow set is exactly deploy-prod.yml + release.yml", () => {
+  assert.deepEqual(
+    [...NON_CI_WORKFLOW_PATHS].sort(),
+    [DEPLOY_PROD_WORKFLOW_PATH, RELEASE_WORKFLOW_PATH].sort(),
+  );
+  assert.equal(Object.isFrozen(NON_CI_WORKFLOW_PATHS), true);
 });
 
 test("3158: fetchDeployCiBoard reads both boards through the injected gh and parses the lines", () => {

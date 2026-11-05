@@ -389,6 +389,40 @@ Realizes EARS-72. One mechanism on all three hosts, the sign-in host's existing 
 
 **The page.** One package component (`packages/auth-flow/src/refusal/`) built from `@ds/design-system` `Button` and `Link`, the copy in `packages/auth-flow/src/copy/entry-refusal.ts`, the variant drawn by an injectable random picker per render. The storefront variant mounts in each storefront's shell route group with that host's config (home `/`, the event path template for «Вернуться к эфиру»); the sign-in host variant draws the logo top bar and links the two storefronts by their public origins from the sign-in host's host-config. The canvas is `design-source/sign-in-refusal.dc.html`.
 
+## Production amendment — a returned-to tab re-checks its session; links into the cabinet navigate by document (2026-11-05, #3748)
+
+Realizes EARS-73 and EARS-74 (implementation #3749). One mechanism in the shared shell core for both storefronts (ADR-0013 A1): it lives in `@ds/storefront-shell`, with the session read from `@ds/auth-flow`; the hosts (`apps/portal`, `apps/doctor`) add nothing — they already hand the shell its resolved `ShellAuthState`.
+
+**The read.** The re-check makes the read the shell's auth state already rests on: `GET /v1/auth/session`, the endpoint `resolveServerAuth` (`packages/auth-flow/src/server/session.ts`) reads on the server to decide guest-vs-doctor for both storefronts' headers (`apps/portal/lib/shell-auth.ts`, `apps/doctor/app/(storefront)/layout.tsx`). From the browser it is a relative, same-origin fetch with `credentials: "include"` through each storefront's `/v1/*` BFF proxy (`apps/portal/next.config.ts`, `apps/doctor/next.config.ts`), so the `__Host-ds_session` cookie travels and no token reaches script. A `200` means the session holds; a `401` means it is gone (revoked by EARS-10 amended or EARS-65, or expired with no refresh). Any other answer or a transport failure changes nothing — the tab's next request resolves as today; the re-check never guesses a sign-out.
+
+**The trigger.** A client island rendered by the shell's signed-in cluster only (`ShellAuthCluster`, `status: "doctor"`), so a guest render never listens and never reads. It listens to `visibilitychange` (to `visible`) and `pageshow` with `persisted` (a back/forward-cache restore). A hidden → visible transition is one return: the events of that one return (a bfcache restore may fire both) share one read, and no read starts while one is in flight. There is no timer and no read on the first render — the server already resolved that render.
+
+**The guest render.** On a `401` the island calls `router.refresh()`. That is an RSC request, which the storefront gate never answers with a silent check (EARS-63: router requests are never checkable), so no silent check runs; the server re-renders the route through `resolveServerAuth`, which now resolves guest, and the shell and page commit their guest render in place. A route that requires sign-in cannot take this path: its server `redirect()` committed by the client router is exactly the empty page EARS-74 removes. The rule: a route core that bounces guests declares its own bounce target for the return re-check — the very target its server `redirect()` already uses — and `router.refresh()` is only for routes that render a guest view. Today's bouncing cores: `@ds/account` `AccountPage` (`packages/account/src/ui/account-page.tsx:36-39`, `withReturnContext(config.authFlow, login, account)`); `/account/events` on both storefronts (`packages/events-storefront/src/ui/my-events-route.tsx:64-66`, `withReturnTarget(config.routes.login, config.routes.accountEvents)`); the doctor storefront's `/account/congress` (`packages/congress-submissions/src/route/section-route.tsx:38`, `signInHref` = `withReturnContext(auth, auth.routes.login, path)`). None is funnelled through another's target, so each keeps its own return path (EARS-61/62). On a `401` the island answers the declared target with `location.assign(<that bounce>)`: a top-level document request to the storefront `/login` entry (EARS-43 amended), which redirects to the sign-in host. That entry is an interactive door, not a silent check.
+
+**Not in scope, by design.** The sign-in direction: a guest tab never reads, because turning it signed in would need a top-level redirect without user action (ADR-0015 §4 req. 12); it becomes signed in on its next document request through EARS-63, as today.
+
+**The links into the cabinet (EARS-74).** Every signed-in link that targets an `/account/**` route is a `next/link` client-router link today: the profile chip in `packages/storefront-shell/src/auth-cluster.tsx`, and the cluster's `ShellAuthState.links` («Мои события» → `/account/events`), drawn by `HeaderNavLink` / `MobileNavRow` (`packages/storefront-shell/src/nav-link.tsx`) on desktop and in the mobile menu. Each becomes a plain `<a href>` — the pattern of `guest-login-link.tsx` (EARS-61); nav links to routes that render a guest view stay client-router links. Measured cause of the flash it removes (#3748 comment 6653676405): the router RSC-fetched `/account`, committed the server `redirect()` as an empty guest page, RSC-fetched `/login`, received the door's deliberate 204 for a non-document request (`packages/auth-flow/src/server/storefront-oidc.ts`, EARS-61) and only then navigated by document, ≈1.7 s of an empty shell. «Мои события» follows the same mechanism through `/account/events`. A document request goes from the current page straight to its target, and with a revoked session to `/login` and the sign-in host, with no page committed in between. The door's 204 stays. The trade is a full document load on each cabinet entry instead of a client transition, accepted. Look, copy, testids and destinations are unchanged; no new user-visible text, so no Stage A.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Storefront B tab (signed-in render)
+  participant P as B's /v1/* BFF proxy → API
+  participant S as B's server render
+  participant H as Sign-in host
+  Note over B: sign-out on storefront A revoked B's session (EARS-10 amended)
+  B->>B: visibilitychange → visible (one return)
+  B->>P: GET /v1/auth/session (same-origin, credentials)
+  P-->>B: 401
+  alt ordinary route
+    B->>S: router.refresh() (RSC request — no silent check)
+    S-->>B: guest render committed in place
+  else /account/** (sign-in required)
+    B->>B: location.assign(the route's own guest bounce, e.g. /login?returnTo=/account/events)
+    B->>H: document request → storefront entry → sign-in host
+  end
+```
+
 ## 1. Architecture overview
 
 `apps/api` is a **Backend-for-Frontend (BFF)** sitting between the portal's headless forms and Zitadel. It owns the domain mirror, consent, RBAC role grant, audit, and abuse guards; it delegates every credential operation to Zitadel via the Session / User v2 API. The portal renders inline forms on its own origin (Variant B, ADR-0001 §2) and talks only to the BFF; it never sees a token.

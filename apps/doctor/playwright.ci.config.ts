@@ -82,6 +82,9 @@ export default defineConfig({
     // #3674: the ways into the feed (home choice, «Моя лента») land on the
     // feed envelope the events stand-in serves, so they ride the same tier.
     "feed-entry.spec.ts",
+    // #3728: the feed canvas-structure check reads the events block the
+    // events stand-in serves, so it rides the same tier.
+    "feed-canvas-structure.spec.ts",
     // #1955: the signed-in redirect and the login return-context copy are both
     // server reads against an api — they ride the return-context tier.
     "login-arrival.spec.ts",

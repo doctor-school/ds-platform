@@ -71,8 +71,14 @@ export const HEAVY_JOBS = {
   "playwright-axe": { packages: ["@ds/showcase"], extraInputs: [] },
   "playwright-axe-doctor": {
     packages: ["@ds/doctor"],
-    // apps/doctor/e2e/header-canvas-structure.spec.ts (#3682) reads the canvas.
-    extraInputs: [/^design-source\/ds-shell\.dc\.html$/],
+    // apps/doctor/e2e/header-canvas-structure.spec.ts (#3682) reads the canvas;
+    // feed-canvas-structure.spec.ts (#3728) reads the feed page canvas and the
+    // card canvas it imports.
+    extraInputs: [
+      /^design-source\/ds-shell\.dc\.html$/,
+      /^design-source\/doctor-feed\.dc\.html$/,
+      /^design-source\/unit-event-card\.dc\.html$/,
+    ],
   },
   "playwright-axe-login": { packages: ["@ds/login"], extraInputs: [] },
   "playwright-axe-portal": {

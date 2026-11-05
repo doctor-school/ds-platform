@@ -573,3 +573,29 @@ export function applyAllowlist(
   }
   return { ...next, stale };
 }
+
+// ── #3728: the resolved tree for slot-aware readers (`./canvas-slots.ts`) ──
+
+export type { ResolvedElement, ResolvedNode };
+
+/** Labels and kinds exactly as the header reader takes them. */
+export const itemKindOf = (tag: string): ItemKind | undefined => KIND[tag];
+export const visibleLabelOf = labelOf;
+
+/**
+ * A canvas evaluated for `input` with every `sc-if` / `sc-for` / `{{ }}`
+ * resolved — the whole `<x-dc>` template, no region cut and no item reading.
+ * `dc-import` / `x-import` nodes stay in the tree with their resolved props.
+ */
+export function resolveCanvas(file: string, input: CanvasInput = {}): ResolvedNode[] {
+  const template = parseTemplate(readFileSync(file, "utf8"));
+  const [script] = findAll(
+    template,
+    (n) => n.tag === "script" && n.attrs.type === "text/x-dc",
+  );
+  if (!script) throw new Error(`${basename(file)}: no <script type="text/x-dc"> logic block`);
+  const [xdc] = findAll(template, (n) => n.tag === "x-dc");
+  if (!xdc) throw new Error(`${basename(file)}: no <x-dc> template root`);
+  const { vals, context } = evaluateLogic(file, script, input);
+  return expand(xdc.children, makeEvaluator(context, vals), {});
+}

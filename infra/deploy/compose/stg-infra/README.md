@@ -17,12 +17,27 @@ Everything here is Phase B: nothing in this file runs on a developer machine.
 
 ## What is deliberately absent
 
-| Absent                    | Why                                                                                                                                    |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| pgbackrest / WAL archive  | The box holds no unique state. `terraform apply` recreates it; `stg-infra` and `ds_golden` rebuild from the repo (spec §9 «Box down»). |
-| Centrifugo                | It is part of the `api-prod` service set and runs inside every slot (spec §3).                                                         |
-| Unleash                   | A second stateful admin service is a §2 non-goal; staging reads flags from env, as production does today.                              |
-| Any production credential | `stage.env` carries sinks, the stand's own captcha keys and secrets generated on this box — see AC4 below.                             |
+| Absent                    | Why                                                                                                                                      |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| pgbackrest / WAL archive  | The box holds no unique state. `terraform apply` recreates it; `stg-infra` and `ds_golden` rebuild from the repo (spec §9 «Box down»).   |
+| Centrifugo                | It is part of the `api-prod` service set and runs inside every slot (spec §3).                                                           |
+| Unleash                   | A second stateful admin service is a §2 non-goal; staging reads flags from env, as production does today.                                |
+| Any production credential | `stage.env` carries sinks, the stand's own captcha keys and secrets generated on this box — see AC4 below. One bounded exception, below. |
+
+**Bounded exception — the shared mon push credential (#3778).** The box carries one
+credential that is not its own: BBM's shared mon push credential (`MON_PUSH_USER` /
+`MON_PUSH_PASSWORD`, the same one the prod hosts use; step 5). It is write-only to
+mon's Prometheus remote_write and Loki push, not a DS application or data credential,
+and reads nothing. It lives only in `~deploy/alloy.env` (`0600`) and in the
+`/etc/alloy/config.alloy` the installer renders from it (`0640 root:alloy`). Both are
+outside `/etc/ds-platform`, so the AC4 Half A grep over `/etc/ds-platform/*.env` does
+not see it, by construction. AC4 carries a separate line that asserts it is ONLY in
+those two files. What a compromise of the box (which runs PR code) exposes: forged
+series pushed under any `instance` label. For example, it could keep
+`node_boot_time_seconds{instance="api-prod"}` alive and mask
+`HostTelemetryStale-api-prod`. It cannot read data. Removal path: a stage-only push
+credential from BBM, with mon binding `instance` to it (#3778; a separate user alone
+does not stop label forging).
 
 ## Prerequisites (owner, once)
 
@@ -54,6 +69,33 @@ Everything here is Phase B: nothing in this file runs on a developer machine.
    `STAGE_BASIC_AUTH_HASH` — MUST be single-quoted: the box sources the file with
    `set -a; . stage.env`, which expands `$2a`/`$14` and silently truncates a bcrypt
    hash (see the comment above that key in `infra/deploy/stage.env.example`).
+5. Alloy pushes the box's node metrics and journald to BBM's mon (`instance=ds-stage-1`,
+   `tenant=ds`). It is a provisioning step on the running box, not cloud-init: the push
+   credential cannot exist at first boot and the download would break the #2121 window.
+   A box rebuild loses it; repeat this step, or `HostTelemetryStale-ds-stage-1` fires
+   (warning, stage only). The installer's source of truth is the `bbm` repo at
+   `origin/main`; from a checkout of it:
+
+   ```bash
+   cd infra/monitoring
+   scp alloy/host-config.alloy.tpl scripts/install-alloy-host.sh ds-stage-1:~/
+   ```
+
+   On the box, write `~/alloy.env` (mode `0600`) with the keys the installer's header
+   names: `ALLOY_INSTANCE=ds-stage-1`, `ALLOY_TENANT=ds`, `ALLOY_VERSION=v1.19.2`,
+   `MON_PUSH_URL_PROM` / `MON_PUSH_URL_LOKI`, `ALLOW_MON_PUSH_CREDENTIAL_CHANGE=0` and
+   the shared `MON_PUSH_USER` / `MON_PUSH_PASSWORD`, the bounded exception above (#3778).
+   The operator types the credential on the box — never in chat, a repo or this file. Then:
+
+   ```bash
+   sudo bash ~/install-alloy-host.sh ~/host-config.alloy.tpl ~/alloy.env
+   systemctl is-active alloy        # expected: active
+   ```
+
+   Then confirm the series on mon: `node_boot_time_seconds{instance="ds-stage-1"}` is
+   present in Grafana Explore, and `HostTelemetryStale-ds-stage-1` is Normal. The mon
+   push allowlist already holds this box's egress IP (`200.169.178.154`, bbm #189); a
+   rebuild that changes the IP needs that allowlist updated in bbm too (push gets `403`).
 
 ## Bring-up order
 
@@ -804,6 +846,12 @@ sudo grep -E '^(BOT_PROTECTION_ENABLED|SMARTCAPTCHA_SERVER_KEY|SMARTCAPTCHA_SITE
 # `infra/deploy/README.md` step 3 uses. The comparison is recorded in #2095.
 sudo sed -n 's/^SMARTCAPTCHA_SERVER_KEY=ysc2_\([^[:space:]]\{20\}\).*/stage captcha pair id: \1/p' /etc/ds-platform/stage.env
 # expected when ON: exactly one line, and that pair id is NOT the production one.
+
+# EXCEPTION (bounded, #3778) — the shared BBM mon push credential is ONLY in the two
+# Alloy files, nowhere else on the box (and never under /etc/ds-platform). It matches
+# by value. The value is read from stdin, so it never reaches argv or the output.
+sed -n 's/^MON_PUSH_PASSWORD=//p' ~/alloy.env | sed -e "s/^[\"']//" -e "s/[\"']$//" | sudo grep -rlIF -f /dev/stdin /etc /home /srv /root 2>/dev/null | sort
+# expected exactly: /etc/alloy/config.alloy and /home/deploy/alloy.env
 ```
 
 **AC5 — the Zitadel converge is idempotent** (it will be re-run by every preview that

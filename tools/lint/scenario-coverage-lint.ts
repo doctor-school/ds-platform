@@ -51,6 +51,23 @@
  * carries no backfill debt of the rule. The §2.6 demotion rule still applies —
  * one confirmed false positive demotes it to WARN.
  *
+ * Where a binding runs (#3345 item 4). Every `@host:login` scenario names its
+ * run with exactly one tag: `@pr-ci:login` — the `apps/login` PR-CI tier
+ * (`playwright-axe-login`, `apps/login/playwright.ci.config.ts` project
+ * `door-scenarios`) generates and runs it against that tier's API double with
+ * the shared `packages/e2e` steps and `missingSteps: "fail-on-gen"`, so a tag
+ * the tier cannot execute fails generation — or `@stage-only:login(<class>)`,
+ * the stage suite's `login` project only, for a class from the fixed list
+ * `STAGE_ONLY_REASONS` (the journey needs the live IdP/session store, a mail
+ * or SMS sink, the real captcha provider, or a session shared across hosts —
+ * none of which the double has). A binding with neither, both, an unlisted or
+ * missing class, or a run tag without `@host:login` is a finding; a comment is
+ * no run class. A Scenario Outline names its run per `Examples:` block — a
+ * block inherits the outline's tags plus the tags above it (Gherkin), so an
+ * outline whose door-only rows run on the tier and whose submitting rows need
+ * a stage-only class splits them into tagged blocks; each block is one run.
+ * The stage suite still runs every binding of either class.
+ *
  * Seams: `LINT_FIXTURE_ROOT` (spec tree), `LINT_GH_FIXTURE_DIR` (lib/gh.ts —
  * canned `gh issue view` JSON for the quarantine check),
  * `LINT_DIFF_NAMESTATUS_FILE` / `LINT_DIFF_BASE` (lib/diff.ts — touched set).
@@ -84,6 +101,7 @@ const RETIRED_RE = /_Retired\._/i;
 const TAG_LINE_RE = /^\s*@\S+(\s+@\S+)*\s*$/;
 const SCENARIO_RE = /^\s*(Scenario|Scenario Outline|Example)\b/;
 const FEATURE_RE = /^\s*Feature\b/;
+const EXAMPLES_RE = /^\s*(Examples|Scenarios)\s*:/;
 const EARS_TAG_RE = /^@EARS-(\d+)$/;
 const QUARANTINE_RE = /^@quarantine(?:\((#?\d+)\))?$/i;
 
@@ -98,6 +116,17 @@ const HOST_QUARANTINE_RE = /^@quarantine:login(?:\((#?\d+)\))?$/i;
 /** The free-text exclusion form #3345 retires: a comment is not a quarantine. */
 const COMMENT_EXCLUSION_RE = /^\s*#.*sign-in-host acceptance/i;
 const ROUTE_REGISTRY_HEADING = "## Route-file registry";
+/** The binding runs on the `apps/login` PR-CI door tier (its API double). */
+export const PR_CI_RUN = "@pr-ci:login";
+/** Why a binding can run in the stage suite only — the fixed list (#3345 item 4). */
+export const STAGE_ONLY_REASONS = [
+  "live-idp",
+  "mail",
+  "sms",
+  "captcha",
+  "cross-host-session",
+] as const;
+const STAGE_ONLY_RE = /^@stage-only:login(?:\((.*)\))?$/;
 const FEATURE_GLOB = "apps/docs/content/specs/features/*/*-scenarios.feature";
 
 function info(msg: string): void {
@@ -109,14 +138,25 @@ function relPath(file: string): string {
   return relative(REPO_ROOT, file).split(sep).join("/");
 }
 
+export interface ExamplesTags {
+  line: number;
+  /** The block's own tags only (the outline's are on the scenario). */
+  tags: string[];
+}
+
 export interface ScenarioTags {
   line: number;
   tags: string[];
+  /** A Scenario Outline's `Examples:` blocks, in file order (empty otherwise). */
+  examples: ExamplesTags[];
 }
 
 /**
  * Parse a `.feature` file into one entry per scenario, carrying the scenario's
- * own tags plus the feature-level tags (Gherkin tag inheritance).
+ * own tags plus the feature-level tags (Gherkin tag inheritance), and each
+ * `Examples:` block of an outline with the tags written above that block —
+ * Gherkin tags a block's rows with them, so one outline can run its rows in
+ * different places.
  */
 export function parseScenarios(text: string): ScenarioTags[] {
   const lines = text.split(/\r?\n/);
@@ -137,7 +177,17 @@ export function parseScenarios(text: string): ScenarioTags[] {
       return;
     }
     if (SCENARIO_RE.test(raw)) {
-      scenarios.push({ line: idx + 1, tags: [...featureTags, ...pending] });
+      scenarios.push({
+        line: idx + 1,
+        tags: [...featureTags, ...pending],
+        examples: [],
+      });
+      pending = [];
+      return;
+    }
+    const current = scenarios[scenarios.length - 1];
+    if (current && EXAMPLES_RE.test(raw)) {
+      current.examples.push({ line: idx + 1, tags: pending });
       pending = [];
       return;
     }
@@ -200,6 +250,56 @@ interface DoorScan {
   hostQuarantines: Quarantine[];
   bound: number;
   quarantined: number;
+  /** `@host:login` scenarios the PR-CI door tier runs. */
+  prCi: number;
+  /** `@host:login` scenarios run by the stage suite only, by reason class. */
+  stageOnly: Map<string, number>;
+}
+
+/** One run of a sign-in-host binding names exactly one valid run class. */
+function checkRunClass(
+  scan: DoorScan,
+  where: string,
+  tags: readonly string[],
+  bound: boolean,
+  unrunnable: boolean,
+): void {
+  const prCi = tags.includes(PR_CI_RUN);
+  const stageTag = tags.find((t) => STAGE_ONLY_RE.test(t));
+  if ((prCi || stageTag) && !bound) {
+    scan.findings.push(
+      `${where} -> ${prCi ? PR_CI_RUN : stageTag} without ${SIGN_IN_HOST_BINDING}; ` +
+        `a run class names where a sign-in-host binding runs`,
+    );
+  } else if (bound && !unrunnable) {
+    if (prCi && stageTag) {
+      scan.findings.push(
+        `${where} -> ${PR_CI_RUN} and ${stageTag} on one scenario; a ` +
+          `binding runs on the PR-CI door tier or in the stage suite only`,
+      );
+    } else if (prCi) {
+      scan.prCi += 1;
+    } else if (stageTag) {
+      const reason = stageTag.match(STAGE_ONLY_RE)?.[1];
+      if (
+        reason === undefined ||
+        !(STAGE_ONLY_REASONS as readonly string[]).includes(reason)
+      ) {
+        scan.findings.push(
+          `${where} -> ${stageTag} names no reason class from the list ` +
+            `(${STAGE_ONLY_REASONS.join(", ")})`,
+        );
+      } else {
+        scan.stageOnly.set(reason, (scan.stageOnly.get(reason) ?? 0) + 1);
+      }
+    } else {
+      scan.findings.push(
+        `${where} -> ${SIGN_IN_HOST_BINDING} names no run: tag it ` +
+          `${PR_CI_RUN} (the apps/login PR-CI door tier runs it) or ` +
+          `@stage-only:login(<class>)`,
+      );
+    }
+  }
 }
 
 /** The sign-in-host binding rule over every spec feature file (header above). */
@@ -214,6 +314,8 @@ async function scanDoorBindings(): Promise<DoorScan> {
     hostQuarantines: [],
     bound: 0,
     quarantined: 0,
+    prCi: 0,
+    stageOnly: new Map(),
   };
   // Read lazily: a tree with no `@door:` tag needs no registry.
   let mounted: Set<string> | undefined;
@@ -287,6 +389,21 @@ async function scanDoorBindings(): Promise<DoorScan> {
               `a scenario is either bound to the sign-in host or parked from it`,
           );
         }
+      }
+      // #3345 item 4 — where the binding runs: the PR-CI door tier or, for a
+      // reason class from the fixed list, the stage suite only (header above).
+      // An outline's rows run per `Examples:` block, each inheriting the
+      // outline's tags plus its own, so the run class is read — and counted —
+      // per block; a plain scenario is its own single run.
+      const runs =
+        scenario.examples.length > 0
+          ? scenario.examples.map((block) => ({
+              where: `${rel}:${block.line}`,
+              tags: [...scenario.tags, ...block.tags],
+            }))
+          : [{ where, tags: scenario.tags }];
+      for (const run of runs) {
+        checkRunClass(scan, run.where, run.tags, bound, unrunnable);
       }
       for (const door of doors) {
         if (!(DOORS as readonly string[]).includes(door)) {
@@ -443,6 +560,15 @@ async function main(): Promise<void> {
     `${doorScan.bound + doorScan.quarantined} mounted-door scenario(s): ` +
       `${doorScan.bound} bound to the sign-in host, ${doorScan.quarantined} host-quarantined.`,
   );
+  const stageOnly = [...doorScan.stageOnly.values()].reduce((a, b) => a + b, 0);
+  info(
+    `${doorScan.prCi + stageOnly} sign-in-host binding(s): ${doorScan.prCi} on ` +
+      `the PR-CI door tier (${PR_CI_RUN}), ${stageOnly} stage-only (` +
+      (STAGE_ONLY_REASONS.filter((r) => doorScan.stageOnly.has(r))
+        .map((r) => `${r}: ${doorScan.stageOnly.get(r)}`)
+        .join(", ") || "none") +
+      `).`,
+  );
   for (const w of warning) process.stdout.write(`${TAG} WARN ${w}\n`);
   if (warning.length > 0) {
     info(
@@ -465,7 +591,8 @@ async function main(): Promise<void> {
     info(
       "PASS — every user-facing handler this PR touched is covered by a live " +
         "scenario, every mounted-door scenario is bound to the sign-in host or " +
-        "host-quarantined, and every quarantine names an OPEN Issue.",
+        "host-quarantined, every binding names its run (PR-CI or a listed " +
+        "stage-only class), and every quarantine names an OPEN Issue.",
     );
     process.exit(0);
   }

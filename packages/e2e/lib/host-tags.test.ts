@@ -9,6 +9,8 @@ import {
   hostTagViolation,
   tagExpressionFor,
   ordinaryStorefrontTagsFor,
+  PR_CI_DOOR_RUN_TAG,
+  prCiDoorTags,
   SIGN_IN_HOST_BINDING_TAG,
   signInHostTags,
 } from "./host-tags.js";
@@ -96,6 +98,24 @@ describe("the sign-in-host binding (#3345)", () => {
     expect(
       login.evaluate(["@host:academy", "@host:login", "@public-feed-entry"]),
     ).toBe(false);
+  });
+
+  it("#3345 item 4: the PR-CI door tier selects only the bindings tagged for it; the stage login project still runs both classes", () => {
+    expect(PR_CI_DOOR_RUN_TAG).toBe("@pr-ci:login");
+    const prCi = parse(prCiDoorTags());
+    const login = parse(signInHostTags());
+    const tagged = ["@host:academy", "@host:login", "@pr-ci:login"];
+    const stageOnly = [
+      "@host:academy",
+      "@host:login",
+      "@stage-only:login(mail)",
+    ];
+    expect(prCi.evaluate(tagged)).toBe(true);
+    expect(prCi.evaluate(stageOnly)).toBe(false);
+    expect(prCi.evaluate(["@host:academy", "@pr-ci:login"])).toBe(false);
+    expect(prCi.evaluate([...tagged, "@default-auth-limits"])).toBe(false);
+    expect(login.evaluate(tagged)).toBe(true);
+    expect(login.evaluate(stageOnly)).toBe(true);
   });
 
   it("a storefront project no longer runs a bound scenario twice, except on the default-auth-limits contour", () => {

@@ -10,7 +10,6 @@ import {
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 
-import { installCaptchaStub } from "../lib/captcha-stub.js";
 import {
   assertNoPrivateRegistrationAccess,
   inputSecret,
@@ -123,7 +122,11 @@ Given(
         state.registrationRequests += 1;
       }
     });
-    await installCaptchaStub(context);
+    // No captcha stub: the seven-character refusal is client-side, so no
+    // registration command and no captcha `execute` ever runs on this journey —
+    // the same as the sibling message-slot refusal (`password-message-slot`).
+    // Routing a token-yielding `captcha.js` would only tie a door-only journey
+    // to the stage test token (#3783).
     await owned.goto(registrationUrl(world.hostBaseUrl, RETURN_TO), {
       waitUntil: "load",
     });

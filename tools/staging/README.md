@@ -253,6 +253,16 @@ the loopback Academy contour runs (#3780) — the lint refuses `@host:login` on 
 the `login` project never selects that tag. `sign-in-host` is the host's own plain specs
 (`packages/e2e/sign-in-host`). Neither selects a host axe or live leg.
 
+**Which run executes a binding (#3345 item 4).** The `login` project here runs every
+`@host:login` binding. Each binding also names its PR-CI fate with exactly one tag, which
+the same lint requires: `@pr-ci:login` — the `apps/login` PR-CI tier (`playwright-axe-login`,
+project `door-scenarios` of `apps/login/playwright.ci.config.ts`) runs it on every PR that
+touches the host, the 003 catalog, the shared steps or the lint, against that tier's API
+double — or `@stage-only:login(<class>)`, run here only, for a class from the fixed list
+`live-idp` (real accounts, sessions or IdP state), `mail`, `sms` (a code read from the
+stand's sinks), `captcha` (the stage-1 test token) or `cross-host-session` (a session shared
+by both storefronts). A free-text reason is a finding.
+
 The runner builds `@ds/e2e`'s workspace dependencies before BDD generation, so a clean
 worktree needs no hand-built `packages/db/dist` or `packages/legal-content/dist` artifact.
 

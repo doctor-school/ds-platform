@@ -18,9 +18,22 @@
 // form commands a spec drives without intercepting (`/v1/sign-in-host/…`):
 // each finished credential step answers `SignInHostStepResponseSchema`'s
 // redirect to `/__idp/callback` here, the IdP's callback in production.
+//
+// A second origin (`LOGIN_FAKE_STOREFRONT_PORT`, #3345 item 4) stands in for the
+// Academy storefront the 003 door scenarios start on (`door-scenarios` project
+// of `playwright.ci.config.ts`): each storefront entry
+// (`GET /{login,register,reset,verify}`) answers the 303 the real entry chain
+// ends in — the host's door on an auth request of the grammar below (`/verify`
+// is the registration entry, 003 EARS-61; `?method=code` names the code
+// intent) — and its private reads are the guest's 401. It records no
+// transaction and holds no session: the scenarios the double can serve are the
+// ones whose door behaviour needs neither (every other binding is
+// `@stage-only:login(<class>)`).
 import { createServer } from "node:http";
 
 const PORT = Number(process.env.LOGIN_FAKE_API_PORT ?? 3216);
+const STOREFRONT_PORT = Number(process.env.LOGIN_FAKE_STOREFRONT_PORT ?? 3217);
+const HOST = `http://127.0.0.1:${Number(process.env.LOGIN_CI_PORT ?? 3215)}`;
 const IDP_CALLBACK = `http://127.0.0.1:${PORT}/__idp/callback`;
 
 /** The ids that predate the generic grammar, answered exactly as before. */
@@ -203,7 +216,12 @@ createServer((req, res) => {
     // 003 EARS-72 — an entry the API refuses: its per-IP limit (429 with
     // `Retry-After`, or without one) or a failure (503).
     if (authRequest === "REFUSE_429") {
-      return json(res, 429, { message: "Too Many Requests" }, { "retry-after": "105" });
+      return json(
+        res,
+        429,
+        { message: "Too Many Requests" },
+        { "retry-after": "105" },
+      );
     }
     if (authRequest === "REFUSE_429_BARE") {
       return json(res, 429, { message: "Too Many Requests" });
@@ -263,7 +281,11 @@ createServer((req, res) => {
     }
   }
 
-  if (url.pathname === "/v1/auth/session") {
+  // A guest's private read (the steps' «no private access» probe): 401.
+  if (
+    url.pathname === "/v1/auth/session" ||
+    url.pathname.startsWith("/v1/me/")
+  ) {
     return json(res, 401, { status: 401, message: "unauthorized" });
   }
 
@@ -290,3 +312,35 @@ createServer((req, res) => {
 
   json(res, 404, { message: "not in the sign-in host double" });
 }).listen(PORT, "127.0.0.1");
+
+/** The Academy storefront entry door each entry path lands on. */
+const ENTRY_DOORS = {
+  "/login": "login",
+  "/register": "register",
+  "/reset": "reset",
+  "/verify": "register",
+};
+
+createServer((req, res) => {
+  const url = new URL(req.url ?? "/", `http://127.0.0.1:${STOREFRONT_PORT}`);
+  if (url.pathname === "/health") return json(res, 200, { status: "ok" });
+  const door = ENTRY_DOORS[url.pathname];
+  if (req.method === "GET" && door) {
+    const code = door === "login" && url.searchParams.get("method") === "code";
+    const target = new URL(`/${door}`, HOST);
+    target.searchParams.set(
+      "authRequest",
+      `academy-${door}${code ? "-code" : ""}`,
+    );
+    res.writeHead(303, {
+      location: target.toString(),
+      "cache-control": "no-store",
+    });
+    return res.end();
+  }
+  if (url.pathname.startsWith("/v1/")) {
+    return json(res, 401, { status: 401, message: "unauthorized" });
+  }
+  res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+  res.end("<!doctype html><title>Not in the storefront entry double</title>");
+}).listen(STOREFRONT_PORT, "127.0.0.1");

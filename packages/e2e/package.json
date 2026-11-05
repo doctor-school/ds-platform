@@ -9,6 +9,7 @@
     "./navigation-model": "./navigation-model.ts",
     "./route-params": "./route-params.ts",
     "./hosts": "./hosts.ts",
+    "./host-tags": "./lib/host-tags.ts",
     "./captcha-stub": "./lib/captcha-stub.ts",
     "./sign-in": "./lib/sign-in.ts",
     "./live-stand-env": "./lib/live-stand-env.ts",

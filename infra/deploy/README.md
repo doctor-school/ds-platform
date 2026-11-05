@@ -1925,14 +1925,20 @@ As-built (OBS-трек, живьём верифицировано):
 - **Push-агенты:** Alloy на api-prod и data-prod (node-метрики + journald + docker →
   mon; `instance=api-prod`/`data-prod`, `tenant=ds`). Конфиг: `/etc/alloy/config.alloy`;
   креды push — `~/alloy.env` (chmod 600). Read-only docker-socket-proxy на
-  `127.0.0.1:2375`.
+  `127.0.0.1:2375`. Alloy на ds-stage-1 (`instance=ds-stage-1`, `tenant=ds`):
+  node-метрики + journald, без docker-логов. Поставлен тем же штатным установщиком
+  bbm, что и на проде (`infra/monitoring/scripts/install-alloy-host.sh` +
+  `host-config.alloy.tpl`), а не через converge/cloud-init; креды push — тот же
+  общий `~/alloy.env` (chmod 600).
 - **Egress data-prod** к mon идёт через router-NAT, source-IP `72.56.14.72`
-  (в `mon-push-allow.conf` на mon).
+  (в `mon-push-allow.conf` на mon). Egress ds-stage-1 — `200.169.178.154`
+  (`DS_STAGE_IP` в `.env` mon, там же в `mon-push-allow.conf`; bbm #189).
 - **Алерты** `tenant=ds` → канал «DS Мониторинг» (Mattermost; Telegram временно
   недоступен — bbm-side egress-блокер): `S3BackupStale-ds` (pgbackrest
   `ds-prod-pgbackrest` >26ч), `ExternalHttpProbeFailed` (пробы `probe_scope=user_path`)
   и `ApplicationHealthProbeFailed` (`probe_scope=app_health`), `CertExpirySoon-warning`
-  /`-critical`, `HostTelemetryStale-api-prod`/`-data-prod`, `DiskFillHigh` (>85/92%).
+  /`-critical`, `HostTelemetryStale-api-prod`/`-data-prod`, `DiskFillHigh` (>85/92%;
+  покрывает и ds-stage-1). Stale-telemetry-алерта для ds-stage-1 нет.
   Правила — Grafana-managed (`grafana/provisioning/alerting/rules.yaml`), не
   Prometheus-rule-файлы: у Prometheus на mon `rule_files` пуст, поэтому
   `/api/v1/alerts` там всегда пустой — состояние алертов читается из Grafana

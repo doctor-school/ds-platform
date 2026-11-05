@@ -11,8 +11,10 @@ export const metadata: Metadata = {
 
 /**
  * #2478 — the doctor storefront's not-found page: the not-found state of the
- * platform's one error page, inside the storefront frame (an unknown address
- * matches no route group, so the frame is mounted here too). HTTP 404.
+ * platform's one error page, inside the storefront frame, for an address no
+ * route matches: it matches no route group, so the frame is mounted here. A
+ * `notFound()` inside the `(storefront)` group renders
+ * `app/(storefront)/not-found.tsx` inside that group's frame instead. HTTP 404.
  */
 export default function DoctorNotFound() {
   return (

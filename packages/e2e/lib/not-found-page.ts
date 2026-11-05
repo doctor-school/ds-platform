@@ -42,20 +42,27 @@ export const SIGNED_IN_COOKIE = "__Host-ds_session=e2e-doctor";
 /**
  * #2478 — one unknown address on a storefront: HTTP 404, the not-found state
  * (one of the variants' headings, a line, one «На главную» → `/`) inside the
- * storefront shell (header with the viewer's cluster, footer), never Next's
- * English default, no horizontal scroll at the current viewport.
+ * storefront shell — exactly one header (with the viewer's cluster) and one
+ * footer — never Next's English default, no horizontal scroll at the current
+ * viewport. `streamed`: the address's route streams (a loading boundary), so
+ * its status and title are not the not-found page's — the body is asserted.
  */
 export async function expectStorefrontNotFound(
   page: Page,
   path: string,
   viewer: "guest" | "doctor",
+  { streamed = false }: { streamed?: boolean } = {},
 ): Promise<void> {
   const response = await page.goto(path);
-  expect(response?.status(), `HTTP status of ${path}`).toBe(404);
-  await expect(page).toHaveTitle(NOT_FOUND_COPY.pageTitle);
-  await expect(
-    page.locator('meta[name="robots"][content*="noindex"]').first(),
-  ).toHaveAttribute("content", /noindex/u);
+  // A route with a loading boundary commits its status and head before its
+  // `notFound()` runs, so such an address is asserted by its body only.
+  if (!streamed) {
+    expect(response?.status(), `HTTP status of ${path}`).toBe(404);
+    await expect(page).toHaveTitle(NOT_FOUND_COPY.pageTitle);
+    await expect(
+      page.locator('meta[name="robots"][content*="noindex"]').first(),
+    ).toHaveAttribute("content", /noindex/u);
+  }
   await expect(page.locator("h1")).toHaveCount(1);
   await expect(notFoundHeading(page)).toBeVisible();
   const main = page.getByRole("main");
@@ -64,7 +71,11 @@ export async function expectStorefrontNotFound(
     main.getByRole("link", { name: NOT_FOUND_COPY.home, exact: true }),
   ).toHaveAttribute("href", "/");
   await expect(page.locator("body")).not.toContainText("could not be found");
+  // Exactly one shell: a not-found inside a framed route group must not add a
+  // second frame around the one its layout already draws.
+  await expect(page.getByTestId("storefront-header")).toHaveCount(1);
   await expect(page.getByTestId("storefront-header")).toBeVisible();
+  await expect(page.getByTestId("storefront-footer")).toHaveCount(1);
   await expect(page.getByTestId("storefront-footer")).toBeVisible();
   await expect(page.getByTestId("shell-auth-cluster").first()).toHaveAttribute(
     "data-cluster",

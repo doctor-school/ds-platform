@@ -15,6 +15,8 @@ import { expect, test } from "@playwright/test";
  * tier: its upstream double answers the shell's session read by cookie.
  */
 const PATHS = ["/no-such-page-2478", "/materials/no-such-material-2478"];
+// An event slug the events double answers 404 for.
+const EVENT_PATH = "/events/no-such-event-2478";
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
 for (const viewer of ["guest", "doctor"] as const) {
@@ -33,6 +35,18 @@ for (const viewer of ["guest", "doctor"] as const) {
           await expectStorefrontNotFound(page, path, viewer);
         });
       }
+
+      // #2478 — a route's own `notFound()` inside the `(storefront)` group
+      // (the event page on an unknown slug) renders inside the group layout's
+      // frame, never a second one. The route streams (`loading.tsx`), so its
+      // status is not asserted here (follow-up owned by the lead).
+      test(`#2478: ${EVENT_PATH} is the not-found page inside one shell`, async ({
+        page,
+      }) => {
+        await expectStorefrontNotFound(page, EVENT_PATH, viewer, {
+          streamed: true,
+        });
+      });
 
       test("#2478: the not-found page is WCAG 2 A/AA clean and «На главную» opens the home", async ({
         page,

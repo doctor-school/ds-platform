@@ -49,6 +49,7 @@ export type ShellConfigKey =
   | "footerSections"
   | "footerDocumentsTitle"
   | "footerDocuments"
+  | "footerPrivacy"
   | "footerContacts"
   | "footerCrossTitle"
   | "footerCrossLabel"
@@ -130,6 +131,7 @@ export function academyShellConfig(
       documentsTitle: t("footerDocumentsTitle"),
       documents: [
         { label: t("footerDocuments"), href: "/documents" },
+        { label: t("footerPrivacy"), href: "/documents/privacy-policy" },
         { label: t("footerContacts"), href: "/documents#contacts" },
       ],
       cross: {

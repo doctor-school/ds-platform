@@ -63,7 +63,8 @@ export interface StaffMirrorRow {
 export interface GrantCommit {
   sub: string;
   email: string;
-  fullName: string;
+  /** ФИО for a mirror row the grant inserts; `null` when unknown (the 049 operator command). */
+  fullName: string | null;
   /** `users.role` — `mirrorRoleFromClaims` of the account's role set after the grant. */
   mirrorRole: string;
   role: string;
@@ -217,6 +218,16 @@ export class StaffAccessRepository {
    */
   async withRevokeLock<T>(sub: string, run: () => Promise<T>): Promise<T> {
     return this.withAdvisoryLock(`staff-access-revoke:${sub}`, run);
+  }
+
+  /**
+   * 049 EARS-6 — serialize every superadmin removal under one key, so the
+   * last-holder count of one removal always reads the state the previous
+   * removal left (two removals of different accounts otherwise hold different
+   * {@link withRevokeLock} keys and could both count the other as a holder).
+   */
+  async withSuperadminRemovalLock<T>(run: () => Promise<T>): Promise<T> {
+    return this.withAdvisoryLock("superadmin-remove", run);
   }
 
   private async withAdvisoryLock<T>(

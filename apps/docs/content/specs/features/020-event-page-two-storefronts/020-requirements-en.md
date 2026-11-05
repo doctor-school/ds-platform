@@ -357,8 +357,8 @@ These stay open; each is designed around above rather than resolved here, and ea
 
 ## Amendment — 2026-11-05 — a returned-to tab turns guest after a sign-out on the other storefront (source: [#3748](https://github.com/doctor-school/ds-platform/issues/3748), owner decision, chat 2026-11-05)
 
-> **Status:** EARS-23 is live in production, so this is recorded as an amendment rather than an inline rewrite (AGENTS.md §6). The mechanism is feature 003's (003 «Production amendment — a returned-to tab re-checks its session; the cabinet chip navigates by document», EARS-73, EARS-74; implementation [#3749](https://github.com/doctor-school/ds-platform/issues/3749)) and is not restated here.
+> **Status:** EARS-23 is live in production, so this is recorded as an amendment rather than an inline rewrite (AGENTS.md §6). The mechanism is feature 003's (003 EARS-73, EARS-74, in the 003 «Production amendment — a returned-to tab re-checks its session; the cabinet chip navigates by document»; implementation [#3749](https://github.com/doctor-school/ds-platform/issues/3749)) and is not restated here.
 
-**What changes.** EARS-23 is read with 003 EARS-73: besides its next request, an already open signed-in event page of the other storefront turns guest when the doctor returns to it. 003 EARS-74 covers the cabinet chip in such a tab. Verification: 003's rows for EARS-73 and EARS-74.
+**What changes.** EARS-23 is read with 003 EARS-73: besides its next request, an already open signed-in event page of the other storefront turns guest when the doctor returns to it. 003 EARS-74 covers the cabinet chip in such a tab. Verification: the rows of 003 EARS-73 / EARS-74.
 
 **What does not change.** EARS-22, EARS-23 and every other clause of 020.

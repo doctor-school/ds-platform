@@ -250,7 +250,7 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       join(stubs, "curl"),
       [
         'echo "$*" >> "$STUB_DIR/curl.log"',
-        // #3157: compare main...<sha> answers from compare.json, any other base (the
+        // #3157: compare refs/heads/main...<sha> answers from compare.json, any other base (the
         // live prod SHA) from compare-live.json.
         // #2987: the Releases listing answers from releases.json.
         "case ${!#} in */compare/refs/heads/main...*) f=$STUB_DIR/compare.json ;; */releases*) f=$STUB_DIR/releases.json ;; *) f=$STUB_DIR/compare-live.json ;; esac",
@@ -905,7 +905,7 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         log("ds-release.log"),
         new RegExp(`^lease prod ${SHA}$`, "m"),
       );
-      assert.match(log("curl.log"), new RegExp(`/compare/main\\.\\.\\.${SHA}`));
+      assert.match(log("curl.log"), new RegExp(`/compare/refs/heads/main\\.\\.\\.${SHA}`));
     });
 
     it("refuses stage-main and PR slots on the prod box", () => {
@@ -1054,7 +1054,7 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         log("ds-release.log"),
         new RegExp(`^lease prod ${SHA}$`, "m"),
       );
-      assert.match(log("curl.log"), new RegExp(`/compare/main\\.\\.\\.${SHA}`));
+      assert.match(log("curl.log"), new RegExp(`/compare/refs/heads/main\\.\\.\\.${SHA}`));
       assert.match(
         log("docker.log"),
         /^inspect ds-api-prod-api-1 --format \{\{\.Config\.Image\}\}$/m,

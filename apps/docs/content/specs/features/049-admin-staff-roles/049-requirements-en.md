@@ -2,7 +2,7 @@
 title: "049 — Admin staff roles: the superadministrator owns staff access, and a global broadcast director runs events"
 description: "Requirements for two new staff roles in the admin: `superadmin` («Суперадминистратор»), the only role that sees and uses «Доступы» (047) and grants there every staff role but its own, given to its first holder by an audited operator step; and `broadcast_director` («Режиссёр трансляций»), a global role that sees the admin event list, creates and edits events and switches the broadcast status, with every other admin section closed to it server-side and absent from its navigation. Both roles sign in with TOTP and count as staff, not participants."
 slug: 049-admin-staff-roles
-status: Draft
+status: In dev
 issues: [3737, 3739, 3740, 3742, 3743, 3744]
 surface: user-facing
 storefronts: none

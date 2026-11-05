@@ -12,27 +12,22 @@ import { signInAsAdmin } from "@ds/e2e/admin-events";
  *   added to the feed.
  * - EARS-12 — the Academy page of a published news item with a cover, a
  *   partner and a body carrying every allowlisted node; a column without a
- *   cover and without a partner; a draft and an unknown slug are the Academy
- *   not-found page with a real 404.
- * - EARS-17 — `doctor.school/materials/{slug}` is the doctor not-found page and
- *   the doctor home has no rail.
+ *   cover and without a partner.
  *
  * Every rendered surface (both pages in both Academy schemes, the preview
  * panel) also passes an axe WCAG 2 A/AA scan.
  *
- * The read error with «Повторить» needs the api to fail under a running
- * storefront; it is driven by hand on the stand (PR body) and pinned in
- * `apps/portal/app/materials/[slug]/page.test.tsx`.
+ * 048 EARS-11/12/17: retry, draft/unknown404 and Doctor absence now run from
+ * the original feature in `packages/e2e/material-pages.config.ts` (#3702).
+ * The page unit tests remain; this file retains preview and rich articles.
  *
  * Two groups. The EARS-3 preview needs only the admin + api, so it runs
  * wherever the admin flows run — CI `admin-e2e` included. The storefront group
- * (EARS-12 pages, EARS-17 doctor not-found) also needs `E2E_PORTAL_URL` and
- * `E2E_DOCTOR_URL` (the two storefronts proxying to the same api) and skips
- * without them; its CI journeys are tracked by #3517. `E2E_SHOT_DIR` opts into
+ * (EARS-12 rich pages) also needs `E2E_PORTAL_URL` and skips without it;
+ * its remaining CI journeys are tracked by #3517. `E2E_SHOT_DIR` opts into
  * the captures the PR body cites.
  */
 const PORTAL = process.env.E2E_PORTAL_URL;
-const DOCTOR = process.env.E2E_DOCTOR_URL;
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
 const WIDE = { width: 1440, height: 900 };
 const NARROW = { width: 390, height: 844 };
@@ -409,20 +404,19 @@ test.describe("048 reading page — admin preview", () => {
 
 test.describe("048 reading page — storefronts", () => {
   test.skip(
-    !PORTAL || !DOCTOR,
-    "needs E2E_PORTAL_URL and E2E_DOCTOR_URL (the storefronts of this stand); CI journeys: #3517",
+    !PORTAL,
+    "needs E2E_PORTAL_URL (the Academy storefront of this stand); CI journeys: #3517",
   );
   test.describe.configure({ mode: "serial" });
 
   let news: Written;
   let column: Written;
-  let draft: Written;
   const newsTitle = `Открыт набор центров в исследование PRP ${RUN}`;
   const columnTitle = `Ортобиология в России: чего не хватает практике ${RUN}`;
   const partnerName = `Партнёр А ${RUN}`;
   const expertFamily = `Страхов${RUN}`;
 
-  test("seed: published news with cover and partner, a column without either, a draft", async ({
+  test("seed: published news with cover and partner, a column without either", async ({
     page,
   }) => {
     await signInAsAdmin(page);
@@ -468,15 +462,7 @@ test.describe("048 reading page — storefronts", () => {
       expertId: expert.id,
       body: SHORT_BODY,
     });
-    draft = await adminWrite(page, {
-      path: "/v1/admin/materials",
-      payload: {
-        kind: "news",
-        title: `Черновик новости ${RUN}`,
-        body: SHORT_BODY,
-      },
-    });
-    expect(news.slug && column.slug && draft.slug).toBeTruthy();
+    expect(news.slug && column.slug).toBeTruthy();
   });
 
   test("048 EARS-12: a news item with a cover, a partner and every allowlisted node", async ({
@@ -569,42 +555,5 @@ test.describe("048 reading page — storefronts", () => {
     await page.setViewportSize(NARROW);
     await expectNoPageSideScroll(page);
     await shotBothSchemes(page, "page-column-bare-mobile");
-  });
-
-  test("048 EARS-12: a draft and an unknown address are the Academy not-found page with a 404", async ({
-    page,
-  }) => {
-    const unknown = await page.goto(`${PORTAL}/materials/net-takogo-${RUN}`);
-    expect(unknown?.status()).toBe(404);
-    // The not-found content is the Academy's own (its root not-found inside
-    // the root layout's one `<main>`); the header slot is the frame around it.
-    const host404 = await page.locator("main").innerText();
-    const draftPage = await page.goto(`${PORTAL}/materials/${draft.slug}`);
-    expect(draftPage?.status()).toBe(404);
-    await expect(page.getByRole("article")).toHaveCount(0);
-    expect(await page.locator("main").innerText()).toBe(host404);
-    // The same not-found content the Academy renders for any unknown address.
-    const elsewhere = await page.goto(`${PORTAL}/net-takoy-stranicy-${RUN}`);
-    expect(elsewhere?.status()).toBe(404);
-    expect(await page.locator("main").innerText()).toBe(host404);
-    await page.goto(`${PORTAL}/materials/${draft.slug}`);
-    await shot(page, "page-not-found-desktop-light");
-  });
-
-  test("048 EARS-17: doctor.school/materials/{slug} is the doctor not-found page and the doctor home has no rail", async ({
-    page,
-  }) => {
-    const res = await page.goto(`${DOCTOR}/materials/${news.slug}`);
-    expect(res?.status()).toBe(404);
-    await expect(page.getByText(newsTitle)).toHaveCount(0);
-    await expect(page.getByRole("article")).toHaveCount(0);
-    const doctor404 = await page.locator("body").innerText();
-    await page.goto(`${DOCTOR}/net-takoy-stranicy-${RUN}`);
-    expect(await page.locator("body").innerText()).toBe(doctor404);
-    await page.goto(`${DOCTOR}/materials/${news.slug}`);
-    await shot(page, "doctor-materials-not-found-desktop-light");
-    await page.goto(`${DOCTOR}/`);
-    await expect(page.getByText("Новости, блог и видео")).toHaveCount(0);
-    await expect(page.getByText(newsTitle)).toHaveCount(0);
   });
 });

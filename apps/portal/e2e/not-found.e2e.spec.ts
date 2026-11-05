@@ -14,7 +14,14 @@ import { expect, test } from "@playwright/test";
  * Academy shell, HTTP 404 — for a guest and for a signed-in doctor. Backend-free
  * tier: `packages/e2e/doubles/storefront-session-api.mjs` answers the shell's
  * session reads by cookie.
+ *
+ * The file also runs against a live portal (`playwright.config.ts`, a stand
+ * slot's `live/academy/default` tier — `E2E_PORTAL_URL` set), where the shell
+ * reads the real API: the fake `SIGNED_IN_COOKIE` is no session there, so the
+ * signed-in viewer runs only on the backend-free tier, whose session double
+ * answers it (#3764). The guest viewer runs on both tiers unchanged.
  */
+const LIVE_PORTAL = Boolean(process.env.E2E_PORTAL_URL);
 // Addresses no route answers. A known route's own `notFound()` (an unknown
 // material or event slug) needs the API's 404 and is driven on a stand slot by
 // `packages/e2e` (material-pages, public-event visibility/originals).
@@ -25,6 +32,10 @@ for (const viewer of ["guest", "doctor"] as const) {
   for (const width of [1280, 390]) {
     test.describe(`${viewer} at ${width}px`, () => {
       test.use({ viewport: { width, height: 844 } });
+      test.skip(
+        viewer === "doctor" && LIVE_PORTAL,
+        "the signed-in cookie is answered only by the backend-free tier's session double",
+      );
       test.beforeEach(async ({ page }) => {
         if (viewer === "doctor")
           await page.setExtraHTTPHeaders({ cookie: SIGNED_IN_COOKIE });

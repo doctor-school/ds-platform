@@ -652,24 +652,24 @@ test.describe("047 / 049 «Доступы» — a superadministrator grants staf
       "doctor_guest",
     ]);
 
-    // V-9: «Доступы» with the superadministrator and director rows on it.
-    await admin
-      .getByRole("searchbox", { name: "Поиск по ФИО и почте" })
-      .fill("");
-    await expect(
-      admin.locator("tr", { hasText: "Суперадминистратор" }).first(),
-    ).toBeVisible();
-    await expect(
-      admin.locator("tr", { hasText: "Режиссёр трансляций" }).first(),
-    ).toBeVisible();
-    const results = await new AxeBuilder({ page: admin })
-      .withTags(WCAG_TAGS)
-      .analyze();
-    const summary = results.violations.map(
-      (v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,
-    );
-    expect(summary, "axe violations on «Доступы»").toEqual([]);
+    // V-9: «Доступы» is axe-clean showing the director row and, after the
+    // section's search (the list pages, so a row is found the way an
+    // administrator finds it), the superadministrator row.
+    const axeViolations = async (): Promise<string[]> => {
+      const results = await new AxeBuilder({ page: admin })
+        .withTags(WCAG_TAGS)
+        .analyze();
+      return results.violations.map(
+        (v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,
+      );
+    };
+    expect(await axeViolations(), "axe violations on «Доступы»").toEqual([]);
     await evidenceShot(admin, "staff-access-list-director");
+    const superadminRows = await rowOf(admin, adminAccount.email);
+    await expect(
+      superadminRows.filter({ hasText: "Суперадминистратор" }),
+    ).toHaveCount(1);
+    expect(await axeViolations(), "axe violations on «Доступы»").toEqual([]);
 
     // The director signs in with the temporary password and enrols TOTP (011).
     const context = await browser.newContext({ locale: "ru-RU" });

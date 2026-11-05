@@ -127,6 +127,8 @@ export async function readRenderedStructure(
   }
   await toggle.click();
   const open = await visibleItems(page, region.root);
+  // Assumes the ≡ panel is always in the DOM (CSS-toggled), so querySelectorAll
+  // indexes stay stable between the closed and open reads.
   const before = new Set(closed.map((i) => i.index));
   await toggle.click();
   return {

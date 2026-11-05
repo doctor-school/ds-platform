@@ -475,7 +475,7 @@ export function diffStructures(canvas: RegionStructure, app: RegionStructure): s
     const want = canvas[container].map(keyOf);
     const have = app[container].map(keyOf);
     let unmatchedHave = [...have];
-    let common: string[] = [];
+    const common: string[] = [];
     for (const key of want) {
       if (unmatchedHave.includes(key)) {
         unmatchedHave = without(unmatchedHave, key);
@@ -486,9 +486,19 @@ export function diffStructures(canvas: RegionStructure, app: RegionStructure): s
         lines.push(`missing in app (${container}): ${key}`);
       }
     }
+    // An occurrence the other container lacks was already reported as «wrong
+    // container» from that side; only that many are suppressed here.
+    const count = (keys: string[], key: string) => keys.filter((k) => k === key).length;
+    const wantOther = canvas[other[container]].map(keyOf);
+    const haveOther = app[other[container]].map(keyOf);
+    const suppressed = new Map<string, number>();
     for (const key of unmatchedHave) {
-      // Already reported as «wrong container» from the other side.
-      if (canvas[other[container]].map(keyOf).includes(key)) continue;
+      const lacking = Math.max(0, count(wantOther, key) - count(haveOther, key));
+      const used = suppressed.get(key) ?? 0;
+      if (used < lacking) {
+        suppressed.set(key, used + 1);
+        continue;
+      }
       lines.push(`extra in app (${container}): ${key}`);
     }
     // Order over the items both sides have in this container.
@@ -503,7 +513,6 @@ export function diffStructures(canvas: RegionStructure, app: RegionStructure): s
         `order (${container}): canvas [${common.join(", ")}] · app [${appOrder.join(", ")}]`,
       );
     }
-    common = [];
   }
   return lines;
 }

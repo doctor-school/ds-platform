@@ -33,7 +33,7 @@
         "label": "Поиск по урокам, школам и событиям"
       },
       "decision": "The doctor-host search submits to the events listing (the one surface that answers a query until the results surface #1492 ships), so the placeholder names what it finds; the canvas text promises lessons and schools that this search does not return.",
-      "source": "Owner decision in the session chat on 2026-11-05 (PR #3703, Issue #3682): keep «Поиск по эфирам»; apps/doctor/lib/shell-config.ts search"
+      "source": "Owner decision recorded at https://github.com/doctor-school/ds-platform/issues/3682#issuecomment-6649178384: keep «Поиск по эфирам»; apps/doctor/lib/shell-config.ts search"
     },
     {
       "canvas": "ds-shell.dc.html",
@@ -41,7 +41,7 @@
       "delta": "extra",
       "item": { "kind": "input", "label": "Поиск по эфирам" },
       "decision": "The doctor-host search submits to the events listing (the one surface that answers a query until the results surface #1492 ships), so the placeholder names what it finds; the canvas text promises lessons and schools that this search does not return.",
-      "source": "Owner decision in the session chat on 2026-11-05 (PR #3703, Issue #3682): keep «Поиск по эфирам»; apps/doctor/lib/shell-config.ts search"
+      "source": "Owner decision recorded at https://github.com/doctor-school/ds-platform/issues/3682#issuecomment-6649178384: keep «Поиск по эфирам»; apps/doctor/lib/shell-config.ts search"
     }
   ]
 }

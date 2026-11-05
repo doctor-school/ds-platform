@@ -138,6 +138,18 @@ describe("canvas-structure · diffStructures", () => {
     ]);
   });
 
+  it("an item in both containers is extra where the canvas has it only once", () => {
+    const canvas: RegionStructure = {
+      bar: [link("Лого")],
+      menu: [link("Эфиры"), link("Войти")],
+    };
+    const app: RegionStructure = {
+      bar: [link("Лого"), link("Войти")],
+      menu: [link("Эфиры"), link("Войти")],
+    };
+    expect(diffStructures(canvas, app)).toEqual(["extra in app (bar): link «Войти»"]);
+  });
+
   it("reports missing, extra and order separately", () => {
     const app: RegionStructure = {
       bar: [{ kind: "button", label: null }, link("Лого"), link("Чужое")],

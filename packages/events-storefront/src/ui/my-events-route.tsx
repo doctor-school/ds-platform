@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import {
   type MyEventsTab,
   forwardedSessionFrom,
+  guestBounceMarker,
   withReturnTarget,
 } from "@ds/schemas";
 import { Container } from "@ds/design-system/container";
@@ -60,17 +61,20 @@ export async function MyEventsRoute({
     forwardedSessionFrom(await headers()),
     tab,
   );
-  if (!result.authenticated) {
-    redirect(
-      withReturnTarget(config.routes.login, config.routes.accountEvents),
-    );
-  }
+  const bounce = withReturnTarget(
+    config.routes.login,
+    config.routes.accountEvents,
+  );
+  if (!result.authenticated) redirect(bounce);
 
   const { data, counts } = result.events;
   const recordings = tab === "recordings";
 
   return (
     <div className="bg-background text-foreground">
+      {/* 003 EARS-73 — the same bounce, declared for the shell's return
+          re-check: a tab returned to after a sign-out takes it by document. */}
+      <span {...guestBounceMarker(bounce)} />
       <header className="bg-header text-header-foreground">
         <Container className="py-10 layout:py-16">
           {/* No page-level time zone line: each time carries its own zone label

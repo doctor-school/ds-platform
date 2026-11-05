@@ -71,4 +71,20 @@ describe("014 EARS-6: the account cabinet decides the guest on the server", () =
     expect(tree).toBeTruthy();
     expect(redirect).not.toHaveBeenCalled();
   });
+
+  it("003 EARS-73: the signed-in render declares the cabinet's own guest bounce for the return re-check", async () => {
+    resolveServerAuth.mockResolvedValue({
+      status: "doctor",
+      claims: { sub: "1", roles: ["doctor_guest"], mfa: false },
+    });
+    const tree = (await AccountPage({ config: CONFIG })) as {
+      props: { children: { type: unknown; props: Record<string, unknown> }[] };
+    };
+    const marker = tree.props.children[0]!;
+    expect(marker.type).toBe("span");
+    expect(marker.props).toEqual({
+      "data-guest-bounce": "/login?returnTo=%2Faccount",
+      hidden: true,
+    });
+  });
 });

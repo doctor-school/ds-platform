@@ -1,9 +1,16 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { StorefrontHeader } from "@ds/storefront-shell";
 import type { ServerAuth } from "@ds/auth-flow/server";
 import { doctorShellAuthState } from "@/lib/auth-flow-routes";
 import { doctorShellConfig } from "@/lib/shell-config";
+
+// 003 EARS-73 — the signed-in cluster mounts the return re-check island, whose
+// `useRouter` needs an App Router; this static render has none.
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({ refresh: () => undefined }),
+}));
 
 const DOCTOR_SHELL = doctorShellConfig("https://academy.doctor.school");
 

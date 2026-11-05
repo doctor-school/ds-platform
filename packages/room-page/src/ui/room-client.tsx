@@ -12,6 +12,7 @@ import {
   type RoomShellServerProps,
 } from "@ds/room";
 import { initialsFromDisplayName } from "@ds/room/display-name";
+import { guestBounceMarker } from "@ds/schemas";
 import { HeaderUserCluster } from "@ds/storefront-shell/user-cluster";
 
 /**
@@ -35,6 +36,9 @@ export interface RoomClientProps extends Omit<
 > {
   /** The doctor's saved display name, or `null` → the EARS-14 JIT prompt. */
   displayName: string | null;
+  /** The room's own guest bounce (its route table's login, carrying the room
+   *  return) — declared for the shell's return re-check (003 EARS-73). */
+  guestBounce: string;
 }
 
 export function RoomClient({
@@ -44,6 +48,7 @@ export function RoomClient({
   copy,
   routes,
   displayName,
+  guestBounce,
 }: RoomClientProps) {
   const router = useRouter();
 
@@ -60,46 +65,56 @@ export function RoomClient({
     [copy],
   );
 
+  // 003 EARS-73 — the room bounces a guest on the server to `guestBounce`, so a
+  // tab returned to after a sign-out takes that same bounce by document.
+  const marker = <span {...guestBounceMarker(guestBounce)} />;
+
   // 006 EARS-14 — the JIT «Имя и фамилия» step. The name persists, then the
   // server page re-renders with it and the room composes on the next pass.
   if (displayName === null) {
     return (
-      <DisplayNamePrompt
-        copy={copy}
-        api={api}
-        onSaved={() => router.refresh()}
-      />
+      <>
+        {marker}
+        <DisplayNamePrompt
+          copy={copy}
+          api={api}
+          onSaved={() => router.refresh()}
+        />
+      </>
     );
   }
 
   return (
-    <RoomShell
-      slug={slug}
-      config={config}
-      context={context}
-      copy={roomCopy}
-      routes={routes}
-      displayName={displayName}
-      linkComponent={Link}
-      userCluster={
-        // 006 EARS-12 / EARS-15 — the storefront chrome: the theme toggle plus
-        // the doctor's initials chip, the SAME `HeaderUserCluster` the shell
-        // header mounts (owner directive 2026-07-23 — one presentation source of
-        // truth, toggle LEFT, chip RIGHTMOST). The room unit renders this node
-        // verbatim in its one chrome slot. The initials come ONLY from the real
-        // saved name — the prompt branch above guarantees there is one.
-        <HeaderUserCluster
-          className="order-first gap-5 layout:order-none"
-          themeToggleLabels={{
-            toDark: copy.themeToggle,
-            toLight: copy.themeToggle,
-          }}
-          profileLabel={roomCopy.avatarLabel(displayName)}
-          initials={initialsFromDisplayName(displayName)}
-          profileTestId="room-avatar"
-          profileClassName="hidden layout:inline-flex"
-        />
-      }
-    />
+    <>
+      {marker}
+      <RoomShell
+        slug={slug}
+        config={config}
+        context={context}
+        copy={roomCopy}
+        routes={routes}
+        displayName={displayName}
+        linkComponent={Link}
+        userCluster={
+          // 006 EARS-12 / EARS-15 — the storefront chrome: the theme toggle plus
+          // the doctor's initials chip, the SAME `HeaderUserCluster` the shell
+          // header mounts (owner directive 2026-07-23 — one presentation source of
+          // truth, toggle LEFT, chip RIGHTMOST). The room unit renders this node
+          // verbatim in its one chrome slot. The initials come ONLY from the real
+          // saved name — the prompt branch above guarantees there is one.
+          <HeaderUserCluster
+            className="order-first gap-5 layout:order-none"
+            themeToggleLabels={{
+              toDark: copy.themeToggle,
+              toLight: copy.themeToggle,
+            }}
+            profileLabel={roomCopy.avatarLabel(displayName)}
+            initials={initialsFromDisplayName(displayName)}
+            profileTestId="room-avatar"
+            profileClassName="hidden layout:inline-flex"
+          />
+        }
+      />
+    </>
   );
 }

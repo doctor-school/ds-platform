@@ -29,6 +29,8 @@ let pathname = "/";
 const usePathnameSpy = vi.fn(() => pathname);
 vi.mock("next/navigation", () => ({
   usePathname: () => usePathnameSpy(),
+  // 003 EARS-73: the signed-in cluster mounts the return re-check island.
+  useRouter: () => ({ refresh: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
 

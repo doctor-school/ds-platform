@@ -104,6 +104,22 @@ describe("014 EARS-6: /account/events sends a guest to the door WITH its return 
   });
 });
 
+describe("003 EARS-73: /account/events declares its own guest bounce", () => {
+  it("003 EARS-73: the signed-in render carries this page's bounce for the return re-check", async () => {
+    fetchMyEvents.mockResolvedValue({
+      authenticated: true,
+      events: { data: [], counts: { upcoming: 0, recordings: 0 } },
+    });
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const html = renderToStaticMarkup(
+      await MyEventsPage({ searchParams: Promise.resolve({}) }),
+    );
+    expect(html).toContain(
+      '<span data-guest-bounce="/login?returnTo=%2Faccount%2Fevents" hidden=""></span>',
+    );
+  });
+});
+
 describe("004 EARS-12 «Мои события» times (gate row 26)", () => {
   it("004 EARS-12: the page header carries no page-level time zone line — each time carries its own zone", async () => {
     fetchMyEvents.mockResolvedValue({

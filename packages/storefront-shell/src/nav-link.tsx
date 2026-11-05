@@ -12,6 +12,34 @@ import type { ShellLink } from "./config";
  * the cluster — a mutual import would be the only alternative.
  */
 
+/**
+ * 003 EARS-74 — a link into the cabinet (`/account` and below) navigates by a
+ * top-level document request, the pattern of the guest link (EARS-61): a router
+ * link RSC-fetches the route, and with a revoked session commits its guest
+ * `redirect()` as an empty page before the sign-in host (#3748). Every other
+ * nav target renders a guest view and stays a client-router link.
+ */
+export function isCabinetHref(href: string): boolean {
+  return /^\/account(?:[/?#]|$)/.test(href);
+}
+
+/**
+ * The anchor of one nav item, returned as ONE element so the DS `Link`'s
+ * `asChild` slot merges its classes onto it: a document `<a>` into the cabinet,
+ * else `next/link`.
+ */
+function navAnchor(item: ShellLink, testId: string | undefined) {
+  return isCabinetHref(item.href) ? (
+    <a href={item.href} data-testid={testId}>
+      {item.label}
+    </a>
+  ) : (
+    <NextLink href={item.href} data-testid={testId}>
+      {item.label}
+    </NextLink>
+  );
+}
+
 /** Desktop on-navy link — the muted tier of the canvas, with the press step one
  *  VISIBLE step below the resting tier via ELEMENT opacity (#270), and the press
  *  colour re-anchored off the DS default (`primary-action` IS the band colour, so
@@ -25,9 +53,7 @@ export function HeaderNavLink({
 }) {
   return (
     <DsLink asChild tone="header-nav">
-      <NextLink href={item.href} data-testid={testId}>
-        {item.label}
-      </NextLink>
+      {navAnchor(item, testId)}
     </DsLink>
   );
 }
@@ -43,9 +69,7 @@ export function MobileNavRow({
 }) {
   return (
     <DsLink asChild tone="neutral" variant="mobile-nav-row" size="sm">
-      <NextLink href={item.href} data-testid={testId}>
-        {item.label}
-      </NextLink>
+      {navAnchor(item, testId)}
     </DsLink>
   );
 }

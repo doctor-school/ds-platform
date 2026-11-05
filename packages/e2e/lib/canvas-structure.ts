@@ -283,6 +283,12 @@ interface ResolvedElement {
   tag: string;
   attrs: Record<string, unknown>;
   children: ResolvedNode[];
+  /**
+   * #3757 — set on each top-level element one `sc-for` iteration produced: the
+   * loop alias (`as`) and a per-canvas iteration id, so a slot reader can take
+   * one iteration as one repeated item. The innermost loop wins.
+   */
+  repeat?: { alias: string; iteration: number };
 }
 type ResolvedNode = ResolvedElement | TextNode | CommentNode;
 
@@ -302,6 +308,8 @@ function makeEvaluator(context: vm.Context, vals: Record<string, unknown>) {
     return fn({ ...vals, ...scope });
   };
 }
+
+let iterationSeq = 0;
 
 function expand(
   nodes: TemplateNode[],
@@ -336,7 +344,11 @@ function expand(
       const items = list ? evaluate(list[1]!, scope) : [];
       const alias = node.attrs.as ?? "item";
       for (const item of Array.isArray(items) ? items : []) {
-        out.push(...expand(node.children, evaluate, { ...scope, [alias]: item }));
+        const iteration = (iterationSeq += 1);
+        for (const child of expand(node.children, evaluate, { ...scope, [alias]: item })) {
+          if (child.type === "el" && !child.repeat) child.repeat = { alias, iteration };
+          out.push(child);
+        }
       }
       continue;
     }

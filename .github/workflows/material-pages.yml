@@ -1,0 +1,83 @@
+name: Material reading originals
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - "apps/portal/**"
+      - "apps/doctor/**"
+      - "apps/docs/content/specs/features/048-materials-feed/**"
+      - "packages/**"
+      - ".github/workflows/material-pages.yml"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "tsconfig*.json"
+      - ".nvmrc"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: material-pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  material-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TURBO_TELEMETRY_DISABLED: 1
+      E2E_MATERIAL_DATABASE_URL: postgres://ds:ds@127.0.0.1:5432/ds_probe_3702
+      E2E_PUBLIC_LOG: 1
+    steps:
+      - name: Set owned runtime paths on the allocated runner
+        run: |
+          echo "E2E_MATERIAL_ARTIFACT_DIR=$RUNNER_TEMP/material-pages-3702" >> "$GITHUB_ENV"
+          echo "E2E_REPORT_DIR=$RUNNER_TEMP/material-pages-3702/report" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Build the real API and both production storefronts
+        run: pnpm exec turbo run build --filter=@ds/api --filter=@ds/portal --filter=@ds/doctor
+      - name: Start the disposable Postgres and migrate its owned database
+        run: |
+          set -euo pipefail
+          mkdir -p "$E2E_MATERIAL_ARTIFACT_DIR"
+          printf '%s\n' '{"command":"build data-layer PG17 image and start job-owned Postgres","database":"ds_probe_3702"}' >> "$E2E_MATERIAL_ARTIFACT_DIR/stand-ops-3702.log"
+          docker build -t ds-material-pages-postgres infra/dev-stand/postgres
+          docker run -d --name ds-material-pages-postgres --network host \
+            -e POSTGRES_USER=ds -e POSTGRES_PASSWORD=ds -e POSTGRES_DB=ds_probe_3702 \
+            ds-material-pages-postgres
+          ready=false
+          for i in $(seq 1 30); do
+            if docker exec ds-material-pages-postgres pg_isready -U ds -d ds_probe_3702; then ready=true; break; fi
+            sleep 1
+          done
+          test "$ready" = true
+          printf '%s\n' '{"command":"pnpm --filter @ds/api drizzle:migrate:ci","database":"ds_probe_3702"}' >> "$E2E_MATERIAL_ARTIFACT_DIR/stand-ops-3702.log"
+          DATABASE_URL="$E2E_MATERIAL_DATABASE_URL" pnpm --filter @ds/api drizzle:migrate:ci
+      - run: pnpm --filter @ds/e2e exec playwright install --with-deps chromium
+      - name: Run the three canonical reading-page originals
+        run: |
+          pnpm --filter @ds/e2e exec bddgen --config material-pages.config.ts
+          pnpm --filter @ds/e2e exec playwright test --config material-pages.config.ts
+          pnpm --filter @ds/e2e exec tsx material-pages/assert-report.ts "$E2E_REPORT_DIR/results.json"
+      - name: Remove only the job-owned Postgres container
+        if: always()
+        run: |
+          mkdir -p "$E2E_MATERIAL_ARTIFACT_DIR"
+          printf '%s\n' '{"command":"docker rm -f ds-material-pages-postgres","scope":"exact job-owned ephemeral container"}' >> "$E2E_MATERIAL_ARTIFACT_DIR/stand-ops-3702.log"
+          if docker container inspect ds-material-pages-postgres >/dev/null 2>&1; then
+            docker rm -f ds-material-pages-postgres
+          fi
+      - name: Upload exact-three browser evidence and resource log
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: material-pages-3702
+          path: ${{ runner.temp }}/material-pages-3702
+          retention-days: 14

@@ -8,6 +8,7 @@
     "*.ts",
     "steps/**/*.ts",
     "api-probes/**/*.ts",
+    "material-pages/**/*.ts",
     "derived/**/*.ts",
     "lib/**/*.ts",
     "sign-in-host/**/*.ts",

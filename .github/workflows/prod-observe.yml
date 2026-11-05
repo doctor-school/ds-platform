@@ -7,6 +7,7 @@ name: Prod observe
 #
 #   gh workflow run prod-observe.yml --ref main -f verb=schema
 #   gh workflow run prod-observe.yml --ref main -f verb=rehearse -f sha=<40-hex main SHA>
+#   gh workflow run prod-observe.yml --ref main -f verb=observe -f name=table-rows -f params='{"table":"users"}'
 #   pnpm prod:read <run-id>            # or: pnpm prod:schema-drift <run-id>
 #
 # The key reaches only ds-read-entrypoint on ds-api-prod (forced command). The job

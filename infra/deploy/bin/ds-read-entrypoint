@@ -13,12 +13,12 @@
 # arguments and would serve the full deploy verb set to the read key. Old trees never
 # write this path, and this file never execs or sources ds-deploy-entrypoint; the only
 # box programs it runs are `ds-release check prod` (fixed words) and, over the hop key,
-# the data entrypoint's `check`, `read-schema`, `rehearse`, `rehearsal-status` and the
+# the data entrypoint's `check`, `read-schema`, `read-observe`, `rehearse`, `rehearsal-status` and the
 # recovery verbs (an older data entrypoint rejects them: fail-closed), and ds-recovery
 # (#3662).
 #
 # It serves READ_VERBS below on the prod box only and rejects every other verb with
-# exit 2. `schema`, `rehearse` and `rehearsal-status` leave as CMS ciphertext to the recipient certificate installed
+# exit 2. `schema`, `observe`, `rehearse` and `rehearsal-status` leave as CMS ciphertext to the recipient certificate installed
 # with the tooling tree (READ_RECIPIENT), never plaintext: the client's stdout is a
 # public Actions artifact. `capabilities` answers its verb list; `recovery-bundle` and
 # `recovery-check` (#3662) answer status lines only (RECOVERY_LINE_RE): no value, no
@@ -68,7 +68,14 @@ accepted() { logger -t "$TAG" -p auth.info "accepted: $(sanitised)" || true; }
 # The verbs it serves (spec §8 (g): S1 serves `capabilities` and `schema`; #3662 adds
 # the key custody); prod-observe.yml / recovery-custody.yml refuse a verb
 # `capabilities` does not name.
-READ_VERBS='capabilities schema rehearse rehearsal-status recovery-bundle recovery-check'
+READ_VERBS='capabilities schema observe rehearse rehearsal-status recovery-bundle recovery-check'
+# #3647: `observe <name>` — the name of a PROD_OBSERVATIONS entry (the data entrypoint's
+# catalogue checks it and every parameter again), the parameters one JSON object of at
+# most MAX_OBSERVE_PARAMS_BYTES on stdin. The data box's rejections of a name or a
+# parameter (exit 2) reach the client as the same exit with their fixed reason.
+OBSERVE_NAME_RE='^[a-z][a-z0-9-]{0,39}$'
+MAX_OBSERVE_PARAMS_BYTES=4096
+OBSERVE_REJECT_RE='^(unknown observation|bad parameters for [a-z][a-z0-9-]{0,39}|the parameters exceed 4096 bytes|the parameters are not one JSON object)$'
 SHA_RE='^[0-9a-f]{40}$'
 # The fixed failure reasons of a read (exit 1), the same list as the data
 # entrypoint's; a reason from the data box outside it reaches the client as
@@ -174,7 +181,12 @@ read_encrypted() {
       reason=$(sed -n "s/^$DATA_TAG: //p" "$read_work/stderr" | tail -n 1)
       read_fail "$(read_reason "$reason")"
       ;;
-    2 | 3) refuse "ds-data-prod does not serve $data_verb (the next release installs it)" ;;
+    2)
+      reason=$(sed -n "s/^$DATA_TAG: rejected: //p" "$read_work/stderr" | tail -n 1)
+      [[ $data_verb == read-observe && $reason =~ $OBSERVE_REJECT_RE ]] && reject "$reason"
+      refuse "ds-data-prod does not serve $data_verb (the next release installs it)"
+      ;;
+    3) refuse "ds-data-prod does not serve $data_verb (the next release installs it)" ;;
     124) read_fail "the read timed out" ;;
     *) read_fail "the read failed" ;;
   esac
@@ -184,6 +196,18 @@ read_encrypted() {
     -out "$read_work/result.cms" "$READ_RECIPIENT" >/dev/null 2>&1 ||
     refuse "openssl cannot encrypt to the recipient certificate"
   cat -- "$read_work/result.cms"
+}
+
+# observe's parameters (#3647): at most MAX_OBSERVE_PARAMS_BYTES, one JSON object (empty
+# reads as {}), into the root-only work dir; the data box checks every field.
+observe_params() {
+  local size
+  read_workdir
+  head -c "$((MAX_OBSERVE_PARAMS_BYTES + 1))" >"$read_work/params.json"
+  size=$(stat -c %s -- "$read_work/params.json")
+  ((size <= MAX_OBSERVE_PARAMS_BYTES)) || reject "the parameters exceed $MAX_OBSERVE_PARAMS_BYTES bytes"
+  python3 -I -c 'import json,sys; raw=open(sys.argv[1],"rb").read(); sys.exit(0 if not raw.strip() or isinstance(json.loads(raw), dict) else 1)' \
+    "$read_work/params.json" 2>/dev/null || reject "the parameters are not one JSON object"
 }
 
 # --- the migration rehearsal (Issue #3648; spec §5 «Migration rehearsal.») ----------
@@ -361,6 +385,8 @@ verb=${words[0]-}
 
 case "$verb" in
   capabilities | schema | recovery-bundle | recovery-check) [[ ${#words[@]} -eq 1 ]] || reject "usage: $verb" ;;
+  observe)
+    [[ ${#words[@]} -eq 2 && ${words[1]} =~ $OBSERVE_NAME_RE ]] || reject "usage: observe <name>" ;;
   rehearse | rehearsal-status)
     [[ ${#words[@]} -eq 2 && ${words[1]} =~ $SHA_RE ]] || reject "usage: $verb <sha> (the full 40-hex commit id)" ;;
   *) reject "unknown read command (allowed: ${READ_VERBS// /, })" ;;
@@ -375,6 +401,11 @@ case "$verb" in
     sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
     read_release_check
     read_encrypted read-schema </dev/null ;;
+  observe)
+    sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
+    observe_params
+    read_release_check
+    read_encrypted "read-observe ${words[1]}" "$read_work/params.json" </dev/null ;;
   rehearse)
     sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
     read_release_check

@@ -41,6 +41,8 @@ export const DATA_VERBS = [
  */
 export const DATA_READ_VERBS = [
   "read-schema",
+  // #3647: one named aggregate read of PROD_OBSERVATIONS (spec §5 «Prod read verbs.» → `observe <name>`).
+  "read-observe",
   // #3648: the migration rehearsal (spec §5 «Migration rehearsal.»).
   "rehearse",
   "rehearsal-status",

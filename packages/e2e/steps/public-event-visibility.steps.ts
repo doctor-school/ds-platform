@@ -2,6 +2,7 @@ import { golden } from "@ds/db/seed/golden";
 import { expect, type APIRequestContext } from "@playwright/test";
 
 import { reachFeedCard } from "../lib/feed-card.js";
+import { maskNotFoundVariant, notFoundHeading } from "../lib/not-found-page.js";
 import { redirectsBesidesSilentCheck } from "../lib/silent-check.js";
 import { Given, Then, When, type StepWorld } from "./support/fixtures.js";
 
@@ -163,18 +164,15 @@ When(
         "not-found stays in place",
       ).toEqual([]);
       await expect(page).toHaveURL((url) => url.pathname === path);
-      await expect(
-        page.getByRole("heading", { name: "404", exact: true }),
-      ).toBeVisible();
+      await expect(notFoundHeading(page)).toBeVisible();
       await expect(page.locator("body")).not.toContainText(DRAFT_TITLE);
       await expect(
         page.locator('meta[name="robots"][content*="noindex"]').first(),
       ).toHaveAttribute("content", /noindex/u);
       notFoundText.push(
-        await page
-          .getByRole("heading", { name: "404", exact: true })
-          .locator("..")
-          .innerText(),
+        maskNotFoundVariant(
+          await notFoundHeading(page).locator("..").innerText(),
+        ),
       );
     }
     expect(notFoundText[0]).toMatch(/\S/u);
@@ -185,9 +183,7 @@ When(
 Then(
   "both event pages render the same not-found response without draft content",
   async ({ page }) => {
-    await expect(
-      page.getByRole("heading", { name: "404", exact: true }),
-    ).toBeVisible();
+    await expect(notFoundHeading(page)).toBeVisible();
     await expect(page.locator("body")).not.toContainText(DRAFT_TITLE);
     await expect(
       page.locator('meta[name="robots"][content*="noindex"]').first(),

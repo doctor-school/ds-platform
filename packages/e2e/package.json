@@ -15,6 +15,7 @@
     "./stand-http-credentials": "./lib/stand-http-credentials.ts",
     "./account-auth-paths": "./lib/account-auth-paths.ts",
     "./storefront-entry": "./lib/storefront-entry.ts",
+    "./not-found-page": "./lib/not-found-page.ts",
     "./sign-in-host-api": "./lib/sign-in-host-api.ts",
     "./storefront-entry-watch": "./lib/storefront-entry-watch.ts",
     "./admin-events": "./admin/index.ts",
@@ -43,6 +44,7 @@
   },
   "dependencies": {
     "@ds/db": "workspace:*",
-    "@ds/legal-content": "workspace:*"
+    "@ds/legal-content": "workspace:*",
+    "@ds/storefront-shell": "workspace:*"
   }
 }

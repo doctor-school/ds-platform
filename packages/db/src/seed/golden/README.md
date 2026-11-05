@@ -232,6 +232,8 @@ two as the week boundary moves.
 | `project_experts`                   | 53                | 50 `active` · 3 `retired`; 15 `curator` (exactly one active curator per project) · 38 `member`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `project_organisations`             | 31                | 29 `active` · 2 `retired`; 15 `is_primary` — at most one per project — and 16 secondary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `project_results`                   | 26                | 030 EARS-2: two ordered results (positions 0–1) on every published project but `publishedNoResults` — a `school` gets Школа + Курс (10 each), a `media` project Подкаст + Событие (3 each); kinds are migration 0055's seed rows; no storefront link (the editor refuses a link off the stand's own `DOCTOR_PUBLIC_ORIGIN`)                                                                                                                                                                                                                                                   |
+| `materials`                         | 1                 | 048 EARS-11: `golden.materials.published` — one `published` news item (no expert, no partner, no cover) whose body exercises the 048 allowlist: paragraph, heading, bullet list, bold, italic, link; the address the stage route walk resolves `/materials/[slug]` to                                                                                                                                                                                                                                                                                                         |
+| `feed_entries`                      | 1                 | 048 EARS-4: that material's `academy` card, as the own-materials feed source writes it; `published_at` is the material's `first_published_at`, both set-once on a re-run                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 Design rules this half obeys, each locked by a `#2213:` test in `golden.spec.ts`:
 
@@ -331,8 +333,10 @@ The seed order follows the chain: `directions` and `organisations` are written
 before `events`, and every link table (`organisation_role_assignments`,
 `direction_specialties`, `direction_adjacency`, `event_directions`,
 `project_experts`, `project_organisations`) after both of its parents; `project_results`
-comes last, conflicting on its `(project_id, position)` slot because the result
-editor replaces a set with fresh ids. `resolveDirectionSpecialtyRows` maps the authored specialty NAMES onto
+follows, conflicting on its `(project_id, position)` slot because the result
+editor replaces a set with fresh ids. `materials` and then `feed_entries` close
+the order; a card conflicts on its `(source_platform, source_ref)` key, because an
+unpublish → publish on a stand re-creates it with a fresh id. `resolveDirectionSpecialtyRows` maps the authored specialty NAMES onto
 the seeded book's ids and fails loudly on a name the book does not carry — a
 link table silently short of rows is the empty feed again, one level down.
 

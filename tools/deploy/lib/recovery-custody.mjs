@@ -68,3 +68,26 @@ export function scheduledVerb(schedule, crons) {
   if (schedule === crons.check) return "recovery-check";
   return null;
 }
+
+// Pinned equal to ds-recovery's RECIPIENT_RE and MIN_RECIPIENTS by the tests: native
+// X25519 recipients only, at least two distinct.
+export const RECIPIENT_RE = /^age1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$/;
+export const MIN_RECIPIENTS = 2;
+
+/**
+ * ds-recovery's custodian gate (check_custodians) on the committed custodians.txt:
+ * `count` distinct native recipients, `invalid` other non-comment lines, `ready` when
+ * the box would accept the file. Counts only — no recipient leaves this function.
+ */
+export function custodianGate(text) {
+  const seen = new Set();
+  let invalid = 0;
+  for (const raw of String(text).split("\n")) {
+    const line = raw.replace(/\r$/, "");
+    if (!line.trim() || /^\s*#/.test(line)) continue;
+    if (RECIPIENT_RE.test(line)) seen.add(line);
+    else invalid += 1;
+  }
+  const count = seen.size;
+  return { count, invalid, ready: invalid === 0 && count >= MIN_RECIPIENTS };
+}

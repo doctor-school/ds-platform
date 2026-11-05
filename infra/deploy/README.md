@@ -55,8 +55,8 @@ infra/deploy/
     stg-infra/        STAGE stand shared services — see «Staging box» below
   stage.env.example   /etc/ds-platform/stage.env template (STAGE box; sinks and the
                       stand's own captcha keys only, never a production credential)
-  RECOVERY.md         recovery after host loss: key manifest, owner-held recovery
-                      bundle (age), restore proof, full host-loss path (#3662)
+  RECOVERY.md         recovery after host loss: key manifest, CI-built recovery
+                      bundle (age, custodians), restore proof, full host-loss path (#3662)
 ```
 
 ## Staging box (`stage-1`)
@@ -629,10 +629,11 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    terraform output -raw pgbackrest_s3_secret_key      # → PGBACKREST_REPO1_S3_KEY_SECRET
    ```
 
-   **Save the irreplaceable keys into the recovery bundle** before you leave this
-   step, and again after any later change to these files: `PGBACKREST_REPO1_CIPHER_PASS`,
-   `ZITADEL_MASTERKEY`, `SIGN_IN_RECORD_KEY` and `AUDIT_IDENTIFIER_PEPPER` cannot be
-   regenerated without losing the data they bind → [`RECOVERY.md`](./RECOVERY.md) §2.
+   **Bundle the irreplaceable keys** before you leave this step, and again after any
+   later change to these files: dispatch `recovery-custody.yml` with `recovery-bundle`,
+   then `recovery-check`. `PGBACKREST_REPO1_CIPHER_PASS`, `ZITADEL_MASTERKEY`,
+   `SIGN_IN_RECORD_KEY` and `AUDIT_IDENTIFIER_PEPPER` cannot be regenerated without
+   losing the data they bind → [`RECOVERY.md`](./RECOVERY.md) §2.
 
 7. **Bring up data-prod FIRST** (DB/Redis/backup). `VPC_IP` = data-prod's private
    address (`var.data_prod_private_ip`, default `192.168.0.10`) — the published
@@ -1204,8 +1205,8 @@ conflate them:
   A PITR `--type=time` target rewinds to just before the bad migration using the
   continuously-archived WAL. Confirm with `pgbackrest --stanza=ds info`.
 
-Host loss (a box or its `/etc/ds-platform` gone), key custody and the owner-run
-restore proof: [`RECOVERY.md`](./RECOVERY.md).
+Host loss (a box or its `/etc/ds-platform` gone), the CI key custody and the restore
+proof: [`RECOVERY.md`](./RECOVERY.md).
 
 ## Prod migration rule — expand/contract
 

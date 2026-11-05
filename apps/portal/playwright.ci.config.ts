@@ -90,6 +90,9 @@ export default defineConfig({
     // 045: the education-index demo pages render from a static fixture module
     // and issue no api/DB call, so they are hermetic in exactly this tier.
     /[\\/]e2e[\\/]education-index-demo\.spec\.ts$/,
+    // #3682: the header-vs-canvas structure check reads `/documents`, which
+    // renders the shared chrome with no backend.
+    /[\\/]e2e[\\/]header-canvas-structure\.e2e\.spec\.ts$/,
   ],
   globalTeardown: "./e2e/support/academy-submissions-global-teardown.ts",
   fullyParallel: true,

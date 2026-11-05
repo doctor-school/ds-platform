@@ -69,9 +69,17 @@ export const HEAVY_JOBS = {
     extraInputs: [],
   },
   "playwright-axe": { packages: ["@ds/showcase"], extraInputs: [] },
-  "playwright-axe-doctor": { packages: ["@ds/doctor"], extraInputs: [] },
+  "playwright-axe-doctor": {
+    packages: ["@ds/doctor"],
+    // apps/doctor/e2e/header-canvas-structure.spec.ts (#3682) reads the canvas.
+    extraInputs: [/^design-source\/ds-shell\.dc\.html$/],
+  },
   "playwright-axe-login": { packages: ["@ds/login"], extraInputs: [] },
-  "playwright-axe-portal": { packages: ["@ds/portal"], extraInputs: [] },
+  "playwright-axe-portal": {
+    packages: ["@ds/portal"],
+    // apps/portal/e2e/header-canvas-structure.e2e.spec.ts (#3682) reads the canvas.
+    extraInputs: [/^design-source\/ds-shell\.dc\.html$/],
+  },
   "standalone-boot": {
     packages: ["@ds/portal", "@ds/admin", "@ds/doctor", "@ds/login"],
     extraInputs: [],

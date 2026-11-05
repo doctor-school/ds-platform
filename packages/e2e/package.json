@@ -20,7 +20,8 @@
     "./admin-events": "./admin/index.ts",
     "./feed-card": "./lib/feed-card.ts",
     "./host-sign-in": "./lib/host-sign-in.ts",
-    "./storefront-session-seed": "./lib/storefront-session-seed.ts"
+    "./storefront-session-seed": "./lib/storefront-session-seed.ts",
+    "./canvas-structure": "./lib/rendered-structure.ts"
   },
   "scripts": {
     "check:host-tags": "tsx bin/check-host-tags.ts",

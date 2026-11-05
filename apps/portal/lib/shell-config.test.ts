@@ -99,6 +99,17 @@ describe("008 EARS-2/12/13/14: the academy host config", () => {
     expect(ru.logo.href).toBe("/webinars");
   });
 
+  it("008 EARS-14 (#3733): the documents column lists documents, the privacy policy, then contacts — the doctor host's order and label", () => {
+    expect(ru.footer.documents).toEqual([
+      { label: catalog.shell.footerDocuments, href: "/documents" },
+      {
+        label: "Политика персональных данных и согласия",
+        href: "/documents/privacy-policy",
+      },
+      { label: catalog.shell.footerContacts, href: "/documents#contacts" },
+    ]);
+  });
+
   it("008 EARS-12 / 003 EARS-72: the chrome hides in the room only — a door path's refusal page sits inside it", () => {
     expect(ru.hiddenOnPaths).toEqual(["/webinars/*/room"]);
   });

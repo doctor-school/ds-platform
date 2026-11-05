@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { publicFeedStateTitles } from "./public-feed-states.js";
+import { publicFeedStateTitles } from "./host-tags.js";
 import {
   assertOperationalReport,
   operationalOriginals,

@@ -5,7 +5,7 @@ import {
   feedEntryLog,
   verifyOwnedFeedEntryListeners,
 } from "../lib/feed-entry.js";
-import { publicFeedStateTitles } from "../lib/public-feed-states.js";
+import { publicFeedStateTitles } from "../lib/host-tags.js";
 import { waitForClientReady } from "../lib/page-ready.js";
 
 type Specialty = { id: string; code: string; name: string; isOther: boolean };

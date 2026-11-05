@@ -4,9 +4,12 @@ import { defineBddConfig } from "playwright-bdd";
 
 import { HOSTS, SIGN_IN_HOST } from "./hosts.js";
 import { authLimitTagsFor } from "./lib/default-auth-limits.js";
-import { ordinaryStorefrontTagsFor, signInHostTags } from "./lib/host-tags.js";
+import {
+  ordinaryStorefrontTagsFor,
+  publicFeedStatePattern,
+  signInHostTags,
+} from "./lib/host-tags.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
-import { publicFeedStatePattern } from "./lib/public-feed-states.js";
 
 /**
  * The C6 REGRESSION SUITE — staging/regression-contour tech spec §6 (Issue #2067).

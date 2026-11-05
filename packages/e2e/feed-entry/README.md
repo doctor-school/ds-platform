@@ -36,8 +36,16 @@ pnpm --filter @ds/e2e exec tsx lib/assert-feed-entry-report.ts "$E2E_REPORT_DIR/
 The strict report requires all three exact titles once, zero failures, skips,
 flakes, retries and top-level errors. `.github/workflows/public-feed-entry.yml`
 executes this contour on the native PR head and uploads `public-feed-entry-originals`
-with `head.txt` and the actual report. The shared default BDD generation also
-loads these bindings; its wider backfill skips do not qualify as this receipt.
+with `head.txt` and the actual report. The receipt also requires each actual
+test's Doctor project name and id. Shared default BDD generation loads the
+definitions but excludes `@public-feed-entry` through its existing selection
+mechanism: ordinary local/stage runs do not supply this task-owned DB contract.
+The dedicated configuration still selects all three originals strictly.
+
+Listener ownership uses the actual socket's PID. On Linux, the process cwd must
+be this worktree's app directory and `/proc/PID/exe` must be the running Node
+binary. This preserves ownership when Next replaces its command line with its
+`next-server` title. Windows continues to require the absolute worktree entry.
 
 Stand commands and exact public-choice idempotency keys go into the task command
 log. The Background transaction rolls back its own rows; browser contexts clear

@@ -57,4 +57,80 @@ describe("017 public feed-entry receipt", () => {
       ),
     ).toThrow("no skip");
   });
+  it("EARS-1: refuses an Academy or missing project identity in the feed-entry receipt", () => {
+    for (const identity of [
+      { projectName: "academy", projectId: "academy" },
+      { projectName: "doctor", projectId: "academy" },
+      { projectName: "academy", projectId: "doctor" },
+      { projectName: "doctor" },
+      { projectId: "doctor" },
+      {},
+    ]) {
+      const report = {
+        suites: [
+          {
+            specs: operationalOriginals.feedEntry.map((title) => ({
+              title,
+              tests: [
+                {
+                  ...identity,
+                  status: "expected",
+                  results: [{ status: "passed", retry: 0 }],
+                },
+              ],
+            })),
+          },
+        ],
+        errors: [],
+      };
+      expect(() =>
+        assertOperationalReport(
+          report,
+          operationalOriginals.feedEntry,
+          "doctor",
+        ),
+      ).toThrow("doctor project");
+    }
+  });
+  it("EARS-1: accepts the Doctor receipt and refuses a conflicting host suffix", () => {
+    const report = (suffix: string) => ({
+      suites: [
+        {
+          specs: operationalOriginals.feedEntry.map((title) => ({
+            title: title + suffix,
+            tests: [
+              {
+                projectName: "doctor",
+                projectId: "doctor",
+                status: "expected",
+                results: [{ status: "passed", retry: 0 }],
+              },
+            ],
+          })),
+        },
+      ],
+      errors: [],
+    });
+    expect(() =>
+      assertOperationalReport(
+        report(""),
+        operationalOriginals.feedEntry,
+        "doctor",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertOperationalReport(
+        report(" @host:doctor"),
+        operationalOriginals.feedEntry,
+        "doctor",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertOperationalReport(
+        report(" @host:academy"),
+        operationalOriginals.feedEntry,
+        "doctor",
+      ),
+    ).toThrow("identity mismatch");
+  });
 });

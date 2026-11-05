@@ -314,15 +314,20 @@ export const E2E_RUN_SELECTION_MODULES: readonly string[] = [
   ...E2E_PATH_LOADED_MODULES,
 ];
 
+/**
+ * Execution controls remain tier-bearing CI/tooling files, not test sources.
+ * Stage checks and environment-sensitive projections concern shipping runtime;
+ * an auth-named test selector is not an authentication implementation.
+ */
+function isE2eExecutionControl(path: string): boolean {
+  return isE2eRunnerScript(path) || E2E_RUN_SELECTION_MODULES.includes(path);
+}
+
 /** Test sources: excluded from the ship size cap and may be added. */
 export function isTestPath(path: string): boolean {
   if (/\.(?:test|spec|e2e-spec)\.[cm]?[jt]sx?$|(?:^|\/)__tests__\//.test(path))
     return true;
-  return (
-    /(?:^|\/)e2e\//.test(path) &&
-    !isE2eRunnerScript(path) &&
-    !E2E_RUN_SELECTION_MODULES.includes(path)
-  );
+  return /(?:^|\/)e2e\//.test(path) && !isE2eExecutionControl(path);
 }
 
 function isChangesetPath(path: string): boolean {
@@ -388,7 +393,7 @@ const hasAuthSegment = (path: string) =>
   path.split("/").some((segment) => /auth/i.test(segment));
 
 export function isEnvironmentSensitivePath(path: string): boolean {
-  if (isNonRuntimePath(path)) return false;
+  if (isNonRuntimePath(path) || isE2eExecutionControl(path)) return false;
   return (
     hasAuthSegment(path) ||
     ENVIRONMENT_SENSITIVE_RES.some((re) => re.test(path))
@@ -416,7 +421,12 @@ const STAGE_CHECK_RES: readonly RegExp[] = [
 ];
 
 export function requiresStageCheck(path: string): boolean {
-  if (isNonRuntimePath(path) || /\.(?:mdx?|example)$/i.test(path)) return false;
+  if (
+    isNonRuntimePath(path) ||
+    isE2eExecutionControl(path) ||
+    /\.(?:mdx?|example)$/i.test(path)
+  )
+    return false;
   return hasAuthSegment(path) || STAGE_CHECK_RES.some((re) => re.test(path));
 }
 

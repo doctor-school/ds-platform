@@ -6,7 +6,7 @@ export function authLimitTagsFor(
 ): string {
   const base = `(${tagExpressionFor(host)})`;
   if (env.E2E_AUTH_LIMIT_TIER === undefined)
-    return `${base} and not @default-auth-limits and not @public-feed-entry`;
+    return `${base} and not @default-auth-limits`;
   if (env.E2E_AUTH_LIMIT_TIER !== "default")
     throw new Error("E2E_AUTH_LIMIT_TIER must be unset or default");
 

@@ -272,6 +272,15 @@ describe("stage-b-lint", () => {
   });
 
   describe("#3205: environment-sensitive change with no render surface", () => {
+    it("EARS-1: an e2e execution-control change with no render surface requires no slot record", () => {
+      const { code, stdout } = runGuard(
+        GUARD,
+        caseDir("stage-b", "skip-e2e-execution-control"),
+        { env: prEnv("3751", "skip-e2e-execution-control") },
+      );
+      expect(code).toBe(0);
+      expect(stdout).toContain("rule does not apply");
+    });
     it("red: env-sensitive runtime file, no UI file, no Stage-check record → exit 1", () => {
       const { code, stderr } = runGuard(
         GUARD,

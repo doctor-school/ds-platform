@@ -4,6 +4,7 @@ import { defineBddConfig } from "playwright-bdd";
 
 import { HOSTS, SIGN_IN_HOST } from "./hosts.js";
 import { authLimitTagsFor } from "./lib/default-auth-limits.js";
+import { ordinaryStorefrontTagsFor } from "./lib/host-tags.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
 
 /**
@@ -122,7 +123,7 @@ const testDirFor = (hostId: keyof typeof HOSTS, tags: string) =>
     featuresRoot: "../../apps/docs/content/specs/features",
     steps: STEPS,
     outputDir: `.features-gen/${hostId}`,
-    tags,
+    tags: ordinaryStorefrontTagsFor(tags),
     missingSteps: "skip-scenario",
   });
 

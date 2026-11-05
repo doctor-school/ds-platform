@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { createRequire } from "node:module";
+import { authLimitTagsFor } from "./default-auth-limits.js";
 
 import {
   HOST_TAG_VALUES,
@@ -6,6 +8,7 @@ import {
   hostTagCounts,
   hostTagViolation,
   tagExpressionFor,
+  ordinaryStorefrontTagsFor,
 } from "./host-tags.js";
 
 /**
@@ -16,7 +19,8 @@ import {
  * a green `bddgen` must not be able to hide, so an untagged file is a
  * generation-time ERROR naming the file, not a warning.
  */
-const feature = (body: string) => `# a header comment\n# and a second one\n\n${body}`;
+const feature = (body: string) =>
+  `# a header comment\n# and a second one\n\n${body}`;
 
 describe("featureHostTags", () => {
   it("reads the tag block directly above `Feature:`, past comments and blanks", () => {
@@ -24,26 +28,64 @@ describe("featureHostTags", () => {
       "@host:both",
     ]);
     expect(
-      featureHostTags("@smoke @host:doctor\n# a comment between\n\nFeature: X\n"),
+      featureHostTags(
+        "@smoke @host:doctor\n# a comment between\n\nFeature: X\n",
+      ),
     ).toEqual(["@host:doctor"]);
   });
 
   it("ignores SCENARIO-level host tags — only the Feature-level block counts", () => {
     expect(
-      featureHostTags("@host:academy\nFeature: X\n\n  @host:admin\n  Scenario: Y\n"),
+      featureHostTags(
+        "@host:academy\nFeature: X\n\n  @host:admin\n  Scenario: Y\n",
+      ),
     ).toEqual(["@host:academy"]);
+  });
+});
+
+describe("ordinary storefront selection", () => {
+  it("EARS-1: composes public contour exclusion after the unchanged auth-only selector for local and stage runs", () => {
+    const require = createRequire(import.meta.url);
+    const parse = createRequire(require.resolve("playwright-bdd"))(
+      "@cucumber/tag-expressions",
+    ).default as (value: string) => { evaluate(tags: string[]): boolean };
+    for (const env of [
+      {},
+      { E2E_PORTAL_URL: "https://pr-3756.stage.doctor.school" },
+    ]) {
+      const auth = authLimitTagsFor("doctor", env);
+      expect(auth).not.toContain("@public-feed-entry");
+      const ordinary = parse(ordinaryStorefrontTagsFor(auth));
+      expect(ordinary.evaluate(["@host:doctor", "@public-feed-entry"])).toBe(
+        false,
+      );
+      expect(
+        ordinary.evaluate(["@host:doctor", "@public-specialty-catalog"]),
+      ).toBe(true);
+    }
+    const dedicated = parse("@host:doctor and @public-feed-entry");
+    expect(dedicated.evaluate(["@host:doctor", "@public-feed-entry"])).toBe(
+      true,
+    );
+    expect(dedicated.evaluate(["@host:academy", "@public-feed-entry"])).toBe(
+      false,
+    );
   });
 });
 
 describe("hostTagViolation", () => {
   it("accepts every value of the vocabulary", () => {
     for (const value of HOST_TAG_VALUES) {
-      expect(hostTagViolation(feature(`@host:${value}\nFeature: X\n`))).toBeNull();
+      expect(
+        hostTagViolation(feature(`@host:${value}\nFeature: X\n`)),
+      ).toBeNull();
     }
   });
 
   it("rejects a file with no host tag at all", () => {
-    expect(hostTagViolation(feature("Feature: X\n"))).toContain("no @host: tag");
+    expect(hostTagViolation(feature("Feature: X\n"))).toContain(
+      "no @host: tag",
+    );
   });
 
   it("rejects a file carrying two host tags", () => {

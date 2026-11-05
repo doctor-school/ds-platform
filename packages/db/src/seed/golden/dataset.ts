@@ -17,6 +17,7 @@ import type {
   congressSubmissionSettings,
 } from "../../schema/congress-submission-settings.js";
 import type { NewEventRecording } from "../../schema/event-recordings.js";
+import type { NewFeedEntry, NewMaterial } from "../../schema/materials.js";
 import type { NewEvent, NewStreamConfigRow } from "../../schema/events.js";
 import type { NewRegistration } from "../../schema/registrations.js";
 import type {
@@ -125,6 +126,9 @@ export interface GoldenDataset {
    * `golden.projects.publishedNoResults` (see `buildProjectResults`).
    */
   projectResults: NewProjectResult[];
+  /** 048 (#3705) — the own materials and the feed cards they publish. */
+  materials: NewMaterial[];
+  feedEntries: NewFeedEntry[];
 }
 
 /** Raised when the dataset itself is inconsistent — a fixture defect, not a run defect. */
@@ -880,6 +884,140 @@ export function buildGoldenDataset(
     projectExperts,
     projectPartners,
     projectResults: buildProjectResults(projects, created),
+    ...buildMaterials(at({ days: -20 }), created),
+  };
+}
+
+/**
+ * The source name of an Academy news card — the API's `ACADEMY_SOURCE_NAME`
+ * (`apps/api/src/materials/own-materials.feed-source.ts`, 048 EARS-9).
+ */
+const ACADEMY_NEWS_SOURCE_NAME = "Академия";
+
+/**
+ * 048 EARS-1, EARS-2, EARS-4, EARS-11 (#3705) — one published Academy news item
+ * and the feed card its publish writes.
+ *
+ * The reading page `/materials/[slug]` renders only a published material, so a
+ * golden stand without one leaves the stage route walk nothing to address. A
+ * news item, not a column: it needs no expert, and no partner (EARS-19) — the
+ * fixture states only what the reading page needs. No cover: a cover is a 012
+ * media object, and the page renders without one.
+ *
+ * The card mirrors what `OwnMaterialsFeedSource.write` derives from the
+ * material, its date included: the card date IS the first publication instant,
+ * and the plan keeps both set-once on a re-run (`plan.ts`).
+ */
+function buildMaterials(
+  published: Date,
+  created: Date,
+): { materials: NewMaterial[]; feedEntries: NewFeedEntry[] } {
+  const material = golden.materials.published;
+  const title = "Эталонная новость Академии";
+  return {
+    materials: [
+      {
+        id: material.id,
+        slug: material.slug,
+        kind: "news",
+        title,
+        authorLine: "Редакция Академии",
+        expertId: null,
+        partnerOrganisationId: null,
+        coverRef: null,
+        body: {
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              content: [
+                {
+                  type: "text",
+                  text: "Эталонный материал золотого набора: опубликованная новость Академии без обложки и партнёра.",
+                },
+              ],
+            },
+            {
+              type: "heading",
+              attrs: { level: 2 },
+              content: [{ type: "text", text: "Что внутри" }],
+            },
+            {
+              type: "bulletList",
+              content: [
+                {
+                  type: "listItem",
+                  content: [
+                    {
+                      type: "paragraph",
+                      content: [
+                        { type: "text", text: "Абзац, " },
+                        {
+                          type: "text",
+                          text: "полужирный",
+                          marks: [{ type: "bold" }],
+                        },
+                        { type: "text", text: " и " },
+                        {
+                          type: "text",
+                          text: "курсив",
+                          marks: [{ type: "italic" }],
+                        },
+                        { type: "text", text: "." },
+                      ],
+                    },
+                  ],
+                },
+                {
+                  type: "listItem",
+                  content: [
+                    {
+                      type: "paragraph",
+                      content: [
+                        {
+                          type: "text",
+                          text: "Ссылка на сайт Академии",
+                          marks: [
+                            {
+                              type: "link",
+                              attrs: { href: "https://academy.doctor.school" },
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        status: "published",
+        firstPublishedAt: published,
+        version: 1,
+        createdAt: created,
+        updatedAt: published,
+      },
+    ],
+    feedEntries: [
+      {
+        id: goldenUuid(GOLDEN_GROUP.feedEntries, 1),
+        sourcePlatform: "academy",
+        sourceRef: material.id,
+        materialId: material.id,
+        kind: "news",
+        title,
+        imageRef: null,
+        imageUrl: null,
+        sourceName: ACADEMY_NEWS_SOURCE_NAME,
+        authorExpertId: null,
+        partnerOrganisationId: null,
+        href: `/materials/${material.slug}`,
+        publishedAt: published,
+        createdAt: published,
+        updatedAt: published,
+      },
+    ],
   };
 }
 

@@ -76,6 +76,8 @@ export const routeParams: RouteParamsMap = Object.freeze({
      * Academy's own (`experts`) live эфир.
      */
     "/webinars/[slug]/room": () => golden.events.academyLive.slug,
+    /** 048 EARS-11 — the reading page of a published material. */
+    "/materials/[slug]": () => golden.materials.published.slug,
     /** A file in `@ds/legal-content`, enumerated by the page itself. */
     "/documents/[slug]": firstPublishedDocumentSlug,
   }),

@@ -78,6 +78,9 @@ export const GOLDEN_GROUP = Object.freeze({
   projectPartners: 0x0011,
   // 030 EARS-2 / EARS-17 (#3503) — the ordered result set of a project.
   projectResults: 0x0012,
+  // 048 EARS-11 (#3705) — the own materials and the feed cards they publish.
+  materials: 0x0013,
+  feedEntries: 0x0014,
 });
 
 /**
@@ -261,6 +264,16 @@ export const golden = Object.freeze({
     archived: Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.events, 6),
       slug: "golden-event-archived",
+    }),
+  }),
+  materials: Object.freeze({
+    /**
+     * 048 EARS-11 — a published Academy news item: the address the reading
+     * page `/materials/[slug]` and its feed card resolve to.
+     */
+    published: Object.freeze({
+      id: goldenUuid(GOLDEN_GROUP.materials, 1),
+      slug: "golden-material-published",
     }),
   }),
   recordings: Object.freeze({

@@ -13,6 +13,7 @@
 import { doctorSpecialties } from "../../schema/doctor-specialties.js";
 import { eventRecordings } from "../../schema/event-recordings.js";
 import { events, streamConfig } from "../../schema/events.js";
+import { feedEntries, materials } from "../../schema/materials.js";
 import { consentRecords } from "../../schema/consent-records.js";
 import {
   congressSubmissionKindSettings,
@@ -146,6 +147,10 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "project_organisations",
   // 030 EARS-17 (#3503) — after its project and migration 0055's output kinds.
   "project_results",
+  // 048 (#3705) — after the experts and organisations a material may reference,
+  // then the feed card that references the material.
+  "materials",
+  "feed_entries",
 ]);
 
 /**
@@ -316,6 +321,19 @@ export function buildGoldenSeedPlan(
       "projectId",
       "position",
     ]),
+    step("materials", materials, dataset.materials, ["id"]),
+    // Unpublish removes a card and a re-publish writes a fresh id (048 EARS-6),
+    // so a stand re-run meets the card on its unique source key
+    // (`feed_entries_source_key`), not on a golden id the stand may no longer
+    // hold. The card date is the material's first publication instant, kept
+    // set-once with it so a re-run never makes the two disagree.
+    step(
+      "feed_entries",
+      feedEntries,
+      dataset.feedEntries,
+      ["sourcePlatform", "sourceRef"],
+      { setOnceKeys: ["publishedAt"] },
+    ),
   ];
 
   const planned = steps.map((s) => s.name);
@@ -349,8 +367,14 @@ function step(
   options: {
     replacesVolumeNamespace?: number;
     volumeNamespaceChildren?: GoldenVolumeChild[];
+    /** Step-specific columns a re-run keeps, on top of {@link SET_ONCE_KEYS}. */
+    setOnceKeys?: string[];
   } = {},
 ): GoldenSeedStep {
+  const setOnce = new Set<string>([
+    ...SET_ONCE_KEYS,
+    ...(options.setOnceKeys ?? []),
+  ]);
   const keys = new Set<string>();
   for (const row of rows) for (const key of Object.keys(row)) keys.add(key);
   return {
@@ -369,9 +393,7 @@ function step(
     // rather than reset to a default: the seed owns what it writes, not the
     // whole row.
     updateKeys: [...keys].filter(
-      (key) =>
-        !conflictKeys.includes(key) &&
-        !(SET_ONCE_KEYS as readonly string[]).includes(key),
+      (key) => !conflictKeys.includes(key) && !setOnce.has(key),
     ),
   };
 }
@@ -484,6 +506,26 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
     dataset.organisationRoleAssignments,
     "organisationId",
     partnerIds,
+  );
+
+  // 048 (#3705) — a material's expert / partner, and the card's material.
+  check(
+    "materials",
+    dataset.materials.filter((row) => row.expertId != null),
+    "expertId",
+    expertIds,
+  );
+  check(
+    "materials",
+    dataset.materials.filter((row) => row.partnerOrganisationId != null),
+    "partnerOrganisationId",
+    partnerIds,
+  );
+  check(
+    "feed_entries",
+    dataset.feedEntries,
+    "materialId",
+    idSet(dataset.materials),
   );
 
   return issues;

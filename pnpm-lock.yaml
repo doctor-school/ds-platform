@@ -931,6 +931,9 @@ importers:
         specifier: ^8.23.0
         version: 8.23.0
     devDependencies:
+      '@ds/schemas':
+        specifier: workspace:*
+        version: link:../schemas
       '@types/pg':
         specifier: ^8.23.1
         version: 8.23.1

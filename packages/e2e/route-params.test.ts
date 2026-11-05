@@ -23,6 +23,16 @@ describe("resolveRoute", () => {
     );
   });
 
+  it("resolves the Academy reading page to the golden published material", () => {
+    // 048 EARS-11 — `/materials/[slug]` renders a published material row, so its
+    // address comes from the golden seed like `/webinars/[slug]`. The doctor
+    // host has no reading page (048 EARS-17), so it carries no entry.
+    expect(resolveRoute("academy", "/materials/[slug]")).toBe(
+      "/materials/golden-material-published",
+    );
+    expect(routeParams.doctor["/materials/[slug]"]).toBeUndefined();
+  });
+
   it("resolves /documents/[slug] from the legal-content catalogue the pages enumerate", () => {
     // The documents are FILES, not DB rows: both hosts' `generateStaticParams`
     // enumerate `listDocuments()`, so the walk must address the same catalogue.

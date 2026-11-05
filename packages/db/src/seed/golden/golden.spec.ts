@@ -9,6 +9,7 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 
+import { materialBodySchema } from "@ds/schemas";
 import { PDFDocument } from "pdf-lib";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -23,6 +24,7 @@ import {
 import {
   golden,
   GOLDEN_ACCOUNT_KEYS,
+  GOLDEN_GROUP,
   goldenUuid,
   SEED_EVENT_KINDS,
   SEED_PROJECT_OUTPUT_KINDS,
@@ -2563,3 +2565,101 @@ function rowsByKey(rows: GoldenRow[]): [string, GoldenRow][] {
     return [key, row] as [string, GoldenRow];
   });
 }
+
+describe("#3705 golden material", () => {
+  // 048 EARS-11 — the Academy reading page `/materials/[slug]` renders a
+  // published material, and the stage route walk (`packages/e2e/route-params.ts`)
+  // needs one such row on every slot to address it.
+  const dataset = buildGoldenDataset(now, subjects);
+  const material = golden.materials.published;
+
+  it("catalogues one published material under its own id group", () => {
+    expect(material.id).toBe(goldenUuid(GOLDEN_GROUP.materials, 1));
+    expect(material.slug).toBe("golden-material-published");
+  });
+
+  it("048 EARS-1, EARS-2: seeds a published news item whose body passes the material body contract", () => {
+    expect(dataset.materials).toHaveLength(1);
+    const row = dataset.materials[0]!;
+    expect(row.id).toBe(material.id);
+    expect(row.slug).toBe(material.slug);
+    expect(row.kind).toBe("news");
+    expect(row.status).toBe("published");
+    expect(row.firstPublishedAt).toBeInstanceOf(Date);
+    // A news item has no expert and no partner (EARS-1, EARS-19).
+    expect(row.expertId ?? null).toBeNull();
+    expect(row.partnerOrganisationId ?? null).toBeNull();
+    expect((row.title as string).length).toBeGreaterThan(0);
+    expect(materialBodySchema.safeParse(row.body).success).toBe(true);
+  });
+
+  it("048 EARS-4: carries the feed card a publish writes for that material", () => {
+    // A published material always has its card (the own-materials feed source
+    // writes it inside the publish transaction), so the fixture carries both.
+    const row = dataset.materials[0]!;
+    expect(dataset.feedEntries).toHaveLength(1);
+    const card = dataset.feedEntries[0]!;
+    expect(card).toMatchObject({
+      sourcePlatform: "academy",
+      sourceRef: material.id,
+      materialId: material.id,
+      kind: "news",
+      title: row.title,
+      imageRef: null,
+      imageUrl: null,
+      sourceName: "Академия",
+      authorExpertId: null,
+      partnerOrganisationId: null,
+      href: `/materials/${material.slug}`,
+    });
+    expect((card.publishedAt as Date).getTime()).toBe(
+      (row.firstPublishedAt as Date).getTime(),
+    );
+    expect(goldenReferentialIssues(dataset)).toEqual([]);
+  });
+
+  it("flags a feed card whose material the dataset does not carry", () => {
+    const broken = {
+      ...dataset,
+      feedEntries: dataset.feedEntries.map((card) => ({
+        ...card,
+        materialId: goldenUuid(GOLDEN_GROUP.materials, 999),
+      })),
+    };
+    expect(goldenReferentialIssues(broken)).toEqual([
+      `feed_entries.materialId references an unknown row: ${goldenUuid(GOLDEN_GROUP.materials, 999)}`,
+    ]);
+  });
+
+  it("writes the material after its references and the card after the material", () => {
+    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const order = plan.map((s) => s.name);
+    expect(order.indexOf("materials")).toBeGreaterThan(
+      order.indexOf("experts"),
+    );
+    expect(order.indexOf("materials")).toBeGreaterThan(
+      order.indexOf("organisations"),
+    );
+    expect(order.indexOf("feed_entries")).toBe(order.indexOf("materials") + 1);
+  });
+
+  it("048 EARS-6: a re-run keeps the publication instant of the material and of its card", () => {
+    // `materials_first_published_at_set_once` refuses to move the instant, and
+    // the card date IS that instant: refreshing one without the other would
+    // make the card and its material disagree on a re-seeded slot.
+    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const materials = plan.find((s) => s.name === "materials")!;
+    expect(materials.conflictKeys).toEqual(["id"]);
+    expect(materials.updateKeys).not.toContain("firstPublishedAt");
+    expect(materials.updateKeys).toContain("status");
+    expect(materials.updateKeys).toContain("updatedAt");
+
+    const cards = plan.find((s) => s.name === "feed_entries")!;
+    // The product re-creates a card on unpublish → publish with a fresh id, so
+    // a re-run meets it on its unique source key, not on the golden id.
+    expect(cards.conflictKeys).toEqual(["sourcePlatform", "sourceRef"]);
+    expect(cards.updateKeys).not.toContain("publishedAt");
+    expect(cards.updateKeys).toContain("title");
+    expect(cards.updateKeys).toContain("updatedAt");
+  });
+});

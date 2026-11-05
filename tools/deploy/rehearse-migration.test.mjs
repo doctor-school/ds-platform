@@ -173,6 +173,11 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     mkdirSync(join(root, "home/deploy/ds-platform/infra/deploy/compose/data-prod/pgbackrest"), { recursive: true });
     mkdirSync(join(root, "proc"), { recursive: true });
     writeFileSync(join(root, "proc/meminfo"), "MemTotal: 8000000 kB\nMemAvailable: 4000000 kB\n");
+    mkdirSync(join(root, "etc/ds-platform"), { recursive: true });
+    writeFileSync(
+      join(root, "etc/ds-platform/data.env"),
+      "# data.env\nPOSTGRES_PASSWORD=db-secret\nPGBACKREST_REPO1_S3_KEY=s3-key\n\nREDIS_PASSWORD=redis-secret\nPGBACKREST_REPO1_CIPHER_PASS=cipher\n",
+    );
     writeFileSync(
       join(root, "home/deploy/ds-platform-postgres-state.json"),
       JSON.stringify({ schema: 1, images: { postgres: `sha256:${"1".repeat(64)}`, pgbackrest: `sha256:${"2".repeat(64)}` } }),
@@ -341,7 +346,9 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
       const s = run.args.join(" ");
       assert.match(s, /--memory 768m --memory-swap 768m --oom-score-adj 1000/);
       assert.doesNotMatch(s, /--network|-p |--publish|--restart/, "the default bridge, no port, no restart policy");
-      assert.match(s, /--env-file \S*\/etc\/ds-platform\/data\.env/);
+      // Only what `pgbackrest restore` / `archive-get` needs: never the DB or other credentials of data.env.
+      assert.doesNotMatch(s, /data\.env/);
+      assert.equal(run.envFile, "PGBACKREST_REPO1_S3_KEY=s3-key\nPGBACKREST_REPO1_CIPHER_PASS=cipher\n");
     }
     const apply = calls().find((c) => c.stdin.includes("VERBOSITY verbose"));
     assert.ok(apply.args.includes(`ds-rehearse-${SHA12}`) && apply.args.includes("ON_ERROR_STOP=1"));

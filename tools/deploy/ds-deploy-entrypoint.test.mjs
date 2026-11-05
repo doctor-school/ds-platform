@@ -1503,7 +1503,8 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.ok(!r.stdout.includes("no pending"), "ciphertext only");
     assert.deepEqual(decrypt(r.stdout), { verb: "rehearse", sha: SHA, state: "no pending migrations", pending: 0 });
     const curl = log("curl").trimEnd().split("\n");
-    assert.match(curl[0], new RegExp(`/compare/main\\.\\.\\.${SHA}$`));
+    // refs/heads/main, never a bare `main` a tag of that name could shadow.
+    assert.match(curl[0], new RegExp(`/compare/refs/heads/main\\.\\.\\.${SHA}$`));
     assert.match(curl[1], new RegExp(`codeload\\.github\\.com/doctor-school/ds-platform/tar\\.gz/${SHA}$`));
     // The release check on both boxes ran first; the data verb carried the archive.
     assert.equal(log("ds-release"), "ds-release-called check prod\ndata-ds-release check prod\n");

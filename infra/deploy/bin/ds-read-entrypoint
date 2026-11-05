@@ -198,13 +198,14 @@ rehearsal_state() {
 }
 
 # Tree provenance, as the box-side rollback refusal checks it (release-driver
-# compare_status): compare main...<sha> must be `behind` (an ancestor of main) or
+# compare_status): compare refs/heads/main...<sha> (the branch, never a tag named
+# `main`) must be `behind` (an ancestor of main) or
 # `identical`; anything else — `ahead`, `diverged`, a 404, a rate limit, a network
 # error — is refused (fail closed): a rehearsal runs reviewed migration SQL only.
 rehearse_on_main() {
   local body status
   body=$(curl -fsS --proto '=https' --max-time 30 -H 'Accept: application/vnd.github+json' \
-    "$GITHUB_API/compare/main...$1" 2>/dev/null) ||
+    "$GITHUB_API/compare/refs/heads/main...$1" 2>/dev/null) ||
     reject "cannot confirm $1 is contained in main (GitHub compare unavailable)"
   status=$(printf '%s' "$body" |
     python3 -I -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status","") if isinstance(d,dict) else "")' \

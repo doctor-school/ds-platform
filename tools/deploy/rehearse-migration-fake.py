@@ -11,8 +11,12 @@ tool, args = sys.argv[1], sys.argv[2:]
 with open(os.environ["FAKE_SCENARIO"], encoding="utf-8") as f:
     sc = json.load(f)
 stdin = sys.stdin.read() if "-f" in args or "-i" in args else ""
+call = {"tool": tool, "args": args, "stdin": stdin}
+if "--env-file" in args:  # what a container would receive
+    with open(args[args.index("--env-file") + 1], encoding="utf-8") as f:
+        call["envFile"] = f.read()
 with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as f:
-    f.write(json.dumps({"tool": tool, "args": args, "stdin": stdin}) + "\n")
+    f.write(json.dumps(call) + "\n")
 SEG = "000000010000000A00000042"
 
 

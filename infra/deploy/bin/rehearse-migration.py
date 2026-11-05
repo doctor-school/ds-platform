@@ -339,6 +339,23 @@ def report_path(sha):
     return os.path.join(REHEARSAL_DIR, sha + ".json")
 
 
+def repo_env(base):
+    """The copy's env file: only the PGBACKREST_* lines of data.env (repository, S3 and
+    cipher settings that `pgbackrest restore` and the copy's `archive-get` read), so a
+    container on the default bridge never holds the database or other credentials.
+    Root-only (0600) in the scratch directory, which the cleanup removes."""
+    try:
+        with open(DATA_ENV, encoding="utf-8") as f:
+            lines = [l for l in f.read().splitlines() if l.startswith("PGBACKREST_") and "=" in l]
+    except OSError:
+        raise Stop(1, "the read failed")
+    path = os.path.join(base, "repo.env")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write("".join(l + "\n" for l in lines))
+    return path
+
+
 def write_report(sha, value):
     """Root-only (0600), whole or not at all; the newest REPORTS_KEPT kept."""
     os.makedirs(REHEARSAL_DIR, mode=0o700, exist_ok=True)
@@ -581,7 +598,7 @@ def cmd_run(sha):
         os.makedirs(pgdata, mode=0o700)
         if not ROOT:
             os.chown(pgdata, 999, 999)  # postgres in both images
-        mounts = ["--env-file", DATA_ENV, "-v", PGBACKREST_CONF + ":/etc/pgbackrest/pgbackrest.conf:ro",
+        mounts = ["--env-file", repo_env(base), "-v", PGBACKREST_CONF + ":/etc/pgbackrest/pgbackrest.conf:ro",
                   "-v", pgdata + ":/var/lib/postgresql/data"]
         # Docker's default bridge (outbound only, for the S3 repository), never the
         # compose network, no published port.

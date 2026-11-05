@@ -253,7 +253,7 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         // #3157: compare main...<sha> answers from compare.json, any other base (the
         // live prod SHA) from compare-live.json.
         // #2987: the Releases listing answers from releases.json.
-        "case ${!#} in */compare/main...*) f=$STUB_DIR/compare.json ;; */releases*) f=$STUB_DIR/releases.json ;; *) f=$STUB_DIR/compare-live.json ;; esac",
+        "case ${!#} in */compare/refs/heads/main...*) f=$STUB_DIR/compare.json ;; */releases*) f=$STUB_DIR/releases.json ;; *) f=$STUB_DIR/compare-live.json ;; esac",
         "[[ -f $f ]] || exit 22",
         'cat "$f"',
       ].join("\n"),
@@ -558,7 +558,7 @@ describe("2985: release-driver", { skip: SKIP }, () => {
     assert.match(
       call,
       new RegExp(
-        `https://api\\.github\\.com/repos/doctor-school/ds-platform/compare/main\\.\\.\\.${SHA}$`,
+        `https://api\\.github\\.com/repos/doctor-school/ds-platform/compare/refs/heads/main\\.\\.\\.${SHA}$`,
       ),
     );
     assert.doesNotMatch(call, /Authorization|token/i);

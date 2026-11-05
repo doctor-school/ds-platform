@@ -412,12 +412,15 @@ post-merge acceptance remains tracked by #3144 until that observation is recorde
 - **A manual one-off, not Terraform.** The registry was created through the Timeweb
   API on 2026-10-16; no Terraform resource models it, so `terraform plan` neither
   shows nor recreates it. Endpoint: `ds-platform.registry.twcstorage.ru`.
-- **Two tokens, each scoped to the job that needs it.**
+- **Three tokens, each scoped to the job that needs it.** Push and pull are registry
+  tokens; read is a Timeweb API token, because the registry tokens cannot read usage
+  and the account-wide `TWC_TOKEN` must never reach CI or a box.
 
-  | Token | Scope       | Lives in                                                                                                                       | Used by                                                                                       |
-  | ----- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-  | push  | push + pull | GitHub Environment `build`, secret `REGISTRY_PUSH_TOKEN`                                                                       | `runtime-images.yml` `build` job only — it runs nothing but buildx after login                |
-  | pull  | pull only   | GitHub Environment `build`, secret `REGISTRY_PULL_TOKEN`; each box, `/etc/ds-platform/registry-pull-token` (0600, `root:root`) | `runtime-images.yml` `verify` job (runs PR-head code); the box's `docker login` before a pull |
+  | Token | Scope                                                                                                                              | Lives in                                                                                                                       | Used by                                                                                       |
+  | ----- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+  | push  | push + pull                                                                                                                        | GitHub Environment `build`, secret `REGISTRY_PUSH_TOKEN`                                                                       | `runtime-images.yml` `build` job only — it runs nothing but buildx after login                |
+  | pull  | pull only                                                                                                                          | GitHub Environment `build`, secret `REGISTRY_PULL_TOKEN`; each box, `/etc/ds-platform/registry-pull-token` (0600, `root:root`) | `runtime-images.yml` `verify` job (runs PR-head code); the box's `docker login` before a pull |
+  | read  | Timeweb API token, project `ds-platform` only: «Реестр контейнеров» — только просмотр, everything else none, sensitive data hidden | GitHub Environment `build`, secret `TWC_READ_TOKEN`                                                                            | `registry-retention.yml` «Plan and prune» step only — the registry's disk usage (#3724)       |
 
   The push token is being removed from ds-stage-1 (`/etc/ds-platform/registry-push-token`)
   under #2981 now that the box only pulls; after that it lives only in Environment `build`.
@@ -428,7 +431,7 @@ post-merge acceptance remains tracked by #3144 until that observation is recorde
 
   Login: `docker login ds-platform.registry.twcstorage.ru -u ds-platform --password-stdin`
   with the token on stdin — the token authenticates; the username is not checked.
-  Neither token is ever written into this repo, an env file or chat.
+  No token is ever written into this repo, an env file or chat.
 
 - **Image naming.** Every `main` merge pushes `ds-platform.registry.twcstorage.ru/<image>:<sha>`;
   an internal pull request carrying the `stage-slot` label pushes
@@ -479,6 +482,16 @@ post-merge acceptance remains tracked by #3144 until that observation is recorde
   deployment, the newest green-`stage-suite` `main` commit or among the newest 3
   `main` images. The job's token reads commit statuses (`statuses: read`). Policy and planner:
   `tools/deploy/lib/registry-retention.mjs`; runner: `tools/deploy/registry-retention.mjs`.
+
+- **Usage signal** (#3724). A full registry otherwise shows only as a failed `main`
+  push (`403 no_free_space_left_in_registry`), and space returns only at the nightly
+  GC, so every retention run reads `disk_stats` (GB) from
+  `GET https://api.timeweb.cloud/api/v1/container-registry/31207` with the read token
+  and writes `registry disk: <used>/<size> GB (<pct>%)` to its step summary. At
+  ≥ 70 % the run raises a warning; at ≥ 90 % it fails — after the prune has finished,
+  never instead of it. A missing token or a failed or refused read is a warning; the
+  read never blocks or alters the prune. Thresholds: `REGISTRY_DISK_WARN_RATIO` /
+  `REGISTRY_DISK_FAIL_RATIO` in the planner.
 
 - **Stage and production both consume it; neither box builds.** The shared mechanics
   live in `tools/deploy/lib/registry.mjs`: the commit's `images-<sha>.json` is resolved

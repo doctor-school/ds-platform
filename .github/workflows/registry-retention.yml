@@ -12,6 +12,8 @@ name: Registry retention
 #     tags go as soon as its `main` images exist (deletes — the merge of this file
 #     itself starts the first such run).
 #   - workflow_dispatch: `dry_run` (default true) prints the plan and deletes nothing.
+# Every run also reports the registry's disk usage (#3724): a warning at >= 70 %, a
+# failed run at >= 90 % (after the prune), a warning when the usage cannot be read.
 
 on:
   schedule:
@@ -61,4 +63,6 @@ jobs:
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_PUSH_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          # Read-only, project-scoped Timeweb API token: registry disk usage only (#3724).
+          TWC_READ_TOKEN: ${{ secrets.TWC_READ_TOKEN }}
         run: node tools/deploy/registry-retention.mjs

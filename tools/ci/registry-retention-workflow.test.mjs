@@ -60,3 +60,22 @@ it("every workflow holding the registry write/delete token participates in the l
     assert.deepEqual(parse(read(name)).concurrency, expected[name], name);
   }
 });
+
+it("the read-only Timeweb token reaches only the retention prune step (#3724)", () => {
+  const holders = readdirSync(fileURLToPath(workflows))
+    .filter((name) => /\.ya?ml$/.test(name))
+    .filter((name) => read(name).includes("secrets.TWC_READ_TOKEN"))
+    .sort();
+  assert.deepEqual(holders, ["registry-retention.yml"]);
+  const workflow = parse(read("registry-retention.yml"));
+  assert.equal(workflow.env?.TWC_READ_TOKEN, undefined, "workflow env");
+  const job = workflow.jobs.retention;
+  assert.equal(job.env?.TWC_READ_TOKEN, undefined, "job env");
+  const steps = job.steps.filter((step) =>
+    JSON.stringify(step).includes("TWC_READ_TOKEN"),
+  );
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].name, "Plan and prune");
+  assert.equal(steps[0].run, "node tools/deploy/registry-retention.mjs");
+  assert.equal(steps[0].env.TWC_READ_TOKEN, "${{ secrets.TWC_READ_TOKEN }}");
+});

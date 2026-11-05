@@ -6,8 +6,13 @@ import assert from "node:assert/strict";
 
 import {
   RetentionError,
+  REGISTRY_DISK_FAIL_RATIO,
+  REGISTRY_DISK_WARN_RATIO,
   STAGE_SUITE_WALK_DEPTH,
+  TIMEWEB_REGISTRY_ID,
+  assessRegistryDisk,
   findGreenStageSuite,
+  readRegistryDisk,
   parseBearerChallenge,
   nextTagRequest,
   parseNextLink,
@@ -512,4 +517,115 @@ test("fail closed: a main history shorter than the bound with no green stage-sui
     (error) =>
       error instanceof RetentionError && /2 main commits/.test(error.message),
   );
+});
+
+// ── Registry disk usage (#3724) ─────────────────────────────────────────────────
+
+const TOKEN = "twc-read-secret-value";
+
+/** A `fetch` stub that records its calls and answers with `respond(url, init)`. */
+function stubFetch(respond) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return respond(url, init);
+  };
+  return { calls, fetchImpl };
+}
+
+const jsonResponse = (status, body) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+
+test("readRegistryDisk: GETs the registry with the bearer token and returns disk_stats", async () => {
+  const { calls, fetchImpl } = stubFetch(() =>
+    jsonResponse(200, {
+      container_registry: {
+        id: TIMEWEB_REGISTRY_ID,
+        preset_id: 1945,
+        disk_stats: { size: 50, used: 21 },
+      },
+    }),
+  );
+  const disk = await readRegistryDisk({ token: TOKEN, fetchImpl });
+  assert.deepEqual(disk, { ok: true, used: 21, size: 50 });
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0].url,
+    `https://api.timeweb.cloud/api/v1/container-registry/${TIMEWEB_REGISTRY_ID}`,
+  );
+  assert.equal(calls[0].init.method ?? "GET", "GET");
+  assert.equal(calls[0].init.headers.Authorization, `Bearer ${TOKEN}`);
+});
+
+test("readRegistryDisk: no token is a failed read, nothing is fetched", async () => {
+  const { calls, fetchImpl } = stubFetch(() => jsonResponse(200, {}));
+  const disk = await readRegistryDisk({ token: "", fetchImpl });
+  assert.equal(disk.ok, false);
+  assert.match(disk.reason, /TWC_READ_TOKEN is not set/);
+  assert.equal(calls.length, 0);
+});
+
+test("readRegistryDisk: an unauthorized answer is a failed read that never echoes the token", async () => {
+  const { fetchImpl } = stubFetch(() =>
+    jsonResponse(403, { message: `token ${TOKEN} has no access` }),
+  );
+  const disk = await readRegistryDisk({ token: TOKEN, fetchImpl });
+  assert.equal(disk.ok, false);
+  assert.match(disk.reason, /HTTP 403/);
+  assert.ok(!disk.reason.includes(TOKEN));
+});
+
+test("readRegistryDisk: a network error is a failed read that never echoes the token", async () => {
+  const { fetchImpl } = stubFetch(() => {
+    throw new Error(`connect ECONNREFUSED (auth ${TOKEN})`);
+  });
+  const disk = await readRegistryDisk({ token: TOKEN, fetchImpl });
+  assert.equal(disk.ok, false);
+  assert.match(disk.reason, /ECONNREFUSED/);
+  assert.ok(!disk.reason.includes(TOKEN));
+});
+
+test("readRegistryDisk: a body without numeric disk_stats is a failed read", async () => {
+  for (const body of [
+    {},
+    { container_registry: {} },
+    { container_registry: { disk_stats: { size: 0, used: 0 } } },
+    { container_registry: { disk_stats: { size: "50", used: 3 } } },
+  ]) {
+    const { fetchImpl } = stubFetch(() => jsonResponse(200, body));
+    const disk = await readRegistryDisk({ token: TOKEN, fetchImpl });
+    assert.equal(disk.ok, false, JSON.stringify(body));
+    assert.match(disk.reason, /disk_stats/);
+  }
+});
+
+test("assessRegistryDisk: below 70 % is ok, from 70 % a warning, from 90 % a failure", () => {
+  assert.equal(REGISTRY_DISK_WARN_RATIO, 0.7);
+  assert.equal(REGISTRY_DISK_FAIL_RATIO, 0.9);
+  const level = (used, size) =>
+    assessRegistryDisk({ ok: true, used, size }).level;
+  assert.equal(level(34, 50), "ok");
+  assert.equal(level(35, 50), "warn");
+  assert.equal(level(44, 50), "warn");
+  assert.equal(level(45, 50), "fail");
+  assert.equal(level(50, 50), "fail");
+});
+
+test("assessRegistryDisk: the summary line reads used/size GB and the percentage", () => {
+  const a = assessRegistryDisk({ ok: true, used: 36, size: 50 });
+  assert.equal(a.line, "registry disk: 36/50 GB (72%)");
+  assert.match(a.message, /registry disk: 36\/50 GB \(72%\)/);
+  assert.match(a.message, /70%/);
+  const f = assessRegistryDisk({ ok: true, used: 46, size: 50 });
+  assert.match(f.message, /90%/);
+});
+
+test("assessRegistryDisk: a failed read is a warning, never a failure", () => {
+  const a = assessRegistryDisk({ ok: false, reason: "HTTP 401" });
+  assert.equal(a.level, "warn");
+  assert.match(a.line, /registry disk: unknown/);
+  assert.match(a.message, /HTTP 401/);
 });

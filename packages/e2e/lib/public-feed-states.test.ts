@@ -3,7 +3,7 @@ import { assertOperationalReport } from "../api-probes/operational-report.js";
 import {
   publicFeedStateTitles,
   publicFeedStatePattern,
-} from "./public-feed-states.js";
+} from "./host-tags.js";
 import { ownedFeedEntryDatabase } from "./feed-entry.js";
 
 describe("018 dedicated public feed states", () => {

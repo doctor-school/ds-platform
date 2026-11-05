@@ -9,7 +9,7 @@ import {
   ownedFeedEntryDatabase,
 } from "./lib/feed-entry.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
-import { publicFeedStatePattern } from "./lib/public-feed-states.js";
+import { publicFeedStatePattern } from "./lib/host-tags.js";
 
 const states = process.env.E2E_PUBLIC_FEED_STATES === "1";
 const task = states ? 3772 : 3751;

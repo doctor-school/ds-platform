@@ -16,9 +16,10 @@ name: Recovery custody
 # the status lines of tools/deploy/lib/recovery-custody.mjs only — no value, no
 # fingerprint, no ciphertext. A box that does not answer its success word fails the job.
 #
-# Until the custodian ceremony (infra/deploy/recovery/custodians.txt with fewer than two
-# recipients) a scheduled run ends green without contacting the boxes and leaves a
-# notice; a dispatch still runs and fails closed on the box.
+# Until the custodian ceremony (infra/deploy/recovery/custodians.txt with no recipient
+# line at all) a scheduled run ends green without contacting the boxes and leaves a
+# notice; any recipient line, valid or not, runs, so a broken file fails red on the
+# box; a dispatch always runs and fails closed on the box.
 
 on:
   schedule:

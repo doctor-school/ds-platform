@@ -148,12 +148,14 @@ identity. The log carries status lines only; the repository is public and no art
 is uploaded. Nothing on the boxes deletes old bundles; a provider lifecycle rule on
 the prefix is tracked in `DEBT.md`.
 
-**Before the ceremony.** While `custodians.txt` holds fewer than two valid recipients,
-a scheduled run ends green without contacting the boxes and leaves the notice
-«custodian ceremony pending (#3662)» in the log and the job summary; a dispatched run
-reaches the boxes, which refuse with «#3662 custodian ceremony pending», and fails.
-The count is the box gate's own rule (native recipients, distinct, nothing but
-comments besides them).
+**Before the ceremony.** While `custodians.txt` holds no recipient line at all (only
+comments and blank lines), a scheduled run ends green without contacting the boxes and
+leaves the notice «custodian ceremony pending (#3662)» in the log and the job summary;
+a dispatched run reaches the boxes, which refuse with «#3662 custodian ceremony
+pending», and fails. Once any recipient line is present, valid or not, every scheduled
+run reaches the boxes, so a broken file after the ceremony (a typo, a plugin
+recipient, a removed custodian leaving fewer than two) fails red there. The box gate's
+rule: two distinct native recipients, nothing but comments besides them.
 
 **After a change.** Any change to a file under `/etc/ds-platform/` on either box — a
 rotation, a new key, a reissue from §1.3 — makes the next daily check report
@@ -229,6 +231,7 @@ console). The bucket name and endpoint are `PGBACKREST_REPO1_S3_BUCKET` /
    S3="aws s3 --endpoint-url https://<endpoint> --region ru-1"
    $S3 cp "s3://<bucket>/recovery-bundle/$BOX/latest.json" "latest-$BOX.json"
    grep -E '"(object|bytes|sha256)"' "latest-$BOX.json"   # bundle.object and its size and hash
+   sed -n '/"members": \[/,/\]/p' "latest-$BOX.json"     # members: the file names step 3 checks
    ```
 
 2. **Fetch the bundle it names and verify it.** `bundle.object` is
@@ -245,7 +248,7 @@ console). The bucket name and endpoint are `PGBACKREST_REPO1_S3_BUCKET` /
    that box and repeat.
 
 3. **Decrypt offline and verify the member list** against the manifest's `members`
-   (names only, nothing is extracted):
+   printed in step 1 (names only, nothing is extracted):
 
    ```bash
    set -o pipefail

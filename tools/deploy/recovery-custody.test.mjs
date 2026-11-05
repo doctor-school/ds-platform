@@ -273,10 +273,11 @@ describe("3662: the status filter — status lines only, a pass needs both boxes
   });
 });
 
-// Until the custodian ceremony a scheduled run would go red every day: with fewer than
-// two valid recipients it ends green without contacting the boxes; a dispatch still
-// fails closed on the box; from two on, the schedule runs as before. The count is the
-// box gate's own rule (ds-recovery check_custodians).
+// Until the custodian ceremony a scheduled run would go red every day: while
+// custodians.txt holds no recipient line at all it ends green without contacting the
+// boxes; any recipient line, valid or not, runs, so a broken file after the ceremony
+// fails red on the box; a dispatch always runs. The count is the box gate's own rule
+// (ds-recovery check_custodians).
 describe("3662: the custodian gate before the ceremony", () => {
   const DS_RECOVERY = join(REPO, "infra/deploy/bin/ds-recovery");
   const DS_RECOVERY_TEXT = readFileSync(DS_RECOVERY, "utf8");
@@ -291,6 +292,8 @@ describe("3662: the custodian gate before the ceremony", () => {
     duplicate: `# role: first custodian\n${R1}\n# role: second custodian\n${R1}\n`,
     oneAndPlugin: `# role: first custodian\n${R1}\n# role: second custodian\n${PLUGIN}\n`,
     twoAndPlugin: `${R1}\n${R2}\n${PLUGIN}\n`,
+    pluginOnly: `# role: first custodian\n${PLUGIN}\n`,
+    typo: `# role: first custodian\nage1-not-a-recipient\n`,
     indented: `  ${R1}\n${R2}\n`,
     noNewline: `${R1}\n${R2}`,
   };
@@ -391,12 +394,10 @@ describe("3662: the custodian gate before the ceremony", () => {
   );
 
   for (const [name, text] of [
-    ["no recipient", FIXTURES.empty],
-    ["one recipient", FIXTURES.one],
-    ["one recipient and a plugin one", FIXTURES.oneAndPlugin],
-    ["a duplicate", FIXTURES.duplicate],
+    ["an empty file", FIXTURES.empty],
+    ["comments and blank lines only", FIXTURES.comments],
   ]) {
-    it(`a scheduled run with ${name} ends green without contacting the boxes`, () => {
+    it(`a scheduled run with ${name} (before the ceremony) ends green without contacting the boxes`, () => {
       for (const cron of [CRONS.bundle, CRONS.check]) {
         const r = run("schedule", cron, "", text);
         assert.equal(r.rc, 0);
@@ -411,6 +412,25 @@ describe("3662: the custodian gate before the ceremony", () => {
         assert.match(r.summary, /custodian ceremony pending \(#3662\)/);
         // Status words and counts only.
         assert.ok(!`${r.logs.join("\n")}${r.summary}`.includes("age1"));
+      }
+    });
+  }
+
+  // After the ceremony a broken file must not turn the schedule green: any recipient
+  // line means the ceremony happened, so the box gate decides, and refuses red.
+  for (const [name, text] of [
+    ["one recipient", FIXTURES.one],
+    ["one recipient and a plugin one", FIXTURES.oneAndPlugin],
+    ["a duplicate", FIXTURES.duplicate],
+    ["a plugin recipient only", FIXTURES.pluginOnly],
+    ["a malformed line only", FIXTURES.typo],
+  ]) {
+    it(`a scheduled run with ${name} runs, so the box gate fails it red`, () => {
+      for (const cron of [CRONS.bundle, CRONS.check]) {
+        const r = run("schedule", cron, "", text);
+        assert.equal(r.rc, 0);
+        assert.match(r.output, /^verb=recovery-(bundle|check)\nrun=true\n$/);
+        assert.equal(r.summary, "");
       }
     });
   }

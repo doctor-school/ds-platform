@@ -3,7 +3,7 @@
 //
 //   node tools/deploy/recovery-custody.mjs verb <event> <schedule> <input-verb>
 //       → appends `verb=<verb>` and `run=true|false` to $GITHUB_OUTPUT; a scheduled
-//         run before the custodian ceremony (fewer than two recipients) is run=false
+//         run before the custodian ceremony (no recipient line at all) is run=false
 //   node tools/deploy/recovery-custody.mjs status <verb> <rc> <stdout-file> <stderr-file>
 //       → the status lines only; exit 1 unless every box answered its success word
 
@@ -46,20 +46,21 @@ export function main(
         return 1;
       }
       // Before the ceremony the box refuses every verb, so a schedule would go red
-      // daily (#3662 decision-debt (a)); a dispatch still reaches the box and fails
-      // closed there.
+      // daily (#3662 decision-debt (a)). Only a file with no recipient line at all is
+      // that state: any line, valid or not, means the ceremony happened and the box
+      // gate must judge it, red when broken. A dispatch always reaches the box.
       let text = "";
       try {
         text = readFileSync(custodians, "utf8");
       } catch {
-        // No file: zero recipients, the same verdict as the box's.
+        // No file: no recipient line, the same verdict as the box's.
       }
-      const { count } = custodianGate(text);
-      const run = event !== "schedule" || count >= MIN_RECIPIENTS;
+      const { count, invalid } = custodianGate(text);
+      const run = event !== "schedule" || count + invalid > 0;
       if (output) appendFileSync(output, `verb=${verb}\nrun=${run}\n`);
       console.log(`recovery-custody: verb ${verb}`);
       if (!run) {
-        const line = `recovery-custody: ${verb} skipped, custodians.txt holds ${count} of ${MIN_RECIPIENTS} recipients: custodian ceremony pending (#3662)`;
+        const line = `recovery-custody: ${verb} skipped, custodians.txt holds no recipient line (${MIN_RECIPIENTS} required): custodian ceremony pending (#3662)`;
         console.log(`::notice::${line}`);
         if (summary) appendFileSync(summary, `${line}\n`);
       }

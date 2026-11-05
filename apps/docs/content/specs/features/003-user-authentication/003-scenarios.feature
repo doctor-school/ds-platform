@@ -1973,3 +1973,50 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Given two uniquely owned verified Academy users are prepared for staff-profile role checks
     When the platform-admin-only Academy owner opens and edits their own profile then signs out
     Then Academy refuses the registrar-only profile but admits the same owner after a doctor-guest grant and fresh sign-in
+
+  # Production amendment 2026-11-05 (#3748, implementation #3749): a returned-to
+  # tab re-checks its session; the cabinet chip navigates by document.
+  # Playwright cross-host on a stage slot, Academy portal + doctor storefront.
+  @EARS-73 @EARS-10 @happy @host:both @return-recheck-signed-out
+  Scenario Outline: A signed-in tab returned to after a sign-out on the other storefront turns guest
+    Given a doctor signed in on the Academy and on the doctor storefront in one browser
+    And the <other> storefront's tab on <path> is open and hidden
+    When the doctor signs out on the <signing-out> storefront
+    And the <other> storefront's tab becomes visible again
+    Then that tab makes exactly one session read
+    And without user action it shows <outcome>
+    And no silent check runs
+
+    Examples:
+      | signing-out | other   | path            | outcome                                   |
+      | doctor      | Academy | an эфир page    | that page's guest render                  |
+      | Academy     | doctor  | an эфир page    | that page's guest render                  |
+      | doctor      | Academy | "/account"      | the sign-in host, by a document navigation |
+      | Academy     | doctor  | "/account"      | the sign-in host, by a document navigation |
+
+  @EARS-73 @happy @host:both @return-recheck-session-holds
+  Scenario Outline: A tab whose session holds is unchanged on return
+    Given a doctor signed in on the <storefront> storefront with its tab hidden
+    When the tab becomes visible again
+    Then that tab makes exactly one session read
+    And the page and its header are unchanged
+    When the tab stays visible for a minute
+    Then no further session read is made
+
+    Examples:
+      | storefront |
+      | Academy    |
+      | doctor     |
+
+  @EARS-74 @EARS-73 @failure @host:both @cabinet-chip-document
+  Scenario Outline: The profile chip in a stale tab goes straight to the sign-in host
+    Given a doctor signed in on both storefronts in one browser
+    And the <other> storefront's tab still shows its signed-in render after a sign-out on the <signing-out> storefront
+    When the doctor activates the profile chip in that tab before any re-check
+    Then the request sequence shows a document navigation to "/account", not an "_rsc" fetch of "/account"
+    And no empty main frame is committed before the sign-in host renders
+
+    Examples:
+      | signing-out | other   |
+      | doctor      | Academy |
+      | Academy     | doctor  |

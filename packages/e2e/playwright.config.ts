@@ -6,6 +6,7 @@ import { HOSTS, SIGN_IN_HOST } from "./hosts.js";
 import { authLimitTagsFor } from "./lib/default-auth-limits.js";
 import { ordinaryStorefrontTagsFor } from "./lib/host-tags.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
+import { publicFeedStatePattern } from "./lib/public-feed-states.js";
 
 /**
  * The C6 REGRESSION SUITE — staging/regression-contour tech spec §6 (Issue #2067).
@@ -142,6 +143,7 @@ export default defineConfig({
   workers,
   forbidOnly: !!process.env.CI,
   ...(grep ? { grep } : {}),
+  grepInvert: publicFeedStatePattern,
   retries: 0,
   timeout: 120_000,
   expect: { timeout: 20_000 },

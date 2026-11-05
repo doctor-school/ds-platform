@@ -20,10 +20,13 @@ const apiRequire = createRequire(
   resolve(feedEntryRoot, "apps/api/package.json"),
 );
 
-export function ownedFeedEntryDatabase(value: string): string {
-  if (!/^\/ds_(dev|probe)_3751$/.test(new URL(value).pathname))
+export function ownedFeedEntryDatabase(
+  value: string,
+  task: 3751 | 3772 = 3751,
+): string {
+  if (!new RegExp(`^/ds_(dev|probe)_${task}$`).test(new URL(value).pathname))
     throw new Error(
-      "Feed-entry originals require the dedicated #3751 database",
+      `Feed-entry originals require the dedicated #${task} database`,
     );
   return value;
 }

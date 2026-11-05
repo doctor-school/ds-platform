@@ -15,6 +15,7 @@ on:
       - "packages/events-storefront/**"
       - "packages/design-system/**"
       - "apps/docs/content/specs/features/017-doctor-shell-specialties/**"
+      - "apps/docs/content/specs/features/018-specialty-feed/**"
       - "design-source/doctor-home.dc.html"
       - "design-source/ds-shell.dc.html"
       - "design-source/manifest.json"
@@ -34,6 +35,7 @@ on:
       - "packages/events-storefront/**"
       - "packages/design-system/**"
       - "apps/docs/content/specs/features/017-doctor-shell-specialties/**"
+      - "apps/docs/content/specs/features/018-specialty-feed/**"
       - "design-source/doctor-home.dc.html"
       - "design-source/ds-shell.dc.html"
       - "design-source/manifest.json"
@@ -51,19 +53,24 @@ permissions:
 jobs:
   public-feed-entry:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [3751, 3772]
     timeout-minutes: 15
     env:
       TURBO_TELEMETRY_DISABLED: "1"
-      DATABASE_URL: postgres://ds:ds@127.0.0.1:5432/ds_probe_3751
+      DATABASE_URL: postgres://ds:ds@127.0.0.1:5432/ds_probe_${{ matrix.task }}
       API_PROXY_TARGET: http://127.0.0.1:3000
       E2E_API_URL: http://127.0.0.1:3000
       E2E_DOCTOR_URL: http://localhost:3004
-      E2E_FEED_ENTRY_DATABASE_URL: postgres://ds:ds@127.0.0.1:5432/ds_probe_3751
+      E2E_FEED_ENTRY_DATABASE_URL: postgres://ds:ds@127.0.0.1:5432/ds_probe_${{ matrix.task }}
       E2E_FEED_ENTRY_BOOT: "1"
+      E2E_PUBLIC_FEED_STATES: ${{ matrix.task == 3772 && '1' || '0' }}
     steps:
       - name: Resolve task-owned receipt paths on the runner
         run: |
-          echo "E2E_FEED_ENTRY_LOG=$RUNNER_TEMP/public-feed-entry/stand-ops-3751.log" >> "$GITHUB_ENV"
+          echo "E2E_FEED_ENTRY_LOG=$RUNNER_TEMP/public-feed-entry/stand-ops-${{ matrix.task }}.log" >> "$GITHUB_ENV"
           echo "E2E_FEED_ENTRY_ARTIFACT_DIR=$RUNNER_TEMP/public-feed-entry" >> "$GITHUB_ENV"
           echo "E2E_REPORT_DIR=$RUNNER_TEMP/public-feed-entry/report" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -77,13 +84,13 @@ jobs:
         run: |
           mkdir -p "$E2E_FEED_ENTRY_ARTIFACT_DIR"
           git rev-parse HEAD > "$E2E_FEED_ENTRY_ARTIFACT_DIR/head.txt"
-          printf '%s\n' '{"command":"build repository pg17-partman image and start job-owned ds_probe_3751 Postgres"}' >> "$E2E_FEED_ENTRY_LOG"
+          printf '%s\n' '{"command":"build repository pg17-partman image and start job-owned ds_probe_${{ matrix.task }} Postgres"}' >> "$E2E_FEED_ENTRY_LOG"
           docker build -t ds-platform/postgres:pg17-partman infra/dev-stand/postgres
           docker run -d --name ds-feed-entry-postgres --network host \
-            -e POSTGRES_USER=ds -e POSTGRES_PASSWORD=ds -e POSTGRES_DB=ds_probe_3751 \
+            -e POSTGRES_USER=ds -e POSTGRES_PASSWORD=ds -e POSTGRES_DB=ds_probe_${{ matrix.task }} \
             ds-platform/postgres:pg17-partman
           for i in $(seq 1 30); do
-            if docker exec ds-feed-entry-postgres pg_isready -U ds -d ds_probe_3751; then exit 0; fi
+            if docker exec ds-feed-entry-postgres pg_isready -U ds -d ds_probe_${{ matrix.task }}; then exit 0; fi
             sleep 2
           done
           docker logs ds-feed-entry-postgres
@@ -91,7 +98,7 @@ jobs:
       - name: Build committed API and Doctor, then migrate the owned DB
         run: |
           pnpm exec turbo run build --filter=@ds/api --filter=@ds/doctor --filter=@ds/e2e...
-          printf '%s\n' '{"command":"drizzle:migrate:ci against job-owned ds_probe_3751"}' >> "$E2E_FEED_ENTRY_LOG"
+          printf '%s\n' '{"command":"drizzle:migrate:ci against job-owned ds_probe_${{ matrix.task }}"}' >> "$E2E_FEED_ENTRY_LOG"
           pnpm --filter @ds/api drizzle:migrate:ci
       - name: Install Chromium
         run: pnpm --filter @ds/e2e exec playwright install --with-deps chromium
@@ -110,7 +117,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: public-feed-entry-originals
+          name: public-feed-originals-${{ matrix.task }}
           path: ${{ runner.temp }}/public-feed-entry
           if-no-files-found: error
           retention-days: 7

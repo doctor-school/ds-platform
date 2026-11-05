@@ -416,11 +416,11 @@ post-merge acceptance remains tracked by #3144 until that observation is recorde
   tokens; read is a Timeweb API token, because the registry tokens cannot read usage
   and the account-wide `TWC_TOKEN` must never reach CI or a box.
 
-  | Token | Scope                                                                                                                              | Lives in                                                                                                                       | Used by                                                                                       |
-  | ----- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-  | push  | push + pull                                                                                                                        | GitHub Environment `build`, secret `REGISTRY_PUSH_TOKEN`                                                                       | `runtime-images.yml` `build` job only — it runs nothing but buildx after login                |
-  | pull  | pull only                                                                                                                          | GitHub Environment `build`, secret `REGISTRY_PULL_TOKEN`; each box, `/etc/ds-platform/registry-pull-token` (0600, `root:root`) | `runtime-images.yml` `verify` job (runs PR-head code); the box's `docker login` before a pull |
-  | read  | Timeweb API token, project `ds-platform` only: «Реестр контейнеров» — только просмотр, everything else none, sensitive data hidden | GitHub Environment `build`, secret `TWC_READ_TOKEN`                                                                            | `registry-retention.yml` «Plan and prune» step only — the registry's disk usage (#3724)       |
+  | Token | Scope                                                                                                                              | Lives in                                                                                                                       | Used by                                                                                                                                                                              |
+  | ----- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | push  | push + pull                                                                                                                        | GitHub Environment `build`, secret `REGISTRY_PUSH_TOKEN`                                                                       | `runtime-images.yml` `build` job only — it runs nothing but buildx after login                                                                                                       |
+  | pull  | pull only                                                                                                                          | GitHub Environment `build`, secret `REGISTRY_PULL_TOKEN`; each box, `/etc/ds-platform/registry-pull-token` (0600, `root:root`) | `runtime-images.yml` `verify` job (runs PR-head code); `deploy-prod.yml` `preflight` (the registry still serves the target's digests, #3654); the box's `docker login` before a pull |
+  | read  | Timeweb API token, project `ds-platform` only: «Реестр контейнеров» — только просмотр, everything else none, sensitive data hidden | GitHub Environment `build`, secret `TWC_READ_TOKEN`                                                                            | `registry-retention.yml` «Plan and prune» step only — the registry's disk usage (#3724)                                                                                              |
 
   The push token is being removed from ds-stage-1 (`/etc/ds-platform/registry-push-token`)
   under #2981 now that the box only pulls; after that it lives only in Environment `build`.
@@ -451,7 +451,13 @@ post-merge acceptance remains tracked by #3144 until that observation is recorde
     keeps its images) ∪ the newest 3 first-parent `main` commits that have an image
     (stage `main`) ∪ the newest first-parent `main` commit whose `stage-suite` commit
     status is `success` (the release candidate — a release refuses any other, so it
-    survives `main` moving past it with red suites) ∪ the heads of the open `hotfix/*`
+    survives `main` moving past it with red suites) ∪ every newer first-parent `main`
+    commit whose `stage-suite` is still in flight — `pending`, or not yet set while a
+    Stage main run for it is queued or running (its title ends with the SHA) — so a
+    candidate whose suite is still running keeps its images however far `main` moves
+    (#3752) ∪ the target of every queued or running `deploy-prod.yml` run, read from its
+    title (`run-name` ends with the target SHA), so a dispatched release, rollback or
+    redeploy keeps its images (#3654) ∪ the heads of the open `hotfix/*`
     branches (a pending `pnpm deploy:prod --ref` candidate) ∪ the open PR heads;
   - per `pr/<image>` repo: the heads of the currently open pull requests;
   - everything else is deleted (`DELETE /v2/<repo>/manifests/<digest>`). Tags that are
@@ -465,7 +471,10 @@ post-merge acceptance remains tracked by #3144 until that observation is recorde
     read, or no green one among the newest 200 `main` commits
     (`STAGE_SUITE_WALK_DEPTH`, a cost bound on the status reads), deletes nothing and
     fails the run naming why — the candidate may lie further back, so no partial keep
-    is safe.
+    is safe. A queued or running Stage main or Deploy prod run whose title names no
+    target SHA (one started before `run-name`) also deletes nothing until it completes.
+    The release pre-flight re-checks the registry itself, so a target pruned anyway is
+    refused before the box is touched.
 
   It runs daily and after every `main` Runtime images run (whatever its conclusion —
   a run that failed on a full registry is exactly when space is needed); both

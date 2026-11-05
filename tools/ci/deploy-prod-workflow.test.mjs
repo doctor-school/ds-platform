@@ -80,9 +80,7 @@ describe("deploy-prod.yml", () => {
   it("2987: the reason reaches steps only through env:", () => {
     const reasonUses = raw.match(/inputs\.reason/g) ?? [];
     const envUses = [...Object.values(wf.jobs)].flatMap((job) =>
-      (job.steps ?? []).filter(
-        (s) => s.env?.REASON === "${{ inputs.reason }}",
-      ),
+      (job.steps ?? []).filter((s) => s.env?.REASON === "${{ inputs.reason }}"),
     );
     assert.ok(envUses.length >= 3);
     assert.equal(reasonUses.length, envUses.length);
@@ -115,7 +113,10 @@ describe("deploy-prod.yml", () => {
     const poll = byId(steps, "rollback-poll");
     assert.equal(poll.if, "inputs.mode == 'rollback'");
     assert.match(poll.run, /"rollback-status prod \$SHA"/);
-    assert.match(poll.run, /release-runner\.mjs rollback-verdict --sha "\$SHA"/);
+    assert.match(
+      poll.run,
+      /release-runner\.mjs rollback-verdict --sha "\$SHA"/,
+    );
     // Lost contact and the time-out set `unknown` before leaving the loop.
     for (const marker of [
       /failed \$ssh_failures times in a row/,
@@ -419,7 +420,13 @@ describe("3219: deploy-prod.yml — the rollback's real outcome after lost conta
 
   it("the start step names its outcome and continues into the poll after an ssh drop", () => {
     const start = byId("rollback");
-    for (const outcome of ["started", "attached", "already-succeeded", "refused", "ssh-lost"]) {
+    for (const outcome of [
+      "started",
+      "attached",
+      "already-succeeded",
+      "refused",
+      "ssh-lost",
+    ]) {
       assert.match(start.run, new RegExp(`outcome=${outcome}`), outcome);
     }
     assert.match(start.run, /since=\$\(date -u \+%s\)/);
@@ -496,9 +503,17 @@ describe("3219: the rollback poll, run against a stubbed box", () => {
       },
     });
     const outputs = Object.fromEntries(
-      readFileSync(out, "utf8").trim().split("\n").filter(Boolean).map((l) => l.split(/=(.*)/s).slice(0, 2)),
+      readFileSync(out, "utf8")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => l.split(/=(.*)/s).slice(0, 2)),
     );
-    return { status: r.status, outputs, polls: Number(readFileSync(path.join(dir, "n"), "utf8")) };
+    return {
+      status: r.status,
+      outputs,
+      polls: Number(readFileSync(path.join(dir, "n"), "utf8")),
+    };
   };
   const reply = (active, rc, record, live = "d".repeat(40)) =>
     JSON.stringify({
@@ -511,7 +526,12 @@ describe("3219: the rollback poll, run against a stubbed box", () => {
   it("a re-run answered already-succeeded records the box's succeeded verdict", () => {
     const r = runPoll({
       start: "already-succeeded",
-      replies: [reply("inactive", 0, { state: "succeeded", endedAt: "2026-10-28T09:00:00Z" })],
+      replies: [
+        reply("inactive", 0, {
+          state: "succeeded",
+          endedAt: "2026-10-28T09:00:00Z",
+        }),
+      ],
     });
     assert.equal(r.status, 0);
     assert.equal(r.outputs.terminal, "succeeded");
@@ -530,8 +550,16 @@ describe("3219: the rollback poll, run against a stubbed box", () => {
       start: "ssh-lost",
       replies: [
         none,
-        reply("active", null, { state: "running", startedAt: "2026-10-28T10:00:30Z", endedAt: null }),
-        reply("inactive", 0, { state: "succeeded", startedAt: "2026-10-28T10:00:30Z", endedAt: "2026-10-28T10:04:00Z" }),
+        reply("active", null, {
+          state: "running",
+          startedAt: "2026-10-28T10:00:30Z",
+          endedAt: null,
+        }),
+        reply("inactive", 0, {
+          state: "succeeded",
+          startedAt: "2026-10-28T10:00:30Z",
+          endedAt: "2026-10-28T10:04:00Z",
+        }),
       ],
     });
     assert.equal(r.status, 0);
@@ -541,7 +569,13 @@ describe("3219: the rollback poll, run against a stubbed box", () => {
   it("a lost start reads an earlier attempt's failed record as no rollback of this run", () => {
     const r = runPoll({
       start: "ssh-lost",
-      replies: [reply("inactive", 1, { state: "failed", startedAt: "2026-10-28T08:00:00Z", endedAt: "2026-10-28T08:05:00Z" })],
+      replies: [
+        reply("inactive", 1, {
+          state: "failed",
+          startedAt: "2026-10-28T08:00:00Z",
+          endedAt: "2026-10-28T08:05:00Z",
+        }),
+      ],
     });
     assert.equal(r.outputs.reason, "not-started");
   });
@@ -553,7 +587,11 @@ describe("3219: the rollback poll, run against a stubbed box", () => {
         reply(
           "inactive",
           0,
-          { state: "succeeded", startedAt: "2026-10-28T08:00:00Z", endedAt: "2026-10-28T08:05:00Z" },
+          {
+            state: "succeeded",
+            startedAt: "2026-10-28T08:00:00Z",
+            endedAt: "2026-10-28T08:05:00Z",
+          },
           SHA,
         ),
       ],
@@ -612,7 +650,11 @@ describe("3439: the release poll names the failing phase and reason, run against
       },
     });
     const outputs = Object.fromEntries(
-      readFileSync(out, "utf8").trim().split("\n").filter(Boolean).map((l) => l.split(/=(.*)/s).slice(0, 2)),
+      readFileSync(out, "utf8")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => l.split(/=(.*)/s).slice(0, 2)),
     );
     return { status: r.status, stdout: r.stdout, outputs };
   };
@@ -624,15 +666,26 @@ describe("3439: the release poll names the failing phase and reason, run against
     });
 
   it("a red smoke after a recorded prune names phase=smoke and its probes, and hands them to the record", () => {
-    const reason = "prod smoke RED (exit 1): failed probes api /v1/health — the new build is unhealthy";
+    const reason =
+      "prod smoke RED (exit 1): failed probes api /v1/health — the new build is unhealthy";
     const r = runPoll([
       reply("active", null, { step: "prune", state: "running" }),
-      reply("failed", 1, { step: "prune", state: "failed" }, { phase: "smoke", reason }),
+      reply(
+        "failed",
+        1,
+        { step: "prune", state: "failed" },
+        { phase: "smoke", reason },
+      ),
     ]);
     assert.equal(r.status, 1);
-    assert.match(r.stdout, /status: driver=active rc=- step=prune state=running\n/);
+    assert.match(
+      r.stdout,
+      /status: driver=active rc=- step=prune state=running\n/,
+    );
     assert.ok(
-      r.stdout.includes(`::error::release failed (driver=failed rc=1 step=prune state=failed phase=smoke reason=${reason})`),
+      r.stdout.includes(
+        `::error::release failed (driver=failed rc=1 step=prune state=failed phase=smoke reason=${reason})`,
+      ),
       r.stdout,
     );
     assert.equal(r.outputs.terminal, "failed");
@@ -641,7 +694,9 @@ describe("3439: the release poll names the failing phase and reason, run against
   });
 
   it("a success carries no failure outputs", () => {
-    const r = runPoll([reply("inactive", 0, { step: "finish", state: "succeeded" })]);
+    const r = runPoll([
+      reply("inactive", 0, { step: "finish", state: "succeeded" }),
+    ]);
     assert.equal(r.status, 0);
     assert.equal(r.outputs.terminal, "succeeded");
     assert.equal(r.outputs["failed-phase"], "");
@@ -651,9 +706,54 @@ describe("3439: the release poll names the failing phase and reason, run against
   it("the record steps pass the phase and reason on", () => {
     for (const id of ["record", "redeploy-record"]) {
       const step = wf.jobs.deploy.steps.find((s) => s.id === id);
-      assert.equal(step.env.FAILED_PHASE, "${{ steps.poll.outputs.failed-phase }}", id);
-      assert.equal(step.env.FAILED_REASON, "${{ steps.poll.outputs.failed-reason }}", id);
-      assert.match(step.run, /--failed-phase "\$FAILED_PHASE" --failed-reason "\$FAILED_REASON"/, id);
+      assert.equal(
+        step.env.FAILED_PHASE,
+        "${{ steps.poll.outputs.failed-phase }}",
+        id,
+      );
+      assert.equal(
+        step.env.FAILED_REASON,
+        "${{ steps.poll.outputs.failed-reason }}",
+        id,
+      );
+      assert.match(
+        step.run,
+        /--failed-phase "\$FAILED_PHASE" --failed-reason "\$FAILED_REASON"/,
+        id,
+      );
+    }
+  });
+});
+
+describe("3654: the registry check of the pre-flight", () => {
+  it("the run title ends with the target SHA — retention keeps a queued or running run's images", () => {
+    assert.equal(
+      wf["run-name"],
+      "Deploy prod ${{ inputs.mode }} ${{ inputs.sha }}",
+    );
+  });
+
+  it("the pre-flight joins Environment build without a Deployment and reads only the pull-only token", () => {
+    assert.deepEqual(wf.jobs.preflight.environment, {
+      name: "build",
+      deployment: false,
+    });
+    const text = JSON.stringify(wf.jobs.preflight);
+    assert.deepEqual(
+      [...new Set(text.match(/secrets\.[A-Z_]+/g))],
+      ["secrets.REGISTRY_PULL_TOKEN"],
+    );
+    for (const id of [
+      "preflight",
+      "rollback-preflight",
+      "redeploy-preflight",
+    ]) {
+      const step = wf.jobs.preflight.steps.find((s) => s.id === id);
+      assert.equal(
+        step.env.REGISTRY_PULL_TOKEN,
+        "${{ secrets.REGISTRY_PULL_TOKEN }}",
+        id,
+      );
     }
   });
 });

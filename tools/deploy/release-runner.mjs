@@ -7,7 +7,8 @@
 //   preflight --sha <sha>
 //       Before the box is touched: the SHA is in `main`, its `stage-suite` status is
 //       success, CI is green, the release gate and the live-broadcast gate pass, and
-//       the recorded `images-<sha>.json` exists. Prints one status line per check;
+//       the recorded `images-<sha>.json` exists and the registry still serves every
+//       digest it records ($REGISTRY_PULL_TOKEN, pull only). Prints one status line per check;
 //       the first refusal exits 1. Writes `images-run-id=<id>` to $GITHUB_OUTPUT.
 //   record --sha <sha> --state succeeded|failed|unknown [--previous-sha <sha>]
 //       After a terminal status of the prod release driver: on success the release
@@ -24,7 +25,7 @@
 //       SHA is the target of one of the latest 3 `release-*` Releases, a strict
 //       ancestor of the live SHA (the latest successful production Deployment's;
 //       compare `<live>...<sha>` = `behind`), and its `images-<sha>.json` is
-//       recorded. No stage-suite, release-gate or live-broadcast check: the target
+//       recorded and served by the registry. No stage-suite, release-gate or live-broadcast check: the target
 //       passed them when it shipped. Writes `images-run-id=<id>` to $GITHUB_OUTPUT.
 //   rollback-verdict --sha <sha> [--since <epoch-s>]
 //       Reads one `rollback-status prod <sha>` reply on stdin and prints one line:
@@ -47,7 +48,8 @@
 //   redeploy-preflight --sha <sha>
 //       Before the box is touched: the owner quote ($OWNER_QUOTE — env only) is not
 //       blank, the SHA has a success production Deployment (it really was
-//       released) and its `images-<sha>.json` is recorded. No stage-suite, CI,
+//       released) and its `images-<sha>.json` is recorded and served by the
+//       registry. No stage-suite, CI,
 //       release-gate or live-broadcast check: the SHA passed them when it was
 //       released; the box driver refuses any SHA but the live one. Writes
 //       `images-run-id=<id>` to $GITHUB_OUTPUT.
@@ -76,6 +78,7 @@ import {
   createDeploymentRecord,
   recordDeployment,
 } from "./deployment-record.mjs";
+import { registryClient, unservedImages } from "./lib/registry-client.mjs";
 import {
   PROD_MANIFEST_POLICY,
   resolveRecordedImagesViaGh,
@@ -99,6 +102,7 @@ export const PREFLIGHT_ORDER = Object.freeze([
   "release-gate",
   "live-broadcast",
   "recorded-images",
+  "registry-images",
 ]);
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
@@ -115,7 +119,11 @@ const RECORD_STATES = Object.freeze({
  * 30-min poll timed out while the unit kept running, or the start call was lost and
  * the box shows no rollback of this run.
  */
-const ROLLBACK_UNKNOWN_REASONS = Object.freeze(["lost-contact", "timeout", "not-started"]);
+const ROLLBACK_UNKNOWN_REASONS = Object.freeze([
+  "lost-contact",
+  "timeout",
+  "not-started",
+]);
 
 /** What the workflow's `rollback prod <sha>` call answered (#3219). */
 const ROLLBACK_START_OUTCOMES = Object.freeze([
@@ -128,7 +136,13 @@ const ROLLBACK_START_OUTCOMES = Object.freeze([
 /** The flags each command admits; anything else is refused. */
 const COMMAND_FLAGS = Object.freeze({
   preflight: ["--sha"],
-  record: ["--sha", "--state", "--previous-sha", "--failed-phase", "--failed-reason"],
+  record: [
+    "--sha",
+    "--state",
+    "--previous-sha",
+    "--failed-phase",
+    "--failed-reason",
+  ],
   "release-status": ["--sha"],
   "rollback-preflight": ["--sha"],
   "rollback-verdict": ["--sha", "--since"],
@@ -151,13 +165,20 @@ const PHASE_ID = /^[a-z][a-z0-9-]{0,39}$/;
  */
 export function releaseFailure(note) {
   if (typeof note !== "object" || note === null) return null;
-  const phase = typeof note.phase === "string" && PHASE_ID.test(note.phase) ? note.phase : null;
+  const phase =
+    typeof note.phase === "string" && PHASE_ID.test(note.phase)
+      ? note.phase
+      : null;
   let reason =
     typeof note.reason === "string"
-      ? // eslint-disable-next-line no-control-regex -- the control characters are what is folded
-        note.reason.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim()
+      ? note.reason
+          // eslint-disable-next-line no-control-regex -- the control characters are what is folded
+          .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
       : "";
-  if (reason.length > FAILURE_REASON_MAX) reason = `${reason.slice(0, FAILURE_REASON_MAX - 1)}…`;
+  if (reason.length > FAILURE_REASON_MAX)
+    reason = `${reason.slice(0, FAILURE_REASON_MAX - 1)}…`;
   if (phase === null && !reason) return null;
   return { phase, reason: reason || null };
 }
@@ -176,14 +197,18 @@ export function releaseStatusLine(text) {
     return null;
   }
   if (typeof doc !== "object" || doc === null) return null;
-  const driver = typeof doc.driver === "object" && doc.driver !== null ? doc.driver : {};
-  const release = typeof doc.release === "object" && doc.release !== null ? doc.release : {};
-  const word = (v, empty) => (v === null || v === undefined || v === "" ? empty : String(v));
+  const driver =
+    typeof doc.driver === "object" && doc.driver !== null ? doc.driver : {};
+  const release =
+    typeof doc.release === "object" && doc.release !== null ? doc.release : {};
+  const word = (v, empty) =>
+    v === null || v === undefined || v === "" ? empty : String(v);
   let line =
     `driver=${word(driver.active, "?")} rc=${word(driver.rc, "-")} ` +
     `step=${word(release.step, "-")} state=${word(release.state, "-")}`;
   const failure = releaseFailure(driver.failure);
-  if (failure) line += ` phase=${failure.phase ?? "-"} reason=${failure.reason ?? "-"}`;
+  if (failure)
+    line += ` phase=${failure.phase ?? "-"} reason=${failure.reason ?? "-"}`;
   return line;
 }
 
@@ -304,8 +329,63 @@ function capture(cmd, args, cwd) {
   return (r.stdout || "").trim();
 }
 
+/**
+ * The recorded images of the registry `images-<sha>.json` names, read with the
+ * pull-only token: the driver's own check (`infra/deploy/bin/release-driver`), so a
+ * target retention pruned is refused here, before any box step (#3654).
+ */
+export function unservedViaRegistry({ images, sha }) {
+  const token = process.env.REGISTRY_PULL_TOKEN;
+  if (!token) {
+    throw new Error(
+      "REGISTRY_PULL_TOKEN is not set — cannot check that the registry still serves the recorded images",
+    );
+  }
+  return unservedImages({ images, sha, request: registryClient(token) });
+}
+
+/**
+ * The `recorded-images` and `registry-images` checks of every pre-flight: the
+ * manifest is recorded, then the registry serves each digest it records.
+ */
+function imagesChecks({ sha, resolveImages, unserved }) {
+  const short = sha.slice(0, 12);
+  let recorded = null;
+  return {
+    "recorded-images": async () => {
+      const resolved = await resolveImages({ ...PROD_MANIFEST_POLICY, sha });
+      recorded = resolved;
+      return {
+        line: `recorded \`${resolved.ref}\` images for ${short} (run ${resolved.run.url})`,
+        imagesRunId: resolved.run.databaseId,
+      };
+    },
+    "registry-images": async () => {
+      if (!recorded?.images)
+        throw new Error("no recorded images to check against the registry");
+      const missing = await unserved({ images: recorded.images, sha });
+      if (missing.length > 0) {
+        throw new Error(
+          `the registry no longer serves the recorded images of ${short}: ` +
+            `${missing.map((m) => m.name).join(", ")} (${missing.map((m) => m.problem).join("; ")}) — ` +
+            "registry retention pruned them; release a SHA whose images the registry still serves (`pnpm release:lane`)",
+        );
+      }
+      return {
+        line: `the registry serves all ${Object.keys(recorded.images).length} recorded images of ${short}`,
+      };
+    },
+  };
+}
+
 /** The pre-flight checks in the spec order, wired to the shared modules. */
-export function preflightChecks({ sha, repo, cwd = process.cwd() }) {
+export function preflightChecks({
+  sha,
+  repo,
+  cwd = process.cwd(),
+  resolveImages = (args) => resolveRecordedImagesViaGh(args),
+  unserved = unservedViaRegistry,
+}) {
   const short = sha.slice(0, 12);
   const checks = {
     "sha-in-main": async () => {
@@ -379,16 +459,7 @@ export function preflightChecks({ sha, repo, cwd = process.cwd() }) {
       if (r.status !== 0) throw new Error(`live-broadcast gate: ${line}`);
       return { line };
     },
-    "recorded-images": async () => {
-      const resolved = await resolveRecordedImagesViaGh({
-        ...PROD_MANIFEST_POLICY,
-        sha,
-      });
-      return {
-        line: `recorded \`${resolved.ref}\` images for ${short} (run ${resolved.run.url})`,
-        imagesRunId: resolved.run.databaseId,
-      };
-    },
+    ...imagesChecks({ sha, resolveImages, unserved }),
   };
   return PREFLIGHT_ORDER.map((name) => ({ name, run: checks[name] }));
 }
@@ -537,6 +608,7 @@ export const ROLLBACK_PREFLIGHT_ORDER = Object.freeze([
   "recent-release",
   "behind-live",
   "recorded-images",
+  "registry-images",
 ]);
 
 /** The registry keeps the images of exactly the latest 3 releases (spec §8 (a)). */
@@ -599,6 +671,7 @@ export function rollbackPreflightChecks({
   cwd = process.cwd(),
   gh = (args) => capture("gh", args, cwd),
   resolveImages = (args) => resolveRecordedImagesViaGh(args),
+  unserved = unservedViaRegistry,
 }) {
   const short = sha.slice(0, 12);
   const checks = {
@@ -642,13 +715,7 @@ export function rollbackPreflightChecks({
         line: `${short} is behind the live prod SHA ${live.slice(0, 12)}`,
       };
     },
-    "recorded-images": async () => {
-      const resolved = await resolveImages({ ...PROD_MANIFEST_POLICY, sha });
-      return {
-        line: `recorded \`${resolved.ref}\` images for ${short} (run ${resolved.run.url})`,
-        imagesRunId: resolved.run.databaseId,
-      };
-    },
+    ...imagesChecks({ sha, resolveImages, unserved }),
   };
   return ROLLBACK_PREFLIGHT_ORDER.map((name) => ({ name, run: checks[name] }));
 }
@@ -705,7 +772,13 @@ export function rollbackVerdict(text, sha, { since = null } = {}) {
       // own start call was lost too: the rollback has nothing left to do.
       if (record.state === "succeeded" && doc.live === sha) {
         const line = `driver=${active} rc=${driver.rc ?? "-"} state=succeeded live=target (earlier attempt)`;
-        return { terminal: "succeeded", line, from: fromOf(record), absent: false, recovered: true };
+        return {
+          terminal: "succeeded",
+          line,
+          from: fromOf(record),
+          absent: false,
+          recovered: true,
+        };
       }
       record = null;
     }
@@ -771,7 +844,8 @@ const NOTICE_OUTCOME = Object.freeze({
 /** The `unknown` outcome by its cause (#3219); lost contact keeps the line above. */
 const NOTICE_UNKNOWN = Object.freeze({
   "lost-contact": NOTICE_OUTCOME.unknown,
-  timeout: "итог неизвестен: откат не завершился за 30 минут и продолжается на прод-сервере",
+  timeout:
+    "итог неизвестен: откат не завершился за 30 минут и продолжается на прод-сервере",
   "not-started":
     "итог неизвестен: связь оборвалась при запуске, и за 2 минуты откат на прод-сервере не появился",
 });
@@ -779,7 +853,9 @@ const NOTICE_UNKNOWN = Object.freeze({
 /** The Mattermost notice of a rollback: the spec's line first, the outcome below. */
 export function buildRollbackNotice({ sha, state, reason, why = null }) {
   const outcome =
-    state === "unknown" ? (NOTICE_UNKNOWN[why] ?? NOTICE_OUTCOME.unknown) : NOTICE_OUTCOME[state];
+    state === "unknown"
+      ? (NOTICE_UNKNOWN[why] ?? NOTICE_OUTCOME.unknown)
+      : NOTICE_OUTCOME[state];
   return `откат прода на ${sha.slice(0, 12)}: ${String(reason ?? "").trim()}\n${outcome}`;
 }
 
@@ -799,7 +875,10 @@ export async function runRollbackNotice({
     );
     return;
   }
-  await post({ webhook, text: buildRollbackNotice({ sha, state, reason, why }) });
+  await post({
+    webhook,
+    text: buildRollbackNotice({ sha, state, reason, why }),
+  });
   log("✓ rollback notice posted to Mattermost");
 }
 
@@ -810,6 +889,7 @@ export const REDEPLOY_PREFLIGHT_ORDER = Object.freeze([
   "owner-quote",
   "released",
   "recorded-images",
+  "registry-images",
 ]);
 
 /** The redeploy pre-flight checks, wired to `gh` and the recorded-images reader. */
@@ -820,6 +900,7 @@ export function redeployPreflightChecks({
   cwd = process.cwd(),
   gh = (args) => capture("gh", args, cwd),
   resolveImages = (args) => resolveRecordedImagesViaGh(args),
+  unserved = unservedViaRegistry,
 }) {
   const short = sha.slice(0, 12);
   const checks = {
@@ -829,7 +910,9 @@ export function redeployPreflightChecks({
           "owner_quote is empty — a production redeploy needs the owner's word",
         );
       }
-      return { line: `owner quote present (${String(ownerQuote).length} chars)` };
+      return {
+        line: `owner quote present (${String(ownerQuote).length} chars)`,
+      };
     },
     released: async () => {
       if (!(await successRecordExistsViaGh({ sha, gh }))) {
@@ -839,13 +922,7 @@ export function redeployPreflightChecks({
       }
       return { line: `${short} has a success production Deployment (${repo})` };
     },
-    "recorded-images": async () => {
-      const resolved = await resolveImages({ ...PROD_MANIFEST_POLICY, sha });
-      return {
-        line: `recorded \`${resolved.ref}\` images for ${short} (run ${resolved.run.url})`,
-        imagesRunId: resolved.run.databaseId,
-      };
-    },
+    ...imagesChecks({ sha, resolveImages, unserved }),
   };
   return REDEPLOY_PREFLIGHT_ORDER.map((name) => ({ name, run: checks[name] }));
 }
@@ -896,7 +973,8 @@ async function readStdin() {
 }
 
 function writeOutput(text) {
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, text);
+  if (process.env.GITHUB_OUTPUT)
+    appendFileSync(process.env.GITHUB_OUTPUT, text);
 }
 
 function repoName() {
@@ -926,12 +1004,15 @@ async function main() {
     return;
   }
   if (args.command === "rollback-verdict") {
-    const v = rollbackVerdict(await readStdin(), args.sha, { since: args.since });
+    const v = rollbackVerdict(await readStdin(), args.sha, {
+      since: args.since,
+    });
     const word = v.recovered
       ? "recovered"
       : v.absent
         ? "absent"
-        : (v.terminal ?? (v.line === "unreadable reply" ? "unreadable" : "running"));
+        : (v.terminal ??
+          (v.line === "unreadable reply" ? "unreadable" : "running"));
     console.log(`${word} ${v.from ?? "-"} ${v.line}`);
     return;
   }

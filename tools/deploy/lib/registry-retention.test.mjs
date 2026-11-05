@@ -10,6 +10,7 @@ import {
   REGISTRY_DISK_WARN_RATIO,
   STAGE_SUITE_WALK_DEPTH,
   TIMEWEB_REGISTRY_ID,
+  activeRunTargets,
   assessRegistryDisk,
   findGreenStageSuite,
   readRegistryDisk,
@@ -50,7 +51,9 @@ function baseInput(overrides = {}) {
   const history = overrides.mainHistory ?? mainHistory;
   return {
     // the newest main commit is the green release candidate unless a test says otherwise
-    stageSuite: { greenSha: history[0] ?? null, walked: 1 },
+    stageSuite: { greenSha: history[0] ?? null, walked: 1, ahead: [] },
+    activeStageShas: [],
+    deployTargets: [],
     tags: registry(mainHistory.map((s, i) => [s, digest(1000 + i)])),
     releases: releases(
       ["release-2026.10.20-1", sha(10)],
@@ -424,7 +427,7 @@ test("the newest green stage-suite main commit is kept beyond the 3-main window 
   // main moved 6 commits past the green candidate, each with a red stage-suite
   const plan = planRetention(
     baseInput({
-      stageSuite: { greenSha: sha(14), walked: 7 },
+      stageSuite: { greenSha: sha(14), walked: 7, ahead: [] },
     }),
   );
   assert.deepEqual(plan.mainShas, [sha(20), sha(19), sha(18)]);
@@ -628,4 +631,155 @@ test("assessRegistryDisk: a failed read is a warning, never a failure", () => {
   assert.equal(a.level, "warn");
   assert.match(a.line, /registry disk: unknown/);
   assert.match(a.message, /HTTP 401/);
+});
+
+// ── In-flight release candidates (#3752) and pending prod deploys (#3654) ───────
+
+test("a main SHA whose stage-suite is pending keeps its images outside the newest 3 (#3752)", () => {
+  // sha(17) is the in-flight candidate: its suite is running while main moved 3
+  // commits past it; sha(10) is the newest green one.
+  const plan = planRetention(
+    baseInput({
+      stageSuite: {
+        greenSha: sha(10),
+        walked: 11,
+        ahead: [
+          { sha: sha(20), state: null },
+          { sha: sha(19), state: null },
+          { sha: sha(18), state: "failure" },
+          { sha: sha(17), state: "pending" },
+          { sha: sha(16), state: "error" },
+        ],
+      },
+    }),
+  );
+  assert.deepEqual(plan.mainShas, [sha(20), sha(19), sha(18)]);
+  assert.deepEqual(plan.inFlightShas, [sha(17)]);
+  const api = plan.repos.find((r) => r.repo === "api");
+  const kept = new Map(api.keep.map((k) => [k.tag, k.reason]));
+  assert.equal(kept.get(sha(17)), "in-flight stage-suite");
+  const deleted = api.delete.flatMap((d) => d.tags);
+  assert.ok(deleted.includes(sha(16)), "a terminal red suite is not in flight");
+  assert.ok(!deleted.includes(sha(17)));
+});
+
+test("a main SHA with no stage-suite yet is in flight only while a Stage main run for it is queued or running (#3752)", () => {
+  const input = (activeStageShas) =>
+    baseInput({
+      stageSuite: {
+        greenSha: sha(10),
+        walked: 11,
+        ahead: [
+          { sha: sha(20), state: null },
+          { sha: sha(19), state: null },
+          { sha: sha(18), state: null },
+          { sha: sha(17), state: null },
+          { sha: sha(16), state: null },
+        ],
+      },
+      activeStageShas,
+    });
+  assert.deepEqual(planRetention(input([sha(16)])).inFlightShas, [sha(16)]);
+  // its Stage run was replaced in the queue: no suite will ever run for it
+  const plan = planRetention(input([]));
+  assert.deepEqual(plan.inFlightShas, []);
+  const api = plan.repos.find((r) => r.repo === "api");
+  assert.ok(api.delete.flatMap((d) => d.tags).includes(sha(16)));
+});
+
+test("fail closed: a stage-suite walk without the states ahead of the candidate, or no active Stage runs listed", () => {
+  assert.throws(
+    () =>
+      planRetention(
+        baseInput({ stageSuite: { greenSha: sha(20), walked: 1 } }),
+      ),
+    (error) => error instanceof RetentionError && /ahead/.test(error.message),
+  );
+  assert.throws(
+    () => planRetention(baseInput({ activeStageShas: undefined })),
+    (error) =>
+      error instanceof RetentionError && /Stage main runs/.test(error.message),
+  );
+});
+
+test("findGreenStageSuite returns the states of the commits it read before the green one", async () => {
+  const states = {
+    [sha(20)]: "pending",
+    [sha(19)]: null,
+    [sha(18)]: "success",
+  };
+  const result = await findGreenStageSuite(
+    [sha(20), sha(19), sha(18), sha(17)],
+    async (s) => (s in states ? states[s] : "failure"),
+  );
+  assert.equal(result.greenSha, sha(18));
+  assert.deepEqual(result.ahead, [
+    { sha: sha(20), state: "pending" },
+    { sha: sha(19), state: null },
+  ]);
+});
+
+test("a SHA with a queued or in-progress deploy-prod run keeps its images (#3654)", () => {
+  // sha(5): a rollback or a release proposed earlier — on no other keep list
+  const plan = planRetention(baseInput({ deployTargets: [sha(5)] }));
+  assert.deepEqual(plan.deployTargets, [sha(5)]);
+  const api = plan.repos.find((r) => r.repo === "api");
+  const kept = new Map(api.keep.map((k) => [k.tag, k.reason]));
+  assert.equal(kept.get(sha(5)), "deploy-prod run");
+  assert.ok(!api.delete.flatMap((d) => d.tags).includes(sha(5)));
+});
+
+test("fail closed: deploy-prod targets not listed, or one that is not a full SHA", () => {
+  for (const deployTargets of [undefined, ["main"]]) {
+    assert.throws(
+      () => planRetention(baseInput({ deployTargets })),
+      (error) =>
+        error instanceof RetentionError && /deploy-prod/.test(error.message),
+    );
+  }
+});
+
+test("activeRunTargets reads each queued or running run's target SHA from its title", () => {
+  assert.deepEqual(
+    activeRunTargets(
+      [
+        { id: 1, title: `Deploy prod release ${sha(5)}` },
+        { id: 2, title: `Deploy prod rollback ${sha(6)}` },
+      ],
+      "deploy-prod",
+    ),
+    [sha(5), sha(6)],
+  );
+  assert.deepEqual(activeRunTargets([], "deploy-prod"), []);
+});
+
+test("fail closed: an active run whose target SHA cannot be determined deletes nothing", () => {
+  for (const runs of [
+    [{ id: 7, title: "Deploy prod" }],
+    [{ id: 7, title: `Deploy prod release ${sha(5)}x` }],
+    [{ id: 7 }],
+    "not a list",
+  ]) {
+    assert.throws(
+      () => activeRunTargets(runs, "deploy-prod"),
+      (error) =>
+        error instanceof RetentionError && /deploy-prod/.test(error.message),
+    );
+  }
+});
+
+test("renderPlanSummary names the in-flight candidates and the deploy-prod targets", () => {
+  const plan = planRetention(
+    baseInput({
+      stageSuite: {
+        greenSha: sha(10),
+        walked: 2,
+        ahead: [{ sha: sha(20), state: "pending" }],
+      },
+      deployTargets: [sha(5)],
+    }),
+  );
+  const text = renderPlanSummary(plan, { dryRun: true });
+  assert.match(text, new RegExp(`In-flight stage-suite kept.*${sha(20)}`));
+  assert.match(text, new RegExp(`deploy-prod.*${sha(5)}`));
 });

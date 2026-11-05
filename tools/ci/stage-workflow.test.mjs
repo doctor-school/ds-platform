@@ -70,7 +70,10 @@ describe("stage.yml", () => {
     assert.match(group, /workflow_run\.event == 'push'/);
     assert.match(group, /workflow_run\.head_branch == 'main'/);
     assert.ok(group.includes("&& 'stage-main' ||"), group);
-    assert.ok(group.includes("format('stage-other-{0}', github.run_id)"), group);
+    assert.ok(
+      group.includes("format('stage-other-{0}', github.run_id)"),
+      group,
+    );
     assert.deepEqual(stage.permissions, { contents: "read" });
     assert.deepEqual(stage.jobs.suite.needs, "converge");
   });
@@ -135,4 +138,11 @@ describe("stage.yml", () => {
     assert.equal(environmentOf(close), undefined);
     assert.match(close.steps[0].run, /state=failure/);
   });
+});
+
+it("3752: the run title ends with the SHA under test — retention keeps a queued or running run's images", () => {
+  assert.equal(
+    stage["run-name"],
+    "Stage main ${{ github.event.workflow_run.head_sha }}",
+  );
 });

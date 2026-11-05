@@ -79,3 +79,14 @@ it("the read-only Timeweb token reaches only the retention prune step (#3724)", 
   assert.equal(steps[0].run, "node tools/deploy/registry-retention.mjs");
   assert.equal(steps[0].env.TWC_READ_TOKEN, "${{ secrets.TWC_READ_TOKEN }}");
 });
+
+it("3752/3654: reads the queued or running Stage main and Deploy prod runs (actions: read), writes nothing", () => {
+  const wf = parse(read("registry-retention.yml"));
+  assert.deepEqual(wf.permissions, {
+    actions: "read",
+    contents: "read",
+    "pull-requests": "read",
+    deployments: "read",
+    statuses: "read",
+  });
+});

@@ -9,7 +9,8 @@ name: Deploy prod
 #   preflight — refuses an empty or whitespace-only owner_quote before anything
 #               else, then `tools/deploy/release-runner.mjs preflight`: the SHA is in
 #               `main`, `stage-suite` is success, CI is green, the release gate and
-#               the live-broadcast gate pass, the recorded `images-<sha>.json` exists.
+#               the live-broadcast gate pass, the recorded `images-<sha>.json` exists,
+#               and the registry still serves every digest it records (#3654).
 #   deploy    — Environment `production` (deployment branches `main`, no required
 #               reviewer, `deployment: false`): ships the manifest to ds-api-prod's
 #               forced command `release prod <sha>` (the prod release driver, a
@@ -64,6 +65,11 @@ name: Deploy prod
 # release-gate exemption, live-broadcast override or hotfix ref. Those stay
 # break-glass on the workstation path (`pnpm deploy:prod`).
 
+# The title ends with the target SHA: registry retention reads it from a queued or
+# running run and keeps that SHA's images (#3654) — a dispatched run's own head_sha is
+# the head of `main`, not the target.
+run-name: Deploy prod ${{ inputs.mode }} ${{ inputs.sha }}
+
 on:
   workflow_dispatch:
     inputs:
@@ -110,6 +116,12 @@ jobs:
   preflight:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # For the pull-only REGISTRY_PULL_TOKEN only: every pre-flight checks that the
+    # registry still serves the recorded digests (#3654), the box driver's check
+    # moved before any box step. No other secret of `build` is referenced here.
+    environment:
+      name: build
+      deployment: false
     permissions:
       actions: read
       checks: read
@@ -167,6 +179,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          REGISTRY_PULL_TOKEN: ${{ secrets.REGISTRY_PULL_TOKEN }}
         run: node tools/deploy/release-runner.mjs preflight --sha "$SHA"
 
       - name: Rollback pre-flight
@@ -175,6 +188,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          REGISTRY_PULL_TOKEN: ${{ secrets.REGISTRY_PULL_TOKEN }}
           REASON: ${{ inputs.reason }}
         run: node tools/deploy/release-runner.mjs rollback-preflight --sha "$SHA"
 
@@ -184,6 +198,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          REGISTRY_PULL_TOKEN: ${{ secrets.REGISTRY_PULL_TOKEN }}
           OWNER_QUOTE: ${{ inputs.owner_quote }}
         run: node tools/deploy/release-runner.mjs redeploy-preflight --sha "$SHA"
 

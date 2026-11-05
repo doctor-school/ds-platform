@@ -10,7 +10,11 @@
 // --rollback` re-pulls a pruned SHA's recorded digests) ∪ the newest MAIN_SHAS_KEPT
 // first-parent `main` commits that have an image (stage `main`) ∪ the newest `main`
 // commit whose `stage-suite` status is `success` (the release candidate, #3240)
-// ∪ the SHA of the latest successful production GitHub Deployment
+// ∪ every newer first-parent `main` commit whose `stage-suite` is still in flight —
+// `pending`, or not yet set while a Stage main run for it is queued or running — so
+// a candidate whose suite is running keeps its images however far `main` moves
+// (#3752) ∪ the target of every queued or in-progress `deploy-prod.yml` run, so a
+// dispatched release, rollback or redeploy never loses its images (#3654) ∪ the SHA of the latest successful production GitHub Deployment
 // (the release cut is non-fatal to a deploy, so a running SHA may have no release)
 // ∪ the heads of the open `hotfix/*` branches (a hotfix is cut from production and
 // pushes under the release namespace, so its pending images are on neither of the
@@ -41,17 +45,22 @@ export const MAIN_SHAS_KEPT = 3;
  *  observed 142 first-parent commits a week, within the token's hourly API budget. */
 export const STAGE_SUITE_WALK_DEPTH = 200;
 const GREEN_STAGE_SUITE = "newest green stage-suite";
+const IN_FLIGHT_STAGE_SUITE = "in-flight stage-suite";
+const DEPLOY_PROD_RUN = "deploy-prod run";
 
 /**
  * The release candidate: the newest `main` commit whose `stage-suite` commit status
  * is `success` (#3240) — a release refuses any other. `readState(sha)` resolves the
  * state (null when there is none) and throws when the status cannot be read. The walk
  * stops at the first green commit, at the first unreadable status (the candidate may
- * lie further back, so nothing past it is known) or at `depth` commits.
+ * lie further back, so nothing past it is known) or at `depth` commits. `ahead` holds
+ * the states read before the green commit, newest first — the commits whose suite
+ * may still be in flight (#3752).
  * Shared by registry retention and `pnpm release:lane` (#3561).
  *
  * @returns {Promise<{greenSha: string | null, walked: number,
- *   unreadable: {sha: string, message: string} | null, bounded: boolean}>}
+ *   unreadable: {sha: string, message: string} | null, bounded: boolean,
+ *   ahead: {sha: string, state: string | null}[]}>}
  */
 export async function newestGreenStageSuite(
   mainHistory,
@@ -59,6 +68,7 @@ export async function newestGreenStageSuite(
   depth = STAGE_SUITE_WALK_DEPTH,
 ) {
   const walk = mainHistory.slice(0, depth);
+  const ahead = [];
   for (let i = 0; i < walk.length; i += 1) {
     let state;
     try {
@@ -69,6 +79,7 @@ export async function newestGreenStageSuite(
         walked: i + 1,
         unreadable: { sha: walk[i], message: error.message },
         bounded: false,
+        ahead,
       };
     }
     if (state === "success")
@@ -77,13 +88,16 @@ export async function newestGreenStageSuite(
         walked: i + 1,
         unreadable: null,
         bounded: false,
+        ahead,
       };
+    ahead.push({ sha: walk[i], state: state ?? null });
   }
   return {
     greenSha: null,
     walked: walk.length,
     unreadable: null,
     bounded: walk.length === depth,
+    ahead,
   };
 }
 
@@ -93,7 +107,8 @@ export async function newestGreenStageSuite(
  * it — an unreadable status, or the bound reached — throws a `RetentionError`: no
  * partial keep is safe and nothing is deleted.
  *
- * @returns {Promise<{greenSha: string, walked: number}>}
+ * @returns {Promise<{greenSha: string, walked: number,
+ *   ahead: {sha: string, state: string | null}[]}>}
  */
 export async function findGreenStageSuite(
   mainHistory,
@@ -102,7 +117,11 @@ export async function findGreenStageSuite(
 ) {
   const result = await newestGreenStageSuite(mainHistory, readState, depth);
   if (result.greenSha)
-    return { greenSha: result.greenSha, walked: result.walked };
+    return {
+      greenSha: result.greenSha,
+      walked: result.walked,
+      ahead: result.ahead,
+    };
   if (result.unreadable)
     throw new RetentionError(
       `stage-suite of main commit ${result.unreadable.sha} could not be read (${result.unreadable.message}) — the release candidate may lie further back; refusing to delete anything`,
@@ -133,6 +152,64 @@ function stageSuiteKeep(stageSuite, mainHistory) {
     );
   }
   return greenSha;
+}
+
+/**
+ * The `main` commits newer than the release candidate whose `stage-suite` is still in
+ * flight (#3752): `pending` (the converge or the suite is running), or no status yet
+ * while a Stage main run for the commit is queued or running (`activeStageShas`). A
+ * missing status with no such run is not in flight: its Stage run was replaced in the
+ * queue, so no suite will run for it. Terminal states (`failure`, `error`) are not in
+ * flight. The states come from the bounded walk, so this adds no status read.
+ */
+function inFlightKeep(stageSuite, activeStageShas, mainHistory) {
+  const ahead = stageSuite?.ahead;
+  if (!Array.isArray(ahead)) {
+    throw new RetentionError(
+      "stage-suite walk: the states ahead of the release candidate are not listed — refusing to delete anything",
+    );
+  }
+  assertShaList(activeStageShas, "queued or running Stage main runs");
+  const active = new Set(activeStageShas);
+  const out = [];
+  for (const entry of ahead) {
+    const s = String(entry?.sha ?? "");
+    if (!FULL_SHA_RE.test(s) || !mainHistory.includes(s)) {
+      throw new RetentionError(
+        `stage-suite walk: commit ${JSON.stringify(entry?.sha ?? null)} ahead of the release candidate is not a main commit`,
+      );
+    }
+    const state = entry.state ?? null;
+    if (state === "pending" || (state === null && active.has(s))) out.push(s);
+  }
+  return out;
+}
+
+/**
+ * The target SHA of each queued or in-progress run of `workflow` (`deploy-prod` or
+ * `stage`), read from its title: both workflows set `run-name` to end with the target
+ * SHA (`deploy-prod.yml`: the `sha` input; `stage.yml`: the triggering Runtime images
+ * run's head SHA). A run's own `head_sha` is the head of the ref it ran on, not its
+ * target. A run whose title does not end with a full SHA (one started before
+ * `run-name`, or a malformed input) throws: its target is unknown, so nothing is
+ * deleted until it completes.
+ *
+ * @param {{id: number, title?: string, url?: string}[]} runs
+ * @returns {string[]}
+ */
+export function activeRunTargets(runs, workflow) {
+  if (!Array.isArray(runs))
+    throw new RetentionError(
+      `queued or running ${workflow} runs not listed — refusing to delete anything`,
+    );
+  return runs.map((run) => {
+    const m = String(run?.title ?? "").match(/ ([0-9a-f]{40})$/);
+    if (!m)
+      throw new RetentionError(
+        `${workflow} run ${run?.url ?? run?.id ?? "?"} is queued or running, but its title ${JSON.stringify(run?.title ?? null)} names no target SHA — refusing to delete anything until it completes`,
+      );
+    return m[1];
+  });
 }
 
 const FULL_SHA_RE = /^[0-9a-f]{40}$/;
@@ -231,6 +308,10 @@ function assertTagListing(tags, repos) {
  *   GitHub Deployment
  * @param {object} input.stageSuite the `findGreenStageSuite` result over
  *   `mainHistory`
+ * @param {string[]} input.activeStageShas targets of the queued or running Stage
+ *   main runs (`activeRunTargets`)
+ * @param {string[]} input.deployTargets targets of the queued or running
+ *   `deploy-prod.yml` runs (`activeRunTargets`)
  */
 export function planRetention({
   tags,
@@ -240,6 +321,8 @@ export function planRetention({
   hotfixHeads,
   productionSha,
   stageSuite,
+  activeStageShas,
+  deployTargets,
 }) {
   const repos = retentionRepos();
   assertTagListing(tags, repos);
@@ -257,6 +340,8 @@ export function planRetention({
     );
   }
   const greenSha = stageSuiteKeep(stageSuite, mainHistory);
+  const inFlightShas = inFlightKeep(stageSuite, activeStageShas, mainHistory);
+  assertShaList(deployTargets, "queued or running deploy-prod runs");
 
   const releaseRepos = repos.filter((r) => !r.startsWith("pr/"));
   const inRegistry = new Set(
@@ -274,6 +359,8 @@ export function planRetention({
   keepOnce(productionSha, "production deployment");
   for (const s of mainShas) keepOnce(s, "main");
   keepOnce(greenSha, GREEN_STAGE_SUITE);
+  for (const s of inFlightShas) keepOnce(s, IN_FLIGHT_STAGE_SUITE);
+  for (const s of deployTargets) keepOnce(s, DEPLOY_PROD_RUN);
   for (const s of hotfixHeads) keepOnce(s, "hotfix branch");
   for (const s of openPrHeads) keepOnce(s, "open PR");
   const prKeep = new Map(openPrHeads.map((s) => [s, "open PR"]));
@@ -321,6 +408,8 @@ export function planRetention({
     mainShas,
     productionSha,
     stageSuite: { greenSha, walked: stageSuite.walked ?? null },
+    inFlightShas,
+    deployTargets: [...deployTargets],
     hotfixHeads: [...hotfixHeads],
     openPrHeads: [...openPrHeads],
     repos: plan,
@@ -333,6 +422,7 @@ function stageSuiteSummary({ greenSha, walked }) {
 
 /** Markdown for `$GITHUB_STEP_SUMMARY` and the log. */
 export function renderPlanSummary(plan, { dryRun }) {
+  const list = (shas) => shas.map((s) => `\`${s}\``).join(", ") || "none";
   const lines = [
     `### Registry retention — ${dryRun ? "dry run (nothing deleted)" : "deleting"}`,
     "",
@@ -340,6 +430,8 @@ export function renderPlanSummary(plan, { dryRun }) {
     `- Main SHAs kept (newest ${MAIN_SHAS_KEPT} with an image): ${plan.mainShas.map((s) => `\`${s}\``).join(", ") || "none"}`,
     `- Latest successful production deployment kept: \`${plan.productionSha}\``,
     `- ${stageSuiteSummary(plan.stageSuite)}`,
+    `- In-flight stage-suite kept (newer main commits whose suite is pending or queued): ${list(plan.inFlightShas)}`,
+    `- Queued or running deploy-prod run targets kept: ${list(plan.deployTargets)}`,
     `- Hotfix branch heads kept: ${plan.hotfixHeads.map((s) => `\`${s}\``).join(", ") || "none"}`,
     `- Open PR heads kept (release and \`pr/\` repos): ${plan.openPrHeads.length}`,
     "",

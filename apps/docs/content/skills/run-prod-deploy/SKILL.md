@@ -72,7 +72,7 @@ Never leave a known-broken PR on `main` without a revert or an applicable tracke
 
 ### 1. Pre-flight reads, then the proposal
 
-Run checklist items 1–11 (above); items 6–8 and 11 are the ones the workflow's `preflight` job re-checks (`tools/deploy/release-runner.mjs preflight --sha <sha>`: SHA in `main` · `stage-suite` success · CI green · release gate · live-broadcast gate · recorded `images-<sha>.json`). Propose the release to the owner in chat: target SHA, range, class, evidence. Wait for the owner's word.
+Run checklist items 1–11 (above); items 6–8 and 11 are the ones the workflow's `preflight` job re-checks (`tools/deploy/release-runner.mjs preflight --sha <sha>`: SHA in `main` · `stage-suite` success · CI green · release gate · live-broadcast gate · recorded `images-<sha>.json` · the registry still serves its digests). Propose the release to the owner in chat: target SHA, range, class, evidence. Wait for the owner's word.
 
 ### 2. Dispatch on the owner's word
 
@@ -150,7 +150,7 @@ The pre-flight refuses a target that is not a strict descendant of the LIVE depl
 
 - **Dispatching without the owner's word**, or with a paraphrase — every release needs the word verbatim in `owner_quote`, and so does an env-change redeploy. A rollback needs none; a redeploy of the live SHA on a red prod health probe runs under the owner's standing authorization, cited in `owner_quote` (runbook `operations/prod-incident-response.md`).
 - **Piping a release command** (`| tee`) — masks a non-zero exit; run it standalone.
-- **`preflight` refuses** — the job names the gate: SHA not in `main`, `stage-suite` missing/pending/red (wait for `stage.yml`), CI red, release gate, live broadcast, or **no recorded images** (`recorded images for <sha>: …` — no branch-push `runtime-images.yml` run for the SHA, a run in progress, a failed run, an expired artifact, or a manifest that is not `ref: "main"`). Nothing was touched; fix the cause, then re-dispatch. Never build on the box.
+- **`preflight` refuses** — the job names the gate: SHA not in `main`, `stage-suite` missing/pending/red (wait for `stage.yml`), CI red, release gate, live broadcast, or **no recorded images** (`recorded images for <sha>: …` — no branch-push `runtime-images.yml` run for the SHA, a run in progress, a failed run, an expired artifact, or a manifest that is not `ref: "main"`), or **pruned images** (`registry-images: the registry no longer serves the recorded images of <sha12>: …` — registry retention deleted them; propose a SHA whose images the registry still serves, `pnpm release:lane`). Nothing was touched; fix the cause, then re-dispatch. Never build on the box.
 - **`runtime-images.yml` red on an npm registry 503** while pulling into the Runtime images — a registry blip, not a code defect: `gh run rerun <run-id> --failed`, and record the flake in `DEBT.md` in the same session (repo-conventions → «CI rerun ≠ free»).
 - **Pre-swap boot verify red (`freshly pulled image(s) do NOT boot: portal=EXITED`)** — **prod is untouched**: nothing was swapped, no migration applied, the previous containers still serve. A build defect to fix on `main` (usually a dependency bump), caught pre-merge by the `standalone-boot` CI job; never a rollback.
 - **Rolling back to a SHA outside the latest 3 releases** — the rollback pre-flight refuses it; roll _forward_ instead (a release of a fixed `main` SHA).

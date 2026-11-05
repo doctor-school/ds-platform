@@ -89,7 +89,7 @@ Feature: Persistent portal app-shell header and public discovery front-door
       Given a user on any portal page
       Then the footer shows the logo and the host foot-note «BBM: Академия смыслов» plus «© Doctor.School, 2026»
       And the footer shows the «Разделы» column built from the nav
-      And the footer shows the «Документы и контакты» column with «Пользовательское соглашение», «Политика обработки персональных данных» and «Контакты»
+      And the footer shows the «Документы и контакты» column with the `/documents` list link, «Политика персональных данных и согласия» and «Контакты»
       And the footer shows the «Врачам» cross-link to «Doctor.School ↗»
       And the footer shows the giant «Academy.Doctor.School» wordmark
 

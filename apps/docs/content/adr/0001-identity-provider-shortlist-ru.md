@@ -241,6 +241,27 @@ Cross-zone constraints: все профили отдают `Strict-Transport-Sec
 
 **Affects.** 046 EARS-26 / EARS-28 / EARS-31; `apps/api/src/auth/admin-session/admin-authority.guard.ts`; `apps/api/src/auth/README.md`; `apps/api/docs/endpoint-authz-matrix.md` (колонка `revalidate`); `infra/dev-stand/idp/provision.sh` (seed проектной роли).
 
+### A4 — Суперадминистратор и режиссёр трансляций ревалидируются под собственными grant'ами; `403 SUPERADMIN_REQUIRED`, `403 BROADCAST_DIRECTOR_REQUIRED` (2026-11-05, #3739)
+
+**Context.** A1 и A3 работают в production: live-строка спрашивает IdP о grant'е, под которым действует сессия, — `pd_officer`, если строка его называет, иначе `platform_admin`, если сессия его держит, иначе event-scoped grant регистратора или комитета, который строка допускает. Фича 049 добавляет две глобальные staff-роли: `superadmin` (владеет «Доступами»; держатель всегда держит и `platform_admin`) и `broadcast_director` (жизненный цикл мероприятия и трансляции без `platform_admin`). Строки «Доступов» становятся live-строками `[superadmin]`, а сессия только режиссёра достигает live-записей мероприятия. По правилу A1/A3 суперадминистратора спросили бы о его ключе `platform_admin`, и отозванный `superadmin` оставил бы «Доступы» открытыми, а сессию режиссёра — о `platform_admin`, которого у неё никогда не было.
+
+**Decision.**
+
+- **Какой grant ревалидируется.** Строка, называющая `superadmin`, спрашивает IdP о `superadmin`, что бы ещё ни держала сессия; это правило проверяется первым. На строке, допускающей `broadcast_director`, сессию с `platform_admin` спрашивают о `platform_admin`; сессию без него, держащую `broadcast_director`, — о `broadcast_director`. Правила A1 для `pd_officer` и регистратора и правило A3 для комитета не меняются.
+- **Новые строки таблицы вердиктов.** Grant отозван, случай `superadmin` → `403` `errorCode: SUPERADMIN_REQUIRED`; случай `broadcast_director` → `403` `errorCode: BROADCAST_DIRECTOR_REQUIRED`, рядом с `PLATFORM_ADMIN_REQUIRED`, `PD_OFFICER_REQUIRED`, `EVENT_REGISTRAR_REQUIRED` и `PROGRAM_COMMITTEE_REQUIRED`.
+- **Валидатор матрицы.** Строка `revalidate: "live"` / `step_up` валидна, если её роли включают `platform_admin`, `pd_officer`, `superadmin` или `broadcast_director`.
+- **Ревалидация никогда не расширяет доступ.** Как в A1: допуск решает проверка `roles` маршрута; иерархии ролей в guard нет, и суперадминистратор достигает строк `[platform_admin]` через свой ключ `platform_admin`.
+- **Пол второго фактора.** Обе роли требуют TOTP (`MFA_REQUIRED_BY_ROLE`), как каждая staff-роль.
+- **Без изменений.** `401 ADMIN_SESSION_REQUIRED`, `503 IDP_REVALIDATION_UNAVAILABLE` и порядок «полномочия до присутствия».
+
+**Consequences.** Отзыв `superadmin` в IdP закрывает «Доступы» на следующем запросе, даже если `platform_admin` остаётся; live-записи режиссёра ревалидируются по grant'у режиссёра без расширения доступа. Admin-консоль обязана трактовать оба кода `403` как отказ по credential (нет доступа), никогда как повод для retry, а `503 IDP_REVALIDATION_UNAVAILABLE` — как retry.
+
+**Why now.** #3739 поставляет ключи ролей и ветки guard'а; их потребляют строки «Доступов» `[superadmin]` и live-записи мероприятия режиссёра (049 EARS-3, EARS-7).
+
+**Open follow-up.** Нет — admin-консоль уже отображает любой `403` как «нет доступа» (`admin-query-retry.ts`, `staff-access.ts`).
+
+**Affects.** 049 EARS-1 / EARS-3 / EARS-7; `apps/api/src/auth/admin-session/admin-authority.guard.ts`; `apps/api/src/authz/authz.matrix.ts`; `apps/api/src/authz/README.md` (таблица live-ревалидации); `apps/api/docs/endpoint-authz-matrix.md`; `infra/dev-stand/idp/provision.sh` (seed проектной роли).
+
 ## Consequences
 
 ### Положительные

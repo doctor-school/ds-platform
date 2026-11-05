@@ -24,9 +24,14 @@ import { DOCTOR_GUEST_ROLE } from "./idp/idp.types.js";
  * silently turns a doctor into staff.
  */
 export const STAFF_ROLES = [
+  // 049 EARS-2 — a superadministrator also holds `platform_admin`; the mirror
+  // records the narrower-held, higher authority first.
+  "superadmin",
   "platform_admin",
   "event-registrar",
   "congress-program-committee",
+  // 049 EARS-2 — the broadcast director, after the congress roles.
+  "broadcast_director",
   "legacy_admin",
   "pd_officer",
 ] as const;

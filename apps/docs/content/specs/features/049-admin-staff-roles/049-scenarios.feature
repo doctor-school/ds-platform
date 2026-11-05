@@ -82,7 +82,7 @@ Feature: 049 — Admin staff roles
     When the director creates an event "Школа кардиологии: эфир 12"
     And links an expert to it
     Then the event card shows the expert's name
-    And configures its stream and publishes it
+    When the director configures its stream and publishes it
     And opens the room and then closes it
     Then each transition succeeds and is recorded with the director as actor
     And the event card has no recordings panel and no links to «Регистрации», «Приём заявок» or «Заявки»

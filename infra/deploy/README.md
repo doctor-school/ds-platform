@@ -921,7 +921,8 @@ by provision.sh step 2); the admin surface authorizes on that role in the token
 (046 EARS-26) are further project roles, seeded by the same step and granted the
 same way — the registrar authorizes the congress roster surface only, the
 programme committee the congress submission registry/card/decision surface only.
-Both are additionally bound to their event(s) by an `event_role_grants` row
+`superadmin` and `broadcast_director` (049 EARS-1, EARS-2) are seeded by the same
+step too. The registrar and the committee are additionally bound to their event(s) by an `event_role_grants` row
 (runbooks in `apps/api/src/registration/README.md` and
 `apps/api/src/congress/README.md`). Issue any of them to a user as a user grant,
 via the bootstrap PAT (idempotent — re-granting an existing grant is rejected as

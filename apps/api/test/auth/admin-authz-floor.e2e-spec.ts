@@ -60,18 +60,37 @@ const ADMIN_ENTRY_CLASSIFICATION: Record<
   // the second-factor entry routes admit a pending registrar on exactly the
   // `platform_admin` flow. Admission to the admin ORIGIN is not reach: what a
   // registrar may then do is the per-route classification below. 046 EARS-26
-  // adds `congress-program-committee` to the same policy (TOTP) on the same terms.
+  // adds `congress-program-committee` to the same policy (TOTP) on the same terms;
+  // 049 EARS-1 adds `broadcast_director` and `superadmin` likewise.
   "POST /v1/admin/auth/mfa/enroll/start": {
     access: "pending-auth",
-    roles: ["platform_admin", "event-registrar", "congress-program-committee"],
+    roles: [
+      "platform_admin",
+      "event-registrar",
+      "congress-program-committee",
+      "broadcast_director",
+      "superadmin",
+    ],
   },
   "POST /v1/admin/auth/mfa/enroll/verify": {
     access: "pending-auth",
-    roles: ["platform_admin", "event-registrar", "congress-program-committee"],
+    roles: [
+      "platform_admin",
+      "event-registrar",
+      "congress-program-committee",
+      "broadcast_director",
+      "superadmin",
+    ],
   },
   "POST /v1/admin/auth/mfa/verify": {
     access: "pending-auth",
-    roles: ["platform_admin", "event-registrar", "congress-program-committee"],
+    roles: [
+      "platform_admin",
+      "event-registrar",
+      "congress-program-committee",
+      "broadcast_director",
+      "superadmin",
+    ],
   },
 };
 
@@ -92,11 +111,15 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
     "platform_admin",
     "event-registrar",
     "congress-program-committee",
+    "broadcast_director",
+    "superadmin",
   ],
   "POST /v1/admin/auth/logout": [
     "platform_admin",
     "event-registrar",
     "congress-program-committee",
+    "broadcast_director",
+    "superadmin",
   ],
   // 047 EARS-8 — re-verifying one's own second factor inside the session, for
   // any staff role the design admits; it changes no grant (047-design §Fresh
@@ -105,6 +128,8 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
     "platform_admin",
     "event-registrar",
     "congress-program-committee",
+    "broadcast_director",
+    "superadmin",
   ],
   // 044 EARS-18 — the congress roster read, the working surface the role
   // exists for: a read of one event's roster.

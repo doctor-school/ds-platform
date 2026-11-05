@@ -5,7 +5,7 @@ import {
   validateRow,
   type MatrixRow,
 } from "./authz.matrix.js";
-import type { AuthzMeta } from "./authz.types.js";
+import type { AuthzMeta, Role } from "./authz.types.js";
 
 const publicMeta: AuthzMeta = {
   access: "public",
@@ -140,6 +140,48 @@ describe("validateRow", () => {
       check: "magic" as never,
     });
     expect(v.length).toBeGreaterThan(0);
+  });
+});
+
+describe("049 EARS-1 — live / step-up rows naming the 049 roles", () => {
+  const liveMeta = (roles: Role[], stepUp = false): AuthzMeta => ({
+    access: "authenticated",
+    roles,
+    check: "fast-path",
+    audit: "high-stakes",
+    tests: ["EARS-3"],
+    revalidate: "live",
+    ...(stepUp ? { stepUp: true } : {}),
+  });
+
+  it("049 EARS-1: accepts a live [superadmin] row", () => {
+    expect(
+      validateRow(
+        "GET /v1/admin/staff-access/grants",
+        liveMeta(["superadmin"]),
+      ),
+    ).toEqual([]);
+    expect(
+      validateRow(
+        "POST /v1/admin/staff-access/grants",
+        liveMeta(["superadmin"], true),
+      ),
+    ).toEqual([]);
+  });
+
+  it("049 EARS-1: accepts a live row naming broadcast_director beside platform_admin", () => {
+    expect(
+      validateRow(
+        "PATCH /v1/admin/events/:id",
+        liveMeta(["platform_admin", "broadcast_director"]),
+      ),
+    ).toEqual([]);
+  });
+
+  it("049 EARS-1: still refuses a live row naming only roles outside the revalidation vocabulary", () => {
+    expect(
+      validateRow("PATCH /v1/admin/events/:id", liveMeta(["doctor_guest"])),
+    ).not.toEqual([]);
   });
 });
 

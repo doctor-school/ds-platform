@@ -18,7 +18,17 @@ describe("011 EARS-3 — role → mfa_required policy", () => {
       "platform_admin",
       "event-registrar",
       "congress-program-committee",
+      "superadmin",
+      "broadcast_director",
     ]);
+  });
+
+  it("049 EARS-1: a principal holding superadmin or broadcast_director requires a second factor", () => {
+    // `startLogin` admits a principal to the admin origin only through this
+    // map, so the entries are what open the door for both roles.
+    expect(requiresMfa(["broadcast_director"])).toBe(true);
+    expect(requiresMfa(["doctor_guest", "broadcast_director"])).toBe(true);
+    expect(requiresMfa(["superadmin"])).toBe(true);
   });
 
   it("044 EARS-19: a principal holding only event-registrar requires a second factor", () => {

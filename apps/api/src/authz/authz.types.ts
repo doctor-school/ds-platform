@@ -30,6 +30,12 @@ export const ROLES = [
   // 046 EARS-26 — the congress programme committee: a coarse role from the
   // project-roles claim, bound to one or more events by `event_role_grants`.
   "congress-program-committee",
+  // 049 EARS-1/EARS-2 — the superadministrator (owns «Доступы»; always also
+  // holds `platform_admin`) and the global broadcast director. Global roles,
+  // so underscore keys like `platform_admin`; both come from the project-roles
+  // claim and `users.role` only mirrors them.
+  "superadmin",
+  "broadcast_director",
 ] as const;
 export type Role = (typeof ROLES)[number];
 

@@ -35,6 +35,11 @@ export const MFA_REQUIRED_BY_ROLE: Readonly<Partial<Record<Role, true>>> =
     // 046 EARS-26 — committee members are external users working in
     // `apps/admin`; they enrol TOTP on first login, exactly like the registrar.
     "congress-program-committee": true,
+    // 049 EARS-1 — the superadministrator and the broadcast director sign in to
+    // `apps/admin` on the same TOTP flow; the entries are what admit them to the
+    // admin origin at all (`startLogin`).
+    superadmin: true,
+    broadcast_director: true,
   });
 
 /**

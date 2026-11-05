@@ -19,6 +19,14 @@ describe("adminQueryRetry — which failed admin data reads are retried", () => 
       { statusCode: 401, errorCode: "STEP_UP_REQUIRED" },
     ],
     ["403 (no access)", { statusCode: 403 }],
+    [
+      "403 SUPERADMIN_REQUIRED (049, ADR-0001 A4)",
+      { statusCode: 403, errorCode: "SUPERADMIN_REQUIRED" },
+    ],
+    [
+      "403 BROADCAST_DIRECTOR_REQUIRED (049, ADR-0001 A4)",
+      { statusCode: 403, errorCode: "BROADCAST_DIRECTOR_REQUIRED" },
+    ],
   ])("#2998: never retries a %s", (_label, error) => {
     expect(adminQueryRetry(0, error)).toBe(false);
   });

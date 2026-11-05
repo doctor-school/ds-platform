@@ -414,7 +414,11 @@ export type AdminAuthorityRole =
   | "platform_admin"
   | "pd_officer"
   | "event-registrar"
-  | "congress-program-committee";
+  | "congress-program-committee"
+  // 049 (ADR-0001 A4): the «Доступы» rows are `[superadmin]` live rows, and the
+  // broadcast director reaches live event writes under its own grant.
+  | "superadmin"
+  | "broadcast_director";
 
 /** Input to {@link IdpClient.revalidateAdminAuthority} (#1304). */
 export interface RevalidateAdminAuthorityInput {

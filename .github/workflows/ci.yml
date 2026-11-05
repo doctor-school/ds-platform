@@ -132,6 +132,7 @@ jobs:
     outputs:
       code: ${{ steps.classify.outputs.code }}
       discipline: ${{ steps.discipline.outputs.discipline }}
+      scenarios: ${{ steps.scenarios.outputs.scenarios }}
       # Heavy-e2e area gate (#2592) — one output per path-gated job; the job →
       # package mapping lives in tools/ci/affected-areas.mjs (HEAVY_JOBS).
       run-admin-e2e: ${{ steps.areas.outputs.run-admin-e2e }}
@@ -155,6 +156,15 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node tools/ci/discipline-changes.mjs
+      # A spec `.feature` is docs-class for `classify` below, but it is the e2e
+      # suite's input — `e2e scenario generation` in `core` reads this (#3345).
+      - name: Select scenario generation
+        id: scenarios
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node tools/ci/scenario-changes.mjs
       # Affected workspace packages INCLUDING transitive dependents → which
       # heavy e2e jobs run. Fails open (every job runs) on a non-PR event, a
       # shared build/CI input, an unowned path, or any classifier error.
@@ -263,6 +273,22 @@ jobs:
       - name: build
         if: needs.changes.outputs.code == 'true'
         run: pnpm build
+
+      # e2e scenario generation (#3345) — `bddgen` of the default e2e config, the
+      # one the stage suite runs. Its `login` project generates with
+      # `missingSteps: "fail-on-gen"`, so a `@host:login` binding on a stepless
+      # scenario, or a renamed/removed step a bound scenario uses, fails HERE on
+      # the PR that causes it — not in the `main` stage run, where a generation
+      # failure aborts every project. No browser, no stand. Runs on every code
+      # change (after `build`, which the step files' `@ds/db` imports resolve
+      # through) and on a spec-`.feature`-only diff, which `code` counts as docs
+      # and so needs the e2e dependency closure built first. POSTURE: BLOCK.
+      - name: e2e scenario generation (deps)
+        if: needs.changes.outputs.code != 'true' && needs.changes.outputs.scenarios == 'true'
+        run: pnpm exec turbo run build --filter=@ds/e2e^...
+      - name: e2e scenario generation
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.scenarios == 'true'
+        run: pnpm --filter @ds/e2e run bddgen
 
       # unit — pure-unit tests for every package EXCEPT @ds/api. @ds/api's suites
       # boot DatabaseModule / hit Postgres + pgvector, so they run in the

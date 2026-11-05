@@ -247,9 +247,10 @@ door the route-mount registry marks `mounted` on `apps/login` — generated from
 `.features-gen/login` with `missingSteps: "fail-on-gen"`, so a bound scenario without
 steps fails generation rather than skipping. Its journeys start on the Academy entry and
 do their credential work on `login-<slot>`; the storefront projects leave those scenarios
-to it (except the `@default-auth-limits` ones, which only the loopback contour runs). A
-door scenario that has no steps yet is parked with `@quarantine:login(#N)` (open Issue)
-and stays on its storefront project. `sign-in-host` is the host's own plain specs
+to it. A door scenario that has no steps yet is parked with `@quarantine:login(#N)` (open
+Issue) and stays on its storefront project; so is a `@default-auth-limits` one, which only
+the loopback Academy contour runs (#3780) — the lint refuses `@host:login` on it, since
+the `login` project never selects that tag. `sign-in-host` is the host's own plain specs
 (`packages/e2e/sign-in-host`). Neither selects a host axe or live leg.
 
 The runner builds `@ds/e2e`'s workspace dependencies before BDD generation, so a clean

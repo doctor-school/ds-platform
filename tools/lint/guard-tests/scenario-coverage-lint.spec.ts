@@ -105,7 +105,7 @@ describe("scenario-coverage-lint", () => {
   // (`@door:<name>`) the route-mount registry marks `mounted` on the sign-in host
   // (`apps/login/app/<name>/page.tsx`) must be bound to it (`@host:login`) or carry
   // a tracked host quarantine (`@quarantine:login(#N)`); a comment is no exclusion.
-  it("red: an unbound mounted-door scenario, a comment-only exclusion, an unknown door and a bad host quarantine → exit 1", () => {
+  it("red: an unbound mounted-door scenario, a comment-only exclusion, an unknown door, a bad host quarantine and a binding no project runs → exit 1", () => {
     const { code, stderr } = runGuard(
       GUARD,
       dir("red-door-binding"),
@@ -132,6 +132,11 @@ describe("scenario-coverage-lint", () => {
     );
     expect(stderr).toContain(
       "apps/docs/content/specs/features/037-doctor-doors/037-scenarios.feature:6 -> @host:login outside an Academy feature",
+    );
+    // The `login` project excludes `@default-auth-limits` (`signInHostTags()`), so
+    // such a binding would be counted bound while no project executes it.
+    expect(stderr).toContain(
+      `${feature}:37 -> @host:login on a @default-auth-limits scenario; no e2e project runs that binding`,
     );
   });
 

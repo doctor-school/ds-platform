@@ -42,9 +42,14 @@
  * removes the scenario from the sign-in-host binding only, so its `@EARS-N` tags
  * still count for coverage on the storefront project. A free-text comment
  * («… not shared-sign-in-host acceptance») is no exclusion and is itself a
- * finding, as are an unknown door name and a binding plus a host quarantine on
- * one scenario. These findings are BLOCK wherever they sit: the rule is new and
- * the catalog carries no backfill debt of it.
+ * finding, as are an unknown door name, a binding plus a host quarantine on
+ * one scenario, and a binding on a `@default-auth-limits` scenario — the `login`
+ * project excludes that tag, so the binding would be counted while no project
+ * runs it. These findings are BLOCK wherever they sit, from day 0 rather than
+ * the ADR-0007 §2.6 WARN v1 default: Issue #3345 (owner-sourced) requires the
+ * sign-in-host binding under `scenario-coverage (BLOCK)`, and the catalog
+ * carries no backfill debt of the rule. The §2.6 demotion rule still applies —
+ * one confirmed false positive demotes it to WARN.
  *
  * Seams: `LINT_FIXTURE_ROOT` (spec tree), `LINT_GH_FIXTURE_DIR` (lib/gh.ts —
  * canned `gh issue view` JSON for the quarantine check),
@@ -87,6 +92,8 @@ export const DOORS = ["login", "register", "reset", "verify"] as const;
 const DOOR_TAG_RE = /^@door:(\S*)$/;
 /** The scenario-level sign-in-host binding (selected by the `login` e2e project). */
 export const SIGN_IN_HOST_BINDING = "@host:login";
+/** The loopback default-limits contour the `login` project never selects. */
+const DEFAULT_AUTH_LIMITS = "@default-auth-limits";
 const HOST_QUARANTINE_RE = /^@quarantine:login(?:\((#?\d+)\))?$/i;
 /** The free-text exclusion form #3345 retires: a comment is not a quarantine. */
 const COMMENT_EXCLUSION_RE = /^\s*#.*sign-in-host acceptance/i;
@@ -255,6 +262,18 @@ async function scanDoorBindings(): Promise<DoorScan> {
             `login project starts on the Academy entry only`,
         );
       }
+      // The `login` project excludes `@default-auth-limits` (`signInHostTags()`
+      // in `packages/e2e/lib/host-tags.ts`): those scenarios run only on the
+      // loopback storefront contour, so such a binding selects nothing on the
+      // sign-in host. Counting it bound would let the guard vouch for a run that
+      // never happens; park it with `@quarantine:login(#N)` instead.
+      const unrunnable = bound && scenario.tags.includes(DEFAULT_AUTH_LIMITS);
+      if (unrunnable) {
+        scan.findings.push(
+          `${where} -> ${SIGN_IN_HOST_BINDING} on a ${DEFAULT_AUTH_LIMITS} scenario; ` +
+            `no e2e project runs that binding — park it with @quarantine:login(#N)`,
+        );
+      }
       if (hostQ) {
         scan.hostQuarantines.push({
           file,
@@ -286,6 +305,7 @@ async function scanDoorBindings(): Promise<DoorScan> {
           continue;
         }
         if (!live.has(door)) continue;
+        if (unrunnable) continue;
         if (bound) scan.bound += 1;
         else if (hostQ) scan.quarantined += 1;
         else {

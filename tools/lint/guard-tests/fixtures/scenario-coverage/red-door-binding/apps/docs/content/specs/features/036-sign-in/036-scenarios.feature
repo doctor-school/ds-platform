@@ -32,3 +32,9 @@ Feature: 036 Sign-in doors
     Given a registered guest
     When the guest registers again
     Then a code is sent
+
+  @EARS-1 @happy @door:login @host:login @default-auth-limits
+  Scenario: A guest signs in under the default auth limits
+    Given a guest on the Academy
+    When the guest signs in
+    Then the guest is signed in

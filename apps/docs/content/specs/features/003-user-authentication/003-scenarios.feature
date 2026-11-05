@@ -711,7 +711,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # and proves fresh per-send execution/instance. Synthetic provider interaction
     # proves frontend orchestration, not Yandex challenge UI or token freshness.
 
-  @EARS-17 @happy @implemented @captcha-threshold @default-auth-limits @door:login @host:login
+  @EARS-17 @happy @implemented @captcha-threshold @default-auth-limits @door:login @quarantine:login(#3780)
   Scenario: Password login challenges only after the backend threshold
     Given a visitor has entered an identifier and password
     When the visitor submits password login before the failed-login threshold
@@ -729,7 +729,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the visitor explicitly asks to resend a code
     Then the portal executes a new invisible check and uses a fresh token for that resend
 
-  @EARS-17 @failure @captcha-failure @default-auth-limits @door:login @host:login
+  @EARS-17 @failure @captcha-failure @default-auth-limits @door:login @quarantine:login(#3780)
   # S067: deterministic provider lifecycle; application requests stay real.
   Scenario: CAPTCHA failure is truthful, terminal, theme-aware, and non-destructive
     Given the invisible widget uses the portal's resolved light or dark theme and follows a live theme change
@@ -836,7 +836,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And a subsequent attempt for that identifier is not throttled
     But the per-IP and per-ASN windows are not forgiven
 
-  @EARS-13 @EARS-5 @EARS-8 @EARS-16 @happy @login-counter-reset @default-auth-limits @door:login @host:login
+  @EARS-13 @EARS-5 @EARS-8 @EARS-16 @happy @login-counter-reset @default-auth-limits @door:login @quarantine:login(#3780)
   Scenario: Academy successful password login clears the same identifier's real rate window
     Given a unique verified Academy account starts the real login-counter journey as a guest
     When two real Academy password refusals are followed by the owner's successful password login
@@ -844,7 +844,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Default-limit local contour only; stage raises the per-account ceiling.
     # Native per-IP/per-ASN no-forgiveness: apps/api/test/auth/abuse-limits.e2e-spec.ts EARS-13.
 
-  @EARS-13 @EARS-12 @EARS-8 @EARS-16 @happy @reset-counter-forgiveness @default-auth-limits @door:reset @host:login
+  @EARS-13 @EARS-12 @EARS-8 @EARS-16 @happy @reset-counter-forgiveness @default-auth-limits @door:reset @quarantine:login(#3780)
   Scenario: Academy password reset completion clears the same identifier rate window
     Given a unique verified Academy reset-forgiveness owner starts as a guest
     When two real Academy password refusals precede that owner's delivered email reset completion
@@ -1556,7 +1556,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   # Narrow default-limit Academy projection (#3037); broader native case retained.
   # Native expiry/redemption/per-IP coverage: apps/api/test/auth/login-handoff.e2e-spec.ts.
-  @EARS-44 @EARS-13 @EARS-16 @failure @default-auth-limits @handoff-throttled @door:login @host:login
+  @EARS-44 @EARS-13 @EARS-16 @failure @default-auth-limits @handoff-throttled @door:login @quarantine:login(#3780)
   Scenario: Academy refuses a live handoff with the ordinary generic account throttle
     Given a fresh owned Academy congress reference remains unused while nine legitimate ordinary email-code requests exhaust its account window
     When a guest opens that still-live reference through the Academy code door with the account return target
@@ -1634,7 +1634,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And no sign-in form is rendered for either
     And a storefront auth request renders that storefront's own registration fields, consents and brand panel
 
-  @EARS-63 @EARS-64 @happy @silent-check
+  @EARS-63 @EARS-64 @happy @silent-check @door:login @host:login
   Scenario: A doctor signed in on the doctor storefront is signed in on the Academy with no form and no guest flash
     Given a doctor signed in on the doctor storefront in this browser
     When the doctor's browser requests an Academy event page as a document
@@ -1706,7 +1706,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the silent-check bucket for the client address is exhausted and a document request arrives
     Then the Academy answers HTTP 200 with the guest render and no redirect
 
-  @EARS-63 @EARS-62 @failure @silent-check-abandoned-form
+  @EARS-63 @EARS-62 @failure @silent-check-abandoned-form @door:login @host:login
   Scenario: An abandoned sign-in form does not hold back the silent check
     Given a guest started the Academy sign-in entry and left the sign-in host form unfinished
     And the same person then signed in on the doctor storefront in another tab
@@ -1752,7 +1752,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the API receives a valid logout token for the doctor's Zitadel session
     Then every storefront session linked to that sid is revoked
 
-  @EARS-64 @EARS-68 @failure @shared-session-strength
+  @EARS-64 @EARS-68 @failure @shared-session-strength @door:login @quarantine:login(#3771)
   Scenario: The shared session is not reused from another fingerprint or when a fresh credential is asked
     Given a live sign-in-host session created in one browser
     When its __Host-ds_login cookie is presented from a different client fingerprint with prompt=none
@@ -1786,7 +1786,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the redeem refuses it because the sid names no live sign-in-host record
     And no storefront session exists
 
-  @EARS-70 @happy @sign-in-host-cookies
+  @EARS-70 @happy @sign-in-host-cookies @door:login @quarantine:login(#3771)
   Scenario: Every session and check cookie is host-only and never shared across hosts
     Given a completed sign-in through the sign-in host and a completed silent check
     Then __Host-ds_login, __Host-ds_oidc_tx, __Host-ds_session, __Host-ds_guest and __Host-ds_check are host-only, HttpOnly, Secure and SameSite=Lax
@@ -1968,7 +1968,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   # Retained Academy baseline (#3256).
   # Existing staff account amendment #2456; no statistics or grant-policy change.
-  @EARS-27 @EARS-28 @EARS-16 @EARS-10 @happy @staff-own-profile @default-auth-limits @host:login
+  @EARS-27 @EARS-28 @EARS-16 @EARS-10 @happy @staff-own-profile @default-auth-limits @quarantine:login(#3780)
   Scenario: Academy staff own-profile access preserves registrar confinement
     Given two uniquely owned verified Academy users are prepared for staff-profile role checks
     When the platform-admin-only Academy owner opens and edits their own profile then signs out

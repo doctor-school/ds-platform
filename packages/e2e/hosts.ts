@@ -97,7 +97,7 @@ export const HOSTS: Readonly<Record<HostId, HostConfig>> = Object.freeze({
 
 /**
  * The sign-in host (`apps/login`, ADR-0015 §4): the one Login V2 host both
- * storefront OIDC clients send a visitor to. Its own `login` Playwright project
+ * storefront OIDC clients send a visitor to. Its own `sign-in-host` Playwright project
  * drives it at `login-<slot>` (E2E_LOGIN_URL, `tools/staging/e2e-stage.mjs`).
  */
 export interface SignInHostConfig {

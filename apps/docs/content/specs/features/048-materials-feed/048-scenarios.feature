@@ -55,7 +55,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     And "Пустая новость" stays a draft
     And the rail has no card "Пустая новость"
 
-  @EARS-1
+  @EARS-1 @material-admin-authoring
   Scenario: A column without an expert is refused
     Given a platform administrator is signed in to the admin with a second factor
     When the administrator saves a material of kind «Колонка эксперта» with no expert chosen
@@ -103,7 +103,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the expert "Страхов Михаил Андреевич" is published again
     Then the card of "Ортобиология в России: что нужно практике" is back in the rail with its first publication date
 
-  @EARS-5 @EARS-8
+  @EARS-5 @EARS-8 @material-admin-authoring
   Scenario: A stale edit is refused
     Given two administrators have the news item "Открыт набор центров в исследование PRP" open
     When the first saves a change and the second then saves another change
@@ -121,7 +121,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the administrator publishes it again
     Then its card is back in the rail with its first publication date
 
-  @EARS-7
+  @EARS-7 @material-admin-authoring
   Scenario: The administrator finds materials by kind
     Given the published news item "Открыт набор центров в исследование PRP" and the draft column "Ортобиология в России: чего не хватает практике"
     And a platform administrator is signed in to the admin with a second factor

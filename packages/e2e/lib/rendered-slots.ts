@@ -1,6 +1,10 @@
+import { readFileSync } from "node:fs";
+import { basename } from "node:path";
+
 import { expect, type Page } from "@playwright/test";
 
 import {
+  applySlotAllowlist,
   diffSlots,
   extractCanvasSlots,
   formatSlots,
@@ -8,7 +12,12 @@ import {
   type SlotSectionSpec,
   type SlotStructure,
 } from "./canvas-slots.js";
-import type { CanvasInput, ItemKind, StructureItem } from "./canvas-structure.js";
+import type {
+  AllowlistEntry,
+  CanvasInput,
+  ItemKind,
+  StructureItem,
+} from "./canvas-structure.js";
 import { canvasPath } from "./rendered-structure.js";
 
 /**
@@ -20,9 +29,13 @@ import { canvasPath } from "./rendered-structure.js";
 export interface RenderedSlotSection {
   /** The section root, e.g. `[data-testid="specialty-feed-events"]`. */
   root: string;
-  /** One repeated card's root, e.g. `[data-webinar-card]`. */
-  card: string;
+  /** One repeated card's root, e.g. `[data-webinar-card]`; absent = a chrome-only section. */
+  card?: string;
 }
+
+const ALLOWLIST = JSON.parse(
+  readFileSync(new URL("./canvas-structure-allowlist.json", import.meta.url), "utf8"),
+) as { entries: AllowlistEntry[] };
 
 export async function readRenderedSlots(
   page: Page,
@@ -38,7 +51,7 @@ export async function readRenderedSlots(
     const section = document.querySelector(root);
     if (!section) throw new Error(`no section ${root}`);
     const collapse = (t: string) => t.replace(/\s+/g, " ").trim();
-    const cards = [...section.querySelectorAll(card)];
+    const cards = card ? [...section.querySelectorAll(card)] : [];
     const shapes: string[][] = cards.map(() => []);
     const chrome: { kind: string; label: string | null }[] = [];
     for (const el of section.querySelectorAll("a, button, input, summary")) {
@@ -60,7 +73,16 @@ export async function readRenderedSlots(
       if (el.tagName === "INPUT") {
         label = collapse(el.getAttribute("placeholder") ?? "") || null;
       } else {
-        const text = collapse((el as HTMLElement).innerText ?? "");
+        // #3757 — the rendered text NODES, not `innerText`: `innerText` applies
+        // CSS `text-transform` («← ДОКУМЕНТЫ»), and the canvas reader takes the
+        // source text, so the uppercase styling both sides draw read unequal.
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let raw = "";
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          const parent = n.parentElement;
+          if (parent?.checkVisibility({ checkVisibilityCSS: true })) raw += n.nodeValue ?? "";
+        }
+        const text = collapse(raw);
         label = /[\p{L}\p{N}]/u.test(text) ? text : null;
       }
       chrome.push({ kind, label });
@@ -94,7 +116,25 @@ export async function expectSlotSectionMatchesCanvas(
     options.renderComponent,
   );
   const fromApp = await readRenderedSlots(page, options.rendered);
-  const lines = diffSlots(fromCanvas, fromApp);
+  // #3757 — the section's decided chrome deviations (`canvas-structure-allowlist.json`,
+  // `regions` = the section's attribute value), stale entries reported.
+  const decided = applySlotAllowlist(
+    ALLOWLIST.entries,
+    {
+      canvas: basename(options.canvas),
+      props: options.input.props ?? {},
+      region: options.section.section[1],
+    },
+    fromCanvas,
+    fromApp,
+  );
+  const lines = [
+    ...decided.stale.map(
+      (entry) =>
+        `stale allowlist entry (${entry.delta}): ${entry.item.kind} «${entry.item.label ?? "icon"}» — ${entry.source}`,
+    ),
+    ...diffSlots(decided.canvas, decided.app, { maskDigits: options.section.maskDigits }),
+  ];
   const report = lines.length
     ? [
         `${options.canvas} ${JSON.stringify(options.input.props ?? {})} section ${options.section.section[1]} ≠ rendered ${options.rendered.root}:`,

@@ -1,11 +1,13 @@
 import { basename, dirname, resolve } from "node:path";
 
 import {
+  applyAllowlist,
   diffStructures,
   itemKindOf,
   parseTemplate,
   resolveCanvas,
   visibleLabelOf,
+  type AllowlistEntry,
   type CanvasInput,
   type ItemKind,
   type ResolvedElement,
@@ -48,7 +50,20 @@ export interface SlotSectionSpec {
   /** The canvas section: an element whose attribute has this value. */
   section: [attr: string, value: string];
   /** `dc-import` names that are one repeated card each. */
-  cards: string[];
+  cards?: string[];
+  /**
+   * #3757 — `sc-for` aliases (`as`) whose every iteration is one repeated card
+   * although no card import draws it (the catalog's chips, a list's rows):
+   * the elements one iteration produced are read as that card's controls.
+   */
+  repeats?: string[];
+  /**
+   * #3757 — the section's chrome labels carry a live count («Показать весь
+   * список — N», «Все 47 уроков →»): every digit run is read as `#` on BOTH
+   * sides, so the canvas's sample number never fails the app's real one,
+   * while a label whose WORDS differ still does.
+   */
+  maskDigits?: boolean;
 }
 
 export interface SlotStructure {
@@ -131,10 +146,23 @@ function split(
   spec: SlotSectionSpec,
   ctx: Ctx,
   out: SlotStructure,
+  iterations: Map<number, ItemKind[]> = new Map(),
 ): void {
   for (const node of nodes) {
     if (node.type !== "el") continue;
-    if (node.tag === "dc-import" && spec.cards.includes(String(node.attrs.name))) {
+    if (node.repeat && spec.repeats?.includes(node.repeat.alias)) {
+      let card = iterations.get(node.repeat.iteration);
+      if (!card) {
+        card = [];
+        iterations.set(node.repeat.iteration, card);
+        out.cards.push(card);
+      }
+      const found: StructureItem[] = [];
+      controls([node], ctx, found);
+      card.push(...found.map((i) => i.kind));
+      continue;
+    }
+    if (node.tag === "dc-import" && (spec.cards ?? []).includes(String(node.attrs.name))) {
       out.cards.push(importedControls(node, ctx).map((i) => i.kind));
       continue;
     }
@@ -147,7 +175,7 @@ function split(
       out.chrome.push({ kind, label: visibleLabelOf(node) });
       continue;
     }
-    split(node.children, spec, ctx, out);
+    split(node.children, spec, ctx, out, iterations);
   }
 }
 
@@ -174,7 +202,15 @@ const shapeKey = (shape: ItemKind[]) => `[${shape.join(" · ") || "no controls"}
  * (missing / extra / order), cards by shape only — counts and labels of the
  * repeated items are never compared.
  */
-export function diffSlots(canvas: SlotStructure, app: SlotStructure): string[] {
+export function diffSlots(
+  canvas: SlotStructure,
+  app: SlotStructure,
+  options: { maskDigits?: boolean | undefined } = {},
+): string[] {
+  if (options.maskDigits) {
+    canvas = maskSlotDigits(canvas);
+    app = maskSlotDigits(app);
+  }
   const lines = diffStructures(
     { bar: canvas.chrome, menu: [] },
     { bar: app.chrome, menu: [] },
@@ -200,4 +236,41 @@ export function formatSlots(slots: SlotStructure): string {
   const chrome = slots.chrome.map((i) => `${i.kind} «${i.label ?? "icon"}»`).join(" · ");
   const shapes = [...new Set(slots.cards.map(shapeKey))].join(", ");
   return `chrome: ${chrome || "—"}\ncards: ${slots.cards.length} · shapes ${shapes || "—"}`;
+}
+
+const DIGIT_RUN = /\p{Nd}+/gu;
+
+/** #3757 — every digit run of a chrome label read as `#` (`SlotSectionSpec.maskDigits`). */
+export function maskSlotDigits(slots: SlotStructure): SlotStructure {
+  return {
+    chrome: slots.chrome.map((item) =>
+      item.label === null ? item : { ...item, label: item.label.replace(DIGIT_RUN, "#") },
+    ),
+    cards: slots.cards,
+  };
+}
+
+/**
+ * #3757 — the decided deviations of a section's CHROME removed from both sides
+ * (`applyAllowlist`, the header's allowlist and semantics: one item per entry,
+ * `regions` scoped by the section's attribute value). Card shapes are never
+ * allowlisted — a decided card difference is a canvas or a component change.
+ */
+export function applySlotAllowlist(
+  entries: AllowlistEntry[],
+  where: { canvas: string; props: Record<string, unknown>; region: string },
+  canvas: SlotStructure,
+  app: SlotStructure,
+): { canvas: SlotStructure; app: SlotStructure; stale: AllowlistEntry[] } {
+  const decided = applyAllowlist(
+    entries,
+    where,
+    { bar: canvas.chrome, menu: [] },
+    { bar: app.chrome, menu: [] },
+  );
+  return {
+    canvas: { chrome: decided.canvas.bar, cards: canvas.cards },
+    app: { chrome: decided.app.bar, cards: app.cards },
+    stale: decided.stale,
+  };
 }

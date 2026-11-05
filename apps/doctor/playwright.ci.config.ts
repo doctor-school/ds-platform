@@ -88,6 +88,11 @@ export default defineConfig({
     // #3728: the feed canvas-structure check reads the events block the
     // events stand-in serves, so it rides the same tier.
     "feed-canvas-structure.spec.ts",
+    // #3757: the home canvas-structure check reads the events block and the
+    // specialty book the events stand-in serves; the documents check rides
+    // the same tier as the other page canvas-structure checks.
+    "home-canvas-structure.spec.ts",
+    "documents-canvas-structure.spec.ts",
     // #1955: the signed-in redirect and the login return-context copy are both
     // server reads against an api — they ride the return-context tier.
     "login-arrival.spec.ts",

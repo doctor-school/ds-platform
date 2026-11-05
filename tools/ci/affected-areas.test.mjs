@@ -246,10 +246,16 @@ test("EARS-8: every heavy job maps to real workspace packages and real extra inp
       ),
       `${job} output`,
     );
+    // The sign-in host tier also runs on a `.feature`-only diff (#3345): its
+    // door-scenario leg generates from the 003 catalog, which `code` counts as docs.
+    const codeGate =
+      job === "playwright-axe-login"
+        ? `\\(needs\\.changes\\.outputs\\.code == 'true' \\|\\| needs\\.changes\\.outputs\\.scenarios == 'true'\\)`
+        : `needs\\.changes\\.outputs\\.code == 'true'`;
     assert.match(
       ci,
       new RegExp(
-        `\\n  ${job}:\\n    needs: changes\\n    if: needs\\.changes\\.outputs\\.code == 'true' && needs\\.changes\\.outputs\\.run-${job} == 'true'\\n`,
+        `\\n  ${job}:\\n    needs: changes\\n    if: ${codeGate} && needs\\.changes\\.outputs\\.run-${job} == 'true'\\n`,
       ),
       `${job} gate`,
     );

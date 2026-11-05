@@ -2,6 +2,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 import type { CSSProperties, ReactNode } from "react";
 import { Inter } from "next/font/google";
+import { ThemeWatcher } from "@ds/storefront-shell/theme-watcher";
+
 import { THEME_FOUC_GUARD } from "@/lib/theme";
 
 export const metadata: Metadata = {
@@ -37,6 +39,9 @@ const inter = Inter({
  * control, so a remembered dark choice must be applied on `<html>` before first
  * paint or every load flashes light first. The script is inline and synchronous
  * for exactly that reason — a component effect runs too late to prevent the flash.
+ * A document Next renders on the client (a page-level `notFound()`) never runs
+ * that inline script, so {@link ThemeWatcher} re-applies the stored choice on
+ * mount (#2478); this storefront does not follow the system scheme.
  */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -64,6 +69,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="min-h-screen bg-background text-foreground antialiased">
+        <ThemeWatcher followSystem={false} />
         {children}
       </body>
     </html>

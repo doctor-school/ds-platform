@@ -57,3 +57,15 @@ for (const viewer of ["guest", "doctor"] as const) {
     });
   }
 }
+
+// #2478 — the not-found page keeps the visitor's theme: a remembered dark
+// choice (`ds-theme`) renders it dark, like every other storefront page.
+test("#2478: a remembered dark theme renders the not-found page dark", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("ds-theme", "dark");
+  });
+  await expectStorefrontNotFound(page, PATHS[0]!, "guest");
+  await expect(page.locator("html")).toHaveClass(/(^|\s)dark(\s|$)/);
+});

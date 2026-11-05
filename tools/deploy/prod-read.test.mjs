@@ -25,10 +25,13 @@ import {
   checkInputs,
   failureReason,
   READ_REASONS,
+  REHEARSAL_POLL_CAP_SEC,
+  REHEARSAL_STATES,
   readKey,
   readRun,
   answerOf,
   resultKey,
+  stateWord,
   statusLine,
 } from "./lib/prod-read.mjs";
 import { newestSnapshot, sha256 } from "./lib/schema-drift.mjs";
@@ -196,8 +199,38 @@ describe("3646: status lines only — verb, rc, size and sha256, or one fixed re
     });
     assert.deepEqual(r, {
       upload: false,
+      failed: true,
       line: "prod-observe: verb=schema rc=1 reason=a release step is running",
     });
+  });
+  it("3648: a rehearsal answer prints its state word, never more; one without a state is not uploaded", () => {
+    for (const word of REHEARSAL_STATES)
+      assert.equal(stateWord(`ds-read-entrypoint: state ${word}\n`), word);
+    assert.equal(stateWord("ds-read-entrypoint: state migration 0042 failed\n"), null);
+    assert.equal(stateWord("state succeeded\n"), null);
+    const done = statusLine({
+      verb: "rehearse",
+      rc: 0,
+      cms,
+      stderr: "ds-read-entrypoint: state started\nds-read-entrypoint: state succeeded\n",
+    });
+    assert.deepEqual(done, {
+      upload: true,
+      failed: false,
+      line: `prod-observe: verb=rehearse rc=0 state=succeeded bytes=5 sha256=${sha256(cms)}`,
+    });
+    const none = statusLine({ verb: "rehearse", rc: 0, cms, stderr: "ds-read-entrypoint: state no pending migrations\n" });
+    assert.match(none.line, / state=no-pending-migrations /);
+    assert.equal(none.failed, false);
+    // Still running after the poll's cap: uploaded, but the job fails.
+    const capped = statusLine({ verb: "rehearse", rc: 0, cms, stderr: "ds-read-entrypoint: state running\n" });
+    assert.equal(capped.upload, true);
+    assert.equal(capped.failed, true);
+    const stateless = statusLine({ verb: "rehearsal-status", rc: 0, cms, stderr: "" });
+    assert.equal(stateless.upload, false);
+    assert.match(stateless.line, /reason=the answer carries no rehearsal state$/);
+    const failed = statusLine({ verb: "rehearse", rc: 1, cms: Buffer.alloc(0), stderr: "ds-read-entrypoint: insufficient headroom (disk)\n" });
+    assert.equal(failed.line, "prod-observe: verb=rehearse rc=1 reason=insufficient headroom (disk)");
   });
 });
 
@@ -259,6 +292,15 @@ describe("3646: prod-observe.yml", () => {
     assert.equal(upload.with.name, "prod-read-${{ github.run_id }}");
     assert.match(upload.with.path, /result\/result\.cms$/);
     assert.equal(upload.with["retention-days"], 1);
+  });
+  it("3648: a rehearse polls rehearsal-status up to the runtime cap and prints only the state word", () => {
+    const read = job.steps.find((s) => s.name === "Read");
+    assert.match(read.run, /if \[ "\$VERB" = rehearse \] && \[ "\$rc" -eq 0 \]; then/);
+    assert.ok(read.run.includes(`deadline=$(( $(date +%s) + ${REHEARSAL_POLL_CAP_SEC} ))`), "the poll stops at the cap");
+    assert.match(read.run, /"rehearsal-status \$\{COMMAND#rehearse \}" <\/dev\/null/);
+    assert.match(read.run, /prod-read\.mjs state "\$RUNNER_TEMP\/read\.err"/);
+    assert.match(read.run, /echo "prod-observe: rehearsal state=\$state"/);
+    assert.ok(job["timeout-minutes"] * 60 > REHEARSAL_POLL_CAP_SEC + 5 * 60, "the job outlives the poll");
   });
   it("never prints the box's raw output: every ssh call redirects stdout and stderr to files", () => {
     for (const step of job.steps.filter((s) =>
@@ -476,6 +518,26 @@ test("3646: prod:schema-drift compares against the checked-out journal and newes
     () => schemaDrift({ answer: { verb: "observe" }, root: REPO }),
     /not a schema answer/,
   );
+});
+
+test("3648: prod:schema-drift compares a rehearsal report's catalogueAfter, and refuses a report without one", () => {
+  const report = {
+    verb: "rehearse",
+    sha: SHA,
+    pending: 1,
+    migrations: [],
+    catalogueAfter: { tables: [], enums: [] },
+    state: "succeeded",
+  };
+  const d = schemaDrift({ answer: report, root: REPO });
+  assert.deepEqual(d.migrations, [], "a report has no applied-migrations list");
+  assert.ok(d.catalogue.some((l) => l.startsWith("table missing: public.")));
+  for (const answer of [
+    { ...report, catalogueAfter: null, state: "failed" },
+    { ...report, catalogueAfter: null, pending: 0 },
+  ]) {
+    assert.throws(() => schemaDrift({ answer, root: REPO }), /carries no catalogueAfter/);
+  }
 });
 
 test("3683: prod:schema-drift accepts the indexes the tree's migration SQL writes by hand", () => {

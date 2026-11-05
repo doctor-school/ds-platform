@@ -43,6 +43,18 @@ export const MAX_REASON = 160;
 export const NAME_RE = /^[a-z][a-z0-9-]{0,39}$/;
 export const SHA_RE = /^[0-9a-f]{40}$/;
 export const RUN_ID_RE = /^[0-9]{1,20}$/;
+/** #3648: the state words of `rehearse` / `rehearsal-status`, the one plaintext a
+ * rehearsal prints (ds-read-entrypoint REHEARSAL_STATE_RE). */
+export const REHEARSAL_STATES = [
+  "started",
+  "running",
+  "no pending migrations",
+  "succeeded",
+  "failed",
+  "absent",
+];
+/** The rehearsal's runtime cap (spec «Durable unit.» RuntimeMaxSec=900): the poll's bound. */
+export const REHEARSAL_POLL_CAP_SEC = 900;
 
 export const ENVIRONMENT = "production-read";
 export const READ_KEY_SECRET = "PROD_READ_SSH_KEY";
@@ -142,6 +154,20 @@ export function failureReason(rc, stderr) {
   return `exited ${rc} without a reason`;
 }
 
+/**
+ * The state word of a rehearsal answer: the last `ds-read-entrypoint: state <word>`
+ * line of stderr when the word is one of REHEARSAL_STATES, else null.
+ */
+export function stateWord(stderr) {
+  const prefix = `${BOX_TAG}: state `;
+  const last = String(stderr)
+    .split(/\r?\n/)
+    .filter((l) => l.startsWith(prefix))
+    .map((l) => l.slice(prefix.length))
+    .at(-1);
+  return REHEARSAL_STATES.includes(last) ? last : null;
+}
+
 /** A DER CMS answer starts with a SEQUENCE; plaintext JSON never does. */
 export function isCiphertext(buf) {
   return Buffer.isBuffer(buf) && buf.length > 0 && buf[0] === 0x30;
@@ -152,17 +178,27 @@ export function isCiphertext(buf) {
  * sha256, and for a failure the fixed reason. `upload` says the ciphertext may go.
  */
 export function statusLine({ verb, rc, cms, stderr }) {
-  if (rc === 0 && isCiphertext(cms)) {
+  const rehearsal = verb === "rehearse" || verb === "rehearsal-status";
+  const state = rehearsal ? stateWord(stderr) : null;
+  if (rc === 0 && isCiphertext(cms) && (!rehearsal || state !== null)) {
     const sum = createHash("sha256").update(cms).digest("hex");
+    // #3648: a rehearsal still `running` after the poll's cap is not an answer.
+    const done = !rehearsal || !["started", "running"].includes(state);
     return {
       upload: true,
-      line: `prod-observe: verb=${verb} rc=0 bytes=${cms.length} sha256=${sum}`,
+      failed: !done,
+      line: `prod-observe: verb=${verb} rc=0${state ? ` state=${state.replaceAll(" ", "-")}` : ""} bytes=${cms.length} sha256=${sum}`,
     };
   }
   const reason =
-    rc === 0 ? "the answer is not CMS ciphertext" : failureReason(rc, stderr);
+    rc !== 0
+      ? failureReason(rc, stderr)
+      : isCiphertext(cms)
+        ? "the answer carries no rehearsal state"
+        : "the answer is not CMS ciphertext";
   return {
     upload: false,
+    failed: true,
     line: `prod-observe: verb=${verb} rc=${rc} reason=${reason}`,
   };
 }

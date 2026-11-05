@@ -490,7 +490,7 @@ release_status() {
 # JSON object checked field by field by DATA_PY below, or the tree archive.
 # infra/deploy/bin/harden-ssh.sh --role data refuses an installed entrypoint without
 # this line; tools/deploy/lib/data-prod.mjs and the tests pin the list.
-DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema recovery-bundle recovery-check recovery-put recovery-latest'
+DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema rehearse rehearsal-status recovery-bundle recovery-check recovery-put recovery-latest'
 DATA_LIVE_TREE=$ROOT/home/deploy/ds-platform
 DATA_COMPOSE=$DATA_LIVE_TREE/infra/deploy/compose/data-prod
 DATA_STATE_FILE=$ROOT/home/deploy/ds-platform-postgres-state.json
@@ -514,6 +514,9 @@ DATA_INSTALL=(
   /usr/local/lib/ds-platform/postgres-artifact-probe.py=tools/deploy/postgres-artifact-probe.py
   /usr/local/lib/ds-platform/harden-ssh.sh=infra/deploy/bin/harden-ssh.sh
   /usr/local/lib/ds-platform/ds-recovery=infra/deploy/bin/ds-recovery
+  /usr/local/lib/ds-platform/rehearse-migration.py=infra/deploy/bin/rehearse-migration.py
+  /usr/local/lib/ds-platform/rehearse-cleanup=infra/deploy/bin/rehearse-cleanup
+  /etc/tmpfiles.d/ds-rehearsal.conf=infra/deploy/tmpfiles.d/ds-rehearsal.conf
 )
 MAX_DATA_PAYLOAD_BYTES=65536
 MAX_SHIP_BYTES=$(override DS_ENTRYPOINT_MAX_SHIP_BYTES $((256 * 1024 * 1024)))                      # 256 MiB gzip stream
@@ -739,14 +742,17 @@ ship_tree() {
 }
 
 install_entrypoints() {
-  local sha=$1 pair
+  local sha=$1 pair mode
   for pair in "${DATA_INSTALL[@]}"; do
     sudo test -f "$DATA_LIVE_TREE/${pair#*=}" || refuse "the shipped tree has no ${pair#*=} (ship first)"
   done
-  sudo install -d -m 0755 -o root -g root "$ROOT/usr/local/lib/ds-platform"
+  sudo install -d -m 0755 -o root -g root "$ROOT/usr/local/lib/ds-platform" "$ROOT/etc/tmpfiles.d"
   # `install` replaces each file by a new inode, so this running script keeps its own.
+  # A program 0755; a configuration file under /etc (the tmpfiles.d entry) 0644.
   for pair in "${DATA_INSTALL[@]}"; do
-    sudo install -m 0755 -o root -g root -- "$DATA_LIVE_TREE/${pair#*=}" "$ROOT${pair%%=*}"
+    mode=0755
+    [[ ${pair%%=*} == /etc/* ]] && mode=0644
+    sudo install -m "$mode" -o root -g root -- "$DATA_LIVE_TREE/${pair#*=}" "$ROOT${pair%%=*}"
   done
   printf '%s: box entrypoints of %s installed\n' "$TAG" "$sha"
 }
@@ -835,7 +841,7 @@ data_verb() {
         reject "usage: recovery-put api-prod <yyyymmddthhmmssz> bundle|manifest" ;;
     recovery-latest)
       [[ $n == 2 && ${words[1]} == api-prod ]] || reject "usage: recovery-latest api-prod" ;;
-    ship | install | converge)
+    ship | install | converge | rehearse | rehearsal-status)
       ((n == 2)) || reject "usage: $verb <sha>"
       check_sha "${words[1]}" ;;
     data-up | backup)
@@ -888,6 +894,8 @@ data_verb() {
     finish) exec sudo "$DS_RELEASE" finish prod "${words[1]}" "${words[2]}" </dev/null ;;
     check | supersede) release_lock_verb "$verb" "${words[1]-}" </dev/null ;;
     read-schema) read_schema </dev/null ;;
+    rehearse) rehearse "${words[1]}" ;;
+    rehearsal-status) rehearsal_status "${words[1]}" </dev/null ;;
     recovery-bundle) recovery_bundle </dev/null ;;
     recovery-check) recovery_check </dev/null ;;
     recovery-put) recovery_put "${words[2]}" "${words[3]}" ;;
@@ -1100,6 +1108,60 @@ read_schema() {
   esac
 }
 
+# --- the migration rehearsal (Issue #3648; spec §5 «Migration rehearsal.») ----------
+# The harness is the root-owned installed rehearse-migration.py (DATA_INSTALL); these
+# verbs only bound the archive, take the lock and map its exit. `rehearse <sha>`
+# (stdin: the migration archive ds-read-entrypoint built from the codeload tree of a
+# SHA contained in `main`) answers started / running / no pending migrations;
+# `rehearsal-status <sha>` reads no database and always answers.
+REHEARSE_PY=$ROOT/usr/local/lib/ds-platform/rehearse-migration.py
+REHEARSE_CLEANUP=$ROOT/usr/local/lib/ds-platform/rehearse-cleanup
+REHEARSAL_LOCK_DIR=$ROOT/run/ds-platform
+REHEARSAL_LOCK=$REHEARSAL_LOCK_DIR/ds-rehearsal.lock
+MAX_REHEARSE_BYTES=$((16 * 1024 * 1024))
+# The busy exit of `flock -n -E`, distinct from every exit of the harness.
+REHEARSAL_BUSY=75
+[[ -z $ROOT ]] || export DS_REHEARSE_ROOT=$ROOT
+
+rehearse_installed() {
+  sudo test -f "$REHEARSE_PY" && sudo test -x "$REHEARSE_CLEANUP" ||
+    refuse "the migration rehearsal is not installed (the next release installs it)"
+}
+
+# The harness's exit: 0 the answer · 1 a fixed reason · 2 a bad archive · 3 not servable.
+rehearse_result() {
+  local rc=$1 out=$2
+  case $rc in
+    0) printf '%s\n' "$out" ;;
+    "$REHEARSAL_BUSY") read_fail "a rehearsal is running" ;;
+    2) reject "${out:-bad migration archive}" ;;
+    3) refuse "${out:-the rehearsal cannot be served}" ;;
+    *) read_fail "$(read_reason "$out")" ;;
+  esac
+}
+
+rehearse() {
+  local sha=$1 size out rc=0
+  rehearse_installed
+  rehearse_work=$(sudo mktemp -d) # global: the EXIT trap outlives this function; root-only (0700)
+  trap 'sudo rm -rf -- "${rehearse_work:-}"' EXIT
+  head -c "$((MAX_REHEARSE_BYTES + 1))" | sudo tee -- "$rehearse_work/drizzle.tar.gz" >/dev/null
+  size=$(sudo stat -c %s -- "$rehearse_work/drizzle.tar.gz")
+  ((size <= MAX_REHEARSE_BYTES)) || reject "the migration archive exceeds $MAX_REHEARSE_BYTES bytes"
+  sudo install -d -m 0755 -o root -g root "$REHEARSAL_LOCK_DIR"
+  # One rehearsal at a time; the unit takes the same lock for its whole run.
+  out=$(sudo flock -n -E "$REHEARSAL_BUSY" "$REHEARSAL_LOCK" \
+    python3 -I "$REHEARSE_PY" start "$sha" "$rehearse_work/drizzle.tar.gz" </dev/null) || rc=$?
+  rehearse_result "$rc" "$out"
+}
+
+rehearsal_status() {
+  local out rc=0
+  rehearse_installed
+  out=$(sudo python3 -I "$REHEARSE_PY" status "$1") || rc=$?
+  rehearse_result "$rc" "$out"
+}
+
 # One of READ_REASONS, else `the read failed`.
 read_reason() {
   local reason
@@ -1167,7 +1229,7 @@ case "$verb" in
     observe "${words[1]}"
     ;;
   capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \
-    backup-info | rollback-floor | finish | check | supersede | converge | read-schema | recovery-bundle | recovery-check | recovery-put | recovery-latest)
+    backup-info | rollback-floor | finish | check | supersede | converge | read-schema | rehearse | rehearsal-status | recovery-bundle | recovery-check | recovery-put | recovery-latest)
     data_verb
     ;;
   *)

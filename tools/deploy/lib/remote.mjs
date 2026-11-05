@@ -519,9 +519,20 @@ export const BOX_ENTRYPOINTS = [
   // #3662: the recovery bundle's box side (both prod boxes; stage carries it unused).
   { dest: DS_RECOVERY_BIN, path: "infra/deploy/bin/ds-recovery" },
 ];
+// #3648: the migration rehearsal of ds-data-prod (spec §5 «Migration rehearsal.»):
+// the harness, the unit's ExecStopPost and the boot-time scratch removal.
+export const REHEARSE_MIGRATION_BIN = "/usr/local/lib/ds-platform/rehearse-migration.py";
+export const REHEARSE_CLEANUP_BIN = "/usr/local/lib/ds-platform/rehearse-cleanup";
+export const REHEARSAL_TMPFILES = "/etc/tmpfiles.d/ds-rehearsal.conf";
 /** #3646: ds-data-prod's `install` set — every box entrypoint but ds-read-entrypoint,
- * which only ds-api-prod serves (spec §5 «Prod read verbs.»). */
-export const DATA_BOX_ENTRYPOINTS = BOX_ENTRYPOINTS.filter(({ dest }) => dest !== DS_READ_ENTRYPOINT_BIN);
+ * which only ds-api-prod serves (spec §5 «Prod read verbs.»), then the data box's own
+ * rehearsal files (#3648). */
+export const DATA_BOX_ENTRYPOINTS = [
+  ...BOX_ENTRYPOINTS.filter(({ dest }) => dest !== DS_READ_ENTRYPOINT_BIN),
+  { dest: REHEARSE_MIGRATION_BIN, path: "infra/deploy/bin/rehearse-migration.py" },
+  { dest: REHEARSE_CLEANUP_BIN, path: "infra/deploy/bin/rehearse-cleanup" },
+  { dest: REHEARSAL_TMPFILES, path: "infra/deploy/tmpfiles.d/ds-rehearsal.conf" },
+];
 export const RELEASE_STATE_ROOT = "/var/lib/ds-platform/release";
 export const RELEASE_POLL_MS = 10 * 1000;
 export const RELEASE_POLL_MAX_FAILURES = 6;

@@ -35,7 +35,7 @@ pnpm --filter @ds/e2e exec tsx lib/assert-feed-entry-report.ts "$E2E_REPORT_DIR/
 
 The strict report requires all three exact titles once, zero failures, skips,
 flakes, retries and top-level errors. `.github/workflows/public-feed-entry.yml`
-executes this contour on the native PR head and uploads `public-feed-entry-originals`
+executes this contour on the native PR head and uploads `public-feed-originals-3751`
 with `head.txt` and the actual report. The receipt also requires each actual
 test's Doctor project name and id. Shared default BDD generation loads the
 definitions but excludes `@public-feed-entry` through its existing selection
@@ -53,3 +53,50 @@ their own preference. After local proof, drop only the owned branch DB and remov
 private task files. Never reset the shared stand, flush Redis, or kill a foreign
 listener. Existing mock transport and unmatched feed-entry coverage stays unless
 committed real equivalence proves a precise duplicate removal.
+
+## Specialty feed states — 018 EARS-1 / EARS-4
+
+Set `E2E_PUBLIC_FEED_STATES=1` to reuse this runner for exactly the originals at
+018 lines 35, 129 and 137. The canonical feature stays unchanged. The dedicated
+configuration generates the original feature with missing scenarios visible as
+skips, then selects the three exact titles. The strict actual report refuses
+any missing binding, extra or duplicate title, wrong project, skip, failure,
+retry, flake or runner error. Ordinary `playwright.config.ts` excludes those
+exact titles even when `E2E_GREP` is provided; it still excludes the existing
+017 resource-dependent tag. Selection never adds a tag to the source feature.
+
+Use the same commands and environment above with `ds_dev_3772` (or the CI-owned
+`ds_probe_3772`) and a separate command log/report directory. The shared workflow
+has two isolated Linux jobs: the previous 017 three and these 018 three. Each
+job boots its own compiled API/Doctor and disposable Postgres, uploads the
+actual report and head receipt, and reaps its resources.
+
+Every 018 scenario verifies the real 017 shell and specialty book, resolves
+«Травматология и ортопедия», and creates its own published directions, active
+specialty link and adjacency. The compiled owning `TargetingRepository` reads
+both relationships before commit. Three real published doctors-audience events
+are linked to that own direction, dated one hour ahead, and verified as the
+actual nearest three. One hides its count; two explicitly show it. Real
+participant registration rows make the shown count one. All fixture mutations
+are parameterized, confined to the exact task database, logged and removed by
+exact generated ids in `After`, including failed journeys. No shared golden
+data, provider accounts, object storage or successful upstream mocks are used.
+
+The real projection currently serves `nmo: false` for every event. The offline
+original requires an offline event, not an accredited one: requirements EN/RU
+allow НМО to mark an event, and require the attribute to remain at event level.
+The real proof checks card chip presence against each actual boolean and bans
+screen headings and filters. It does not prove positive НМО authoring/rendering.
+The distinct mocked positive-chip test in `apps/doctor/e2e/feed-events.spec.ts`
+and mapper `nmo: true` boundary remain. The layout mock also retains its
+unmatched personalization assertion; API owning-layer tests remain.
+
+The previous `feed-events.spec.ts` hidden-counter case is the one exact local
+duplicate removed after committed real proof. Its no-line/no-zero/no-slot and
+visible-neighbor assertions now belong to canonical 018:129 via
+`public-feed-states.steps.ts`. Canonical 018:35 also checks the real envelope;
+its local layout case remains because it additionally checks the absence of a
+personalization claim. Canonical 018:137 checks real offline projection and
+same-card rendering; its local case remains for the otherwise unavailable
+positive НМО chip. First-block ordering, all-events navigation, failed-read
+retry, axe and API tests retain their separate boundaries.

@@ -4,7 +4,11 @@ import { defineBddConfig } from "playwright-bdd";
 
 import { HOSTS, SIGN_IN_HOST } from "./hosts.js";
 import { authLimitTagsFor } from "./lib/default-auth-limits.js";
-import { ordinaryStorefrontTagsFor, signInHostTags } from "./lib/host-tags.js";
+import {
+  ordinaryStorefrontTagsFor,
+  publicFeedStatePattern,
+  signInHostTags,
+} from "./lib/host-tags.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
 
 /**
@@ -158,6 +162,7 @@ export default defineConfig({
   workers,
   forbidOnly: !!process.env.CI,
   ...(grep ? { grep } : {}),
+  grepInvert: publicFeedStatePattern,
   retries: 0,
   timeout: 120_000,
   expect: { timeout: 20_000 },

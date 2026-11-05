@@ -35,3 +35,22 @@ Feature: 036 Sign-in doors
     Given a guest on the Academy
     When the guest signs in by the mailed code
     Then the guest is signed in
+
+  # One outline, two runs: its door-only rows run on the PR-CI tier, the row
+  # that submits through the captcha runs in the stage suite only. Gherkin
+  # tags each Examples block, so the run class is read per block.
+  @EARS-2 @happy @door:register @host:login
+  Scenario Outline: A guest reveals the password on a door
+    Given a guest on the <surface> form
+    When the guest reveals the password
+    Then the password is plain
+
+    @pr-ci:login
+    Examples:
+      | surface      |
+      | registration |
+
+    @stage-only:login(captcha)
+    Examples:
+      | surface        |
+      | reset-complete |

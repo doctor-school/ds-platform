@@ -32,3 +32,27 @@ Feature: 036 Sign-in doors
     Given a guest on the Academy
     When the guest signs in
     Then the guest is signed in
+
+  @EARS-3 @happy @door:login @host:login
+  Scenario Outline: An outline whose second Examples block names no run
+    Given a guest on the <surface> form
+    Then the guest is signed in
+
+    @pr-ci:login
+    Examples:
+      | surface |
+      | login   |
+
+    Examples:
+      | surface  |
+      | register |
+
+  @EARS-3 @happy @door:login @host:login @pr-ci:login
+  Scenario Outline: An outline run on PR-CI whose Examples block is also stage-only
+    Given a guest on the <surface> form
+    Then the guest is signed in
+
+    @stage-only:login(mail)
+    Examples:
+      | surface |
+      | login   |

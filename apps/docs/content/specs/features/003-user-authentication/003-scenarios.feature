@@ -1279,7 +1279,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the length-only registrant enters that fresh delivered confirmation code once
     Then that one confirmation opens the verified length-only account with a secure session and no additional sign-in
 
-  @EARS-36 @failure @password-refusal @door:register @host:login @stage-only:login(captcha)
+  @EARS-36 @failure @password-refusal @door:register @host:login @pr-ci:login
   Scenario: A password shorter than the minimum length is rejected by the single rule
     Given an Academy short-password registrant with a unique never-registered email and the account return target
     When that registrant enters seven lowercase letters, blurs the password and attempts the normal registration submit
@@ -1318,7 +1318,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain PasswordField one-slot unit coverage, identifier-validation blur
     # checks, and password-hint/password-refusal journeys; their triggers differ.
 
-  @EARS-38 @happy @password-reveal @door:register @host:login @stage-only:login(captcha)
+  @EARS-38 @happy @password-reveal @door:register @host:login
   Scenario Outline: Every password field carries a keyboard-operable reveal toggle
     Given an Academy guest on the <surface> password-reveal form
     When the reveal visitor enters a password and selects a caret range
@@ -1329,11 +1329,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the reveal field is masked with an unpressed localized show action and unchanged value and caret
     And revealing issued no registration, password-login or reset-completion request and grants no private access
 
+    @pr-ci:login
     Examples:
       | surface        |
       | registration   |
-      | reset-complete |
       | password login |
+
+    @stage-only:login(captcha)
+    Examples:
+      | surface        |
+      | reset-complete |
 
   @EARS-38 @failure @password-reveal-reload @door:register @host:login @pr-ci:login
   Scenario: Revealing a password has no side effect and never survives a reload

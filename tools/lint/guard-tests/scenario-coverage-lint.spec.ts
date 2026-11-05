@@ -150,13 +150,15 @@ describe("scenario-coverage-lint", () => {
     // read as the ordinary quarantine, EARS-2 would be uncovered in a touched spec.
     expect(code).toBe(0);
     expect(stdout).toContain(
-      "3 mounted-door scenario(s): 2 bound to the sign-in host, 1 host-quarantined",
+      "4 mounted-door scenario(s): 3 bound to the sign-in host, 1 host-quarantined",
     );
     // #3345 item 4 — each binding names where it runs: the PR-CI door tier or,
     // for a reason class from the fixed list, the stage suite only.
     expect(stdout).toContain(
-      "2 sign-in-host binding(s): 1 on the PR-CI door tier (@pr-ci:login), 1 stage-only (mail: 1)",
+      "4 sign-in-host binding(s): 2 on the PR-CI door tier (@pr-ci:login), 2 stage-only (mail: 1, captcha: 1)",
     );
+    // The split outline counts once per tagged Examples block: its door-only
+    // block on the PR-CI tier, its captcha-submitting block stage-only.
     expect(stdout).toContain("PASS");
   });
 
@@ -187,6 +189,16 @@ describe("scenario-coverage-lint", () => {
     );
     expect(stderr).toContain(
       `${feature}:31 -> @pr-ci:login without @host:login`,
+    );
+    // An outline's run class is read per Examples block (Gherkin tags each block):
+    // a block that inherits none names no run; a block tag that contradicts the
+    // outline's own run tag is both classes on that block.
+    expect(stderr).toContain(
+      `${feature}:46 -> @host:login names no run: tag it @pr-ci:login (the apps/login PR-CI door tier runs it) or @stage-only:login(<class>)`,
+    );
+    expect(stderr).not.toContain(`${feature}:42 ->`);
+    expect(stderr).toContain(
+      `${feature}:56 -> @pr-ci:login and @stage-only:login(mail) on one scenario`,
     );
   });
 

@@ -578,11 +578,19 @@ export function applyAllowlist(
     if (!Object.entries(entry.props).every(([k, v]) => where.props[k] === v)) continue;
     if (entry.regions && !(where.region && entry.regions.includes(where.region))) continue;
     const side = entry.delta === "missing" ? next.canvas : next.app;
+    // An entry is ONE decided item: it removes one occurrence, so an unlabelled
+    // `icon` entry (the signed-in avatar) leaves the other icon links in place.
+    // Equal items pair left to right with the other side, so the unpaired,
+    // decided occurrence is the TRAILING one (the logo icon leads every bar).
     let hit = false;
     for (const container of ["bar", "menu"] as const) {
-      const before = side[container].length;
-      side[container] = side[container].filter((item) => !sameItem(item, entry.item));
-      hit ||= side[container].length !== before;
+      const items = side[container];
+      let at = items.length - 1;
+      while (at >= 0 && !sameItem(items[at]!, entry.item)) at -= 1;
+      if (at === -1) continue;
+      side[container] = items.filter((_, i) => i !== at);
+      hit = true;
+      break;
     }
     if (!hit) stale.push(entry);
   }

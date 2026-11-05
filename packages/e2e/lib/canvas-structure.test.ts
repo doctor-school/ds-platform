@@ -295,6 +295,17 @@ describe("canvas-structure · applyAllowlist", () => {
     expect(doctor.canvas.bar).toHaveLength(2);
   });
 
+  it("#3727: an entry removes ONE item — the trailing one — so an unlabelled icon entry spares the logo", () => {
+    const avatar: AllowlistEntry = { ...entry, props: {}, delta: "extra", item: { kind: "link", label: null } };
+    const app: RegionStructure = {
+      bar: [{ kind: "link", label: null }, { kind: "link", label: "Эфиры" }, { kind: "link", label: null }],
+      menu: [],
+    };
+    const out = applyAllowlist([avatar], { canvas: "ds-shell.dc.html", props: {} }, { bar: [], menu: [] }, app);
+    expect(out.app.bar).toEqual([{ kind: "link", label: null }, { kind: "link", label: "Эфиры" }]);
+    expect(out.stale).toEqual([]);
+  });
+
   it("an applicable entry that matches nothing is stale", () => {
     const where = { canvas: "ds-shell.dc.html", props: { host: "academy" } };
     const out = applyAllowlist([entry], where, { bar: [], menu: [] }, { bar: [], menu: [] });

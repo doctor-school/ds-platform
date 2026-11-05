@@ -180,7 +180,6 @@ test.describe("047 / 049 «Доступы» — a superadministrator grants staf
     await expect(
       admin.getByRole("table", { name: "Сотрудники с доступом к админке" }),
     ).toBeVisible();
-    await evidenceShot(admin, "staff-access-list");
     const ownRows = await rowOf(admin, adminAccount.email);
     await expect(ownRows).toHaveCount(2);
     await expect(ownRows.first()).toContainText("Суперадминистратор");
@@ -190,6 +189,16 @@ test.describe("047 / 049 «Доступы» — a superadministrator grants staf
     await expect(ownRows.getByRole("button", { name: "Отозвать" })).toHaveCount(
       0,
     );
+    // The shots are taken once the list has resolved, never on its skeleton:
+    // first the caller's own rows found by the search, then the whole list.
+    await evidenceShot(admin, "staff-access-list-superadmin");
+    await admin
+      .getByRole("searchbox", { name: "Поиск по ФИО и почте" })
+      .fill("");
+    await expect(
+      admin.locator("tbody tr", { hasText: "@" }).first(),
+    ).toBeVisible();
+    await evidenceShot(admin, "staff-access-list");
   });
 
   test("047 EARS-3/EARS-5/EARS-6 (V-9): a new email gets «Программный комитет» for an event, a one-time password, signs in with it and lands on the event's «Заявки»", async ({

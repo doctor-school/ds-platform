@@ -77,6 +77,11 @@ it("an internal PR pushes pr/* images only while it carries the stage-slot label
   assert.equal(plan({ EVENT: "push", GIT_REF: "refs/heads/main", SHA }).push, "true");
 });
 
+it("an unpushed run records no images manifest, so a pr-slot finds nothing to pull", () => {
+  // The refusal that names the label (registry.mjs resolveRecordedImages) relies on it.
+  assert.equal(workflow.jobs.images.if, "needs.plan.outputs.push == 'true'");
+});
+
 it("adding the label starts a pushing run for the current head; any other label starts nothing", () => {
   const types = workflow.on.pull_request.types;
   for (const type of ["opened", "synchronize", "reopened", "labeled"]) assert.ok(types.includes(type), type);

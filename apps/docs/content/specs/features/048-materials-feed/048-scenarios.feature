@@ -215,7 +215,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     And the page shows «Колонка эксперта», the publication date and the expert's name as plain text
     And the link to "https://pubmed.ncbi.nlm.nih.gov/" targets a new tab with rel "noopener noreferrer"
 
-  @EARS-12
+  @EARS-12 @material-reading-pages
   Scenario: A failed material read offers a retry
     Given the news item "Открыт набор центров в исследование PRP" is published with the slug "otkryt-nabor-centrov"
     And the material read fails once
@@ -224,13 +224,13 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the visitor chooses «Повторить»
     Then the reading page shows "Открыт набор центров в исследование PRP"
 
-  @EARS-11 @EARS-12
+  @EARS-11 @EARS-12 @material-reading-pages
   Scenario: A draft material has no public page
     Given the draft news item "Черновик новости" with the slug "chernovik-novosti"
     When a visitor opens "/materials/chernovik-novosti" on the Academy
     Then the Academy not-found page is shown
 
-  @EARS-17
+  @EARS-17 @material-reading-pages
   Scenario: The doctor storefront shows nothing of the feed
     Given the news item "Открыт набор центров в исследование PRP" is published with the slug "otkryt-nabor-centrov"
     When a doctor opens "/materials/otkryt-nabor-centrov" on doctor.school

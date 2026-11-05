@@ -123,7 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="text-sm text-muted-foreground"
             data-testid="access-refused"
           >
-            {t("login.errorForbidden")}
+            {t("shell.sectionForbidden")}
           </p>
         )}
       </main>

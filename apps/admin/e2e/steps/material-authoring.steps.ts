@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
 
 import { bootstrapAdminSession, signInAsAdmin } from "@ds/e2e/admin-events";
+import { PublicFeedPageSchema } from "@ds/schemas";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { createBdd } from "playwright-bdd";
 import { Pool, type QueryResultRow } from "pg";
@@ -24,6 +25,7 @@ type State = {
   auditIds?: string[];
   storedDraft?: QueryResultRow[];
   feedBefore?: unknown;
+  feedRowsBefore?: QueryResultRow[];
   previewTitle?: string;
 };
 const states = new WeakMap<AdminWorld, State>();
@@ -407,7 +409,19 @@ async function publicFeed(page: Page): Promise<unknown> {
     return { status: response.status, body: await response.json() };
   });
   expect(answer.status).toBe(200);
-  return answer.body;
+  const feed = PublicFeedPageSchema.parse(answer.body);
+  return {
+    ...feed,
+    data: feed.data.map((card) => {
+      if (!card.image) return card;
+      const image = new URL(card.image.url);
+      // Presigned credentials change on a read; the stored entry and image key do not.
+      for (const name of [...image.searchParams.keys()])
+        if (name.toLowerCase().startsWith("x-amz-"))
+          image.searchParams.delete(name);
+      return { ...card, image: { url: image.href } };
+    }),
+  };
 }
 
 Given(
@@ -421,6 +435,9 @@ Given(
     ]);
     expect(current.storedDraft).toHaveLength(1);
     current.feedBefore = await publicFeed(page);
+    current.feedRowsBefore = await rows(
+      "SELECT * FROM feed_entries ORDER BY id",
+    );
   },
 );
 When(
@@ -438,7 +455,7 @@ When(
     const response = await published;
     expect(response.status()).toBe(409);
     expect(await response.json()).toMatchObject({
-      code: "PUBLISH_REQUIREMENTS_NOT_MET",
+      errorCode: "PUBLISH_REQUIREMENTS_NOT_MET",
     });
   },
 );
@@ -467,6 +484,9 @@ Then(
     const feed = await publicFeed(page);
     expect(JSON.stringify(feed)).not.toContain(title);
     expect(feed).toEqual(state(world).feedBefore);
+    expect(await rows("SELECT * FROM feed_entries ORDER BY id")).toEqual(
+      state(world).feedRowsBefore,
+    );
   },
 );
 When(
@@ -516,6 +536,9 @@ Given(
     current.previewTitle = `Предпросмотр без сохранения ${randomUUID()}`;
     current.before = await rows("SELECT id FROM materials ORDER BY id");
     current.feedBefore = await publicFeed(page);
+    current.feedRowsBefore = await rows(
+      "SELECT * FROM feed_entries ORDER BY id",
+    );
     await page.goto("/materials/create");
     await page.getByTestId("material-title").fill(current.previewTitle);
     await page.getByTestId("material-author-line").fill("Редакция Академии");
@@ -561,6 +584,9 @@ Then(
     ).toEqual([]);
     const feed = await publicFeed(page);
     expect(feed).toEqual(current.feedBefore);
+    expect(await rows("SELECT * FROM feed_entries ORDER BY id")).toEqual(
+      current.feedRowsBefore,
+    );
     expect(JSON.stringify(feed)).not.toContain(current.previewTitle);
   },
 );

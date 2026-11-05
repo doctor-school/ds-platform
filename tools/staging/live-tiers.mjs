@@ -424,6 +424,10 @@ export const LIVE_TIERS = Object.freeze([
     rootDir: "e2e",
     gated: [
       { file: "e2e/shell-live.spec.ts", requires: [URL_DOCTOR, ...ACCOUNT] },
+      {
+        file: "e2e/account-canvas-structure-live.spec.ts",
+        requires: [URL_DOCTOR, ...ACCOUNT],
+      },
     ],
   },
 ]);

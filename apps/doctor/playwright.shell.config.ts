@@ -25,7 +25,8 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  */
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /(^|[/\\])shell-live\.spec\.ts$/,
+  // #3758: the signed-in `/account` canvas-structure check rides this tier.
+  testMatch: /(^|[/\\])(shell-live|account-canvas-structure-live)\.spec\.ts$/,
   // One live account, one shared upstream feed: do not race them.
   fullyParallel: false,
   workers: 1,

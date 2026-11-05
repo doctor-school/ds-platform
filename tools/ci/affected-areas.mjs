@@ -74,7 +74,8 @@ export const HEAVY_JOBS = {
     // apps/doctor/e2e/header-canvas-structure.spec.ts (#3682) reads the canvas;
     // feed-canvas-structure.spec.ts (#3728) reads the feed page canvas and the
     // card canvas it imports; home- and documents-canvas-structure.spec.ts
-    // (#3757) read the home, documents-list and document page canvases.
+    // (#3757) read the home, documents-list and document page canvases;
+    // account-canvas-structure-live.spec.ts (#3758) reads the R1 account canvas.
     extraInputs: [
       /^design-source\/ds-shell\.dc\.html$/,
       /^design-source\/doctor-feed\.dc\.html$/,
@@ -82,6 +83,7 @@ export const HEAVY_JOBS = {
       /^design-source\/doctor-home\.dc\.html$/,
       /^design-source\/doctor-docs\.dc\.html$/,
       /^design-source\/document\.dc\.html$/,
+      /^design-source\/account-profile\.dc\.html$/,
     ],
   },
   "playwright-axe-login": { packages: ["@ds/login"], extraInputs: [] },

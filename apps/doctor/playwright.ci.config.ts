@@ -115,6 +115,8 @@ export default defineConfig({
     // `playwright.shell.config.ts`. The guest half of the shared chrome stays
     // here, in `shell.spec.ts`.
     "shell-live.spec.ts",
+    // #3758: the signed-in `/account` canvas-structure check — same live tier.
+    "account-canvas-structure-live.spec.ts",
     // #2027 wave 1 (rows 73 + 77): the duplicate-registration notice is a REAL
     // email through Mailpit, so the spec rides the live
     // `playwright.register-live.config.ts`.

@@ -184,6 +184,30 @@
       "item": { "kind": "link", "label": "Все события" },
       "decision": "The home's capped events block carries one «Все события» link to the full /events listing in place of «Показать ещё» — the label as the spec states it, without the canvas arrow.",
       "source": "https://github.com/doctor-school/ds-platform/pull/3603 (PR body, «Visible differences vs the earlier home canvas (d-home · события)»: «Все события» is the feed's button under the cards in place of «Показать ещё»); owner Stage-B GO «По стенду го» https://github.com/doctor-school/ds-platform/pull/3603#issuecomment-6600016436; apps/docs/content/specs/features/017-doctor-shell-specialties/017-requirements-en.md EARS-9; packages/events-storefront/src/copy/feed-copy.ts feed.allEvents"
+    },
+    {
+      "canvas": "account-profile.dc.html",
+      "props": { "host": "витрина врача", "variant": "Разделы" },
+      "regions": ["Профиль · Разделы"],
+      "delta": "missing",
+      "item": {
+        "kind": "link",
+        "label": "Пароль Сменить пароль Отправим ссылку для сброса на email →"
+      },
+      "decision": "The password reset is code-only (the email carries a code, no link), so the «Сменить пароль» helper says «код», not the canvas «ссылку»; the canvas row predates the rewording.",
+      "source": "apps/docs/content/specs/features/003-user-authentication/003-design.md §13.4 (reset mail = code); PR #1062 (Closes #898); packages/account/src/copy/account-copy.ts passwordHelper"
+    },
+    {
+      "canvas": "account-profile.dc.html",
+      "props": { "host": "витрина врача", "variant": "Разделы" },
+      "regions": ["Профиль · Разделы"],
+      "delta": "extra",
+      "item": {
+        "kind": "link",
+        "label": "Пароль Сменить пароль Отправим код для сброса пароля на email →"
+      },
+      "decision": "The password reset is code-only (the email carries a code, no link), so the «Сменить пароль» helper says «код», not the canvas «ссылку»; the canvas row predates the rewording.",
+      "source": "apps/docs/content/specs/features/003-user-authentication/003-design.md §13.4 (reset mail = code); PR #1062 (Closes #898); packages/account/src/copy/account-copy.ts passwordHelper"
     }
   ]
 }

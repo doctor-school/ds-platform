@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
 
 import {
+  DS_SHELL_FOOTER_REGION,
+  DS_SHELL_HEADER_REGION,
   applyAllowlist,
   diffStructures,
   extractCanvasStructure,
@@ -93,7 +95,7 @@ async function visibleItems(page: Page, root: string): Promise<Seen[]> {
 }
 
 /** Rows by vertical centre (a shared centre within 12px is one row), then left. */
-function visualOrder(items: Seen[]): StructureItem[] {
+function rowOrder(items: Seen[]): StructureItem[] {
   const byCentre = [...items].sort(
     (a, b) => a.top + a.height / 2 - (b.top + b.height / 2),
   );
@@ -114,6 +116,16 @@ export interface RenderedRegion {
   root: string;
   /** The menu toggle to open for the `menu` read; absent = no menu read. */
   menuToggle?: string;
+  /**
+   * `visual` (default): rows top to bottom, left to right. `document`: DOM
+   * order — for a region of side-by-side columns (the footer grid), whose
+   * canvas order is column by column, not row by row.
+   */
+  order?: "visual" | "document";
+}
+
+function documentOrder(items: Seen[]): StructureItem[] {
+  return [...items].sort((a, b) => a.index - b.index).map(({ kind, label }) => ({ kind, label }));
 }
 
 export async function readRenderedStructure(
@@ -121,9 +133,10 @@ export async function readRenderedStructure(
   region: RenderedRegion,
 ): Promise<RegionStructure> {
   const closed = await visibleItems(page, region.root);
+  const ordered = region.order === "document" ? documentOrder : rowOrder;
   const toggle = region.menuToggle ? page.locator(region.menuToggle) : null;
   if (!toggle || !(await toggle.isVisible())) {
-    return { bar: visualOrder(closed), menu: [] };
+    return { bar: ordered(closed), menu: [] };
   }
   await toggle.click();
   const open = await visibleItems(page, region.root);
@@ -132,8 +145,8 @@ export async function readRenderedStructure(
   const before = new Set(closed.map((i) => i.index));
   await toggle.click();
   return {
-    bar: visualOrder(closed),
-    menu: visualOrder(open.filter((i) => !before.has(i.index))),
+    bar: ordered(closed),
+    menu: ordered(open.filter((i) => !before.has(i.index))),
   };
 }
 
@@ -155,7 +168,7 @@ export async function canvasStructureMismatch(
   const props = input.props ?? {};
   const decided = applyAllowlist(
     ALLOWLIST.entries,
-    { canvas: basename(file), props },
+    { canvas: basename(file), props, region: (region ?? DS_SHELL_HEADER_REGION).name },
     fromCanvas,
     fromApp,
   );
@@ -176,40 +189,93 @@ export async function canvasStructureMismatch(
   ].join("\n");
 }
 
-/**
- * The storefront header (`@ds/storefront-shell`, both hosts) against
- * `design-source/ds-shell.dc.html`, guest, at the canvas's two widths: 320 and
- * 390 read the canvas mobile branch, 1440 the desktop one. Guest only — the CI
- * tiers have no session.
- */
-export function defineStorefrontHeaderCanvasParity(options: {
+/** The storefront regions checked against `design-source/ds-shell.dc.html`. */
+const STOREFRONT_REGIONS = {
+  header: {
+    canvas: DS_SHELL_HEADER_REGION,
+    rendered: {
+      root: '[data-testid="storefront-header"]',
+      menuToggle: '[data-testid="shell-mobile-menu"] > summary',
+    },
+    issue: "#3682",
+    title: " (bar / ≡ menu)",
+  },
+  footer: {
+    canvas: DS_SHELL_FOOTER_REGION,
+    rendered: { root: '[data-testid="storefront-footer"]', order: "document" },
+    issue: "#3727",
+    title: "",
+  },
+} satisfies Record<
+  string,
+  { canvas: RegionSpec; rendered: RenderedRegion; issue: string; title: string }
+>;
+
+export interface StorefrontCanvasParityOptions {
   host: "doctor" | "academy";
-  /** A route of this storefront that renders without a backend. */
+  /** A route of this storefront that renders (with no backend on a guest tier). */
   path: string;
-}): void {
+  /**
+   * Signs the page in with the tier's own session setup before the read; the
+   * canvas is then evaluated with `loggedIn: true`. Absent = guest (cookies
+   * cleared).
+   */
+  signIn?: (page: Page) => Promise<void>;
+}
+
+function defineStorefrontCanvasParity(
+  region: keyof typeof STOREFRONT_REGIONS,
+  options: StorefrontCanvasParityOptions,
+): void {
+  const { canvas, rendered, issue, title } = STOREFRONT_REGIONS[region];
+  const loggedIn = !!options.signIn;
+  const who = loggedIn ? "signed-in" : "guest";
   for (const width of [320, 390, 1440]) {
     const mobile = width < 900;
-    test.describe(`#3682 header ≡ ds-shell canvas · ${options.host} · guest · ${width}`, () => {
+    test.describe(`${loggedIn ? "#3727" : issue} ${region} ≡ ds-shell canvas · ${options.host} · ${who} · ${width}`, () => {
       test.use({ viewport: { width, height: 800 } });
-      test(`the rendered header has the canvas structure (bar / ≡ menu)`, async ({
+      test(`the rendered ${region} has the canvas structure${title}`, async ({
         page,
         context,
       }) => {
-        await context.clearCookies();
+        if (options.signIn) await options.signIn(page);
+        else await context.clearCookies();
         await page.goto(options.path);
         await waitForClientReady(page);
+        // The cluster resolves its branch after hydration on the Academy host
+        // (a client profile read); read only once it is the signed-in one.
+        await page
+          .locator(`[data-testid="shell-auth-cluster"][data-cluster="${loggedIn ? "doctor" : "guest"}"]`)
+          .waitFor({ state: "attached" });
         await page.evaluate(() => document.fonts.ready);
         const mismatch = await canvasStructureMismatch(
           page,
           "ds-shell.dc.html",
-          { props: { host: options.host, loggedIn: false, mobile } },
-          {
-            root: '[data-testid="storefront-header"]',
-            menuToggle: '[data-testid="shell-mobile-menu"] > summary',
-          },
+          { props: { host: options.host, loggedIn, mobile } },
+          rendered,
+          canvas,
         );
         expect(mismatch, mismatch ?? "").toBeNull();
       });
     });
   }
+}
+
+/**
+ * The storefront header (`@ds/storefront-shell`, both hosts) against
+ * `design-source/ds-shell.dc.html` at the canvas's two widths: 320 and 390 read
+ * the canvas mobile branch, 1440 the desktop one; bar and `≡` menu. Guest, or
+ * signed in (`loggedIn: true`) when `signIn` is given.
+ */
+export function defineStorefrontHeaderCanvasParity(options: StorefrontCanvasParityOptions): void {
+  defineStorefrontCanvasParity("header", options);
+}
+
+/**
+ * #3727 — the storefront footer against the canvas `ds-shell · футер` artboard
+ * at 320 / 390 / 1440: its links in document (column) order; the decorative
+ * giant wordmark is `aria-hidden` and carries none.
+ */
+export function defineStorefrontFooterCanvasParity(options: StorefrontCanvasParityOptions): void {
+  defineStorefrontCanvasParity("footer", options);
 }

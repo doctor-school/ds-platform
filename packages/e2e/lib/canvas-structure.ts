@@ -41,13 +41,16 @@ export interface RegionStructure {
 
 /** Where the region starts and ends in the expanded template. */
 export interface RegionSpec {
+  /** The region's name, matched by an allowlist entry's `regions`. */
+  name?: string;
   /** The first element of the region: a tag, optionally with one attribute value. */
   start: { tag: string; attr?: [name: string, value: string] };
   /**
    * The region runs over the start element and its following siblings up to
-   * (not including) the first comment containing this text.
+   * (not including) the first comment containing this text; absent, the
+   * region is the start element alone.
    */
-  untilComment: string;
+  untilComment?: string;
 }
 
 export interface CanvasInput {
@@ -57,8 +60,15 @@ export interface CanvasInput {
 
 /** ds-shell pilot region: the `<header>` plus the mobile search band under it. */
 export const DS_SHELL_HEADER_REGION: RegionSpec = {
+  name: "header",
   start: { tag: "header" },
   untilComment: "Зона контента экрана",
+};
+
+/** #3727 — the ds-shell footer artboard (`ds-shell · футер`), the element alone. */
+export const DS_SHELL_FOOTER_REGION: RegionSpec = {
+  name: "footer",
+  start: { tag: "footer", attr: ["data-screen-label", "ds-shell · футер"] },
 };
 
 // ── template parsing ────────────────────────────────────────────────────────
@@ -411,9 +421,11 @@ function regionNodes(tree: ResolvedNode[], spec: RegionSpec): ResolvedNode[] | n
     // A depth-first search over the siblings of each level.
     const at = node.children.findIndex(matches);
     if (at !== -1) {
+      const { untilComment } = spec;
+      if (untilComment === undefined) return [node.children[at]!];
       const region: ResolvedNode[] = [];
       for (const sibling of node.children.slice(at)) {
-        if (sibling.type === "comment" && sibling.value.includes(spec.untilComment)) break;
+        if (sibling.type === "comment" && sibling.value.includes(untilComment)) break;
         region.push(sibling);
       }
       return region;
@@ -530,6 +542,8 @@ export interface AllowlistEntry {
   canvas: string;
   /** Applies when every listed prop equals the evaluated canvas prop. */
   props: Record<string, unknown>;
+  /** Applies only to these regions ({@link RegionSpec.name}); absent = every region. */
+  regions?: string[];
   /** `missing`: the canvas draws it, the app decidedly does not. `extra`: the reverse. */
   delta: "missing" | "extra";
   item: StructureItem;
@@ -550,7 +564,7 @@ function sameItem(a: StructureItem, b: StructureItem): boolean {
  */
 export function applyAllowlist(
   entries: AllowlistEntry[],
-  where: { canvas: string; props: Record<string, unknown> },
+  where: { canvas: string; props: Record<string, unknown>; region?: string | undefined },
   canvas: RegionStructure,
   app: RegionStructure,
 ): { canvas: RegionStructure; app: RegionStructure; stale: AllowlistEntry[] } {
@@ -562,12 +576,21 @@ export function applyAllowlist(
   for (const entry of entries) {
     if (entry.canvas !== where.canvas) continue;
     if (!Object.entries(entry.props).every(([k, v]) => where.props[k] === v)) continue;
+    if (entry.regions && !(where.region && entry.regions.includes(where.region))) continue;
     const side = entry.delta === "missing" ? next.canvas : next.app;
+    // An entry is ONE decided item: it removes one occurrence, so an unlabelled
+    // `icon` entry (the signed-in avatar) leaves the other icon links in place.
+    // Equal items pair left to right with the other side, so the unpaired,
+    // decided occurrence is the TRAILING one (the logo icon leads every bar).
     let hit = false;
     for (const container of ["bar", "menu"] as const) {
-      const before = side[container].length;
-      side[container] = side[container].filter((item) => !sameItem(item, entry.item));
-      hit ||= side[container].length !== before;
+      const items = side[container];
+      let at = items.length - 1;
+      while (at >= 0 && !sameItem(items[at]!, entry.item)) at -= 1;
+      if (at === -1) continue;
+      side[container] = items.filter((_, i) => i !== at);
+      hit = true;
+      break;
     }
     if (!hit) stale.push(entry);
   }

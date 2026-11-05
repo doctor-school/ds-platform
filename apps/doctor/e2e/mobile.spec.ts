@@ -285,9 +285,22 @@ async function expectAxeClean(page: Page, render: string) {
   ).toEqual([]);
 }
 
-/** Drive the catalog from the open render to the collapsed chosen row. */
+/**
+ * Drive the catalog from the open render to the collapsed chosen row: a
+ * recorded choice opens its feed (#3674), and the row is what the home shows
+ * on the way back — in the theme the visitor picked, which the toggle keeps.
+ */
 async function chooseCardiology(page: Page) {
+  const pressed = await page
+    .getByTestId("theme-toggle")
+    .getAttribute("aria-pressed");
   await page.getByRole("button", { name: "Кардиология", exact: true }).click();
+  await expect(page).toHaveURL(/\/feed\/code-1$/);
+  await page.goto("/");
+  await expect(page.getByTestId("theme-toggle")).toHaveAttribute(
+    "aria-pressed",
+    pressed ?? "false",
+  );
   await expect(page.getByTestId("specialty-catalog")).toHaveAttribute(
     "data-state",
     "chosen",

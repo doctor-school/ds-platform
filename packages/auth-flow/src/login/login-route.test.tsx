@@ -234,11 +234,11 @@ describe("017 #1955: /login is closed to a doctor who already has a session", ()
     expect(redirect).toHaveBeenCalledTimes(1);
   });
 
-  it("017 #1955.21: a signed-in doctor with a remembered specialty lands on the 019 feed", async () => {
+  it("017 #1955.21: a signed-in doctor with a remembered specialty lands on that specialty's 018 feed", async () => {
     resolveServerAuth.mockResolvedValue(DOCTOR);
     remembersSpecialty();
 
-    expect(await landingOf(DOCTOR_FIXTURE, {})).toBe("/events");
+    expect(await landingOf(DOCTOR_FIXTURE, {})).toBe("/feed/kardiologiya");
   });
 
   it("017 #1955.22: a signed-in GATE arrival goes to the эфир it came from, not the generic landing", async () => {

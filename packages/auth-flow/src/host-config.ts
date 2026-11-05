@@ -525,7 +525,10 @@ export type AuthFlowLandingConfig =
   | {
       readonly afterLogin: string;
       readonly specialtyAware: true;
-      /** The feed a remembered specialty lands on (021 EARS-3). */
+      /**
+       * The feed a remembered specialty lands on (021 EARS-3), as a route
+       * TEMPLATE whose `:code` is the remembered specialty's code (`/feed/:code`).
+       */
       readonly specialtyFeed: string;
       readonly specialtyEndpoints: {
         /** The profile read, sent with the session (`/v1/me/specialty`). */

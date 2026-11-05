@@ -15,14 +15,15 @@ import {
  *
  * THE LANDING IS A DECISION ABOUT THE VISITOR, NOT A CONSTANT - on a host whose
  * config says `landing.specialtyAware`. If 017 already remembers which specialty
- * this visitor reads for (`SpecialtyChosen`, the LD-2 cascade), they land on the
- * feed the config names (`specialtyFeed`); otherwise on `afterLogin`, the surface
+ * this visitor reads for (`SpecialtyChosen`, the LD-2 cascade), they land on
+ * THAT specialty's 018 feed - the config's `specialtyFeed` route template with
+ * `:code` filled from the remembered choice; otherwise on `afterLogin`, the surface
  * where the specialty question is asked. An UNRESOLVED read (`choice: null`)
  * lands exactly like a resolved «nothing chosen»: both mean «we do not know».
  * A host that is not specialty-aware lands on `afterLogin` and reads nothing.
  *
  * THE ACCOUNT PAGE IS NEVER A DIRECT-ARRIVAL LANDING (LD-4 owner decision): the
- * only destinations are the two config paths.
+ * only destinations are the config's feed template and `afterLogin`.
  *
  * WHY THE PACKAGE READS THE SPECIALTY. A `mounted` route file may not read
  * anything, so the remembered-specialty read is a package server helper; the
@@ -135,9 +136,25 @@ export function resolveDirectArrivalLanding(
   if (!landing.specialtyAware) return landing.afterLogin;
   // `choice: null` is «unresolved», `choice.specialty: null` is «resolved:
   // nothing chosen». Different facts, same landing.
-  return remembered.choice?.specialty
-    ? landing.specialtyFeed
+  const specialty = remembered.choice?.specialty;
+  return specialty
+    ? specialtyFeedLanding(landing, specialty.code)
     : landing.afterLogin;
+}
+
+/**
+ * The feed a chosen specialty lands on: the config's `specialtyFeed` route
+ * template with `:code` replaced by the (encoded) specialty code - the same
+ * shape as `routes.eventPathTemplate`, data rather than a callback.
+ */
+export function specialtyFeedLanding(
+  landing: SpecialtyAwareLanding,
+  specialtyCode: string,
+): string {
+  return landing.specialtyFeed.replace(
+    ":code",
+    encodeURIComponent(specialtyCode),
+  );
 }
 
 /**

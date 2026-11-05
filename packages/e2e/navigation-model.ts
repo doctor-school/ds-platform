@@ -35,9 +35,36 @@ export type Visitor = Exclude<Audience, "both">;
  * marker when the page owns no `h1`. Exactly one of the two: a union, not two
  * optional fields, so «neither was filled in» cannot typecheck.
  */
-export type NavigationLanding =
+export type NavigationPageLanding =
   | { readonly h1: string; readonly surface?: never }
   | { readonly surface: string; readonly h1?: never };
+
+/**
+ * One page a redirecting item may land on. `path` is a pathname pattern: a
+ * `:name` segment matches exactly one non-empty segment, every other segment
+ * matches literally — enough to say «/feed/<some specialty code>» and nothing
+ * looser.
+ */
+export interface NavigationRedirectTarget {
+  readonly path: string;
+  readonly landing: NavigationPageLanding;
+}
+
+/**
+ * A destination whose href is a REDIRECT by design (017 «Моя лента» → `/feed`,
+ * which resolves the visitor's remembered specialty): the item lists every
+ * page it may land on and that page's own evidence. The walk accepts only a
+ * declared target — the redirect is part of the contract, not a hole in it.
+ */
+export interface NavigationRedirectLanding {
+  readonly redirectsTo: readonly NavigationRedirectTarget[];
+  readonly h1?: never;
+  readonly surface?: never;
+}
+
+/** What an item's landing declares: the page at its own href, or its redirect targets. */
+export type NavigationLanding =
+  NavigationPageLanding | NavigationRedirectLanding;
 
 /** One navigation destination the header renders and the walk visits. */
 export interface NavigationItem {
@@ -83,11 +110,42 @@ export function itemsFor(
   );
 }
 
-/** Resolve an item's landing into the assertion the navigation step runs. */
-export function landingEvidence(item: NavigationItem): LandingEvidence {
-  return item.landing.h1 !== undefined
-    ? { kind: "h1", value: item.landing.h1 }
-    : { kind: "surface", value: item.landing.surface };
+function evidenceOf(landing: NavigationPageLanding): LandingEvidence {
+  return landing.h1 !== undefined
+    ? { kind: "h1", value: landing.h1 }
+    : { kind: "surface", value: landing.surface };
+}
+
+function pathMatches(pattern: string, pathname: string): boolean {
+  const want = pattern.split("/");
+  const got = pathname.split("/");
+  if (want.length !== got.length) return false;
+  return want.every((segment, i) =>
+    segment.startsWith(":") ? got[i] !== "" : segment === got[i],
+  );
+}
+
+/**
+ * Resolve the §6.2 assertion for the page a visitor LANDED on after opening
+ * `item.href`, or `null` when that pathname is not a landing the item declares.
+ *
+ * A plain item lands only on its own href, exactly — a silent redirect stays
+ * red. A redirecting item lands only on one of its declared targets, and the
+ * evidence is that TARGET's, so «redirected, but to the wrong page» stays red
+ * too.
+ */
+export function landingEvidenceAt(
+  item: NavigationItem,
+  pathname: string,
+): LandingEvidence | null {
+  const { landing } = item;
+  if ("redirectsTo" in landing) {
+    const target = landing.redirectsTo.find((t) =>
+      pathMatches(t.path, pathname),
+    );
+    return target ? evidenceOf(target.landing) : null;
+  }
+  return pathname === item.href ? evidenceOf(landing) : null;
 }
 
 /**

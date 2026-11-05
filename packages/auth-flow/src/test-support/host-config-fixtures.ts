@@ -85,7 +85,7 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
   landing: {
     afterLogin: "/",
     specialtyAware: true,
-    specialtyFeed: "/events",
+    specialtyFeed: "/feed/:code",
     specialtyEndpoints: {
       signedIn: "/v1/me/specialty",
       guest: "/v1/public/specialty-choice",

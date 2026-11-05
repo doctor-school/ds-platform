@@ -165,7 +165,7 @@ test.describe("017 EARS-1: the doctor storefront mounts the shared chrome", () =
       .getByTestId("footer-sections")
       .getByRole("link")
       .evaluateAll((els) => els.map((a) => a.getAttribute("href")));
-    expect(navHrefs).toEqual(["/events"]);
+    expect(navHrefs).toEqual(["/events", "/feed"]);
     // One config value feeds both lists, so they cannot drift apart.
     expect(footerHrefs).toEqual(navHrefs);
   });
@@ -277,10 +277,13 @@ test.describe("017 EARS-11: the mobile nav disclosure", () => {
     expect(loginBox.y).toBeGreaterThanOrEqual(rowsBox.y + rowsBox.height);
     expect(Math.round(loginBox.width)).toBe(Math.round(rowsBox.width));
     // The SAME configured targets as the desktop nav — one config value.
-    await expect(mobileNav.getByRole("link")).toHaveCount(1);
+    await expect(mobileNav.getByRole("link")).toHaveCount(2);
     await expect(
       mobileNav.getByRole("link", { name: "Эфиры" }),
     ).toHaveAttribute("href", "/events");
+    await expect(
+      mobileNav.getByRole("link", { name: "Моя лента" }),
+    ).toHaveAttribute("href", "/feed");
 
     // It closes again — a native `<details>`, trapping nothing.
     await menu.locator("summary").click();

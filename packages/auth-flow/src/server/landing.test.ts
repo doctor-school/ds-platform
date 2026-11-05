@@ -54,13 +54,25 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("021 EARS-3 — the direct-arrival landing (LD-4)", () => {
-  it("021 EARS-3: a remembered specialty lands the doctor on the 019 events feed", () => {
+  it("021 EARS-3: a remembered specialty lands the doctor on the 018 feed of that specialty, /feed/<code>", () => {
     expect(
       resolveDirectArrivalLanding(
         DOCTOR_FIXTURE,
         remembered({ specialty: CHOSEN, storedIn: "session" }),
       ),
-    ).toBe("/events");
+    ).toBe("/feed/kardiologiya");
+  });
+
+  it("021 EARS-3: the feed path carries the REMEMBERED specialty's code — the config holds a template, not a destination", () => {
+    expect(
+      resolveDirectArrivalLanding(
+        DOCTOR_FIXTURE,
+        remembered({
+          specialty: { ...CHOSEN, code: "nevrologiya", name: "Неврология" },
+          storedIn: "session",
+        }),
+      ),
+    ).toBe("/feed/nevrologiya");
   });
 
   it("021 EARS-3: a doctor-stored remembered specialty lands on the same feed — the store is not the decision", () => {
@@ -69,7 +81,7 @@ describe("021 EARS-3 — the direct-arrival landing (LD-4)", () => {
         DOCTOR_FIXTURE,
         remembered({ specialty: CHOSEN, storedIn: "profile" }, "doctor"),
       ),
-    ).toBe("/events");
+    ).toBe("/feed/kardiologiya");
   });
 
   it("021 EARS-3: a resolved 'nothing chosen yet' lands on the storefront home", () => {
@@ -98,7 +110,7 @@ describe("021 EARS-3 — the direct-arrival landing (LD-4)", () => {
       ),
       resolveDirectArrivalLanding(DOCTOR_FIXTURE, remembered(null)),
     ];
-    expect(new Set(destinations)).toEqual(new Set(["/events", "/"]));
+    expect(new Set(destinations)).toEqual(new Set(["/feed/kardiologiya", "/"]));
     expect(destinations).not.toContain("/account");
   });
 
@@ -185,7 +197,7 @@ describe("017 EARS-6 — the remembered specialty, read from the host-named endp
 
     await expect(
       resolveArrivalLanding(DOCTOR_FIXTURE, new Headers(), fetchImpl),
-    ).resolves.toBe("/events");
+    ).resolves.toBe("/feed/kardiologiya");
     fetchImpl.mockClear();
     await expect(
       resolveArrivalLanding(ACADEMY_FIXTURE, new Headers(), fetchImpl),

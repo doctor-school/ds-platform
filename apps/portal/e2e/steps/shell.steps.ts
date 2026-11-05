@@ -83,8 +83,8 @@ Then(
     // auto-waits for the signaled re-read to resolve.
     const header = shellHeader(page);
     await expect(shellLogo(page)).toBeVisible();
-    // The CONFIGURED nav is «Эфиры» alone on both storefronts (owner decision
-    // 2026-09-10, #2180). For a SIGNED-IN academy doctor the canvas draws the
+    // The CONFIGURED academy nav is «Эфиры» alone (owner decision 2026-09-10,
+    // #2180; the doctor host adds «Моя лента», 017 EARS-1, #3674). For a SIGNED-IN academy doctor the canvas draws the
     // auth cluster's own «Мои события» → `/account/events` at the tail of that
     // same nav group (`design-source/ds-shell.dc.html` `user.links` line 209,
     // rendered line 33 — 008 EARS-5/EARS-11, restored by #2243). So assert the

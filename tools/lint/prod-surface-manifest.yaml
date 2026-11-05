@@ -136,6 +136,16 @@ routes:
     status: deferred
     issue: "#1495"
 
+  # 018 entry (#3674) — «Моя лента», the header item's static target: a server
+  # redirect to the remembered specialty's `/feed/<code>`, or to the home
+  # catalog when nothing is chosen. It paints nothing of its own, so its status
+  # follows the feed it leads to — `deferred` with it until #1495 flips.
+  - app: doctor
+    route: /feed
+    file: apps/doctor/app/(storefront)/feed/page.tsx
+    status: deferred
+    issue: "#1495"
+
   # 020 EARS-1 (#1764) — the shared event page mounted on the doctor storefront.
   # The read model, the composition blocks and the server-resolved participation
   # CTA are REAL and shared with the academy host, and its Stage-B verdict is

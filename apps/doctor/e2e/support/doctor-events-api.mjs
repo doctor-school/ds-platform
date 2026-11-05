@@ -435,6 +435,25 @@ const FEED_EVENTS = [
 ];
 let specialtyEventsFailing = false;
 
+/**
+ * 018 entry (#3674) — every specialty this stand-in serves a feed for: the
+ * feed fixture's own entry plus the catalog book, so a choice made on the home
+ * catalog lands on a real feed envelope rather than the not-found state.
+ */
+const FEED_BOOK = [FEED_SPECIALTY, ...SPECIALTIES];
+
+/** The guest store of 017 LD-2, as the real api keeps it: `__Host-ds_specialty` = the entry id. */
+const SPECIALTY_COOKIE = "__Host-ds_specialty";
+
+function rememberedGuestSpecialty(cookieHeader) {
+  const id = (cookieHeader ?? "")
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${SPECIALTY_COOKIE}=`))
+    ?.slice(SPECIALTY_COOKIE.length + 1);
+  return FEED_BOOK.find((entry) => entry.id === id) ?? null;
+}
+
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
@@ -706,7 +725,8 @@ const server = createServer((request, response) => {
   );
   if (feedPath) {
     const code = decodeURIComponent(feedPath[1]);
-    if (code !== FEED_SPECIALTY.code) {
+    const feedSpecialty = FEED_BOOK.find((entry) => entry.code === code);
+    if (!feedSpecialty) {
       return json(response, 404, {
         type: "https://docs.doctor.school/errors/specialty-feed-not-found",
         title: "No specialty feed at this address",
@@ -723,7 +743,7 @@ const server = createServer((request, response) => {
       });
     }
     return json(response, 200, {
-      specialty: FEED_SPECIALTY,
+      specialty: feedSpecialty,
       blocks: [{ kind: "events", read: `/v1/storefront/feed/${code}/events` }],
       order: "events-first",
       viewer: {
@@ -749,8 +769,48 @@ const server = createServer((request, response) => {
       roles: ["doctor"],
     });
   }
+  // 017 EARS-6 / EARS-7 — the guest half of the choose/change contract
+  // (`apps/doctor/lib/specialty-choice.ts`): POST records `{ specialty: <id> }`
+  // in the guest cookie and answers what it recorded; GET reads the cookie back.
   if (url.pathname === "/v1/public/specialty-choice") {
-    return json(response, 200, { specialty: null, storedIn: "none" });
+    if (request.method === "POST") {
+      let body = "";
+      request.on("data", (chunk) => (body += chunk));
+      request.on("end", () => {
+        let reference = null;
+        try {
+          reference = JSON.parse(body || "{}").specialty ?? null;
+        } catch {
+          reference = null;
+        }
+        const entry = FEED_BOOK.find((candidate) => candidate.id === reference);
+        if (!entry) {
+          return json(response, 422, {
+            type: "https://docs.doctor.school/errors/validation",
+            title: "Unknown specialty",
+            status: 422,
+            traceId: "e2e",
+          });
+        }
+        return json(
+          response,
+          200,
+          { specialty: entry, storedIn: "session" },
+          {
+            "set-cookie": `${SPECIALTY_COOKIE}=${entry.id}; Path=/; HttpOnly; Secure; SameSite=Lax`,
+          },
+        );
+      });
+      return undefined;
+    }
+    const entry = rememberedGuestSpecialty(request.headers.cookie);
+    return json(
+      response,
+      200,
+      entry
+        ? { specialty: entry, storedIn: "session" }
+        : { specialty: null, storedIn: "none" },
+    );
   }
 
   return json(response, 404, { status: 404 });
@@ -797,7 +857,10 @@ function monthEntries(month, url) {
     }));
 }
 
-function json(response, status, body) {
-  response.writeHead(status, { "content-type": "application/json" });
+function json(response, status, body, headers = undefined) {
+  response.writeHead(status, {
+    "content-type": "application/json",
+    ...(headers ?? {}),
+  });
   response.end(JSON.stringify(body));
 }

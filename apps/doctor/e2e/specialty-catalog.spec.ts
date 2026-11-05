@@ -70,7 +70,10 @@ async function serveCatalog(
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ doctors: 1, computedAt: "2026-08-27T09:00:00.000Z" }),
+      body: JSON.stringify({
+        doctors: 1,
+        computedAt: "2026-08-27T09:00:00.000Z",
+      }),
     }),
   );
 
@@ -112,7 +115,9 @@ async function serveCatalog(
       return;
     }
     if (options.searchDelayMs) {
-      await new Promise((resolve) => setTimeout(resolve, options.searchDelayMs));
+      await new Promise((resolve) =>
+        setTimeout(resolve, options.searchDelayMs),
+      );
     }
     const found = ENTRIES.filter((entry) => matches(entry.name, query));
     await route.fulfill({
@@ -159,7 +164,10 @@ test.describe("017 EARS-4/5: the home specialty catalog (variant Б)", () => {
     // A real accessible name, not a placeholder standing in for one.
     const field = page.getByRole("searchbox", { name: "Поиск специальности" });
     await expect(field).toBeVisible();
-    await expect(field).toHaveAttribute("placeholder", "Начните вводить название");
+    await expect(field).toHaveAttribute(
+      "placeholder",
+      "Начните вводить название",
+    );
 
     await expect(catalog.getByText("Частые специальности")).toBeVisible();
     const chips = page.getByTestId("specialty-entry");
@@ -226,7 +234,9 @@ test.describe("017 EARS-4/5: the home specialty catalog (variant Б)", () => {
     // «Детская кардиология» is NOT in the frequent set and the fragment is not
     // its prefix: it can only be here if the search ran over the whole book and
     // matched anywhere in the name.
-    await expect(chips.filter({ hasText: "Детская кардиология" })).toHaveCount(1);
+    await expect(chips.filter({ hasText: "Детская кардиология" })).toHaveCount(
+      1,
+    );
     expect(queries.at(-1)).toBe("кардиолог");
   });
 
@@ -471,10 +481,11 @@ test.describe("017 EARS-4/5: the home specialty catalog (variant Б)", () => {
     // no separate save control to tab to afterwards (EARS-7's «no separate save
     // step» is a keyboard promise too). What the recorded choice then does to
     // the section is `specialty-memory.spec.ts`'s subject; what this case holds
-    // is that the chip is the control, not decoration in front of one.
+    // is that the chip is the control, not decoration in front of one — the
+    // recorded choice opens its feed (#3674).
     await page.keyboard.press("Enter");
 
-    await expect(page.getByTestId("specialty-chosen")).toHaveText("Кардиология");
+    await expect(page).toHaveURL(/\/feed\/code-1$/);
     // The submitted reference is the entry's own identity, never its label.
     expect(submitted).toEqual([ENTRIES[0]!.id]);
   });

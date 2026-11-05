@@ -2,6 +2,7 @@ import { Button, FilterChip, Input, Skeleton } from "@ds/design-system";
 import type { SpecialtyRef } from "@ds/schemas";
 
 import { SectionHeading } from "@/components/section-heading";
+import { SPECIALTY_CATALOG_ANCHOR } from "@/lib/navigation-model";
 
 /**
  * 017 EARS-4 / EARS-5 — the home-page specialty catalog in Stage-A variant Б
@@ -107,12 +108,14 @@ export interface SpecialtyCatalogViewProps {
 const HEADING = "Ваша специальность";
 const PLACEHOLDER = "Начните вводить название";
 const FREQUENT_LABEL = "Частые специальности";
-const NO_MATCH = "Ничего не найдено. Проверьте написание или выберите «Другое».";
+const NO_MATCH =
+  "Ничего не найдено. Проверьте написание или выберите «Другое».";
 const ERROR_COPY = "Не удалось загрузить список специальностей.";
 const RETRY = "Обновить";
 /** The narrowing failed — the BOOK did not. Says which, and offers both routes
  * out: repeat the search, or open the whole list below. */
-const SEARCH_ERROR_COPY = "Не удалось выполнить поиск. Повторите попытку или откройте весь список.";
+const SEARCH_ERROR_COPY =
+  "Не удалось выполнить поиск. Повторите попытку или откройте весь список.";
 const SEARCH_RETRY = "Повторить поиск";
 const SEARCHING_COPY = "Ищем совпадения…";
 /** Canvas copy of the collapsed row (`doctor-home.dc.html` L86-87), transcribed. */
@@ -164,6 +167,7 @@ export function SpecialtyCatalogView({
   if (state.kind === "chosen") {
     return (
       <section
+        id={SPECIALTY_CATALOG_ANCHOR}
         data-testid="specialty-catalog"
         data-state="chosen"
         className={SECTION}
@@ -209,6 +213,7 @@ export function SpecialtyCatalogView({
   if (state.kind === "loading") {
     return (
       <section
+        id={SPECIALTY_CATALOG_ANCHOR}
         data-testid="specialty-catalog"
         data-state="loading"
         aria-busy="true"
@@ -236,6 +241,7 @@ export function SpecialtyCatalogView({
   if (state.kind === "error") {
     return (
       <section
+        id={SPECIALTY_CATALOG_ANCHOR}
         data-testid="specialty-catalog"
         data-state="error"
         className={SECTION}
@@ -270,12 +276,11 @@ export function SpecialtyCatalogView({
 
   const { total, entries, view, busy } = state;
   const expandLabel =
-    view === "expanded"
-      ? "Свернуть список"
-      : `Показать весь список — ${total}`;
+    view === "expanded" ? "Свернуть список" : `Показать весь список — ${total}`;
 
   return (
     <section
+      id={SPECIALTY_CATALOG_ANCHOR}
       data-testid="specialty-catalog"
       data-state={view}
       data-total={total}

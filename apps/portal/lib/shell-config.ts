@@ -115,9 +115,10 @@ export function academyShellConfig(
 
     /**
      * «Эфиры» alone. The canvas draws four items on the academy artboard; the
-     * owner decision of 2026-09-10 (Issue #2180, merged 008 / 017 deltas) is the
-     * single shipped destination on BOTH storefronts, the nav growing with
-     * features 015 / 016 and the partner surface.
+     * owner decision of 2026-09-10 (Issue #2180, merged 008 deltas) is the
+     * single shipped destination on this storefront, the nav growing with
+     * features 015 / 016 and the partner surface. The doctor host carries its
+     * own set («Эфиры» + «Моя лента», 017 EARS-1, #3674).
      */
     nav: portalTopNav.map((item) => ({
       label: t(item.label),

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { EventsFeed } from "@ds/events-storefront/feed";
 import { SectionHeading } from "@/components/section-heading";
-import { SpecialtyCatalog } from "@/components/specialty-catalog";
+import { HomeSpecialtyCatalog } from "@/components/home-specialty-catalog";
 import { StorefrontHero } from "@/components/storefront-hero";
 import {
   DOCTOR_EVENTS_STOREFRONT,
@@ -20,7 +20,8 @@ import { retryDoctorEventsBlock } from "./events/retry-block-action";
  * the four scale counters bound to one computed read, LD-3), then the specialty
  * catalog (EARS-4/EARS-5 — Stage-A variant Б: search field, frequent set,
  * «Показать весь список — N») or, once a specialty is remembered, its collapsed
- * targeted row (EARS-6/EARS-7), then the nearest events (EARS-9, #1485): the
+ * targeted row (EARS-6/EARS-7) — a recorded choice opens that specialty's
+ * feed, `/feed/<code>` (018 entry, #3674) — then the nearest events (EARS-9, #1485): the
  * events page's own day feed block (`@ds/events-storefront/feed`, 019
  * EARS-3/EARS-9) capped to `DOCTOR_HOME_FEED_LIMIT` cards with «Все события»,
  * retried through the events page's own block-retry action. It reads the same
@@ -64,7 +65,7 @@ export default async function DoctorHomePage() {
   return (
     <>
       <StorefrontHero />
-      <SpecialtyCatalog
+      <HomeSpecialtyCatalog
         actor={remembered.actor}
         initialChoice={remembered.choice}
       />
@@ -74,7 +75,9 @@ export default async function DoctorHomePage() {
         data-testid="home-events"
       >
         <div className="mx-auto w-full max-w-content">
-          <SectionHeading id="home-events-heading">{EVENTS_HEADING}</SectionHeading>
+          <SectionHeading id="home-events-heading">
+            {EVENTS_HEADING}
+          </SectionHeading>
           <EventsFeed
             config={DOCTOR_EVENTS_STOREFRONT}
             limit={DOCTOR_HOME_FEED_LIMIT}

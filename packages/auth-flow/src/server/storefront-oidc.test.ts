@@ -1,4 +1,4 @@
-import { toStorefrontReturnPath } from "@ds/schemas";
+import { toStorefrontReturnPath, type SpecialtyChoice } from "@ds/schemas";
 import { describe, expect, it } from "vitest";
 
 import { ACADEMY_AUTH_FLOW, DOCTOR_AUTH_FLOW } from "../hosts";
@@ -67,6 +67,11 @@ function fakeApi(
     transaction?: { status: number; retryAfter?: string } | "throw" | "junk";
     /** 005 EARS-2 — the `RegisterForEvent` answer; `"throw"` = a network failure. */
     registration?: number | "throw";
+    /**
+     * 021 LD-4 — the 017 remembered-specialty reads: the signed-in read
+     * answers only the minted session (`fresh-sid`), anything else is 401.
+     */
+    specialty?: { signedIn: SpecialtyChoice; guest: SpecialtyChoice };
   } = {},
 ) {
   const calls: Call[] = [];
@@ -123,6 +128,16 @@ function fakeApi(
               },
             },
           );
+    }
+    if (opts.specialty && url.endsWith("/v1/me/specialty")) {
+      const cookie = new Headers(init?.headers).get("cookie") ?? "";
+      return /(?:^|; )__Host-ds_session=fresh-sid(?:;|$)/.test(cookie) &&
+        !cookie.includes("__Host-ds_session=old")
+        ? Response.json(opts.specialty.signedIn)
+        : new Response(null, { status: 401 });
+    }
+    if (opts.specialty && url.endsWith("/v1/public/specialty-choice")) {
+      return Response.json(opts.specialty.guest);
     }
     if (url.endsWith("/registration")) {
       if (opts.registration === "throw") throw new TypeError("fetch failed");
@@ -548,24 +563,39 @@ describe("storefront entry", () => {
 
   it("003 EARS-72: a 429 transaction is a typed rate-limited refusal carrying the Retry-After seconds, never a thrown error", async () => {
     const api = fakeApi({ transaction: { status: 429, retryAfter: "105" } });
-    const outcome = await storefrontEntryOutcome(get("/login"), ACADEMY, "login", {
-      fetchImpl: api.fetchImpl,
-      env: ENV,
-    });
+    const outcome = await storefrontEntryOutcome(
+      get("/login"),
+      ACADEMY,
+      "login",
+      {
+        fetchImpl: api.fetchImpl,
+        env: ENV,
+      },
+    );
     expect(outcome).toEqual({
       refused: { reason: "rate-limited", retryAfterSeconds: 105 },
     });
   });
 
   it("003 EARS-72: a 429 without a parseable Retry-After carries no wait", async () => {
-    for (const retryAfter of [undefined, "soon", "0", "Wed, 21 Oct 2026 07:28:00 GMT"]) {
+    for (const retryAfter of [
+      undefined,
+      "soon",
+      "0",
+      "Wed, 21 Oct 2026 07:28:00 GMT",
+    ]) {
       const api = fakeApi({
         transaction: { status: 429, ...(retryAfter ? { retryAfter } : {}) },
       });
-      const outcome = await storefrontEntryOutcome(get("/register"), DOCTOR, "register", {
-        fetchImpl: api.fetchImpl,
-        env: ENV,
-      });
+      const outcome = await storefrontEntryOutcome(
+        get("/register"),
+        DOCTOR,
+        "register",
+        {
+          fetchImpl: api.fetchImpl,
+          env: ENV,
+        },
+      );
       expect(outcome).toEqual({
         refused: { reason: "rate-limited", retryAfterSeconds: null },
       });
@@ -581,10 +611,15 @@ describe("storefront entry", () => {
       "junk" as const,
     ]) {
       const api = fakeApi({ transaction });
-      const outcome = await storefrontEntryOutcome(get("/reset"), ACADEMY, "reset", {
-        fetchImpl: api.fetchImpl,
-        env: ENV,
-      });
+      const outcome = await storefrontEntryOutcome(
+        get("/reset"),
+        ACADEMY,
+        "reset",
+        {
+          fetchImpl: api.fetchImpl,
+          env: ENV,
+        },
+      );
       expect(outcome).toEqual({
         refused: { reason: "unavailable", retryAfterSeconds: null },
       });
@@ -592,7 +627,10 @@ describe("storefront entry", () => {
   });
 
   it("003 EARS-72: a refused entry from an event page names that event (the same event target the transaction would record), a land-only return included", async () => {
-    for (const returnTo of ["/webinars/live-1", "/webinars/live-1?intent=land"]) {
+    for (const returnTo of [
+      "/webinars/live-1",
+      "/webinars/live-1?intent=land",
+    ]) {
       const api = fakeApi({ transaction: { status: 503 } });
       const outcome = await storefrontEntryOutcome(
         get(`/login?returnTo=${encodeURIComponent(returnTo)}`),
@@ -1030,5 +1068,57 @@ describe("storefront callback", () => {
     );
     expect(res.headers.get("location")).toBe("/events/live-1#");
     expect(registrations(api)).toHaveLength(0);
+  });
+  it("021 EARS-3 (LD-4): a callback that mints a session reads the remembered specialty with that session — a profile-only choice lands on its feed, none lands on /", async () => {
+    const NONE: SpecialtyChoice = { specialty: null, storedIn: "none" };
+    const landingOnly = (signedIn: SpecialtyChoice) =>
+      fakeApi({
+        specialty: { signedIn, guest: NONE },
+        redeem: () =>
+          new Response(
+            JSON.stringify({
+              sub: "u1",
+              roles: ["doctor"],
+              mfa: false,
+              returnPath: null,
+              door: "login",
+              kind: "interactive",
+              completeRegistration: null,
+            }),
+            {
+              status: 200,
+              headers: {
+                "set-cookie":
+                  "__Host-ds_session=fresh-sid; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax",
+              },
+            },
+          ),
+      });
+    const profile = await storefrontCallback(
+      withTx(
+        "/auth/callback?code=c&state=s",
+        `${OIDC_TX_COOKIE}=${TX_ID}; __Host-ds_session=old`,
+      ),
+      DOCTOR,
+      {
+        fetchImpl: landingOnly({
+          specialty: {
+            id: "11111111-1111-4111-8111-111111111111",
+            code: "kardiologiya",
+            name: "Кардиология",
+            isOther: false,
+          },
+          storedIn: "profile",
+        }).fetchImpl,
+        env: ENV,
+      },
+    );
+    expect(profile.headers.get("location")).toBe("/feed/kardiologiya#");
+    const none = await storefrontCallback(
+      withTx("/auth/callback?code=c&state=s"),
+      DOCTOR,
+      { fetchImpl: landingOnly(NONE).fetchImpl, env: ENV },
+    );
+    expect(none.headers.get("location")).toBe("/#");
   });
 });

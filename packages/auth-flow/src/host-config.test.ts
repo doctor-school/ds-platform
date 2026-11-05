@@ -19,6 +19,7 @@ import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
 } from "./test-support/host-config-fixtures";
+import { DOCTOR_AUTH_FLOW } from "./hosts/doctor.host-config";
 
 /**
  * #2027 PR 1.5 — the host config grows the DATA the sign-in door consumes.
@@ -43,12 +44,20 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
     const landing = DOCTOR_FIXTURE.landing;
     expect(landing.specialtyAware).toBe(true);
     if (!landing.specialtyAware) throw new Error("unreachable");
-    expect(landing.specialtyFeed).toBe("/events");
+    expect(landing.specialtyFeed).toBe("/feed/:code");
     expect(landing.specialtyEndpoints).toEqual({
       signedIn: "/v1/me/specialty",
       guest: "/v1/public/specialty-choice",
       consumptionDeferredHeader: "x-ds-specialty-consumption-deferred",
     });
+  });
+
+  it("021 EARS-3 (#3674): the SHIPPED doctor host lands a remembered specialty on its own feed — the template carries `:code`", () => {
+    const landing = DOCTOR_AUTH_FLOW.landing;
+    expect(landing.specialtyAware).toBe(true);
+    if (!landing.specialtyAware) throw new Error("unreachable");
+    expect(landing.specialtyFeed).toContain(":code");
+    expect(landing.specialtyFeed).toBe("/feed/:code");
   });
 
   it("rows 39, 42: the event page and the room are route TEMPLATES, not parsers", () => {

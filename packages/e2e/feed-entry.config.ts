@@ -9,21 +9,26 @@ import {
   ownedFeedEntryDatabase,
 } from "./lib/feed-entry.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
+import { publicFeedStatePattern } from "./lib/public-feed-states.js";
+
+const states = process.env.E2E_PUBLIC_FEED_STATES === "1";
+const task = states ? 3772 : 3751;
 
 const testDir = defineBddConfig({
-  features:
-    "../../apps/docs/content/specs/features/017-doctor-shell-specialties/017-scenarios.feature",
+  features: states
+    ? "../../apps/docs/content/specs/features/018-specialty-feed/018-scenarios.feature"
+    : "../../apps/docs/content/specs/features/017-doctor-shell-specialties/017-scenarios.feature",
   featuresRoot: "../../apps/docs/content/specs/features",
   steps: ["steps/**/*.ts"],
-  outputDir: ".features-gen/feed-entry",
-  tags: "@host:doctor and @public-feed-entry",
-  missingSteps: "fail-on-gen",
+  outputDir: states ? ".features-gen/feed-states" : ".features-gen/feed-entry",
+  tags: states ? "@host:doctor" : "@host:doctor and @public-feed-entry",
+  missingSteps: states ? "skip-scenario" : "fail-on-gen",
 });
 const api = process.env.E2E_API_URL;
 const doctor = process.env.E2E_DOCTOR_URL;
 const boot = process.env.E2E_FEED_ENTRY_BOOT === "1";
 const database = boot
-  ? ownedFeedEntryDatabase(process.env.E2E_FEED_ENTRY_DATABASE_URL ?? "")
+  ? ownedFeedEntryDatabase(process.env.E2E_FEED_ENTRY_DATABASE_URL ?? "", task)
   : undefined;
 if (boot && (!api || !doctor))
   throw new Error(
@@ -50,6 +55,7 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
+  ...(states ? { grep: publicFeedStatePattern } : {}),
   timeout: 120_000,
   expect: { timeout: 20_000 },
   reporter: reportersFor({
@@ -87,7 +93,7 @@ export default defineConfig({
               DATABASE_URL:
                 database! +
                 (database!.includes("?") ? "&" : "?") +
-                "application_name=feed-entry-3751-api",
+                `application_name=feed-entry-${task}-api`,
               PORT: new URL(api!).port,
               RECONCILE_SWEEP_INTERVAL_MS: "0",
               AUDIT_IDENTIFIER_PEPPER: randomUUID(),

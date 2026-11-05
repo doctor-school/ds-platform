@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { publicFeedStateTitles } from "./public-feed-states.js";
 import {
   assertOperationalReport,
   operationalOriginals,
@@ -6,7 +7,9 @@ import {
 
 assertOperationalReport(
   JSON.parse(readFileSync(process.argv[2]!, "utf8")),
-  operationalOriginals.feedEntry,
+  process.env.E2E_PUBLIC_FEED_STATES === "1"
+    ? publicFeedStateTitles
+    : operationalOriginals.feedEntry,
   "doctor",
 );
 console.log(

@@ -297,8 +297,14 @@ Then("the page and its header are unchanged", async ({ page }) => {
     "doctor",
   );
   expect(new URL(w.tab.url()).pathname).toBe(w.path);
+  // A `next/link` viewport prefetch (`next-router-prefetch: 1`) re-fires when
+  // the tab becomes visible; it renders nothing, so only a document load or a
+  // non-prefetch RSC fetch (what `router.refresh()` sends) is a re-render.
   const rerenders = sinceReturn(w).filter(
-    (r) => isDocument(w)(r) || new URL(r.url()).searchParams.has("_rsc"),
+    (r) =>
+      isDocument(w)(r) ||
+      (new URL(r.url()).searchParams.has("_rsc") &&
+        r.headers()["next-router-prefetch"] !== "1"),
   );
   expect(rerenders, "no reload and no router refresh").toEqual([]);
 });

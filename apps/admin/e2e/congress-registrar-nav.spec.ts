@@ -60,7 +60,8 @@ const ADMIN_SECTIONS = [
   "nav-direction-specialties",
   "nav-direction-adjacency",
   "nav-specialties",
-  "nav-access",
+  // «Доступы» (nav-access) is the superadministrator's (049 EARS-3): a platform
+  // administrator's chrome no longer draws it.
 ];
 
 test.describe.configure({ mode: "serial" });

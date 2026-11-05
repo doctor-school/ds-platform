@@ -11,7 +11,9 @@ import type { AdminSessionResponse } from "@ds/schemas";
  * the server would refuse.
  *
  * - `platform_admin` → the full section set, not limited by any binding (EARS-38:
- *   «Роль платформенного администратора не ограничивается привязкой»).
+ *   «Роль платформенного администратора не ограничивается привязкой»), except
+ *   «Доступы», which also needs `superadmin` (049 EARS-3). A superadministrator
+ *   always also holds `platform_admin`, so there is no superadmin-only state.
  * - only `event-registrar` → exactly the roster of each bound event (the partial
  *   unique index keeps that at one), no events list, no other section; with no
  *   binding row → nothing at all.
@@ -25,14 +27,28 @@ import type { AdminSessionResponse } from "@ds/schemas";
  */
 
 const PLATFORM_ADMIN = "platform_admin";
+const SUPERADMIN = "superadmin";
 const EVENT_REGISTRAR = "event-registrar";
 const PROGRAM_COMMITTEE = "congress-program-committee";
 
 type EventRef = { eventId: string; eventSlug: string };
 
+/** 049 EARS-3 — «Доступы», the superadministrator's section. */
+const STAFF_ACCESS_PATH = "/access";
+const STAFF_ACCESS_RESOURCE = "staff-access";
+
+function isStaffAccessPath(pathname: string): boolean {
+  return (
+    pathname === STAFF_ACCESS_PATH ||
+    pathname.startsWith(`${STAFF_ACCESS_PATH}/`)
+  );
+}
+
 export interface AdminAccess {
-  /** `platform_admin`: every section, every event. */
+  /** `platform_admin`: every section, every event — «Доступы» aside. */
   readonly full: boolean;
+  /** 049 EARS-3 — `superadmin` (with `full`): «Доступы» too. */
+  readonly superadmin: boolean;
   /** Events whose roster a registrar is bound to — ids and slugs both match. */
   readonly rosterEvents: ReadonlyArray<EventRef>;
   /** 046 EARS-31 — events whose submissions a committee member is bound to. */
@@ -108,12 +124,13 @@ export const ADMIN_SECTION_NAV: readonly AdminNavItem[] = [
     labelKey: "app.nav.specialties",
   },
   // 047 EARS-1 — staff access closes the row: it manages who reaches the
-  // sections before it. Drawn only here, so only a platform_admin sees it.
-  { href: "/access", testId: "nav-access", labelKey: "app.nav.access" },
+  // sections before it. Drawn only for a superadministrator (049 EARS-3).
+  { href: STAFF_ACCESS_PATH, testId: "nav-access", labelKey: "app.nav.access" },
 ];
 
 const NO_ACCESS: AdminAccess = {
   full: false,
+  superadmin: false,
   rosterEvents: [],
   committeeEvents: [],
 };
@@ -129,17 +146,26 @@ function grantsOf(session: AdminSessionResponse, role: string): EventRef[] {
 export function adminAccess(session: AdminSessionResponse | null): AdminAccess {
   if (!session) return NO_ACCESS;
   if (session.roles.includes(PLATFORM_ADMIN)) {
-    return { ...NO_ACCESS, full: true };
+    return {
+      ...NO_ACCESS,
+      full: true,
+      superadmin: session.roles.includes(SUPERADMIN),
+    };
   }
   return {
     full: false,
+    superadmin: false,
     rosterEvents: grantsOf(session, EVENT_REGISTRAR),
     committeeEvents: grantsOf(session, PROGRAM_COMMITTEE),
   };
 }
 
 export function adminNavItems(access: AdminAccess): AdminNavItem[] {
-  if (access.full) return [...ADMIN_SECTION_NAV];
+  if (access.full) {
+    return ADMIN_SECTION_NAV.filter(
+      (item) => access.superadmin || item.href !== STAFF_ACCESS_PATH,
+    );
+  }
   return [
     ...access.rosterEvents.map(({ eventId }) => ({
       href: `/events/${eventId}/roster`,
@@ -185,6 +211,7 @@ const EVENT_SCREENS: ReadonlyArray<{
 
 /** May the chrome render this admin route's content for the principal? */
 export function canAccessPath(access: AdminAccess, pathname: string): boolean {
+  if (isStaffAccessPath(pathname)) return access.full && access.superadmin;
   if (access.full) return true;
   return EVENT_SCREENS.some((screen) => {
     const match = screen.path.exec(pathname);
@@ -197,13 +224,17 @@ export function canAccessPath(access: AdminAccess, pathname: string): boolean {
 
 /**
  * The Refine `can` answer — the roster resource is `congress-roster`, the
- * submissions registry `congress-submissions`, both keyed by event.
+ * submissions registry `congress-submissions`, both keyed by event;
+ * `staff-access` needs `superadmin` (049 EARS-3).
  */
 export function canAccessResource(
   access: AdminAccess,
   resource: string | undefined,
   params?: { id?: string | number },
 ): boolean {
+  if (resource === STAFF_ACCESS_RESOURCE) {
+    return access.full && access.superadmin;
+  }
   if (access.full) return true;
   const screen = EVENT_SCREENS.find((entry) => entry.resource === resource);
   return (

@@ -84,8 +84,14 @@ async function resolveSub(email: string): Promise<string> {
  */
 async function grantProjectRole(
   sub: string,
-  role: string = ADMIN_ROLE,
+  roleOrRoles: string | readonly string[] = ADMIN_ROLE,
 ): Promise<void> {
+  const roles = typeof roleOrRoles === "string" ? [roleOrRoles] : roleOrRoles;
+  for (const role of roles) await ensureProjectRole(role);
+  await addRolesToGrant(sub, roles);
+}
+
+async function ensureProjectRole(role: string): Promise<void> {
   const issuer = required("IDP_ISSUER").replace(/\/$/, "");
   const token = required("IDP_SERVICE_TOKEN");
   const projectId = required("IDP_PROJECT_ID");
@@ -116,6 +122,25 @@ async function grantProjectRole(
       `zitadel ensure ${role} role failed: HTTP ${roleRes.status}`,
     );
   }
+}
+
+/**
+ * Add `roles` to the user's project grant in ONE write. Two consecutive
+ * single-role calls race the grant read projection: the second search can still
+ * return the roles from before the first PUT, and its PUT then drops the role
+ * the first one added (seen with `superadmin` + `platform_admin`, #3740).
+ */
+async function addRolesToGrant(
+  sub: string,
+  roles: readonly string[],
+): Promise<void> {
+  const issuer = required("IDP_ISSUER").replace(/\/$/, "");
+  const token = required("IDP_SERVICE_TOKEN");
+  const projectId = required("IDP_PROJECT_ID");
+  const headers = {
+    authorization: `Bearer ${token}`,
+    "content-type": "application/json",
+  };
 
   // Find the user's existing grant on the project (created by 003 register). The
   // user-grant read projection lags the register write (CQRS eventual
@@ -137,7 +162,9 @@ async function grantProjectRole(
   }
 
   if (existing) {
-    const roleKeys = Array.from(new Set([...(existing.roleKeys ?? []), role]));
+    const roleKeys = Array.from(
+      new Set([...(existing.roleKeys ?? []), ...roles]),
+    );
     const upd = await fetch(
       `${issuer}/management/v1/users/${sub}/grants/${existing.id}`,
       { method: "PUT", headers, body: JSON.stringify({ roleKeys }) },
@@ -151,7 +178,7 @@ async function grantProjectRole(
   const create = await fetch(`${issuer}/management/v1/users/${sub}/grants`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ projectId, roleKeys: [role] }),
+    body: JSON.stringify({ projectId, roleKeys: [...roles] }),
   });
   if (!create.ok && create.status !== 409) {
     throw new Error(`zitadel grant create failed: HTTP ${create.status}`);
@@ -259,8 +286,8 @@ export async function bootstrapRegistrarCommitteeAccount(
   const email = uniqueEmail("registrar-committee");
   await register(adminOrigin, email, E2E_PASSWORD);
   const sub = await resolveSub(email);
-  await grantProjectRole(sub, REGISTRAR_ROLE);
-  await grantProjectRole(sub, COMMITTEE_ROLE);
+  // One write for both roles — see `addRolesToGrant`.
+  await grantProjectRole(sub, [REGISTRAR_ROLE, COMMITTEE_ROLE]);
   await new Promise((r) => setTimeout(r, 2500));
   return { email, password: E2E_PASSWORD };
 }
@@ -277,8 +304,8 @@ export async function bootstrapSuperadminAccount(
   const email = uniqueEmail("superadmin");
   await register(adminOrigin, email, E2E_PASSWORD);
   const sub = await resolveSub(email);
-  await grantProjectRole(sub, ADMIN_ROLE);
-  await grantProjectRole(sub, SUPERADMIN_ROLE);
+  // One write for both roles — see `addRolesToGrant`.
+  await grantProjectRole(sub, [ADMIN_ROLE, SUPERADMIN_ROLE]);
   await new Promise((r) => setTimeout(r, 2500));
   return { email, password: E2E_PASSWORD };
 }

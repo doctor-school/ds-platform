@@ -63,6 +63,12 @@ const REVOCATIONS_URL = "/v1/admin/staff-access/revocations";
 const REVOKE_ENDPOINT = "POST /v1/admin/staff-access/revocations";
 const DOCTOR_GUEST = "doctor_guest";
 const STALE_MS = 31 * 60 * 1000;
+/**
+ * 049 EARS-3: «Доступы» answers only a superadministrator, and a holder of
+ * `superadmin` always also holds `platform_admin` (049 «Role keys»).
+ */
+const SUPERADMIN_HOLDER = ["platform_admin", "superadmin"] as const;
+const DIRECTOR = "broadcast_director";
 
 interface Operator {
   email: string;
@@ -161,7 +167,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     /** An enrolled staff member holding `role`, with a live admin session. */
     async function enrolledStaff(
       prefix: string,
-      role: string,
+      role: string | readonly string[],
     ): Promise<Operator> {
       const { email, sub } = await registeredDoctor(prefix);
       await fake.grantProjectRole(sub, role);
@@ -310,28 +316,31 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     // ---- V-1 -------------------------------------------------------------
 
-    it("047 EARS-1: the staff-access routes are platform_admin-only with live revalidation, and the grant declares stepUp", () => {
+    it("049 EARS-3: the staff-access routes are superadmin-only with live revalidation, and the grant declares stepUp", () => {
       const rows = collectAuthzRows(app).rows;
       const list = rows.find((r) => r.endpoint === `GET ${LIST_URL}`);
       const grants = rows.find((r) => r.endpoint === GRANT_ENDPOINT);
       expect(list?.meta).toMatchObject({
-        roles: ["platform_admin"],
+        roles: ["superadmin"],
         revalidate: "live",
       });
       expect(list?.meta.stepUp).toBeFalsy();
       expect(grants?.meta).toMatchObject({
-        roles: ["platform_admin"],
+        roles: ["superadmin"],
         revalidate: "live",
         stepUp: true,
         audit: "high-stakes",
       });
     });
 
-    it("047 EARS-1: a registrar and a committee member are refused on every staff-access endpoint", async () => {
+    it("049 EARS-3: a platform administrator, a registrar, a committee member and a director are refused 403 on every staff-access endpoint", async () => {
+      const platformAdmin = await enrolledStaff("pa", "platform_admin");
       const registrar = await enrolledStaff("reg", "event-registrar");
       const committee = await enrolledStaff("pc", "congress-program-committee");
-      const spies = idpWriteSpies();
-      for (const op of [registrar, committee]) {
+      const director = await enrolledStaff("dir", DIRECTOR);
+      const target = await enrolledStaff("tgt", DIRECTOR);
+      const spies = [...idpWriteSpies(), vi.spyOn(fake, "removeProjectGrant")];
+      for (const op of [platformAdmin, registrar, committee, director]) {
         const list = await app.inject({
           method: "GET",
           url: LIST_URL,
@@ -344,14 +353,47 @@ describe.skipIf(!process.env.DATABASE_URL)(
           role: "platform_admin",
         });
         expect(res.statusCode).toBe(403);
+        const revoked = await app.inject({
+          method: "POST",
+          url: REVOCATIONS_URL,
+          headers: op.headers,
+          payload: { userId: target.sub, role: DIRECTOR },
+        });
+        expect(revoked.statusCode).toBe(403);
       }
       for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+      expect(fake.grantedRoles(target.sub)).toContain(DIRECTOR);
+    });
+
+    it("049 EARS-3: a superadministrator lists; once the IdP has withdrawn superadmin the list answers 403 SUPERADMIN_REQUIRED", async () => {
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
+      const ok = await app.inject({
+        method: "GET",
+        url: LIST_URL,
+        headers: admin.headers,
+      });
+      expect(ok.statusCode).toBe(200);
+      const held = (await fake.getProjectGrant(admin.sub))!;
+      await fake.updateProjectGrantRoles(
+        admin.sub,
+        held.grantId,
+        held.roleKeys.filter((key) => key !== "superadmin"),
+      );
+      const refused = await app.inject({
+        method: "GET",
+        url: LIST_URL,
+        headers: admin.headers,
+      });
+      expect(refused.statusCode).toBe(403);
+      expect((refused.json() as { errorCode: string }).errorCode).toBe(
+        "SUPERADMIN_REQUIRED",
+      );
     });
 
     // ---- V-4, V-7, EARS-2 ------------------------------------------------
 
     it("047 EARS-5: an unknown email gets a verified staff account, a doctor_guest + role grant and a users row, no consent row, and a one-time password the audit and logs never carry", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const eventId = await insertEvent("Конгресс 047 — новый");
       const email = uniqueEmail("new");
       const since = await dbNow();
@@ -388,6 +430,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         role: "congress-program-committee",
         eventId,
         eventTitle: "Конгресс 047 — новый",
+        revocable: true,
       });
 
       // The IdP account: verified email, the ФИО name, doctor_guest + the role.
@@ -441,7 +484,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-9: the binding row's 010 change audit carries the granting administrator as actor", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const eventId = await insertEvent("Конгресс 047 — аудит");
       const email = uniqueEmail("audit");
       const res = await grant(admin, {
@@ -467,7 +510,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-2: the list shows one row per person, role and event, platform_admin with no event", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const eventA = await insertEvent("Конгресс 047 — A");
       const eventB = await insertEvent("Конгресс 047 — B");
       const email = uniqueEmail("pc2");
@@ -499,6 +542,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
             role: "congress-program-committee",
             eventId: eventA,
             eventTitle: "Конгресс 047 — A",
+            revocable: true,
           },
           {
             userId: sub,
@@ -507,6 +551,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
             role: "congress-program-committee",
             eventId: eventB,
             eventTitle: "Конгресс 047 — B",
+            revocable: true,
           },
         ]),
       );
@@ -524,7 +569,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     // ---- V-3 -------------------------------------------------------------
 
     it("047 EARS-4: an existing account keeps doctor_guest, its name and its password — the role is added to its grant, no account created, no password returned", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const eventId = await insertEvent("Конгресс 047 — существующий");
       const doctor = await registeredDoctor("doc");
       await fake.grantProjectRole(doctor.sub, "doctor_guest");
@@ -569,7 +614,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-6: an existing account without a password gets a temporary password", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const email = uniqueEmail("nopw");
       // An account with a verified email and no password (an operator-made
       // account, the email-code sign-in only).
@@ -600,7 +645,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-3: an existing account whose email is unverified is refused with STAFF_GRANT_EMAIL_UNVERIFIED and nothing changes — not its password, roles, sessions, mirror row or bindings; once its email is verified the same grant adds the role and keeps the password", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const eventId = await insertEvent(
         "Конгресс 047 — неподтверждённая почта",
       );
@@ -684,7 +729,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-3: an email that more than one IdP account holds is refused with STAFF_GRANT_EMAIL_AMBIGUOUS and nothing changes — no IdP write, no binding, no ledger row", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const eventId = await insertEvent("Конгресс 047 — общая почта");
       const email = uniqueEmail("shared");
       // The IdP does not keep emails unique: two accounts on one address.
@@ -719,7 +764,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-3: two concurrent grants for one email are serialized — one completes, the other is refused as complete, and the shown password signs in", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const email = uniqueEmail("race");
       const body = { email, fullName: "Гонкин Пётр", role: "platform_admin" };
       const create = vi.spyOn(fake, "createUser");
@@ -743,7 +788,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     // ---- V-2 -------------------------------------------------------------
 
     it("047 EARS-3: malformed or mis-shaped grants are refused with no IdP write and no row", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const eventId = await insertEvent("Конгресс 047 — форма");
       const spies = idpWriteSpies();
       const email = uniqueEmail("shape");
@@ -776,7 +821,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-3: a registrar already bound to another event, a complete role and a complete committee event are refused with nothing changed", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const eventA = await insertEvent("Конгресс 047 — R1");
       const eventB = await insertEvent("Конгресс 047 — R2");
       const registrar = uniqueEmail("r");
@@ -864,7 +909,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-3: a registrar binding written past the grant's read (by a writer outside the grant lock) is refused by the database constraint as REGISTRAR_BOUND_ELSEWHERE, with no auth.role.granted", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const eventA = await insertEvent("Конгресс 047 — гонка A");
       const eventB = await insertEvent("Конгресс 047 — гонка B");
       const registrar = uniqueEmail("regrace");
@@ -903,7 +948,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-3: a platform_admin grant that failed after the IdP role add is finished by the same grant, with one auth.role.granted and the password shown by the finishing request", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const email = uniqueEmail("dbfault");
       const since = await dbNow();
       vi.spyOn(
@@ -939,7 +984,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-6: a grant that failed at the password step is finished by the same grant, which sets and shows the password, with one auth.role.granted", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const email = uniqueEmail("pwfault");
       const since = await dbNow();
       vi.spyOn(fake, "setUserPassword").mockRejectedValueOnce(
@@ -971,7 +1016,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     // ---- V-6 -------------------------------------------------------------
 
     it("047 EARS-8: a stale second factor is refused with STEP_UP_REQUIRED and nothing changes; re-verify refreshes the same session and the same grant passes; a second grant inside the window asks for no code", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       await ageSecondFactor(admin.sid);
       const store = app.get<AdminSessionStore>(ADMIN_SESSION_STORE);
       const before = (await store.get(admin.sid))!;
@@ -1120,11 +1165,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return rows[0]!.role;
     }
 
-    it("047 EARS-1: the revocation route is platform_admin-only with live revalidation, stepUp and high-stakes audit", () => {
+    it("049 EARS-3: the revocation route is superadmin-only with live revalidation, stepUp and high-stakes audit", () => {
       const rows = collectAuthzRows(app).rows;
       const revocations = rows.find((r) => r.endpoint === REVOKE_ENDPOINT);
       expect(revocations?.meta).toMatchObject({
-        roles: ["platform_admin"],
+        roles: ["superadmin"],
         revalidate: "live",
         stepUp: true,
         audit: "high-stakes",
@@ -1132,7 +1177,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-7: revoking one of two committee bindings keeps the role; revoking the last removes it and keeps doctor_guest; every admin session and pending sign-in ends each time and the next admin request is refused", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const first = await insertEvent("Конгресс 047 — первый");
       const second = await insertEvent("Конгресс 047 — второй");
       const member = await signedInMember("congress-program-committee");
@@ -1201,7 +1246,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-7: a platform administrator revoking their own platform_admin is refused with nothing changed", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const since = await dbNow();
       const update = vi.spyOn(fake, "updateProjectGrantRoles");
       const res = await revoke(admin, {
@@ -1219,7 +1264,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-7: another platform administrator's platform_admin is revoked from the grant, doctor_guest kept, sessions ended", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const other = await signedInMember("platform_admin");
       const since = await dbNow();
       const res = await revoke(admin, {
@@ -1240,7 +1285,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-7: revoking the last role of a grant removes the grant, ends the sessions, records one auth.role.revoked and re-projects the mirror", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       // A grant that predates EARS-4/5: platform_admin alone, no doctor_guest.
       const solo = await enrolledStaff("solo", "platform_admin");
       const soloGrant = await fake.getProjectGrant(solo.sub);
@@ -1267,7 +1312,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-7: a legacy holder whose IdP role was already removed by a failed revocation (session end failed) is finished by the repeat — sessions ended, one auth.role.revoked", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       // Granted the old-runbook way: straight on the IdP, no auth.role.granted row.
       const legacy = await signedInMember("platform_admin");
       const since = await dbNow();
@@ -1293,7 +1338,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-7: a repeat after a complete revocation is refused 409, nothing written", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const member = await signedInMember("platform_admin");
       const body = { userId: member.sub, role: "platform_admin" };
       const since = await dbNow();
@@ -1318,7 +1363,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-7: an IdP failure on the role removal answers 503, still ends the sessions and pending sign-in, records no revocation, and the repeat finishes it with one auth.role.revoked", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const eventId = await insertEvent("Конгресс 047 — сбой");
       const member = await signedInMember("congress-program-committee");
       const granted = await grant(admin, {
@@ -1359,7 +1404,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-9: the revocation records auth.role.revoked with person, role, event and actor, and the binding delete carries the administrator as the 010 actor", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const eventId = await insertEvent("Конгресс 047 — аудит отзыва");
       const email = uniqueEmail("revaudit");
       const granted = await grant(admin, {
@@ -1406,7 +1451,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("047 EARS-8: a stale second factor refuses a revocation with STEP_UP_REQUIRED and nothing changes; after a current code the same revocation passes", async () => {
-      const admin = await enrolledStaff("adm", "platform_admin");
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
       const eventId = await insertEvent("Конгресс 047 — свежесть отзыва");
       const member = await signedInMember("congress-program-committee");
       const granted = await grant(admin, {
@@ -1464,6 +1509,201 @@ describe.skipIf(!process.env.DATABASE_URL)(
       for (const row of trail) {
         expect(row.metadata).toMatchObject({ endpoint: REVOKE_ENDPOINT });
       }
+    });
+
+    // ---- 049 V-4 (EARS-4) ------------------------------------------------
+
+    it("049 EARS-4: a director grant adds broadcast_director with no binding and one auth.role.granted; with an event it is refused 400", async () => {
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
+      const eventId = await insertEvent("Эфир 049");
+      const email = uniqueEmail("dir");
+
+      const withEvent = await grant(admin, {
+        email,
+        fullName: "Режиссёров Пётр",
+        role: DIRECTOR,
+        eventId,
+      });
+      expect(withEvent.statusCode).toBe(400);
+
+      const since = await dbNow();
+      const res = await grant(admin, {
+        email,
+        fullName: "Режиссёров Пётр",
+        role: DIRECTOR,
+      });
+      expect(res.statusCode).toBe(201);
+      const body = res.json() as {
+        row: Record<string, unknown>;
+        temporaryPassword?: string;
+      };
+      const sub = await subOf(email);
+      expect(body.row).toEqual({
+        userId: sub,
+        fullName: "Режиссёров Пётр",
+        email,
+        role: DIRECTOR,
+        eventId: null,
+        eventTitle: null,
+        revocable: true,
+      });
+      expect(body.temporaryPassword).toHaveLength(16);
+      expect(fake.grantedRoles(sub).sort()).toEqual(
+        [DIRECTOR, DOCTOR_GUEST].sort(),
+      );
+      expect(await bindingsOf(email)).toEqual([]);
+      const granted = await roleRows(sub, since);
+      expect(granted.map((r) => r.event_type)).toEqual(["auth.role.granted"]);
+      expect(granted[0]!.metadata).toMatchObject({
+        role: DIRECTOR,
+        by_admin: admin.sub,
+      });
+    });
+
+    it("049 EARS-4: a grant naming superadmin or any other role is refused 400 with no IdP write and no row", async () => {
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
+      const spies = idpWriteSpies();
+      for (const role of ["superadmin", "pd_officer", DOCTOR_GUEST]) {
+        const email = uniqueEmail("never");
+        const res = await grant(admin, {
+          email,
+          fullName: "Иванов Иван",
+          role,
+        });
+        expect(res.statusCode, role).toBe(400);
+        const { rows } = await pool.query(
+          "SELECT 1 FROM users WHERE email = $1",
+          [email],
+        );
+        expect(rows).toEqual([]);
+      }
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    });
+
+    // ---- 049 V-4 (EARS-5) ------------------------------------------------
+
+    it("049 EARS-5: superadministrator rows are listed without «Отозвать», as are their platform_admin and the caller's own; a director row is revocable", async () => {
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
+      const other = await enrolledStaff("sa", SUPERADMIN_HOLDER);
+      const director = await enrolledStaff("dir", DIRECTOR);
+      const plain = await enrolledStaff("pa", "platform_admin");
+      const list = await app.inject({
+        method: "GET",
+        url: LIST_URL,
+        headers: admin.headers,
+      });
+      expect(list.statusCode).toBe(200);
+      const items = (list.json() as { items: Array<Record<string, unknown>> })
+        .items;
+      const rowOf = (userId: string, role: string) =>
+        items.filter((i) => i.userId === userId && i.role === role);
+
+      for (const holder of [admin, other]) {
+        expect(rowOf(holder.sub, "superadmin")).toEqual([
+          expect.objectContaining({
+            eventId: null,
+            eventTitle: null,
+            revocable: false,
+          }),
+        ]);
+        expect(rowOf(holder.sub, "platform_admin")).toEqual([
+          expect.objectContaining({ revocable: false }),
+        ]);
+      }
+      expect(rowOf(director.sub, DIRECTOR)).toEqual([
+        expect.objectContaining({
+          eventId: null,
+          eventTitle: null,
+          revocable: true,
+        }),
+      ]);
+      expect(rowOf(plain.sub, "platform_admin")).toEqual([
+        expect.objectContaining({ revocable: true }),
+      ]);
+      // The superadministrator rows head the list.
+      expect(items[0]!.role).toBe("superadmin");
+    });
+
+    it("049 EARS-5: a revocation naming superadmin is refused 400 with nothing changed", async () => {
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
+      const other = await enrolledStaff("sa", SUPERADMIN_HOLDER);
+      const since = await dbNow();
+      const update = vi.spyOn(fake, "updateProjectGrantRoles");
+      for (const userId of [admin.sub, other.sub]) {
+        const res = await revoke(admin, { userId, role: "superadmin" });
+        expect(res.statusCode).toBe(400);
+      }
+      expect(update).not.toHaveBeenCalled();
+      expect(fake.grantedRoles(other.sub)).toContain("superadmin");
+      expect(await adminSessionStatus(other)).toBe(200);
+      expect(await roleRows(other.sub, since)).toEqual([]);
+    });
+
+    it("049 EARS-5: a superadministrator revoking their own platform_admin is refused with nothing changed", async () => {
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
+      const since = await dbNow();
+      const res = await revoke(admin, {
+        userId: admin.sub,
+        role: "platform_admin",
+      });
+      expect(res.statusCode).toBe(403);
+      expect((res.json() as { errorCode: string }).errorCode).toBe(
+        "REVOKE_SELF_PLATFORM_ADMIN",
+      );
+      expect(fake.grantedRoles(admin.sub)).toEqual(
+        expect.arrayContaining([...SUPERADMIN_HOLDER]),
+      );
+      expect(await roleRows(admin.sub, since)).toEqual([]);
+    });
+
+    it("049 EARS-5: revoking platform_admin from another holder of superadmin is 409 STAFF_REVOKE_SUPERADMIN_HOLDER — no IdP write, no session ended, no ledger row", async () => {
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
+      const other = await enrolledStaff("sa", SUPERADMIN_HOLDER);
+      const since = await dbNow();
+      const writes = [
+        vi.spyOn(fake, "updateProjectGrantRoles"),
+        vi.spyOn(fake, "removeProjectGrant"),
+      ];
+      const res = await revoke(admin, {
+        userId: other.sub,
+        role: "platform_admin",
+      });
+      expect(res.statusCode).toBe(409);
+      expect((res.json() as { errorCode: string }).errorCode).toBe(
+        "STAFF_REVOKE_SUPERADMIN_HOLDER",
+      );
+      for (const spy of writes) expect(spy).not.toHaveBeenCalled();
+      expect(fake.grantedRoles(other.sub)).toEqual(
+        expect.arrayContaining([...SUPERADMIN_HOLDER]),
+      );
+      expect(await adminSessionStatus(other)).toBe(200);
+      const { rows } = await pool.query(
+        `SELECT event_type FROM audit_ledger WHERE subject_id = $1 AND created_at >= $2
+           AND (event_type LIKE 'auth.role.%' OR event_type = 'auth.session.terminated')`,
+        [other.sub, since],
+      );
+      expect(rows).toEqual([]);
+    });
+
+    it("049 EARS-5: a director revocation removes broadcast_director, keeps doctor_guest, ends the director's admin sessions and pending sign-in and records auth.role.revoked", async () => {
+      const admin = await enrolledStaff("adm", SUPERADMIN_HOLDER);
+      const director = await signedInMember(DIRECTOR);
+      expect(await adminSessionStatus(director)).toBe(200);
+      const since = await dbNow();
+      const res = await revoke(admin, {
+        userId: director.sub,
+        role: DIRECTOR,
+      });
+      expect(res.statusCode).toBe(204);
+      expect(fake.grantedRoles(director.sub)).toEqual([DOCTOR_GUEST]);
+      expect(await adminSessionStatus(director)).toBe(401);
+      expect(await pendingRecord(director.pendingRef)).toBeUndefined();
+      const revoked = await roleRows(director.sub, since);
+      expect(revoked.map((r) => r.event_type)).toEqual(["auth.role.revoked"]);
+      expect(revoked[0]!.metadata).toMatchObject({
+        role: DIRECTOR,
+        by_admin: admin.sub,
+      });
     });
   },
 );

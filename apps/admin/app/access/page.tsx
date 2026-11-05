@@ -31,6 +31,7 @@ import {
   STAFF_ACCESS_REVOCATIONS_PATH,
   staffAccessCells,
   staffAccessRowKey,
+  staffAccessRowRevocable,
   type GrantFormFields,
   type StaffAccessCells,
 } from "@/lib/staff-access";
@@ -81,7 +82,9 @@ export default function StaffAccessPage() {
     );
     if (saved?.path === STAFF_ACCESS_REVOCATIONS_PATH) {
       const row = StaffAccessRowSchema.safeParse(saved.context.row);
-      if (row.success) setRevoking({ row: row.data, replay: true });
+      if (row.success && staffAccessRowRevocable(row.data)) {
+        setRevoking({ row: row.data, replay: true });
+      }
       return;
     }
     const fields = saved?.context.fields as
@@ -149,22 +152,29 @@ export default function StaffAccessPage() {
       key: "actions",
       header: t("staffAccess.columns.actions"),
       width: "12%",
-      fullValue: () => t("staffAccess.revoke.trigger"),
-      render: (row) => (
-        <Button
-          variant="outline"
-          size="sm"
-          data-testid={`staff-access-revoke-${row.key}`}
-          onClick={() => {
-            // The list item itself, not the display row: it is what the
-            // step-up saves and reads back against the row schema.
-            const item = items.find((i) => staffAccessRowKey(i) === row.key);
-            if (item) setRevoking({ row: item, replay: false });
-          }}
-        >
-          {t("staffAccess.revoke.trigger")}
-        </Button>
-      ),
+      // 049 EARS-5: «Отозвать» only on a revocable row — never a
+      // superadministrator row, the caller's own platform administrator row or
+      // that of a holder of `superadmin`.
+      fullValue: (row) =>
+        staffAccessRowRevocable(row) ? t("staffAccess.revoke.trigger") : "",
+      render: (row) =>
+        !staffAccessRowRevocable(row) ? null : (
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid={`staff-access-revoke-${row.key}`}
+            onClick={() => {
+              // The list item itself, not the display row: it is what the
+              // step-up saves and reads back against the row schema.
+              const item = items.find((i) => staffAccessRowKey(i) === row.key);
+              if (item && staffAccessRowRevocable(item)) {
+                setRevoking({ row: item, replay: false });
+              }
+            }}
+          >
+            {t("staffAccess.revoke.trigger")}
+          </Button>
+        ),
     },
   ];
 

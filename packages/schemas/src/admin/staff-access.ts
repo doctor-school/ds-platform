@@ -4,18 +4,31 @@ import { z } from "zod";
  * 047 — staff access («Доступы»): the contract the API and the admin form share
  * (047-design §Work-package map → Contract).
  *
- * `GRANTABLE_STAFF_ROLES` is the ONE list of roles a platform administrator may
- * grant from the section. The API validates against it and the admin form draws
- * its role select from it, so a future grantable role is one edit here.
- * `pd_officer` is deliberately absent (047-design §«`pd_officer` not grantable
- * yet»).
+ * `GRANTABLE_STAFF_ROLES` is the ONE list of roles a superadministrator may
+ * grant from the section (049 EARS-4). The API validates grants and
+ * revocations against it and the admin form draws its role select from it, so
+ * a future grantable role is one edit here. `superadmin` is deliberately absent
+ * — it changes only through the operator command (049 EARS-6) — and so is
+ * `pd_officer` (047-design §«`pd_officer` not grantable yet»).
  */
 export const GRANTABLE_STAFF_ROLES = [
   "platform_admin",
   "event-registrar",
   "congress-program-committee",
+  "broadcast_director",
 ] as const;
 export type GrantableStaffRole = (typeof GRANTABLE_STAFF_ROLES)[number];
+
+/**
+ * 049 EARS-5 — the roles «Доступы» lists: the grantable ones plus
+ * `superadmin`, which is shown (never granted or revoked there). The order is
+ * the list order: the superadministrators first.
+ */
+export const LISTED_STAFF_ROLES = [
+  "superadmin",
+  ...GRANTABLE_STAFF_ROLES,
+] as const;
+export type ListedStaffRole = (typeof LISTED_STAFF_ROLES)[number];
 
 /**
  * The grantable roles bound to one event (`event_role_grants`): a grant of one
@@ -37,21 +50,25 @@ export function isEventBoundStaffRole(
  * One row of the «Доступы» list (047 EARS-2): one per person and role, and per
  * event for an event-bound role. `userId` is the person's IdP subject — the
  * identity the IdP grant and the revocation command are keyed by. `eventId` is
- * `null` for `platform_admin`, and for an event-bound role whose binding row is
- * missing (a half-finished grant or revocation, listed so it stays visible and
- * revocable — 047-design §The list).
+ * `null` for a role bound to no event, and for an event-bound role whose
+ * binding row is missing (a half-finished grant or revocation, listed so it
+ * stays visible and revocable — 047-design §The list). `revocable` says
+ * whether the row offers «Отозвать» (049 EARS-5): never for `superadmin`, for
+ * the caller's own `platform_admin`, or for the `platform_admin` of a holder of
+ * `superadmin`.
  */
 export const StaffAccessRowSchema = z.strictObject({
   userId: z.string().min(1),
   fullName: z.string().nullable(),
   email: z.string().nullable(),
-  role: z.enum(GRANTABLE_STAFF_ROLES),
+  role: z.enum(LISTED_STAFF_ROLES),
   eventId: z.uuid().nullable(),
   eventTitle: z.string().nullable(),
+  revocable: z.boolean(),
 });
 export type StaffAccessRow = z.infer<typeof StaffAccessRowSchema>;
 
-/** `GET /v1/admin/staff-access` — every holder of a grantable role (EARS-2). */
+/** `GET /v1/admin/staff-access` — every holder of a listed role (047 EARS-2, 049 EARS-5). */
 export const StaffAccessListResponseSchema = z.strictObject({
   items: z.array(StaffAccessRowSchema),
 });

@@ -1,8 +1,9 @@
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import {
-  GRANTABLE_STAFF_ROLES,
+  LISTED_STAFF_ROLES,
   isEventBoundStaffRole,
   type GrantableStaffRole,
+  type ListedStaffRole,
   type StaffAccessGrantRequest,
   type StaffAccessGrantResponse,
   type StaffAccessRevokeRequest,
@@ -36,6 +37,7 @@ export type StaffAccessRefusalCode =
   | "STAFF_GRANT_EMAIL_UNVERIFIED"
   | "STAFF_GRANT_EMAIL_AMBIGUOUS"
   | "REVOKE_SELF_PLATFORM_ADMIN"
+  | "STAFF_REVOKE_SUPERADMIN_HOLDER"
   | "REVOKE_ALREADY_COMPLETE";
 
 const REFUSALS: Record<
@@ -66,11 +68,36 @@ const REFUSALS: Record<
     status: HttpStatus.FORBIDDEN,
     message: "a platform administrator cannot revoke their own platform_admin",
   },
+  STAFF_REVOKE_SUPERADMIN_HOLDER: {
+    status: HttpStatus.CONFLICT,
+    message:
+      "the account holds superadmin; its platform_admin is not revoked until the operator removes superadmin",
+  },
   REVOKE_ALREADY_COMPLETE: {
     status: HttpStatus.CONFLICT,
     message: "this access is already revoked",
   },
 };
+
+const SUPERADMIN = "superadmin";
+
+/**
+ * 049 EARS-5 — whether a row offers «Отозвать»: never a `superadmin` row (it
+ * changes only through the operator command), never the caller's own
+ * `platform_admin` (047 EARS-7), never the `platform_admin` of an account that
+ * still holds `superadmin` (a superadministrator always holds both).
+ */
+export function isRevocableRow(
+  role: ListedStaffRole,
+  holder: { sub: string; roleKeys: readonly string[] },
+  callerSub: string,
+): boolean {
+  if (role === SUPERADMIN) return false;
+  if (role === "platform_admin") {
+    return holder.sub !== callerSub && !holder.roleKeys.includes(SUPERADMIN);
+  }
+  return true;
+}
 
 export class StaffAccessRefusal extends HttpException {
   constructor(readonly errorCode: StaffAccessRefusalCode) {
@@ -108,16 +135,17 @@ export class StaffAccessService {
   ) {}
 
   /**
-   * EARS-2 — one row per person and role, and per event for an event-bound
-   * role. The IdP grant is the authority for who holds a role; the mirror gives
-   * the ФИО and email (the IdP projection fills them for an account the mirror
-   * lacks); an event-bound role with no binding row is listed with an empty
-   * event so a half-finished grant stays visible.
+   * 047 EARS-2, 049 EARS-5 — one row per person and role, and per event for an
+   * event-bound role, over the listed roles (the grantable ones and
+   * `superadmin`). The IdP grant is the authority for who holds a role; the
+   * mirror gives the ФИО and email (the IdP projection fills them for an
+   * account the mirror lacks); an event-bound role with no binding row is
+   * listed with an empty event so a half-finished grant stays visible. Each
+   * row says whether it is revocable by `callerSub`.
    */
-  async list(): Promise<StaffAccessRow[]> {
-    const holders = await this.idp.listProjectGrantsWithRoles(
-      GRANTABLE_STAFF_ROLES,
-    );
+  async list(callerSub: string): Promise<StaffAccessRow[]> {
+    const holders =
+      await this.idp.listProjectGrantsWithRoles(LISTED_STAFF_ROLES);
     const mirrors = new Map(
       (await this.repo.findMirrorsBySubs(holders.map((h) => h.sub))).map(
         (m) => [m.zitadelSub, m],
@@ -133,17 +161,25 @@ export class StaffAccessService {
         fullName: mirror?.displayName ?? holder.displayName ?? null,
         email: mirror?.email ?? holder.email ?? null,
       };
-      for (const role of GRANTABLE_STAFF_ROLES) {
+      for (const role of LISTED_STAFF_ROLES) {
         if (!holder.roleKeys.includes(role)) continue;
+        const revocable = isRevocableRow(role, holder, callerSub);
+        const unbound = {
+          ...person,
+          role,
+          eventId: null,
+          eventTitle: null,
+          revocable,
+        };
         if (!isEventBoundStaffRole(role)) {
-          rows.push({ ...person, role, eventId: null, eventTitle: null });
+          rows.push(unbound);
           continue;
         }
         const bound = bindings.filter(
           (b) => b.zitadelSub === holder.sub && b.role === role,
         );
         if (bound.length === 0) {
-          rows.push({ ...person, role, eventId: null, eventTitle: null });
+          rows.push(unbound);
           continue;
         }
         for (const b of bound) {
@@ -152,14 +188,15 @@ export class StaffAccessService {
             role,
             eventId: b.eventId,
             eventTitle: b.eventTitle,
+            revocable,
           });
         }
       }
     }
     return rows.sort(
       (a, b) =>
-        GRANTABLE_STAFF_ROLES.indexOf(a.role) -
-          GRANTABLE_STAFF_ROLES.indexOf(b.role) ||
+        LISTED_STAFF_ROLES.indexOf(a.role) -
+          LISTED_STAFF_ROLES.indexOf(b.role) ||
         (a.fullName ?? a.email ?? "").localeCompare(
           b.fullName ?? b.email ?? "",
           "ru",
@@ -349,6 +386,7 @@ export class StaffAccessService {
         role,
         eventId,
         eventTitle: event?.title ?? null,
+        revocable: isRevocableRow(role, { sub, roleKeys }, byAdmin),
       },
       ...(temporaryPassword === undefined ? {} : { temporaryPassword }),
     };
@@ -387,6 +425,15 @@ export class StaffAccessService {
 
     // ---- Completeness read: IdP grant; mirror; bindings of this role.
     const grant = await this.idp.getProjectGrant(sub);
+    // 049 EARS-5: a holder of `superadmin` always also holds `platform_admin`;
+    // that `platform_admin` is not revoked here until the operator command has
+    // removed `superadmin` — refused before any write, nothing changed.
+    if (
+      role === "platform_admin" &&
+      (grant?.roleKeys.includes(SUPERADMIN) ?? false)
+    ) {
+      throw new StaffAccessRefusal("STAFF_REVOKE_SUPERADMIN_HOLDER");
+    }
     const mirror = await this.repo.findMirrorBySub(sub);
     const bindings =
       mirror && boundRole !== null

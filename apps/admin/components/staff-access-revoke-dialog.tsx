@@ -15,10 +15,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@ds/design-system";
-import type { StaffAccessRow } from "@ds/schemas";
 import {
   revokeRefusal,
   revokeRequestOf,
+  type RevocableStaffAccessRow,
   STAFF_ACCESS_REVOCATIONS_PATH,
   STAFF_ACCESS_REVOKE_ENDPOINT,
   STAFF_ACCESS_ROUTE,
@@ -34,7 +34,7 @@ import { adminCsrfToken } from "@/lib/admin-auth";
 
 /** The row being revoked; `replay` — back from the code screen, sent once on open. */
 export interface StaffAccessRevokeTarget {
-  row: StaffAccessRow;
+  row: RevocableStaffAccessRow;
   replay: boolean;
 }
 
@@ -80,7 +80,7 @@ export function StaffAccessRevokeDialog({
     onClose();
   }
 
-  function send(current: StaffAccessRow, retry: boolean) {
+  function send(current: RevocableStaffAccessRow, retry: boolean) {
     const body = revokeRequestOf(current);
     const mine = ++attempt.current;
     const live = () => attempt.current === mine;
@@ -142,6 +142,8 @@ export function StaffAccessRevokeDialog({
         return t("staffAccess.revoke.errors.unavailable");
       case "selfPlatformAdmin":
         return t("staffAccess.revoke.errors.selfPlatformAdmin");
+      case "superadminHolder":
+        return t("staffAccess.revoke.errors.superadminHolder");
       case "stepUp":
         return t("staffAccess.revoke.errors.stepUpAgain");
       case "forbidden":
@@ -155,7 +157,9 @@ export function StaffAccessRevokeDialog({
 
   const pending = mutation.isPending;
   // A refusal that nothing can change offers no «Повторить».
-  const final = refusal?.kind === "selfPlatformAdmin";
+  const final =
+    refusal?.kind === "selfPlatformAdmin" ||
+    refusal?.kind === "superadminHolder";
 
   return (
     <AlertDialog

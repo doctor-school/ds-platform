@@ -16,25 +16,48 @@ import {
   staffAccessRoleLabelKey,
   staffAccessRowKey,
   staffAccessRoleTakesEvent,
+  staffAccessRowRevocable,
+  STAFF_ACCESS_ROLES,
+  type RevocableStaffAccessRow,
 } from "./staff-access";
 
 const EVENT_ID = "0b8c2f1e-2f7a-4a39-9d0e-6f3a1c2b4d5e";
 
-const ADMIN_ROW: StaffAccessRow = {
+const ADMIN_ROW: RevocableStaffAccessRow = {
   userId: "sub-1",
   fullName: "Иванова Анна Сергеевна",
   email: "ivanova@example.ru",
   role: "platform_admin",
   eventId: null,
   eventTitle: null,
+  revocable: true,
 };
-const REGISTRAR_ROW: StaffAccessRow = {
+const REGISTRAR_ROW: RevocableStaffAccessRow = {
   userId: "sub-2",
   fullName: "Петров Пётр",
   email: "petrov@example.ru",
   role: "event-registrar",
   eventId: EVENT_ID,
   eventTitle: "Конгресс 2027",
+  revocable: true,
+};
+const SUPERADMIN_ROW: StaffAccessRow = {
+  userId: "sub-3",
+  fullName: "Главный Олег",
+  email: "owner@example.ru",
+  role: "superadmin",
+  eventId: null,
+  eventTitle: null,
+  revocable: false,
+};
+const DIRECTOR_ROW: StaffAccessRow = {
+  userId: "sub-4",
+  fullName: "Режиссёров Пётр",
+  email: "director@example.ru",
+  role: "broadcast_director",
+  eventId: null,
+  eventTitle: null,
+  revocable: true,
 };
 
 describe("047 EARS-2 «Доступы» — the list rows", () => {
@@ -291,6 +314,50 @@ describe("047 EARS-3 «Мероприятие» — the event selector's server 
     await expect(
       fetchStaffAccessEventPage({ q: "", page: 1, pageSize: 25 }, fetchImpl),
     ).rejects.toThrow();
+  });
+});
+
+describe("049 EARS-4 / EARS-5 «Доступы» — superadministrator and director rows", () => {
+  it("049 EARS-4: the grant form offers the director role, with no event field", () => {
+    expect(STAFF_ACCESS_ROLES).toEqual([
+      "platform_admin",
+      "event-registrar",
+      "congress-program-committee",
+      "broadcast_director",
+    ]);
+    expect(STAFF_ACCESS_ROLES).not.toContain("superadmin");
+    expect(staffAccessRoleTakesEvent("broadcast_director")).toBe(false);
+    expect(staffAccessRoleLabelKey("broadcast_director")).toBe(
+      "staffAccess.roles.broadcast_director",
+    );
+  });
+
+  it("049 EARS-5: a superadministrator row reads «Суперадминистратор» with no event and offers no «Отозвать»; a director row does", () => {
+    expect(staffAccessCells(SUPERADMIN_ROW)).toEqual({
+      fullName: "Главный Олег",
+      email: "owner@example.ru",
+      roleKey: "staffAccess.roles.superadmin",
+      event: "",
+    });
+    expect(staffAccessRowRevocable(SUPERADMIN_ROW)).toBe(false);
+    expect(staffAccessRowRevocable({ ...ADMIN_ROW, revocable: false })).toBe(
+      false,
+    );
+    // A superadmin row is never revocable, whatever the flag claims.
+    expect(
+      staffAccessRowRevocable({ ...SUPERADMIN_ROW, revocable: true }),
+    ).toBe(false);
+    expect(staffAccessRowRevocable(DIRECTOR_ROW)).toBe(true);
+    expect(staffAccessRowRevocable(ADMIN_ROW)).toBe(true);
+  });
+
+  it("049 EARS-5: a 409 STAFF_REVOKE_SUPERADMIN_HOLDER reads as the superadministrator refusal, final", () => {
+    expect(
+      revokeRefusal({
+        statusCode: 409,
+        errorCode: "STAFF_REVOKE_SUPERADMIN_HOLDER",
+      }),
+    ).toEqual({ kind: "superadminHolder" });
   });
 });
 

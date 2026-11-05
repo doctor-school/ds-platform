@@ -290,6 +290,72 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     assert.deepEqual(plan.backup, { label: "20261105-000000F_20261105-090000I", stopAt: "2026-10-30T08:47:03Z" });
   });
 
+  it("start --restore-only with nothing pending skips the short-circuit, checks the headroom and starts the unit", () => {
+    const r = harness(["start", SHA, archive(), "--restore-only"], { liveNewest: 3000 });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), { verb: "rehearse-restore", sha: SHA, state: "started", pending: 0 });
+    assert.ok(calls().some((c) => c.args.includes("info")), "the headroom read");
+    const unit = calls().find((c) => c.tool === "systemd-run").args;
+    assert.ok(unit.includes(`--unit=ds-rehearse-${SHA12}`), "the same unit name");
+    assert.deepEqual(unit.slice(-2), ["run", SHA]);
+    assert.ok(!existsSync(join(rehearsal(), `${SHA}.json`)), "no pending:0 report");
+    const plan = JSON.parse(readFileSync(join(scratchDir(), SHA12, "plan.json"), "utf8"));
+    assert.equal(plan.restoreOnly, true);
+    assert.equal(plan.newest, 3000);
+    assert.deepEqual(plan.pending, []);
+    assert.deepEqual(plan.headroom, { dbSize: 1024 ** 3, scratchFree: 100 * 1024 ** 3, memAvailable: 4000000 * 1024, required: 1.5 * 1024 ** 3 + 2 * 1024 ** 3 });
+    // With a pending migration a restore-only start still applies none of them.
+    const pending = harness(["start", SHA, archive(), "--restore-only"], { liveNewest: 1000 });
+    assert.deepEqual(JSON.parse(pending.stdout), { verb: "rehearse-restore", sha: SHA, state: "started", pending: 0 });
+    assert.deepEqual(JSON.parse(readFileSync(join(scratchDir(), SHA12, "plan.json"), "utf8")).pending, []);
+  });
+
+  it("start --restore-only refuses (exit 1) on the headroom as `start` does; the refusal creates nothing", () => {
+    const r = harness(["start", SHA, archive(), "--restore-only"], { liveNewest: 3000, dbSize: 1024 ** 3 }, { DS_REHEARSE_FREE_BYTES: String(1.5 * 1024 ** 3 + 2 * 1024 ** 3 - 1) });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.equal(r.stdout, "insufficient headroom (disk)\n");
+    assert.ok(!calls().some((c) => c.tool === "systemd-run"));
+    assert.ok(scratchEmpty());
+    assert.ok(!existsSync(join(rehearsal(), `${SHA}.json`)));
+  });
+
+  it("run of a restore-only plan: check, restore, every copy check, nothing applied, the catalogue, the measured headroom", () => {
+    const s = harness(["start", SHA, archive(), "--restore-only"], { liveNewest: 3000 });
+    assert.equal(s.status, 0, s.stdout + s.stderr);
+    writeFileSync(join(dir, "calls.log"), "");
+    const r = harness(["run", SHA], { liveNewest: 3000 });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const report = reportOf();
+    assert.equal(report.verb, "rehearse");
+    assert.equal(report.restoreOnly, true);
+    assert.equal(report.state, "succeeded");
+    assert.equal(report.reason, null);
+    assert.equal(report.pending, 0);
+    assert.deepEqual(report.migrations, []);
+    assert.equal(report.recoveredTo, "2026-11-05T09:30:00.123+00:00");
+    assert.deepEqual(report.catalogueAfter, { tables: [{ schema: "public", name: "users" }], enums: [], sequences: [] });
+    assert.equal(report.headroom.dbSize, 1024 ** 3);
+    assert.ok(Number.isInteger(report.headroom.scratchUsed) && report.headroom.scratchUsed > 0);
+    assert.ok(calls().some((c) => c.args.includes("check")), "the archive check");
+    assert.equal(dockerRuns().length, 2, "restore and copy");
+    assert.ok(calls().some((c) => c.args[0] === "logs"), "the replay-point check");
+    assert.ok(calls().some((c) => c.args[0] === "exec" && c.stdin.includes("__drizzle_migrations")), "the copy-behind-prod check");
+    assert.ok(!calls().some((c) => c.stdin.includes("VERBOSITY verbose")), "nothing applied");
+    assert.ok(scratchEmpty());
+    assert.ok(calls().some((c) => c.args.join(" ") === `rm -f ds-rehearse-${SHA12}`));
+  });
+
+  it("run of a restore-only plan fails (copy behind prod) with restoreOnly and the headroom in its report", () => {
+    harness(["start", SHA, archive(), "--restore-only"], { liveNewest: 3000 });
+    const r = harness(["run", SHA], { liveNewest: 3000, copyNewest: 2000 });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    const report = reportOf();
+    assert.equal(report.state, "failed");
+    assert.equal(report.reason, "copy behind prod");
+    assert.equal(report.restoreOnly, true);
+    assert.equal(report.headroom.dbSize, 1024 ** 3);
+  });
+
   it("start answers `running` for this SHA's live unit and refuses (1) while another rehearsal runs", () => {
     const mine = harness(["start", SHA, archive()], { unitActive: true });
     assert.equal(mine.status, 0);
@@ -319,8 +385,13 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     const r = harness(["run", SHA]);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     const report = reportOf();
-    assert.deepEqual(Object.keys(report), ["verb", "sha", "backup", "recoveredTo", "pending", "migrations", "catalogueAfter", "state", "reason"]);
+    assert.deepEqual(Object.keys(report), ["verb", "sha", "backup", "recoveredTo", "pending", "migrations", "catalogueAfter", "state", "reason", "restoreOnly", "headroom"]);
     assert.equal(report.verb, "rehearse");
+    assert.equal(report.restoreOnly, false);
+    // The measured headroom (bytes): the check's inputs from `start`, the scratch the copy used.
+    const { scratchUsed, ...measured } = report.headroom;
+    assert.deepEqual(measured, { dbSize: 1024 ** 3, scratchFree: 100 * 1024 ** 3, memAvailable: 4000000 * 1024, required: 1.5 * 1024 ** 3 + 2 * 1024 ** 3 });
+    assert.ok(Number.isInteger(scratchUsed) && scratchUsed > 0, String(scratchUsed));
     assert.equal(report.state, "succeeded");
     assert.equal(report.reason, null);
     assert.equal(report.pending, 2);
@@ -409,6 +480,8 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     assert.ok(scratchEmpty());
     assert.equal(reportOf().state, "failed");
     assert.equal(reportOf().reason, "the rehearsal did not finish");
+    assert.equal(reportOf().restoreOnly, false);
+    assert.equal(reportOf().headroom.dbSize, 1024 ** 3, "the plan's headroom survives the cleanup");
     writeFileSync(join(rehearsal(), `${SHA}.json`), '{"state":"succeeded"}\n');
     assert.equal(harness(["cleanup", SHA]).status, 0);
     assert.equal(reportOf().state, "succeeded", "an existing report is kept");
@@ -440,7 +513,7 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
   });
 
   it("rejects (exit 2) any other usage", () => {
-    for (const args of [[], ["start", SHA], ["run", "abc"], ["status"], ["cleanup", SHA, SHA], ["exec", SHA]]) {
+    for (const args of [[], ["start", SHA], ["start", SHA, "x.tar.gz", "--apply"], ["run", "abc"], ["status"], ["cleanup", SHA, SHA], ["exec", SHA]]) {
       assert.equal(harness(args).status, 2, JSON.stringify(args));
     }
   });

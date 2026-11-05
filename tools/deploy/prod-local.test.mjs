@@ -856,7 +856,7 @@ test("3646: the read-key converge runs the root-owned harden-ssh.sh --role prod 
 });
 
 test("3646: the release probe does not require the read verbs, so a box from before them takes the release that installs them", () => {
-  assert.deepEqual(DATA_READ_VERBS, ["read-schema", "read-observe", "rehearse", "rehearsal-status", "recovery-bundle", "recovery-check", "recovery-put", "recovery-latest"]);
+  assert.deepEqual(DATA_READ_VERBS, ["read-schema", "read-observe", "rehearse", "rehearse-restore", "rehearsal-status", "recovery-bundle", "recovery-check", "recovery-put", "recovery-latest"]);
   for (const verb of DATA_READ_VERBS) assert.ok(!DATA_VERBS.includes(verb), verb);
   assert.equal(servesDataVerbs(JSON.stringify({ role: "data", verbs: DATA_VERBS })), true);
 });

@@ -52,6 +52,7 @@ test("3662: the verb whitelist — ds-read-entrypoint serves the two recovery ve
     "schema",
     "observe",
     "rehearse",
+    "rehearse-restore",
     "rehearsal-status",
     ...RECOVERY_VERBS,
   ]);

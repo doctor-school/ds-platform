@@ -7,6 +7,7 @@ name: Prod observe
 #
 #   gh workflow run prod-observe.yml --ref main -f verb=schema
 #   gh workflow run prod-observe.yml --ref main -f verb=rehearse -f sha=<40-hex main SHA>
+#   gh workflow run prod-observe.yml --ref main -f verb=rehearse-restore -f sha=<40-hex main SHA>
 #   gh workflow run prod-observe.yml --ref main -f verb=observe -f name=table-rows -f params='{"table":"users"}'
 #   pnpm prod:read <run-id>            # or: pnpm prod:schema-drift <run-id>
 #
@@ -19,6 +20,10 @@ name: Prod observe
 # A `rehearse` (#3648) polls `rehearsal-status` until the rehearsal ends, at most its
 # 15-min runtime cap, and uploads that last answer; its one plaintext is the state
 # word (`started`, `running`, `no pending migrations`, `succeeded`, `failed`, `absent`).
+# `rehearse-restore` polls the same way: the restore of prod onto the throw-away copy
+# and its copy checks with no migration applied, its report carrying the measured
+# headroom. A final state `failed` (or still `started` / `running` at the cap) fails
+# the job after the upload, so a green run is a green rehearsal.
 
 on:
   workflow_dispatch:
@@ -27,7 +32,7 @@ on:
         description: "The read verb."
         required: true
         type: choice
-        options: [schema, observe, rehearse, rehearsal-status]
+        options: [schema, observe, rehearse, rehearse-restore, rehearsal-status]
         default: schema
       name:
         description: "observe: the catalogue entry name."
@@ -40,7 +45,7 @@ on:
         type: string
         default: "{}"
       sha:
-        description: "rehearse / rehearsal-status: the full 40-hex SHA."
+        description: "rehearse / rehearse-restore / rehearsal-status: the full 40-hex SHA."
         required: false
         type: string
         default: ""
@@ -130,7 +135,7 @@ jobs:
           set -e
           # #3648: a started rehearsal is polled by `rehearsal-status` up to its runtime
           # cap; the last answer is the one uploaded. Only the state word is printed.
-          if [ "$VERB" = rehearse ] && [ "$rc" -eq 0 ]; then
+          if { [ "$VERB" = rehearse ] || [ "$VERB" = rehearse-restore ]; } && [ "$rc" -eq 0 ]; then
             state=$(node tools/deploy/prod-read.mjs state "$RUNNER_TEMP/read.err")
             deadline=$(( $(date +%s) + 900 ))
             while [ "$rc" -eq 0 ] && { [ "$state" = started ] || [ "$state" = running ]; } &&
@@ -141,7 +146,7 @@ jobs:
               ssh -i "$RUNNER_TEMP/prod-read-ssh/key" -o IdentitiesOnly=yes \
                 -o UserKnownHostsFile="$RUNNER_TEMP/prod-read-ssh/known_hosts" \
                 -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
-                "$PROD_SSH_USER@$PROD_SSH_HOST" "rehearsal-status ${COMMAND#rehearse }" </dev/null \
+                "$PROD_SSH_USER@$PROD_SSH_HOST" "rehearsal-status ${COMMAND#* }" </dev/null \
                 >"$RUNNER_TEMP/result/result.cms" 2>"$RUNNER_TEMP/read.err"
               rc=$?
               set -e
@@ -151,7 +156,7 @@ jobs:
           node tools/deploy/prod-read.mjs status "$VERB" "$rc" "$RUNNER_TEMP/result/result.cms" "$RUNNER_TEMP/read.err"
 
       - name: Upload the ciphertext
-        if: steps.read.outputs.upload == 'true'
+        if: "!cancelled() && steps.read.outputs.upload == 'true'"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: prod-read-${{ github.run_id }}

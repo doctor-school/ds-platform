@@ -18,8 +18,14 @@
 #                          `no pending migrations` (a report with "pending":0, nothing
 #                          restored) or checks the headroom and starts the durable unit
 #                          ds-rehearse-<sha12>; prints one JSON answer
+#   start <sha> <archive> --restore-only
+#                          the data verb `rehearse-restore <sha>`: the same with the
+#                          pending list forced empty — no `no pending migrations`
+#                          answer, the headroom check, the unit; its run restores,
+#                          checks the copy and applies nothing
 #   run <sha>              the unit's body: `pgbackrest check`, restore, the copy, the
-#                          apply in one transaction, the report
+#                          apply in one transaction (none when restore-only), the
+#                          report with the measured headroom
 #   status <sha>           the data verb `rehearsal-status <sha>`: running, the report,
 #                          or absent
 #   cleanup [<sha>]        the unit's ExecStopPost (rehearse-cleanup): removes every
@@ -277,19 +283,24 @@ def parse_apply(stdout, stderr, tags, returncode=0):
 
 
 def report(sha, *, pending, state, backup=None, recovered_to=None, migrations=(),
-           catalogue_after=None, reason=None):
+           catalogue_after=None, reason=None, restore_only=False, headroom=None):
     """The report shape of spec «Report.»."""
     if state not in ("succeeded", "failed"):
         raise ValueError(state)
     return {"verb": "rehearse", "sha": sha, "backup": backup, "recoveredTo": recovered_to,
             "pending": pending, "migrations": list(migrations), "catalogueAfter": catalogue_after,
-            "state": state, "reason": reason}
+            "state": state, "reason": reason, "restoreOnly": bool(restore_only), "headroom": headroom}
+
+
+def headroom_required(db_size):
+    """The scratch bytes the check demands: 1.5 x the database size + 2 GiB."""
+    return int(1.5 * db_size + 2 * GIB)
 
 
 def headroom_reason(db_size, free_bytes, mem_available):
     """None, or the fixed refusal: 1.5 x the database size + 2 GiB free on the scratch
     filesystem, 1 GiB MemAvailable."""
-    if free_bytes < 1.5 * db_size + 2 * GIB:
+    if free_bytes < headroom_required(db_size):
         return "insufficient headroom (disk)"
     if mem_available < GIB:
         return "insufficient headroom (memory)"
@@ -483,6 +494,21 @@ def free_bytes():
     return int(override) if override else shutil.disk_usage(REHEARSAL_DIR).free
 
 
+def disk_used(path):
+    """Bytes the tree under `path` occupies (allocated blocks; the apparent size where
+    the platform reports none), for the report's measured headroom."""
+    total = 0
+    for top, dirs, files in os.walk(path):
+        for name in dirs + files:
+            try:
+                st = os.lstat(os.path.join(top, name))
+            except OSError:
+                continue
+            blocks = getattr(st, "st_blocks", None)
+            total += blocks * 512 if blocks is not None else st.st_size
+    return total
+
+
 def mem_available():
     try:
         with open(MEMINFO, encoding="ascii") as f:
@@ -511,10 +537,12 @@ def answer(value):
     sys.stdout.write(json.dumps(value, separators=(",", ":")) + "\n")
 
 
-def cmd_start(sha, archive):
-    """The data verb `rehearse <sha>`, under the rehearsal lock."""
+def cmd_start(sha, archive, restore_only=False):
+    """The data verb `rehearse <sha>` (`rehearse-restore <sha>` with restore_only), under
+    the rehearsal lock."""
+    verb = "rehearse-restore" if restore_only else "rehearse"
     if unit_active(sha):
-        return answer({"verb": "rehearse", "sha": sha, "state": "running"})
+        return answer({"verb": verb, "sha": sha, "state": "running"})
     if other_unit_active(sha):
         raise Stop(1, "a rehearsal is running")
     remove_leftovers()
@@ -523,20 +551,24 @@ def cmd_start(sha, archive):
     try:
         unpack(archive, base)
         newest = newest_applied(LIVE)
-        pending = pending_migrations(read_journal(base), newest)
+        pending = [] if restore_only else pending_migrations(read_journal(base), newest)
         load_migrations(base, pending)
         if os.path.exists(report_path(sha)):
             os.unlink(report_path(sha))
-        if not pending:
+        if not pending and not restore_only:
             write_report(sha, report(sha, pending=0, state="succeeded"))
             shutil.rmtree(base, ignore_errors=True)
             return answer({"verb": "rehearse", "sha": sha, "state": "no pending migrations", "pending": 0})
         backup, size = backup_info()
-        reason = headroom_reason(size, free_bytes(), mem_available())
+        free, mem = free_bytes(), mem_available()
+        reason = headroom_reason(size, free, mem)
         if reason:
             raise Stop(1, reason)
+        headroom = {"dbSize": size, "scratchFree": free, "memAvailable": mem,
+                    "required": headroom_required(size)}
         with open(os.path.join(base, "plan.json"), "w", encoding="utf-8") as f:
-            json.dump({"newest": newest, "pending": pending, "backup": backup}, f)
+            json.dump({"newest": newest, "pending": pending, "backup": backup,
+                       "restoreOnly": restore_only, "headroom": headroom}, f)
     except Stop:
         shutil.rmtree(base, ignore_errors=True)
         raise
@@ -551,7 +583,7 @@ def cmd_start(sha, archive):
     if done.returncode != 0:
         shutil.rmtree(base, ignore_errors=True)
         raise Stop(1, "the read failed")
-    return answer({"verb": "rehearse", "sha": sha, "state": "started", "pending": len(pending)})
+    return answer({"verb": verb, "sha": sha, "state": "started", "pending": len(pending)})
 
 
 def wait_promoted(sha, deadline):
@@ -580,7 +612,21 @@ def cmd_run(sha):
         write_report(sha, report(sha, pending=None, state="failed", reason="the read failed"))
         return 1
     pending, backup = plan["pending"], plan["backup"]
+    restore_only = plan.get("restoreOnly") is True
     ctx = {"backup": backup, "recovered_to": None, "migrations": []}
+
+    def measured():
+        # The plan's headroom inputs plus the scratch the run occupies now, read before
+        # each report, so a failure after the restore still states what it used.
+        if not isinstance(plan.get("headroom"), dict):
+            return None
+        return dict(plan["headroom"], scratchUsed=disk_used(base))
+
+    def done_report(state, **kw):
+        write_report(sha, report(sha, pending=len(pending), state=state, backup=backup,
+                                 recovered_to=ctx["recovered_to"], restore_only=restore_only,
+                                 headroom=measured(), **kw))
+
     try:
         migrations = load_migrations(base, pending)
         with open(STATE_FILE, encoding="utf-8") as f:
@@ -623,6 +669,9 @@ def cmd_run(sha):
         ctx["recovered_to"] = psql_json(copy_prefix(sha), "SELECT to_json(pg_last_xact_replay_timestamp());\n")
         if newest_applied(copy_prefix(sha)) != plan["newest"]:
             raise Stop(1, "copy behind prod")
+        if restore_only:
+            done_report("succeeded", catalogue_after=psql_json(copy_prefix(sha), CATALOGUE_SQL, timeout=120))
+            return 0
         done = run(copy_prefix(sha) + ["psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "-U", "ds", "-d", DATABASE,
                                        "-f", "-"],
                    stdin=apply_script(migrations).encode("utf-8"),
@@ -631,18 +680,14 @@ def cmd_run(sha):
                                      [m["tag"] for m in migrations], done.returncode)
         ctx["migrations"] = result
         if failed:
-            write_report(sha, report(sha, pending=len(pending), state="failed", backup=backup,
-                                     recovered_to=ctx["recovered_to"], migrations=result))
+            done_report("failed", migrations=result)
             return 1
-        catalogue = psql_json(copy_prefix(sha), CATALOGUE_SQL, timeout=120)
-        write_report(sha, report(sha, pending=len(pending), state="succeeded", backup=backup,
-                                 recovered_to=ctx["recovered_to"], migrations=result,
-                                 catalogue_after=catalogue))
+        done_report("succeeded", migrations=result,
+                    catalogue_after=psql_json(copy_prefix(sha), CATALOGUE_SQL, timeout=120))
         return 0
     except Stop as e:
         reason = e.reason if e.reason in READ_REASONS else "the read failed"
-        write_report(sha, report(sha, pending=len(pending), state="failed", backup=backup,
-                                 recovered_to=ctx["recovered_to"], migrations=ctx["migrations"], reason=reason))
+        done_report("failed", migrations=ctx["migrations"], reason=reason)
         return 1
     finally:
         for name in ("ds-rehearse-" + sha12(sha), "ds-rehearse-" + sha12(sha) + "-restore"):
@@ -669,15 +714,28 @@ def cmd_status(sha):
 
 
 def cmd_cleanup(sha=None):
+    plan = {}
+    if sha:
+        # Read before the scratch goes: the unfinished report still says what ran.
+        try:
+            with open(os.path.join(scratch(sha), "plan.json"), encoding="utf-8") as f:
+                plan = json.load(f)
+        except (OSError, ValueError):
+            plan = {}
+        if not isinstance(plan, dict):
+            plan = {}
     remove_leftovers()
     if sha and not os.path.exists(report_path(sha)):
-        write_report(sha, report(sha, pending=None, state="failed", reason=UNFINISHED))
+        headroom = plan.get("headroom") if isinstance(plan.get("headroom"), dict) else None
+        write_report(sha, report(sha, pending=None, state="failed", reason=UNFINISHED,
+                                 restore_only=plan.get("restoreOnly") is True, headroom=headroom))
 
 
 def main(argv):
     try:
-        if len(argv) == 3 and argv[0] == "start" and SHA_RE.fullmatch(argv[1]):
-            cmd_start(argv[1], argv[2])
+        if (len(argv) in (3, 4) and argv[0] == "start" and SHA_RE.fullmatch(argv[1])
+                and argv[3:] in ([], ["--restore-only"])):
+            cmd_start(argv[1], argv[2], restore_only=len(argv) == 4)
             return 0
         if len(argv) == 2 and argv[0] == "run" and SHA_RE.fullmatch(argv[1]):
             return cmd_run(argv[1])
@@ -687,7 +745,7 @@ def main(argv):
         if argv[:1] == ["cleanup"] and len(argv) <= 2 and all(SHA_RE.fullmatch(a) for a in argv[1:]):
             cmd_cleanup(*argv[1:])
             return 0
-        raise Stop(2, "usage: rehearse-migration.py start <sha> <archive> | run <sha> | status <sha> | cleanup [<sha>]")
+        raise Stop(2, "usage: rehearse-migration.py start <sha> <archive> [--restore-only] | run <sha> | status <sha> | cleanup [<sha>]")
     except Stop as e:
         sys.stdout.write(e.reason + "\n")
         return e.code

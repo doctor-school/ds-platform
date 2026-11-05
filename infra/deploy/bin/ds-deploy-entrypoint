@@ -492,7 +492,7 @@ release_status() {
 # JSON object checked field by field by DATA_PY below, or the tree archive.
 # infra/deploy/bin/harden-ssh.sh --role data refuses an installed entrypoint without
 # this line; tools/deploy/lib/data-prod.mjs and the tests pin the list.
-DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema read-observe rehearse rehearsal-status recovery-bundle recovery-check recovery-put recovery-latest'
+DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema read-observe rehearse rehearse-restore rehearsal-status recovery-bundle recovery-check recovery-put recovery-latest'
 DATA_LIVE_TREE=$ROOT/home/deploy/ds-platform
 DATA_COMPOSE=$DATA_LIVE_TREE/infra/deploy/compose/data-prod
 DATA_STATE_FILE=$ROOT/home/deploy/ds-platform-postgres-state.json
@@ -845,7 +845,7 @@ data_verb() {
       [[ $n == 2 && ${words[1]} == api-prod ]] || reject "usage: recovery-latest api-prod" ;;
     read-observe)
       [[ $n == 2 && ${words[1]} =~ ^[a-z][a-z0-9-]{0,39}$ ]] || reject "usage: read-observe <name>" ;;
-    ship | install | converge | rehearse | rehearsal-status)
+    ship | install | converge | rehearse | rehearse-restore | rehearsal-status)
       ((n == 2)) || reject "usage: $verb <sha>"
       check_sha "${words[1]}" ;;
     data-up | backup)
@@ -900,6 +900,7 @@ data_verb() {
     read-schema) read_schema </dev/null ;;
     read-observe) read_observe "${words[1]}" ;;
     rehearse) rehearse "${words[1]}" ;;
+    rehearse-restore) rehearse "${words[1]}" --restore-only ;;
     rehearsal-status) rehearsal_status "${words[1]}" </dev/null ;;
     recovery-bundle) recovery_bundle </dev/null ;;
     recovery-check) recovery_check </dev/null ;;
@@ -1314,7 +1315,9 @@ read_observe() {
 # verbs only bound the archive, take the lock and map its exit. `rehearse <sha>`
 # (stdin: the migration archive ds-read-entrypoint built from the codeload tree of a
 # SHA contained in `main`) answers started / running / no pending migrations;
-# `rehearsal-status <sha>` reads no database and always answers.
+# `rehearse-restore <sha>` (the same stdin) is the harness's `--restore-only` start —
+# the restore and the copy checks with no migration applied, answering started /
+# running; `rehearsal-status <sha>` reads no database and always answers.
 REHEARSE_PY=$ROOT/usr/local/lib/ds-platform/rehearse-migration.py
 REHEARSE_CLEANUP=$ROOT/usr/local/lib/ds-platform/rehearse-cleanup
 REHEARSAL_LOCK_DIR=$ROOT/run/ds-platform
@@ -1342,7 +1345,7 @@ rehearse_result() {
 }
 
 rehearse() {
-  local sha=$1 size out rc=0
+  local sha=$1 mode=${2-} size out rc=0
   rehearse_installed
   rehearse_work=$(sudo mktemp -d) # global: the EXIT trap outlives this function; root-only (0700)
   trap 'sudo rm -rf -- "${rehearse_work:-}"' EXIT
@@ -1352,7 +1355,7 @@ rehearse() {
   sudo install -d -m 0755 -o root -g root "$REHEARSAL_LOCK_DIR"
   # One rehearsal at a time; the unit takes the same lock for its whole run.
   out=$(sudo flock -n -E "$REHEARSAL_BUSY" "$REHEARSAL_LOCK" \
-    python3 -I "$REHEARSE_PY" start "$sha" "$rehearse_work/drizzle.tar.gz" </dev/null) || rc=$?
+    python3 -I "$REHEARSE_PY" start "$sha" "$rehearse_work/drizzle.tar.gz" ${mode:+"$mode"} </dev/null) || rc=$?
   rehearse_result "$rc" "$out"
 }
 
@@ -1430,7 +1433,7 @@ case "$verb" in
     observe "${words[1]}"
     ;;
   capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \
-    backup-info | rollback-floor | finish | check | supersede | converge | read-schema | read-observe | rehearse | rehearsal-status | recovery-bundle | recovery-check | recovery-put | recovery-latest)
+    backup-info | rollback-floor | finish | check | supersede | converge | read-schema | read-observe | rehearse | rehearse-restore | rehearsal-status | recovery-bundle | recovery-check | recovery-put | recovery-latest)
     data_verb
     ;;
   *)

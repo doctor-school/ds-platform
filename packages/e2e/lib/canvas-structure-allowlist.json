@@ -91,21 +91,27 @@
     },
     {
       "canvas": "ds-shell.dc.html",
-      "props": { "host": "doctor" },
+      "props": {},
       "regions": ["footer"],
       "delta": "extra",
-      "item": { "kind": "link", "label": "Политика персональных данных и согласия" },
-      "decision": "The doctor footer privacy link carries the published document title «Политика персональных данных и согласия»; the canvas label «Политика обработки персональных данных» is superseded.",
-      "source": "Lead decision recorded at https://github.com/doctor-school/ds-platform/issues/3727#issuecomment-6651753484 (Q3); apps/docs/content/specs/features/028-legal-pages/028-requirements-en.md EARS-3; apps/doctor/lib/shell-config.ts footer.documents"
+      "item": {
+        "kind": "link",
+        "label": "Политика персональных данных и согласия"
+      },
+      "decision": "The footer privacy link on both storefronts carries the published document title «Политика персональных данных и согласия»; the canvas label «Политика обработки персональных данных» is superseded.",
+      "source": "Lead decision recorded at https://github.com/doctor-school/ds-platform/issues/3727#issuecomment-6651753484 (Q3); apps/docs/content/specs/features/028-legal-pages/028-requirements-en.md EARS-3; apps/doctor/lib/shell-config.ts + apps/portal/lib/shell-config.ts footer.documents"
     },
     {
       "canvas": "ds-shell.dc.html",
-      "props": { "host": "doctor" },
+      "props": {},
       "regions": ["footer"],
       "delta": "missing",
-      "item": { "kind": "link", "label": "Политика обработки персональных данных" },
-      "decision": "The doctor footer privacy link carries the published document title «Политика персональных данных и согласия»; the canvas label «Политика обработки персональных данных» is superseded.",
-      "source": "Lead decision recorded at https://github.com/doctor-school/ds-platform/issues/3727#issuecomment-6651753484 (Q3); apps/docs/content/specs/features/028-legal-pages/028-requirements-en.md EARS-3; apps/doctor/lib/shell-config.ts footer.documents"
+      "item": {
+        "kind": "link",
+        "label": "Политика обработки персональных данных"
+      },
+      "decision": "The footer privacy link on both storefronts carries the published document title «Политика персональных данных и согласия»; the canvas label «Политика обработки персональных данных» is superseded.",
+      "source": "Lead decision recorded at https://github.com/doctor-school/ds-platform/issues/3727#issuecomment-6651753484 (Q3); apps/docs/content/specs/features/028-legal-pages/028-requirements-en.md EARS-3; apps/doctor/lib/shell-config.ts + apps/portal/lib/shell-config.ts footer.documents"
     }
   ]
 }

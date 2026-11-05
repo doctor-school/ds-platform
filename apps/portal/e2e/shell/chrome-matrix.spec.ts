@@ -399,6 +399,17 @@ async function measureChrome(page: Page, url: string): Promise<ChromeGeometry> {
     .getByTestId("storefront-header")
     .evaluate((el) => Number.parseFloat(getComputedStyle(el).rowGap));
 
+  // Below `layout` the auth cluster is the last item of the `≡` panel (#3629,
+  // canvas `ds-shell.dc.html` l.53), so the closed disclosure hides the chip on
+  // both hosts. Measure it where the canvas puts it — inside the opened panel —
+  // and only after every bar measurement above, which the open panel would move.
+  if (heights["shell-login"] === null && menuHeight !== null) {
+    await menu.click();
+    const login = page.getByTestId("shell-login").first();
+    await expect(login).toBeVisible();
+    heights["shell-login"] = (await login.boundingBox())?.height ?? null;
+  }
+
   return {
     heights,
     menuHeight,

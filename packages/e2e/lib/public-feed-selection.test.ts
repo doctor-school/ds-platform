@@ -19,5 +19,10 @@ it("EARS-1: ordinary storefront runs cannot execute fixture-only 018 originals e
     "doctor",
     "walks",
     "login",
+    "sign-in-host",
   ]);
+  expect(
+    ordinaryConfig.projects!.find((project) => project.name === "login")
+      ?.metadata,
+  ).toEqual({ storefront: "academy" });
 });

@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * #2228 — the storefront route-group layout is the sticky-footer frame of the
+ * #2228 — the storefront frame (mounted by the `(storefront)` route-group
+ * layout and the root not-found, #2478) is the sticky-footer frame of the
  * doctor storefront (017 EARS-1). The frame is a min-full-height flex column,
  * the route content grows, the shared footer sits at the viewport bottom on a
  * short page and follows the content on a long one. The Academy root layout
@@ -30,7 +31,7 @@ vi.mock("@ds/storefront-shell", () => ({
   ),
 }));
 
-import StorefrontLayout from "./layout";
+import { DoctorStorefrontFrame } from "./storefront-frame";
 
 beforeEach(() => {
   vi.stubEnv(
@@ -43,7 +44,7 @@ afterEach(() => {
 });
 
 async function renderLayout(): Promise<Document> {
-  const tree = await StorefrontLayout({
+  const tree = await DoctorStorefrontFrame({
     children: <p data-testid="route-content">short page</p>,
   });
   return new DOMParser().parseFromString(
@@ -71,7 +72,7 @@ describe("017 EARS-1 (#2228): the storefront frame pins the footer to the viewpo
 });
 
 describe("017 EARS-12 / LD-4 (#3147): the footer crossing leaves for the ENVIRONMENT's Academy", () => {
-  it("EARS-12: the layout hands the host config the Academy origin read from the running container's env", async () => {
+  it("EARS-12: the frame hands the host config the Academy origin read from the running container's env", async () => {
     const doc = await renderLayout();
     expect(
       doc

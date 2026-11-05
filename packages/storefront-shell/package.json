@@ -9,7 +9,9 @@
     "./user-cluster": "./src/user-cluster.tsx",
     "./theme": "./src/theme.ts",
     "./theme-watcher": "./src/theme-watcher.tsx",
-    "./sibling-origin": "./src/sibling-origin.ts"
+    "./sibling-origin": "./src/sibling-origin.ts",
+    "./not-found": "./src/not-found-page.tsx",
+    "./not-found-copy": "./src/copy/not-found.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

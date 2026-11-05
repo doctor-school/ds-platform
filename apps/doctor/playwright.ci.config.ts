@@ -53,6 +53,9 @@ export default defineConfig({
   // needs a real api + Postgres + a provisioned doctor session, so it rides
   // `playwright.room.config.ts` and is never collected by a backend-free run.
   testIgnore: [
+    // #2478: the not-found page needs the session read for its signed-in half;
+    // it runs on the events tier, whose upstream double answers it.
+    "not-found.spec.ts",
     "specialty-consumption.spec.ts",
     "register-return-context.spec.ts",
     // 021 EARS-10 (#1546): the post-confirmation landing is a decision of the

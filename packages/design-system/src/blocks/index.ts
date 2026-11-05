@@ -161,6 +161,10 @@ export type {
 } from "./event-list";
 export { EmptyState } from "./empty-state";
 export type { EmptyStateProps, EmptyStateVariant } from "./empty-state";
+// #2478 — the platform's ONE error page (refusal, not found, …): each error or
+// absence case is a state of it with its own copy, never a new page.
+export { StatusPage } from "./status-page";
+export type { StatusPageProps } from "./status-page";
 // 020 EARS-19 (wave-3 gate row 29) — the event page's canvas loading skeleton.
 export { EventPageSkeleton } from "./event-page-skeleton";
 export type { EventPageSkeletonProps } from "./event-page-skeleton";

@@ -8,6 +8,7 @@ import {
   signInAsAdmin,
 } from "../admin/index.js";
 import { baseUrlFor, HOSTS, type HostConfig } from "../hosts.js";
+import { maskNotFoundVariant, notFoundHeading } from "../lib/not-found-page.js";
 import { redirectsBesidesSilentCheck } from "../lib/silent-check.js";
 import { standHttpCredentials } from "../lib/stand-http-credentials.js";
 import {
@@ -428,13 +429,11 @@ async function requestDraft(world: StepWorld, host: HostConfig): Promise<void> {
     await expect(page).toHaveURL(
       (url) => url.pathname === `${host.eventsPath}/${slug}`,
     );
-    await expect(
-      page.getByRole("heading", { name: "404", exact: true }),
-    ).toBeVisible();
+    await expect(notFoundHeading(page)).toBeVisible();
     await expect(
       page.locator('meta[name="robots"][content*="noindex"]').first(),
     ).toHaveAttribute("content", /noindex/u);
-    notFound.push(await page.getByRole("main").innerText());
+    notFound.push(maskNotFoundVariant(await page.getByRole("main").innerText()));
   }
   expect(notFound[0]).toMatch(/\S/u);
   expect(notFound[0]).toBe(notFound[1]);
@@ -452,9 +451,7 @@ Then(
   async ({ world }) => {
     const record = journey(world).responses.at(-1);
     expect(record?.api).toMatch(/event not found/u);
-    await expect(
-      record!.page.getByRole("heading", { name: "404", exact: true }),
-    ).toBeVisible();
+    await expect(notFoundHeading(record!.page)).toBeVisible();
   },
 );
 Then(

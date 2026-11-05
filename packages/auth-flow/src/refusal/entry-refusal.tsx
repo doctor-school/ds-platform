@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@ds/design-system/button";
 import { Link } from "@ds/design-system/link";
+import { StatusPage } from "@ds/design-system/status-page";
 
 import { ENTRY_REFUSAL_COPY } from "../copy/entry-refusal";
 import type { EntryRefusalReason } from "../server/entry-refusal";
@@ -39,8 +40,8 @@ function clock(seconds: number): string {
 }
 
 /**
- * 003 EARS-72 — the refusal page's content (canvas
- * `design-source/sign-in-refusal.dc.html`): one centred column — heading,
+ * 003 EARS-72 — the refusal state of the platform's one error page
+ * (`StatusPage`, canvas `design-source/sign-in-refusal.dc.html`): heading,
  * text, the primary retry and the way out. A rate-limited refusal with a
  * wait counts down on the disabled retry and opens it at zero; otherwise the
  * retry is open at once. The retry re-opens the door URL (its loading state
@@ -78,21 +79,12 @@ export function EntryRefusal({
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center px-4 py-16 lg:py-24">
-      <div className="flex w-full max-w-xl flex-col items-center gap-6 text-center">
-        <div className="flex flex-col gap-3">
-          <h1 className="text-balance text-3xl font-extrabold leading-title">
-            {title}
-          </h1>
-          <p className="text-pretty text-lg leading-normal text-muted-foreground">{text}</p>
-        </div>
-        <div
-          className={
-            wayOut.kind === "link"
-              ? "flex w-full flex-col items-center gap-4 lg:w-auto lg:flex-row lg:flex-wrap lg:justify-center lg:gap-6"
-              : "flex w-full flex-col items-center gap-4"
-          }
-        >
+    <StatusPage
+      title={title}
+      text={text}
+      actionsLayout={wayOut.kind === "link" ? "row" : "stack"}
+      actions={
+        <>
           <Button
             size="lg"
             className="w-full tabular-nums lg:w-auto lg:min-w-72"
@@ -109,9 +101,9 @@ export function EntryRefusal({
           ) : (
             <SitesLine academyHref={wayOut.academyHref} doctorHref={wayOut.doctorHref} />
           )}
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }
 

@@ -4,6 +4,7 @@ import {
   startMaterialPages,
   type MaterialPages,
 } from "../lib/material-pages.js";
+import { maskNotFoundVariant } from "../lib/not-found-page.js";
 import { waitForClientReady } from "../lib/page-ready.js";
 
 export const test = base.extend<{
@@ -128,7 +129,7 @@ Then(
       body: await page.screenshot({ fullPage: true }),
       contentType: "image/png",
     });
-    const content = await page.locator("main").innerText();
+    const content = maskNotFoundVariant(await page.locator("main").innerText());
     expect(
       (
         await page.goto(
@@ -136,7 +137,7 @@ Then(
         )
       )?.status(),
     ).toBe(404);
-    expect(await page.locator("main").innerText()).toBe(content);
+    expect(maskNotFoundVariant(await page.locator("main").innerText())).toBe(content);
     expect(
       (
         await page.goto(
@@ -144,7 +145,7 @@ Then(
         )
       )?.status(),
     ).toBe(404);
-    expect(await page.locator("main").innerText()).toBe(content);
+    expect(maskNotFoundVariant(await page.locator("main").innerText())).toBe(content);
   },
 );
 Then(
@@ -161,7 +162,7 @@ Then(
       body: await page.screenshot({ fullPage: true }),
       contentType: "image/png",
     });
-    const content = await page.locator("body").innerText();
+    const content = maskNotFoundVariant(await page.locator("body").innerText());
     expect(
       (
         await page.goto(
@@ -169,7 +170,7 @@ Then(
         )
       )?.status(),
     ).toBe(404);
-    expect(await page.locator("body").innerText()).toBe(content);
+    expect(maskNotFoundVariant(await page.locator("body").innerText())).toBe(content);
   },
 );
 Then(

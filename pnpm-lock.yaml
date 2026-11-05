@@ -1076,6 +1076,9 @@ importers:
       '@ds/legal-content':
         specifier: workspace:*
         version: link:../legal-content
+      '@ds/storefront-shell':
+        specifier: workspace:*
+        version: link:../storefront-shell
     devDependencies:
       '@playwright/test':
         specifier: ^1.62.1

@@ -1,0 +1,48 @@
+import { headers } from "next/headers";
+import type { ReactNode } from "react";
+import { StorefrontFooter, StorefrontHeader } from "@ds/storefront-shell";
+import { resolveServerAuth } from "@ds/auth-flow/server";
+import { readSiblingOrigin } from "@ds/storefront-shell/sibling-origin";
+import { doctorShellConfig } from "@/lib/shell-config";
+import { doctorShellAuthState } from "@/lib/auth-flow-routes";
+
+/**
+ * 017 EARS-1 — THE doctor storefront frame: header, the page's one `<main>`
+ * and footer, around `children`.
+ *
+ * Mounted by the `(storefront)` route-group layout for every storefront route
+ * and by the root `app/not-found.tsx` (#2478): an unknown address matches no
+ * route group, so the not-found page has to draw the same frame itself rather
+ * than a bare page — one definition, two mounts, no copy of the layout.
+ *
+ * The chrome itself is `@ds/storefront-shell`, owned ONCE for both storefronts
+ * (#2180, epic #2020 / ADR-0013 A1). This host supplies only VALUES
+ * ({@link doctorShellConfig}) and the resolved sign-in STATE — there is no
+ * doctor-local header, footer or auth-cluster component, which is what stops
+ * the two storefronts drifting apart every time either side ships.
+ *
+ * The sign-in branch is resolved HERE, on the server, from the request headers
+ * (`@ds/auth-flow/server` → the `__Host-ds_session` cookie, ADR-0015 §4) and
+ * handed to the shared chrome as data. That is what makes "exactly one action
+ * cluster, never a transitional state" true of the first byte of HTML rather
+ * than of a settled client effect.
+ *
+ * Reading `headers()` opts every mounting route into dynamic rendering. That is
+ * the correct trade for a per-visitor header: a statically cached shell would
+ * serve one visitor's cluster to everyone.
+ */
+export async function DoctorStorefrontFrame({ children }: { children: ReactNode }) {
+  const auth = await resolveServerAuth(await headers());
+  const config = doctorShellConfig(readSiblingOrigin(process.env, "doctor"));
+
+  return (
+    <div
+      data-testid="storefront-shell"
+      className="flex min-h-screen flex-col bg-background text-foreground"
+    >
+      <StorefrontHeader config={config} auth={doctorShellAuthState(auth)} />
+      <main className="flex-1">{children}</main>
+      <StorefrontFooter config={config} />
+    </div>
+  );
+}

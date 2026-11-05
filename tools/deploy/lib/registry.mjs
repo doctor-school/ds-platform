@@ -36,6 +36,12 @@ export const KEPT_LOCAL_IMAGE_IDS_SHELL = `kept_ids=$(sudo docker images --forma
 /** Root-only on every consuming box; read by the box's own shell, never by this tool. */
 export const REGISTRY_PULL_TOKEN_FILE = "/etc/ds-platform/registry-pull-token";
 export const IMAGES_WORKFLOW = "runtime-images.yml";
+/**
+ * The PR label under which `runtime-images.yml` pushes a PR head's `pr/<image>` set
+ * and records its `images-<sha>` (#3701). Without it a PR run builds and boots from a
+ * tar only: the registry quota cannot carry a full image set per PR push.
+ */
+export const PR_IMAGES_LABEL = "stage-slot";
 /** The manifest keys; each is pulled and tagged locally as `ds-<key>:<sha>`. */
 export const RECORDED_IMAGE_NAMES = Object.freeze(["api", "api-migrate", "portal", "admin", "doctor", "login"]);
 /**
@@ -233,7 +239,8 @@ export function selectImagesRun(runs, { sha, mainOnly, purpose }) {
 
 /**
  * Operator-side resolution of the recorded digests: run → artifact → validated set.
- * `gh(argv)` resolves to stdout; `readText(path)` reads the downloaded manifest.
+ * `gh(argv)` resolves to stdout; `readText(path)` reads the downloaded manifest;
+ * `pr` (a PR consumer's number) only fills the label hint of a refusal.
  */
 export async function resolveRecordedImages({
   sha,
@@ -241,6 +248,7 @@ export async function resolveRecordedImages({
   consumer,
   mainOnly,
   purpose,
+  pr,
   gh,
   readText,
   tmpDir,
@@ -266,9 +274,15 @@ export async function resolveRecordedImages({
     await gh(["run", "download", String(run.databaseId), "-n", name, "-D", tmpDir]);
     text = await readText(join(tmpDir, `${name}.json`));
   } catch (err) {
+    // A PR run records images only while the PR carries the label; say how to get them.
+    const hint =
+      run.event === "pull_request"
+        ? `; a PR run pushes its images only while the PR carries the label \`${PR_IMAGES_LABEL}\`: ` +
+          `\`gh pr edit ${pr ?? "<N>"} --add-label ${PR_IMAGES_LABEL}\`, then retry once the run it starts completes`
+        : "";
     throw new RegistryError(
       `runtime-images run ${run.url} has no readable artifact ${name} ` +
-        `(${err instanceof Error ? err.message.split("\n")[0] : err}) — nothing to ${purpose}`,
+        `(${err instanceof Error ? err.message.split("\n")[0] : err}) — nothing to ${purpose}${hint}`,
     );
   }
   let manifest;

@@ -114,7 +114,7 @@ import {
   verifyImagesScript,
   verifyRunningScript,
 } from "./slot.mjs";
-import { RECORDED_IMAGE_NAMES } from "../deploy/lib/registry.mjs";
+import { PR_IMAGES_LABEL, RECORDED_IMAGE_NAMES } from "../deploy/lib/registry.mjs";
 
 const BASE = "stage.doctor.school";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -2277,6 +2277,29 @@ test("a run without its artifact (expired, never uploaded) refuses by run URL", 
     }),
     (err) => err instanceof SlotError && err.message.includes(RUN_URL) && err.message.includes(`images-${SHA}`),
   );
+});
+
+test("a PR run that pushed nothing names the `stage-slot` label that makes it push (#3701)", async () => {
+  // An unlabelled internal PR run builds and boots from the tar and records no
+  // `images-<sha>`, so a pr-slot must tell the operator how to get the images.
+  await assert.rejects(
+    resolveRecordedImages({
+      slot: "pr-7",
+      sha: SHA,
+      gh: async (argv) => {
+        if (argv[1] === "list") return JSON.stringify([run({ event: "pull_request" })]);
+        throw new Error("no artifact matches");
+      },
+      tmpDir: "/tmp/x",
+      readText: async () => "",
+    }),
+    (err) =>
+      err instanceof SlotError &&
+      err.message.includes(RUN_URL) &&
+      err.message.includes(`label \`${PR_IMAGES_LABEL}\``) &&
+      err.message.includes(`gh pr edit 7 --add-label ${PR_IMAGES_LABEL}`),
+  );
+  assert.equal(PR_IMAGES_LABEL, "stage-slot");
 });
 
 test("verify asserts every local tag's RepoDigests carry exactly the recorded digest", () => {

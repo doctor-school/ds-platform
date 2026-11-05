@@ -355,19 +355,44 @@ join the same lock — the one exception is the `pull_request` run below. The re
 runner must never be run standalone, and out-of-workflow registry writes are outside
 this coordination boundary.
 
-A `pull_request` run (pushing `pr/*` only) takes the per-PR group
+A `pull_request` run takes the per-PR group
 `runtime-images-pr-<N>` with `cancel-in-progress: true` instead (#3561): a newer
-head cancels the superseded build, and `main` never waits behind PR builds. It is
-safe outside the lock because its images carry the label
-`org.opencontainers.image.revision=<head-sha>`, so a PR digest belongs to one head
-and an image-neutral push never re-tags a digest retention may be deleting. `main`
-images carry no such label, so an unchanged service keeps its digest across SHAs.
+head cancels the superseded build, and `main` never waits behind PR builds. It
+pushes `pr/*` only while the PR carries the `stage-slot` label (below); otherwise it
+builds and boots from a tar like a fork PR. It is safe outside the lock because its
+images carry the label `org.opencontainers.image.revision=<head-sha>`, so a PR digest
+belongs to one head and an image-neutral push never re-tags a digest retention may be
+deleting (only the config differs; the layers are shared). `main` images carry no
+such label, so with reproducible layers (below) an image whose inputs a commit does
+not change keeps its digest across SHAs. A `labeled` event for any other label takes
+a group of its own and builds nothing, so it cancels no build.
 GitHub keeps up to 100 pending runs with `queue: max`; additional arrivals are
 cancelled when full. Queue order follows when a run starts waiting, so dispatch
 order is not guaranteed. See
 [GitHub's concurrency contract](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
 `pnpm release:lane` prints the image-build, Stage main and deploy queues with the
 release candidate.
+
+**Quota sizing (#3701).** The registry has a fixed 25 GB quota, and a DELETE frees
+bytes only at the provider's nightly garbage collection. The binding rule is therefore
+**unique bytes pushed in one day + the retention keep-set ≤ the quota** — retention
+running more often does not raise it. Measured on 2026-11-04 before this rule was
+enforced: 28 `main` pushes + ~49 internal-PR pushes ≈ 77 full sets of six images,
+which filled 25 GB within the day, because no push was deduplicated: every
+Dockerfile runs `COPY . .` before the install/build, so every commit rebuilds every
+later layer, and BuildKit wrote fresh file mtimes into them — identical content, new
+layer digest, stored again (aef63ad92 changed only `tools/deploy/`, yet all six
+digests changed). Two mechanisms in `runtime-images.yml` hold the rule:
+
+- **Reproducible layers.** The build job sets a constant `SOURCE_DATE_EPOCH=0` (never
+  the commit time) and both exporters run with `rewrite-timestamp=true`, so a rebuilt
+  layer with identical content gets the identical digest and the registry stores only
+  the layers that actually changed. Content that a build itself makes
+  non-deterministic still differs per build (#3701 records what remains).
+- **PR images on demand.** An internal PR pushes its `pr/*` set only while it carries
+  the `stage-slot` label — the only consumer is a `pr-<N>` stage slot
+  (`tools/staging/README.md`); `pnpm stage:slot up pr-<N>` names the label when the
+  head has no record.
 
 **Activation boundary.** Runs using old workflow revisions (including reruns) retain
 their old concurrency configuration. After this fix merges, observe existing old

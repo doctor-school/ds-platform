@@ -20,12 +20,7 @@ const DOCTOR_FEED = join(REPO, "design-source/doctor-feed.dc.html");
 const quote = (s: string) => s.replace(/"/g, "&quot;");
 
 /** A page canvas and a card canvas side by side, as in `design-source/`. */
-function fixtures(
-  page: string,
-  pageLogic: string,
-  card: string,
-  cardLogic: string,
-): string {
+function fixtures(page: string, pageLogic: string, card: string, cardLogic: string): string {
   const dir = mkdtempSync(join(tmpdir(), "canvas-slots-"));
   const write = (name: string, template: string, logic: string) =>
     writeFileSync(
@@ -37,10 +32,7 @@ function fixtures(
   return join(dir, "page.dc.html");
 }
 
-const SPEC = {
-  section: ["data-screen-label", "events"] as [string, string],
-  cards: ["unit-card"],
-};
+const SPEC = { section: ["data-screen-label", "events"] as [string, string], cards: ["unit-card"] };
 
 const PAGE = `
   <dc-import name="ds-shell" embedded="{{ true }}">
@@ -92,27 +84,20 @@ describe("canvas-slots · extractCanvasSlots", () => {
       `<x-import component-from-global-scope="DsDesignSystem.Card" dc-props="{{ {} }}"></x-import>`,
       `renderVals() { return {}; }`,
     );
-    expect(() => extractCanvasSlots(file, {}, SPEC)).toThrow(
-      /needs a component renderer/,
-    );
+    expect(() => extractCanvasSlots(file, {}, SPEC)).toThrow(/needs a component renderer/);
   });
 
   it("reads the vendored doctor-feed events section: one chrome link and one shape per sample event", () => {
     const out = extractCanvasSlots(
       DOCTOR_FEED,
       { props: { loggedIn: false } },
-      {
-        section: ["data-screen-label", "d-feed · события"],
-        cards: ["unit-event-card"],
-      },
+      { section: ["data-screen-label", "d-feed · события"], cards: ["unit-event-card"] },
       (name, props) => {
         expect(name).toBe("WebinarCard");
         return `<div data-webinar-card><a href="${String(props.href)}">${String(props.title)}</a></div>`;
       },
     );
-    expect(out.chrome).toEqual([
-      { kind: "link", label: "Все события по специальности →" },
-    ]);
+    expect(out.chrome).toEqual([{ kind: "link", label: "Все события по специальности →" }]);
     expect(out.cards.length).toBeGreaterThan(0);
     expect(new Set(out.cards.map((c) => c.join()))).toEqual(new Set(["link"]));
   });
@@ -146,9 +131,7 @@ describe("canvas-slots · diffSlots", () => {
   it("fails a control missing from every card", () => {
     expect(
       diffSlots(canvas, { chrome: canvas.chrome, cards: [["link"], ["link"]] }),
-    ).toEqual([
-      "card shape: app [link] on 2 card(s) — the canvas draws [link · button]",
-    ]);
+    ).toEqual(["card shape: app [link] on 2 card(s) — the canvas draws [link · button]"]);
   });
 
   it("fails a control moved from the cards into the section chrome (the #3629 class)", () => {
@@ -361,10 +344,7 @@ const ACCOUNT_SECTION = {
 const accountCanvas = (phase: string, congress: string) =>
   extractCanvasSlots(
     ACCOUNT_PROFILE,
-    {
-      props: { host: "витрина врача", variant: "Разделы", congress },
-      state: { phase },
-    },
+    { props: { host: "витрина врача", variant: "Разделы", congress }, state: { phase } },
     ACCOUNT_SECTION,
   );
 
@@ -383,8 +363,7 @@ describe("canvas-slots · a section with no repeated cards (#3758, /account)", (
   });
 
   it("reads the vendored account-profile «Разделы» section, the phone and congress rows by state", () => {
-    const labels = (s: SlotStructure) =>
-      s.chrome.map((i) => `${i.kind} ${i.label}`);
+    const labels = (s: SlotStructure) => s.chrome.map((i) => `${i.kind} ${i.label}`);
     const withCongress = accountCanvas("confirmed", "есть заявка");
     expect(withCongress.cards).toEqual([]);
     expect(labels(withCongress)).toEqual([
@@ -418,20 +397,13 @@ describe("canvas-slots · a section with no repeated cards (#3758, /account)", (
 
   it("reconciles the cabinet's code-only «Сменить пароль» helper through the one allowlist step, no stale entry", () => {
     const { entries } = JSON.parse(
-      readFileSync(
-        join(REPO, "packages/e2e/lib/canvas-structure-allowlist.json"),
-        "utf8",
-      ),
+      readFileSync(join(REPO, "packages/e2e/lib/canvas-structure-allowlist.json"), "utf8"),
     ) as { entries: AllowlistEntry[] };
     const canvas = accountCanvas("confirmed", "есть заявка");
     const app: SlotStructure = {
       chrome: canvas.chrome.map((i) =>
         i.label?.startsWith("Пароль")
-          ? {
-              ...i,
-              label:
-                "Пароль Сменить пароль Отправим код для сброса пароля на email →",
-            }
+          ? { ...i, label: "Пароль Сменить пароль Отправим код для сброса пароля на email →" }
           : i,
       ),
       cards: [],
@@ -439,11 +411,7 @@ describe("canvas-slots · a section with no repeated cards (#3758, /account)", (
     expect(diffSlots(canvas, app)).not.toEqual([]);
     const where = {
       canvas: "account-profile.dc.html",
-      props: {
-        host: "витрина врача",
-        variant: "Разделы",
-        congress: "есть заявка",
-      },
+      props: { host: "витрина врача", variant: "Разделы", congress: "есть заявка" },
       region: "Профиль · Разделы",
     };
     const decided = applySlotAllowlist(entries, where, canvas, app);

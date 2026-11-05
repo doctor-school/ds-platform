@@ -20,13 +20,6 @@ import type {
 } from "./canvas-structure.js";
 import { canvasPath } from "./rendered-structure.js";
 
-const ALLOWLIST = JSON.parse(
-  readFileSync(
-    new URL("./canvas-structure-allowlist.json", import.meta.url),
-    "utf8",
-  ),
-) as { entries: AllowlistEntry[] };
-
 /**
  * #3728 — the APP half of the repeated-slot check (`./canvas-slots.ts`): the
  * visible controls of one rendered section, split into its chrome (outside
@@ -39,6 +32,10 @@ export interface RenderedSlotSection {
   /** One repeated card's root, e.g. `[data-webinar-card]`; absent = a chrome-only section. */
   card?: string;
 }
+
+const ALLOWLIST = JSON.parse(
+  readFileSync(new URL("./canvas-structure-allowlist.json", import.meta.url), "utf8"),
+) as { entries: AllowlistEntry[] };
 
 export async function readRenderedSlots(
   page: Page,
@@ -54,52 +51,44 @@ export async function readRenderedSlots(
     const section = document.querySelector(root);
     if (!section) throw new Error(`no section ${root}`);
     const collapse = (t: string) => t.replace(/\s+/g, " ").trim();
-    // #3758: labels are read as AUTHORED — the canvas tokenizer reads template
-    // text, not CSS — so a `text-transform` (the cabinet's uppercase row
-    // eyebrows «ПАРОЛЬ») must not leak into `innerText` for the read.
+    // Labels are read as AUTHORED — the canvas tokenizer reads template text,
+    // not CSS — so a `text-transform` («← ДОКУМЕНТЫ» #3757, the cabinet's
+    // uppercase row eyebrows «ПАРОЛЬ» #3758) must not leak into `innerText`.
     const authored = document.createElement("style");
     authored.textContent = "* { text-transform: none !important; }";
     document.head.append(authored);
-    try {
-      const cards = card ? [...section.querySelectorAll(card)] : [];
-      const shapes: string[][] = cards.map(() => []);
-      const chrome: { kind: string; label: string | null }[] = [];
-      for (const el of section.querySelectorAll("a, button, input, summary")) {
-        const box = el.getBoundingClientRect();
-        const shown =
-          el.checkVisibility({
-            checkOpacity: true,
-            checkVisibilityCSS: true,
-          }) &&
-          box.width > 1 &&
-          box.height > 1 &&
-          !el.closest('[aria-hidden="true"]');
-        if (!shown) continue;
-        if (el.parentElement?.closest("a, button, summary")) continue;
-        const kind = KIND[el.tagName]!;
-        const at = cards.findIndex((c) => c.contains(el));
-        if (at !== -1) {
-          shapes[at]!.push(kind);
-          continue;
-        }
-        let label: string | null;
-        if (el.tagName === "INPUT") {
-          label = collapse(el.getAttribute("placeholder") ?? "") || null;
-        } else {
-          // `innerText` (#3758) keeps a separator between block children — the
-          // cabinet row «Пароль» / «Сменить пароль» / helper reads as the canvas
-          // tokenizer's spaced words — and drops hidden text as rendering does;
-          // the `authored` style above keeps CSS `text-transform` («← ДОКУМЕНТЫ»,
-          // #3757) out of it.
-          const text = collapse((el as HTMLElement).innerText ?? "");
-          label = /[\p{L}\p{N}]/u.test(text) ? text : null;
-        }
-        chrome.push({ kind, label });
+    const cards = card ? [...section.querySelectorAll(card)] : [];
+    const shapes: string[][] = cards.map(() => []);
+    const chrome: { kind: string; label: string | null }[] = [];
+    for (const el of section.querySelectorAll("a, button, input, summary")) {
+      const box = el.getBoundingClientRect();
+      const shown =
+        el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) &&
+        box.width > 1 &&
+        box.height > 1 &&
+        !el.closest('[aria-hidden="true"]');
+      if (!shown) continue;
+      if (el.parentElement?.closest("a, button, summary")) continue;
+      const kind = KIND[el.tagName]!;
+      const at = cards.findIndex((c) => c.contains(el));
+      if (at !== -1) {
+        shapes[at]!.push(kind);
+        continue;
       }
-      return { chrome, cards: shapes };
-    } finally {
-      authored.remove();
+      let label: string | null;
+      if (el.tagName === "INPUT") {
+        label = collapse(el.getAttribute("placeholder") ?? "") || null;
+      } else {
+        // `innerText` (#3758) keeps a separator between block children — the
+        // cabinet row «Пароль» / «Сменить пароль» / helper reads as the canvas
+        // tokenizer's spaced words — and drops hidden text as rendering does.
+        const text = collapse((el as HTMLElement).innerText ?? "");
+        label = /[\p{L}\p{N}]/u.test(text) ? text : null;
+      }
+      chrome.push({ kind, label });
     }
+    authored.remove();
+    return { chrome, cards: shapes };
   }, region);
   return {
     chrome: read.chrome as StructureItem[],
@@ -145,9 +134,7 @@ export async function expectSlotSectionMatchesCanvas(
       (entry) =>
         `stale allowlist entry (${entry.delta}): ${entry.item.kind} «${entry.item.label ?? "icon"}» — ${entry.source}`,
     ),
-    ...diffSlots(decided.canvas, decided.app, {
-      maskDigits: options.section.maskDigits,
-    }),
+    ...diffSlots(decided.canvas, decided.app, { maskDigits: options.section.maskDigits }),
   ];
   const report = lines.length
     ? [

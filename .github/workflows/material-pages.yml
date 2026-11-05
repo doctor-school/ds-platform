@@ -30,10 +30,12 @@ jobs:
     env:
       TURBO_TELEMETRY_DISABLED: 1
       E2E_MATERIAL_DATABASE_URL: postgres://ds:ds@127.0.0.1:5432/ds_probe_3702
-      E2E_MATERIAL_ARTIFACT_DIR: ${{ runner.temp }}/material-pages-3702
-      E2E_REPORT_DIR: ${{ runner.temp }}/material-pages-3702/report
       E2E_PUBLIC_LOG: 1
     steps:
+      - name: Set owned runtime paths on the allocated runner
+        run: |
+          echo "E2E_MATERIAL_ARTIFACT_DIR=$RUNNER_TEMP/material-pages-3702" >> "$GITHUB_ENV"
+          echo "E2E_REPORT_DIR=$RUNNER_TEMP/material-pages-3702/report" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

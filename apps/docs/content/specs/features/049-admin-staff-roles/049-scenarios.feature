@@ -45,6 +45,17 @@ Feature: 049 — Admin staff roles
     When a revocation naming the superadministrator role is sent to the staff-access endpoint
     Then it is refused and nothing changes
 
+  @EARS-5
+  Scenario: The platform administrator role of a superadministrator cannot be revoked in «Доступы»
+    Given a superadministrator is signed in to the admin with a second factor verified within the last 30 minutes
+    And another account holds the superadministrator role and the platform administrator role
+    When the superadministrator opens «Доступы»
+    Then the other account's platform administrator row has no «Отозвать»
+    When a revocation of the platform administrator role of the other account is sent to the staff-access endpoint
+    Then it is refused as «STAFF_REVOKE_SUPERADMIN_HOLDER» with the reason
+    And the other account still holds the superadministrator role and the platform administrator role
+    And none of its admin sessions is ended and nothing is recorded
+
   @EARS-6
   Scenario: The operator makes the first superadministrator, and the last one cannot be removed
     Given no account holds the superadministrator role
@@ -58,13 +69,19 @@ Feature: 049 — Admin staff roles
     Then it is refused because the account is the last superadministrator, and nothing changes
     When the operator runs the superadmin grant for "nobody@example.org"
     Then it is refused, no account is created and nothing changes
+    When the operator runs the superadmin grant for "owner@example.org" naming an acting subject no IdP account has
+    Then it is refused with the reason and nothing changes
 
   @EARS-7 @EARS-8
   Scenario: A broadcast director creates an event and runs its broadcast
     Given a broadcast director is signed in to the admin
     When the director looks at the admin navigation
     Then the navigation has only «Мероприятия»
+    When the director picks a project on the create form
+    Then the form fills in the event defaults from that project
     When the director creates an event "Школа кардиологии: эфир 12"
+    And links an expert to it
+    Then the event card shows the expert's name
     And configures its stream and publishes it
     And opens the room and then closes it
     Then each transition succeeds and is recorded with the director as actor
@@ -76,7 +93,7 @@ Feature: 049 — Admin staff roles
     Given a broadcast director is signed in to the admin
     When the director opens "/projects" directly
     Then the shell lands on "/projects" showing "У этой учётной записи нет прав администратора."
-    And the project, recording, legacy-broadcast, roster and staff-access endpoints refuse the director
+    And the project write, recording, legacy-broadcast, roster and staff-access endpoints refuse the director
     Given the IdP has withdrawn the director's role
     When the director sends a live-revalidated write on an event
     Then it is refused as «BROADCAST_DIRECTOR_REQUIRED» and nothing changes

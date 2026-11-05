@@ -105,7 +105,7 @@ lang: ru
 - **EARS-1** читается с `superadmin` вместо `platform_admin`: пункт навигации, маршрут и каждый эндпоинт доступа сотрудников (`roles: [superadmin]`, `revalidate: "live"`) обслуживают только обладателя `superadmin`; администратор платформы без него получает отказ (049 EARS-3). Step-up (EARS-8) не меняется.
 - **EARS-2** показывает ещё каждого обладателя `superadmin` («Суперадминистратор», без «Отозвать») и `broadcast_director` («Режиссёр трансляций»), оба с пустым мероприятием (049 EARS-5).
 - **EARS-3** — выдаваемые роли: `platform_admin`, `event-registrar`, `congress-program-committee` и `broadcast_director` (без мероприятия, путь `platform_admin` из EARS-4…EARS-6); выдача с `superadmin` отклоняется на валидации (049 EARS-4).
-- **EARS-7** — отзыв с `superadmin` отклоняется на валидации; суперадминистратор не может отозвать собственный `platform_admin`; `superadmin` выдаётся и снимается только операторской командой 049 EARS-6.
+- **EARS-7** — отзыв с `superadmin` отклоняется на валидации; суперадминистратор не может отозвать собственный `platform_admin`, как и `platform_admin` учётной записи, которая ещё держит `superadmin` (`409 STAFF_REVOKE_SUPERADMIN_HOLDER`, 049 EARS-5); `superadmin` выдаётся и снимается только операторской командой 049 EARS-6.
 - «Администратор платформы», действующий в EARS-2…EARS-9, — это суперадминистратор.
 
 ## Инварианты

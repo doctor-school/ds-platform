@@ -105,7 +105,7 @@ lang: en
 - **EARS-1** reads `superadmin` where it says `platform_admin`: the navigation entry, the route and every staff-access endpoint (`roles: [superadmin]`, `revalidate: "live"`) serve only a holder of `superadmin`; a platform administrator without it is refused (049 EARS-3). Step-up (EARS-8) is unchanged.
 - **EARS-2** also lists every holder of `superadmin` («Суперадминистратор», no «Отозвать») and of `broadcast_director` («Режиссёр трансляций»), both with an empty event (049 EARS-5).
 - **EARS-3** — the grantable roles are `platform_admin`, `event-registrar`, `congress-program-committee` and `broadcast_director` (no event, the `platform_admin` path of EARS-4…EARS-6); a grant naming `superadmin` is refused at validation (049 EARS-4).
-- **EARS-7** — a revocation naming `superadmin` is refused at validation; the superadministrator cannot revoke their own `platform_admin`; `superadmin` is given and removed only by the operator command of 049 EARS-6.
+- **EARS-7** — a revocation naming `superadmin` is refused at validation; the superadministrator cannot revoke their own `platform_admin`, nor the `platform_admin` of an account that still holds `superadmin` (`409 STAFF_REVOKE_SUPERADMIN_HOLDER`, 049 EARS-5); `superadmin` is given and removed only by the operator command of 049 EARS-6.
 - The «platform administrator» acting in EARS-2…EARS-9 is the superadministrator.
 
 ## Invariants

@@ -1,6 +1,6 @@
 # Admin spec-owned materials originals
 
-`--project materials` in `../playwright.config.ts` executes the three existing
+`--project materials` in `../playwright.config.ts` executes the six existing
 048 originals tagged `@material-admin-authoring`. The source retains
 `@host:academy`; the Admin project selects the authoring originals explicitly
 and uses strict generation. The source Background publishes the named Expert
@@ -31,3 +31,12 @@ The existing operational receipt gate requires each exact title once with no
 missing/extra original, skip, retry or flake. The Admin CI job runs and uploads
 that report independently of the legacy flows result. Keep the legacy
 same-account/two-tab conflict test: it covers a different identity boundary.
+
+The empty-body original observes the real publish refusal, the unchanged stored
+draft and the public feed's lack of its card. The paste original writes an HTML
+fragment to the browser clipboard and uses the editor's native paste command;
+it checks that its paragraph remains and no image/table element survives. The
+unsaved-preview original drives the real reading-page preview and banner, then
+compares the stored material row set and the real public feed before and after.
+These are three new originals; the previous expert refusal, two-administrator
+conflict and kind filter remain in the same six-title receipt.

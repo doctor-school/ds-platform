@@ -13,13 +13,28 @@ const report = (specs: unknown[]) => ({
   errors: [],
 });
 describe("operational original receipt gate", () => {
-  it("accepts the exact three material originals and refuses an incidental fourth", () => {
+  it("accepts the six retained material originals and refuses an incidental seventh or the previous three-only receipt", () => {
     const originals = operationalOriginals.materials;
     expect(originals).toEqual([
+      "A material without a body cannot be published",
       "A column without an expert is refused",
+      "Pasted images and tables are stripped by the editor",
+      "The administrator previews an unsaved material",
       "A stale edit is refused",
       "The administrator finds materials by kind",
     ]);
+    expect(() =>
+      assertOperationalReport(
+        report(
+          [
+            "A column without an expert is refused",
+            "A stale edit is refused",
+            "The administrator finds materials by kind",
+          ].map(passed),
+        ),
+        originals,
+      ),
+    ).toThrow("identity mismatch");
     expect(() =>
       assertOperationalReport(report(originals.map(passed)), originals),
     ).not.toThrow();

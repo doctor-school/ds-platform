@@ -294,7 +294,7 @@ test.describe("048 — «Материалы» in the live admin", () => {
     await expect(page.getByTestId("material-partner-clear")).toHaveCount(0);
   });
 
-  test("048 EARS-4: a draft without text is refused at «Текст» and stays a draft; with text it publishes with its first-publication date", async ({
+  test("048 EARS-4: a refused empty-body error clears after typing; saved text publishes with its first-publication date", async ({
     page,
   }) => {
     const title = `Пустая новость ${Date.now()}`;
@@ -305,10 +305,6 @@ test.describe("048 — «Материалы» in the live admin", () => {
     await expect(page.getByTestId("material-body-error")).toContainText(
       "Чтобы опубликовать материал, напишите текст.",
     );
-    await expect(page.getByTestId("material-lifecycle-error")).toContainText(
-      "Материал пока нельзя опубликовать — чего не хватает, отмечено у полей.",
-    );
-    await expect(page.getByTestId("material-status")).toHaveText("Черновик");
 
     // Unsaved text holds the publish: the saved version is what goes out.
     await writeBody(page, "Текст новости.");

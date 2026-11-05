@@ -5,6 +5,7 @@ import {
   readFileSync,
   readdirSync,
   readlinkSync,
+  realpathSync,
 } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
@@ -39,10 +40,56 @@ export function feedEntryLog(event: Record<string, unknown>) {
   );
 }
 
+interface FeedEntryProcessIdentity {
+  name: "api" | "doctor";
+  platform: NodeJS.Platform;
+  root: string;
+  command: string;
+  cwd?: string;
+  executable?: string;
+  nodeExecutable?: string;
+}
+
+export function assertFeedEntryProcessIdentity(
+  identity: FeedEntryProcessIdentity,
+) {
+  const normalize = (value: string) => {
+    const path = value.replaceAll("\\", "/");
+    return identity.platform === "win32" ? path.toLowerCase() : path;
+  };
+  if (identity.platform === "linux") {
+    if (
+      normalize(identity.cwd ?? "") !==
+      `${normalize(identity.root)}/apps/${identity.name}`
+    )
+      throw new Error("Feed-entry listener has the wrong worktree cwd");
+    if (
+      !identity.executable ||
+      !identity.nodeExecutable ||
+      normalize(identity.executable) !== normalize(identity.nodeExecutable)
+    )
+      throw new Error("Feed-entry listener is not the owning Node executable");
+    // Next replaces /proc cmdline with this title after boot; cwd + exe remain OS-owned.
+    if (
+      identity.name === "doctor" &&
+      /^next-server \(v[^()\s]+\)\s*$/.test(identity.command)
+    )
+      return;
+  } else if (identity.platform !== "win32") {
+    throw new Error("Unsupported feed-entry process identity platform");
+  }
+  const command = normalize(identity.command);
+  if (
+    !command.includes(normalize(identity.root)) ||
+    !command.includes(
+      identity.name === "api" ? "apps/api/dist/main.js" : "next/dist/bin/next",
+    )
+  )
+    throw new Error("Feed-entry listener has the wrong process identity");
+}
+
 export function verifyOwnedFeedEntryListeners() {
   if (process.env.E2E_FEED_ENTRY_BOOT !== "1") return;
-  const normalize = (value: string) =>
-    value.replaceAll("\\", "/").toLowerCase();
   for (const [name, url] of [
     ["api", process.env.E2E_API_URL],
     ["doctor", process.env.E2E_DOCTOR_URL],
@@ -50,6 +97,11 @@ export function verifyOwnedFeedEntryListeners() {
     const port = Number(new URL(url!).port);
     let pid: number;
     let command: string;
+    const identity: Omit<FeedEntryProcessIdentity, "command"> = {
+      name,
+      platform: process.platform,
+      root: feedEntryRoot,
+    };
     if (process.platform === "win32") {
       const connections = execFileSync("netstat.exe", ["-ano", "-p", "tcp"], {
         encoding: "utf8",
@@ -104,20 +156,19 @@ export function verifyOwnedFeedEntryListeners() {
         "\0",
         " ",
       );
-      expect(readlinkSync(`/proc/${pid}/cwd`)).toBe(
-        resolve(feedEntryRoot, "apps", name),
-      );
+      identity.cwd = readlinkSync(`/proc/${pid}/cwd`);
+      identity.executable = readlinkSync(`/proc/${pid}/exe`);
+      identity.nodeExecutable = realpathSync(process.execPath);
     }
-    expect(normalize(command)).toContain(normalize(feedEntryRoot));
-    expect(normalize(command)).toContain(
-      name === "api" ? "apps/api/dist/main.js" : "next/dist/bin/next",
-    );
+    assertFeedEntryProcessIdentity({ ...identity, command });
     feedEntryLog({
       command: "verify actual owned listener PID and worktree entry",
       name,
       port,
       pid,
       entry: command.trim(),
+      cwd: identity.cwd,
+      executable: identity.executable,
     });
   }
 }

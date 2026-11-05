@@ -39,7 +39,7 @@ for (const viewer of ["guest", "doctor"] as const) {
       // #2478 — a route's own `notFound()` inside the `(storefront)` group
       // (the event page on an unknown slug) renders inside the group layout's
       // frame, never a second one. The route streams (`loading.tsx`), so its
-      // status is not asserted here (follow-up owned by the lead).
+      // status is not asserted here (the 200 is tracked in #3746).
       test(`#2478: ${EVENT_PATH} is the not-found page inside one shell`, async ({
         page,
       }) => {

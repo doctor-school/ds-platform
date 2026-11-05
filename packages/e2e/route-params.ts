@@ -83,6 +83,11 @@ export const routeParams: RouteParamsMap = Object.freeze({
     "/events/[slug]": () => golden.events.upcoming.slug,
     "/events/[slug]/room": () => golden.events.live.slug,
     "/documents/[slug]": firstPublishedDocumentSlug,
+    /**
+     * The 018 specialty feed: any code of the closed `specialties_minzdrav`
+     * book, which every environment seeds whole (ADR-0016 §5).
+     */
+    "/feed/[specialty]": () => "kardiologiya",
   }),
 });
 

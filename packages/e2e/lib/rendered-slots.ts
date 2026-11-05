@@ -51,6 +51,12 @@ export async function readRenderedSlots(
     const section = document.querySelector(root);
     if (!section) throw new Error(`no section ${root}`);
     const collapse = (t: string) => t.replace(/\s+/g, " ").trim();
+    // Labels are read as AUTHORED — the canvas tokenizer reads template text,
+    // not CSS — so a `text-transform` («← ДОКУМЕНТЫ» #3757, the cabinet's
+    // uppercase row eyebrows «ПАРОЛЬ» #3758) must not leak into `innerText`.
+    const authored = document.createElement("style");
+    authored.textContent = "* { text-transform: none !important; }";
+    document.head.append(authored);
     const cards = card ? [...section.querySelectorAll(card)] : [];
     const shapes: string[][] = cards.map(() => []);
     const chrome: { kind: string; label: string | null }[] = [];
@@ -73,20 +79,15 @@ export async function readRenderedSlots(
       if (el.tagName === "INPUT") {
         label = collapse(el.getAttribute("placeholder") ?? "") || null;
       } else {
-        // #3757 — the rendered text NODES, not `innerText`: `innerText` applies
-        // CSS `text-transform` («← ДОКУМЕНТЫ»), and the canvas reader takes the
-        // source text, so the uppercase styling both sides draw read unequal.
-        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-        let raw = "";
-        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-          const parent = n.parentElement;
-          if (parent?.checkVisibility({ checkVisibilityCSS: true })) raw += n.nodeValue ?? "";
-        }
-        const text = collapse(raw);
+        // `innerText` (#3758) keeps a separator between block children — the
+        // cabinet row «Пароль» / «Сменить пароль» / helper reads as the canvas
+        // tokenizer's spaced words — and drops hidden text as rendering does.
+        const text = collapse((el as HTMLElement).innerText ?? "");
         label = /[\p{L}\p{N}]/u.test(text) ? text : null;
       }
       chrome.push({ kind, label });
     }
+    authored.remove();
     return { chrome, cards: shapes };
   }, region);
   return {

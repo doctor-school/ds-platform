@@ -221,7 +221,15 @@ function findAll(nodes: TemplateNode[], test: (n: ElementNode) => boolean): Elem
 
 // ── logic evaluation ────────────────────────────────────────────────────────
 
+// The DC runtime runs `renderVals()` with the page's `React` global, and some
+// canvases build an element value there (`account-profile.dc.html`'s
+// `footLogoEl`). The check reads controls from the TEMPLATE only, so the
+// element is kept as an inert descriptor; were a template ever to interpolate
+// one, it would become text, never a control.
 const DC_LOGIC_STUB = `
+const React = Object.freeze({
+  createElement: (type, props, ...children) => ({ $$dcElement: type, props, children }),
+});
 class DCLogic {
   constructor() { this.props = {}; this.state = {}; }
   setState(update) {

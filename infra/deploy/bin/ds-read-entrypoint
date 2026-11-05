@@ -13,15 +13,18 @@
 # arguments and would serve the full deploy verb set to the read key. Old trees never
 # write this path, and this file never execs or sources ds-deploy-entrypoint; the only
 # box programs it runs are `ds-release check prod` (fixed words) and, over the hop key,
-# the data entrypoint's `check`, `read-schema` and the recovery verbs (an older data
-# entrypoint rejects them: fail-closed), and ds-recovery (#3662).
+# the data entrypoint's `check`, `read-schema`, `rehearse`, `rehearsal-status` and the
+# recovery verbs (an older data entrypoint rejects them: fail-closed), and ds-recovery
+# (#3662).
 #
 # It serves READ_VERBS below on the prod box only and rejects every other verb with
-# exit 2. `schema` leaves as CMS ciphertext to the recipient certificate installed
+# exit 2. `schema`, `rehearse` and `rehearsal-status` leave as CMS ciphertext to the recipient certificate installed
 # with the tooling tree (READ_RECIPIENT), never plaintext: the client's stdout is a
 # public Actions artifact. `capabilities` answers its verb list; `recovery-bundle` and
 # `recovery-check` (#3662) answer status lines only (RECOVERY_LINE_RE): no value, no
 # fingerprint, no ciphertext — the bundle's ciphertext goes to the pgBackRest bucket.
+# `rehearse` / `rehearsal-status` (#3648) add one plaintext line on stderr, the state
+# word (REHEARSAL_STATE_RE) prod-observe.yml prints; everything else stays encrypted.
 #
 # Installed as /usr/local/bin/ds-read-entrypoint beside ds-release and
 # ds-deploy-entrypoint, by the same install step (tools/deploy/lib/remote.mjs).
@@ -65,7 +68,8 @@ accepted() { logger -t "$TAG" -p auth.info "accepted: $(sanitised)" || true; }
 # The verbs it serves (spec §8 (g): S1 serves `capabilities` and `schema`; #3662 adds
 # the key custody); prod-observe.yml / recovery-custody.yml refuse a verb
 # `capabilities` does not name.
-READ_VERBS='capabilities schema recovery-bundle recovery-check'
+READ_VERBS='capabilities schema rehearse rehearsal-status recovery-bundle recovery-check'
+SHA_RE='^[0-9a-f]{40}$'
 # The fixed failure reasons of a read (exit 1), the same list as the data
 # entrypoint's; a reason from the data box outside it reaches the client as
 # `the read failed`.
@@ -97,6 +101,13 @@ RECOVERY_CUSTODIANS=$ROOT/usr/local/lib/ds-platform/tree/infra/deploy/recovery/c
 RECOVERY_LINE_RE='^(api-prod|data-prod) (MATCH|MISSING|STORED [0-9]{8}T[0-9]{6}Z members [0-9]{1,3}|STALE [0-9]{1,5}d|MISMATCH [A-Za-z0-9_.:-]{1,80})$'
 # A ds-recovery refusal or failure: its own fixed text, bounded.
 RECOVERY_REASON_RE='^ds-recovery: [A-Za-z0-9 #().,:/_-]{1,200}$'
+# #3648: the rehearsal's input — the SHA's tree from codeload, as the -driver unit
+# downloads it, once GitHub says the SHA is contained in `main`.
+CODELOAD=$(override DS_ENTRYPOINT_CODELOAD https://codeload.github.com/doctor-school/ds-platform/tar.gz)
+GITHUB_API=$(override DS_ENTRYPOINT_GITHUB_API https://api.github.com/repos/doctor-school/ds-platform)
+MAX_REHEARSE_BYTES=$((16 * 1024 * 1024))
+# The state words of the rehearsal answers, the one plaintext a rehearsal prints.
+REHEARSAL_STATE_RE='^(started|running|no pending migrations|succeeded|failed|absent)$'
 
 read_fail() {
   printf '%s: %s\n' "$TAG" "$1" >&2
@@ -140,13 +151,23 @@ read_release_check() {
   case $rc in 0) ;; 3) read_fail "a release step is running" ;; 124) read_fail "the read timed out" ;; *) read_fail "the read failed" ;; esac
 }
 
-# The verb's whole answer, encrypted to READ_RECIPIENT (CMS AuthEnvelopedData,
-# AES-256-GCM, DER): only the ciphertext reaches stdout.
-read_encrypted() {
-  local data_verb=$1 rc=0 reason
+read_workdir() {
+  [[ -n ${read_work:-} ]] && return 0
   read_work=$(mktemp -d) # global: the EXIT trap outlives this function; root-only (0700)
   trap 'rm -rf -- "${read_work:-}"' EXIT
-  data_prod_hop "$data_verb" >"$read_work/answer.json" 2>"$read_work/stderr" || rc=$?
+}
+
+# The verb's whole answer, encrypted to READ_RECIPIENT (CMS AuthEnvelopedData,
+# AES-256-GCM, DER): only the ciphertext reaches stdout. argv: the data request, then
+# optionally the file the hop sends as its stdin.
+read_encrypted() {
+  local data_request=$1 stdin_file=${2-} data_verb=${1%% *} rc=0 reason
+  read_workdir
+  if [[ -n $stdin_file ]]; then
+    data_prod_hop_in "$data_request" <"$stdin_file" >"$read_work/answer.json" 2>"$read_work/stderr" || rc=$?
+  else
+    data_prod_hop "$data_request" >"$read_work/answer.json" 2>"$read_work/stderr" || rc=$?
+  fi
   case $rc in
     0) ;;
     1)
@@ -158,10 +179,92 @@ read_encrypted() {
     *) read_fail "the read failed" ;;
   esac
   [[ -s $read_work/answer.json ]] || read_fail "the read failed"
+  [[ $data_verb != rehearse && $data_verb != rehearsal-status ]] || rehearsal_state "$read_work/answer.json"
   openssl cms -encrypt -binary -aes-256-gcm -outform DER -in "$read_work/answer.json" \
     -out "$read_work/result.cms" "$READ_RECIPIENT" >/dev/null 2>&1 ||
     refuse "openssl cannot encrypt to the recipient certificate"
   cat -- "$read_work/result.cms"
+}
+
+# --- the migration rehearsal (Issue #3648; spec §5 «Migration rehearsal.») ----------
+# The answer's state word, the one plaintext line (stderr) of a rehearsal verb; an
+# answer without one of REHEARSAL_STATE_RE is a failed read.
+rehearsal_state() {
+  local state
+  state=$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d["state"] if isinstance(d,dict) and isinstance(d.get("state"),str) else "")' \
+    "$1" 2>/dev/null) || state=
+  [[ $state =~ $REHEARSAL_STATE_RE ]] || read_fail "the read failed"
+  printf '%s: state %s\n' "$TAG" "$state" >&2
+}
+
+# Tree provenance, as the box-side rollback refusal checks it (release-driver
+# compare_status): compare refs/heads/main...<sha> (the branch, never a tag named
+# `main`) must be `behind` (an ancestor of main) or
+# `identical`; anything else — `ahead`, `diverged`, a 404, a rate limit, a network
+# error — is refused (fail closed): a rehearsal runs reviewed migration SQL only.
+rehearse_on_main() {
+  local body status
+  body=$(curl -fsS --proto '=https' --max-time 30 -H 'Accept: application/vnd.github+json' \
+    "$GITHUB_API/compare/refs/heads/main...$1" 2>/dev/null) ||
+    reject "cannot confirm $1 is contained in main (GitHub compare unavailable)"
+  status=$(printf '%s' "$body" |
+    python3 -I -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status","") if isinstance(d,dict) else "")' \
+      2>/dev/null) || status=
+  case $status in
+    behind | identical) ;;
+    *) reject "$1 is not contained in main (compare status: ${status:-unknown})" ;;
+  esac
+}
+
+# The SHA's codeload tree, as root; only apps/api/drizzle/*.sql and
+# meta/_journal.json go on, checked member by member like `ship` (no absolute or ..
+# path, regular files only, at most MAX_REHEARSE_BYTES), repacked as drizzle/....
+read -r -d '' REHEARSE_ARCHIVE_PY <<'PY' || true
+import io, re, sys, tarfile
+src, dest, cap = sys.argv[1], sys.argv[2], int(sys.argv[3])
+SQL = re.compile(r"apps/api/drizzle/([A-Za-z0-9_]{1,128}\.sql)")
+JOURNAL = "apps/api/drizzle/meta/_journal.json"
+def stop(reason):
+    sys.stdout.write(reason + "\n")
+    sys.exit(1)
+picked, total = [], 0
+try:
+    with tarfile.open(src, mode="r:gz") as tar:
+        for m in tar:
+            parts = m.name.split("/")
+            if m.name.startswith("/") or ".." in parts:
+                stop("the tree holds an absolute or .. path")
+            rest = "/".join(p for p in parts[1:] if p not in ("", "."))
+            sql = SQL.fullmatch(rest)
+            if not (sql or rest == JOURNAL):
+                continue
+            if not m.isreg():
+                stop("a migration member is not a regular file")
+            total += m.size
+            if total > cap:
+                stop("the migrations exceed the archive cap")
+            name = "drizzle/" + (sql.group(1) if sql else "meta/_journal.json")
+            picked.append((name, tar.extractfile(m).read()))
+except (tarfile.TarError, EOFError, OSError):
+    stop("the tree is not a readable gzip tar stream")
+if not any(n == "drizzle/meta/_journal.json" for n, _ in picked):
+    stop("the tree has no migration journal")
+with tarfile.open(dest, mode="w:gz") as out:
+    for name, data in sorted(picked):
+        info = tarfile.TarInfo(name)
+        info.size, info.mode = len(data), 0o644
+        out.addfile(info, io.BytesIO(data))
+PY
+
+rehearse_archive() {
+  local sha=$1
+  command -v curl >/dev/null || refuse "curl is not installed"
+  read_workdir
+  curl -fsSL --proto '=https' --retry 3 --max-time 300 --max-filesize $((1024 * 1024 * 1024)) \
+    -o "$read_work/tree.tar.gz" "$CODELOAD/$sha" 2>/dev/null || read_fail "the read failed"
+  python3 -I -X utf8 -c "$REHEARSE_ARCHIVE_PY" "$read_work/tree.tar.gz" "$read_work/drizzle.tar.gz" \
+    "$MAX_REHEARSE_BYTES" >/dev/null 2>&1 || read_fail "the read failed"
+  rm -f -- "$read_work/tree.tar.gz"
 }
 
 # --- the key custody (Issue #3662; spec §5 «Prod read verbs.») ----------------------
@@ -258,6 +361,8 @@ verb=${words[0]-}
 
 case "$verb" in
   capabilities | schema | recovery-bundle | recovery-check) [[ ${#words[@]} -eq 1 ]] || reject "usage: $verb" ;;
+  rehearse | rehearsal-status)
+    [[ ${#words[@]} -eq 2 && ${words[1]} =~ $SHA_RE ]] || reject "usage: $verb <sha> (the full 40-hex commit id)" ;;
   *) reject "unknown read command (allowed: ${READ_VERBS// /, })" ;;
 esac
 accepted
@@ -270,6 +375,16 @@ case "$verb" in
     sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
     read_release_check
     read_encrypted read-schema </dev/null ;;
+  rehearse)
+    sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
+    read_release_check
+    rehearse_on_main "${words[1]}"
+    rehearse_archive "${words[1]}"
+    read_encrypted "rehearse ${words[1]}" "$read_work/drizzle.tar.gz" </dev/null ;;
+  rehearsal-status)
+    # Reads no database: no release check; it always answers.
+    sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
+    read_encrypted "rehearsal-status ${words[1]}" </dev/null ;;
   recovery-bundle | recovery-check)
     read_release_check
     recovery_verb "${verb#recovery-}" </dev/null ;;

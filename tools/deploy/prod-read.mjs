@@ -5,13 +5,15 @@
 //
 // Operator (workstation):
 //   pnpm prod:read <run-id>               download + decrypt one run's artifact
-//   pnpm prod:schema-drift <run-id>       drift of a `schema` answer vs the tree (exit 0 / 1 drift / 2 usage)
+//   pnpm prod:schema-drift <run-id>       drift of a `schema` answer or a rehearsal report's
+//                                         catalogueAfter vs the tree (exit 0 / 1 drift / 2 usage)
 //   pnpm prod:read-key                    the owner's step: the read ssh key pair
 //   pnpm prod:read-result-key [--rotate]  the lead's step: the result key pair
 // Runner (prod-observe.yml, node builtins only):
 //   node tools/deploy/prod-read.mjs check-inputs <stdin-file>       env VERB NAME PARAMS SHA
 //   node tools/deploy/prod-read.mjs check-capabilities <verb>       stdin the capabilities answer
 //   node tools/deploy/prod-read.mjs status <verb> <rc> <cms> <stderr>
+//   node tools/deploy/prod-read.mjs state <stderr>                  a rehearsal's state word (#3648)
 
 import { execFileSync } from "node:child_process";
 import {
@@ -33,6 +35,7 @@ import {
   ReadError,
   readRun,
   resultKey,
+  stateWord,
   statusLine,
 } from "./lib/prod-read.mjs";
 import {
@@ -53,10 +56,20 @@ function output(key, value) {
     appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
 }
 
-/** `schema-drift`: (a) migrations and (b) catalogue of a decrypted `schema` answer. */
+/**
+ * `schema-drift`: (a) migrations and (b) catalogue of a decrypted `schema` answer;
+ * of a rehearsal report (#3648) its `catalogueAfter` only — the catalogue the
+ * migrations of `<sha>` produced on the copy, against the checked-out tree's snapshot
+ * (check out `<sha>` first); a report has no applied-migrations list.
+ */
 export function schemaDrift({ answer, root }) {
-  if (answer?.verb !== "schema")
-    throw new ReadError("the answer is not a schema answer");
+  const report = answer?.verb === "rehearse";
+  if (answer?.verb !== "schema" && !report)
+    throw new ReadError("the answer is not a schema answer or a rehearsal report");
+  if (report && (answer.catalogueAfter === null || typeof answer.catalogueAfter !== "object"))
+    throw new ReadError(
+      `the rehearsal report carries no catalogueAfter (state ${answer.state}, pending ${answer.pending})`,
+    );
   const meta = join(root, "apps/api/drizzle/meta");
   const journal = JSON.parse(readFileSync(join(meta, "_journal.json"), "utf8"));
   const name = newestSnapshot(readdirSync(meta));
@@ -68,8 +81,8 @@ export function schemaDrift({ answer, root }) {
   };
   return {
     snapshot: name,
-    migrations: migrationDrift(journal, readSql, answer.migrations),
-    catalogue: catalogueDrift(snapshot, answer.catalogue, {
+    migrations: report ? [] : migrationDrift(journal, readSql, answer.migrations),
+    catalogue: catalogueDrift(snapshot, report ? answer.catalogueAfter : answer.catalogue, {
       handWrittenIndexes: handWrittenIndexes(journal, readSql),
     }),
   };
@@ -103,7 +116,9 @@ function main(argv) {
       const d = schemaDrift({ answer, root });
       const lines = [...d.migrations, ...d.catalogue];
       console.log(
-        `prod:schema-drift: ${path} (taken ${answer.takenAt ?? "?"}) against ${d.snapshot} and the journal`,
+        answer.verb === "rehearse"
+          ? `prod:schema-drift: ${path} (rehearsal of ${answer.sha}, catalogueAfter) against ${d.snapshot}`
+          : `prod:schema-drift: ${path} (taken ${answer.takenAt ?? "?"}) against ${d.snapshot} and the journal`,
       );
       for (const l of lines) console.log(`  ${l}`);
       console.log(
@@ -171,21 +186,28 @@ function main(argv) {
       const stderr = existsSync(stderrFile)
         ? readFileSync(stderrFile, "utf8")
         : "";
-      const { upload, line } = statusLine({
+      const { upload, failed, line } = statusLine({
         verb,
         rc: Number(rc),
         cms,
         stderr,
       });
-      console.log(upload ? line : `::error::${line}`);
+      console.log(failed ? `::error::${line}` : line);
       if (process.env.GITHUB_STEP_SUMMARY)
         appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${line}\n`);
       output("upload", String(upload));
-      return upload ? 0 : 1;
+      return failed ? 1 : 0;
+    }
+    case "state": {
+      // The poll's view of one rehearsal answer: its state word, or `none`.
+      const [stderrFile] = rest;
+      const stderr = existsSync(stderrFile) ? readFileSync(stderrFile, "utf8") : "";
+      console.log((stateWord(stderr) ?? "none").replaceAll(" ", "-"));
+      return 0;
     }
     default:
       throw new ReadError(
-        "usage: prod-read.mjs read|schema-drift|read-key|result-key|check-inputs|check-capabilities|status",
+        "usage: prod-read.mjs read|schema-drift|read-key|result-key|check-inputs|check-capabilities|status|state",
       );
   }
 }

@@ -6,6 +6,7 @@ name: Prod observe
 # `prod-observe.yml`.»). The lead dispatches it; a read needs no owner word (§10).
 #
 #   gh workflow run prod-observe.yml --ref main -f verb=schema
+#   gh workflow run prod-observe.yml --ref main -f verb=rehearse -f sha=<40-hex main SHA>
 #   pnpm prod:read <run-id>            # or: pnpm prod:schema-drift <run-id>
 #
 # The key reaches only ds-read-entrypoint on ds-api-prod (forced command). The job
@@ -14,7 +15,9 @@ name: Prod observe
 # to the recipient certificate, never plaintext — as the artifact
 # `prod-read-<run_id>`. The log and the job summary carry status lines only: verb,
 # exit code, ciphertext size and sha256, and for a failure one fixed reason.
-# The `rehearse` poll of `rehearsal-status` arrives with the rehearsal (#3648).
+# A `rehearse` (#3648) polls `rehearsal-status` until the rehearsal ends, at most its
+# 15-min runtime cap, and uploads that last answer; its one plaintext is the state
+# word (`started`, `running`, `no pending migrations`, `succeeded`, `failed`, `absent`).
 
 on:
   workflow_dispatch:
@@ -60,7 +63,8 @@ env:
 jobs:
   read:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # A `rehearse` polls up to the rehearsal's 15-min runtime cap.
+    timeout-minutes: 25
     environment:
       name: production-read
       deployment: false
@@ -123,6 +127,26 @@ jobs:
             >"$RUNNER_TEMP/result/result.cms" 2>"$RUNNER_TEMP/read.err"
           rc=$?
           set -e
+          # #3648: a started rehearsal is polled by `rehearsal-status` up to its runtime
+          # cap; the last answer is the one uploaded. Only the state word is printed.
+          if [ "$VERB" = rehearse ] && [ "$rc" -eq 0 ]; then
+            state=$(node tools/deploy/prod-read.mjs state "$RUNNER_TEMP/read.err")
+            deadline=$(( $(date +%s) + 900 ))
+            while [ "$rc" -eq 0 ] && { [ "$state" = started ] || [ "$state" = running ]; } &&
+              [ "$(date +%s)" -lt "$deadline" ]; do
+              echo "prod-observe: rehearsal state=$state"
+              sleep 20
+              set +e
+              ssh -i "$RUNNER_TEMP/prod-read-ssh/key" -o IdentitiesOnly=yes \
+                -o UserKnownHostsFile="$RUNNER_TEMP/prod-read-ssh/known_hosts" \
+                -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+                "$PROD_SSH_USER@$PROD_SSH_HOST" "rehearsal-status ${COMMAND#rehearse }" </dev/null \
+                >"$RUNNER_TEMP/result/result.cms" 2>"$RUNNER_TEMP/read.err"
+              rc=$?
+              set -e
+              state=$(node tools/deploy/prod-read.mjs state "$RUNNER_TEMP/read.err")
+            done
+          fi
           node tools/deploy/prod-read.mjs status "$VERB" "$rc" "$RUNNER_TEMP/result/result.cms" "$RUNNER_TEMP/read.err"
 
       - name: Upload the ciphertext

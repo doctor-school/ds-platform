@@ -117,3 +117,6 @@ packages/design-system/.ds-sync-pkg/
 .design-sync/.cache/
 .design-sync/learnings/
 .design-sync/node_modules
+
+# Python bytecode of the box harness tests (tools/deploy/rehearse-migration.test.mjs)
+__pycache__/

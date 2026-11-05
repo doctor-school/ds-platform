@@ -10,12 +10,14 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -1031,7 +1033,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
 
   it("3313: install puts every box entrypoint of the shipped tree in place", () => {
     setRole("data");
-    for (const { path } of BOX_ENTRYPOINTS) {
+    for (const { path } of [...BOX_ENTRYPOINTS, ...DATA_BOX_ENTRYPOINTS]) {
       mkdirSync(dirname(join(tree(), path)), { recursive: true });
       writeFileSync(join(tree(), path), `# ${path}\n`);
     }
@@ -1041,11 +1043,14 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       assert.equal(readFileSync(join(root, dest), "utf8"), `# ${path}\n`, dest);
     }
     assert.equal(existsSync(join(root, DS_READ_ENTRYPOINT_BIN)), false, "ds-read-entrypoint is not installed on ds-data-prod");
+    // #3648: the rehearsal's programs 0755, its tmpfiles.d entry 0644.
+    assert.equal(statSync(join(root, "usr/local/lib/ds-platform/rehearse-migration.py")).mode & 0o777, 0o755);
+    assert.equal(statSync(join(root, "etc/tmpfiles.d/ds-rehearsal.conf")).mode & 0o777, 0o644);
   });
 
   it("3320: converge installs the shipped entrypoints, then runs the installed harden-ssh.sh --role data --from-release", () => {
     setRole("data");
-    for (const { path } of BOX_ENTRYPOINTS) {
+    for (const { path } of [...BOX_ENTRYPOINTS, ...DATA_BOX_ENTRYPOINTS]) {
       mkdirSync(dirname(join(tree(), path)), { recursive: true });
       writeFileSync(
         join(tree(), path),
@@ -1233,7 +1238,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     readBoxes({ cert: false });
     const r = readRun("capabilities");
     assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema", "recovery-bundle", "recovery-check"] });
+    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema", "rehearse", "rehearsal-status", "recovery-bundle", "recovery-check"] });
     assert.match(log("logger"), /auth\.info accepted: capabilities/);
   });
 
@@ -1256,8 +1261,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     `rollback-status prod ${SHA}`,
     `redeploy prod ${SHA}`,
     "observe academy-host",
-    `rehearse ${SHA}`,
-    `rehearsal-status ${SHA}`,
+    "rehearse",
+    `rehearse ${SHA.slice(0, 12)}`,
+    `rehearse ${SHA} now`,
+    `rehearsal-status`,
     "read-schema",
     "check",
     `converge ${SHA}`,
@@ -1427,6 +1434,146 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     const dead = readRun("schema");
     assert.equal(dead.status, 1);
     assert.equal(dead.stderr, "ds-read-entrypoint: the read failed\n");
+  });
+
+  // --- 3648: the migration rehearsal over the read path ------------------------------
+  // curl answers GitHub's compare and serves a codeload tree; the hop runs the data
+  // entrypoint, which runs the repository harness under the data root with the box
+  // tools faked (rehearse-migration-fake.py); flock runs its command unless busy.
+  const HARNESS = resolve(here, "../../infra/deploy/bin/rehearse-migration.py");
+  const CLEANUP = resolve(here, "../../infra/deploy/bin/rehearse-cleanup");
+  const FAKE = resolve(here, "rehearse-migration-fake.py");
+  const rehearseBoxes = ({ compare = "behind", liveNewest = 3000 } = {}) => {
+    readBoxes();
+    const lib = join(dataRoot(), "usr/local/lib/ds-platform");
+    mkdirSync(lib, { recursive: true });
+    copyFileSync(HARNESS, join(lib, "rehearse-migration.py"));
+    copyFileSync(CLEANUP, join(lib, "rehearse-cleanup"));
+    chmodSync(join(lib, "rehearse-cleanup"), 0o755);
+    mkdirSync(join(dataRoot(), "proc"), { recursive: true });
+    writeFileSync(join(dataRoot(), "proc/meminfo"), "MemAvailable: 4000000 kB\n");
+    writeFileSync(join(dir, "scenario.json"), JSON.stringify({ liveNewest }));
+    // A codeload tree: one top directory, the migrations among other files.
+    const journal = { entries: [{ idx: 0, when: 1000, tag: "0000_init" }, { idx: 1, when: 3000, tag: "0001_users" }] };
+    const made = spawnSync("python3", ["-I", "-c", [
+      "import io, json, sys, tarfile",
+      "j = sys.argv[2]",
+      "files = {'ds-platform-x/apps/api/drizzle/meta/_journal.json': j,",
+      "  'ds-platform-x/apps/api/drizzle/0000_init.sql': 'CREATE TABLE a (id int);',",
+      "  'ds-platform-x/apps/api/drizzle/0001_users.sql': 'ALTER TABLE a ADD b int;',",
+      "  'ds-platform-x/apps/api/drizzle/meta/0001_snapshot.json': '{}',",
+      "  'ds-platform-x/README.md': 'x'}",
+      "with tarfile.open(sys.argv[1], 'w:gz') as t:",
+      "    for n, d in files.items():",
+      "        b = d.encode(); i = tarfile.TarInfo(n); i.size = len(b); t.addfile(i, io.BytesIO(b))",
+    ].join("\n"), join(dir, "tree.tar.gz"), JSON.stringify(journal)], { encoding: "utf8" });
+    assert.equal(made.status, 0, made.stderr);
+    writeFileSync(
+      join(stubs, "curl"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "curl $*" >> "$STUB_DIR/curl.log"',
+        'out=; for ((i = 1; i <= $#; i++)); do [[ ${!i} == -o ]] && { j=$((i + 1)); out=${!j}; }; done',
+        'case "${*: -1}" in',
+        `  */compare/*) [[ ${compare === null ? "1" : "0"} == 0 ]] || exit 22; echo '{"status":"${compare}"}' ;;`,
+        `  *) cp "${join(dir, "tree.tar.gz")}" "$out" ;;`,
+        "esac",
+      ].join("\n") + "\n",
+    );
+    chmodSync(join(stubs, "curl"), 0o755);
+    writeFileSync(
+      join(stubs, "flock"),
+      '#!/usr/bin/env bash\necho "flock $*" >> "$STUB_DIR/flock.log"\n[[ -z ${STUB_FLOCK_BUSY:-} ]] || exit 75\nshift 4\nexec "$@"\n',
+    );
+    chmodSync(join(stubs, "flock"), 0o755);
+  };
+  const rehearseEnv = (extra = {}) => ({
+    DS_REHEARSE_FAKE: FAKE,
+    DS_REHEARSE_FREE_BYTES: String(100 * 1024 ** 3),
+    FAKE_SCENARIO: join(dir, "scenario.json"),
+    FAKE_LOG: join(dir, "fake.log"),
+    ...extra,
+  });
+
+  it("3648: rehearse checks the SHA is in main, ships only the migrations, answers encrypted with a plaintext state word", () => {
+    rehearseBoxes();
+    const r = readRun(`rehearse ${SHA}`, { env: rehearseEnv() });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, "ds-read-entrypoint: state no pending migrations\n");
+    assert.ok(!r.stdout.includes("no pending"), "ciphertext only");
+    assert.deepEqual(decrypt(r.stdout), { verb: "rehearse", sha: SHA, state: "no pending migrations", pending: 0 });
+    const curl = log("curl").trimEnd().split("\n");
+    // refs/heads/main, never a bare `main` a tag of that name could shadow.
+    assert.match(curl[0], new RegExp(`/compare/refs/heads/main\\.\\.\\.${SHA}$`));
+    assert.match(curl[1], new RegExp(`codeload\\.github\\.com/doctor-school/ds-platform/tar\\.gz/${SHA}$`));
+    // The release check on both boxes ran first; the data verb carried the archive.
+    assert.equal(log("ds-release"), "ds-release-called check prod\ndata-ds-release check prod\n");
+    const hops = log("ssh").trimEnd().split("\n").map((l) => l.split("deploy@192.168.0.10 ")[1]);
+    assert.deepEqual(hops, ["check", `rehearse ${SHA}`]);
+    assert.ok(!log("ssh").split("\n")[1].split(" ").includes("-n"), "the archive rides the hop's stdin");
+    assert.match(log("flock"), /^flock -n -E 75 \S*\/run\/ds-platform\/ds-rehearsal\.lock python3 -I \S*rehearse-migration\.py start /m);
+    const report = JSON.parse(readFileSync(join(dataRoot(), `var/lib/ds-platform/rehearsal/${SHA}.json`), "utf8"));
+    assert.equal(report.pending, 0);
+    const status = readRun(`rehearsal-status ${SHA}`, { env: rehearseEnv() });
+    assert.equal(status.status, 0, status.stderr);
+    assert.equal(status.stderr, "ds-read-entrypoint: state succeeded\n");
+    assert.equal(decrypt(status.stdout).pending, 0);
+  });
+
+  it("3648: rehearse with a pending migration starts the durable unit and answers `started`", () => {
+    rehearseBoxes({ liveNewest: 1000 });
+    const r = readRun(`rehearse ${SHA}`, { env: rehearseEnv() });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, "ds-read-entrypoint: state started\n");
+    assert.deepEqual(decrypt(r.stdout), { verb: "rehearse", sha: SHA, state: "started", pending: 1 });
+    const unit = readFileSync(join(dir, "fake.log"), "utf8").trimEnd().split("\n").map((l) => JSON.parse(l)).find((c) => c.tool === "systemd-run");
+    assert.ok(unit.args.includes(`--unit=ds-rehearse-${SHA.slice(0, 12)}`));
+  });
+
+  for (const [label, compare] of [["ahead of main", "ahead"], ["diverged from main", "diverged"], ["unknown to GitHub", null]]) {
+    it(`3648: rehearse rejects (exit 2) a SHA ${label}, before any download or hop`, () => {
+      rehearseBoxes({ compare });
+      const r = readRun(`rehearse ${SHA}`, { env: rehearseEnv() });
+      assert.equal(r.status, 2, r.stderr);
+      assert.match(r.stderr, /contained in main/);
+      assert.ok(!log("curl").includes("codeload"), "no download");
+      assert.ok(!log("ssh").includes("rehearse"), "no data verb");
+      assert.match(log("logger"), /auth\.warning rejected:/);
+    });
+  }
+
+  it("3648: rehearse fails (exit 1, a rehearsal is running) while the lock is held; a release step refuses it first", () => {
+    rehearseBoxes();
+    const busy = readRun(`rehearse ${SHA}`, { env: rehearseEnv({ STUB_FLOCK_BUSY: "1" }) });
+    assert.equal(busy.status, 1);
+    assert.equal(busy.stderr, "ds-read-entrypoint: a rehearsal is running\n");
+    assert.equal(busy.stdout.length, 0);
+    const release = readRun(`rehearse ${SHA}`, { env: rehearseEnv({ STUB_DATA_CHECK_RC: "3" }) });
+    assert.equal(release.status, 1);
+    assert.equal(release.stderr, "ds-read-entrypoint: a release step is running\n");
+  });
+
+  it("3648: rehearsal-status reads no database and runs no release check; absent before any rehearsal", () => {
+    rehearseBoxes();
+    const r = readRun(`rehearsal-status ${SHA}`, { env: rehearseEnv() });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, "ds-read-entrypoint: state absent\n");
+    assert.deepEqual(decrypt(r.stdout), { verb: "rehearsal-status", sha: SHA, state: "absent" });
+    assert.equal(log("ds-release") + log("curl"), "");
+    assert.equal(log("docker"), "");
+  });
+
+  it("3648: the data box's rehearse rejects (exit 2) an archive over 16 MiB; elsewhere it is the data box's verb", () => {
+    setRole("prod");
+    assert.equal(run(`rehearse ${SHA}`).status, 3);
+    rehearseBoxes();
+    const r = spawnSync("bash", [ENTRYPOINT], {
+      env: { ...process.env, PATH: `${stubs}${delimiter}${process.env.PATH}`, STUB_DIR: dir, DS_ENTRYPOINT_ROOT: dataRoot(), SSH_ORIGINAL_COMMAND: `rehearse ${SHA}`, ...rehearseEnv() },
+      input: Buffer.alloc(16 * 1024 * 1024 + 1),
+    });
+    assert.equal(r.status, 2, String(r.stderr));
+    assert.match(String(r.stderr), /the migration archive exceeds 16777216 bytes/);
+    assert.equal(log("flock"), "");
   });
 
   it("3646: read-schema on the data box answers plaintext over the hop only to ds-read-entrypoint; elsewhere it is the data box's verb", () => {

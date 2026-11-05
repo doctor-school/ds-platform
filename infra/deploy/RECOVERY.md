@@ -106,9 +106,11 @@ not secrets; their values are in the templates or derive from the environment.
 - **Restore proof automation.** The restore proof is planned as an automated,
   isolated drill on the `rehearse-migration` throw-away restore of #3648 (§3); until it
   lands, §3's manual procedure is the only proof.
-- **`--network none` stops WAL replay.** The spec's throw-away copy runs
-  `--network none`, but its `restore_command` (`pgbackrest archive-get`) needs the
-  S3 repository, so recovery ends at the backup's consistency point (§3.2) — #3648.
+- **The copy needs egress for WAL replay.** A throw-away copy's `restore_command`
+  (`pgbackrest archive-get`) reads the S3 repository, so under `--network none`
+  recovery ends at the backup's consistency point (§3.2). This copy and the spec's
+  rehearsal both run on Docker's default bridge; the rehearsal also refuses a copy
+  that did not replay to the WAL switch of its `pgbackrest check` (#3648).
 
 Owner-private evidence (named only, never copied here): `outputs/2026-11-04-local-backup/report.json`
 and `outputs/2026-11-04-backup-implementation-plan/plan.json` (BBM workspace),
@@ -439,10 +441,10 @@ checksum is not a proof. The run stays on ds-data-prod, so restored personal dat
 stays in RF and never reaches a workstation.
 
 **Primary path (planned, #3662).** An automated, isolated restore drill on the #3648
-throw-away restore mechanism (`rehearse-migration`), with that mechanism's
-`--network none` limitation fixed so the copy replays archived WAL (§3.2 «Network of
-the copy»). It has not been built; until it lands, the owner-run tool and the manual
-fallback below are the proof.
+throw-away restore mechanism (`rehearse-migration`), whose copy runs on Docker's
+default bridge and so replays archived WAL (§3.2 «Network of the copy»). The drill
+has not been built; until it lands, the owner-run tool and the manual fallback below
+are the proof.
 
 **Owner-run tool (interim, §2.4):
 `pnpm recovery restore-proof --bundle <out>/ds-recovery-<date>-data-prod.tar.age`.**
@@ -541,7 +543,7 @@ sudo docker run -d --rm --name ds-recovery-pg \
 that `pgbackrest restore` wrote (`pgbackrest archive-get` from the S3 repository),
 which needs egress. The copy therefore runs on Docker's default bridge, not the
 compose network, with no published port and `listen_addresses=''`. With
-`--network none`, as the spec's rehearsal states, `archive-get` cannot reach the
+`--network none`, `archive-get` cannot reach the
 repository and the recovery stops at the backup's own consistency point; record
 that as PARTIAL.
 

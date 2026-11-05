@@ -50,6 +50,8 @@ test("3662: the verb whitelist — ds-read-entrypoint serves the two recovery ve
   assert.deepEqual(shellVar(READ_ENTRYPOINT, "READ_VERBS").split(" "), [
     "capabilities",
     "schema",
+    "rehearse",
+    "rehearsal-status",
     ...RECOVERY_VERBS,
   ]);
   assert.match(

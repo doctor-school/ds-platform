@@ -41,6 +41,9 @@ export const DATA_VERBS = [
  */
 export const DATA_READ_VERBS = [
   "read-schema",
+  // #3648: the migration rehearsal (spec §5 «Migration rehearsal.»).
+  "rehearse",
+  "rehearsal-status",
   // #3662: the key custody (spec §5 «Prod read verbs.» → recovery-bundle / recovery-check).
   "recovery-bundle",
   "recovery-check",

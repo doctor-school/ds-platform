@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# rehearse-cleanup — ExecStopPost of the migration rehearsal unit ds-rehearse-<sha12>
+# (Issue #3648; tech spec
+# apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md §5
+# «Migration rehearsal.» → «Durable unit.»). systemd runs it on success, failure, a
+# kill and the runtime cap: every ds-rehearse-* container and the scratch go, and a
+# run that left no report gets a failed one. Teardown never depends on the client.
+#
+# Installed root-owned as /usr/local/lib/ds-platform/rehearse-cleanup beside
+# rehearse-migration.py (ds-deploy-entrypoint DATA_INSTALL).
+set -euo pipefail
+export LC_ALL=C
+HERE=/usr/local/lib/ds-platform
+PYTHON=/usr/bin/python3
+# Test hook: run beside the repository copy of the harness.
+if [[ ${BASH_SOURCE[0]} != "$HERE/rehearse-cleanup" ]]; then
+  HERE=$(dirname -- "${BASH_SOURCE[0]}")
+  PYTHON=python3
+fi
+(($# <= 1)) || { echo "usage: rehearse-cleanup [<sha>]" >&2; exit 2; }
+exec "$PYTHON" -I "$HERE/rehearse-migration.py" cleanup "$@"

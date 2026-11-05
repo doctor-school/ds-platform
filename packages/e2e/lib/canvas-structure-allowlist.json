@@ -1,0 +1,28 @@
+{
+  "entries": [
+    {
+      "canvas": "ds-shell.dc.html",
+      "props": { "host": "academy" },
+      "delta": "missing",
+      "item": { "kind": "link", "label": "Проекты" },
+      "decision": "The canvas draws the full intended Academy nav; the host: academy config carries only shipped targets, so v1 is «Эфиры» alone — this link enters with its feature (015 Проекты, 016 Эксперты, the partner surface Партнёры).",
+      "source": "apps/docs/content/specs/features/008-portal-shell/008-requirements-en.md EARS-1; PR #2198 body («known canvas delta»)"
+    },
+    {
+      "canvas": "ds-shell.dc.html",
+      "props": { "host": "academy" },
+      "delta": "missing",
+      "item": { "kind": "link", "label": "Эксперты" },
+      "decision": "The canvas draws the full intended Academy nav; the host: academy config carries only shipped targets, so v1 is «Эфиры» alone — this link enters with its feature (015 Проекты, 016 Эксперты, the partner surface Партнёры).",
+      "source": "apps/docs/content/specs/features/008-portal-shell/008-requirements-en.md EARS-1; PR #2198 body («known canvas delta»)"
+    },
+    {
+      "canvas": "ds-shell.dc.html",
+      "props": { "host": "academy" },
+      "delta": "missing",
+      "item": { "kind": "link", "label": "Партнёры" },
+      "decision": "The canvas draws the full intended Academy nav; the host: academy config carries only shipped targets, so v1 is «Эфиры» alone — this link enters with its feature (015 Проекты, 016 Эксперты, the partner surface Партнёры).",
+      "source": "apps/docs/content/specs/features/008-portal-shell/008-requirements-en.md EARS-1; PR #2198 body («known canvas delta»)"
+    }
+  ]
+}

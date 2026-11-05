@@ -1,0 +1,187 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { describe, expect, it } from "vitest";
+
+import {
+  applyAllowlist,
+  diffStructures,
+  extractCanvasStructure,
+  formatStructure,
+  parseTemplate,
+  type AllowlistEntry,
+  type RegionStructure,
+} from "./canvas-structure.js";
+
+const REPO = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
+const DS_SHELL = join(REPO, "design-source/ds-shell.dc.html");
+
+/** A one-off canvas file with the given template and logic. */
+function canvas(template: string, logic: string, props = "{}"): string {
+  const dir = mkdtempSync(join(tmpdir(), "canvas-structure-"));
+  const file = join(dir, "fixture.dc.html");
+  writeFileSync(
+    file,
+    `<x-dc>${template}</x-dc><script type="text/x-dc" data-dc-script data-props="${props
+      .replace(/"/g, "&quot;")}">class Component extends DCLogic { ${logic} }</script>`,
+  );
+  return file;
+}
+
+const REGION = { start: { tag: "header" }, untilComment: "end" };
+
+describe("canvas-structure · parseTemplate", () => {
+  it("keeps quoted `>` inside attributes and treats void elements as leaves", () => {
+    const [div] = parseTemplate('<div title="a > b"><img alt="x"><span>t</span></div>');
+    expect(div).toMatchObject({ type: "el", tag: "div", attrs: { title: "a > b" } });
+    expect(div?.type === "el" && div.children.map((c) => c.type === "el" && c.tag)).toEqual([
+      "img",
+      "span",
+    ]);
+  });
+});
+
+describe("canvas-structure · extractCanvasStructure", () => {
+  it("expands sc-if / sc-for / {{ }} against renderVals(), splits bar from a <details> menu, and reads an image-only link by kind", () => {
+    const file = canvas(
+      `<header>
+         <a href="#"><img alt="{{ logo }}"></a>
+         <sc-if value="{{ wide }}"><input placeholder="Поиск"></sc-if>
+         <sc-for list="{{ nav }}" as="n"><a>{{ n.label }}</a></sc-for>
+         <button title="Тема">☾</button>
+         <details><summary>≡</summary><nav><sc-for list="{{ nav }}" as="n"><a>{{ n.label }}</a></sc-for><a>{{ primary }}</a></nav></details>
+       </header>
+       <sc-if value="{{ band }}"><div><input placeholder="Поиск внизу"></div></sc-if>
+       <!-- end -->
+       <footer><a>not in the region</a></footer>`,
+      `state = { band: false };
+       renderVals() { const p = this.props, s = this.state;
+         return { logo: 'DS', wide: !p.mobile, band: s.band,
+           nav: [{ label: 'Эфиры' }, { label: 'Проекты' }], primary: 'Войти' }; }`,
+      JSON.stringify({ mobile: { default: true } }),
+    );
+    const tree = extractCanvasStructure(file, { state: { band: true } }, REGION);
+    expect(tree).toEqual({
+      bar: [
+        { kind: "link", label: null },
+        { kind: "link", label: "Эфиры" },
+        { kind: "link", label: "Проекты" },
+        { kind: "button", label: null },
+        { kind: "summary", label: null },
+        { kind: "input", label: "Поиск внизу" },
+      ],
+      menu: [
+        { kind: "link", label: "Эфиры" },
+        { kind: "link", label: "Проекты" },
+        { kind: "link", label: "Войти" },
+      ],
+    });
+    // A prop overrides its declared default.
+    expect(extractCanvasStructure(file, { props: { mobile: false } }, REGION).bar[1]).toEqual({
+      kind: "input",
+      label: "Поиск",
+    });
+  });
+
+  it("names the canvas when renderVals() needs the DC runtime", () => {
+    const file = canvas("<header></header>", "renderVals() { return window.DsDesignSystem; }");
+    expect(() => extractCanvasStructure(file, {}, REGION)).toThrow(
+      /fixture\.dc\.html: renderVals\(\) is not evaluable/,
+    );
+  });
+
+  it("ds-shell · doctor · guest · 390: the auth primary is the LAST item of the ≡ menu, not the bar", () => {
+    const tree = extractCanvasStructure(DS_SHELL, {
+      props: { host: "doctor", loggedIn: false, mobile: true },
+    });
+    expect(formatStructure(tree)).toBe(
+      [
+        "bar: link «icon» · button «icon» · summary «icon» · input «Поиск по урокам, школам и событиям»",
+        "menu: link «Эфиры» · link «Войти / Регистрация»",
+      ].join("\n"),
+    );
+  });
+
+  it("ds-shell · academy · guest · 1440: no search, four nav links, theme, primary in the bar", () => {
+    const tree = extractCanvasStructure(DS_SHELL, {
+      props: { host: "academy", loggedIn: false, mobile: false },
+    });
+    expect(formatStructure(tree)).toBe(
+      [
+        "bar: link «icon» · link «Эфиры» · link «Проекты» · link «Эксперты» · link «Партнёры» · button «icon» · link «Войти / Регистрация»",
+        "menu: —",
+      ].join("\n"),
+    );
+  });
+});
+
+describe("canvas-structure · diffStructures", () => {
+  const link = (label: string) => ({ kind: "link" as const, label });
+  const canvasTree: RegionStructure = {
+    bar: [link("Лого"), { kind: "button", label: null }],
+    menu: [link("Эфиры"), link("Войти")],
+  };
+
+  it("an identical tree has no difference", () => {
+    expect(diffStructures(canvasTree, canvasTree)).toEqual([]);
+  });
+
+  it("the pre-#3664 header: the auth primary in the bar is a wrong-container difference", () => {
+    const app: RegionStructure = {
+      bar: [link("Лого"), { kind: "button", label: null }, link("Войти")],
+      menu: [link("Эфиры")],
+    };
+    expect(diffStructures(canvasTree, app)).toEqual([
+      "wrong container: link «Войти» — canvas menu, app bar",
+    ]);
+  });
+
+  it("reports missing, extra and order separately", () => {
+    const app: RegionStructure = {
+      bar: [{ kind: "button", label: null }, link("Лого"), link("Чужое")],
+      menu: [link("Эфиры")],
+    };
+    expect(diffStructures(canvasTree, app)).toEqual([
+      "extra in app (bar): link «Чужое»",
+      "order (bar): canvas [link «Лого», button «icon»] · app [button «icon», link «Лого»]",
+      "missing in app (menu): link «Войти»",
+    ]);
+  });
+});
+
+describe("canvas-structure · applyAllowlist", () => {
+  const entry: AllowlistEntry = {
+    canvas: "ds-shell.dc.html",
+    props: { host: "academy" },
+    delta: "missing",
+    item: { kind: "link", label: "Проекты" },
+    decision: "the config ships only «Эфиры»",
+    source: "spec",
+  };
+  const tree: RegionStructure = {
+    bar: [{ kind: "link", label: "Эфиры" }, { kind: "link", label: "Проекты" }],
+    menu: [],
+  };
+
+  it("drops a decided `missing` item from the canvas side only where its props apply", () => {
+    const where = { canvas: "ds-shell.dc.html", props: { host: "academy" } };
+    const out = applyAllowlist([entry], where, tree, { bar: [], menu: [] });
+    expect(out.canvas.bar).toEqual([{ kind: "link", label: "Эфиры" }]);
+    expect(out.stale).toEqual([]);
+    const doctor = applyAllowlist(
+      [entry],
+      { canvas: "ds-shell.dc.html", props: { host: "doctor" } },
+      tree,
+      { bar: [], menu: [] },
+    );
+    expect(doctor.canvas.bar).toHaveLength(2);
+  });
+
+  it("an applicable entry that matches nothing is stale", () => {
+    const where = { canvas: "ds-shell.dc.html", props: { host: "academy" } };
+    const out = applyAllowlist([entry], where, { bar: [], menu: [] }, { bar: [], menu: [] });
+    expect(out.stale).toEqual([entry]);
+  });
+});

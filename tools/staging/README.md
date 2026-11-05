@@ -234,9 +234,23 @@ export STAGE_BASIC_AUTH_PASS="…"          # same variable the converge needs, 
 pnpm e2e:stage pr-123                     # both storefronts
 pnpm e2e:stage main --project academy --grep "витрина"
 pnpm e2e:stage main --project walks       # only the derived walks (§6.3), no axe leg
+pnpm e2e:stage pr-123 --project login     # the door scenarios bound to the sign-in host
+pnpm e2e:stage pr-123 --project sign-in-host  # the sign-in host's own plain specs
 pnpm e2e:stage pr-123 --no-axe            # skip the a11y leg explicitly
 pnpm e2e:stage pr-123 --no-live           # skip the storefront live-tier legs (#3168)
 ```
+
+**The sign-in host's two projects (#3345).** `login` is a Gherkin project: every
+`NNN-scenarios.feature` scenario tagged `@host:login` — the binding
+`tools/lint/scenario-coverage-lint.ts` requires for each `@door:<name>` scenario whose
+door the route-mount registry marks `mounted` on `apps/login` — generated from
+`.features-gen/login` with `missingSteps: "fail-on-gen"`, so a bound scenario without
+steps fails generation rather than skipping. Its journeys start on the Academy entry and
+do their credential work on `login-<slot>`; the storefront projects leave those scenarios
+to it (except the `@default-auth-limits` ones, which only the loopback contour runs). A
+door scenario that has no steps yet is parked with `@quarantine:login(#N)` (open Issue)
+and stays on its storefront project. `sign-in-host` is the host's own plain specs
+(`packages/e2e/sign-in-host`). Neither selects a host axe or live leg.
 
 The runner builds `@ds/e2e`'s workspace dependencies before BDD generation, so a clean
 worktree needs no hand-built `packages/db/dist` or `packages/legal-content/dist` artifact.

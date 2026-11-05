@@ -28,6 +28,24 @@
  * the `guards-block` CI job: it self-limits its own exit code, so the WARN rows
  * never block a merge, and a real finding is a red check the moment it appears.
  *
+ * Sign-in-host binding (#3345 item 3, ADR-0015 §4). A scenario names the door
+ * it journeys through with a scenario-level `@door:<login|register|reset|verify>`
+ * tag. Once that door is `mounted` on the sign-in host — the row
+ * `apps/login/app/<door>/page.tsx` of the route-mount registry («## Route-file
+ * registry» in `capability-ownership.md`, read by the one shared parser
+ * `lib/registry-rows.ts`) — the scenario must carry the sign-in-host binding
+ * `@host:login`, which puts it in the `login` Gherkin project of `packages/e2e`.
+ * That project generates with `missingSteps: "fail-on-gen"`, so a bound scenario
+ * with no step definitions fails `bddgen` instead of becoming a skip. The only
+ * exclusion is a host quarantine `@quarantine:login(#N)` naming an OPEN Issue
+ * (checked exactly like `@quarantine(#N)`); unlike the ordinary quarantine it
+ * removes the scenario from the sign-in-host binding only, so its `@EARS-N` tags
+ * still count for coverage on the storefront project. A free-text comment
+ * («… not shared-sign-in-host acceptance») is no exclusion and is itself a
+ * finding, as are an unknown door name and a binding plus a host quarantine on
+ * one scenario. These findings are BLOCK wherever they sit: the rule is new and
+ * the catalog carries no backfill debt of it.
+ *
  * Seams: `LINT_FIXTURE_ROOT` (spec tree), `LINT_GH_FIXTURE_DIR` (lib/gh.ts —
  * canned `gh issue view` JSON for the quarantine check),
  * `LINT_DIFF_NAMESTATUS_FILE` / `LINT_DIFF_BASE` (lib/diff.ts — touched set).
@@ -41,6 +59,7 @@ import fg from "fast-glob";
 
 import { ghViewJson } from "./lib/gh.js";
 import { touchedPaths } from "./lib/diff.js";
+import { parseRegistryRows } from "./lib/registry-rows.js";
 
 const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
   ? resolve(process.env.LINT_FIXTURE_ROOT)
@@ -62,6 +81,17 @@ const SCENARIO_RE = /^\s*(Scenario|Scenario Outline|Example)\b/;
 const FEATURE_RE = /^\s*Feature\b/;
 const EARS_TAG_RE = /^@EARS-(\d+)$/;
 const QUARANTINE_RE = /^@quarantine(?:\((#?\d+)\))?$/i;
+
+/** The doors `@ds/auth-flow` renders; each is a sign-in-host route once mounted. */
+export const DOORS = ["login", "register", "reset", "verify"] as const;
+const DOOR_TAG_RE = /^@door:(\S*)$/;
+/** The scenario-level sign-in-host binding (selected by the `login` e2e project). */
+export const SIGN_IN_HOST_BINDING = "@host:login";
+const HOST_QUARANTINE_RE = /^@quarantine:login(?:\((#?\d+)\))?$/i;
+/** The free-text exclusion form #3345 retires: a comment is not a quarantine. */
+const COMMENT_EXCLUSION_RE = /^\s*#.*sign-in-host acceptance/i;
+const ROUTE_REGISTRY_HEADING = "## Route-file registry";
+const FEATURE_GLOB = "apps/docs/content/specs/features/*/*-scenarios.feature";
 
 function info(msg: string): void {
   process.stdout.write(`${TAG} ${msg}\n`);
@@ -146,6 +176,131 @@ interface SpecReport {
   touched: boolean;
 }
 
+/** The doors whose sign-in-host route the route-mount registry marks `mounted`. */
+export function mountedDoors(
+  rows: readonly { path: string; until: string }[],
+): Set<string> {
+  const mounted = new Set<string>();
+  for (const door of DOORS) {
+    const row = rows.find((r) => r.path === `apps/login/app/${door}/page.tsx`);
+    if (row && row.until.trim() === "mounted") mounted.add(door);
+  }
+  return mounted;
+}
+
+interface DoorScan {
+  findings: string[];
+  hostQuarantines: Quarantine[];
+  bound: number;
+  quarantined: number;
+}
+
+/** The sign-in-host binding rule over every spec feature file (header above). */
+async function scanDoorBindings(): Promise<DoorScan> {
+  const files = await fg([FEATURE_GLOB], {
+    cwd: REPO_ROOT,
+    ignore: ["**/node_modules/**"],
+    absolute: true,
+  });
+  const scan: DoorScan = {
+    findings: [],
+    hostQuarantines: [],
+    bound: 0,
+    quarantined: 0,
+  };
+  // Read lazily: a tree with no `@door:` tag needs no registry.
+  let mounted: Set<string> | undefined;
+  let registryError = "";
+  const doorsMounted = (): Set<string> | null => {
+    if (mounted === undefined && registryError === "") {
+      try {
+        mounted = mountedDoors(parseRegistryRows(ROUTE_REGISTRY_HEADING));
+      } catch (e) {
+        registryError = (e as Error).message;
+      }
+    }
+    return mounted ?? null;
+  };
+  for (const file of files.sort()) {
+    const rel = relPath(file);
+    const text = readFileSync(file, "utf8");
+    text.split(/\r?\n/).forEach((line, idx) => {
+      if (COMMENT_EXCLUSION_RE.test(line)) {
+        scan.findings.push(
+          `${rel}:${idx + 1} -> a comment-only sign-in-host exclusion; bind the ` +
+            `scenario with ${SIGN_IN_HOST_BINDING} or park it with @quarantine:login(#N)`,
+        );
+      }
+    });
+    for (const scenario of parseScenarios(text)) {
+      const where = `${rel}:${scenario.line}`;
+      const doors = scenario.tags
+        .map((t) => t.match(DOOR_TAG_RE))
+        .filter((m): m is RegExpMatchArray => m !== null)
+        .map((m) => m[1]);
+      const hostQ = scenario.tags
+        .map((t) => t.match(HOST_QUARANTINE_RE))
+        .find((m) => m !== null);
+      const bound = scenario.tags.includes(SIGN_IN_HOST_BINDING);
+      // The `login` project starts its journeys on the Academy entry
+      // (`packages/e2e/playwright.config.ts`): a binding in a doctor-only or
+      // admin feature would run against the wrong storefront.
+      if (
+        bound &&
+        !scenario.tags.includes("@host:academy") &&
+        !scenario.tags.includes("@host:both")
+      ) {
+        scan.findings.push(
+          `${where} -> ${SIGN_IN_HOST_BINDING} outside an Academy feature; the ` +
+            `login project starts on the Academy entry only`,
+        );
+      }
+      if (hostQ) {
+        scan.hostQuarantines.push({
+          file,
+          line: scenario.line,
+          raw: hostQ[0],
+          issue: hostQ[1] ? Number(hostQ[1].replace("#", "")) : null,
+        });
+        if (bound) {
+          scan.findings.push(
+            `${where} -> ${SIGN_IN_HOST_BINDING} and ${hostQ[0]} on one scenario; ` +
+              `a scenario is either bound to the sign-in host or parked from it`,
+          );
+        }
+      }
+      for (const door of doors) {
+        if (!(DOORS as readonly string[]).includes(door)) {
+          scan.findings.push(
+            `${where} -> unknown door @door:${door} (expected one of ` +
+              DOORS.map((d) => `@door:${d}`).join(", ") +
+              `)`,
+          );
+          continue;
+        }
+        const live = doorsMounted();
+        if (live === null) {
+          scan.findings.push(
+            `${where} -> @door:${door} cannot be checked: ${registryError}`,
+          );
+          continue;
+        }
+        if (!live.has(door)) continue;
+        if (bound) scan.bound += 1;
+        else if (hostQ) scan.quarantined += 1;
+        else {
+          scan.findings.push(
+            `${where} -> @door:${door} is mounted on the sign-in host, but the ` +
+              `scenario has no ${SIGN_IN_HOST_BINDING} binding (or a tracked ` +
+              `@quarantine:login(#N))`,
+          );
+        }
+      }
+    }
+  }
+  return scan;
+}
+
 async function main(): Promise<void> {
   const reqFiles = await fg([REQUIREMENTS_GLOB], {
     cwd: REPO_ROOT,
@@ -211,6 +366,9 @@ async function main(): Promise<void> {
     });
   }
 
+  const doorScan = await scanDoorBindings();
+  quarantines.push(...doorScan.hostQuarantines);
+
   // §6.5 — every quarantine must name an OPEN Issue. BLOCK wherever it sits: a
   // quarantine nobody tracks is a test switched off for good, not backfill debt.
   const badQuarantines: string[] = [];
@@ -261,6 +419,10 @@ async function main(): Promise<void> {
   }
 
   info(`scanned ${reports.length} user-facing feature spec(s).`);
+  info(
+    `${doorScan.bound + doorScan.quarantined} mounted-door scenario(s): ` +
+      `${doorScan.bound} bound to the sign-in host, ${doorScan.quarantined} host-quarantined.`,
+  );
   for (const w of warning) process.stdout.write(`${TAG} WARN ${w}\n`);
   if (warning.length > 0) {
     info(
@@ -275,19 +437,26 @@ async function main(): Promise<void> {
     );
   }
 
-  if (blocking.length === 0 && badQuarantines.length === 0) {
+  if (
+    blocking.length === 0 &&
+    badQuarantines.length === 0 &&
+    doorScan.findings.length === 0
+  ) {
     info(
       "PASS — every user-facing handler this PR touched is covered by a live " +
-        "scenario, and every quarantine names an OPEN Issue.",
+        "scenario, every mounted-door scenario is bound to the sign-in host or " +
+        "host-quarantined, and every quarantine names an OPEN Issue.",
     );
     process.exit(0);
   }
 
   for (const b of badQuarantines) process.stderr.write(`${TAG} ${b}\n`);
   for (const b of blocking) process.stderr.write(`${TAG} ${b}\n`);
+  for (const b of doorScan.findings) process.stderr.write(`${TAG} ${b}\n`);
   process.stderr.write(
     `${TAG} FAIL — ${blocking.length} touched spec(s) with an uncovered EARS ` +
-      `handler and ${badQuarantines.length} untracked quarantine(s) (tech spec ` +
+      `handler, ${doorScan.findings.length} sign-in-host binding finding(s) ` +
+      `(#3345) and ${badQuarantines.length} untracked quarantine(s) (tech spec ` +
       `§6.4/§6.5). Tag a live scenario in the spec's NNN-scenarios.feature with ` +
       `@EARS-N for each handler, and give every @quarantine an OPEN Issue that ` +
       `names the scenario.\n`,

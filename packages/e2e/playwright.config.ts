@@ -4,7 +4,7 @@ import { defineBddConfig } from "playwright-bdd";
 
 import { HOSTS, SIGN_IN_HOST } from "./hosts.js";
 import { authLimitTagsFor } from "./lib/default-auth-limits.js";
-import { ordinaryStorefrontTagsFor } from "./lib/host-tags.js";
+import { ordinaryStorefrontTagsFor, signInHostTags } from "./lib/host-tags.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
 
 /**
@@ -28,6 +28,17 @@ import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
  * the `bddgen` script runs `bin/check-host-tags.ts` first: an untagged file
  * fails generation and names itself, rather than silently vanishing from both
  * suites.
+ *
+ * ── The sign-in host (#3345) ─────────────────────────────────────────────────
+ * A door scenario bound to the sign-in host (scenario-level `@host:login`,
+ * required by `tools/lint/scenario-coverage-lint.ts` for every door the
+ * route-mount registry marks `mounted` on `apps/login`) runs in the `login`
+ * project, NOT in its storefront's: the journey starts on the storefront entry
+ * (`metadata.storefront`, read by the `host` fixture) and does its credential
+ * work on `login-<slot>`. That project generates with `missingSteps:
+ * "fail-on-gen"` — a bound scenario with no step definitions fails `bddgen`,
+ * because a binding that can only skip is the silent gap the rule exists to
+ * close; a door scenario without steps is parked with `@quarantine:login(#N)`.
  *
  * ── Missing steps ────────────────────────────────────────────────────────────
  * `missingSteps: "skip-scenario"`. The three alternatives playwright-bdd 9.2
@@ -115,7 +126,11 @@ const FEATURES = "../../apps/docs/content/specs/features/*/*-scenarios.feature";
 const STEPS = ["steps/**/*.ts"];
 
 /** One generated test dir per host — the tag filter differs, so the output must. */
-const testDirFor = (hostId: keyof typeof HOSTS, tags: string) =>
+const testDirFor = (
+  hostId: keyof typeof HOSTS | "login",
+  tags: string,
+  missingSteps: "skip-scenario" | "fail-on-gen" = "skip-scenario",
+) =>
   defineBddConfig({
     features: FEATURES,
     // `featuresRoot` anchors the generated paths at the spec tree, so a generated
@@ -123,18 +138,19 @@ const testDirFor = (hostId: keyof typeof HOSTS, tags: string) =>
     featuresRoot: "../../apps/docs/content/specs/features",
     steps: STEPS,
     outputDir: `.features-gen/${hostId}`,
-    tags: ordinaryStorefrontTagsFor(tags),
-    missingSteps: "skip-scenario",
+    tags,
+    missingSteps,
   });
 
 const academyTestDir = testDirFor(
   "academy",
-  authLimitTagsFor("academy", process.env),
+  ordinaryStorefrontTagsFor(authLimitTagsFor("academy", process.env)),
 );
 const doctorTestDir = testDirFor(
   "doctor",
-  authLimitTagsFor("doctor", process.env),
+  ordinaryStorefrontTagsFor(authLimitTagsFor("doctor", process.env)),
 );
+const loginTestDir = testDirFor("login", signInHostTags(), "fail-on-gen");
 
 export default defineConfig({
   // Parallel: one golden worker-pool account per worker (see `workers` above).
@@ -193,12 +209,26 @@ export default defineConfig({
       testMatch: /.*\.walk\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"] },
     },
-    // ── The sign-in host (ADR-0015 §4, #3171) ────────────────────────────────
-    // Its own shape (no navigation model, no legal documents, no events path),
-    // so it is neither a Gherkin host project nor a walk target: plain specs in
-    // `./sign-in-host`, addressed at `login-<slot>` through E2E_LOGIN_URL.
+    // ── The sign-in host (ADR-0015 §4) ───────────────────────────────────────
+    // `login` (#3345): the door scenarios bound with `@host:login`. Its base
+    // URL is the storefront the journeys start on — the 003 catalog is the
+    // Academy's (`@host:academy`), and the lint refuses a binding in a feature
+    // of any other storefront until this project grows a sibling for it.
     {
       name: "login",
+      testDir: loginTestDir,
+      metadata: { storefront: "academy" },
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: process.env[HOSTS.academy.baseUrlEnv],
+      },
+    },
+    // `sign-in-host` (#3171): the host's own shape (no navigation model, no
+    // legal documents, no events path), so it is neither a Gherkin host project
+    // nor a walk target: plain specs in `./sign-in-host`, addressed at
+    // `login-<slot>` through E2E_LOGIN_URL.
+    {
+      name: "sign-in-host",
       testDir: "./sign-in-host",
       testMatch: /.*\.spec\.ts$/,
       use: {

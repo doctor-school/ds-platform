@@ -9,6 +9,7 @@ import {
   exitCodeFor,
   liveLegVerdict,
   parseE2eArgs,
+  PROJECTS,
   planLiveLeg,
   preflightVerdict,
   publicAxeLeg,
@@ -81,6 +82,23 @@ describe("parseE2eArgs", () => {
 
   it("selects the derived-walks project", () => {
     assert.equal(parseE2eArgs(["main", "--project", "walks"]).project, "walks");
+  });
+
+  it("selects the sign-in host's door journeys apart from its plain specs (#3345)", () => {
+    // `login` is the Gherkin project of the 003 door scenarios bound with
+    // `@host:login`; `sign-in-host` keeps the host's own plain specs.
+    assert.equal(parseE2eArgs(["main", "--project", "login"]).project, "login");
+    assert.equal(
+      parseE2eArgs(["main", "--project", "sign-in-host"]).project,
+      "sign-in-host",
+    );
+    assert.deepEqual(PROJECTS, [
+      "academy",
+      "doctor",
+      "walks",
+      "login",
+      "sign-in-host",
+    ]);
   });
 
   it("refuses an unknown project, an unknown flag and a missing slot", () => {

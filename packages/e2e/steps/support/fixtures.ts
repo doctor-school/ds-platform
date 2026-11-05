@@ -137,7 +137,12 @@ export interface EditorWrites {
 export const test = base.extend<{ host: HostConfig; world: StepWorld }>({
   // eslint-disable-next-line no-empty-pattern -- bddgen requires the `({}, use)` shape (see above)
   host: async ({}, use, testInfo) => {
-    await use(hostById(testInfo.project.name));
+    // A project named by a storefront drives that storefront. The `login`
+    // project (#3345) drives the door scenarios bound to the sign-in host,
+    // whose journeys start on the storefront its `metadata.storefront` names.
+    const storefront = (testInfo.project.metadata as { storefront?: string })
+      .storefront;
+    await use(hostById(storefront ?? testInfo.project.name));
   },
   world: async ({ host }, use) => {
     await use({ host, hostBaseUrl: baseUrlFor(host) });

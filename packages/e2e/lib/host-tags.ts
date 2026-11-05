@@ -107,3 +107,8 @@ export function hostTagCounts(
 export function tagExpressionFor(hostId: StorefrontHostId): string {
   return `@host:${hostId} or @host:both`;
 }
+
+export function ordinaryStorefrontTagsFor(expression: string): string {
+  // The dedicated 017 contour needs owned resources that ordinary stage runs do not provision.
+  return `(${expression}) and not @public-feed-entry`;
+}

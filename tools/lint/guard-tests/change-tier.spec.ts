@@ -720,6 +720,21 @@ describe("#2819: CI runner scripts under e2e/ are not test paths", () => {
     expect(result.minimum).toBe("ask");
     expect(result.testOnly ?? false).toBe(false);
     expect(resolveTier(SHIP, [mod(path)]).effective).toBeNull();
+    expect(requiresStageCheck(path)).toBe(false);
+    expect(isEnvironmentSensitivePath(path)).toBe(false);
+  });
+
+  it("EARS-1: registered e2e execution controls keep their tier classification without requiring a shipping-runtime slot", () => {
+    for (const path of [
+      ...E2E_RUN_SELECTION_MODULES,
+      "apps/doctor/e2e/run-ci-tiers.mjs",
+      "packages/e2e/bin/check-host-tags.ts",
+    ]) {
+      expect(isTestPath(path), path).toBe(false);
+      expect(isNonRuntimePath(path), path).toBe(false);
+      expect(requiresStageCheck(path), path).toBe(false);
+      expect(isEnvironmentSensitivePath(path), path).toBe(false);
+    }
   });
 
   it("EARS-1: a PR changing only an e2e runner script is neither test-only nor ship", () => {

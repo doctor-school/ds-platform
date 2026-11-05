@@ -1,6 +1,6 @@
 ---
 title: "Grant and revoke staff access"
-description: "Giving a staff member access to the admin panel and taking it away in «Доступы»: the grant, the second-factor confirmation, the one-time temporary password and its delivery by a Mattermost bot DM, the first login, offboarding with «Отозвать», and the manual bootstrap of an environment's first platform administrator."
+description: "Giving a staff member access to the admin panel and taking it away in «Доступы»: the grant, the second-factor confirmation, the one-time temporary password and its delivery by a Mattermost bot DM, the first login, offboarding with «Отозвать», the superadmin operator command, and the manual bootstrap of an environment's first platform administrator."
 lang: en
 ---
 
@@ -11,7 +11,8 @@ member access to the admin panel at `https://admin.doctor.school`, or to take it
 away. Staff access is managed in the admin section «Доступы» (`/access`,
 feature 047): the grant finds or creates the account, adds the role and the event
 binding and shows a one-time temporary password; «Отозвать» removes the role and
-ends every admin session of the person at once. The only manual path left is
+ends every admin session of the person at once. Two paths stay outside
+«Доступы»: the [superadministrator](#superadministrator) operator command, and
 [bootstrapping the first platform administrator](#bootstrap-the-first-platform-administrator)
 of an environment, when nobody can sign in to «Доступы» yet.
 
@@ -249,6 +250,62 @@ waiting period and no manual session clean-up.
 Every grant and revocation is recorded in the audit ledger (`auth.role.granted`
 / `auth.role.revoked`, with the person, the role, the event and the acting
 administrator); no separate tracker record of the offboarding is needed.
+
+## Superadministrator
+
+`superadmin` (feature 049) is never granted or revoked in «Доступы»: the
+superadmin operator command is the only path that gives or removes it. Run it
+when the platform needs its first superadministrator, when another person is
+to become one, or when one leaves the role. It runs inside the environment's
+running `api` container, which already holds that environment's API
+configuration; there is no second-factor confirmation, so the post-action note
+below is the record of who acted and why.
+
+**Production** (ds-api-prod, from a `breakglass` session — `deploy` has no shell
+there). The api image carries the compiled command in `dist/`, so it runs with
+plain `node`; no pnpm, tsx or repository checkout is needed:
+
+```bash
+cd /home/deploy/ds-platform/infra/deploy/compose/api-prod
+sudo docker compose exec -T api node dist/staff-access/superadmin-main.js grant  --email <account email> --by-admin <operator IdP sub>
+sudo docker compose exec -T api node dist/staff-access/superadmin-main.js remove --email <account email> --by-admin <operator IdP sub>
+```
+
+A stage PR slot runs the same `node dist/staff-access/superadmin-main.js …` in
+its own `api` container.
+
+**Workstation, against the dev stand:**
+
+```bash
+set -a; source ~/.ds-platform/.env.local; set +a
+pnpm --filter @ds/api superadmin -- grant  --email <account email> --by-admin <operator IdP sub>
+pnpm --filter @ds/api superadmin -- remove --email <account email> --by-admin <operator IdP sub>
+```
+
+- `--email` names an **existing** account whose email is verified; the command
+  creates no account and sets no password — the person signs in with their own
+  password and has, or enrols, the authenticator. An unknown, unverified or
+  shared email is refused with nothing changed.
+- `--by-admin` is the IdP subject of the operator running it, written as the
+  acting administrator of the ledger rows; it must be an existing account. For
+  the very first superadministrator there is nobody else to name: pass your own
+  subject (for the owner's account, the account itself).
+- **grant** adds `superadmin` and `platform_admin` to the account's existing
+  roles (each only when absent, `doctor_guest` and the rest kept) and records
+  one `auth.role.granted` per role added. Running it again changes nothing.
+- **remove** takes away `superadmin` only — `platform_admin` stays and, if it
+  should go too, another superadministrator revokes it in «Доступы» — ends
+  every admin session and unfinished admin sign-in of the person and records
+  `auth.role.revoked`. **The last superadministrator cannot be removed**: grant
+  the role to another account first.
+- Output: one JSON line on stdout (`verb`, `sub`, `changed`, `byAdmin`) — no
+  secret. A refusal prints `REFUSED — <reason>; nothing was changed` on stderr
+  and exits non-zero.
+
+**A post-action note on the tracking Issue is MANDATORY, in the same session as
+the run:** who ran it (a role plus the operator's IdP subject), whose account
+(the target's IdP subject), grant or remove, and why. A run with no note is an
+unrecorded change of the platform's highest staff role; treat it as an incident.
 
 ## Bootstrap the first platform administrator
 

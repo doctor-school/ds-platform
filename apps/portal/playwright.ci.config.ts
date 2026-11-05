@@ -35,6 +35,11 @@ const READY_URL = `${BASE}/documents`;
 // transaction endpoint; this tier boots the shared double of that endpoint.
 const DOUBLE_PORT = Number(process.env.STOREFRONT_DOUBLE_PORT ?? 3217);
 const DOUBLE_TOKEN = "storefront-double-token";
+// #2478: the session reads of the shell's auth cluster (`/v1/auth/session`,
+// `/v1/me/profile`), so a signed-in visitor's header is reachable here.
+const SESSION_DOUBLE_PORT = Number(
+  process.env.STOREFRONT_SESSION_DOUBLE_PORT ?? 3218,
+);
 const ACADEMY_E2E_SAFE_MARKER = "ACADEMY_PARTNERSHIP_E2E_SAFE";
 
 function normalized(path: string): string {
@@ -93,6 +98,8 @@ export default defineConfig({
     // #3682: the header-vs-canvas structure check reads `/documents`, which
     // renders the shared chrome with no backend.
     /[\\/]e2e[\\/]header-canvas-structure\.e2e\.spec\.ts$/,
+    // #2478: the not-found page, guest and signed in, against the session double.
+    /[\\/]e2e[\\/]not-found\.e2e\.spec\.ts$/,
   ],
   globalTeardown: "./e2e/support/academy-submissions-global-teardown.ts",
   fullyParallel: true,
@@ -121,6 +128,13 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
+      command: "node ../../packages/e2e/doubles/storefront-session-api.mjs",
+      url: `http://127.0.0.1:${SESSION_DOUBLE_PORT}/health`,
+      env: { STOREFRONT_SESSION_DOUBLE_PORT: String(SESSION_DOUBLE_PORT) },
+      timeout: 30_000,
+      reuseExistingServer: false,
+    },
+    {
       // Bound like the image (Dockerfile HOSTNAME=0.0.0.0): on a 127.0.0.1 bind
       // Next hands the proxy a `localhost` URL, so a gate rewrite reads as
       // external and loses its status (003 EARS-72 refusal page, #3379).
@@ -134,6 +148,7 @@ export default defineConfig({
         ACADEMY_SUBMISSIONS_DIR,
         INTERNAL_API_URL: `http://127.0.0.1:${DOUBLE_PORT}`,
         INTERNAL_API_TOKEN: DOUBLE_TOKEN,
+        API_PROXY_TARGET: `http://127.0.0.1:${SESSION_DOUBLE_PORT}`,
       },
     },
   ],

@@ -1,9 +1,9 @@
-import NextLink from "next/link";
 import { UserRound } from "lucide-react";
 import { Button } from "@ds/design-system/button";
 
 import type { ShellAuthState } from "./config";
 import { GuestLoginLink } from "./guest-login-link";
+import { SessionRecheck } from "./session-recheck";
 
 /**
  * 008 EARS-4/5/6 · 017 EARS-1 — the storefront chrome's auth affordance, owned
@@ -28,6 +28,11 @@ import { GuestLoginLink } from "./guest-login-link";
  * contract in `packages/schemas` carries a points value, so drawing it would
  * mean inventing one or painting a placeholder number at a doctor — both
  * forbidden (AGENTS.md §6). It lands with its read contract, Issue #1559.
+ *
+ * 003 EARS-74 — the profile chip is a plain document `<a>`, not a router link,
+ * like the guest link (EARS-61): a router link RSC-fetched `/account`, committed
+ * its guest `redirect()` as an empty page and only then reached the sign-in
+ * host (#3748). A document request goes straight there.
  */
 /**
  * Where the cluster sits (#3629). Below `layout` it is the last item of the `≡`
@@ -93,9 +98,9 @@ export function ShellAuthCluster({ auth }: { auth: ShellAuthState }) {
         // guest chip it replaces, so the bar's height never moves with the
         // session.
         <Button asChild variant="header-action" size="menu-chip">
-          <NextLink href={auth.profileHref} data-testid="shell-avatar">
+          <a href={auth.profileHref} data-testid="shell-avatar">
             {auth.label}
-          </NextLink>
+          </a>
         </Button>
       ) : (
         // The initials chip — an icon-LINK to the profile, never a dropdown and
@@ -106,7 +111,7 @@ export function ShellAuthCluster({ auth }: { auth: ShellAuthState }) {
         // `primary.label`); from `layout` up the square shows the initials.
         // One link, both texts, CSS picks — never a second chip (EARS-1).
         <Button asChild variant="header-action" size="menu-avatar">
-          <NextLink
+          <a
             href={auth.profileHref}
             aria-label={auth.label}
             data-testid="shell-avatar"
@@ -115,9 +120,12 @@ export function ShellAuthCluster({ auth }: { auth: ShellAuthState }) {
             <span className="hidden layout:inline-flex">
               {auth.initials ? auth.initials : avatarFallbackIcon}
             </span>
-          </NextLink>
+          </a>
         </Button>
       )}
+      {/* 003 EARS-73 — only a signed-in render re-checks its session when the
+          tab is returned to; it renders nothing. */}
+      <SessionRecheck />
     </div>
   );
 }

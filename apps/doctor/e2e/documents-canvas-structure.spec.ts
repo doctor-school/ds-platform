@@ -8,12 +8,12 @@ import { expectSlotSectionMatchesCanvas } from "@ds/e2e/canvas-slots";
  * (guest, doctor storefront): each section's chrome by kind + visible label,
  * its repeated rows by SHAPE only (`@ds/e2e/canvas-slots`). The rows are the
  * published set of `@ds/legal-content` (028), never the canvases' sample rows.
- * Decided chrome deviations (028 EARS-4 RuTube, EARS-6 no Academy crossing)
- * live in `canvas-structure-allowlist.json`.
+ * Decided chrome deviations (028 EARS-4 RuTube, EARS-6 no Academy crossing,
+ * and the owner's PR #2009 Stage-B round 1 removal of the Academy caption and
+ * the «Про согласия» block nested in «d-docs · документы») live in
+ * `canvas-structure-allowlist.json`.
  *
- * Not compared: «d-docs · документы» (it nests «d-docs · согласия», whose
- * cabinet link the page does not render and no decision covers yet — #3757
- * PR body), «document · подвал документа» (the canvas draws no control in it;
+ * Not compared: «document · подвал документа» (the canvas draws no control in it;
  * the edition line is the poster's on the page), the document's table of
  * contents and back link (drawn outside every labelled section) and the
  * document text (data, not structure).
@@ -39,6 +39,23 @@ for (const width of [390, 1440]) {
         input,
         section: { section: ["data-screen-label", "d-docs · постер-шапка"] },
         rendered: { root: '[data-testid="documents-page"] > div:first-child' },
+      });
+    });
+
+    test("the documents section has the canvas structure (row shapes)", async ({
+      page,
+    }) => {
+      await expectSlotSectionMatchesCanvas(page, {
+        canvas: "doctor-docs.dc.html",
+        input,
+        section: {
+          section: ["data-screen-label", "d-docs · документы"],
+          repeats: ["doc"],
+        },
+        rendered: {
+          root: 'section[aria-labelledby="documents-heading"]',
+          card: '[data-testid^="legal-document-row-"]',
+        },
       });
     });
 

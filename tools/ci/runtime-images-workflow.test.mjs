@@ -2,7 +2,8 @@
 // deleted manifest's bytes only at the provider's nightly GC, so what one day of runs
 // uploads is the binding constraint (infra/deploy/README.md → Container registry).
 // Two mechanisms keep it bounded: reproducible layers (an image-neutral commit
-// re-uploads nothing) and PR images pushed only on demand (the `stage-slot` label).
+// re-uploads nothing; the API Dockerfile's `pnpm deploy` trees are part of that) and
+// PR images pushed only on demand (the `stage-slot` label).
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";

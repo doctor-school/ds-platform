@@ -27,6 +27,7 @@
     {
       "canvas": "ds-shell.dc.html",
       "props": { "host": "doctor" },
+      "regions": ["header"],
       "delta": "missing",
       "item": {
         "kind": "input",
@@ -38,6 +39,7 @@
     {
       "canvas": "ds-shell.dc.html",
       "props": { "host": "doctor" },
+      "regions": ["header"],
       "delta": "extra",
       "item": { "kind": "input", "label": "Поиск по эфирам" },
       "decision": "The doctor-host search submits to the events listing (the one surface that answers a query until the results surface #1492 ships), so the placeholder names what it finds; the canvas text promises lessons and schools that this search does not return.",
@@ -50,6 +52,60 @@
       "item": { "kind": "link", "label": "Моя лента" },
       "decision": "The doctor header carries a permanent «Моя лента» item into the 018 specialty feed, added by the owner after the canvas was drawn; the canvas doctor artboard still shows «Эфиры» alone.",
       "source": "Owner decision recorded at https://github.com/doctor-school/ds-platform/issues/3674#issuecomment-6630378173 («#3674 + пункт в шапке»), Stage-B GO on PR #3696; apps/doctor/lib/navigation-model.ts"
+    },
+    {
+      "canvas": "ds-shell.dc.html",
+      "props": { "host": "doctor", "loggedIn": true },
+      "regions": ["header"],
+      "delta": "missing",
+      "item": { "kind": "link", "label": "120 Pul·340 Bre·1 250 Con" },
+      "decision": "The signed-in points plate is deferred: no shipped contract in packages/schemas carries a points value, and painting the canvas sample numbers at a doctor is a banned stub; it lands with its read contract.",
+      "source": "https://github.com/doctor-school/ds-platform/issues/1559 (017 EARS-1 deferral, source:spec); packages/storefront-shell/src/auth-cluster.tsx"
+    },
+    {
+      "canvas": "ds-shell.dc.html",
+      "props": {},
+      "regions": ["footer"],
+      "delta": "missing",
+      "item": { "kind": "link", "label": "Пользовательское соглашение" },
+      "decision": "«Пользовательское соглашение» has no approved text and no page (028 slice 2, owner 2026-09-06); a document with no approved content is absent, never a placeholder row, so neither storefront's footer links it.",
+      "source": "apps/docs/content/specs/features/028-legal-pages/028-requirements-en.md Out of scope + Constraints; apps/doctor/lib/shell-config.ts footer.documents"
+    },
+    {
+      "canvas": "ds-shell.dc.html",
+      "props": { "host": "doctor" },
+      "regions": ["footer"],
+      "delta": "extra",
+      "item": { "kind": "link", "label": "Документы и контакты" },
+      "decision": "The footer documents column opens with a link into the /documents list (the storefront legal surface), which the canvas does not draw; it stays.",
+      "source": "Lead decision recorded at https://github.com/doctor-school/ds-platform/issues/3727#issuecomment-6651753484 (Q1: keep); apps/docs/content/specs/features/028-legal-pages/028-requirements-en.md EARS-1"
+    },
+    {
+      "canvas": "ds-shell.dc.html",
+      "props": { "host": "academy" },
+      "regions": ["footer"],
+      "delta": "extra",
+      "item": { "kind": "link", "label": "Документы" },
+      "decision": "The footer documents column opens with a link into the /documents list (the storefront legal surface), which the canvas does not draw; it stays.",
+      "source": "Lead decision recorded at https://github.com/doctor-school/ds-platform/issues/3727#issuecomment-6651753484 (Q1: keep); apps/docs/content/specs/features/028-legal-pages/028-requirements-en.md EARS-1"
+    },
+    {
+      "canvas": "ds-shell.dc.html",
+      "props": { "host": "doctor" },
+      "regions": ["footer"],
+      "delta": "extra",
+      "item": { "kind": "link", "label": "Политика персональных данных и согласия" },
+      "decision": "The doctor footer privacy link carries the published document title «Политика персональных данных и согласия»; the canvas label «Политика обработки персональных данных» is superseded.",
+      "source": "Lead decision recorded at https://github.com/doctor-school/ds-platform/issues/3727#issuecomment-6651753484 (Q3); apps/docs/content/specs/features/028-legal-pages/028-requirements-en.md EARS-3; apps/doctor/lib/shell-config.ts footer.documents"
+    },
+    {
+      "canvas": "ds-shell.dc.html",
+      "props": { "host": "doctor" },
+      "regions": ["footer"],
+      "delta": "missing",
+      "item": { "kind": "link", "label": "Политика обработки персональных данных" },
+      "decision": "The doctor footer privacy link carries the published document title «Политика персональных данных и согласия»; the canvas label «Политика обработки персональных данных» is superseded.",
+      "source": "Lead decision recorded at https://github.com/doctor-school/ds-platform/issues/3727#issuecomment-6651753484 (Q3); apps/docs/content/specs/features/028-legal-pages/028-requirements-en.md EARS-3; apps/doctor/lib/shell-config.ts footer.documents"
     }
   ]
 }

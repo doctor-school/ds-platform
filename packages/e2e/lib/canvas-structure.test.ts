@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  DS_SHELL_FOOTER_REGION,
   applyAllowlist,
   diffStructures,
   extractCanvasStructure,
@@ -117,6 +118,109 @@ describe("canvas-structure · extractCanvasStructure", () => {
   });
 });
 
+describe("canvas-structure · #3727 footer region and signed-in header", () => {
+  it("a region with no `untilComment` is the start element alone — its following siblings are not read", () => {
+    const file = canvas(
+      '<div><footer data-screen-label="f"><a href="#">Внутри</a></footer><a href="#">Снаружи</a></div>',
+      "renderVals() { return {}; }",
+    );
+    const tree = extractCanvasStructure(file, {}, { start: { tag: "footer", attr: ["data-screen-label", "f"] } });
+    expect(formatStructure(tree)).toBe("bar: link «Внутри»\nmenu: —");
+  });
+
+  it("ds-shell · doctor · guest · footer: «Разделы», the three documents, then the single crossing — the logo image and the aria-hidden wordmark are not items", () => {
+    const tree = extractCanvasStructure(
+      DS_SHELL,
+      { props: { host: "doctor", loggedIn: false, mobile: true } },
+      DS_SHELL_FOOTER_REGION,
+    );
+    expect(formatStructure(tree)).toBe(
+      [
+        "bar: link «Эфиры» · link «Пользовательское соглашение» · link «Политика обработки персональных данных» · link «Контакты» · link «Academy.Doctor.School ↗»",
+        "menu: —",
+      ].join("\n"),
+    );
+  });
+
+  it("ds-shell · academy · guest · footer: the four-link «Разделы» and the crossing to Doctor.School", () => {
+    const tree = extractCanvasStructure(
+      DS_SHELL,
+      { props: { host: "academy", loggedIn: false, mobile: false } },
+      DS_SHELL_FOOTER_REGION,
+    );
+    expect(formatStructure(tree)).toBe(
+      [
+        "bar: link «Эфиры» · link «Проекты» · link «Эксперты» · link «Партнёры» · link «Пользовательское соглашение» · link «Политика обработки персональных данных» · link «Контакты» · link «Doctor.School ↗»",
+        "menu: —",
+      ].join("\n"),
+    );
+  });
+
+  it("ds-shell · doctor · signed-in · 1440: the points plate and «Личный кабинет» replace the guest primary", () => {
+    const tree = extractCanvasStructure(DS_SHELL, {
+      props: { host: "doctor", loggedIn: true, mobile: false },
+    });
+    expect(formatStructure(tree)).toBe(
+      [
+        "bar: link «icon» · input «Поиск по урокам, школам и событиям» · link «Эфиры» · link «120 Pul·340 Bre·1 250 Con» · button «icon» · link «Личный кабинет»",
+        "menu: —",
+      ].join("\n"),
+    );
+  });
+
+  it("ds-shell · academy · signed-in · 390: «Мои события» then «Личный кабинет» close the ≡ menu", () => {
+    const tree = extractCanvasStructure(DS_SHELL, {
+      props: { host: "academy", loggedIn: true, mobile: true },
+    });
+    expect(formatStructure(tree)).toBe(
+      [
+        "bar: link «icon» · button «icon» · summary «icon»",
+        "menu: link «Эфиры» · link «Проекты» · link «Эксперты» · link «Партнёры» · link «Мои события» · link «Личный кабинет»",
+      ].join("\n"),
+    );
+  });
+
+  it("RED: a footer with the documents column after the crossing, and a second crossing, is reported", () => {
+    const want = extractCanvasStructure(
+      DS_SHELL,
+      { props: { host: "doctor", loggedIn: false, mobile: false } },
+      DS_SHELL_FOOTER_REGION,
+    );
+    const link = (label: string) => ({ kind: "link" as const, label });
+    const broken: RegionStructure = {
+      bar: [
+        link("Эфиры"),
+        link("Academy.Doctor.School ↗"),
+        link("Пользовательское соглашение"),
+        link("Политика обработки персональных данных"),
+        link("Контакты"),
+        link("Academy.Doctor.School ↗"),
+      ],
+      menu: [],
+    };
+    expect(diffStructures(want, broken)).toEqual([
+      "extra in app (bar): link «Academy.Doctor.School ↗»",
+      "order (bar): canvas [link «Эфиры», link «Пользовательское соглашение», link «Политика обработки персональных данных», link «Контакты», link «Academy.Doctor.School ↗»] · app [link «Эфиры», link «Academy.Doctor.School ↗», link «Пользовательское соглашение», link «Политика обработки персональных данных», link «Контакты»]",
+    ]);
+  });
+
+  it("RED: a signed-in header still drawing the guest primary is reported both ways", () => {
+    const want = extractCanvasStructure(DS_SHELL, {
+      props: { host: "academy", loggedIn: true, mobile: false },
+    });
+    const broken: RegionStructure = {
+      bar: want.bar.map((item) =>
+        item.label === "Личный кабинет" ? { kind: "link", label: "Войти / Регистрация" } : item,
+      ),
+      menu: [],
+    };
+    expect(diffStructures(want, broken)).toEqual([
+      "missing in app (bar): link «Личный кабинет»",
+      "extra in app (bar): link «Войти / Регистрация»",
+    ]);
+  });
+});
+
 describe("canvas-structure · diffStructures", () => {
   const link = (label: string) => ({ kind: "link" as const, label });
   const canvasTree: RegionStructure = {
@@ -195,5 +299,24 @@ describe("canvas-structure · applyAllowlist", () => {
     const where = { canvas: "ds-shell.dc.html", props: { host: "academy" } };
     const out = applyAllowlist([entry], where, { bar: [], menu: [] }, { bar: [], menu: [] });
     expect(out.stale).toEqual([entry]);
+  });
+
+  it("#3727: an entry scoped to `regions` applies only there and is never stale elsewhere", () => {
+    const scoped: AllowlistEntry = { ...entry, regions: ["header"] };
+    const props = { host: "academy" };
+    const header = applyAllowlist(
+      [scoped],
+      { canvas: "ds-shell.dc.html", props, region: "header" },
+      tree,
+      { bar: [], menu: [] },
+    );
+    expect(header.canvas.bar).toEqual([{ kind: "link", label: "Эфиры" }]);
+    const footer = applyAllowlist(
+      [scoped],
+      { canvas: "ds-shell.dc.html", props, region: "footer" },
+      { bar: [], menu: [] },
+      { bar: [], menu: [] },
+    );
+    expect(footer.stale).toEqual([]);
   });
 });

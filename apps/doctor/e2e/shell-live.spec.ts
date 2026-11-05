@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { defineStorefrontHeaderCanvasParity } from "@ds/e2e/canvas-structure";
 import { loginAsDoctor } from "./support/doctor-session";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 
@@ -128,4 +129,14 @@ test.describe("017 EARS-5: the header search narrows the shipped feed", () => {
     await expect(page.getByTestId("shell-search")).toHaveCount(1);
     await expect(page.getByTestId("storefront-header")).toBeVisible();
   });
+});
+
+// #3727 — the signed-in header against the vendored canvas
+// `design-source/ds-shell.dc.html` (host=doctor, `loggedIn: true`) at
+// 320 / 390 / 1440; the guest header and the footer run backend-free in
+// `header-canvas-structure.spec.ts`.
+defineStorefrontHeaderCanvasParity({
+  host: "doctor",
+  path: "/",
+  signIn: loginAsDoctor,
 });

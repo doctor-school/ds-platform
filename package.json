@@ -132,6 +132,7 @@
     "prod:read-key": "node tools/deploy/prod-read.mjs read-key",
     "prod:read-result-key": "node tools/deploy/prod-read.mjs result-key",
     "prod:schema-drift": "node tools/deploy/prod-read.mjs schema-drift",
+    "recovery": "node tools/deploy/recovery.mjs",
     "release:lane": "node tools/deploy/release-lane.mjs",
     "task:worktree": "node tools/dev/task-worktree.mjs",
     "worktree:teardown": "node tools/dev/worktree-teardown.mjs",

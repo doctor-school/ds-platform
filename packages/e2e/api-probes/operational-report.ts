@@ -4,6 +4,8 @@ interface TestResult {
 }
 interface Test {
   status: string;
+  projectName?: string;
+  projectId?: string;
   results: TestResult[];
 }
 interface Suite {
@@ -15,6 +17,7 @@ interface Suite {
 export function assertOperationalReport(
   value: unknown,
   expected: readonly string[],
+  expectedProject?: string,
 ) {
   const report = value as { suites?: Suite[]; errors?: unknown[] } | undefined;
   if (
@@ -27,7 +30,25 @@ export function assertOperationalReport(
   const found: string[] = [];
   function visit(suite: Suite) {
     for (const spec of suite.specs ?? []) {
-      found.push(spec.title.replace(/ @host:[a-z-]+$/, ""));
+      found.push(
+        spec.title.replace(
+          expectedProject
+            ? new RegExp(` @host:${expectedProject}$`)
+            : / @host:[a-z-]+$/,
+          "",
+        ),
+      );
+      if (
+        expectedProject &&
+        spec.tests.some(
+          (test) =>
+            test.projectName !== expectedProject ||
+            test.projectId !== expectedProject,
+        )
+      )
+        throw new Error(
+          `Original must belong to ${expectedProject} project: ${spec.title}`,
+        );
       if (
         spec.tests.length !== 1 ||
         spec.tests.some(
@@ -54,6 +75,11 @@ export function assertOperationalReport(
 }
 
 export const operationalOriginals = {
+  feedEntry: [
+    "A choice opens the chosen specialty's feed",
+    "«Моя лента» opens the remembered specialty's feed",
+    "«Моя лента» with nothing chosen opens the home specialty catalog, never an empty feed",
+  ],
   api: [
     "Health endpoint reports ok on a running process",
     "Readiness endpoint reports ok when Postgres, pgvector and object storage all respond",

@@ -1,0 +1,8 @@
+{
+  "number": 3751,
+  "body": "## Summary\nAdjust a CI-only BDD execution selector.\n\nChange-tier: ask — execution control\nStage-B: N/A — no render surface\n",
+  "labels": [],
+  "files": [{ "path": "packages/e2e/lib/default-auth-limits.ts" }],
+  "changedFiles": 1,
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

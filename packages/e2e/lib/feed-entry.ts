@@ -1,5 +1,11 @@
+import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  readFileSync,
+  readdirSync,
+  readlinkSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -31,6 +37,89 @@ export function feedEntryLog(event: Record<string, unknown>) {
     path,
     JSON.stringify({ at: new Date().toISOString(), ...event }) + "\n",
   );
+}
+
+export function verifyOwnedFeedEntryListeners() {
+  if (process.env.E2E_FEED_ENTRY_BOOT !== "1") return;
+  const normalize = (value: string) =>
+    value.replaceAll("\\", "/").toLowerCase();
+  for (const [name, url] of [
+    ["api", process.env.E2E_API_URL],
+    ["doctor", process.env.E2E_DOCTOR_URL],
+  ] as const) {
+    const port = Number(new URL(url!).port);
+    let pid: number;
+    let command: string;
+    if (process.platform === "win32") {
+      const connections = execFileSync("netstat.exe", ["-ano", "-p", "tcp"], {
+        encoding: "utf8",
+        windowsHide: true,
+      });
+      const listener = connections
+        .split(/\r?\n/)
+        .map((line) => line.trim().split(/\s+/))
+        .find(
+          (cells) => cells[1]?.endsWith(`:${port}`) && cells[3] === "LISTENING",
+        );
+      if (!listener) throw new Error(`No owned ${name} listener on ${port}`);
+      pid = Number(listener[4]);
+      command = execFileSync(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-Command",
+          `(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}').CommandLine`,
+        ],
+        { encoding: "utf8", windowsHide: true },
+      );
+    } else {
+      const inodes = new Set(
+        ["/proc/net/tcp", "/proc/net/tcp6"].flatMap((path) =>
+          readFileSync(path, "utf8")
+            .split("\n")
+            .map((line) => line.trim().split(/\s+/))
+            .filter(
+              (cells) =>
+                cells[1]?.split(":")[1] ===
+                  port.toString(16).toUpperCase().padStart(4, "0") &&
+                cells[3] === "0A",
+            )
+            .map((cells) => `socket:[${cells[9]}]`),
+        ),
+      );
+      const found = readdirSync("/proc")
+        .filter((value) => /^\d+$/.test(value))
+        .find((value) => {
+          try {
+            return readdirSync(`/proc/${value}/fd`).some((fd) =>
+              inodes.has(readlinkSync(`/proc/${value}/fd/${fd}`)),
+            );
+          } catch {
+            return false;
+          }
+        });
+      if (!found) throw new Error(`No owned ${name} listener on ${port}`);
+      pid = Number(found);
+      command = readFileSync(`/proc/${pid}/cmdline`, "utf8").replaceAll(
+        "\0",
+        " ",
+      );
+      expect(readlinkSync(`/proc/${pid}/cwd`)).toBe(
+        resolve(feedEntryRoot, "apps", name),
+      );
+    }
+    expect(normalize(command)).toContain(normalize(feedEntryRoot));
+    expect(normalize(command)).toContain(
+      name === "api" ? "apps/api/dist/main.js" : "next/dist/bin/next",
+    );
+    feedEntryLog({
+      command: "verify actual owned listener PID and worktree entry",
+      name,
+      port,
+      pid,
+      entry: command.trim(),
+    });
+  }
 }
 
 export function verifyFeedEntryProvenance() {

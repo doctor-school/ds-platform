@@ -9,6 +9,7 @@ import {
   feedEntryRoot,
   verifyFeedEntryProvenance,
   verifyManagedFeedEntryAdjacency,
+  verifyOwnedFeedEntryListeners,
 } from "../lib/feed-entry.js";
 
 type Specialty = { id: string; code: string; name: string; isOther: boolean };
@@ -44,6 +45,7 @@ Given(
   /^the storefront is apps\/doctor serving doctor\.school on the shared design system$/,
   async ({ page, host, world }) => {
     expect(host.id).toBe("doctor");
+    verifyOwnedFeedEntryListeners();
     state.set(page, { book: [], commands: [] });
     page.on("request", (request) => {
       if (

@@ -76,7 +76,7 @@ export default defineConfig({
     ? {
         webServer: [
           {
-            command: "node dist/main.js",
+            command: `node "${resolve(feedEntryRoot, "apps/api/dist/main.js")}"`,
             cwd: resolve(feedEntryRoot, "apps/api"),
             url: `${api}/v1/health`,
             reuseExistingServer: false,
@@ -98,7 +98,7 @@ export default defineConfig({
           {
             command: `node "${next}" start --hostname 127.0.0.1 --port ${new URL(doctor!).port}`,
             cwd: resolve(feedEntryRoot, "apps/doctor"),
-              url: doctor!,
+            url: doctor!,
             reuseExistingServer: false,
             timeout: 60_000,
             env: {

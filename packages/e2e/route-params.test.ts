@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { listDocuments } from "@ds/legal-content";
 
-import { resolveRoute, routeParams } from "./route-params.js";
+import {
+  UNKNOWN_ADDRESS_SEGMENT,
+  directVisitAnswer,
+  resolveRoute,
+  routeParams,
+} from "./route-params.js";
 
 describe("resolveRoute", () => {
   it("substitutes the golden slug into a dynamic pattern", () => {
@@ -46,6 +51,19 @@ describe("resolveRoute", () => {
     expect(resolveRoute("doctor", "/documents/[slug]")).toBe(
       `/documents/${first!.slug}`,
     );
+  });
+
+  it("addresses the Academy catch-all with an unknown path that answers 404", () => {
+    // #2478 — the catch-all exists to answer addresses no route serves, so the
+    // walk opens one and asserts the not-found page's 404 instead of a 200.
+    expect(resolveRoute("academy", "/[...catchAll]")).toBe(
+      `/${UNKNOWN_ADDRESS_SEGMENT}`,
+    );
+    expect(directVisitAnswer("academy", "/[...catchAll]")).toEqual({
+      status: 404,
+      cite: "#2478",
+    });
+    expect(routeParams.doctor["/[...catchAll]"]).toBeUndefined();
   });
 
   it("returns undefined for a route no entity renders", () => {

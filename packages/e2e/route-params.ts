@@ -56,6 +56,12 @@ const firstPublishedDocumentSlug: RouteParamResolver = () => {
 };
 
 /**
+ * A path segment no storefront route serves: the address the walk opens for a
+ * catch-all whose whole job is answering unknown addresses (#2478).
+ */
+export const UNKNOWN_ADDRESS_SEGMENT = "route-walk-unknown-address";
+
+/**
  * Route pattern → the value that renders it. Keyed per host: the two storefronts
  * spell the same concept differently (`/webinars/[slug]` on academy,
  * `/events/[slug]` on doctor), so one flat map would make a missing entry on one
@@ -80,6 +86,12 @@ export const routeParams: RouteParamsMap = Object.freeze({
     "/materials/[slug]": () => golden.materials.published.slug,
     /** A file in `@ds/legal-content`, enumerated by the page itself. */
     "/documents/[slug]": firstPublishedDocumentSlug,
+    /**
+     * #2478 — the catch-all that answers every address no other route does,
+     * by rendering the not-found page inside the shell. Its honest address is
+     * one no route serves; {@link directVisitAnswers} declares its 404.
+     */
+    "/[...catchAll]": () => UNKNOWN_ADDRESS_SEGMENT,
   }),
   doctor: Object.freeze({
     "/events/[slug]": () => golden.events.upcoming.slug,
@@ -116,7 +128,8 @@ export function resolveRoute(
  * This is not a skip. The walk still opens the address and asserts the
  * declared status, so a page that starts serving a direct visit — or a
  * declaration whose page answers something else — fails the walk naming the
- * route. Every row cites the EARS that makes the direct visit a non-page.
+ * route. Every row cites the EARS (or Issue) that makes the direct visit a
+ * non-page.
  */
 export type DirectVisitAnswer = {
   /** The status a direct visit answers. */
@@ -137,7 +150,12 @@ const REFUSAL_PAGE: DirectVisitAnswer = Object.freeze({
 export const directVisitAnswers: Readonly<
   Record<HostId, Readonly<Record<RoutePattern, DirectVisitAnswer>>>
 > = Object.freeze({
-  academy: Object.freeze({ "/auth/refused": REFUSAL_PAGE }),
+  academy: Object.freeze({
+    "/auth/refused": REFUSAL_PAGE,
+    // #2478 — the Academy catch-all renders the not-found page for an unknown
+    // address with HTTP 404 (`apps/portal/app/[...catchAll]/page.tsx`).
+    "/[...catchAll]": Object.freeze({ status: 404, cite: "#2478" }),
+  }),
   doctor: Object.freeze({ "/auth/refused": REFUSAL_PAGE }),
 });
 

@@ -1975,7 +1975,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then Academy refuses the registrar-only profile but admits the same owner after a doctor-guest grant and fresh sign-in
 
   # Production amendment 2026-11-05 (#3748, implementation #3749): a returned-to
-  # tab re-checks its session; the cabinet chip navigates by document.
+  # tab re-checks its session; links into the cabinet navigate by document.
   # Playwright cross-host on a stage slot, Academy portal + doctor storefront.
   @EARS-73 @EARS-10 @happy @host:both @return-recheck-signed-out
   Scenario Outline: A signed-in tab returned to after a sign-out on the other storefront turns guest
@@ -1993,6 +1993,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
       | Academy     | doctor  | an эфир page    | that page's guest render                  |
       | doctor      | Academy | "/account"      | the sign-in host, by a document navigation |
       | Academy     | doctor  | "/account"      | the sign-in host, by a document navigation |
+      | doctor      | Academy | "/account/events" | the sign-in host, by a document navigation, returning to "/account/events" |
 
   @EARS-73 @happy @host:both @return-recheck-session-holds
   Scenario Outline: A tab whose session holds is unchanged on return
@@ -2009,14 +2010,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
       | doctor     |
 
   @EARS-74 @EARS-73 @failure @host:both @cabinet-chip-document
-  Scenario Outline: The profile chip in a stale tab goes straight to the sign-in host
+  Scenario Outline: A signed-in link into the cabinet in a stale tab goes straight to the sign-in host
     Given a doctor signed in on both storefronts in one browser
     And the <other> storefront's tab still shows its signed-in render after a sign-out on the <signing-out> storefront
-    When the doctor activates the profile chip in that tab before any re-check
-    Then the request sequence shows a document navigation to "/account", not an "_rsc" fetch of "/account"
-    And no empty main frame is committed before the sign-in host renders
+    When the doctor activates <link> in that tab before any re-check
+    Then the request sequence shows a document navigation to <target> and no "_rsc" fetch of <target>
+    And the sign-in host renders
 
     Examples:
-      | signing-out | other   |
-      | doctor      | Academy |
-      | Academy     | doctor  |
+      | signing-out | other   | link                             | target            |
+      | doctor      | Academy | the profile chip                 | "/account"        |
+      | Academy     | doctor  | the profile chip                 | "/account"        |
+      | doctor      | Academy | «Мои события» in the header      | "/account/events" |
+      | doctor      | Academy | «Мои события» in the mobile menu | "/account/events" |

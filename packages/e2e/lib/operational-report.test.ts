@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { assertOperationalReport } from "../api-probes/operational-report.js";
+import {
+  assertOperationalReport,
+  operationalOriginals,
+} from "../api-probes/operational-report.js";
 
 const passed = (title: string) => ({
   title,
@@ -10,6 +13,28 @@ const report = (specs: unknown[]) => ({
   errors: [],
 });
 describe("operational original receipt gate", () => {
+  it("accepts the exact three material originals and refuses an incidental fourth", () => {
+    const originals = operationalOriginals.materials;
+    expect(originals).toEqual([
+      "A column without an expert is refused",
+      "A stale edit is refused",
+      "The administrator finds materials by kind",
+    ]);
+    expect(() =>
+      assertOperationalReport(report(originals.map(passed)), originals),
+    ).not.toThrow();
+    expect(() =>
+      assertOperationalReport(
+        report([
+          ...originals.map(passed),
+          passed(
+            "An administrator writes a news item and it becomes the first card of the rail",
+          ),
+        ]),
+        originals,
+      ),
+    ).toThrow("identity mismatch");
+  });
   it("accepts each expected original exactly once on its first attempt", () => {
     expect(() =>
       assertOperationalReport(

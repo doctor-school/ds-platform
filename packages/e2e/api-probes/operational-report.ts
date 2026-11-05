@@ -67,4 +67,9 @@ export const operationalOriginals = {
     "A direct SQL write with no audit context still leaves an honest trail row",
     "A new table cannot silently opt out of auditing",
   ],
+  materials: [
+    "A column without an expert is refused",
+    "A stale edit is refused",
+    "The administrator finds materials by kind",
+  ],
 } as const;

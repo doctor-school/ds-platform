@@ -64,6 +64,17 @@ const auditTestDir = defineBddConfig({
   missingSteps: "skip-scenario",
 });
 
+// 048 keeps its Academy host semantics; these three source originals exercise
+// the Admin writer and therefore have an explicit, strict Admin contour.
+const materialsTestDir = defineBddConfig({
+  features:
+    "../docs/content/specs/features/048-materials-feed/048-scenarios.feature",
+  featuresRoot: "../docs/content/specs/features",
+  steps: ["e2e/steps/material-authoring.steps.ts", "e2e/support/fixtures.ts"],
+  outputDir: ".features-gen/materials",
+  tags: "@material-admin-authoring",
+});
+
 export default defineConfig({
   testDir,
   fullyParallel: false,
@@ -91,6 +102,11 @@ export default defineConfig({
       name: "audit",
       testDir: auditTestDir,
       grep: /Deleting a row captures the full old row in the diff|An update that changes nothing leaves no trail row|A trail row cannot be rewritten or removed|A direct SQL write with no audit context still leaves an honest trail row|A new table cannot silently opt out of auditing/,
+    },
+    {
+      name: "materials",
+      testDir: materialsTestDir,
+      use: { ...devices["Desktop Chrome"] },
     },
   ],
 });

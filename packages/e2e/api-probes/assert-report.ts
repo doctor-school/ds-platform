@@ -4,8 +4,8 @@ import {
   operationalOriginals,
 } from "./operational-report.js";
 const [file, kind] = process.argv.slice(2);
-if (!file || (kind !== "api" && kind !== "audit"))
-  throw new Error("Expected report path and api|audit");
+if (!file || (kind !== "api" && kind !== "audit" && kind !== "materials"))
+  throw new Error("Expected report path and api|audit|materials");
 assertOperationalReport(
   JSON.parse(readFileSync(file, "utf8")),
   operationalOriginals[kind],

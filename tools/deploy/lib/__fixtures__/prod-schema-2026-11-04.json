@@ -1,0 +1,2412 @@
+{
+  "answer": {
+    "verb": "schema",
+    "database": "fixture",
+    "takenAt": "2026-01-01T00:00:00Z",
+    "serverVersion": "fixture",
+    "migrations": [],
+    "dumpSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "catalogue": {
+      "tables": [
+        {
+          "schema": "partman",
+          "name": "part_config",
+          "columns": [
+            {
+              "name": "parent_table",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "control",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "time_encoder",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "time_decoder",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "partition_interval",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "partition_type",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "premake",
+              "type": "integer",
+              "notNull": true,
+              "default": "4",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "automatic_maintenance",
+              "type": "text",
+              "notNull": true,
+              "default": "'on'::text",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "template_table",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "retention",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "retention_schema",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "retention_keep_index",
+              "type": "boolean",
+              "notNull": true,
+              "default": "true",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "retention_keep_table",
+              "type": "boolean",
+              "notNull": true,
+              "default": "true",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "epoch",
+              "type": "text",
+              "notNull": true,
+              "default": "'none'::text",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "constraint_cols",
+              "type": "text[]",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "optimize_constraint",
+              "type": "integer",
+              "notNull": true,
+              "default": "30",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "infinite_time_partitions",
+              "type": "boolean",
+              "notNull": true,
+              "default": "false",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "datetime_string",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "jobmon",
+              "type": "boolean",
+              "notNull": true,
+              "default": "true",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "sub_partition_set_full",
+              "type": "boolean",
+              "notNull": true,
+              "default": "false",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "undo_in_progress",
+              "type": "boolean",
+              "notNull": true,
+              "default": "false",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "inherit_privileges",
+              "type": "boolean",
+              "notNull": false,
+              "default": "false",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "constraint_valid",
+              "type": "boolean",
+              "notNull": true,
+              "default": "true",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "ignore_default_data",
+              "type": "boolean",
+              "notNull": true,
+              "default": "true",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "date_trunc_interval",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "maintenance_order",
+              "type": "integer",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "retention_keep_publication",
+              "type": "boolean",
+              "notNull": true,
+              "default": "false",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "maintenance_last_run",
+              "type": "timestamp with time zone",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "async_partitioning_in_progress",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            }
+          ],
+          "indexes": [
+            {
+              "name": "part_config_parent_table_pkey",
+              "definition": "CREATE UNIQUE INDEX part_config_parent_table_pkey ON partman.part_config USING btree (parent_table)"
+            },
+            {
+              "name": "part_config_type_idx",
+              "definition": "CREATE INDEX part_config_type_idx ON partman.part_config USING btree (partition_type)"
+            }
+          ],
+          "constraints": [
+            {
+              "name": "control_constraint_col_chk",
+              "kind": "check",
+              "definition": "CHECK (((constraint_cols @> ARRAY[control]) <> true))"
+            },
+            {
+              "name": "part_config_automatic_maintenance_check",
+              "kind": "check",
+              "definition": "CHECK (partman.check_automatic_maintenance_value(automatic_maintenance))"
+            },
+            {
+              "name": "part_config_epoch_check",
+              "kind": "check",
+              "definition": "CHECK (partman.check_epoch_type(epoch))"
+            },
+            {
+              "name": "part_config_parent_table_pkey",
+              "kind": "primary key",
+              "definition": "PRIMARY KEY (parent_table)"
+            },
+            {
+              "name": "part_config_type_check",
+              "kind": "check",
+              "definition": "CHECK (partman.check_partition_type(partition_type))"
+            },
+            {
+              "name": "positive_premake_check",
+              "kind": "check",
+              "definition": "CHECK ((premake > 0))"
+            },
+            {
+              "name": "retention_schema_not_empty_chk",
+              "kind": "check",
+              "definition": "CHECK ((retention_schema <> ''::text))"
+            }
+          ]
+        },
+        {
+          "schema": "partman",
+          "name": "template_public_audit_ledger",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "event_id",
+              "type": "uuid",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "event_type",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "subject_id",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "sid",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "reason",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "metadata",
+              "type": "jsonb",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            }
+          ],
+          "indexes": [],
+          "constraints": []
+        },
+        {
+          "schema": "public",
+          "name": "audit_ledger",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "notNull": true,
+              "default": "gen_random_uuid()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "event_id",
+              "type": "uuid",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "event_type",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "subject_id",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "sid",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "reason",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "metadata",
+              "type": "jsonb",
+              "notNull": true,
+              "default": "'{}'::jsonb",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": "now()",
+              "identity": null,
+              "generated": null
+            }
+          ],
+          "indexes": [
+            {
+              "name": "audit_ledger_event_id_unique",
+              "definition": "CREATE UNIQUE INDEX audit_ledger_event_id_unique ON ONLY public.audit_ledger USING btree (event_id, created_at)"
+            },
+            {
+              "name": "audit_ledger_pkey",
+              "definition": "CREATE UNIQUE INDEX audit_ledger_pkey ON ONLY public.audit_ledger USING btree (id, created_at)"
+            }
+          ],
+          "constraints": [
+            {
+              "name": "audit_ledger_event_id_unique",
+              "kind": "unique",
+              "definition": "UNIQUE (event_id, created_at)"
+            },
+            {
+              "name": "audit_ledger_pkey",
+              "kind": "primary key",
+              "definition": "PRIMARY KEY (id, created_at)"
+            }
+          ]
+        },
+        {
+          "schema": "public",
+          "name": "audit_ledger_default",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "notNull": true,
+              "default": "gen_random_uuid()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "event_id",
+              "type": "uuid",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "event_type",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "subject_id",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "sid",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "reason",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "metadata",
+              "type": "jsonb",
+              "notNull": true,
+              "default": "'{}'::jsonb",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": "now()",
+              "identity": null,
+              "generated": null
+            }
+          ],
+          "indexes": [
+            {
+              "name": "audit_ledger_default_event_id_created_at_key",
+              "definition": "CREATE UNIQUE INDEX audit_ledger_default_event_id_created_at_key ON public.audit_ledger_default USING btree (event_id, created_at)"
+            },
+            {
+              "name": "audit_ledger_default_pkey",
+              "definition": "CREATE UNIQUE INDEX audit_ledger_default_pkey ON public.audit_ledger_default USING btree (id, created_at)"
+            }
+          ],
+          "constraints": [
+            {
+              "name": "audit_ledger_default_event_id_created_at_key",
+              "kind": "unique",
+              "definition": "UNIQUE (event_id, created_at)"
+            },
+            {
+              "name": "audit_ledger_default_pkey",
+              "kind": "primary key",
+              "definition": "PRIMARY KEY (id, created_at)"
+            }
+          ]
+        },
+        {
+          "schema": "public",
+          "name": "audit_ledger_y2026_m01",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "notNull": true,
+              "default": "gen_random_uuid()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "event_id",
+              "type": "uuid",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "event_type",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "subject_id",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "sid",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "reason",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "metadata",
+              "type": "jsonb",
+              "notNull": true,
+              "default": "'{}'::jsonb",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": "now()",
+              "identity": null,
+              "generated": null
+            }
+          ],
+          "indexes": [
+            {
+              "name": "audit_ledger_y2026_m01_event_id_created_at_key",
+              "definition": "CREATE UNIQUE INDEX audit_ledger_y2026_m01_event_id_created_at_key ON public.audit_ledger_y2026_m01 USING btree (event_id, created_at)"
+            },
+            {
+              "name": "audit_ledger_y2026_m01_pkey",
+              "definition": "CREATE UNIQUE INDEX audit_ledger_y2026_m01_pkey ON public.audit_ledger_y2026_m01 USING btree (id, created_at)"
+            }
+          ],
+          "constraints": [
+            {
+              "name": "audit_ledger_y2026_m01_event_id_created_at_key",
+              "kind": "unique",
+              "definition": "UNIQUE (event_id, created_at)"
+            },
+            {
+              "name": "audit_ledger_y2026_m01_pkey",
+              "kind": "primary key",
+              "definition": "PRIMARY KEY (id, created_at)"
+            }
+          ]
+        },
+        {
+          "schema": "public",
+          "name": "congress_submission_kind_settings",
+          "columns": [
+            {
+              "name": "event_id",
+              "type": "uuid",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "kind",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "opens_at",
+              "type": "timestamp with time zone",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "closes_at",
+              "type": "timestamp with time zone",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "submit_limit",
+              "type": "integer",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "max_age_years",
+              "type": "integer",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            }
+          ],
+          "indexes": [
+            {
+              "name": "congress_submission_kind_settings_event_id_kind_pk",
+              "definition": "CREATE UNIQUE INDEX congress_submission_kind_settings_event_id_kind_pk ON public.congress_submission_kind_settings USING btree (event_id, kind)"
+            }
+          ],
+          "constraints": [
+            {
+              "name": "congress_submission_kind_settings_age_range",
+              "kind": "check",
+              "definition": "CHECK (((max_age_years IS NULL) OR ((max_age_years >= 18) AND (max_age_years <= 99))))"
+            },
+            {
+              "name": "congress_submission_kind_settings_closing_after_opening",
+              "kind": "check",
+              "definition": "CHECK (((opens_at IS NULL) OR (closes_at > opens_at)))"
+            },
+            {
+              "name": "congress_submission_kind_settings_event_id_congress_submission_",
+              "kind": "foreign key",
+              "definition": "FOREIGN KEY (event_id) REFERENCES congress_submission_settings(event_id) ON DELETE RESTRICT"
+            },
+            {
+              "name": "congress_submission_kind_settings_event_id_kind_pk",
+              "kind": "primary key",
+              "definition": "PRIMARY KEY (event_id, kind)"
+            },
+            {
+              "name": "congress_submission_kind_settings_kind_known",
+              "kind": "check",
+              "definition": "CHECK ((kind = ANY (ARRAY['oral'::text, 'poster'::text, 'abstract'::text])))"
+            },
+            {
+              "name": "congress_submission_kind_settings_limit_positive",
+              "kind": "check",
+              "definition": "CHECK (((submit_limit IS NULL) OR (submit_limit > 0)))"
+            },
+            {
+              "name": "congress_submission_kind_settings_opening_needs_closing",
+              "kind": "check",
+              "definition": "CHECK (((opens_at IS NULL) OR (closes_at IS NOT NULL)))"
+            }
+          ]
+        },
+        {
+          "schema": "public",
+          "name": "direction_specialties",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "notNull": true,
+              "default": "gen_random_uuid()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "direction_id",
+              "type": "uuid",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "specialty_minzdrav_id",
+              "type": "uuid",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "status",
+              "type": "relationship_status",
+              "notNull": true,
+              "default": "'active'::relationship_status",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "deleted_at",
+              "type": "timestamp with time zone",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "version",
+              "type": "integer",
+              "notNull": true,
+              "default": "1",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": "now()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "updated_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": "now()",
+              "identity": null,
+              "generated": null
+            }
+          ],
+          "indexes": [
+            {
+              "name": "direction_specialties_pair_key",
+              "definition": "CREATE UNIQUE INDEX direction_specialties_pair_key ON public.direction_specialties USING btree (direction_id, specialty_minzdrav_id)"
+            },
+            {
+              "name": "direction_specialties_pkey",
+              "definition": "CREATE UNIQUE INDEX direction_specialties_pkey ON public.direction_specialties USING btree (id)"
+            },
+            {
+              "name": "direction_specialties_specialty_id_idx",
+              "definition": "CREATE INDEX direction_specialties_specialty_id_idx ON public.direction_specialties USING btree (specialty_minzdrav_id)"
+            }
+          ],
+          "constraints": [
+            {
+              "name": "direction_specialties_direction_id_directions_id_fk",
+              "kind": "foreign key",
+              "definition": "FOREIGN KEY (direction_id) REFERENCES directions(id) ON DELETE RESTRICT"
+            },
+            {
+              "name": "direction_specialties_pkey",
+              "kind": "primary key",
+              "definition": "PRIMARY KEY (id)"
+            },
+            {
+              "name": "direction_specialties_retired_iff_deleted",
+              "kind": "check",
+              "definition": "CHECK (((status = 'retired'::relationship_status) = (deleted_at IS NOT NULL)))"
+            },
+            {
+              "name": "direction_specialties_specialty_minzdrav_id_specialties_minzdra",
+              "kind": "foreign key",
+              "definition": "FOREIGN KEY (specialty_minzdrav_id) REFERENCES specialties_minzdrav(id) ON DELETE RESTRICT"
+            },
+            {
+              "name": "direction_specialties_version_positive",
+              "kind": "check",
+              "definition": "CHECK ((version >= 1))"
+            }
+          ]
+        },
+        {
+          "schema": "public",
+          "name": "directions",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "notNull": true,
+              "default": "gen_random_uuid()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "slug",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "title",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "first_published_at",
+              "type": "timestamp with time zone",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "status",
+              "type": "taxonomy_status",
+              "notNull": true,
+              "default": "'draft'::taxonomy_status",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "deleted_at",
+              "type": "timestamp with time zone",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "version",
+              "type": "integer",
+              "notNull": true,
+              "default": "1",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": "now()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "updated_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": "now()",
+              "identity": null,
+              "generated": null
+            }
+          ],
+          "indexes": [
+            {
+              "name": "directions_pkey",
+              "definition": "CREATE UNIQUE INDEX directions_pkey ON public.directions USING btree (id)"
+            },
+            {
+              "name": "directions_slug_key",
+              "definition": "CREATE UNIQUE INDEX directions_slug_key ON public.directions USING btree (slug)"
+            },
+            {
+              "name": "directions_slug_trgm_idx",
+              "definition": "CREATE INDEX directions_slug_trgm_idx ON public.directions USING gin (slug gin_trgm_ops)"
+            },
+            {
+              "name": "directions_title_trgm_idx",
+              "definition": "CREATE INDEX directions_title_trgm_idx ON public.directions USING gin (title gin_trgm_ops)"
+            }
+          ],
+          "constraints": [
+            {
+              "name": "directions_pkey",
+              "kind": "primary key",
+              "definition": "PRIMARY KEY (id)"
+            },
+            {
+              "name": "directions_published_has_first_published_at",
+              "kind": "check",
+              "definition": "CHECK (((status <> 'published'::taxonomy_status) OR (first_published_at IS NOT NULL)))"
+            },
+            {
+              "name": "directions_retired_iff_deleted",
+              "kind": "check",
+              "definition": "CHECK (((status = 'retired'::taxonomy_status) = (deleted_at IS NOT NULL)))"
+            },
+            {
+              "name": "directions_slug_bounds",
+              "kind": "check",
+              "definition": "CHECK (((char_length(slug) >= 1) AND (char_length(slug) <= 80)))"
+            },
+            {
+              "name": "directions_slug_not_uuid",
+              "kind": "check",
+              "definition": "CHECK ((slug !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text))"
+            },
+            {
+              "name": "directions_slug_pattern",
+              "kind": "check",
+              "definition": "CHECK ((slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text))"
+            },
+            {
+              "name": "directions_title_bounds",
+              "kind": "check",
+              "definition": "CHECK (((char_length(title) >= 1) AND (char_length(title) <= 120)))"
+            },
+            {
+              "name": "directions_version_positive",
+              "kind": "check",
+              "definition": "CHECK ((version >= 1))"
+            }
+          ]
+        },
+        {
+          "schema": "public",
+          "name": "experts",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "notNull": true,
+              "default": "gen_random_uuid()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "slug",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "photo_ref",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "professional_role",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "credentials",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "affiliation",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "bio",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "first_published_at",
+              "type": "timestamp with time zone",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "status",
+              "type": "taxonomy_status",
+              "notNull": true,
+              "default": "'draft'::taxonomy_status",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "deleted_at",
+              "type": "timestamp with time zone",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "content_removed_at",
+              "type": "timestamp with time zone",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "version",
+              "type": "integer",
+              "notNull": true,
+              "default": "1",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": "now()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "updated_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": "now()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "family_name",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "given_name",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "patronymic",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "user_id",
+              "type": "uuid",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            }
+          ],
+          "indexes": [
+            {
+              "name": "experts_family_name_trgm_idx",
+              "definition": "CREATE INDEX experts_family_name_trgm_idx ON public.experts USING gin (family_name gin_trgm_ops)"
+            },
+            {
+              "name": "experts_given_name_trgm_idx",
+              "definition": "CREATE INDEX experts_given_name_trgm_idx ON public.experts USING gin (given_name gin_trgm_ops)"
+            },
+            {
+              "name": "experts_patronymic_trgm_idx",
+              "definition": "CREATE INDEX experts_patronymic_trgm_idx ON public.experts USING gin (patronymic gin_trgm_ops)"
+            },
+            {
+              "name": "experts_pkey",
+              "definition": "CREATE UNIQUE INDEX experts_pkey ON public.experts USING btree (id)"
+            },
+            {
+              "name": "experts_slug_key",
+              "definition": "CREATE UNIQUE INDEX experts_slug_key ON public.experts USING btree (slug)"
+            },
+            {
+              "name": "experts_slug_trgm_idx",
+              "definition": "CREATE INDEX experts_slug_trgm_idx ON public.experts USING gin (slug gin_trgm_ops)"
+            },
+            {
+              "name": "experts_user_id_key",
+              "definition": "CREATE UNIQUE INDEX experts_user_id_key ON public.experts USING btree (user_id)"
+            }
+          ],
+          "constraints": [
+            {
+              "name": "experts_affiliation_bounds",
+              "kind": "check",
+              "definition": "CHECK (((affiliation IS NULL) OR ((char_length(affiliation) >= 1) AND (char_length(affiliation) <= 240))))"
+            },
+            {
+              "name": "experts_bio_bounds",
+              "kind": "check",
+              "definition": "CHECK (((bio IS NULL) OR ((char_length(bio) >= 1) AND (char_length(bio) <= 4000))))"
+            },
+            {
+              "name": "experts_content_removed_shape",
+              "kind": "check",
+              "definition": "CHECK (((content_removed_at IS NULL) OR ((status = 'retired'::taxonomy_status) AND (deleted_at IS NOT NULL) AND (family_name IS NULL) AND (given_name IS NULL) AND (patronymic IS NULL) AND (photo_ref IS NULL) AND (professional_role IS NULL) AND (credentials IS NULL) AND (affiliation IS NULL) AND (bio IS NULL))))"
+            },
+            {
+              "name": "experts_credentials_bounds",
+              "kind": "check",
+              "definition": "CHECK (((credentials IS NULL) OR ((char_length(credentials) >= 1) AND (char_length(credentials) <= 500))))"
+            },
+            {
+              "name": "experts_family_name_bounds",
+              "kind": "check",
+              "definition": "CHECK (((family_name IS NULL) OR ((char_length(family_name) >= 1) AND (char_length(family_name) <= 80))))"
+            },
+            {
+              "name": "experts_given_name_bounds",
+              "kind": "check",
+              "definition": "CHECK (((given_name IS NULL) OR ((char_length(given_name) >= 1) AND (char_length(given_name) <= 80))))"
+            },
+            {
+              "name": "experts_patronymic_bounds",
+              "kind": "check",
+              "definition": "CHECK (((patronymic IS NULL) OR ((char_length(patronymic) >= 1) AND (char_length(patronymic) <= 80))))"
+            },
+            {
+              "name": "experts_pkey",
+              "kind": "primary key",
+              "definition": "PRIMARY KEY (id)"
+            },
+            {
+              "name": "experts_professional_role_bounds",
+              "kind": "check",
+              "definition": "CHECK (((professional_role IS NULL) OR ((char_length(professional_role) >= 1) AND (char_length(professional_role) <= 160))))"
+            },
+            {
+              "name": "experts_published_has_first_published_at",
+              "kind": "check",
+              "definition": "CHECK (((status <> 'published'::taxonomy_status) OR (first_published_at IS NOT NULL)))"
+            },
+            {
+              "name": "experts_retired_iff_deleted",
+              "kind": "check",
+              "definition": "CHECK (((status = 'retired'::taxonomy_status) = (deleted_at IS NOT NULL)))"
+            },
+            {
+              "name": "experts_slug_bounds",
+              "kind": "check",
+              "definition": "CHECK (((char_length(slug) >= 1) AND (char_length(slug) <= 80)))"
+            },
+            {
+              "name": "experts_slug_not_uuid",
+              "kind": "check",
+              "definition": "CHECK ((slug !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text))"
+            },
+            {
+              "name": "experts_slug_pattern",
+              "kind": "check",
+              "definition": "CHECK ((slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text))"
+            },
+            {
+              "name": "experts_structured_name_present_unless_removed",
+              "kind": "check",
+              "definition": "CHECK (((content_removed_at IS NOT NULL) OR ((family_name IS NOT NULL) AND (given_name IS NOT NULL))))"
+            },
+            {
+              "name": "experts_user_id_users_id_fk",
+              "kind": "foreign key",
+              "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT"
+            },
+            {
+              "name": "experts_version_positive",
+              "kind": "check",
+              "definition": "CHECK ((version >= 1))"
+            }
+          ]
+        },
+        {
+          "schema": "public",
+          "name": "organisation_role_assignments",
+          "columns": [
+            {
+              "name": "organisation_id",
+              "type": "uuid",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "role_id",
+              "type": "uuid",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": "now()",
+              "identity": null,
+              "generated": null
+            }
+          ],
+          "indexes": [
+            {
+              "name": "organisation_role_assignments_organisation_id_role_id_pk",
+              "definition": "CREATE UNIQUE INDEX organisation_role_assignments_organisation_id_role_id_pk ON public.organisation_role_assignments USING btree (organisation_id, role_id)"
+            },
+            {
+              "name": "organisation_role_assignments_role_id_idx",
+              "definition": "CREATE INDEX organisation_role_assignments_role_id_idx ON public.organisation_role_assignments USING btree (role_id)"
+            }
+          ],
+          "constraints": [
+            {
+              "name": "organisation_role_assignments_organisation_id_organisations_id_",
+              "kind": "foreign key",
+              "definition": "FOREIGN KEY (organisation_id) REFERENCES organisations(id) ON DELETE RESTRICT"
+            },
+            {
+              "name": "organisation_role_assignments_organisation_id_role_id_pk",
+              "kind": "primary key",
+              "definition": "PRIMARY KEY (organisation_id, role_id)"
+            },
+            {
+              "name": "organisation_role_assignments_role_id_organisation_roles_id_fk",
+              "kind": "foreign key",
+              "definition": "FOREIGN KEY (role_id) REFERENCES organisation_roles(id) ON DELETE RESTRICT"
+            }
+          ]
+        },
+        {
+          "schema": "public",
+          "name": "organisations",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "notNull": true,
+              "default": "gen_random_uuid()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "slug",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "title",
+              "type": "text",
+              "notNull": true,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "logo_ref",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "website_url",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "first_published_at",
+              "type": "timestamp with time zone",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "status",
+              "type": "taxonomy_status",
+              "notNull": true,
+              "default": "'draft'::taxonomy_status",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "deleted_at",
+              "type": "timestamp with time zone",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "version",
+              "type": "integer",
+              "notNull": true,
+              "default": "1",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "created_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": "now()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "updated_at",
+              "type": "timestamp with time zone",
+              "notNull": true,
+              "default": "now()",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "description",
+              "type": "text",
+              "notNull": false,
+              "default": null,
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "public_name_visible",
+              "type": "boolean",
+              "notNull": true,
+              "default": "true",
+              "identity": null,
+              "generated": null
+            },
+            {
+              "name": "public_logo_visible",
+              "type": "boolean",
+              "notNull": true,
+              "default": "true",
+              "identity": null,
+              "generated": null
+            }
+          ],
+          "indexes": [
+            {
+              "name": "organisations_pkey",
+              "definition": "CREATE UNIQUE INDEX organisations_pkey ON public.organisations USING btree (id)"
+            },
+            {
+              "name": "organisations_slug_key",
+              "definition": "CREATE UNIQUE INDEX organisations_slug_key ON public.organisations USING btree (slug)"
+            },
+            {
+              "name": "organisations_slug_trgm_idx",
+              "definition": "CREATE INDEX organisations_slug_trgm_idx ON public.organisations USING gin (slug gin_trgm_ops)"
+            },
+            {
+              "name": "organisations_title_trgm_idx",
+              "definition": "CREATE INDEX organisations_title_trgm_idx ON public.organisations USING gin (title gin_trgm_ops)"
+            }
+          ],
+          "constraints": [
+            {
+              "name": "organisations_description_bounds",
+              "kind": "check",
+              "definition": "CHECK (((description IS NULL) OR (char_length(description) <= 1000)))"
+            },
+            {
+              "name": "organisations_pkey",
+              "kind": "primary key",
+              "definition": "PRIMARY KEY (id)"
+            },
+            {
+              "name": "organisations_published_has_first_published_at",
+              "kind": "check",
+              "definition": "CHECK (((status <> 'published'::taxonomy_status) OR (first_published_at IS NOT NULL)))"
+            },
+            {
+              "name": "organisations_retired_iff_deleted",
+              "kind": "check",
+              "definition": "CHECK (((status = 'retired'::taxonomy_status) = (deleted_at IS NOT NULL)))"
+            },
+            {
+              "name": "organisations_slug_bounds",
+              "kind": "check",
+              "definition": "CHECK (((char_length(slug) >= 1) AND (char_length(slug) <= 80)))"
+            },
+            {
+              "name": "organisations_slug_not_uuid",
+              "kind": "check",
+              "definition": "CHECK ((slug !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text))"
+            },
+            {
+              "name": "organisations_slug_pattern",
+              "kind": "check",
+              "definition": "CHECK ((slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text))"
+            },
+            {
+              "name": "organisations_title_bounds",
+              "kind": "check",
+              "definition": "CHECK (((char_length(title) >= 1) AND (char_length(title) <= 160)))"
+            },
+            {
+              "name": "organisations_version_positive",
+              "kind": "check",
+              "definition": "CHECK ((version >= 1))"
+            },
+            {
+              "name": "organisations_website_url_bounds",
+              "kind": "check",
+              "definition": "CHECK (((website_url IS NULL) OR ((char_length(website_url) >= 1) AND (char_length(website_url) <= 2048))))"
+            },
+            {
+              "name": "organisations_website_url_https",
+              "kind": "check",
+              "definition": "CHECK (((website_url IS NULL) OR (website_url ~ '^https://[^\\s/?#]+[^\\s]*$'::text)))"
+            }
+          ]
+        }
+      ],
+      "enums": [
+        {
+          "schema": "public",
+          "name": "relationship_status",
+          "values": ["active", "retired"]
+        },
+        {
+          "schema": "public",
+          "name": "taxonomy_status",
+          "values": ["draft", "published", "retired"]
+        }
+      ],
+      "sequences": []
+    }
+  },
+  "snapshot": {
+    "tables": {
+      "public.audit_ledger": {
+        "name": "audit_ledger",
+        "schema": "",
+        "columns": {
+          "id": {
+            "name": "id",
+            "type": "uuid",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "gen_random_uuid()"
+          },
+          "event_id": {
+            "name": "event_id",
+            "type": "uuid",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "event_type": {
+            "name": "event_type",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "subject_id": {
+            "name": "subject_id",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "sid": {
+            "name": "sid",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "reason": {
+            "name": "reason",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "metadata": {
+            "name": "metadata",
+            "type": "jsonb",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "'{}'::jsonb"
+          },
+          "created_at": {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "now()"
+          }
+        },
+        "indexes": {},
+        "foreignKeys": {},
+        "compositePrimaryKeys": {
+          "audit_ledger_pkey": {
+            "name": "audit_ledger_pkey",
+            "columns": ["id", "created_at"]
+          }
+        },
+        "uniqueConstraints": {
+          "audit_ledger_event_id_unique": {
+            "name": "audit_ledger_event_id_unique",
+            "nullsNotDistinct": false,
+            "columns": ["event_id", "created_at"]
+          }
+        },
+        "policies": {},
+        "checkConstraints": {},
+        "isRLSEnabled": false
+      },
+      "public.direction_specialties": {
+        "name": "direction_specialties",
+        "schema": "",
+        "columns": {
+          "id": {
+            "name": "id",
+            "type": "uuid",
+            "primaryKey": true,
+            "notNull": true,
+            "default": "gen_random_uuid()"
+          },
+          "direction_id": {
+            "name": "direction_id",
+            "type": "uuid",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "specialty_minzdrav_id": {
+            "name": "specialty_minzdrav_id",
+            "type": "uuid",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "status": {
+            "name": "status",
+            "type": "relationship_status",
+            "typeSchema": "public",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "'active'"
+          },
+          "deleted_at": {
+            "name": "deleted_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "version": {
+            "name": "version",
+            "type": "integer",
+            "primaryKey": false,
+            "notNull": true,
+            "default": 1
+          },
+          "created_at": {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "now()"
+          },
+          "updated_at": {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "now()"
+          }
+        },
+        "indexes": {
+          "direction_specialties_pair_key": {
+            "name": "direction_specialties_pair_key",
+            "columns": [
+              {
+                "expression": "direction_id",
+                "isExpression": false,
+                "asc": true,
+                "nulls": "last"
+              },
+              {
+                "expression": "specialty_minzdrav_id",
+                "isExpression": false,
+                "asc": true,
+                "nulls": "last"
+              }
+            ],
+            "isUnique": true,
+            "concurrently": false,
+            "method": "btree",
+            "with": {}
+          },
+          "direction_specialties_specialty_id_idx": {
+            "name": "direction_specialties_specialty_id_idx",
+            "columns": [
+              {
+                "expression": "specialty_minzdrav_id",
+                "isExpression": false,
+                "asc": true,
+                "nulls": "last"
+              }
+            ],
+            "isUnique": false,
+            "concurrently": false,
+            "method": "btree",
+            "with": {}
+          }
+        },
+        "foreignKeys": {
+          "direction_specialties_direction_id_directions_id_fk": {
+            "name": "direction_specialties_direction_id_directions_id_fk",
+            "tableFrom": "direction_specialties",
+            "tableTo": "directions",
+            "columnsFrom": ["direction_id"],
+            "columnsTo": ["id"],
+            "onDelete": "restrict",
+            "onUpdate": "no action"
+          },
+          "direction_specialties_specialty_minzdrav_id_specialties_minzdrav_id_fk": {
+            "name": "direction_specialties_specialty_minzdrav_id_specialties_minzdrav_id_fk",
+            "tableFrom": "direction_specialties",
+            "tableTo": "specialties_minzdrav",
+            "columnsFrom": ["specialty_minzdrav_id"],
+            "columnsTo": ["id"],
+            "onDelete": "restrict",
+            "onUpdate": "no action"
+          }
+        },
+        "compositePrimaryKeys": {},
+        "uniqueConstraints": {},
+        "policies": {},
+        "checkConstraints": {
+          "direction_specialties_retired_iff_deleted": {
+            "name": "direction_specialties_retired_iff_deleted",
+            "value": "(\"direction_specialties\".\"status\" = 'retired') = (\"direction_specialties\".\"deleted_at\" IS NOT NULL)"
+          },
+          "direction_specialties_version_positive": {
+            "name": "direction_specialties_version_positive",
+            "value": "\"direction_specialties\".\"version\" >= 1"
+          }
+        },
+        "isRLSEnabled": false
+      },
+      "public.directions": {
+        "name": "directions",
+        "schema": "",
+        "columns": {
+          "id": {
+            "name": "id",
+            "type": "uuid",
+            "primaryKey": true,
+            "notNull": true,
+            "default": "gen_random_uuid()"
+          },
+          "slug": {
+            "name": "slug",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "title": {
+            "name": "title",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "first_published_at": {
+            "name": "first_published_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "status": {
+            "name": "status",
+            "type": "taxonomy_status",
+            "typeSchema": "public",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "'draft'"
+          },
+          "deleted_at": {
+            "name": "deleted_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "version": {
+            "name": "version",
+            "type": "integer",
+            "primaryKey": false,
+            "notNull": true,
+            "default": 1
+          },
+          "created_at": {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "now()"
+          },
+          "updated_at": {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "now()"
+          }
+        },
+        "indexes": {
+          "directions_slug_key": {
+            "name": "directions_slug_key",
+            "columns": [
+              {
+                "expression": "slug",
+                "isExpression": false,
+                "asc": true,
+                "nulls": "last"
+              }
+            ],
+            "isUnique": true,
+            "concurrently": false,
+            "method": "btree",
+            "with": {}
+          }
+        },
+        "foreignKeys": {},
+        "compositePrimaryKeys": {},
+        "uniqueConstraints": {},
+        "policies": {},
+        "checkConstraints": {
+          "directions_retired_iff_deleted": {
+            "name": "directions_retired_iff_deleted",
+            "value": "(\"directions\".\"status\" = 'retired') = (\"directions\".\"deleted_at\" IS NOT NULL)"
+          },
+          "directions_slug_pattern": {
+            "name": "directions_slug_pattern",
+            "value": "\"directions\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"
+          },
+          "directions_slug_not_uuid": {
+            "name": "directions_slug_not_uuid",
+            "value": "\"directions\".\"slug\" !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'"
+          },
+          "directions_slug_bounds": {
+            "name": "directions_slug_bounds",
+            "value": "char_length(\"directions\".\"slug\") BETWEEN 1 AND 80"
+          },
+          "directions_title_bounds": {
+            "name": "directions_title_bounds",
+            "value": "char_length(\"directions\".\"title\") BETWEEN 1 AND 120"
+          },
+          "directions_version_positive": {
+            "name": "directions_version_positive",
+            "value": "\"directions\".\"version\" >= 1"
+          },
+          "directions_published_has_first_published_at": {
+            "name": "directions_published_has_first_published_at",
+            "value": "\"directions\".\"status\" <> 'published' OR \"directions\".\"first_published_at\" IS NOT NULL"
+          }
+        },
+        "isRLSEnabled": false
+      },
+      "public.experts": {
+        "name": "experts",
+        "schema": "",
+        "columns": {
+          "id": {
+            "name": "id",
+            "type": "uuid",
+            "primaryKey": true,
+            "notNull": true,
+            "default": "gen_random_uuid()"
+          },
+          "slug": {
+            "name": "slug",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "family_name": {
+            "name": "family_name",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "given_name": {
+            "name": "given_name",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "patronymic": {
+            "name": "patronymic",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "user_id": {
+            "name": "user_id",
+            "type": "uuid",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "photo_ref": {
+            "name": "photo_ref",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "professional_role": {
+            "name": "professional_role",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "credentials": {
+            "name": "credentials",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "affiliation": {
+            "name": "affiliation",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "bio": {
+            "name": "bio",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "first_published_at": {
+            "name": "first_published_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "status": {
+            "name": "status",
+            "type": "taxonomy_status",
+            "typeSchema": "public",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "'draft'"
+          },
+          "deleted_at": {
+            "name": "deleted_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "content_removed_at": {
+            "name": "content_removed_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "version": {
+            "name": "version",
+            "type": "integer",
+            "primaryKey": false,
+            "notNull": true,
+            "default": 1
+          },
+          "created_at": {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "now()"
+          },
+          "updated_at": {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "now()"
+          }
+        },
+        "indexes": {
+          "experts_slug_key": {
+            "name": "experts_slug_key",
+            "columns": [
+              {
+                "expression": "slug",
+                "isExpression": false,
+                "asc": true,
+                "nulls": "last"
+              }
+            ],
+            "isUnique": true,
+            "concurrently": false,
+            "method": "btree",
+            "with": {}
+          },
+          "experts_user_id_key": {
+            "name": "experts_user_id_key",
+            "columns": [
+              {
+                "expression": "user_id",
+                "isExpression": false,
+                "asc": true,
+                "nulls": "last"
+              }
+            ],
+            "isUnique": true,
+            "concurrently": false,
+            "method": "btree",
+            "with": {}
+          }
+        },
+        "foreignKeys": {
+          "experts_user_id_users_id_fk": {
+            "name": "experts_user_id_users_id_fk",
+            "tableFrom": "experts",
+            "tableTo": "users",
+            "columnsFrom": ["user_id"],
+            "columnsTo": ["id"],
+            "onDelete": "restrict",
+            "onUpdate": "no action"
+          }
+        },
+        "compositePrimaryKeys": {},
+        "uniqueConstraints": {},
+        "policies": {},
+        "checkConstraints": {
+          "experts_retired_iff_deleted": {
+            "name": "experts_retired_iff_deleted",
+            "value": "(\"experts\".\"status\" = 'retired') = (\"experts\".\"deleted_at\" IS NOT NULL)"
+          },
+          "experts_slug_pattern": {
+            "name": "experts_slug_pattern",
+            "value": "\"experts\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"
+          },
+          "experts_slug_not_uuid": {
+            "name": "experts_slug_not_uuid",
+            "value": "\"experts\".\"slug\" !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'"
+          },
+          "experts_slug_bounds": {
+            "name": "experts_slug_bounds",
+            "value": "char_length(\"experts\".\"slug\") BETWEEN 1 AND 80"
+          },
+          "experts_family_name_bounds": {
+            "name": "experts_family_name_bounds",
+            "value": "\"experts\".\"family_name\" IS NULL OR char_length(\"experts\".\"family_name\") BETWEEN 1 AND 80"
+          },
+          "experts_given_name_bounds": {
+            "name": "experts_given_name_bounds",
+            "value": "\"experts\".\"given_name\" IS NULL OR char_length(\"experts\".\"given_name\") BETWEEN 1 AND 80"
+          },
+          "experts_patronymic_bounds": {
+            "name": "experts_patronymic_bounds",
+            "value": "\"experts\".\"patronymic\" IS NULL OR char_length(\"experts\".\"patronymic\") BETWEEN 1 AND 80"
+          },
+          "experts_professional_role_bounds": {
+            "name": "experts_professional_role_bounds",
+            "value": "\"experts\".\"professional_role\" IS NULL OR char_length(\"experts\".\"professional_role\") BETWEEN 1 AND 160"
+          },
+          "experts_credentials_bounds": {
+            "name": "experts_credentials_bounds",
+            "value": "\"experts\".\"credentials\" IS NULL OR char_length(\"experts\".\"credentials\") BETWEEN 1 AND 500"
+          },
+          "experts_affiliation_bounds": {
+            "name": "experts_affiliation_bounds",
+            "value": "\"experts\".\"affiliation\" IS NULL OR char_length(\"experts\".\"affiliation\") BETWEEN 1 AND 240"
+          },
+          "experts_bio_bounds": {
+            "name": "experts_bio_bounds",
+            "value": "\"experts\".\"bio\" IS NULL OR char_length(\"experts\".\"bio\") BETWEEN 1 AND 4000"
+          },
+          "experts_version_positive": {
+            "name": "experts_version_positive",
+            "value": "\"experts\".\"version\" >= 1"
+          },
+          "experts_published_has_first_published_at": {
+            "name": "experts_published_has_first_published_at",
+            "value": "\"experts\".\"status\" <> 'published' OR \"experts\".\"first_published_at\" IS NOT NULL"
+          },
+          "experts_structured_name_present_unless_removed": {
+            "name": "experts_structured_name_present_unless_removed",
+            "value": "\"experts\".\"content_removed_at\" IS NOT NULL OR (\"experts\".\"family_name\" IS NOT NULL AND \"experts\".\"given_name\" IS NOT NULL)"
+          },
+          "experts_content_removed_shape": {
+            "name": "experts_content_removed_shape",
+            "value": "\"experts\".\"content_removed_at\" IS NULL OR (\n        \"experts\".\"status\" = 'retired'\n        AND \"experts\".\"deleted_at\" IS NOT NULL\n        AND \"experts\".\"family_name\" IS NULL\n        AND \"experts\".\"given_name\" IS NULL\n        AND \"experts\".\"patronymic\" IS NULL\n        AND \"experts\".\"photo_ref\" IS NULL\n        AND \"experts\".\"professional_role\" IS NULL\n        AND \"experts\".\"credentials\" IS NULL\n        AND \"experts\".\"affiliation\" IS NULL\n        AND \"experts\".\"bio\" IS NULL\n      )"
+          }
+        },
+        "isRLSEnabled": false
+      },
+      "public.organisation_role_assignments": {
+        "name": "organisation_role_assignments",
+        "schema": "",
+        "columns": {
+          "organisation_id": {
+            "name": "organisation_id",
+            "type": "uuid",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "role_id": {
+            "name": "role_id",
+            "type": "uuid",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "created_at": {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "now()"
+          }
+        },
+        "indexes": {
+          "organisation_role_assignments_role_id_idx": {
+            "name": "organisation_role_assignments_role_id_idx",
+            "columns": [
+              {
+                "expression": "role_id",
+                "isExpression": false,
+                "asc": true,
+                "nulls": "last"
+              }
+            ],
+            "isUnique": false,
+            "concurrently": false,
+            "method": "btree",
+            "with": {}
+          }
+        },
+        "foreignKeys": {
+          "organisation_role_assignments_organisation_id_organisations_id_fk": {
+            "name": "organisation_role_assignments_organisation_id_organisations_id_fk",
+            "tableFrom": "organisation_role_assignments",
+            "tableTo": "organisations",
+            "columnsFrom": ["organisation_id"],
+            "columnsTo": ["id"],
+            "onDelete": "restrict",
+            "onUpdate": "no action"
+          },
+          "organisation_role_assignments_role_id_organisation_roles_id_fk": {
+            "name": "organisation_role_assignments_role_id_organisation_roles_id_fk",
+            "tableFrom": "organisation_role_assignments",
+            "tableTo": "organisation_roles",
+            "columnsFrom": ["role_id"],
+            "columnsTo": ["id"],
+            "onDelete": "restrict",
+            "onUpdate": "no action"
+          }
+        },
+        "compositePrimaryKeys": {
+          "organisation_role_assignments_organisation_id_role_id_pk": {
+            "name": "organisation_role_assignments_organisation_id_role_id_pk",
+            "columns": ["organisation_id", "role_id"]
+          }
+        },
+        "uniqueConstraints": {},
+        "policies": {},
+        "checkConstraints": {},
+        "isRLSEnabled": false
+      },
+      "public.organisations": {
+        "name": "organisations",
+        "schema": "",
+        "columns": {
+          "id": {
+            "name": "id",
+            "type": "uuid",
+            "primaryKey": true,
+            "notNull": true,
+            "default": "gen_random_uuid()"
+          },
+          "slug": {
+            "name": "slug",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "title": {
+            "name": "title",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "logo_ref": {
+            "name": "logo_ref",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "website_url": {
+            "name": "website_url",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "description": {
+            "name": "description",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "public_name_visible": {
+            "name": "public_name_visible",
+            "type": "boolean",
+            "primaryKey": false,
+            "notNull": true,
+            "default": true
+          },
+          "public_logo_visible": {
+            "name": "public_logo_visible",
+            "type": "boolean",
+            "primaryKey": false,
+            "notNull": true,
+            "default": true
+          },
+          "first_published_at": {
+            "name": "first_published_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "status": {
+            "name": "status",
+            "type": "taxonomy_status",
+            "typeSchema": "public",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "'draft'"
+          },
+          "deleted_at": {
+            "name": "deleted_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "version": {
+            "name": "version",
+            "type": "integer",
+            "primaryKey": false,
+            "notNull": true,
+            "default": 1
+          },
+          "created_at": {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "now()"
+          },
+          "updated_at": {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": true,
+            "default": "now()"
+          }
+        },
+        "indexes": {
+          "organisations_slug_key": {
+            "name": "organisations_slug_key",
+            "columns": [
+              {
+                "expression": "slug",
+                "isExpression": false,
+                "asc": true,
+                "nulls": "last"
+              }
+            ],
+            "isUnique": true,
+            "concurrently": false,
+            "method": "btree",
+            "with": {}
+          }
+        },
+        "foreignKeys": {},
+        "compositePrimaryKeys": {},
+        "uniqueConstraints": {},
+        "policies": {},
+        "checkConstraints": {
+          "organisations_retired_iff_deleted": {
+            "name": "organisations_retired_iff_deleted",
+            "value": "(\"organisations\".\"status\" = 'retired') = (\"organisations\".\"deleted_at\" IS NOT NULL)"
+          },
+          "organisations_slug_pattern": {
+            "name": "organisations_slug_pattern",
+            "value": "\"organisations\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"
+          },
+          "organisations_slug_not_uuid": {
+            "name": "organisations_slug_not_uuid",
+            "value": "\"organisations\".\"slug\" !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'"
+          },
+          "organisations_slug_bounds": {
+            "name": "organisations_slug_bounds",
+            "value": "char_length(\"organisations\".\"slug\") BETWEEN 1 AND 80"
+          },
+          "organisations_title_bounds": {
+            "name": "organisations_title_bounds",
+            "value": "char_length(\"organisations\".\"title\") BETWEEN 1 AND 160"
+          },
+          "organisations_website_url_bounds": {
+            "name": "organisations_website_url_bounds",
+            "value": "\"organisations\".\"website_url\" IS NULL OR char_length(\"organisations\".\"website_url\") BETWEEN 1 AND 2048"
+          },
+          "organisations_website_url_https": {
+            "name": "organisations_website_url_https",
+            "value": "\"organisations\".\"website_url\" IS NULL OR \"organisations\".\"website_url\" ~ '^https://[^\\s/?#]+[^\\s]*$'"
+          },
+          "organisations_description_bounds": {
+            "name": "organisations_description_bounds",
+            "value": "\"organisations\".\"description\" IS NULL OR char_length(\"organisations\".\"description\") <= 1000"
+          },
+          "organisations_version_positive": {
+            "name": "organisations_version_positive",
+            "value": "\"organisations\".\"version\" >= 1"
+          },
+          "organisations_published_has_first_published_at": {
+            "name": "organisations_published_has_first_published_at",
+            "value": "\"organisations\".\"status\" <> 'published' OR \"organisations\".\"first_published_at\" IS NOT NULL"
+          }
+        },
+        "isRLSEnabled": false
+      },
+      "public.congress_submission_kind_settings": {
+        "name": "congress_submission_kind_settings",
+        "schema": "",
+        "columns": {
+          "event_id": {
+            "name": "event_id",
+            "type": "uuid",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "kind": {
+            "name": "kind",
+            "type": "text",
+            "primaryKey": false,
+            "notNull": true
+          },
+          "opens_at": {
+            "name": "opens_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "closes_at": {
+            "name": "closes_at",
+            "type": "timestamp with time zone",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "submit_limit": {
+            "name": "submit_limit",
+            "type": "integer",
+            "primaryKey": false,
+            "notNull": false
+          },
+          "max_age_years": {
+            "name": "max_age_years",
+            "type": "integer",
+            "primaryKey": false,
+            "notNull": false
+          }
+        },
+        "indexes": {},
+        "foreignKeys": {
+          "congress_submission_kind_settings_event_id_congress_submission_settings_event_id_fk": {
+            "name": "congress_submission_kind_settings_event_id_congress_submission_settings_event_id_fk",
+            "tableFrom": "congress_submission_kind_settings",
+            "tableTo": "congress_submission_settings",
+            "columnsFrom": ["event_id"],
+            "columnsTo": ["event_id"],
+            "onDelete": "restrict",
+            "onUpdate": "no action"
+          }
+        },
+        "compositePrimaryKeys": {
+          "congress_submission_kind_settings_event_id_kind_pk": {
+            "name": "congress_submission_kind_settings_event_id_kind_pk",
+            "columns": ["event_id", "kind"]
+          }
+        },
+        "uniqueConstraints": {},
+        "policies": {},
+        "checkConstraints": {
+          "congress_submission_kind_settings_kind_known": {
+            "name": "congress_submission_kind_settings_kind_known",
+            "value": "\"congress_submission_kind_settings\".\"kind\" IN ('oral', 'poster', 'abstract')"
+          },
+          "congress_submission_kind_settings_opening_needs_closing": {
+            "name": "congress_submission_kind_settings_opening_needs_closing",
+            "value": "\"congress_submission_kind_settings\".\"opens_at\" IS NULL OR \"congress_submission_kind_settings\".\"closes_at\" IS NOT NULL"
+          },
+          "congress_submission_kind_settings_closing_after_opening": {
+            "name": "congress_submission_kind_settings_closing_after_opening",
+            "value": "\"congress_submission_kind_settings\".\"opens_at\" IS NULL OR \"congress_submission_kind_settings\".\"closes_at\" > \"congress_submission_kind_settings\".\"opens_at\""
+          },
+          "congress_submission_kind_settings_limit_positive": {
+            "name": "congress_submission_kind_settings_limit_positive",
+            "value": "\"congress_submission_kind_settings\".\"submit_limit\" IS NULL OR \"congress_submission_kind_settings\".\"submit_limit\" > 0"
+          },
+          "congress_submission_kind_settings_age_range": {
+            "name": "congress_submission_kind_settings_age_range",
+            "value": "\"congress_submission_kind_settings\".\"max_age_years\" IS NULL OR \"congress_submission_kind_settings\".\"max_age_years\" BETWEEN 18 AND 99"
+          }
+        },
+        "isRLSEnabled": false
+      }
+    },
+    "enums": {
+      "public.relationship_status": {
+        "name": "relationship_status",
+        "schema": "public",
+        "values": ["active", "retired"]
+      },
+      "public.taxonomy_status": {
+        "name": "taxonomy_status",
+        "schema": "public",
+        "values": ["draft", "published", "retired"]
+      }
+    }
+  }
+}

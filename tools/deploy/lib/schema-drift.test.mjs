@@ -1,13 +1,18 @@
 // Issue #3646: the drift of a prod `schema` answer against the tree (spec §5 «Local commands.»).
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   catalogueDrift,
+  handWrittenIndexes,
   migrationDrift,
   newestSnapshot,
   normaliseDefault,
   normaliseType,
+  pgIdentifier,
   sha256,
 } from "./schema-drift.mjs";
 
@@ -296,5 +301,146 @@ test("3646: catalogue — missing, extra and changed tables, columns, indexes, c
   assert.deepEqual(catalogueDrift(SNAPSHOT, { tables: [], enums: [] }), [
     "table missing: public.users",
     "enum missing: public.record_status",
+  ]);
+});
+
+// Issue #3683: the clean prod schema of 2026-11-04 (prod-observe run 41828590216),
+// reduced to the objects of its three false-positive classes plus ordinary tables;
+// `snapshot` holds the same tables of `0055_snapshot.json`.
+const FIXTURE = JSON.parse(
+  readFileSync(
+    fileURLToPath(
+      new URL("./__fixtures__/prod-schema-2026-11-04.json", import.meta.url),
+    ),
+    "utf8",
+  ),
+);
+const REPO = fileURLToPath(new URL("../../../", import.meta.url));
+const treeSql = (tag) => {
+  const p = join(REPO, "apps/api/drizzle", `${tag}.sql`);
+  return existsSync(p) ? readFileSync(p, "utf8") : null;
+};
+const TREE_JOURNAL = JSON.parse(
+  readFileSync(join(REPO, "apps/api/drizzle/meta/_journal.json"), "utf8"),
+);
+const fixtureAnswer = () => JSON.parse(JSON.stringify(FIXTURE.answer));
+const fixtureDrift = (answer = fixtureAnswer()) =>
+  catalogueDrift(FIXTURE.snapshot, answer.catalogue, {
+    handWrittenIndexes: handWrittenIndexes(TREE_JOURNAL, treeSql),
+  });
+
+test("3683: the clean prod schema of 2026-11-04 compares to no drift", () => {
+  assert.deepEqual(fixtureDrift(), []);
+});
+
+test("3683: pg_partman — the partman schema and the partitions of a snapshot parent are not drift", () => {
+  const tables = FIXTURE.answer.catalogue.tables;
+  const without = (pred) =>
+    catalogueDrift(
+      FIXTURE.snapshot,
+      { ...FIXTURE.answer.catalogue, tables: tables.filter(pred) },
+      { handWrittenIndexes: handWrittenIndexes(TREE_JOURNAL, treeSql) },
+    );
+  // Today's answer carries no partition field: the parent is recognised by its
+  // partitioned (`ON ONLY`) indexes and the children by its name prefix and columns.
+  assert.ok(tables.every((t) => !("partitionOf" in t)));
+  assert.ok(tables.some((t) => t.name === "audit_ledger_y2026_m01"));
+  assert.ok(tables.some((t) => t.schema === "partman"));
+  // With the box field, the field decides.
+  const a = fixtureAnswer();
+  for (const t of a.catalogue.tables)
+    t.partitionOf = /^audit_ledger_/.test(t.name)
+      ? "public.audit_ledger"
+      : null;
+  assert.deepEqual(fixtureDrift(a), []);
+  const b = fixtureAnswer();
+  for (const t of b.catalogue.tables) t.partitionOf = null;
+  assert.deepEqual(fixtureDrift(b), [
+    "table extra: public.audit_ledger_default",
+    "table extra: public.audit_ledger_y2026_m01",
+  ]);
+  // A partition of a parent the snapshot lacks is still drift.
+  assert.deepEqual(
+    without((t) => t.name !== "audit_ledger" || t.schema !== "public"),
+    [
+      "table missing: public.audit_ledger",
+      "table extra: public.audit_ledger_default",
+      "table extra: public.audit_ledger_y2026_m01",
+    ],
+  );
+});
+
+test("3683: constraint and index names compare after Postgres' 63-byte truncation", () => {
+  assert.equal(pgIdentifier("a".repeat(70)), "a".repeat(63));
+  assert.equal(pgIdentifier("short"), "short");
+  // A multi-byte character is never split: 62 ASCII + one 2-byte letter = 64 bytes.
+  assert.equal(pgIdentifier(`${"a".repeat(62)}я`), "a".repeat(62));
+  const fk = Object.values(
+    FIXTURE.snapshot.tables["public.direction_specialties"].foreignKeys,
+  ).map((k) => k.name);
+  assert.ok(fk.some((n) => Buffer.byteLength(n) > 63));
+  // A truncated name that differs from the snapshot's prefix is still drift.
+  const a = fixtureAnswer();
+  const t = a.catalogue.tables.find((x) => x.name === "direction_specialties");
+  const k = t.constraints.find((x) => x.name.length === 63);
+  const stored = k.name;
+  k.name = `${stored.slice(0, 62)}x`;
+  assert.deepEqual(fixtureDrift(a), [
+    `constraint missing: public.direction_specialties ${stored} (foreign key)`,
+    `constraint extra: public.direction_specialties ${k.name} (foreign key)`,
+  ]);
+});
+
+test("3683: hand-written indexes — created in migration SQL, renamed and dropped in journal order", () => {
+  const files = {
+    "0000_a":
+      'CREATE INDEX "t_a_trgm_idx" ON "t" USING gin ("a" gin_trgm_ops);--> statement-breakpoint\n' +
+      'CREATE UNIQUE INDEX IF NOT EXISTS "t_b_idx" ON "t" ("b");\n' +
+      '-- CREATE INDEX "t_commented_idx" ON "t" ("c");\n',
+    "0001_b":
+      'ALTER INDEX "t_a_trgm_idx" RENAME TO "u_a_trgm_idx";--> statement-breakpoint\n' +
+      'DROP INDEX IF EXISTS "t_b_idx";\n',
+  };
+  const journal = {
+    entries: [
+      { tag: "0000_a", when: 1 },
+      { tag: "0001_b", when: 2 },
+    ],
+  };
+  assert.deepEqual(
+    [...handWrittenIndexes(journal, (tag) => files[tag] ?? null)],
+    ["u_a_trgm_idx"],
+  );
+  const tree = handWrittenIndexes(TREE_JOURNAL, treeSql);
+  for (const name of [
+    "directions_slug_trgm_idx",
+    "experts_patronymic_trgm_idx",
+    "organisations_title_trgm_idx",
+  ])
+    assert.ok(tree.has(name), name);
+  assert.ok(!tree.has("partners_slug_trgm_idx"), "renamed away in 0054");
+  assert.ok(!tree.has("event_experts_legacy_speaker_key"), "dropped in 0036");
+});
+
+test("3683: real drift on the clean prod schema still shows — an extra table, a missing column, an unknown index", () => {
+  const a = fixtureAnswer();
+  a.catalogue.tables.push({
+    schema: "public",
+    name: "audit_ledger_shadow",
+    columns: [],
+    indexes: [],
+    constraints: [],
+  });
+  const dir = a.catalogue.tables.find((t) => t.name === "directions");
+  dir.columns = dir.columns.filter((c) => c.name !== "title");
+  dir.indexes.push({
+    name: "directions_stray_trgm_idx",
+    definition:
+      "CREATE INDEX directions_stray_trgm_idx ON public.directions USING gin (slug gin_trgm_ops)",
+  });
+  assert.deepEqual(fixtureDrift(a), [
+    "table extra: public.audit_ledger_shadow",
+    "column missing: public.directions.title",
+    "index extra: public.directions directions_stray_trgm_idx",
   ]);
 });

@@ -1353,6 +1353,9 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.match(sql, /FROM drizzle\.__drizzle_migrations m/);
     assert.match(sql, /pg_get_indexdef\(x\.indexrelid\)/);
     assert.match(sql, /pg_get_constraintdef\(k\.oid\)/);
+    // #3683: each table names its partition parent, so pg_partman's children are not drift.
+    assert.match(sql, /FROM pg_inherits h JOIN pg_class p ON p\.oid = h\.inhparent/);
+    assert.match(sql, /WHERE h\.inhrelid = c\.oid AND c\.relispartition\) AS "partitionOf"/);
     assert.match(sql, /ROLLBACK;\n$/);
     const docker = log("docker");
     assert.match(docker, /^compose exec -T -e PGCLIENTENCODING=UTF8 postgres psql -X -qAt -v ON_ERROR_STOP=1 -U ds -d ds_prod -f -$/m);

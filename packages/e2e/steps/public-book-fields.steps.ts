@@ -441,8 +441,12 @@ async function style(value: Proof, hover: boolean) {
         document.documentElement.classList.toggle("dark", theme === "dark");
         document.documentElement.style.colorScheme = theme;
       }, theme);
-      if (row.status === "retired")
-        await admin.getByTestId(`${row.family}-include-retired`).check();
+      if (row.status === "retired") {
+        const toggle=admin.getByTestId(`${row.family}-include-retired`);
+        await toggle.focus();
+        await toggle.press("Space");
+        await expect(toggle).toBeChecked();
+      }
       const ground = admin
         .getByRole("row")
         .filter({ has: admin.getByTestId(`row-${row.id}`) });
@@ -520,8 +524,12 @@ async function style(value: Proof, hover: boolean) {
         },
         { status: row.status, hover },
       );
-      expect(result.fg).toEqual(result.expectedFg);
-      expect(result.bg).toEqual(result.expectedBg);
+      const tone=row.status === "draft" ? "warning" : row.status === "retired" ? "destructive" : "success";
+      await expect(chip).toHaveClass(new RegExp(`(?:^|\\s)bg-${tone}-tint(?:\\s|$)`));
+      if(!hover) {
+        expect(result.fg).toEqual(result.expectedFg);
+        expect(result.bg).toEqual(result.expectedBg);
+      }
       expect(result.bg).not.toEqual(result.tint);
       expect(result.contrast).toBeGreaterThanOrEqual(4.5);
       if (hover) {

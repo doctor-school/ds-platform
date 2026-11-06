@@ -92,9 +92,9 @@ When("the viewer opens the week list", async ({ page, host }) => {
     ).href,
   );
   expect(api.status()).toBe(200);
-  const body = (await api.json()) as { items: { id: string }[] };
+  const body = (await api.json()) as { data: { slug: string }[] };
   for (const event of events)
-    expect(body.items.map(({ id }) => id)).toContain(event.id);
+    expect(body.data.map(({ slug }) => slug)).toContain(event.slug);
   expect((await page.goto(`${host.eventsPath}?${query}`))?.status()).toBe(200);
   await waitForClientReady(page);
 });
@@ -278,7 +278,10 @@ Then(
     await search.fill(`no-such-specialty-${randomUUID()}`);
     await expect(admin.locator('[data-testid^="row-"]:visible')).toHaveCount(0);
     await noBookControls(admin);
-    await admin.getByRole("button", { name: "Сбросить всё" }).click();
+    await admin
+      .getByTestId("specialties-filters")
+      .getByRole("button", { name: "Сбросить всё", exact: true })
+      .click();
     const row = admin.locator('[data-testid^="row-"]:visible').first();
     await expect(row).toBeVisible();
     const url = admin.url();

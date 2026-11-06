@@ -5,6 +5,7 @@
 # stack. Facts come from their producer features (021, 022, 024, 020, the room);
 # amounts in brackets are rule-version parameters with the PRD defaults.
 
+@host:admin
 Feature: One attention-points ledger accrues, reserves, debits and releases Pul, Bre and Con
 
   Background:
@@ -55,16 +56,18 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Given "A" has 150 Pul of open obligations and 0 Pul available
     When "A" asks to reserve for another advance-mode event priced 50 Pul
     Then the reserve is refused with problem "points-threshold-short" and a shortfall of 50
-    And the earn hint names 5 lessons
+    And the earn hint states 200 Pul to earn and 20 lessons, the 150 Pul owed counted first
     And an open event and every lesson remain open to "A"
 
   @EARS-18 @failure
   Scenario: A no-show releases the reserve and annuls the advance
     Given "A" holds a reserve with an advance on event "E2"
-    When "E2" ends and the settlement window passes without AttendanceConfirmed for "A"
+    When "E2" ends and the 24-hour no-show window passes without AttendanceConfirmed for "A"
     Then the reserve is released by compensating postings
     And the advance and its obligation are annulled
     And no participation award is posted
+    When AttendanceConfirmed for "A" on "E2" arrives late
+    Then nothing is debited and the participation award is posted as late
 
   @EARS-21 @failure
   Scenario: A fourth concurrent limited-seat reserve is refused

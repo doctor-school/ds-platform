@@ -1,6 +1,6 @@
 ---
 title: "025 — Design"
-description: "Design companion to the 025 attention points engine requirements: the module placement, the ledger ER fragment (accounts, postings with denomination and unique event id, rule versions, gating, obligations), the immutability and partitioning mirrored from audit_ledger, the accrual cascade with dedupe and obligation settlement, the reserve lifecycle state machine, the gating decision, the leaderboard read model, the admin API and the reconciliation of ADR-0003 with ADR-0016."
+description: "Design companion to the 025 attention points engine requirements: the module placement, the ledger ER fragment (accounts, postings with denomination and a fact-level event id unique with its leg, the posting-keys table, rule versions, gating, obligations), the immutability and partitioning mirrored from audit_ledger, the accrual cascade with dedupe and obligation settlement, the reserve lifecycle state machine, the gating decision, the leaderboard read model, the admin API and the reconciliation of ADR-0003 with ADR-0016."
 slug: 025-attention-points-engine-design
 lang: en
 ---
@@ -21,6 +21,7 @@ erDiagram
   points_accounts ||--o{ points_postings : "debit_account_id / credit_account_id"
   points_rule_versions ||--o{ points_postings : "rule_id + rule_version"
   points_postings ||--o| points_postings : "reverses_posting_id"
+  points_posting_keys ||--|{ points_postings : "event_id (one fact, its legs)"
   projects ||--o{ points_postings : "project_id"
   organisations ||--o{ points_postings : "attributed_organisation_id"
   points_gating ||--o{ points_reserves : "price at reserve time"
@@ -37,8 +38,8 @@ erDiagram
   }
   points_postings {
     uuid id PK
-    text event_id "unique via points_posting_keys"
-    text dedupe_key "unique via points_posting_keys; null for spend/settle"
+    text event_id "the fact; FK points_posting_keys"
+    text leg "posting within the fact; unique with event_id"
     uuid debit_account_id FK
     uuid credit_account_id FK
     text denomination "pul|bre|con"
@@ -83,7 +84,7 @@ erDiagram
 ```
 
 - **Accounts.** Unique (`subject_kind`, `subject_id`, `unit`) for subjects; system accounts are keyed by a `system_code` (`issuance`, `reserve`, `sink`, `advance`) — one per unit. `amount` is a positive integer; direction is the debit/credit pair, so a fold is `Σ credits − Σ debits` per (account, denomination).
-- **Event id and dedupe key** (requirements → Prior decisions, reconciliation of ADR-0003 with ADR-0016). `event_id` is unique across the table — the idempotency key of the fact (a producer's event id, or a derived id `reserve:<registration>`, `settle:<registration>`, `release:<registration>`, `obligation-settle:<posting>`). `dedupe_key` is unique where not null and is set only on accrual postings: `<personId>:<contentRef>:<action>:<denomination>`. Postgres requires the partition key in every unique constraint of a partitioned table, which is why `audit_ledger` scopes its `event_id` uniqueness to `(event_id, created_at)` — dedup within one monthly partition, acceptable for an audit trail. For points that is **not** acceptable: a lesson completed in March and replayed by an offline sync in April must still be a duplicate (EARS-4). So global uniqueness lives in a non-partitioned companion table `points_posting_keys (event_id PK, dedupe_key UNIQUE NULLS DISTINCT, posting_month)`, inserted first in the same transaction as the postings; this is the one deliberate departure from the `audit_ledger` template.
+- **Event id, leg and dedupe key** (ADR-0016 §6 / design §2.12 as rewritten in this PR). **One domain fact = one `event_id`**: the producer's event id, or a derived fact id for the engine's own facts (`reserve:<registration>`, `settle:<registration>`, `release:<registration>`). A fact may write several postings — a module award in three denominations, a reserve plus an advance, a release reversing both, an accrual plus its obligation settlement — so a posting is unique on (`event_id`, `leg`), where the `leg` names the posting within the fact (denomination + entry kind: `accrual:pul`, `accrual:bre`, `reserve:balance`, `reserve:advance`, `settle:pul`, `release:balance`, `obligation-settle:pul`, …). Postgres requires the partition key in every unique constraint of a partitioned table, which is why `audit_ledger` scopes its `event_id` uniqueness to `(event_id, created_at)` — dedup within one monthly partition, acceptable for an audit trail. For points that is **not** acceptable: a lesson completed in March and replayed by an offline sync in April must still be a duplicate (EARS-4). So global dedupe lives in the non-partitioned **`points_posting_keys (event_id PK, dedupe_key UNIQUE NULLS DISTINCT, occurred_month)`** — **one row per fact**, the dedupe key being the PRD key `<personId>:<contentRef>:<action>` for an accrual fact and null for a spend fact (whose `event_id` alone is its key) — inserted in the same transaction **before** the fact's postings, so the key is known before the rule is evaluated. The postings of one fact share its `occurred_at` and therefore one partition, so the partition-local unique index on (`event_id`, `leg`, `occurred_at`) is effectively (`event_id`, `leg`). This is how the points ledger satisfies ADR-0003 §3; it is the one deliberate departure from the `audit_ledger` template.
 - **Derived state tables** (`points_reserves`, `points_obligations`) are projections rebuilt from postings; they hold no amount the postings do not already prove and carry the `audit_row_change()` trigger like `registration_attendance`. A cached balance, if ever needed, is the same kind of rebuildable projection.
 
 ## 3. Immutability and partitions
@@ -108,9 +109,9 @@ sequenceDiagram
   else new
     I->>R: activeVersion(action, occurredAt)
     R-->>I: {ruleId, version, amounts per denomination}
-    I->>L: insert postings issuance→person per non-zero denomination
+    I->>L: insert postings issuance→person, one leg per non-zero denomination (eventId, leg accrual:<denomination>)
     opt open obligation and Pul > 0
-      I->>L: insert settle posting person→advance (min(pul, remaining))
+      I->>L: insert leg obligation-settle:pul person→advance (min(pul, remaining))
     end
     I->>L: COMMIT
     I->>B: PointsCredited (+ AdvanceSettled)
@@ -137,10 +138,10 @@ stateDiagram-v2
   released --> [*]
 ```
 
-- **Postings per transition.** reserve: person→reserve (balance part) and advance→reserve (shortfall, opening the obligation); settle: reserve→sink (full price); release: a reversal of each reserve-side posting.
-- **No-show.** A scheduled sweep after `EventEnded` + the settlement window [24 h, a rule-book parameter] releases every still-`reserved` registration of that event with reason `no-show`; the sweep is idempotent through the derived `release:<registration>` event id.
+- **Postings per transition** (each transition is one fact with its own `event_id`, its postings told apart by `leg`). reserve (`reserve:<registration>`): leg `reserve:balance` person→reserve and leg `reserve:advance` advance→reserve (shortfall, opening the obligation); settle (`settle:<registration>`): leg `settle:pul` reserve→sink (full price); release (`release:<registration>`): one reversal leg per reserve-side posting.
+- **No-show.** A scheduled sweep after `EventEnded` + the no-show window [24 h, rule-book parameter `noShow.window`, EARS-18] releases every still-`reserved` registration of that event with reason `no-show`; the sweep is idempotent through the derived `release:<registration>` event id. A late `AttendanceConfirmed` for a released registration finds the `release:` key row, writes no `settle:` fact and accrues only the participation award (EARS-18).
 - **After settle**, the obligation stays open and is netted by later Pul accruals (§4); it is never a negative balance — the read model reports `advance.remaining`, and `pul.available` is the fold of the person account, which no posting takes below zero.
-- **Gating decision** (EARS-13) is a pure function `decide(gating, balance, openObligations, ruleVersion)` in `packages/schemas/src/points/gating.ts`, shared by the read endpoint and the reserve command so the advertised decision and the enforced one cannot diverge. It never takes an attribution argument (EARS-15 invariant).
+- **Gating decision** (EARS-13) is a pure function `decide(gating, balance, openObligations, ruleVersion)` in `packages/schemas/src/points/gating.ts` — `shortfall = price − available`, `pulToEarn = shortfall + Σ remaining obligations` (EARS-20 nets new Pul to obligations first), `lessonsNeeded = ceil(pulToEarn / lesson award)` — shared by the read endpoint and the reserve command so the advertised decision and the enforced one cannot diverge. It never takes an attribution argument (EARS-15 invariant).
 
 ## 6. Rule book (EARS-25, 26)
 

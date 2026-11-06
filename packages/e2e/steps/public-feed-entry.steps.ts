@@ -580,11 +580,15 @@ Then(
     await submitAdjacency(page, kindOptions[1]);
     const value = entry(page),
       id = value.records!.edges[0]!;
-    const response = await value.admin!.request.get(
-      new URL(`/v1/admin/direction-adjacency/${id}`, value.admin!.url()).href,
-    );
-    expect(response.status()).toBe(200);
-    expect(await response.json()).toMatchObject({ id, kind: value.chosenKind });
+    const response = await value.admin!.evaluate(async (id) => {
+      const response = await fetch(`/v1/admin/direction-adjacency/${id}`, {
+        credentials: "include",
+        headers: { accept: "application/json" },
+      });
+      return { status: response.status, body: await response.json() };
+    }, id);
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ id, kind: value.chosenKind });
     expect(await value.records!.edge(id)).toMatchObject({
       id,
       kind: value.chosenKind,

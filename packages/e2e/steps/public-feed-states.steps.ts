@@ -6,6 +6,7 @@ import {
   verifyOwnedFeedEntryListeners,
 } from "../lib/feed-entry.js";
 import { publicFeedStateTitles } from "../lib/host-tags.js";
+import { publicReadonlyOriginals } from "../lib/public-readonly-originals.js";
 import { waitForClientReady } from "../lib/page-ready.js";
 
 type Specialty = { id: string; code: string; name: string; isOther: boolean };
@@ -246,7 +247,10 @@ Then(
 );
 After(async ({ page, $testInfo }) => {
   if (
-    !publicFeedStateTitles.some(
+    ![
+      ...publicFeedStateTitles,
+      ...publicReadonlyOriginals.map(({ title }) => title),
+    ].some(
       (title) =>
         $testInfo.title === title || $testInfo.title.startsWith(title + " @"),
     )

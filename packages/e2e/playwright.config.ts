@@ -10,6 +10,7 @@ import {
   signInHostTags,
 } from "./lib/host-tags.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
+import { publicReadonlyPattern } from "./lib/public-readonly-originals.js";
 
 /**
  * The C6 REGRESSION SUITE — staging/regression-contour tech spec §6 (Issue #2067).
@@ -162,7 +163,9 @@ export default defineConfig({
   workers,
   forbidOnly: !!process.env.CI,
   ...(grep ? { grep } : {}),
-  grepInvert: publicFeedStatePattern,
+  grepInvert: new RegExp(
+    `${publicFeedStatePattern.source}|${publicReadonlyPattern.source}`,
+  ),
   retries: 0,
   timeout: 120_000,
   expect: { timeout: 20_000 },

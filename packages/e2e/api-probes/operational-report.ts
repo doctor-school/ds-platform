@@ -14,9 +14,14 @@ interface Suite {
   suites?: Suite[];
 }
 
+export interface OperationalCase {
+  title: string;
+  suitePath: readonly string[];
+}
+
 export function assertOperationalReport(
   value: unknown,
-  expected: readonly string[],
+  expected: readonly (string | OperationalCase)[],
   expectedProject?: string,
 ) {
   const report = value as { suites?: Suite[]; errors?: unknown[] } | undefined;
@@ -28,16 +33,23 @@ export function assertOperationalReport(
   )
     throw new Error("Missing or failed operational-original report");
   const found: string[] = [];
-  function visit(suite: Suite) {
+  const strict = expected.some((item) => typeof item !== "string");
+  const key = (item: string | OperationalCase) =>
+    typeof item === "string"
+      ? item
+      : JSON.stringify([...item.suitePath, item.title]);
+  function visit(suite: Suite, parents: string[] = []) {
+    const path = suite.title
+      ? [...parents, suite.title.replaceAll("\\", "/")]
+      : parents;
     for (const spec of suite.specs ?? []) {
-      found.push(
-        spec.title.replace(
-          expectedProject
-            ? new RegExp(` @host:${expectedProject}$`)
-            : / @host:[a-z-]+$/,
-          "",
-        ),
+      const title = spec.title.replace(
+        expectedProject
+          ? new RegExp(` @host:${expectedProject}$`)
+          : / @host:[a-z-]+$/,
+        "",
       );
+      found.push(strict ? JSON.stringify([...path, title]) : title);
       if (
         expectedProject &&
         spec.tests.some(
@@ -63,11 +75,12 @@ export function assertOperationalReport(
           `Original must pass once with no skip, flake or retry: ${spec.title}`,
         );
     }
-    for (const child of suite.suites ?? []) visit(child);
+    for (const child of suite.suites ?? []) visit(child, path);
   }
-  report.suites.forEach(visit);
+  report.suites.forEach((suite) => visit(suite));
   if (
-    JSON.stringify([...found].sort()) !== JSON.stringify([...expected].sort())
+    JSON.stringify([...found].sort()) !==
+    JSON.stringify(expected.map(key).sort())
   )
     throw new Error(
       `Operational original identity mismatch: ${JSON.stringify(found)}`,

@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        task: [3751, 3772, 3785, 3789, 3797]
+        task: [3751, 3772, 3785, 3789, 3797, 3804]
     timeout-minutes: 25
     env:
       TURBO_TELEMETRY_DISABLED: "1"
@@ -74,6 +74,7 @@ jobs:
       E2E_ADMIN_URL: http://localhost:3200
       E2E_FEED_ENTRY_DATABASE_URL: postgres://ds:ds@127.0.0.1:5432/ds_probe_${{ matrix.task }}
       E2E_FEED_ENTRY_BOOT: "1"
+      E2E_PUBLIC_BOOK_FIELDS: ${{ matrix.task == 3804 && '1' || '0' }}
       E2E_PUBLIC_RECORD_FORMS: ${{ matrix.task == 3797 && '1' || '0' }}
       E2E_PUBLIC_SPECIALTY_MEMORY: ${{ matrix.task == 3789 && '1' || '0' }}
       E2E_PUBLIC_READONLY: ${{ matrix.task == 3785 && '1' || '0' }}
@@ -81,9 +82,13 @@ jobs:
     steps:
       - name: Resolve task-owned receipt paths on the runner
         run: |
-          echo "E2E_FEED_ENTRY_LOG=$RUNNER_TEMP/public-feed-entry/stand-ops-${{ matrix.task }}.log" >> "$GITHUB_ENV"
-          echo "E2E_FEED_ENTRY_ARTIFACT_DIR=$RUNNER_TEMP/public-feed-entry" >> "$GITHUB_ENV"
-          echo "E2E_REPORT_DIR=$RUNNER_TEMP/public-feed-entry/report" >> "$GITHUB_ENV"
+          receipt="$RUNNER_TEMP/public-feed-entry/${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.task }}"
+          if [ -e "$receipt" ]; then echo "Refusing to overwrite existing receipt $receipt"; exit 1; fi
+          mkdir -p "$(dirname "$receipt")"
+          mkdir "$receipt"
+          echo "E2E_FEED_ENTRY_LOG=$receipt/stand-ops-${{ matrix.task }}.log" >> "$GITHUB_ENV"
+          echo "E2E_FEED_ENTRY_ARTIFACT_DIR=$receipt" >> "$GITHUB_ENV"
+          echo "E2E_REPORT_DIR=$receipt/report" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -107,15 +112,15 @@ jobs:
           docker logs ds-feed-entry-postgres
           exit 1
       - name: Configure the existing Admin actor fixture for the read-only task
-        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797
+        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797 || matrix.task == 3804
         run: |
           echo 'IDP_ISSUER=http://localhost:9080' >> "$GITHUB_ENV"
           echo 'IDP_REDIRECT_URI=http://localhost:3000/auth/callback' >> "$GITHUB_ENV"
       - name: Prepare the PAT mount
-        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797
+        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797 || matrix.task == 3804
         run: mkdir -p "$RUNNER_TEMP/idp-pat" && chmod 0777 "$RUNNER_TEMP/idp-pat"
       - name: Start the IdP (Zitadel)
-        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797
+        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797 || matrix.task == 3804
         run: |
           # ZITADEL_HTTPCLIENT_DENYLIST — the same SSRF-guard override as api-e2e
           # (see the note there), the dev stand and stage/prod: the default list
@@ -147,7 +152,7 @@ jobs:
             ghcr.io/zitadel/zitadel:v4.17.3 \
             start-from-init --masterkeyFromEnv
       - name: Wait for the IdP to be ready
-        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797
+        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797 || matrix.task == 3804
         run: |
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:9080/debug/ready >/dev/null 2>&1; then
@@ -157,7 +162,7 @@ jobs:
           done
           echo "the IdP did not become ready in time"; docker logs ds-idp; exit 1
       - name: Read the bootstrap PAT
-        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797
+        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797 || matrix.task == 3804
         run: |
           for i in $(seq 1 30); do
             if [ -s "$RUNNER_TEMP/idp-pat/pat.txt" ]; then
@@ -172,7 +177,7 @@ jobs:
       # /debug/ready can pass before the management API's internal gRPC listener
       # is usable (#1887). Share the authenticated wait with api-e2e.
       - name: Wait for authenticated IdP management readiness
-        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797
+        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797 || matrix.task == 3804
         run: node infra/dev-stand/idp/wait-ready.mjs
       # The dev stand's own provisioner, unmodified — it is idempotent, needs
       # only curl + jq (both on ubuntu-latest), seeds the
@@ -184,7 +189,7 @@ jobs:
       # are per-run ephemeral (the IdP lives and dies on this runner), but a
       # public log stays clean regardless.
       - name: Provision the IdP project, client and roles
-        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797
+        if: matrix.task == 3785 || matrix.task == 3789 || matrix.task == 3797 || matrix.task == 3804
         env:
           IDP_BASE_URL: http://localhost:9080
           # 017 EARS-19 needs the headless Admin actor. The public originals
@@ -198,7 +203,7 @@ jobs:
 
       - name: Build committed API and Doctor, then migrate the owned DB
         run: |
-          if [ '${{ matrix.task }}' = '3785' ] || [ '${{ matrix.task }}' = '3789' ] || [ '${{ matrix.task }}' = '3797' ]; then
+          if [ '${{ matrix.task }}' = '3785' ] || [ '${{ matrix.task }}' = '3789' ] || [ '${{ matrix.task }}' = '3797' ] || [ '${{ matrix.task }}' = '3804' ]; then
             pnpm exec turbo run build --filter=@ds/api --filter=@ds/doctor --filter=@ds/portal --filter=@ds/admin --filter=@ds/e2e...
           else
             pnpm exec turbo run build --filter=@ds/api --filter=@ds/doctor --filter=@ds/e2e...
@@ -207,7 +212,7 @@ jobs:
           pnpm --filter @ds/api drizzle:migrate:ci
       - name: Install Chromium
         run: pnpm --filter @ds/e2e exec playwright install --with-deps chromium
-      - name: Execute the exact three canonical originals and enforce their actual receipt
+      - name: Execute three canonical originals (five cases for 3804) and enforce their actual receipt
         run: |
           pnpm --filter @ds/e2e exec bddgen --config feed-entry.config.ts
           pnpm --filter @ds/e2e exec playwright test --config feed-entry.config.ts

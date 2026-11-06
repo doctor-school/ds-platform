@@ -109,10 +109,14 @@ export type PointsPostOutcome = z.infer<typeof PointsPostOutcomeSchema>;
  *  - POINTS_INSUFFICIENT_PUL — EARS-22: the fact would take available Pul
  *    below zero. A consumer slice may translate it to its own decision
  *    (e.g. #3810's `points-threshold-short` with an earn hint).
+ *  - POINTS_OCCURRED_AT_FUTURE — EARS-27: the fact's `occurredAt` lies more
+ *    than one day past now (beyond clock skew); a far-future posting would
+ *    land in the default partition and block monthly partition creation.
  */
 export const POINTS_LEDGER_ERROR_CODES = [
   "POINTS_ACCOUNT_CLOSED",
   "POINTS_INSUFFICIENT_PUL",
+  "POINTS_OCCURRED_AT_FUTURE",
 ] as const;
 export const PointsLedgerErrorCodeSchema = z.enum(POINTS_LEDGER_ERROR_CODES);
 export type PointsLedgerErrorCode = z.infer<typeof PointsLedgerErrorCodeSchema>;

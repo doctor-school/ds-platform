@@ -19,4 +19,12 @@ describe("PointsLedgerError", () => {
     expect(body.type.endsWith("/points-insufficient-pul")).toBe(true);
     expect(body.status).toBe(409);
   });
+
+  it("025 EARS-27: a far-future fact refuses with problem points-occurred-at-future", () => {
+    const body = new PointsLedgerError(
+      "POINTS_OCCURRED_AT_FUTURE",
+    ).toProblemDetails("t");
+    expect(body.type.endsWith("/points-occurred-at-future")).toBe(true);
+    expect(body.status).toBe(422);
+  });
 });

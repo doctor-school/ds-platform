@@ -234,6 +234,13 @@ export const pointsPostings = pgTable(
       "points_postings_reverses_pair_check",
       sql`(${table.reversesPostingId} IS NULL) = (${table.reversesOccurredAt} IS NULL)`,
     ),
+    // EARS-27 — a far-future posting would sit in the DEFAULT partition and
+    // block pg_partman from creating that month's partition; the service
+    // refuses it first (`points-occurred-at-future`), this is the backstop.
+    check(
+      "points_postings_occurred_at_not_future_check",
+      sql`${table.occurredAt} <= ${table.recordedAt} + interval '1 day'`,
+    ),
     // The balance fold reads postings per (account, denomination).
     index("points_postings_debit_idx").on(
       table.debitAccountId,

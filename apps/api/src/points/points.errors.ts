@@ -18,6 +18,8 @@ export const POINTS_LEDGER_ERROR_STATUS: Readonly<
   // 409: the fact is well-formed; the account's state refuses it.
   POINTS_ACCOUNT_CLOSED: 409,
   POINTS_INSUFFICIENT_PUL: 409,
+  // 422: the fact itself is unprocessable — dated beyond the clock-skew bound.
+  POINTS_OCCURRED_AT_FUTURE: 422,
 };
 
 const POINTS_LEDGER_ERROR_TITLE: Readonly<
@@ -25,6 +27,7 @@ const POINTS_LEDGER_ERROR_TITLE: Readonly<
 > = {
   POINTS_ACCOUNT_CLOSED: "The attention-points account is closed",
   POINTS_INSUFFICIENT_PUL: "Not enough Pul available for this posting",
+  POINTS_OCCURRED_AT_FUTURE: "The fact is dated too far in the future",
 };
 
 /** Problem `type` slug: `POINTS_ACCOUNT_CLOSED` → `points-account-closed`. */

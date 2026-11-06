@@ -303,6 +303,126 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(parent[0]!.partstrat).toBe("r");
     });
 
+    it("025 EARS-27: a fact dated more than a day ahead is refused with points-occurred-at-future and writes nothing", async () => {
+      const personId = randomUUID();
+      const fact = accrual(personId, {
+        occurredAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+      });
+      const refusal = await ledger.post(fact).catch((e: unknown) => e);
+      expect(refusal).toBeInstanceOf(PointsLedgerError);
+      expect((refusal as PointsLedgerError).problem).toBe(
+        "points-occurred-at-future",
+      );
+      expect((refusal as PointsLedgerError).getStatus()).toBe(422);
+      expect(await postingsOf(personId)).toHaveLength(0);
+      const { rows } = await handle.pool.query(
+        `SELECT 1 FROM points_posting_keys WHERE event_id = $1`,
+        [fact.eventId],
+      );
+      expect(rows).toHaveLength(0);
+      // A small clock skew is still accepted.
+      const skewed = await ledger.post(
+        accrual(personId, { occurredAt: new Date(Date.now() + 60_000) }),
+      );
+      expect(skewed.status).toBe("posted");
+    });
+
+    it("025 EARS-27: the database refuses a posting dated more than a day past its recorded_at", async () => {
+      const personId = randomUUID();
+      const account = await ledger.resolvePersonAccount(personId);
+      const issuance = await ledger.resolveSystemAccount("issuance");
+      const eventId = randomUUID();
+      const future = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+      await handle.pool.query(
+        `INSERT INTO points_posting_keys (event_id, occurred_month) VALUES ($1, date_trunc('month', $2::timestamptz)::date)`,
+        [eventId, future],
+      );
+      await expect(
+        handle.pool.query(
+          `INSERT INTO points_postings (event_id, leg, debit_account_id, credit_account_id, denomination, amount, rule_id, rule_version, occurred_at)
+         VALUES ($1, 'a', $2, $3, 'pul', 10, $4, 1, $5)`,
+          [eventId, issuance.id, account.id, ruleId, future],
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "points_postings_occurred_at_not_future_check",
+      });
+    });
+
+    it("025 EARS-22: facts touching two new accounts in opposite order do not deadlock", async () => {
+      const pairs = Array.from({ length: 12 }, () => [
+        randomUUID(),
+        randomUUID(),
+      ]);
+      const both = (first: string, second: string): PointsFact => ({
+        eventId: randomUUID(),
+        occurredAt: new Date("2026-11-06T10:00:00Z"),
+        legs: [first, second].map((personId, i) => ({
+          leg: `accrual:pul:${i}`,
+          debit: { kind: "system" as const, code: "issuance" as const },
+          credit: { kind: "person" as const, personId },
+          denomination: "pul" as const,
+          amount: 5,
+          ruleId,
+          ruleVersion: 1,
+        })),
+      });
+      const results = await Promise.allSettled(
+        pairs.flatMap(([a, b]) => [
+          ledger.post(both(a!, b!)),
+          ledger.post(both(b!, a!)),
+        ]),
+      );
+      const rejected = results.filter(
+        (r): r is PromiseRejectedResult => r.status === "rejected",
+      );
+      expect(rejected.map((r) => String(r.reason))).toEqual([]);
+      for (const [a, b] of pairs) {
+        expect(await pulAvailable(a!)).toBe(10);
+        expect(await pulAvailable(b!)).toBe(10);
+      }
+    });
+
+    it("025 EARS-4: a replay of a recorded fact answers duplicate even after the account closed", async () => {
+      const personId = randomUUID();
+      const fact = accrual(personId);
+      const first = await ledger.post(fact);
+      await ledger.close(personId, new Date("2026-11-06T12:00:00Z"));
+      const replay = await ledger.post(fact);
+      expect(replay.status).toBe("duplicate");
+      expect(replay.postings.map((p) => p.id)).toEqual(
+        first.postings.map((p) => p.id),
+      );
+      expect(await postingsOf(personId)).toHaveLength(1);
+    });
+
+    it("025 EARS-4: post joins a caller's transaction, so the caller's rollback leaves nothing", async () => {
+      const personId = randomUUID();
+      const fact = accrual(personId);
+      const rollback = new Error("caller rolls back");
+      await expect(
+        handle.db.transaction(async (tx) => {
+          const outcome = await ledger.post(fact, tx);
+          expect(outcome.status).toBe("posted");
+          throw rollback;
+        }),
+      ).rejects.toBe(rollback);
+      expect(await postingsOf(personId)).toHaveLength(0);
+      const { rows } = await handle.pool.query(
+        `SELECT 1 FROM points_posting_keys WHERE event_id = $1`,
+        [fact.eventId],
+      );
+      expect(rows).toHaveLength(0);
+      // A refusal inside a caller's transaction rolls back only the fact.
+      await handle.db.transaction(async (tx) => {
+        await expect(
+          ledger.post(debit(personId, 1), tx),
+        ).rejects.toBeInstanceOf(PointsLedgerError);
+        expect((await ledger.post(fact, tx)).status).toBe("posted");
+      });
+      expect(await postingsOf(personId)).toHaveLength(1);
+    });
+
     it("025 EARS-31: a closed account refuses with points-account-closed and leaves prior postings unchanged", async () => {
       const personId = randomUUID();
       await ledger.post(accrual(personId, { bre: 1 }));

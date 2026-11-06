@@ -26,6 +26,14 @@ type Executor = Db | Tx;
 
 const UNIT = "attention_points" as const;
 
+/** Clock-skew bound for a fact's `occurredAt` (EARS-27; DB CHECK in 0058). */
+const FUTURE_SKEW_MS = 24 * 60 * 60 * 1000;
+
+/** A deterministic key per account ref — also the global open order. */
+function refKey(ref: PointsAccountRef): string {
+  return ref.kind === "person" ? `p:${ref.personId}` : `s:${ref.code}`;
+}
+
 /**
  * The 025 ledger core (025-design §2/§3/§9). The ONE account-resolution API
  * every consumer uses (EARS-1) and the ONE write entry point for a fact
@@ -92,48 +100,63 @@ export class PointsLedgerService {
   }
 
   /**
-   * Writes one domain fact in ONE transaction:
-   *  1. resolves every account the legs name and locks the person accounts
-   *     (`SELECT … FOR UPDATE`, id order) — per-account serialisation (EARS-22);
-   *  2. refuses a closed person account, writing nothing (EARS-31);
-   *  3. inserts the fact's `points_posting_keys` row first; a conflict on its
+   * Writes one domain fact in ONE transaction — the caller's when `executor`
+   * is a transaction (025-design §1: producers post inside their own
+   * transaction; the fact runs in a savepoint, so a refusal rolls back only
+   * the fact), else its own:
+   *  0. refuses a fact dated more than a day ahead, writing nothing (EARS-27 —
+   *     it would land in the default partition and block partition creation);
+   *  1. opens every account the legs name in one deterministic key order, then
+   *     locks the person accounts (`SELECT … FOR UPDATE`, id order) —
+   *     per-account serialisation (EARS-22). Both orders are global, so two
+   *     facts naming the same accounts in opposite leg order cannot deadlock;
+   *  2. inserts the fact's `points_posting_keys` row; a conflict on its
    *     `event_id` OR its dedupe key writes nothing and answers `duplicate`
-   *     with the existing postings (EARS-4 — the constraint is the authority);
+   *     with the existing postings (EARS-4 — the constraint is the authority).
+   *     Idempotency precedes the account state: a replay still answers
+   *     `duplicate` after the account closed;
+   *  3. refuses a closed person account, writing nothing (EARS-31);
    *  4. refuses any leg that would take a person's available Pul below zero
    *     (EARS-22);
    *  5. writes the postings (immutable, partitioned — EARS-27).
    */
-  async post(input: PointsFact): Promise<PointsPostOutcome> {
+  async post(
+    input: PointsFact,
+    executor: Executor = this.db,
+  ): Promise<PointsPostOutcome> {
     const fact = PointsFactSchema.parse(input);
-    return this.db.transaction(async (tx) => {
-      const accountIds = new Map<string, PointsAccountRow>();
-      const resolve = async (ref: PointsAccountRef): Promise<string> => {
-        const key =
-          ref.kind === "person" ? `p:${ref.personId}` : `s:${ref.code}`;
-        let row = accountIds.get(key);
-        if (!row) {
-          row =
-            ref.kind === "person"
-              ? await this.resolvePersonAccount(ref.personId, tx)
-              : await this.resolveSystemAccount(ref.code, tx);
-          accountIds.set(key, row);
-        }
-        return row.id;
-      };
-      const legs: Array<ResolvedLeg & { source: PointsFact["legs"][number] }> =
-        [];
+    if (fact.occurredAt.getTime() > Date.now() + FUTURE_SKEW_MS) {
+      throw new PointsLedgerError("POINTS_OCCURRED_AT_FUTURE");
+    }
+    return executor.transaction(async (tx) => {
+      const refs = new Map<string, PointsAccountRef>();
       for (const leg of fact.legs) {
-        legs.push({
+        refs.set(refKey(leg.debit), leg.debit);
+        refs.set(refKey(leg.credit), leg.credit);
+      }
+      const accounts = new Map<string, PointsAccountRow>();
+      for (const key of [...refs.keys()].sort()) {
+        const ref = refs.get(key)!;
+        accounts.set(
+          key,
+          ref.kind === "person"
+            ? await this.resolvePersonAccount(ref.personId, tx)
+            : await this.resolveSystemAccount(ref.code, tx),
+        );
+      }
+      const accountId = (ref: PointsAccountRef): string =>
+        accounts.get(refKey(ref))!.id;
+      const legs: Array<ResolvedLeg & { source: PointsFact["legs"][number] }> =
+        fact.legs.map((leg) => ({
           leg: leg.leg,
           denomination: leg.denomination,
           amount: leg.amount,
-          debitAccountId: await resolve(leg.debit),
-          creditAccountId: await resolve(leg.credit),
+          debitAccountId: accountId(leg.debit),
+          creditAccountId: accountId(leg.credit),
           source: leg,
-        });
-      }
+        }));
 
-      const personIds = [...accountIds.entries()]
+      const personIds = [...accounts.entries()]
         .filter(([key]) => key.startsWith("p:"))
         .map(([, row]) => row.id)
         .sort();
@@ -146,9 +169,6 @@ export class PointsLedgerService {
               .where(inArray(pointsAccounts.id, personIds))
               .orderBy(asc(pointsAccounts.id))
               .for("update");
-      if (locked.some((account) => account.closedAt !== null)) {
-        throw new PointsLedgerError("POINTS_ACCOUNT_CLOSED");
-      }
 
       const inserted = await tx
         .insert(pointsPostingKeys)
@@ -164,6 +184,9 @@ export class PointsLedgerService {
           status: "duplicate" as const,
           postings: await this.existingPostings(tx, fact),
         };
+      }
+      if (locked.some((account) => account.closedAt !== null)) {
+        throw new PointsLedgerError("POINTS_ACCOUNT_CLOSED");
       }
 
       const balances = new Map<string, number>();

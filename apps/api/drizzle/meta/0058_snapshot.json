@@ -5475,6 +5475,10 @@
         "points_postings_reverses_pair_check": {
           "name": "points_postings_reverses_pair_check",
           "value": "(\"points_postings\".\"reverses_posting_id\" IS NULL) = (\"points_postings\".\"reverses_occurred_at\" IS NULL)"
+        },
+        "points_postings_occurred_at_not_future_check": {
+          "name": "points_postings_occurred_at_not_future_check",
+          "value": "\"points_postings\".\"occurred_at\" <= \"points_postings\".\"recorded_at\" + interval '1 day'"
         }
       },
       "isRLSEnabled": false

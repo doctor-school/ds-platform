@@ -64,7 +64,8 @@ CREATE TABLE "points_postings" (
 	CONSTRAINT "points_postings_amount_check" CHECK ("points_postings"."amount" > 0),
 	CONSTRAINT "points_postings_denomination_check" CHECK ("points_postings"."denomination" IS NULL OR "points_postings"."denomination" IN ('pul', 'bre', 'con')),
 	CONSTRAINT "points_postings_distinct_accounts_check" CHECK ("points_postings"."debit_account_id" <> "points_postings"."credit_account_id"),
-	CONSTRAINT "points_postings_reverses_pair_check" CHECK (("points_postings"."reverses_posting_id" IS NULL) = ("points_postings"."reverses_occurred_at" IS NULL))
+	CONSTRAINT "points_postings_reverses_pair_check" CHECK (("points_postings"."reverses_posting_id" IS NULL) = ("points_postings"."reverses_occurred_at" IS NULL)),
+	CONSTRAINT "points_postings_occurred_at_not_future_check" CHECK ("points_postings"."occurred_at" <= "points_postings"."recorded_at" + interval '1 day')
 
 ) PARTITION BY RANGE ("occurred_at");
 --> statement-breakpoint

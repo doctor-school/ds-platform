@@ -60,6 +60,16 @@ export const AUDIT_CAPTURE_ALLOWLIST: readonly {
       "append-only telemetry stream, itself an event log — auditing would duplicate the stream 1:1 with no WHO/WHAT gain (010-design §5)",
   },
   {
+    table: "points_postings",
+    rationale:
+      "the 025 attention-points ledger itself — append-only double-entry postings (UPDATE/DELETE refused by trigger, 025 EARS-27), each row already the WHO/WHAT/WHEN record of one domain fact; auditing would duplicate the ledger 1:1 (the audit_ledger recursion argument, 010-design §5)",
+  },
+  {
+    table: "points_posting_keys",
+    rationale:
+      "the 025 ledger's append-only dedupe index — one INSERT-only row per fact (UPDATE/DELETE refused by trigger, 025 EARS-4), written in the same transaction as that fact's postings and carrying no state the postings do not; auditing would duplicate the ledger 1:1",
+  },
+  {
     table: "sign_in_host_records",
     rationale:
       "ephemeral sign-in-host session state (003 EARS-64), no domain truth: every row is an encrypted Zitadel session handle that lives at most 30 days and is replaced, deleted on mismatch/sign-out or purged when expired — auditing it would copy bearer envelopes into the 3-year ledger; the credential step itself is already in auth_audit (LoginSucceeded)",

@@ -23,7 +23,7 @@ type State = {
   before?: unknown;
   refusal?: {
     status: number;
-    body: { code?: string; fieldErrors?: { path: string }[] };
+    body: { errorCode?: string; errors?: { path: string }[] };
     method: string;
     path: string;
     headers: Record<string, string>;
@@ -242,7 +242,8 @@ Then(
   async ({ page }) => {
     const value = state(page);
     expect(value.refusal!.status).toBe(409);
-    expect(value.refusal!.body.fieldErrors).toEqual([
+    expect(value.refusal!.body.errorCode).toBe("PUBLISH_REQUIREMENTS_NOT_MET");
+    expect(value.refusal!.body.errors).toEqual([
       expect.objectContaining({ path: "results" }),
     ]);
     await expect(value.admin!.getByTestId("publish-error")).toContainText(
@@ -318,7 +319,8 @@ When(
 Then("the save is refused with a field error on the link", async ({ page }) => {
   const value = state(page);
   expect(value.refusal!.status).toBe(400);
-  expect(value.refusal!.body.fieldErrors).toEqual([
+  expect(value.refusal!.body.errorCode).toBe("VALIDATION_FAILED");
+  expect(value.refusal!.body.errors).toEqual([
     expect.objectContaining({ path: "results.0.storefrontUrl" }),
   ]);
   await expect(value.admin!.getByTestId("result-url-0")).toHaveAttribute(

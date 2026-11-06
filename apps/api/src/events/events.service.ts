@@ -361,8 +361,9 @@ export type TransitionFence = (
  *    эфир and stamp {@link EVENT_HIDDEN_AUDIT_TYPE} on a reversible move;
  *  - `ConfigureStream` is not a transition at all, so no map can refuse it — a
  *    `legacy` эфир never acquires a stream config (014-design §3.1);
- *  - the generic `POST :id/transition` writes state with no precondition and no
- *    audit row, so both legacy edges are sealed off from it here.
+ *  - the generic `POST :id/transition` writes state with no command-specific
+ *    precondition (it does record its actor in `audit_ledger`), so both legacy
+ *    edges are sealed off from it here.
  *
  * Applying it at every broadcast entry point rather than only where the map
  * leaks is deliberate: exclusion that has to be re-derived per command is

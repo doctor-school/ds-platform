@@ -43,7 +43,12 @@ def reading(n):
 if tool == "systemctl":
     if args[0] == "is-active":
         out(("active" if sc.get("unitActive") else "inactive") + "\n", 0 if sc.get("unitActive") else 3)
-    out("".join(u + " loaded active running x\n" for u in sc.get("otherUnits", [])))
+    # list-units: a unit is listed only when its state is in --state ("otherUnits" are
+    # active; "otherUnitsDeactivating" are in their ExecStopPost).
+    wanted = next((a.split("=", 1)[1].split(",") for a in args if a.startswith("--state=")), [])
+    units = [(u, "active") for u in sc.get("otherUnits", [])]
+    units += [(u, "deactivating") for u in sc.get("otherUnitsDeactivating", [])]
+    out("".join(u + " loaded " + st + " running x\n" for u, st in units if st in wanted))
 if tool == "systemd-run":
     out("", sc.get("systemdRunRc", 0))
 if tool != "docker":

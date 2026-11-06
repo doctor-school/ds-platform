@@ -281,7 +281,7 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     });
   }
 
-  it("start removes every leftover, then starts the durable unit with the cap, the lock and the cleanup", () => {
+  it("start removes every leftover, then starts the durable unit with the cap and the cleanup, outside the lock", () => {
     mkdirSync(join(scratchDir(), "deadbeefdead/pgdata"), { recursive: true });
     mkdirSync(rehearsal(), { recursive: true });
     writeFileSync(join(rehearsal(), `${SHA}.json`), '{"state":"failed"}\n');
@@ -298,8 +298,11 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     assert.ok(unit.includes("RuntimeMaxSec=900"));
     assert.ok(unit.some((a) => a.startsWith("ExecStopPost=") && a.endsWith(`/usr/local/lib/ds-platform/rehearse-cleanup ${SHA}`)));
     const body = unit.slice(unit.indexOf("--") + 1);
-    assert.deepEqual(body.slice(0, 3), ["/usr/bin/flock", "-w", "60"]);
-    assert.ok(body[3].endsWith("/run/ds-platform/ds-rehearsal.lock"));
+    // The lock serialises the starts only: the unit holds none, so a retried or
+    // re-attached caller of the same SHA reaches the harness and answers `running`
+    // instead of the busy refusal (spec «Durable unit.»).
+    assert.ok(!body.some((a) => a.endsWith("flock") || a.endsWith("ds-rehearsal.lock")), body.join(" "));
+    assert.match(body[0], /python3?(\.exe)?$/, body.join(" "));
     assert.deepEqual(body.slice(-2), ["run", SHA]);
     const plan = JSON.parse(readFileSync(join(scratchDir(), SHA12, "plan.json"), "utf8"));
     assert.equal(plan.newest, 1000);
@@ -373,6 +376,21 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     assert.equal(report.headroom.dbSize, 1024 ** 3);
   });
 
+  it("start takes the archive the release gate builds from its target tree", async () => {
+    const { migrationArchive } = await import("./lib/rehearsal-gate.mjs");
+    const path = join(dir, "gate.tar.gz");
+    writeFileSync(
+      path,
+      migrationArchive([
+        { name: "drizzle/meta/_journal.json", data: Buffer.from(JSON.stringify(JOURNAL)) },
+        ...Object.entries(SQL).map(([t, s]) => ({ name: `drizzle/${t}.sql`, data: Buffer.from(s) })),
+      ]),
+    );
+    const r = harness(["start", SHA, path]);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), { verb: "rehearse", sha: SHA, state: "started", pending: 2 });
+  });
+
   it("start answers `running` for this SHA's live unit and refuses (1) while another rehearsal runs", () => {
     const mine = harness(["start", SHA, archive()], { unitActive: true });
     assert.equal(mine.status, 0);
@@ -381,6 +399,14 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     assert.equal(other.status, 1);
     assert.equal(other.stdout, "a rehearsal is running\n");
     assert.ok(!calls().some((c) => c.tool === "systemd-run"));
+  });
+
+  it("start refuses (1) while another SHA's unit is still cleaning up (deactivating), before removing any leftover", () => {
+    const r = harness(["start", SHA, archive()], { otherUnitsDeactivating: ["ds-rehearse-fedcba987654.service"] });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.equal(r.stdout, "a rehearsal is running\n");
+    assert.ok(!calls().some((c) => c.tool === "systemd-run"), "no unit");
+    assert.ok(!calls().some((c) => c.args.join(" ") === "ps -aq --filter name=^ds-rehearse-"), "its cleanup is left alone");
   });
 
   for (const [label, members] of [

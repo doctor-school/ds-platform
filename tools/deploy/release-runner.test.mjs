@@ -112,6 +112,7 @@ describe("parseRunnerArgs", () => {
     for (const flag of [
       "--skip-ci-check",
       "--release-gate-exempt",
+      "--skip-rehearsal",
       "--allow-live-broadcast",
       "--ref",
     ]) {

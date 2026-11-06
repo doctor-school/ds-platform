@@ -28,6 +28,10 @@
 //                                          Stage-B hold — #1662 — and the
 //                                          stage `main` check — #2701; reason
 //                                          is mandatory and loudly printed)
+//     pnpm deploy:prod --skip-rehearsal "<reason>"   (escape hatch for the
+//                                          migration rehearsal — #3648; on the
+//                                          owner's explicit go only; reason is
+//                                          mandatory and loudly printed)
 //     node tools/deploy/prod.mjs --local --images-file <path|->
 //                                          the prod release driver's run ON
 //                                          ds-api-prod (#3157, below)
@@ -186,6 +190,13 @@ import {
 } from "./lib/remote.mjs";
 import { OPTIONAL_VHOST_PROBES } from "./smoke-prod.mjs";
 import { createDataProdClient } from "./lib/data-prod.mjs";
+import {
+  SKIP_REHEARSAL_FLAG,
+  migrationArchive,
+  parseSkipRehearsal,
+  readTreeMigrations,
+  runRehearsalGate,
+} from "./lib/rehearsal-gate.mjs";
 
 // The ssh/ship primitives live in ./lib/remote.mjs so the staging slot tool
 // drives its box through exactly the same channel (#2194). They are re-exported
@@ -261,6 +272,7 @@ export const DEPLOY_PLAN = Object.freeze([
   "runtime-config-backup",
   "ship",
   "install",
+  "rehearse",
   "data-prod-env",
   "data-prod-up",
   "backup",
@@ -295,6 +307,7 @@ export const OPERATOR_ONLY_STEPS = Object.freeze(["preflight", "release-cut", "d
 export const REDEPLOY_SKIPPED_STEPS = Object.freeze([
   "postgres-verify",
   "install",
+  "rehearse",
   "data-prod-env",
   "data-prod-up",
   "backup",
@@ -480,6 +493,27 @@ export function parseLocalFlags(args) {
 function targetFile(sha, path) {
   if (LOCAL_TREE) return readFileSync(join(LOCAL_TREE, ...path.split("/")), "utf8").trim();
   return localCap("git", ["show", `${sha}:${path}`]);
+}
+
+/**
+ * The target tree's migration files (#3648): on the box the extracted tree it runs from,
+ * on the workstation the committed SHA's blobs, byte for byte.
+ */
+function targetMigrations(sha) {
+  if (LOCAL_TREE) return readTreeMigrations(LOCAL_TREE);
+  const blob = (path) => {
+    const r = spawnSync("git", ["show", `${sha}:${path}`], { maxBuffer: 64 * 1024 * 1024 });
+    if (r.status !== 0) throw new Error(`\`git show ${sha.slice(0, 12)}:${path}\` exited ${r.status}`);
+    return r.stdout;
+  };
+  const names = localCap("git", ["ls-tree", "--name-only", sha, "apps/api/drizzle/"]).split(/\r?\n/);
+  return [
+    ...names
+      .map((path) => path.slice("apps/api/drizzle/".length))
+      .filter((name) => /^[A-Za-z0-9_]{1,128}\.sql$/.test(name))
+      .map((name) => ({ name: `drizzle/${name}`, data: blob(`apps/api/drizzle/${name}`) })),
+    { name: "drizzle/meta/_journal.json", data: blob("apps/api/drizzle/meta/_journal.json") },
+  ];
 }
 
 /** The ship: the committed SHA (`git archive`), or on the box the tree it runs from. */
@@ -2406,6 +2440,31 @@ async function deploy(hotfixRef = null, local = null) {
   openReleaseSha = sha;
   openReleaseHosts = redeploy ? [API_PROD] : [API_PROD, DATA_PROD];
 
+  // #3648: the pending migrations of this tree run first on a throw-away restore of prod
+  // on ds-data-prod (spec §5 «Migration rehearsal.» → «Release gate.»), so a breaking
+  // migration refuses here, before any data-prod state change and the migrate.
+  if (walk.releasePhase("rehearse")) {
+    step("#3648: rehearse the pending migrations on a restored copy (BEFORE any data-prod change)");
+    t = Date.now();
+    const skip = parseSkipRehearsal(process.argv);
+    if (skip.error) die(skip.error); // already caught at start-up; belt-and-braces
+    if (skip.skip) {
+      console.log(
+        `  ⚠ ${SKIP_REHEARSAL_FLAG}: SKIPPING the migration rehearsal` +
+          ` — ${skip.reason} (this line is the audit record).`,
+      );
+    } else {
+      const gate = await runRehearsalGate({
+        sha,
+        archive: migrationArchive(targetMigrations(sha)),
+        call: (words, options) => dataProd().call(words, options),
+        log: (line) => console.log(`  ${line}`),
+      });
+      if (!gate.ok) die(gate.reason, { authored: true });
+      ok("migration rehearsal passed", t);
+    }
+  }
+
   // The compose interpolation files live INSIDE the shipped tree, which every ship
   // replaces — so they are rewritten on every run, outside the durable unit: a
   // re-run whose `up` returns its recorded verdict still leaves them in place for
@@ -2966,6 +3025,9 @@ async function main() {
   // already run (the same contract `--rollback` validates its argument under).
   const exemptUsage = parseReleaseGateExempt(process.argv);
   if (exemptUsage.error) die(exemptUsage.error);
+  // #3648: `--skip-rehearsal "<reason>"` under the same contract.
+  const skipUsage = parseSkipRehearsal(process.argv);
+  if (skipUsage.error) die(skipUsage.error);
 
   // `--ref <sha>` (#1881) validates under the same contract: a bare, mistyped or
   // `--rollback`-combined flag dies BEFORE the clean-tree / fetch / CI probes.

@@ -3,7 +3,7 @@ title: "Фича 025 — Движок очков внимания: начисл�
 description: "Продуктовые требования к единому счёту очков врача на витрине для врачей, в Академии и в мобильном приложении: три единицы (Pul — единственная тратимая; Bre — репутация; Con — осознанность), правила начисления и их значения по умолчанию, трата Pul на живые события через резерв со списанием только после подтверждённого участия, одно правило аванса на событие для всех врачей, режимы гейтинга для каждой единицы контента, месячный лидерборд по согласию, модель текстов, в которой «бесплатно для врача» остаётся утверждением о деньгах, защита от накрутки и комплаенс-ограничения. Каждое число — настраиваемый параметр, каждая проводка хранит версию правила. Backend-only: поверхности принадлежат потребителям 018, 020, 021, 022, 024 и 036. Волна 2; источник EARS-триплета 025 (ADR-0014)."
 slug: two-site-ia-025-attention-points-engine-product-ru
 epic: ../../product/two-site-ia/brief-ru.md
-status: Draft
+status: In dev
 surface: backend-only
 storefronts: none
 storefronts_reason: "The engine has no screen of its own: every surface that shows a balance, a price, an advance or a leaderboard belongs to a consumer feature (020 event page, 021 registration, 022 doctor account, 024 learning module, 018 feed, the mobile app). One account serves both storefronts and the app (OWD-10), so the engine is storefront-neutral by construction."

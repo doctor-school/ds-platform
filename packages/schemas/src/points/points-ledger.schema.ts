@@ -112,11 +112,23 @@ export type PointsPostOutcome = z.infer<typeof PointsPostOutcomeSchema>;
  *  - POINTS_OCCURRED_AT_FUTURE — EARS-27: the fact's `occurredAt` lies more
  *    than one day past now (beyond clock skew); a far-future posting would
  *    land in the default partition and block monthly partition creation.
+ *  - POINTS_BRE_CON_DEBIT — EARS-12: a leg debits Bre or Con from a person
+ *    account without reversing a specific earlier posting (no penalty, no
+ *    conversion between denominations).
+ *  - POINTS_RULE_UNKNOWN — EARS-25: the rule id is not in the rule book.
+ *  - POINTS_RULE_PARAMETERS_INVALID — EARS-25: the parameters fail the rule's
+ *    schema (field errors in `errors`).
+ *  - POINTS_RULE_EFFECTIVE_FROM_PAST — EARS-25: a version takes effect from
+ *    now or later, never retroactively.
  */
 export const POINTS_LEDGER_ERROR_CODES = [
   "POINTS_ACCOUNT_CLOSED",
   "POINTS_INSUFFICIENT_PUL",
   "POINTS_OCCURRED_AT_FUTURE",
+  "POINTS_BRE_CON_DEBIT",
+  "POINTS_RULE_UNKNOWN",
+  "POINTS_RULE_PARAMETERS_INVALID",
+  "POINTS_RULE_EFFECTIVE_FROM_PAST",
 ] as const;
 export const PointsLedgerErrorCodeSchema = z.enum(POINTS_LEDGER_ERROR_CODES);
 export type PointsLedgerErrorCode = z.infer<typeof PointsLedgerErrorCodeSchema>;
@@ -128,6 +140,9 @@ export const PointsLedgerProblemDetailsSchema = z.strictObject({
   detail: z.string().optional(),
   instance: z.string().optional(),
   errorCode: PointsLedgerErrorCodeSchema,
+  errors: z
+    .array(z.strictObject({ path: z.string(), message: z.string() }))
+    .optional(),
   traceId: z.string(),
 });
 export type PointsLedgerProblemDetails = z.infer<

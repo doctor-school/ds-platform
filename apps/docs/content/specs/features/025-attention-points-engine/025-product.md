@@ -3,7 +3,7 @@ title: "Feature 025 — The attention points engine: accrual, spend and gating (
 description: "Product requirements for the one points account a doctor holds across the doctor storefront, the Academy and the mobile app: three units (Pul — the only spendable one; Bre — reputation; Con — awareness), the earn rules and their defaults, spending Pul on live events through a reserve that is debited only on confirmed attendance, one advance rule per event for every doctor, gating modes per content item, the consented monthly leaderboard, the copy model that keeps «бесплатно для врача» a money statement, anti-farming and the compliance guardrails. Every number is a configurable parameter and every posting records its rule version. Backend-only: the consumers 018, 020, 021, 022, 024 and 036 own the surfaces. Wave 2; source of the 025 EARS triplet (ADR-0014)."
 slug: two-site-ia-025-attention-points-engine-product
 epic: ../../product/two-site-ia/brief.md
-status: Draft
+status: In dev
 surface: backend-only
 storefronts: none
 storefronts_reason: "The engine has no screen of its own: every surface that shows a balance, a price, an advance or a leaderboard belongs to a consumer feature (020 event page, 021 registration, 022 doctor account, 024 learning module, 018 feed, the mobile app). One account serves both storefronts and the app (OWD-10), so the engine is storefront-neutral by construction."

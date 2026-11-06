@@ -1008,6 +1008,15 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/materials/${ABSENT_ID}/unpublish`,
     payload: {},
   },
+  // 025 EARS-25 (#3808) — publishing a rule version. The rule id names no rule
+  // and the body is empty, so an admitted principal gets a 404/422 and no
+  // version is ever stored by this suite.
+  {
+    endpoint: "POST /v1/admin/points/rules/:ruleId/versions",
+    method: "POST",
+    url: "/v1/admin/points/rules/floor-absent-rule/versions",
+    payload: {},
+  },
 ];
 
 /** An authz refusal — never a 2xx, never a partially-served admin answer. */

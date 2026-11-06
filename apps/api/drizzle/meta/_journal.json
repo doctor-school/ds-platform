@@ -414,6 +414,13 @@
       "when": 1793964914500,
       "tag": "0058_points_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1793969694420,
+      "tag": "0059_points_rule_book",
+      "breakpoints": true
     }
   ]
 }

@@ -1252,6 +1252,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/points/rules/{ruleId}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PointsRulesAdminController_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/project-experts": {
         parameters: {
             query?: never;
@@ -3619,6 +3635,16 @@ export interface components {
             captchaToken?: string;
             identifier: string;
         };
+        PointsRuleVersionDto: {
+            createdAt: string;
+            effectiveFrom: string;
+            parameters: {
+                [key: string]: unknown;
+            };
+            publishedBy: string | null;
+            ruleId: string;
+            version: number;
+        };
         PostChatMessageRequestDto: {
             text: string;
         };
@@ -3712,6 +3738,13 @@ export interface components {
             pagination: {
                 hasMore: boolean;
                 nextCursor: string | null;
+            };
+        };
+        PublishPointsRuleVersionRequestDto: {
+            /** Format: date-time */
+            effectiveFrom?: string;
+            parameters: {
+                [key: string]: unknown;
             };
         };
         RegisterRequestDto: {
@@ -5919,6 +5952,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    PointsRulesAdminController_publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishPointsRuleVersionRequestDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointsRuleVersionDto"];
+                };
             };
         };
     };

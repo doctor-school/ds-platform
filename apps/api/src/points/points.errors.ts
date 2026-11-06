@@ -9,7 +9,8 @@ import { PROBLEM_TYPE_BASE } from "../taxonomy/taxonomy.errors.js";
 // the platform `errorCode` + `traceId` (ADR-0002), mirroring
 // `storefront/specialties.errors.ts`: status and title derive from the code so
 // a throw site cannot pick a wrong pair, and the wire body is built here so the
-// filter of the slice that adds HTTP (#3813) and the tests share one source.
+// `PointsProblemFilter` (#3808 adds the first HTTP route) and the tests share
+// one source.
 // No title calls Pul «бесплатно» or points «баллы» (EARS-30).
 
 export const POINTS_LEDGER_ERROR_STATUS: Readonly<
@@ -20,6 +21,12 @@ export const POINTS_LEDGER_ERROR_STATUS: Readonly<
   POINTS_INSUFFICIENT_PUL: 409,
   // 422: the fact itself is unprocessable — dated beyond the clock-skew bound.
   POINTS_OCCURRED_AT_FUTURE: 422,
+  // 422: no rule may express a penalty or a conversion (EARS-12).
+  POINTS_BRE_CON_DEBIT: 422,
+  // EARS-25 publish refusals.
+  POINTS_RULE_UNKNOWN: 404,
+  POINTS_RULE_PARAMETERS_INVALID: 422,
+  POINTS_RULE_EFFECTIVE_FROM_PAST: 422,
 };
 
 const POINTS_LEDGER_ERROR_TITLE: Readonly<
@@ -28,6 +35,11 @@ const POINTS_LEDGER_ERROR_TITLE: Readonly<
   POINTS_ACCOUNT_CLOSED: "The attention-points account is closed",
   POINTS_INSUFFICIENT_PUL: "Not enough Pul available for this posting",
   POINTS_OCCURRED_AT_FUTURE: "The fact is dated too far in the future",
+  POINTS_BRE_CON_DEBIT: "Bre and Con are never debited from a person account",
+  POINTS_RULE_UNKNOWN: "No such attention-points rule",
+  POINTS_RULE_PARAMETERS_INVALID: "The rule parameters are invalid",
+  POINTS_RULE_EFFECTIVE_FROM_PAST:
+    "A rule version cannot take effect in the past",
 };
 
 /** Problem `type` slug: `POINTS_ACCOUNT_CLOSED` → `points-account-closed`. */
@@ -39,6 +51,7 @@ export class PointsLedgerError extends HttpException {
   constructor(
     readonly errorCode: PointsLedgerErrorCode,
     readonly detail?: string,
+    readonly fieldErrors?: ReadonlyArray<{ path: string; message: string }>,
   ) {
     super(
       POINTS_LEDGER_ERROR_TITLE[errorCode],
@@ -62,6 +75,7 @@ export class PointsLedgerError extends HttpException {
       ...(this.detail ? { detail: this.detail } : {}),
       ...(instance ? { instance } : {}),
       errorCode: this.errorCode,
+      ...(this.fieldErrors ? { errors: [...this.fieldErrors] } : {}),
       traceId,
     };
   }

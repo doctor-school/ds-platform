@@ -1831,7 +1831,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.run-admin-e2e == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # #3826: measured browser setup + serial tiers exhausted 45m before axe completed.
+    timeout-minutes: 60
     env:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_admin_e2e
       IDP_ISSUER: http://localhost:9080

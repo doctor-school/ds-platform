@@ -26,6 +26,7 @@ import { SignInHostModule } from "./sign-in-host/sign-in-host.module.js";
 import { CongressModule } from "./congress/congress.module.js";
 
 import { StaffAccessModule } from "./staff-access/staff-access.module.js";
+import { PointsModule } from "./points/points.module.js";
 @Module({
   imports: [
     // 010 EARS-3/EARS-5 — global audit-context interceptor: attributes every
@@ -95,6 +96,9 @@ import { StaffAccessModule } from "./staff-access/staff-access.module.js";
     MeModule,
     // 047 — «Доступы»: the platform administrator's staff-role list and grant.
     StaffAccessModule,
+    // 025 attention-points ledger core (#3807): the one ledger write/resolve
+    // API later 025 slices and producer features call in-process.
+    PointsModule,
     HealthModule,
     ReadinessModule,
   ],

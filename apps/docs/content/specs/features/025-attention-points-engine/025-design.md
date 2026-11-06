@@ -20,7 +20,7 @@ erDiagram
   users ||--o| points_accounts : "person (subject_id)"
   points_accounts ||--o{ points_postings : "debit_account_id / credit_account_id"
   points_rule_versions ||--o{ points_postings : "rule_id + rule_version"
-  points_postings ||--o| points_postings : "reverses_posting_id"
+  points_postings ||--o| points_postings : "reverses_posting_id + reverses_occurred_at"
   points_posting_keys ||--|{ points_postings : "event_id (one fact, its legs)"
   projects ||--o{ points_postings : "project_id"
   organisations ||--o{ points_postings : "attributed_organisation_id"
@@ -52,7 +52,8 @@ erDiagram
     integer rule_version
     uuid attributed_organisation_id FK
     uuid attributed_member_id FK
-    uuid reverses_posting_id FK
+    uuid reverses_posting_id FK "with reverses_occurred_at"
+    timestamptz reverses_occurred_at FK "partition key of the reversed posting"
     timestamptz occurred_at "partition key"
     timestamptz recorded_at
   }
@@ -85,11 +86,12 @@ erDiagram
 
 - **Accounts.** Unique (`subject_kind`, `subject_id`, `unit`) for subjects; system accounts are keyed by a `system_code` (`issuance`, `reserve`, `sink`, `advance`) — one per unit. `amount` is a positive integer; direction is the debit/credit pair, so a fold is `Σ credits − Σ debits` per (account, denomination).
 - **Event id, leg and dedupe key** (ADR-0016 §6 / design §2.12 as rewritten in this PR). **One domain fact = one `event_id`**: the producer's event id, or a derived fact id for the engine's own facts (`reserve:<registration>`, `settle:<registration>`, `release:<registration>`). A fact may write several postings — a module award in three denominations, a reserve plus an advance, a release reversing both, an accrual plus its obligation settlement — so a posting is unique on (`event_id`, `leg`), where the `leg` names the posting within the fact (denomination + entry kind: `accrual:pul`, `accrual:bre`, `reserve:balance`, `reserve:advance`, `settle:pul`, `release:balance`, `obligation-settle:pul`, …). Postgres requires the partition key in every unique constraint of a partitioned table, which is why `audit_ledger` scopes its `event_id` uniqueness to `(event_id, created_at)` — dedup within one monthly partition, acceptable for an audit trail. For points that is **not** acceptable: a lesson completed in March and replayed by an offline sync in April must still be a duplicate (EARS-4). So global dedupe lives in the non-partitioned **`points_posting_keys (event_id PK, dedupe_key UNIQUE NULLS DISTINCT, occurred_month)`** — **one row per fact**, the dedupe key being the PRD key `<personId>:<contentRef>:<action>` for an accrual fact and null for a spend fact (whose `event_id` alone is its key) — inserted in the same transaction **before** the fact's postings, so the key is known before the rule is evaluated. The postings of one fact share its `occurred_at` and therefore one partition, so the partition-local unique index on (`event_id`, `leg`, `occurred_at`) is effectively (`event_id`, `leg`). This is how the points ledger satisfies ADR-0003 §3; it is the one deliberate departure from the `audit_ledger` template.
+- **Reversal reference.** A reversing posting names the posting it reverses by its full key (`reverses_posting_id`, `reverses_occurred_at`) — a two-column foreign key into `points_postings` (`id`, `occurred_at`). Postgres requires the partition key in every unique key of a partitioned table, so the primary key is (`id`, `occurred_at`) and a foreign key into it must carry both columns; a `CHECK` keeps the pair all-null or all-set.
 - **Derived state tables** (`points_reserves`, `points_obligations`) are projections rebuilt from postings; they hold no amount the postings do not already prove and carry the `audit_row_change()` trigger like `registration_attendance`. A cached balance, if ever needed, is the same kind of rebuildable projection.
 
 ## 3. Immutability and partitions
 
-Mirrors `audit_ledger` (`packages/db/src/schema/audit-ledger.ts`, migration `0003_audit_ledger_partitioning.sql`): `points_postings` is `PARTITION BY RANGE (occurred_at)` with monthly partitions `points_postings_yYYYY_mMM` plus a `DEFAULT` safety-net partition; a `BEFORE UPDATE OR DELETE` trigger raises for every row (EARS-27); `rule_id` / `rule_version` are `NOT NULL` and a `CHECK` requires `amount > 0`. The migration is hand-written SQL beside the drizzle schema, as for `audit_ledger`.
+Mirrors `audit_ledger` (`packages/db/src/schema/audit-ledger.ts`, migration `0003_audit_ledger_partitioning.sql`): `points_postings` is `PARTITION BY RANGE (occurred_at)` with monthly partitions `points_postings_yYYYY_mMM` plus a `DEFAULT` safety-net partition; a `BEFORE UPDATE OR DELETE` trigger raises for every row (EARS-27); `rule_id` / `rule_version` are `NOT NULL` and a `CHECK` requires `amount > 0`. A posting dated beyond the clock skew would sit in the `DEFAULT` partition and later block the creation of its month's partition, so a `CHECK` bounds `occurred_at <= recorded_at + interval '1 day'` and the ledger core refuses such a fact first, writing nothing, with `points-occurred-at-future` (422). The ledger core's other refusals are `points-insufficient-pul` (a leg would take a person's available Pul below zero, EARS-22) and `points-account-closed` (§9, EARS-31); a replay of an already-recorded fact answers `duplicate` before any of them, even for a since-closed account. The migration is hand-written SQL beside the drizzle schema, as for `audit_ledger`.
 
 ## 4. Accrual cascade (EARS-3, 4, 20)
 

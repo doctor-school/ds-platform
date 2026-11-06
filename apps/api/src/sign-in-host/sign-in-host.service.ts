@@ -16,7 +16,11 @@ import type {
 } from "@ds/schemas";
 import { AuthService, type SessionAcceptor } from "../auth/auth.service.js";
 import { RateLimitService } from "../auth/rate-limit/rate-limit.service.js";
-import { STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE } from "../auth/rate-limit/rate-limit.types.js";
+import {
+  SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE,
+  STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
+  type RateLimitRefusal,
+} from "../auth/rate-limit/rate-limit.types.js";
 import { SessionService } from "../auth/session/session.service.js";
 import {
   IDP_CLIENT,
@@ -71,14 +75,22 @@ const STEP_REVOKED = "invalid credentials";
 export interface HostRequest {
   readonly cookies: Readonly<Record<string, string>>;
   readonly fingerprint: string;
-  /** The client IP the sign-in-host server forwards (the per-IP silent bucket, req. 9). */
+  /** The client IP the sign-in-host server forwards (the entry's per-IP buckets, req. 9). */
   readonly ip: string;
+  /** The edge-resolved ASN (`x-asn`), absent in dev — the interactive entry's per-ASN window. */
+  readonly asn?: string | undefined;
 }
 
-export interface EntryOutcome {
-  readonly body: SignInHostEntryResponse;
-  readonly setCookies: string[];
-}
+export type EntryOutcome =
+  | {
+      readonly body: SignInHostEntryResponse;
+      readonly setCookies: string[];
+    }
+  /**
+   * 003 EARS-13: an entry that is not a storefront's silent check met the
+   * `sign-in-host:entry` ceiling — the shared generic 429.
+   */
+  | { readonly throttled: RateLimitRefusal };
 
 export interface StepOutcome {
   readonly url: string;
@@ -154,8 +166,28 @@ export class SignInHostService {
       setCookies,
     });
 
-    if (!authRequest || !AUTH_REQUEST_ID.test(authRequest)) return back();
-    const request = await this.hostIdp.readAuthRequest(authRequest);
+    const request =
+      authRequest && AUTH_REQUEST_ID.test(authRequest)
+        ? await this.hostIdp.readAuthRequest(authRequest)
+        : null;
+    // 003 EARS-63 (f), ADR-0015 §4 req. 9 — the bucket is chosen from the auth
+    // request Zitadel holds, never from the query: a storefront's `prompt=none`
+    // request counts only in the silent bucket below; every other entry (an
+    // interactive request, an unreadable one, a client outside the map) meets
+    // the `sign-in-host:entry` per-IP and per-ASN windows (003 EARS-13), keyed
+    // as the storefront entry's so one origin meets one ceiling on both hosts.
+    const silent =
+      request !== null &&
+      settings.clients.has(request.clientId) &&
+      request.prompt.includes("none");
+    if (!silent) {
+      const decision = await this.limiter.consume({
+        ip: req.ip,
+        asn: req.asn,
+        scope: SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE,
+      });
+      if (!decision.allowed) return { throttled: decision.refusal };
+    }
     if (!request) return back();
 
     // EARS-60: a client outside the fixed map — the admin client among them —
@@ -191,7 +223,7 @@ export class SignInHostService {
     // one finalises with `login_required`, so the storefront callback ends it
     // as a guest render, never an error.
     if (
-      request.prompt.includes("none") &&
+      silent &&
       !(await this.limiter.tryConsume({
         ip: req.ip,
         scope: STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,

@@ -35,6 +35,7 @@ import {
   PasswordLoginDoor,
   RateLimited,
   RateLimitService,
+  refuseThrottled,
 } from "../auth/rate-limit/index.js";
 import { SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE } from "../auth/rate-limit/rate-limit.types.js";
 import {
@@ -120,9 +121,14 @@ export class SignInHostController {
     private readonly doctorRegister: DoctorRegisterService,
   ) {}
 
+  /**
+   * The entry carries no `@RateLimited`: which bucket it counts in depends on
+   * the auth request Zitadel holds, so the service consumes it after the read
+   * (003 EARS-63 (f)) — a silent check in `oidc:silent-check` only, every other
+   * entry in `sign-in-host:entry` with the guard's 429 and `Retry-After`.
+   */
   @Get("entry")
   @Public()
-  @RateLimited(SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE)
   @Authz({
     access: "public",
     check: "none",
@@ -134,14 +140,19 @@ export class SignInHostController {
     @Headers("cookie") cookie: string | undefined,
     @Headers("user-agent") userAgent: string | undefined,
     @Headers("accept-language") acceptLanguage: string | undefined,
+    @Headers("x-asn") asn: string | undefined,
     @Ip() ip: string,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<SignInHostEntryResponse> {
     const outcome = await this.host.entry(
       query.authRequest,
-      hostRequest({ cookie, userAgent, acceptLanguage }, ip),
+      {
+        ...hostRequest({ cookie, userAgent, acceptLanguage }, ip),
+        asn: asn || undefined,
+      },
       { record: RECORD_COOKIE_NAME, form: FORM_COOKIE_NAME },
     );
+    if ("throttled" in outcome) refuseThrottled(outcome.throttled, reply);
     setCookies(reply, outcome.setCookies);
     return outcome.body;
   }

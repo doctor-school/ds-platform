@@ -551,7 +551,7 @@ Given(
 
 When("they open «Вид связи»", async ({ page }) => {
   await entry(page)
-    .admin!.getByRole("combobox", { name: "Вид связи", exact: true })
+    .admin!.getByRole("combobox", { name: "Выберите вид связи", exact: true })
     .click();
 });
 
@@ -559,7 +559,7 @@ Then(
   "the options are the closed Russian-labelled vocabulary with an explanation line each",
   async ({ page }) => {
     const admin = entry(page).admin!;
-    await expect(admin.getByRole("option")).toHaveCount(3);
+    await expect(admin.getByRole("listbox").getByRole("option")).toHaveCount(3);
     for (const kind of kindOptions) {
       const option = admin.getByRole("option", {
         name: `${kind.label} ${kind.description}`,

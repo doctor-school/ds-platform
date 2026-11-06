@@ -58,7 +58,7 @@
       "props": { "host": "doctor", "loggedIn": true, "mobile": false },
       "regions": ["header"],
       "delta": "missing",
-      "item": { "kind": "link", "label": "120 Pul·340 Bre·1 250 Con" },
+      "item": { "kind": "link", "label": "120 Pul · 340 Bre · 1 250 Con" },
       "decision": "The signed-in points plate is deferred: no shipped contract in packages/schemas carries a points value, and painting the canvas sample numbers at a doctor is a banned stub; it lands with its read contract. Desktop only: the mobile canvas draws no plate.",
       "source": "https://github.com/doctor-school/ds-platform/issues/1559 (017 EARS-1 deferral, source:spec); packages/storefront-shell/src/auth-cluster.tsx"
     },

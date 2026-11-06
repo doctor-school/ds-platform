@@ -35,6 +35,7 @@ import {
   PasswordLoginDoor,
   RateLimited,
   RateLimitService,
+  refuseThrottled,
 } from "../auth/rate-limit/index.js";
 import { SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE } from "../auth/rate-limit/rate-limit.types.js";
 import {
@@ -120,28 +121,46 @@ export class SignInHostController {
     private readonly doctorRegister: DoctorRegisterService,
   ) {}
 
+  /**
+   * The entry carries no `@RateLimited`: the service applies its limits itself,
+   * before any form-state or Zitadel read (003 EARS-13, EARS-63 (f)); a
+   * `throttled` outcome is the guard's own 429 via `refuseThrottled`.
+   */
   @Get("entry")
   @Public()
-  @RateLimited(SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE)
   @Authz({
     access: "public",
     check: "none",
     audit: "high-stakes",
-    tests: ["EARS-60", "EARS-64", "EARS-66", "EARS-67", "EARS-68", "EARS-71"],
+    tests: [
+      "EARS-13",
+      "EARS-60",
+      "EARS-63",
+      "EARS-64",
+      "EARS-66",
+      "EARS-67",
+      "EARS-68",
+      "EARS-71",
+    ],
   })
   async entry(
     @Query() query: SignInHostEntryQueryDto,
     @Headers("cookie") cookie: string | undefined,
     @Headers("user-agent") userAgent: string | undefined,
     @Headers("accept-language") acceptLanguage: string | undefined,
+    @Headers("x-asn") asn: string | undefined,
     @Ip() ip: string,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<SignInHostEntryResponse> {
     const outcome = await this.host.entry(
       query.authRequest,
-      hostRequest({ cookie, userAgent, acceptLanguage }, ip),
+      {
+        ...hostRequest({ cookie, userAgent, acceptLanguage }, ip),
+        asn: asn || undefined,
+      },
       { record: RECORD_COOKIE_NAME, form: FORM_COOKIE_NAME },
     );
+    if ("throttled" in outcome) refuseThrottled(outcome.throttled, reply);
     setCookies(reply, outcome.setCookies);
     return outcome.body;
   }

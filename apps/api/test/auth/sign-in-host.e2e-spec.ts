@@ -1010,6 +1010,148 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     }
   });
 
+  describe("EARS-63: a silent entry counts only in the silent bucket", () => {
+    // Small buckets so the boundary is reachable: two interactive entries per
+    // IP, four silent ones, three entries per ASN. Each test uses its own IP.
+    let limited: Awaited<ReturnType<typeof compile>>;
+    beforeAll(async () => {
+      limited = await compile({
+        ...RELAXED_RATE_LIMIT,
+        perAsnPerHour: 3,
+        scopedPerIpPer15Min: {
+          "sign-in-host:entry": 2,
+          "oidc:silent-check": 4,
+        },
+      });
+    });
+    afterAll(async () => {
+      await limited.app.close();
+    });
+
+    const hit = (
+      prompt: string[],
+      from: { remoteAddress: string; asn?: string },
+    ) =>
+      limited.app.inject({
+        method: "GET",
+        url: `/v1/sign-in-host/entry?authRequest=${limited.hostIdp.seedAuthRequest({ clientId: DOCTOR, prompt })}`,
+        remoteAddress: from.remoteAddress,
+        headers: {
+          ...DEVICE,
+          ...(from.asn ? { "x-asn": from.asn } : {}),
+        },
+      });
+    const loginRequired = (res: { statusCode: number; json(): unknown }) => {
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        action: "redirect",
+        url: expect.stringContaining("error=login_required"),
+      });
+    };
+
+    it("003 EARS-63: a prompt=none entry spends no sign-in-host:entry unit, its own bucket's trip finalises login_required, and the interactive entry keeps its per-IP 429", async () => {
+      const ip = { remoteAddress: "198.51.100.7" };
+      const log = vi.spyOn(Logger.prototype, "log");
+      try {
+        // Four silent entries — more than the interactive bucket holds —
+        // spend none of its per-IP units: each one answers (no record here).
+        for (let i = 0; i < 4; i++) loginRequired(await hit(["none"], ip));
+        // The silent bucket (four) is spent: the fifth is limited, and a
+        // limited silent entry finalises login_required too.
+        loginRequired(await hit(["none"], ip));
+        const lines = log.mock.calls
+          .map(([line]) => String(line))
+          .filter((line) => line.startsWith("entry "));
+        expect(lines.at(-1)).toBe(
+          "entry storefront=doctor prompt=none record=unread result=limited",
+        );
+        expect(lines.filter((l) => l.endsWith("result=limited"))).toHaveLength(
+          1,
+        );
+      } finally {
+        vi.restoreAllMocks();
+      }
+      // The interactive bucket is still whole: two forms, then the 429.
+      for (let i = 0; i < 2; i++) {
+        const form = await hit(["login"], ip);
+        expect(form.statusCode).toBe(200);
+        expect(form.json()).toMatchObject({ action: "render" });
+      }
+      const throttled = await hit(["login"], ip);
+      expect(throttled.statusCode).toBe(429);
+      expect(throttled.json()).toMatchObject({ message: GENERIC_THROTTLED });
+      expect(Number(throttled.headers["retry-after"])).toBeGreaterThan(0);
+    });
+
+    it("003 EARS-63: past a tripped entry limit a silent entry still finalises login_required", async () => {
+      const ip = { remoteAddress: "198.51.100.8" };
+      for (let i = 0; i < 2; i++)
+        expect((await hit(["login"], ip)).statusCode).toBe(200);
+      expect((await hit(["login"], ip)).statusCode).toBe(429);
+      loginRequired(await hit(["none"], ip));
+    });
+
+    it("003 EARS-13: with the entry and silent buckets spent, an entry is the 429 before any form-state or Zitadel read", async () => {
+      const ip = { remoteAddress: "198.51.100.9" };
+      // Spend both buckets for this IP: four silent entries, two forms.
+      for (let i = 0; i < 4; i++) loginRequired(await hit(["none"], ip));
+      for (let i = 0; i < 2; i++)
+        expect((await hit(["login"], ip)).statusCode).toBe(200);
+      const state = limited.app.get<SignInHostStateStore>(
+        SIGN_IN_HOST_STATE_STORE,
+      );
+      const interactive = limited.hostIdp.seedAuthRequest({
+        clientId: DOCTOR,
+        prompt: ["login"],
+      });
+      const silent = limited.hostIdp.seedAuthRequest({
+        clientId: DOCTOR,
+        prompt: ["none"],
+      });
+      const read = vi.spyOn(limited.hostIdp, "readAuthRequest");
+      const getForm = vi.spyOn(state, "getForm");
+      try {
+        for (const authRequest of [interactive, silent, "not-an-id"]) {
+          const res = await limited.app.inject({
+            method: "GET",
+            url: `/v1/sign-in-host/entry?authRequest=${authRequest}`,
+            remoteAddress: ip.remoteAddress,
+            headers: {
+              ...DEVICE,
+              cookie: `${FORM_COOKIE_NAME}=${randomBytes(16).toString("base64url")}`,
+            },
+          });
+          expect(res.statusCode).toBe(429);
+          expect(res.json()).toMatchObject({ message: GENERIC_THROTTLED });
+        }
+        expect(read).not.toHaveBeenCalled();
+        expect(getForm).not.toHaveBeenCalled();
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
+
+    it("003 EARS-63: the interactive entry keeps its per-ASN ceiling and a silent entry from that ASN still finalises login_required", async () => {
+      const asn = "64500";
+      for (let i = 1; i <= 3; i++) {
+        const form = await hit(["login"], {
+          remoteAddress: `203.0.113.${i}`,
+          asn,
+        });
+        expect(form.statusCode).toBe(200);
+      }
+      const throttled = await hit(["login"], {
+        remoteAddress: "203.0.113.4",
+        asn,
+      });
+      expect(throttled.statusCode).toBe(429);
+      expect(throttled.json()).toMatchObject({ message: GENERIC_THROTTLED });
+      // Only the client-address window names its reset (EARS-16).
+      expect(throttled.headers["retry-after"]).toBeUndefined();
+      loginRequired(await hit(["none"], { remoteAddress: "203.0.113.5", asn }));
+    });
+  });
+
   it("EARS-64: S166 a missing opaque record clears only its cookie on silent Academy entry and preserves independent reuse and password recovery", async () => {
     const address = await account("s166-missing-record");
     recordNow = new Date();

@@ -226,14 +226,17 @@ export class RateLimitService {
    * (`consumedWindowResetAtMs`, the guard's receipt): if that window has since
    * rolled over — or no receipt exists — there is nothing of this request's to
    * give back, and decrementing the fresh window would erase a failure.
+   * `scope` names the bucket the unit was taken from (`@RateLimited("<tag>")`
+   * or a handler's own `consume`); absent, the unscoped auth window.
    */
   async refundIpUnit(
     ip: string,
     consumedWindowResetAtMs: number | undefined,
+    scope?: string,
   ): Promise<void> {
     if (consumedWindowResetAtMs === undefined) return;
     await this.store.refund(
-      ipKey(undefined, ip),
+      ipKey(scope, ip),
       consumedWindowResetAtMs,
       this.now(),
     );

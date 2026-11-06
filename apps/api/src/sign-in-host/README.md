@@ -36,18 +36,18 @@ internal routes: `packages/schemas/src/auth/storefront-oidc.schema.ts`.
 
 ## Routes
 
-| Route                                 | Does                                                      | Storefront door (same guards)             |
-| ------------------------------------- | --------------------------------------------------------- | ----------------------------------------- |
-| `GET entry?authRequest=`              | render / redirect decision; sets the form-state cookie    | — (own per-IP scope `sign-in-host:entry`) |
-| `POST login`                          | password step → record + finalise                         | — (host-only)                             |
-| `POST login/otp/request`, `login/otp` | code request / code step → record + finalise              | `POST /v1/auth/login/otp/request`         |
-| `POST login/otp/handoff`              | redeems the reference the spent intent carried            | `POST /v1/auth/login/otp/handoff`         |
-| `POST register`                       | Academy registration (Academy form only)                  | `POST /v1/auth/register`                  |
-| `POST verify`                         | Academy code step → record + finalise (Academy form only) | — (host-only)                             |
-| `POST verify/resend`                  | re-issues the registration code (either form)             | `POST /v1/auth/verify/resend`             |
-| `POST storefront/doctor/register`     | doctor registration (doctor form only)                    | `POST /v1/storefront/doctor/register`     |
-| `POST storefront/doctor/verify`       | doctor code step → record + finalise (doctor form only)   | — (host-only)                             |
-| `POST password/reset[/complete]`      | reset request / completion → record + finalise            | `POST /v1/auth/password/reset`            |
+| Route                                 | Does                                                      | Storefront door (same guards)                                                                                    |
+| ------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `GET entry?authRequest=`              | render / redirect decision; sets the form-state cookie    | — (own per-IP scope `sign-in-host:entry`; a storefront's `prompt=none` entry counts only in `oidc:silent-check`) |
+| `POST login`                          | password step → record + finalise                         | — (host-only)                                                                                                    |
+| `POST login/otp/request`, `login/otp` | code request / code step → record + finalise              | `POST /v1/auth/login/otp/request`                                                                                |
+| `POST login/otp/handoff`              | redeems the reference the spent intent carried            | `POST /v1/auth/login/otp/handoff`                                                                                |
+| `POST register`                       | Academy registration (Academy form only)                  | `POST /v1/auth/register`                                                                                         |
+| `POST verify`                         | Academy code step → record + finalise (Academy form only) | — (host-only)                                                                                                    |
+| `POST verify/resend`                  | re-issues the registration code (either form)             | `POST /v1/auth/verify/resend`                                                                                    |
+| `POST storefront/doctor/register`     | doctor registration (doctor form only)                    | `POST /v1/storefront/doctor/register`                                                                            |
+| `POST storefront/doctor/verify`       | doctor code step → record + finalise (doctor form only)   | — (host-only)                                                                                                    |
+| `POST password/reset[/complete]`      | reset request / completion → record + finalise            | `POST /v1/auth/password/reset`                                                                                   |
 
 Every `POST` is refused with one `403` unless `Origin` is the host's own origin,
 `Sec-Fetch-Site` (when sent) is `same-origin`, and the CSRF token equals the one

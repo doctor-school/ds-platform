@@ -15,6 +15,7 @@ import {
   THROTTLED_PASSWORD_LOGIN_KEY,
   type PasswordLoginTier,
   type RateLimitReceipt,
+  type RateLimitRefusal,
   type RateLimitedMarker,
 } from "./rate-limit.types.js";
 
@@ -33,8 +34,29 @@ interface GuardRequest {
 }
 
 /** The reply surface the guard writes a header on (Fastify's `reply.header`). */
-interface GuardResponse {
+export interface GuardResponse {
   header(name: string, value: string): unknown;
+}
+
+/**
+ * The one throttled answer (003 EARS-13/16): a generic `429` naming no
+ * threshold and no account; only a refusal by the client-address window
+ * carries `Retry-After` until that window resets. Shared by the guard and a
+ * handler that must read its own request before choosing the bucket (the
+ * sign-in-host entry, 003 EARS-63 (f)).
+ */
+export function refuseThrottled(
+  refusal: RateLimitRefusal,
+  response: GuardResponse,
+): never {
+  if (refusal.window === "ip") {
+    const seconds = Math.max(
+      1,
+      Math.ceil((refusal.resetAtMs - refusal.atMs) / 1000),
+    );
+    response.header("Retry-After", String(seconds));
+  }
+  throw new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);
 }
 
 /**
@@ -83,19 +105,7 @@ export class RateLimitGuard implements CanActivate {
       door: typeof marked === "object" ? marked.door : undefined,
     });
     if (!decision.allowed) {
-      // 003 EARS-13: only the client-address window names its reset (EARS-16).
-      if (decision.refusal.window === "ip") {
-        const seconds = Math.max(
-          1,
-          Math.ceil(
-            (decision.refusal.resetAtMs - decision.refusal.atMs) / 1000,
-          ),
-        );
-        context
-          .switchToHttp()
-          .getResponse<GuardResponse>()
-          .header("Retry-After", String(seconds));
-      }
+      const response = context.switchToHttp().getResponse<GuardResponse>();
       // 003 EARS-15: throttling replaces the password lockout — one audit row
       // per tripped per-user window, as the lock left one per lock.
       const { window, tripped } = decision.refusal;
@@ -121,7 +131,7 @@ export class RateLimitGuard implements CanActivate {
           });
         }
       }
-      throw new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);
+      refuseThrottled(decision.refusal, response);
     }
     // EARS-13 (#2684): a succeeding verification refunds the unit taken here,
     // so the handler must know which per-IP window that unit came from.

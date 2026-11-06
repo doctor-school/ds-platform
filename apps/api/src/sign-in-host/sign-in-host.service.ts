@@ -16,7 +16,11 @@ import type {
 } from "@ds/schemas";
 import { AuthService, type SessionAcceptor } from "../auth/auth.service.js";
 import { RateLimitService } from "../auth/rate-limit/rate-limit.service.js";
-import { STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE } from "../auth/rate-limit/rate-limit.types.js";
+import {
+  SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE,
+  STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
+  type RateLimitRefusal,
+} from "../auth/rate-limit/rate-limit.types.js";
 import { SessionService } from "../auth/session/session.service.js";
 import {
   IDP_CLIENT,
@@ -71,14 +75,22 @@ const STEP_REVOKED = "invalid credentials";
 export interface HostRequest {
   readonly cookies: Readonly<Record<string, string>>;
   readonly fingerprint: string;
-  /** The client IP the sign-in-host server forwards (the per-IP silent bucket, req. 9). */
+  /** The client IP the sign-in-host server forwards (the entry's per-IP buckets, req. 9). */
   readonly ip: string;
+  /** The edge-resolved ASN (`x-asn`), absent in dev — the interactive entry's per-ASN window. */
+  readonly asn?: string | undefined;
 }
 
-export interface EntryOutcome {
-  readonly body: SignInHostEntryResponse;
-  readonly setCookies: string[];
-}
+export type EntryOutcome =
+  | {
+      readonly body: SignInHostEntryResponse;
+      readonly setCookies: string[];
+    }
+  /**
+   * 003 EARS-13: an entry that is not a storefront's silent check met the
+   * `sign-in-host:entry` ceiling — the shared generic 429.
+   */
+  | { readonly throttled: RateLimitRefusal };
 
 export interface StepOutcome {
   readonly url: string;
@@ -141,6 +153,33 @@ export class SignInHostService {
   ): Promise<EntryOutcome> {
     const settings = this.enabled();
     const setCookies: string[] = [];
+    const wellFormed =
+      authRequest !== undefined && AUTH_REQUEST_ID.test(authRequest);
+    // 003 EARS-13 / EARS-63 (f), ADR-0015 §4 req. 9 — the limit answers before
+    // any read (form state, Zitadel). Every entry first takes a
+    // `sign-in-host:entry` unit on the per-IP and per-ASN windows, keyed as the
+    // storefront entry's so one origin meets one ceiling on both hosts.
+    const decision = await this.limiter.consume({
+      ip: req.ip,
+      asn: req.asn,
+      scope: SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE,
+    });
+    // Past a tripped entry limit only a silent check may still proceed (to its
+    // `login_required`), and whether this is one is known only from Zitadel's
+    // auth request — so that read is bought with a `oidc:silent-check` unit
+    // up front: reads past the trip stay within the silent bucket's per-IP
+    // ceiling, and with both spent the entry is the 429 without any read.
+    const silentUnitTaken =
+      !decision.allowed &&
+      wellFormed &&
+      (await this.limiter.tryConsume({
+        ip: req.ip,
+        scope: STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
+      }));
+    if (!decision.allowed && !silentUnitTaken) {
+      return { throttled: decision.refusal };
+    }
+
     const priorFormId = req.cookies[cookieNames.form];
     const prior = priorFormId ? await this.state.getForm(priorFormId) : null;
     // EARS-66 / EARS-67: anything that names no live auth request goes back to
@@ -154,8 +193,27 @@ export class SignInHostService {
       setCookies,
     });
 
-    if (!authRequest || !AUTH_REQUEST_ID.test(authRequest)) return back();
-    const request = await this.hostIdp.readAuthRequest(authRequest);
+    const request = wellFormed
+      ? await this.hostIdp.readAuthRequest(authRequest)
+      : null;
+    // The bucket is chosen from the auth request Zitadel holds, never from the
+    // query: a storefront's `prompt=none` request counts in the silent bucket
+    // only; every other entry (interactive, unreadable, a client outside the
+    // map) keeps its `sign-in-host:entry` unit.
+    const silent =
+      request !== null &&
+      settings.clients.has(request.clientId) &&
+      request.prompt.includes("none");
+    if (!decision.allowed && !silent) return { throttled: decision.refusal };
+    if (decision.allowed && silent) {
+      // The silent check gives its per-IP entry unit back. The per-ASN unit
+      // stays charged: the limiter refunds per-IP units only.
+      await this.limiter.refundIpUnit(
+        req.ip,
+        decision.receipt.ipWindowResetAtMs,
+        SIGN_IN_HOST_ENTRY_RATE_LIMIT_SCOPE,
+      );
+    }
     if (!request) return back();
 
     // EARS-60: a client outside the fixed map — the admin client among them —
@@ -187,11 +245,13 @@ export class SignInHostService {
       );
 
     // 003 EARS-63 (f), ADR-0015 §4 req. 9 — every entry of a `prompt=none`
-    // auth request counts in the silent path's own per-IP bucket; a limited
+    // auth request counts in the silent path's own per-IP bucket (once: a read
+    // past the entry trip already took its unit above); a limited
     // one finalises with `login_required`, so the storefront callback ends it
     // as a guest render, never an error.
     if (
-      request.prompt.includes("none") &&
+      silent &&
+      !silentUnitTaken &&
       !(await this.limiter.tryConsume({
         ip: req.ip,
         scope: STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,

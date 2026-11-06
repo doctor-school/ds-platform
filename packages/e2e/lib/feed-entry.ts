@@ -21,21 +21,23 @@ const apiRequire = createRequire(
   resolve(feedEntryRoot, "apps/api/package.json"),
 );
 
-export function feedEntryTask(): 3751 | 3772 | 3785 | 3789 | 3797 {
-  return process.env.E2E_PUBLIC_RECORD_FORMS === "1"
-    ? 3797
-    : process.env.E2E_PUBLIC_SPECIALTY_MEMORY === "1"
-      ? 3789
-      : process.env.E2E_PUBLIC_READONLY === "1"
-        ? 3785
-        : process.env.E2E_PUBLIC_FEED_STATES === "1"
-          ? 3772
-          : 3751;
+export function feedEntryTask(): 3751 | 3772 | 3785 | 3789 | 3797 | 3826 {
+  return process.env.E2E_PUBLIC_PROJECT_REFUSALS === "1"
+    ? 3826
+    : process.env.E2E_PUBLIC_RECORD_FORMS === "1"
+      ? 3797
+      : process.env.E2E_PUBLIC_SPECIALTY_MEMORY === "1"
+        ? 3789
+        : process.env.E2E_PUBLIC_READONLY === "1"
+          ? 3785
+          : process.env.E2E_PUBLIC_FEED_STATES === "1"
+            ? 3772
+            : 3751;
 }
 
 export function ownedFeedEntryDatabase(
   value: string,
-  task: 3751 | 3772 | 3785 | 3789 | 3797 = feedEntryTask(),
+  task: 3751 | 3772 | 3785 | 3789 | 3797 | 3826 = feedEntryTask(),
 ): string {
   if (!new RegExp(`^/ds_(dev|probe)_${task}$`).test(new URL(value).pathname))
     throw new Error(
@@ -116,7 +118,8 @@ export function verifyOwnedFeedEntryListeners() {
         ] as const)
       : []),
     ...(process.env.E2E_PUBLIC_SPECIALTY_MEMORY === "1" ||
-    process.env.E2E_PUBLIC_RECORD_FORMS === "1"
+    process.env.E2E_PUBLIC_RECORD_FORMS === "1" ||
+    process.env.E2E_PUBLIC_PROJECT_REFUSALS === "1"
       ? ([["admin", process.env.E2E_ADMIN_URL]] as const)
       : []),
   ] as const) {

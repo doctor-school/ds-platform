@@ -214,3 +214,40 @@ post-merge cleanup. Log every stand/SQL/process/port operation; preserve failed
 reports and snapshots. App-local layout, lifecycle, API rejection and Field
 primitive tests retain their distinct boundaries. No product visual changes or
 owner Stage-B stand are introduced.
+
+## Project publication and link refusals — 030 EARS-2 / EARS-6 / EARS-19
+
+`E2E_PUBLIC_PROJECT_REFUSALS=1` selects exactly 030:24, 030:32 and 030:155,
+with the inherited Academy project identity and unchanged canonical source.
+The last journey explicitly opens the owned Doctor origin. Ordinary runs
+exclude these three resource-dependent titles; the existing five CI arms remain
+and task 3826 adds three cases (eighteen total).
+
+Build API, Doctor and Admin and use `ds_dev_3826` through the snapshot/migrate
+wrapper, or CI's `ds_probe_3826`. Supply the same owned API/Doctor/Admin URLs,
+development IdP and receipt variables above. The three existing commands
+generate, execute and strictly validate this contour; no Academy listener is
+needed. The API uses `https://doctor.school` as its allowed result-link origin.
+
+Every case completes all three Background clauses against authenticated API
+reads and exact persisted rows: four active output kinds, published «Фарма
+Плюс» with «Инвестор» and published «ЦИТО» with «Клиническая площадка».
+Only task-owned organizations are inserted; seeded kinds and roles are read.
+The strict report requires all nine completed groups and their row identities.
+
+The publish case opens the real draft with description and active published
+curator, attempts publication, requires only the results blocker and confirms
+the exact project and empty result set stay unchanged after reload. The link
+case edits the actual results form, submits the external HTTPS URL, requires
+the server's field-addressed 400, and compares the whole ordered API/DB set
+before and after refusal and reload. Both record ordinary browser Origin,
+If-Match and idempotency headers. The Doctor case requires real HTTP 404 and
+the normal not-found composition, compares it to an unknown route and checks
+there is no project/catalog/article content. No product transport is mocked.
+
+`After` deletes only generated fixture identities and the returned operator,
+verifies absence, and closes its browser context. Playwright owns/reaps the
+compiled listeners; the database and snapshots remain for lead closeout. Keep
+every failed and successful raw run in its own immutable head/run directory.
+The broader app-local project and API tests remain. This adds no render delta,
+visual artifact, Stage-B stand or production release.

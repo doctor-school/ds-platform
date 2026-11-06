@@ -12,7 +12,19 @@ import { E2E_PASSWORD } from "../admin/admin-session.js";
 
 const require = createRequire(resolve(feedEntryRoot, "apps/api/package.json"));
 
-export async function connection(task: 3785 | 3789 | 3797 = 3785) {
+export async function connection(task: 3785 | 3789 | 3797 | 3826 = 3785) {
+  if (task === 3826) {
+    // The 030 Background starts in Admin; a real public read establishes its
+    // lazy API pool before requiring that pool's database identity.
+    const readiness = await fetch(
+      new URL("/v1/public/specialties", process.env.E2E_API_URL!),
+    );
+    expect(readiness.status).toBe(200);
+    feedEntryLog({
+      command: "owning API database read before 030 fixture connection",
+      status: readiness.status,
+    });
+  }
   const database = ownedFeedEntryDatabase(
     process.env.E2E_FEED_ENTRY_DATABASE_URL ?? "",
     task,
@@ -118,7 +130,9 @@ export async function createCalendarGroupingFixture(today: string) {
   }
 }
 
-export async function createReadonlyOperator(task: 3785 | 3789 | 3797 = 3785) {
+export async function createReadonlyOperator(
+  task: 3785 | 3789 | 3797 | 3826 = 3785,
+) {
   const issuer = process.env.IDP_ISSUER!;
   if (!issuer || new URL(issuer).hostname === "id.doctor.school")
     throw new Error("Read-only operator fixture requires the development IdP");

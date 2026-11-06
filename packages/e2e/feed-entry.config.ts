@@ -15,32 +15,40 @@ import {
   publicReadonlyPatternFor,
   publicRecordFormPattern,
   publicSpecialtyMemoryPattern,
+  publicProjectRefusalPattern,
 } from "./lib/host-tags.js";
 
 const states = process.env.E2E_PUBLIC_FEED_STATES === "1";
 const readonly = process.env.E2E_PUBLIC_READONLY === "1";
 const memory = process.env.E2E_PUBLIC_SPECIALTY_MEMORY === "1";
 const records = process.env.E2E_PUBLIC_RECORD_FORMS === "1";
+const projects = process.env.E2E_PUBLIC_PROJECT_REFUSALS === "1";
 const task = feedEntryTask();
 
 const testDir = defineBddConfig({
-  features: states
-    ? "../../apps/docs/content/specs/features/018-specialty-feed/018-scenarios.feature"
-    : "../../apps/docs/content/specs/features/017-doctor-shell-specialties/017-scenarios.feature",
+  features: projects
+    ? "../../apps/docs/content/specs/features/030-projects-catalog-and-page/030-scenarios.feature"
+    : states
+      ? "../../apps/docs/content/specs/features/018-specialty-feed/018-scenarios.feature"
+      : "../../apps/docs/content/specs/features/017-doctor-shell-specialties/017-scenarios.feature",
   featuresRoot: "../../apps/docs/content/specs/features",
   steps: ["steps/**/*.ts"],
-  outputDir: records
-    ? ".features-gen/record-forms"
-    : memory
-      ? ".features-gen/specialty-memory"
-      : states
-        ? ".features-gen/feed-states"
-        : ".features-gen/feed-entry",
-  tags:
-    states || memory || records
+  outputDir: projects
+    ? ".features-gen/project-refusals"
+    : records
+      ? ".features-gen/record-forms"
+      : memory
+        ? ".features-gen/specialty-memory"
+        : states
+          ? ".features-gen/feed-states"
+          : ".features-gen/feed-entry",
+  tags: projects
+    ? "@host:academy"
+    : states || memory || records
       ? "@host:doctor"
       : "@host:doctor and @public-feed-entry",
-  missingSteps: states || memory || records ? "skip-scenario" : "fail-on-gen",
+  missingSteps:
+    states || memory || records || projects ? "skip-scenario" : "fail-on-gen",
 });
 const api = process.env.E2E_API_URL;
 const doctor = process.env.E2E_DOCTOR_URL;
@@ -56,7 +64,7 @@ if (boot && (!api || !doctor))
   );
 if (boot && readonly && (!academy || !admin))
   throw new Error("Read-only originals require owned Academy and Admin URLs");
-if (boot && (memory || records) && !admin)
+if (boot && (memory || records || projects) && !admin)
   throw new Error(
     "Specialty memory and record originals require an owned Admin URL",
   );
@@ -97,6 +105,7 @@ export default defineConfig({
   ...(states ? { grep: publicFeedStatePattern } : {}),
   ...(memory ? { grep: publicSpecialtyMemoryPattern } : {}),
   ...(records ? { grep: publicRecordFormPattern } : {}),
+  ...(projects ? { grep: publicProjectRefusalPattern } : {}),
   timeout: 120_000,
   expect: { timeout: 20_000 },
   reporter: reportersFor({
@@ -109,13 +118,13 @@ export default defineConfig({
   ),
   projects: [
     {
-      name: "doctor",
+      name: projects ? "academy" : "doctor",
       testDir: readonly ? readonlyTestDir("doctor") : testDir,
       ...(readonly ? { grep: publicReadonlyPatternFor("doctor") } : {}),
       use: {
         ...devices["Desktop Chrome"],
         locale: "ru-RU",
-        baseURL: doctor,
+        baseURL: projects ? academy : doctor,
         trace: "retain-on-failure",
       },
     },
@@ -157,6 +166,9 @@ export default defineConfig({
               AUDIT_IDENTIFIER_PEPPER: randomUUID(),
               LIFECYCLE_IMPACT_TOKEN_SECRET: randomUUID(),
               BOT_PROTECTION_ENABLED: "false",
+              ...(projects
+                ? { DOCTOR_PUBLIC_ORIGIN: "https://doctor.school" }
+                : {}),
             },
           },
           {
@@ -172,7 +184,7 @@ export default defineConfig({
               ACADEMY_PUBLIC_ORIGIN: readonly ? academy! : doctor!,
             },
           },
-          ...(readonly || memory || records
+          ...(readonly || memory || records || projects
             ? (readonly
                 ? (["portal", "admin"] as const)
                 : (["admin"] as const)

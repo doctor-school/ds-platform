@@ -101,7 +101,7 @@ describe("025 rule book schemas", () => {
     );
   });
 
-  it("025 EARS-4: a fact of a content-scoped action requires contentRef; only the once-per-person actions may omit it", () => {
+  it("025 EARS-4: a fact of a content-scoped action requires contentRef; a once-per-person action (registration, profile) forbids it", () => {
     const base = {
       eventId: "e-1",
       personId: "00000000-0000-4000-8000-000000000001",
@@ -109,16 +109,19 @@ describe("025 rule book schemas", () => {
     };
     const perPerson = ["registration", "profile"];
     for (const action of POINTS_ACCRUAL_ACTIONS) {
+      const once = perPerson.includes(action);
       const withRef = PointsAccrualFactSchema.safeParse({
         ...base,
         action,
         contentRef: "item-1",
       });
-      expect(withRef.success, action).toBe(true);
+      expect(withRef.success, action).toBe(!once);
       const withoutRef = PointsAccrualFactSchema.safeParse({ ...base, action });
-      expect(withoutRef.success, action).toBe(perPerson.includes(action));
-      if (!withoutRef.success) {
-        expect(withoutRef.error.issues[0]?.path).toEqual(["contentRef"]);
+      expect(withoutRef.success, action).toBe(once);
+      for (const refused of [withRef, withoutRef]) {
+        if (!refused.success) {
+          expect(refused.error.issues[0]?.path).toEqual(["contentRef"]);
+        }
       }
     }
   });

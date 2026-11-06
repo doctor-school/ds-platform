@@ -34,7 +34,8 @@ export const PointsAccrualActionSchema = z.enum(POINTS_ACCRUAL_ACTIONS);
 /**
  * The actions credited once per person (025-product «Earn rules»:
  * registration — once per person; profile — once). Every other action is
- * deduplicated per content item and its fact carries `contentRef` (EARS-4).
+ * deduplicated per content item and its fact carries `contentRef`; a
+ * once-per-person fact carries none (EARS-4).
  */
 export const POINTS_PER_PERSON_ACTIONS = [
   "registration",
@@ -160,8 +161,9 @@ export const POINTS_RULE_DEFAULTS: {
  * question, rating, interactive reaction), or the counterpart person of a
  * referral — and is REQUIRED for those actions (EARS-4): without it the dedupe
  * key would collapse to `<personId>::<action>` and a second lesson would read
- * as a duplicate of the first. Only a once-per-person action
- * ({@link POINTS_PER_PERSON_ACTIONS}: registration, profile) may omit it. There is deliberately no
+ * as a duplicate of the first. A once-per-person action
+ * ({@link POINTS_PER_PERSON_ACTIONS}: registration, profile) FORBIDS it, so its
+ * dedupe key is always `<personId>::<action>` and a second fact is a duplicate. There is deliberately no
  * field for a prescription, a sale, a sponsor or an arrival source that a rule
  * could read: an arrival link is ATTRIBUTION only, written to the postings and
  * read by no rule.
@@ -193,10 +195,16 @@ export const PointsAccrualFactSchema = z
       .optional(),
   })
   .superRefine((fact, ctx) => {
-    if (
-      fact.contentRef === undefined &&
-      !(POINTS_PER_PERSON_ACTIONS as readonly string[]).includes(fact.action)
-    ) {
+    const once = (POINTS_PER_PERSON_ACTIONS as readonly string[]).includes(
+      fact.action,
+    );
+    if (once && fact.contentRef !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["contentRef"],
+        message: `a ${fact.action} fact is once per person and names no content item (contentRef)`,
+      });
+    } else if (!once && fact.contentRef === undefined) {
       ctx.addIssue({
         code: "custom",
         path: ["contentRef"],

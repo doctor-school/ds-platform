@@ -280,6 +280,31 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(await rows(second.eventId)).not.toHaveLength(0);
     });
 
+    it("025 EARS-4: a second registration fact of the same person answers duplicate, and a registration fact with a contentRef is refused", async () => {
+      const personId = randomUUID();
+      const { contentRef: _none, ...first } = fact({
+        personId,
+        action: "registration",
+      });
+      expect((await intake.accept(first)).status).toBe("posted");
+      const before = credited.length;
+      const second = {
+        ...first,
+        eventId: `registration:${randomUUID()}`,
+      };
+      expect((await intake.accept(second)).status).toBe("duplicate");
+      const withRef = {
+        ...first,
+        eventId: `registration:${randomUUID()}`,
+        contentRef: randomUUID(),
+      };
+      await expect(intake.accept(withRef)).rejects.toMatchObject({
+        issues: [expect.objectContaining({ path: ["contentRef"] })],
+      });
+      expect(await rows(withRef.eventId)).toHaveLength(0);
+      expect(credited.length).toBe(before);
+    });
+
     it("025 EARS-4: the intake refuses a content-scoped fact without contentRef and writes nothing", async () => {
       const { contentRef: _omitted, ...f } = fact();
       const before = credited.length;

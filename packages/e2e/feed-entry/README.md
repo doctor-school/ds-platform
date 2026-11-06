@@ -236,8 +236,8 @@ The address case creates a unique Russian title through the real UI, checks an
 independently spelled transliteration, publishes through the UI, renames through
 the UI, reloads and compares normal authenticated GET and exact database reads.
 Slug and first-publication instant must survive the rename. Status fixtures use
-normal authenticated browser-origin authoring and exact owned database status
-preparation. All seven relevant family/status combinations run in both themes,
+normal authenticated browser-origin authoring and lifecycle commands, including
+the direction's impact preview. All seven family/status combinations run in both themes,
 before and during real row hover. Computed colors must resolve to the semantic
 foreground/background pair, maintain AA normal-text contrast, and remain distinct
 from the hovered row ground. No color-equality constraint between interaction

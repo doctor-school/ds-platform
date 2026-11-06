@@ -65,9 +65,10 @@ async function request<T>(
   method = "GET",
   body?: unknown,
   version?: number,
+  impactToken?: string,
 ) {
   const result = await admin.evaluate(
-    async ({ path, method, body, version }) => {
+    async ({ path, method, body, version, impactToken }) => {
       const headers: Record<string, string> = { accept: "application/json" };
       if (method !== "GET") {
         const cookie = document.cookie
@@ -80,6 +81,7 @@ async function request<T>(
         headers["idempotency-key"] = crypto.randomUUID();
         headers["content-type"] = "application/json";
         if (version !== undefined) headers["if-match"] = `"${version}"`;
+        if(impactToken) headers["lifecycle-impact-token"] = impactToken;
       }
       const response = await fetch(path, {
         method,
@@ -89,10 +91,10 @@ async function request<T>(
       });
       return { status: response.status, body: await response.json() };
     },
-    { path, method, body, version },
+    { path, method, body, version, impactToken },
   );
   expect(result.status).toBe(
-    method === "POST" && !/publish$/.test(path) ? 201 : 200,
+    method === "POST" && /^\/v1\/admin\/(directions|direction-adjacency|direction-specialties)$/.test(path) ? 201 : 200,
   );
   return result.body as T;
 }
@@ -175,7 +177,11 @@ async function seedFamilies(value: Proof, statuses = false) {
           {},
           direction.version,
         );
-      else await value.records!.status("direction", direction.id, status);
+      else {
+        const impact=await request<{affected:unknown[];impactToken:string}>(value.admin!,`/v1/admin/directions/${direction.id}/lifecycle-impact?transition=retire`);
+        expect(impact.affected).toEqual([]);
+        await request(value.admin!,`/v1/admin/directions/${direction.id}/retire`,"POST",{},direction.version,impact.impactToken);
+      }
       value.rows.push({
         family: "directions",
         id: direction.id,
@@ -195,8 +201,8 @@ async function seedFamilies(value: Proof, statuses = false) {
       directionId: c.id,
       specialtyMinzdravId: specialty.id,
     });
-    await value.records!.status("edge", retiredEdge.id, "retired");
-    await value.records!.status("link", retiredLink.id, "retired");
+    await request(value.admin!,`/v1/admin/direction-adjacency/${retiredEdge.id}/retire`,"POST",{},retiredEdge.version);
+    await request(value.admin!,`/v1/admin/direction-specialties/${retiredLink.id}/retire`,"POST",{},retiredLink.version);
     value.rows.push(
       {
         family: "direction-adjacency",
@@ -396,7 +402,7 @@ Then("the address is frozen on first publish", async ({ page }) => {
     status: "published",
   });
   expect(actual.firstPublishedAt).toBe(
-    new Date(String(first.first_published_at)).toISOString(),
+    (first.first_published_at as Date).toISOString(),
   );
   expect(await value.records!.row("direction", id)).toMatchObject({
     slug: first.slug,

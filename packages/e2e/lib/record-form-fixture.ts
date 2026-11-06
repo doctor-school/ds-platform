@@ -35,19 +35,6 @@ export async function createRecordFormFixture(task: 3797 | 3804 = 3797) {
       expect(result.rows).toHaveLength(1);
       return result.rows[0] as Record<string, unknown>;
     },
-    async status(kind: keyof typeof owned, id: string, status: string) {
-      expect(task).toBe(3804);
-      expect(owned[kind]).toContain(id);
-      expect(
-        kind === "direction"
-          ? ["draft", "published", "retired"]
-          : ["active", "retired"],
-      ).toContain(status);
-      await db.query(`UPDATE ${tables[kind]} SET status=$2 WHERE id=$1`, [
-        id,
-        status,
-      ]);
-    },
     async edge(id: string) {
       expect(edges).toContain(id);
       const result = await db.query(

@@ -638,8 +638,9 @@ stay on the operator path above.
   The log shows `↻ ds-data-prod: converge <sha12>: …` then `✓ … converged`; a
   converged box prints `nothing to change`. The workstation path never converges. No owner
   server step is in the path.
-  **Migration rehearsal (#3648)** — phase `rehearse`, right after `install` and its
-  converges and before `data-prod-env`, in a release only (a redeploy and a rollback apply
+  **Migration rehearsal (#3648)** — phase `rehearse`, right after `install`, its
+  converges and `data-prod-env` (which only rewrites the compose env `ship` dropped — the
+  gate's live read is a `docker compose exec`) and before `data-prod-up`, in a release only (a redeploy and a rollback apply
   no migration and rehearse nothing; tech spec §5 «Migration rehearsal.» → «Release gate.»).
   `lib/rehearsal-gate.mjs` builds the target tree's migration archive (`drizzle/<tag>.sql`
   and `drizzle/meta/_journal.json`, the shape `ds-read-entrypoint` sends — on the box from
@@ -650,7 +651,7 @@ stay on the operator path above.
   `restoreOnly: false` goes on. A `rehearse-restore` of the same SHA shares the unit and
   the report path, so a restore-only report is never the gate's pass: the gate starts its
   own rehearsal once, and a second restore-only report refuses `a rehearsal is running`.
-  Anything else fails the release in phase `rehearse`, before any data-prod state change,
+  Anything else fails the release in phase `rehearse`, before any data-prod container start or data change,
   with the failure note `migration <tag> failed (SQLSTATE <code>)` or one fixed reason
   (`insufficient headroom (disk)`, `copy behind prod`, `the rehearsal did not finish`, …;
   an unlisted one reads `the rehearsal could not run`) — never a message or a row value;

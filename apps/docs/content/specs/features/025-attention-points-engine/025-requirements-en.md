@@ -2,7 +2,7 @@
 title: "025 — Attention points engine: accrual, spend and gating"
 description: "Requirements for the one attention-points ledger a doctor holds across the doctor storefront, the Academy and the mobile app: the person account and its three denominations (Pul, Bre, Con), the immutable double-entry postings that each carry a rule version and a unique event id, the accrual rules with their defaults and the (doctor, content item, action) dedupe, the reserve on sign-up / debit on confirmed attendance / release on cancel, no-show or event cancel, the per-event advance flag with its 150 Pul obligation cap netted from future earnings, the referral award and its monthly cap, the consented monthly leaderboard read model, the admin API for rules, prices and gating modes, compensating corrections, attention aggregates for 036 and the frozen account on erasure. Backend-only: every surface belongs to a consumer."
 slug: 025-attention-points-engine
-status: Draft
+status: In dev
 surface: backend-only
 tracker: https://github.com/doctor-school/ds-platform/milestone/23
 prior_decisions:

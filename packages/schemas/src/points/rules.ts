@@ -30,6 +30,16 @@ export const POINTS_ACCRUAL_ACTIONS = [
   "referral-invitee",
 ] as const;
 export const PointsAccrualActionSchema = z.enum(POINTS_ACCRUAL_ACTIONS);
+
+/**
+ * The actions credited once per person (025-product «Earn rules»:
+ * registration — once per person; profile — once). Every other action is
+ * deduplicated per content item and its fact carries `contentRef` (EARS-4).
+ */
+export const POINTS_PER_PERSON_ACTIONS = [
+  "registration",
+  "profile",
+] as const satisfies readonly (typeof POINTS_ACCRUAL_ACTIONS)[number][];
 export type PointsAccrualAction = z.infer<typeof PointsAccrualActionSchema>;
 
 const amount = z.number().int().min(0);
@@ -146,37 +156,54 @@ export const POINTS_RULE_DEFAULTS: {
 /**
  * EARS-3 — an accrual-source fact as a producer hands it to the intake
  * (Event Model `AccrueFromFact`). `contentRef` names the content item the
- * action is about (lesson, module, event, invitee); it is absent for a
- * once-per-person action (registration, profile). There is deliberately no
+ * action is about — the lesson, the module, the event (participation,
+ * question, rating, interactive reaction), or the counterpart person of a
+ * referral — and is REQUIRED for those actions (EARS-4): without it the dedupe
+ * key would collapse to `<personId>::<action>` and a second lesson would read
+ * as a duplicate of the first. Only a once-per-person action
+ * ({@link POINTS_PER_PERSON_ACTIONS}: registration, profile) may omit it. There is deliberately no
  * field for a prescription, a sale, a sponsor or an arrival source that a rule
  * could read: an arrival link is ATTRIBUTION only, written to the postings and
  * read by no rule.
  */
-export const PointsAccrualFactSchema = z.strictObject({
-  eventId: z.string().min(1).max(256),
-  personId: z.uuid(),
-  action: PointsAccrualActionSchema,
-  contentRef: z
-    .string()
-    .min(1)
-    .max(256)
-    .regex(/^[^:]+$/, "a content ref carries no ':'")
-    .optional(),
-  occurredAt: z.coerce.date(),
-  projectId: z.uuid().optional(),
-  output: z
-    .strictObject({
-      type: z.string().min(1).max(128),
-      id: z.uuid(),
-    })
-    .optional(),
-  attribution: z
-    .strictObject({
-      organisationId: z.uuid().optional(),
-      memberId: z.uuid().optional(),
-    })
-    .optional(),
-});
+export const PointsAccrualFactSchema = z
+  .strictObject({
+    eventId: z.string().min(1).max(256),
+    personId: z.uuid(),
+    action: PointsAccrualActionSchema,
+    contentRef: z
+      .string()
+      .min(1)
+      .max(256)
+      .regex(/^[^:]+$/, "a content ref carries no ':'")
+      .optional(),
+    occurredAt: z.coerce.date(),
+    projectId: z.uuid().optional(),
+    output: z
+      .strictObject({
+        type: z.string().min(1).max(128),
+        id: z.uuid(),
+      })
+      .optional(),
+    attribution: z
+      .strictObject({
+        organisationId: z.uuid().optional(),
+        memberId: z.uuid().optional(),
+      })
+      .optional(),
+  })
+  .superRefine((fact, ctx) => {
+    if (
+      fact.contentRef === undefined &&
+      !(POINTS_PER_PERSON_ACTIONS as readonly string[]).includes(fact.action)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["contentRef"],
+        message: `a ${fact.action} fact names its content item (contentRef)`,
+      });
+    }
+  });
 export type PointsAccrualFact = z.infer<typeof PointsAccrualFactSchema>;
 
 /** The PRD dedupe key `<personId>:<contentRef>:<action>` (EARS-4); empty content segment for a once-per-person action. */

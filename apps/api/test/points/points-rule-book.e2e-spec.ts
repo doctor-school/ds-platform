@@ -226,23 +226,72 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(credited.length).toBe(before);
     });
 
-    it("025 EARS-3: inside a producer's transaction the fact commits with it and is published only on publishCommitted", async () => {
+    it("025 EARS-3: accept owns its transaction and publishes PointsCredited exactly once, and not on a duplicate", async () => {
       const f = fact();
       const before = credited.length;
-      const outcome = await handle.db.transaction((tx) => intake.accept(f, tx));
-      expect(outcome.status).toBe("posted");
-      expect(credited.length).toBe(before);
-      await intake.publishCommitted(outcome);
+      expect((await intake.accept(f)).status).toBe("posted");
+      expect(credited.slice(before).map((e) => e.eventId)).toEqual([f.eventId]);
+      expect((await intake.accept(f)).status).toBe("duplicate");
       expect(credited.length).toBe(before + 1);
+    });
 
-      const rolledBack = fact();
+    it("025 EARS-3: acceptWithin a producer's transaction publishes nothing before publishAfterCommit, then exactly once", async () => {
+      const f = fact();
+      const before = credited.length;
+      const { outcome, publishAfterCommit } = await handle.db.transaction(
+        async (tx) => {
+          const accepted = await intake.acceptWithin(tx, f);
+          expect(credited.length).toBe(before);
+          return accepted;
+        },
+      );
+      expect(outcome.status).toBe("posted");
+      expect(await rows(f.eventId)).not.toHaveLength(0);
+      expect(credited.length).toBe(before);
+      await publishAfterCommit();
+      await publishAfterCommit();
+      expect(credited.slice(before).map((e) => e.eventId)).toEqual([f.eventId]);
+    });
+
+    it("025 EARS-3: after a producer's rollback an acceptWithin fact is neither stored nor published", async () => {
+      const f = fact();
+      const before = credited.length;
       await expect(
         handle.db.transaction(async (tx) => {
-          await intake.accept(rolledBack, tx);
+          await intake.acceptWithin(tx, f);
           throw new Error("producer aborts");
         }),
       ).rejects.toThrow("producer aborts");
-      expect(await rows(rolledBack.eventId)).toHaveLength(0);
+      expect(await rows(f.eventId)).toHaveLength(0);
+      const { rows: keys } = await handle.pool.query(
+        `SELECT 1 FROM points_posting_keys WHERE event_id = $1`,
+        [f.eventId],
+      );
+      expect(keys).toHaveLength(0);
+      expect(credited.length).toBe(before);
+    });
+
+    it("025 EARS-4: two lesson facts of one person for different lessons both credit", async () => {
+      const personId = randomUUID();
+      const first = fact({ personId, contentRef: randomUUID() });
+      const second = fact({ personId, contentRef: randomUUID() });
+      expect((await intake.accept(first)).status).toBe("posted");
+      expect((await intake.accept(second)).status).toBe("posted");
+      expect(await rows(second.eventId)).not.toHaveLength(0);
+    });
+
+    it("025 EARS-4: the intake refuses a content-scoped fact without contentRef and writes nothing", async () => {
+      const { contentRef: _omitted, ...f } = fact();
+      const before = credited.length;
+      await expect(intake.accept(f)).rejects.toMatchObject({
+        issues: [expect.objectContaining({ path: ["contentRef"] })],
+      });
+      const { rows: keys } = await handle.pool.query(
+        `SELECT 1 FROM points_posting_keys WHERE event_id = $1`,
+        [f.eventId],
+      );
+      expect(keys).toHaveLength(0);
+      expect(credited.length).toBe(before);
     });
 
     it("025 EARS-3 / EARS-25: a fact evaluates the version active at its occurredAt — a fact dated before a newly published version keeps the old one", async () => {

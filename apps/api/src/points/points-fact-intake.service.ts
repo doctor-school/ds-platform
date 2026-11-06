@@ -45,7 +45,10 @@ export type PointsIntakeOutcome =
  * at the fact's `occurredAt`, builds one leg `accrual:<denomination>` issuance
  * → person per non-zero denomination with the PRD dedupe key
  * `<personId>:<contentRef>:<action>`, and posts them through the ledger core in
- * one transaction; then it publishes `PointsCredited`.
+ * one transaction; `PointsCredited` is published only after that transaction
+ * committed — by {@link PointsFactIntake.accept} itself, or by the producer
+ * through the `publishAfterCommit` that {@link PointsFactIntake.acceptWithin}
+ * returns.
  *
  * Not here (later slices, design §4): the `obligation-settle:pul` leg netting
  * new Pul against an open advance (#3811), the per-action award conditions
@@ -64,32 +67,56 @@ export class PointsFactIntake {
   ) {}
 
   /**
-   * Accept one accrual fact. Without `tx` the intake owns the transaction and
-   * publishes `PointsCredited` after it committed. With a producer's `tx`
-   * (design §1: producers post inside their own transaction; the fact runs in
-   * a savepoint) the commit is the producer's, so the intake cannot publish:
-   * the producer calls {@link publishCommitted} with the outcome once its
-   * transaction committed.
+   * Accept one accrual fact in a transaction of the intake's own; once it
+   * committed, publish `PointsCredited` (a `posted` outcome only — a duplicate
+   * or a zero credit publishes nothing). An invalid fact (`PointsAccrualFactSchema`,
+   * e.g. a content-scoped action without `contentRef`) throws its `ZodError`
+   * before anything is written.
    */
-  async accept(
-    input: PointsAccrualFact,
-    tx?: Tx,
-  ): Promise<PointsIntakeOutcome> {
+  async accept(input: PointsAccrualFact): Promise<PointsIntakeOutcome> {
     const fact = PointsAccrualFactSchema.parse(input);
-    const outcome = tx
-      ? await this.evaluateAndPost(fact, tx)
-      : await withRequestAuditContext(this.db, (own) =>
-          this.evaluateAndPost(fact, own),
-        );
-    if (!tx) await this.publishCommitted(outcome);
+    const outcome = await withRequestAuditContext(this.db, (own) =>
+      this.evaluateAndPost(fact, own),
+    );
+    await this.publishAfterCommit(outcome)();
     return outcome;
   }
 
-  /** Publish the event of a committed `posted` outcome; a duplicate or a zero credit publishes nothing. */
-  async publishCommitted(outcome: PointsIntakeOutcome): Promise<void> {
-    if (outcome.status === "posted") {
+  /**
+   * Accept one accrual fact inside a producer's transaction (design §1: the
+   * fact commits or rolls back with the producer's own write; the ledger runs
+   * it in a savepoint). The commit is the producer's, so the intake publishes
+   * nothing itself and hands back the obligation instead:
+   *
+   * **the caller MUST invoke `publishAfterCommit()` after its transaction
+   * committed**, and never before; a caller whose transaction rolled back
+   * never calls it (nothing was stored, so nothing is published). It publishes
+   * `PointsCredited` at most once, and only for a `posted` outcome; the
+   * returned promise settles once the subscribers ran (a subscriber failure is
+   * logged, never thrown — `PointsEventsPublisher`).
+   */
+  async acceptWithin(
+    tx: Tx,
+    input: PointsAccrualFact,
+  ): Promise<{
+    outcome: PointsIntakeOutcome;
+    publishAfterCommit: () => Promise<void>;
+  }> {
+    const fact = PointsAccrualFactSchema.parse(input);
+    const outcome = await this.evaluateAndPost(fact, tx);
+    return { outcome, publishAfterCommit: this.publishAfterCommit(outcome) };
+  }
+
+  /** The once-only publication of a committed outcome's event. */
+  private publishAfterCommit(
+    outcome: PointsIntakeOutcome,
+  ): () => Promise<void> {
+    let published = false;
+    return async () => {
+      if (published || outcome.status !== "posted") return;
+      published = true;
       await this.events.publishCredited(outcome.credited);
-    }
+    };
   }
 
   private async evaluateAndPost(

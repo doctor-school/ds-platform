@@ -11,7 +11,7 @@ lang: en
 
 ## 1. Placement
 
-One NestJS module `apps/api/src/points/` owns the ledger, the rule book, the gating decision and the read models; its request/response contracts live in `packages/schemas/src/points/` (the SDK is regenerated into `packages/api-client/`), its tables in `packages/db/src/schema/points-*.ts`. Consumers never import the module's internals: storefronts and the mobile app read over HTTP, and producer features (020, 022, 024, the room) hand facts to the module's in-process fact intake (`PointsFactIntake.accept(fact)`) inside their own transaction boundary, or over the internal endpoint the mobile offline sync replays through. No package outside `apps/api` holds points logic (capability registry row «Attention points engine (025)»).
+One NestJS module `apps/api/src/points/` owns the ledger, the rule book, the gating decision and the read models; its request/response contracts live in `packages/schemas/src/points/` (the SDK is regenerated into `packages/api-client/`), its tables in `packages/db/src/schema/points-*.ts`. Consumers never import the module's internals: storefronts and the mobile app read over HTTP, and producer features (020, 022, 024, the room) hand facts to the module's in-process fact intake inside their own transaction boundary (`PointsFactIntake.acceptWithin(tx, fact)`, which returns the outcome with a `publishAfterCommit` the producer calls after its COMMIT; `accept(fact)` when the fact is the producer's whole write and the intake owns the transaction), or over the internal endpoint the mobile offline sync replays through. No package outside `apps/api` holds points logic (capability registry row «Attention points engine (025)»).
 
 ## 2. Data model
 
@@ -103,7 +103,7 @@ sequenceDiagram
   participant L as Ledger core (tx)
   participant B as PointsEventsPublisher
   P->>I: fact {eventId, personId, action, contentRef, occurredAt}
-  I->>L: BEGIN (or a savepoint in the producer's transaction)
+  I->>L: BEGIN (accept) or a savepoint in the producer's transaction (acceptWithin)
   I->>R: activeVersion(accrual.<action>, occurredAt)
   R-->>I: {ruleId, version, amounts per denomination}
   I->>L: post(fact: dedupe key <personId>:<contentRef>:<action>, one leg accrual:<denomination> issuance→person per non-zero denomination)
@@ -116,15 +116,15 @@ sequenceDiagram
       I->>L: leg obligation-settle:pul person→advance (min(pul, remaining))
     end
     L->>L: insert postings
-    I->>L: COMMIT
-    I->>B: PointsCredited (+ AdvanceSettled)
+    I->>L: COMMIT (accept; acceptWithin: the producer commits)
+    I->>B: PointsCredited (+ AdvanceSettled) — after COMMIT: accept itself, or the producer's publishAfterCommit()
     I-->>P: credited
   end
 ```
 
 The rule is read before the ledger core runs, because the legs are built from it; the dedupe key is computed from the fact alone, so a replay still answers `duplicate` from the key row and never from the rule. The account row lock serialises every posting of one person (EARS-22); concurrent first facts race on the account's unique constraint and the loser re-reads (EARS-1). The mobile offline sync replays its queued facts through the same intake; its pending entries become `credited` or `duplicate` from the intake's answer (EARS-4).
 
-- **Event publication.** apps/api has no event bus; `PointsCredited` is published through the module's one typed in-process provider, `PointsEventsPublisher`, strictly after COMMIT, so a subscriber never sees a credit that rolled back. A duplicate or a zero credit (a rule version crediting 0 in every denomination writes nothing, not even a key row) publishes nothing. When the producer passes its own transaction the commit is the producer's: the intake returns the outcome, and the producer hands it to `publishCommitted` once its transaction committed. Delivery is in-process and at-most-once; the postings, not the event, are the record.
+- **Event publication.** apps/api has no event bus; `PointsCredited` is published through the module's one typed in-process provider, `PointsEventsPublisher`, strictly after COMMIT, so a subscriber never sees a credit that rolled back. A duplicate or a zero credit (a rule version crediting 0 in every denomination writes nothing, not even a key row) publishes nothing. `accept(fact)` owns its transaction and publishes after its own COMMIT. `acceptWithin(tx, fact)` posts inside the producer's transaction, whose commit is the producer's: it returns `{ outcome, publishAfterCommit }`, so the obligation sits in the return type — the producer calls `publishAfterCommit()` after its COMMIT, and a producer that rolled back never calls it. Delivery is in-process and at-most-once; the postings, not the event, are the record.
 - **EARS-12 in the ledger core.** Whatever the caller, the ledger core refuses a leg that debits Bre or Con from a person account without reversing a specific earlier posting (`points-bre-con-debit`, 422, nothing written). Every leg carries one denomination, so no fact can express a penalty or a conversion between denominations.
 - **Built by later slices.** The `obligation-settle:pul` leg (#3811), the per-action award conditions — offline/open learning without Pul, the presence share (#3809) — and the referral monthly cap (#3816). The engagement cap of EARS-10 needs no state: the dedupe key per (person, event, action) is the cap.
 

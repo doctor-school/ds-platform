@@ -365,7 +365,7 @@ Then(
     await expect(
       admin.getByRole("heading", {
         level: 1,
-        name: "Связи специальностей",
+        name: "Направления и специальности",
         exact: true,
       }),
     ).toBeVisible();

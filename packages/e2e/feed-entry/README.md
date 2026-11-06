@@ -145,3 +145,37 @@ anonymous. It does not configure storefront clients, sign-in-host routes or
 their internal credential; those belong to the separate auth contour. Supplying
 that credential would start a real silent SSO navigation requiring a login host
 this non-auth runner does not own.
+
+## Remembered specialty and Admin link — 017 EARS-7 / EARS-16
+
+`E2E_PUBLIC_SPECIALTY_MEMORY=1` selects exactly 017:212, 017:218 and 017:385
+on their canonical Doctor project, preserving the source feature and all six
+inherited Background conditions. Ordinary storefront runs exclude these exact
+titles. The dedicated configuration and strict receipt retain the preceding
+nine originals as separate selections; CI runs all four task matrix entries.
+
+Use the same generation, Playwright and receipt commands with `ds_dev_3789`
+(snapshot/migrate wrapper) or the CI-owned `ds_probe_3789`. Build API, Doctor
+and Admin, and supply the owned `E2E_ADMIN_URL` and development IdP variables
+listed above. This selection owns only those three compiled listeners; it does
+not need an Academy listener or sign-in-host configuration.
+
+The home scenario records the real public choice, reloads, and checks the
+collapsed specialty name/change row with no search, list, chips or expand
+control. Re-choice starts with a remembered book specialty, reopens the actual
+catalog, clicks a different book entry, verifies the accepted POST body and
+response, then checks the exact new feed route, heading, envelope and HTTP
+document. Reload proves persistence; exactly one re-choice command and no save
+control prove no separate save step. The Admin scenario first completes the
+Doctor Background, then uses the existing owned operator/MFA infrastructure in
+a separate context to check and follow the real «Связи специальностей» link.
+
+Each completed Background assertion group is recorded in the test's
+`public-feed-entry` attachment; each of these three requires all six groups.
+The actual report therefore carries eighteen completed groups, alongside the
+strict three-pass, zero-failure/skip/retry/flake/error receipt. The operator
+fixture accepts only the explicit 3785 or 3789 task database, logs exact actor
+ownership before mutation, deletes the created IdP actor and verifies absence.
+The branch-only mirror remains in the owned database for canonical cleanup.
+App-local specialty-memory, feed-layout and taxonomy author/reject/retire/restore
+tests remain because they cover distinct mocked or broader boundaries.

@@ -12,15 +12,15 @@ import { E2E_PASSWORD } from "../admin/admin-session.js";
 
 const require = createRequire(resolve(feedEntryRoot, "apps/api/package.json"));
 
-async function connection() {
+async function connection(task: 3785 | 3789 = 3785) {
   const database = ownedFeedEntryDatabase(
     process.env.E2E_FEED_ENTRY_DATABASE_URL ?? "",
-    3785,
+    task,
   );
   const { Pool } = require("pg");
   const pool = new Pool({
     connectionString: database,
-    application_name: "readonly-3785-fixture",
+    application_name: `readonly-${task}-fixture`,
   });
   const client = await pool.connect();
   const query = async (sql: string, values: unknown[] = []) => {
@@ -30,7 +30,8 @@ async function connection() {
   try {
     const facts = (
       await query(
-        "SELECT current_database() AS name, (SELECT count(*)::int FROM pg_stat_activity WHERE application_name='feed-entry-3785-api') AS api_connections",
+        "SELECT current_database() AS name, (SELECT count(*)::int FROM pg_stat_activity WHERE application_name=$1) AS api_connections",
+        [`feed-entry-${task}-api`],
       )
     ).rows[0];
     expect(`/${facts.name}`).toBe(new URL(database).pathname);
@@ -117,7 +118,7 @@ export async function createCalendarGroupingFixture(today: string) {
   }
 }
 
-export async function createReadonlyOperator() {
+export async function createReadonlyOperator(task: 3785 | 3789 = 3785) {
   const issuer = process.env.IDP_ISSUER!;
   if (!issuer || new URL(issuer).hostname === "id.doctor.school")
     throw new Error("Read-only operator fixture requires the development IdP");
@@ -125,7 +126,7 @@ export async function createReadonlyOperator() {
     authorization: `Bearer ${process.env.IDP_SERVICE_TOKEN!}`,
     "content-type": "application/json",
   };
-  const email = `readonly-3785-${randomUUID()}@ds.test`;
+  const email = `readonly-${task}-${randomUUID()}@ds.test`;
   const search = await fetch(`${issuer}/management/v1/users/_search`, {
     method: "POST",
     headers,
@@ -188,7 +189,7 @@ export async function createReadonlyOperator() {
       sub,
       role: "platform_admin",
     });
-    const db = await connection();
+    const db = await connection(task);
     try {
       const user = randomUUID();
       feedEntryLog({

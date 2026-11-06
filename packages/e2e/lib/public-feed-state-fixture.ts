@@ -92,6 +92,14 @@ export async function createPublicFeedStateFixture(specialtyId: string) {
       await pool.end();
     }
   }
+  feedEntryLog({
+    command: "reserved exact owned 018 fixture before mutation",
+    events,
+    own,
+    adjacent,
+    kind,
+    user,
+  });
   try {
     const facts = (
       await query(

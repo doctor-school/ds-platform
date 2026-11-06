@@ -47,11 +47,9 @@ async function noBookControls(page: Page) {
   ).toHaveCount(0);
   for (const role of ["button", "link"] as const)
     await expect(
-      page
-        .getByRole("main")
-        .getByRole(role, {
-          name: /создать|добавить|редактировать|изменить|удалить|импорт/i,
-        }),
+      page.getByRole("main").getByRole(role, {
+        name: /создать|добавить|редактировать|изменить|удалить|импорт/i,
+      }),
     ).toHaveCount(0);
   await expect(
     page.getByRole("main").locator('input[type="file"]'),
@@ -74,11 +72,16 @@ Given(
     );
   },
 );
-Given("a viewer whose browser timezone is Europe/London", async ({ page }) => {
-  expect(
-    await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone),
-  ).toBe("Europe/London");
-});
+Given(
+  /^a viewer whose browser timezone is Europe\/London$/,
+  async ({ page }) => {
+    expect(
+      await page.evaluate(
+        () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+      ),
+    ).toBe("Europe/London");
+  },
+);
 When("the viewer opens the week list", async ({ page, host }) => {
   const { year, events } = state(page).calendar!;
   const query = `from=${year}-10-14&to=${year}-10-16`;
@@ -145,21 +148,19 @@ Then(
   "no Academy link exists on the feed — 017's footer link remains the only crossing",
   async ({ page }) => {
     const academy = new URL(process.env.E2E_PORTAL_URL!).origin;
-    const crossing = await page
-      .getByRole("link")
-      .evaluateAll(
-        (links, origin) =>
-          links
-            .filter(
-              (node) =>
-                new URL((node as HTMLAnchorElement).href).origin === origin,
-            )
-            .map((node) => ({
-              href: (node as HTMLAnchorElement).href,
-              inFooter: !!node.closest('[data-testid="storefront-footer"]'),
-            })),
-        academy,
-      );
+    const crossing = await page.getByRole("link").evaluateAll(
+      (links, origin) =>
+        links
+          .filter(
+            (node) =>
+              new URL((node as HTMLAnchorElement).href).origin === origin,
+          )
+          .map((node) => ({
+            href: (node as HTMLAnchorElement).href,
+            inFooter: !!node.closest('[data-testid="storefront-footer"]'),
+          })),
+      academy,
+    );
     expect(crossing).toHaveLength(1);
     expect(crossing[0]!.inFooter).toBe(true);
     expect(new URL(crossing[0]!.href).pathname).toBe("/");
@@ -250,8 +251,8 @@ Then(
       if (seen.size === expected.size) break;
       const first = await rows.first().getAttribute("data-testid");
       await admin
-        .getByRole("button", { name: /следующ/i })
-        .filter({ visible: true })
+        .getByRole("navigation", { name: "Страницы списка" })
+        .getByRole("button", { name: "Вперёд", exact: true })
         .click();
       await expect(rows.first()).not.toHaveAttribute("data-testid", first!);
     }

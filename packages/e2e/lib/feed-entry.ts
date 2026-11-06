@@ -408,6 +408,14 @@ export async function verifyManagedFeedEntryAdjacency(specialtyId: string) {
     feedEntryLog({ command: "SQL", database: new URL(database).pathname, sql });
     return client.query(sql, values);
   }
+  feedEntryLog({
+    command:
+      "reserved exact transaction-local managed adjacency before mutation",
+    own,
+    adjacent,
+    link,
+    edge,
+  });
   try {
     const facts = (
       await query(

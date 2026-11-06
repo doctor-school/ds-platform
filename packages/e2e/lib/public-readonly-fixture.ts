@@ -81,6 +81,11 @@ export async function createCalendarGroupingFixture(today: string) {
       await db.close();
     }
   };
+  feedEntryLog({
+    command: "reserved exact owned calendar grouping fixture before mutation",
+    events,
+    kind,
+  });
   try {
     await db.query(
       "INSERT INTO event_kinds (id,slug,title,allowed_formats,status,first_published_at) VALUES ($1,$2,'004 grouping fixture',ARRAY['online','offline']::event_participation_format[],'published',now())",
@@ -172,10 +177,25 @@ export async function createReadonlyOperator() {
     });
   };
   try {
+    feedEntryLog({
+      command: "grant exact owned operator role",
+      sub,
+      role: "platform_admin",
+    });
     await idp.grantProjectRole(sub, "platform_admin");
+    feedEntryLog({
+      command: "granted exact owned operator role",
+      sub,
+      role: "platform_admin",
+    });
     const db = await connection();
     try {
       const user = randomUUID();
+      feedEntryLog({
+        command: "reserved branch-only operator mirror before mutation",
+        user,
+        sub,
+      });
       await db.query(
         "INSERT INTO users (id,zitadel_sub,email,role) VALUES ($1,$2,$3,'platform_admin')",
         [user, sub, email],

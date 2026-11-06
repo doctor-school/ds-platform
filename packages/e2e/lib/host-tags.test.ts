@@ -13,7 +13,35 @@ import {
   prCiDoorTags,
   SIGN_IN_HOST_BINDING_TAG,
   signInHostTags,
+  publicProjectRefusalPattern,
+  publicProjectRefusalTitles,
 } from "./host-tags.js";
+
+describe("030 dedicated exact-three selection", () => {
+  it("EARS-19: selects the two refusals and explicit Doctor journey, never the adjacent retirement original", () => {
+    expect(publicProjectRefusalTitles).toEqual([
+      "A project without results cannot be published",
+      "A result link outside doctor.school is refused",
+      "The doctor storefront has no projects",
+    ]);
+    for (const title of publicProjectRefusalTitles)
+      expect(
+        publicProjectRefusalPattern.test(
+          `academy Feature ${title} @host:academy`,
+        ),
+      ).toBe(true);
+    expect(
+      publicProjectRefusalPattern.test(
+        "An output kind in use cannot be retired @host:academy",
+      ),
+    ).toBe(false);
+    expect(
+      publicProjectRefusalPattern.test(
+        "A result link outside doctorXschool is refused",
+      ),
+    ).toBe(false);
+  });
+});
 
 /**
  * The structural half of the host-selection contract (regression-contour tech

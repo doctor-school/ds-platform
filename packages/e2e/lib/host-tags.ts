@@ -201,6 +201,16 @@ export const publicRecordFormTitles = [
 
 export const publicRecordFormPattern = patternFor(publicRecordFormTitles);
 
+export const publicProjectRefusalTitles = [
+  "A project without results cannot be published",
+  "A result link outside doctor.school is refused",
+  "The doctor storefront has no projects",
+] as const;
+
+export const publicProjectRefusalPattern = patternFor(
+  publicProjectRefusalTitles,
+);
+
 export function publicReadonlyPatternFor(host: StorefrontHostId) {
   return patternFor(
     publicReadonlyOriginals

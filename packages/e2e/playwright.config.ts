@@ -9,6 +9,7 @@ import {
   publicFeedStatePattern,
   publicReadonlyPattern,
   publicRecordFormPattern,
+  publicProjectRefusalPattern,
   publicSpecialtyMemoryPattern,
   signInHostTags,
 } from "./lib/host-tags.js";
@@ -166,7 +167,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   ...(grep ? { grep } : {}),
   grepInvert: new RegExp(
-    `${publicFeedStatePattern.source}|${publicReadonlyPattern.source}|${publicSpecialtyMemoryPattern.source}|${publicRecordFormPattern.source}`,
+    `${publicFeedStatePattern.source}|${publicReadonlyPattern.source}|${publicSpecialtyMemoryPattern.source}|${publicRecordFormPattern.source}|${publicProjectRefusalPattern.source}`,
   ),
   retries: 0,
   timeout: 120_000,

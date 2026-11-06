@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, expect, it, vi } from "vitest";
 import { parse } from "yaml";
-import { publicReadonlyOriginals } from "./public-readonly-originals.js";
+import { publicReadonlyOriginals } from "./host-tags.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();

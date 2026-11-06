@@ -110,6 +110,9 @@ before opening a separate real Admin context. The strict report checks each
 title once on its canonical host with zero failures, skips, retries, flakes or
 runner errors. Ordinary storefront runs exclude these owned-fixture identities.
 The existing 3751 and 3772 selections remain separate and unchanged.
+Pure title/host selection lives in the existing `lib/host-tags.ts` control
+module. Strict receipt validation stays outside the ordinary config's import
+graph in `lib/public-readonly-originals.ts`.
 
 Build API, Doctor, Academy and Admin with `API_PROXY_TARGET` pointing to the
 owned API. Use `ds_dev_3785` (the snapshot/migrate branch wrapper) or the CI-owned

@@ -10,7 +10,7 @@ import {
   feedEntryLog,
   verifyOwnedFeedEntryListeners,
 } from "../lib/feed-entry.js";
-import { publicReadonlyOriginals } from "../lib/public-readonly-originals.js";
+import { publicReadonlyOriginals } from "../lib/host-tags.js";
 import { waitForClientReady } from "../lib/page-ready.js";
 
 type Book = {

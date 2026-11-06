@@ -9,8 +9,8 @@ import {
   publicReadonlyOriginals,
   publicReadonlyPattern,
   publicReadonlyPatternFor,
-  assertPublicReadonlyReport,
-} from "./public-readonly-originals.js";
+} from "./host-tags.js";
+import { assertPublicReadonlyReport } from "./public-readonly-originals.js";
 
 describe("public read-only original selection", () => {
   it("EARS-12: selects exactly the three original identities on their canonical hosts", () => {

@@ -10,8 +10,10 @@ import {
   ownedFeedEntryDatabase,
 } from "./lib/feed-entry.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
-import { publicFeedStatePattern } from "./lib/host-tags.js";
-import { publicReadonlyPatternFor } from "./lib/public-readonly-originals.js";
+import {
+  publicFeedStatePattern,
+  publicReadonlyPatternFor,
+} from "./lib/host-tags.js";
 
 const states = process.env.E2E_PUBLIC_FEED_STATES === "1";
 const readonly = process.env.E2E_PUBLIC_READONLY === "1";

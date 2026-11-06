@@ -7,10 +7,10 @@ import { authLimitTagsFor } from "./lib/default-auth-limits.js";
 import {
   ordinaryStorefrontTagsFor,
   publicFeedStatePattern,
+  publicReadonlyPattern,
   signInHostTags,
 } from "./lib/host-tags.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
-import { publicReadonlyPattern } from "./lib/public-readonly-originals.js";
 
 /**
  * The C6 REGRESSION SUITE — staging/regression-contour tech spec §6 (Issue #2067).

@@ -12,7 +12,7 @@ import { E2E_PASSWORD } from "../admin/admin-session.js";
 
 const require = createRequire(resolve(feedEntryRoot, "apps/api/package.json"));
 
-async function connection(task: 3785 | 3789 = 3785) {
+export async function connection(task: 3785 | 3789 | 3797 = 3785) {
   const database = ownedFeedEntryDatabase(
     process.env.E2E_FEED_ENTRY_DATABASE_URL ?? "",
     task,
@@ -118,7 +118,7 @@ export async function createCalendarGroupingFixture(today: string) {
   }
 }
 
-export async function createReadonlyOperator(task: 3785 | 3789 = 3785) {
+export async function createReadonlyOperator(task: 3785 | 3789 | 3797 = 3785) {
   const issuer = process.env.IDP_ISSUER!;
   if (!issuer || new URL(issuer).hostname === "id.doctor.school")
     throw new Error("Read-only operator fixture requires the development IdP");

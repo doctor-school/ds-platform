@@ -8,6 +8,7 @@ import {
   ordinaryStorefrontTagsFor,
   publicFeedStatePattern,
   publicReadonlyPattern,
+  publicRecordFormPattern,
   publicSpecialtyMemoryPattern,
   signInHostTags,
 } from "./lib/host-tags.js";
@@ -165,7 +166,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   ...(grep ? { grep } : {}),
   grepInvert: new RegExp(
-    `${publicFeedStatePattern.source}|${publicReadonlyPattern.source}|${publicSpecialtyMemoryPattern.source}`,
+    `${publicFeedStatePattern.source}|${publicReadonlyPattern.source}|${publicSpecialtyMemoryPattern.source}|${publicRecordFormPattern.source}`,
   ),
   retries: 0,
   timeout: 120_000,

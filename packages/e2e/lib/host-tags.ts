@@ -193,6 +193,14 @@ export const publicSpecialtyMemoryPattern = patternFor(
   publicSpecialtyMemoryTitles,
 );
 
+export const publicRecordFormTitles = [
+  "A single-tab record page renders no tab bar",
+  "The adjacency kind is a closed explained vocabulary",
+  "A record form is one framed panel of ruled sections",
+] as const;
+
+export const publicRecordFormPattern = patternFor(publicRecordFormTitles);
+
 export function publicReadonlyPatternFor(host: StorefrontHostId) {
   return patternFor(
     publicReadonlyOriginals

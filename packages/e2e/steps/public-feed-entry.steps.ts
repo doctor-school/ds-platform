@@ -1,15 +1,22 @@
 import { expect, type Page, type BrowserContext } from "@playwright/test";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { Given, When, Then, After } from "./support/fixtures.js";
 import { chooseGuestSpecialty } from "../lib/specialty-choice.js";
 import { waitForClientReady } from "../lib/page-ready.js";
 import { signInAsAdmin } from "../admin/sign-in.js";
 import { createReadonlyOperator } from "../lib/public-readonly-fixture.js";
-import { publicSpecialtyMemoryTitles } from "../lib/host-tags.js";
+import { createRecordFormFixture } from "../lib/record-form-fixture.js";
+import {
+  publicRecordFormTitles,
+  publicSpecialtyMemoryTitles,
+} from "../lib/host-tags.js";
 import {
   feedEntryLog,
   feedEntryRoot,
+  assertRecordFormComposition,
   verifyFeedEntryProvenance,
   verifyManagedFeedEntryAdjacency,
   verifyOwnedFeedEntryListeners,
@@ -27,6 +34,10 @@ const state = new WeakMap<
     operator?: Awaited<ReturnType<typeof createReadonlyOperator>>;
     adminContext?: BrowserContext;
     admin?: Page;
+    records?: Awaited<ReturnType<typeof createRecordFormFixture>>;
+    sourceTitle?: string;
+    targetTitle?: string;
+    chosenKind?: string;
   }
 >();
 function entry(page: Page) {
@@ -372,6 +383,351 @@ Then(
   },
 );
 
+async function recordOperator(
+  page: Page,
+  browser: import("@playwright/test").Browser,
+) {
+  const value = entry(page);
+  expect(value.backgrounds).toHaveLength(6);
+  value.records = await createRecordFormFixture();
+  value.operator = await createReadonlyOperator(3797);
+  value.adminContext = await browser.newContext({
+    baseURL: process.env.E2E_ADMIN_URL!,
+    locale: "ru-RU",
+    viewport: { width: 1440, height: 1000 },
+  });
+  value.admin = await value.adminContext.newPage();
+  await signInAsAdmin(value.admin, value.operator.credentials);
+  const titles = [
+    `Кардиология ${randomUUID()}`,
+    `Ревматология ${randomUUID()}`,
+  ] as const;
+  for (const title of titles) {
+    await value.admin.goto("/directions/create");
+    await value.admin.getByTestId("direction-title").fill(title);
+    const created = value.admin.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/v1/admin/directions" &&
+        response.request().method() === "POST",
+    );
+    await value.admin.getByTestId("submit-direction").click();
+    const response = await created;
+    const body = await response.json();
+    if (response.status() === 201) value.records.own("direction", body.id);
+    expect(response.status()).toBe(201);
+    await expect(value.admin).toHaveURL(new RegExp(`/directions/${body.id}$`));
+    await expect(value.admin.getByTestId("direction-heading")).toHaveText(
+      title,
+    );
+  }
+  [value.sourceTitle, value.targetTitle] = titles;
+  await value.admin.goto("/direction-adjacency/create");
+  await expect(
+    value.admin.getByTestId("direction-adjacency-form"),
+  ).toBeVisible();
+  await value.admin
+    .getByTestId("direction-adjacency-direction")
+    .selectOption(value.records.directions[0]!);
+  await value.admin
+    .getByTestId("direction-adjacency-adjacent")
+    .selectOption(value.records.directions[1]!);
+  return value;
+}
+
+const kindOptions = [
+  {
+    value: "related",
+    label: "Смежное направление",
+    description:
+      "Соседняя область: врачи одного направления регулярно читают материалы другого.",
+  },
+  {
+    value: "subdiscipline",
+    label: "Поддисциплина",
+    description:
+      "Более узкая область внутри направления — часть его, а не сосед.",
+  },
+  {
+    value: "interdisciplinary",
+    label: "Междисциплинарная связь",
+    description:
+      "Направления из разных областей, которые сходятся на общих задачах.",
+  },
+] as const;
+
+async function submitAdjacency(page: Page, kind: (typeof kindOptions)[number]) {
+  const value = entry(page),
+    admin = value.admin!;
+  await admin
+    .getByRole("option", {
+      name: `${kind.label} ${kind.description}`,
+      exact: true,
+    })
+    .click();
+  value.chosenKind = kind.value;
+  const created = admin.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/v1/admin/direction-adjacency" &&
+      response.request().method() === "POST",
+  );
+  await admin.getByTestId("submit-direction-adjacency").click();
+  const response = await created,
+    body = await response.json();
+  if (response.status() === 201) value.records!.own("edge", body.id);
+  expect(response.status()).toBe(201);
+  expect(response.request().postDataJSON().kind).toBe(kind.value);
+  expect(body.kind).toBe(kind.value);
+  await expect(admin).toHaveURL(new RegExp(`/direction-adjacency/${body.id}$`));
+  await expect(admin.getByTestId("direction-adjacency-heading")).toHaveText(
+    `${value.sourceTitle} → ${value.targetTitle}`,
+  );
+  await expect(admin.getByTestId("direction-adjacency-status")).toHaveText(
+    "Действует",
+  );
+  await expect(admin.locator("#kind")).toContainText(kind.label);
+}
+
+Given(
+  "an operator opens a reference-book record with exactly one tab",
+  async ({ page, browser }) => {
+    const value = await recordOperator(page, browser);
+    await value.admin!.locator("#kind").click();
+    await submitAdjacency(page, kindOptions[0]);
+    await expect(
+      value.admin!.getByTestId("direction-adjacency-form"),
+    ).toBeVisible();
+    expect((await value.records!.edge(value.records!.edges[0]!)).kind).toBe(
+      "related",
+    );
+  },
+);
+
+Then("no tab bar is rendered", async ({ page }) => {
+  const admin = entry(page).admin!;
+  await expect(admin.getByRole("tablist")).toHaveCount(0);
+  await expect(admin.getByRole("tab")).toHaveCount(0);
+  await expect(
+    admin.getByTestId("direction-adjacency-direction"),
+  ).toBeDisabled();
+});
+
+Then("a record with two or more tabs renders the tab bar", async ({ page }) => {
+  const value = entry(page),
+    admin = value.admin!;
+  await admin.goto(`/directions/${value.records!.directions[0]}`);
+  await expect(admin.getByTestId("direction-heading")).toHaveText(
+    value.sourceTitle!,
+  );
+  await expect(admin.getByRole("tablist")).toHaveCount(1);
+  await expect(admin.getByRole("tab")).toHaveCount(2);
+  const main = admin.getByTestId("tab-main"),
+    events = admin.getByTestId("tab-events");
+  await expect(main).toHaveAttribute("aria-selected", "true");
+  await expect(admin.getByTestId("direction-form")).toBeVisible();
+  await events.click();
+  await expect(events).toHaveAttribute("aria-selected", "true");
+  await expect(main).toHaveAttribute("aria-selected", "false");
+  await expect(admin.getByTestId("direction-form")).toBeHidden();
+  await expect(admin.getByRole("tabpanel")).toBeVisible();
+  await expect(admin.getByRole("tabpanel")).toHaveAttribute(
+    "aria-labelledby",
+    (await events.getAttribute("id")) as string,
+  );
+  await expect(admin.getByTestId("event-directions-panel")).toBeVisible();
+  await expect(admin.getByTestId("event-directions-empty")).toBeVisible();
+  await main.click();
+  await expect(main).toHaveAttribute("aria-selected", "true");
+  await expect(admin.getByTestId("direction-title")).toHaveValue(
+    value.sourceTitle!,
+  );
+});
+
+Given(
+  "an operator creates a direction adjacency link",
+  async ({ page, browser }) => {
+    await recordOperator(page, browser);
+  },
+);
+
+When("they open «Вид связи»", async ({ page }) => {
+  await entry(page)
+    .admin!.getByRole("combobox", { name: "Вид связи", exact: true })
+    .click();
+});
+
+Then(
+  "the options are the closed Russian-labelled vocabulary with an explanation line each",
+  async ({ page }) => {
+    const admin = entry(page).admin!;
+    await expect(admin.getByRole("option")).toHaveCount(3);
+    for (const kind of kindOptions) {
+      const option = admin.getByRole("option", {
+        name: `${kind.label} ${kind.description}`,
+        exact: true,
+      });
+      await expect(option).toBeVisible();
+      await expect(option.getByText(kind.label, { exact: true })).toBeVisible();
+      await expect(
+        option.getByText(kind.description, { exact: true }),
+      ).toBeVisible();
+    }
+  },
+);
+
+Then(
+  "the stored value is the existing slug for the chosen option",
+  async ({ page }) => {
+    await submitAdjacency(page, kindOptions[1]);
+    const value = entry(page),
+      id = value.records!.edges[0]!;
+    const response = await value.admin!.request.get(
+      new URL(`/v1/admin/direction-adjacency/${id}`, value.admin!.url()).href,
+    );
+    expect(response.status()).toBe(200);
+    expect(await response.json()).toMatchObject({ id, kind: value.chosenKind });
+    expect(await value.records!.edge(id)).toMatchObject({
+      id,
+      kind: value.chosenKind,
+    });
+  },
+);
+
+Then(
+  "a value outside the vocabulary is refused by the API",
+  async ({ page }) => {
+    const value = entry(page),
+      id = value.records!.edges[0]!;
+    const before = await value.records!.edge(id);
+    const result = await value.admin!.evaluate(
+      async ({ id, version }) => {
+        const cookie = document.cookie
+          .split("; ")
+          .find((item) => item.startsWith("__Host-ds_admin_csrf="));
+        if (!cookie) throw new Error("Normal Admin CSRF cookie is absent");
+        const response = await fetch(`/v1/admin/direction-adjacency/${id}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json",
+            "x-ds-admin-csrf": decodeURIComponent(
+              cookie.slice(cookie.indexOf("=") + 1),
+            ),
+            "idempotency-key": crypto.randomUUID(),
+            "if-match": `"${version}"`,
+          },
+          body: JSON.stringify({ kind: "outside-the-vocabulary" }),
+        });
+        return { status: response.status, body: await response.json() };
+      },
+      { id, version: before.version },
+    );
+    expect(result.status).toBe(400);
+    expect(result.body.errors).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "kind" })]),
+    );
+    expect(await value.records!.edge(id)).toEqual(before);
+    feedEntryLog({
+      command: "real invalid-kind API refusal preserved exact row",
+      id,
+      status: result.status,
+    });
+  },
+);
+
+Given(
+  "an operator opens a reference-book record form",
+  async ({ page, browser }) => {
+    await recordOperator(page, browser);
+  },
+);
+
+Then("the fields render inside a single framed panel", async ({ page }) => {
+  const admin = entry(page).admin!,
+    form = admin.getByTestId("direction-adjacency-form");
+  await expect(admin.locator("form")).toHaveCount(1);
+  await expect(form).toBeVisible();
+  await expect(form.locator("fieldset")).toHaveCount(2);
+  const border = await form.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return [
+      style.borderTopWidth,
+      style.borderRightWidth,
+      style.borderBottomWidth,
+      style.borderLeftWidth,
+    ].map(parseFloat);
+  });
+  expect(border.every((width) => width > 0)).toBe(true);
+  await expect(form.getByTestId("submit-direction-adjacency")).toHaveCount(1);
+  await expect(form.locator("fieldset [data-form-actions]")).toHaveCount(0);
+});
+
+Then("its sections are separated by hairlines", async ({ page }) => {
+  const sections = entry(page)
+    .admin!.getByTestId("direction-adjacency-form")
+    .locator("fieldset");
+  expect(
+    await sections.evaluateAll((elements) =>
+      elements.map((element) => {
+        const style = getComputedStyle(element);
+        return {
+          width: parseFloat(style.borderTopWidth),
+          style: style.borderTopStyle,
+          color: style.borderTopColor,
+        };
+      }),
+    ),
+  ).toEqual([
+    { width: 0, style: "solid", color: expect.any(String) },
+    {
+      width: 1,
+      style: "solid",
+      color: expect.not.stringMatching(/transparent|rgba\(0, 0, 0, 0\)/),
+    },
+  ]);
+});
+
+Then(
+  "each section is led by a statement heading with its explanatory line",
+  async ({ page }) => {
+    const sections = entry(page)
+      .admin!.getByTestId("direction-adjacency-form")
+      .locator("fieldset");
+    const statements = ["Между какими направлениями связь", "Что это за связь"];
+    for (let i = 0; i < 2; i++) {
+      const section = sections.nth(i),
+        legend = section.locator(":scope > legend");
+      await expect(legend).toHaveText(statements[i]!);
+      await expect(section).toHaveAccessibleName(statements[i]!);
+      const description = await section.getAttribute("aria-describedby");
+      expect(description).toBeTruthy();
+      const text = await section.evaluate((element) => {
+        const id = element.getAttribute("aria-describedby")!;
+        const target = document.getElementById(id);
+        if (!target || target.parentElement !== element)
+          throw new Error("Orphaned section description");
+        return target.textContent!.trim();
+      });
+      expect(text.length).toBeGreaterThan(20);
+      await expect(section).toHaveAccessibleDescription(text);
+    }
+  },
+);
+
+Then(
+  "no section-local form layout is assembled in place of the Field family",
+  async () => {
+    const path = "apps/admin/components/direction-adjacency-form.tsx";
+    assertRecordFormComposition(
+      readFileSync(resolve(feedEntryRoot, path), "utf8"),
+    );
+    feedEntryLog({
+      command: "owning AST proves imported and mounted Field-family primitives",
+      path,
+    });
+  },
+);
+
 Then(
   /^the shell lands on "\/#specialties" showing the open specialty catalog in view$/,
   async ({ page }) => {
@@ -409,7 +765,7 @@ After(async ({ page, $testInfo }) => {
   });
   try {
     if (
-      publicSpecialtyMemoryTitles.some(
+      [...publicSpecialtyMemoryTitles, ...publicRecordFormTitles].some(
         (title) =>
           $testInfo.title === title || $testInfo.title.startsWith(title + " @"),
       )
@@ -417,10 +773,14 @@ After(async ({ page, $testInfo }) => {
       expect(value.backgrounds).toHaveLength(6);
   } finally {
     try {
-      await value.adminContext?.close();
+      await value.records?.cleanup();
     } finally {
-      await value.operator?.cleanup();
-      state.delete(page);
+      try {
+        await value.adminContext?.close();
+      } finally {
+        await value.operator?.cleanup();
+        state.delete(page);
+      }
     }
   }
 });

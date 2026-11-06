@@ -21,19 +21,21 @@ const apiRequire = createRequire(
   resolve(feedEntryRoot, "apps/api/package.json"),
 );
 
-export function feedEntryTask(): 3751 | 3772 | 3785 | 3789 {
-  return process.env.E2E_PUBLIC_SPECIALTY_MEMORY === "1"
-    ? 3789
-    : process.env.E2E_PUBLIC_READONLY === "1"
-      ? 3785
-      : process.env.E2E_PUBLIC_FEED_STATES === "1"
-        ? 3772
-        : 3751;
+export function feedEntryTask(): 3751 | 3772 | 3785 | 3789 | 3797 {
+  return process.env.E2E_PUBLIC_RECORD_FORMS === "1"
+    ? 3797
+    : process.env.E2E_PUBLIC_SPECIALTY_MEMORY === "1"
+      ? 3789
+      : process.env.E2E_PUBLIC_READONLY === "1"
+        ? 3785
+        : process.env.E2E_PUBLIC_FEED_STATES === "1"
+          ? 3772
+          : 3751;
 }
 
 export function ownedFeedEntryDatabase(
   value: string,
-  task: 3751 | 3772 | 3785 | 3789 = feedEntryTask(),
+  task: 3751 | 3772 | 3785 | 3789 | 3797 = feedEntryTask(),
 ): string {
   if (!new RegExp(`^/ds_(dev|probe)_${task}$`).test(new URL(value).pathname))
     throw new Error(
@@ -113,7 +115,8 @@ export function verifyOwnedFeedEntryListeners() {
           ["admin", process.env.E2E_ADMIN_URL],
         ] as const)
       : []),
-    ...(process.env.E2E_PUBLIC_SPECIALTY_MEMORY === "1"
+    ...(process.env.E2E_PUBLIC_SPECIALTY_MEMORY === "1" ||
+    process.env.E2E_PUBLIC_RECORD_FORMS === "1"
       ? ([["admin", process.env.E2E_ADMIN_URL]] as const)
       : []),
   ] as const) {
@@ -196,78 +199,76 @@ export function verifyOwnedFeedEntryListeners() {
   }
 }
 
+function parse(name: string, text: string) {
+  return ts.createSourceFile(
+    name,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+}
+function imported(file: ts.SourceFile, module: string, exported: string) {
+  const declaration = file.statements
+    .filter(ts.isImportDeclaration)
+    .find(
+      (node) =>
+        ts.isStringLiteral(node.moduleSpecifier) &&
+        node.moduleSpecifier.text === module,
+    );
+  const clause = declaration?.importClause;
+  const bindings = clause?.namedBindings;
+  const binding =
+    bindings && ts.isNamedImports(bindings)
+      ? bindings.elements.find(
+          (node) =>
+            !node.isTypeOnly &&
+            (node.propertyName ?? node.name).text === exported,
+        )
+      : undefined;
+  expect(
+    clause?.isTypeOnly,
+    `${exported} must be a value import from ${module}`,
+  ).toBe(false);
+  expect(binding, `${exported} must be imported from ${module}`).toBeDefined();
+  return binding!.name.text;
+}
+function component(file: ts.SourceFile, name?: string) {
+  const declaration = file.statements
+    .filter(ts.isFunctionDeclaration)
+    .find(
+      (node) =>
+        node.modifiers?.some(
+          (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+        ) &&
+        (name
+          ? node.name?.text === name
+          : node.modifiers?.some(
+              (modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword,
+            )),
+    );
+  expect(
+    declaration?.body,
+    "The mounted component must have an exported body",
+  ).toBeDefined();
+  const returned = declaration!.body!.statements.find(
+    ts.isReturnStatement,
+  )?.expression;
+  let root = returned;
+  while (root && ts.isParenthesizedExpression(root)) root = root.expression;
+  expect(
+    root && ts.isJsxElement(root),
+    "The component must return its mounted JSX tree",
+  ).toBe(true);
+  return { declaration: declaration!, root: root as ts.JsxElement };
+}
+
 export function assertFeedEntryComposition(source: {
   layout: string;
   frame: string;
 }) {
-  // Read real imports and returned JSX; comments and unused look-alikes cannot establish provenance.
-  const parse = (name: string, text: string) =>
-    ts.createSourceFile(
-      name,
-      text,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TSX,
-    );
   const layout = parse("layout.tsx", source.layout);
   const frame = parse("storefront-frame.tsx", source.frame);
-  function imported(file: ts.SourceFile, module: string, exported: string) {
-    const declaration = file.statements
-      .filter(ts.isImportDeclaration)
-      .find(
-        (node) =>
-          ts.isStringLiteral(node.moduleSpecifier) &&
-          node.moduleSpecifier.text === module,
-      );
-    const clause = declaration?.importClause;
-    const bindings = clause?.namedBindings;
-    const binding =
-      bindings && ts.isNamedImports(bindings)
-        ? bindings.elements.find(
-            (node) =>
-              !node.isTypeOnly &&
-              (node.propertyName ?? node.name).text === exported,
-          )
-        : undefined;
-    expect(
-      clause?.isTypeOnly,
-      `${exported} must be a value import from ${module}`,
-    ).toBe(false);
-    expect(
-      binding,
-      `${exported} must be imported from ${module}`,
-    ).toBeDefined();
-    return binding!.name.text;
-  }
-  function component(file: ts.SourceFile, name?: string) {
-    const declaration = file.statements
-      .filter(ts.isFunctionDeclaration)
-      .find(
-        (node) =>
-          node.modifiers?.some(
-            (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
-          ) &&
-          (name
-            ? node.name?.text === name
-            : node.modifiers?.some(
-                (modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword,
-              )),
-      );
-    expect(
-      declaration?.body,
-      "The mounted component must have an exported body",
-    ).toBeDefined();
-    const returned = declaration!.body!.statements.find(
-      ts.isReturnStatement,
-    )?.expression;
-    let root = returned;
-    while (root && ts.isParenthesizedExpression(root)) root = root.expression;
-    expect(
-      root && ts.isJsxElement(root),
-      "The component must return its mounted JSX tree",
-    ).toBe(true);
-    return { declaration: declaration!, root: root as ts.JsxElement };
-  }
   const hasChildren = (node: ts.JsxElement) =>
     node.children.some(
       (child) =>
@@ -354,6 +355,65 @@ export function assertFeedEntryComposition(source: {
       "Shared shell components must receive that Doctor config",
     ).toBe(config!.name.getText(frame));
   }
+}
+
+export function assertRecordFormComposition(source: string) {
+  const file = parse("direction-adjacency-form.tsx", source);
+  const names = new Map(
+    [
+      ["@ds/design-system/blocks", "FormSection"],
+      ["@ds/design-system/blocks", "FormFieldGroup"],
+      ["@ds/design-system/blocks", "FormActions"],
+      ...[
+        "Form",
+        "FormField",
+        "FormItem",
+        "FormLabel",
+        "FormControl",
+        "FormMessage",
+      ].map((name) => ["@ds/design-system/form", name]),
+    ].map(([module, name]) => [name!, imported(file, module!, name!)]),
+  );
+  const mounted = component(file, "DirectionAdjacencyForm");
+  const localNames: string[] = [];
+  function locals(node: ts.Node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name))
+      localNames.push(node.name.text);
+    ts.forEachChild(node, locals);
+  }
+  locals(mounted.declaration.body!);
+  expect(
+    localNames.filter((name) => [...names.values()].includes(name)),
+  ).toEqual([]);
+  expect(mounted.root.openingElement.tagName.getText(file)).toBe(
+    names.get("Form"),
+  );
+  const uses: string[] = [];
+  function jsx(node: ts.Node) {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node))
+      uses.push(node.tagName.getText(file));
+    ts.forEachChild(node, jsx);
+  }
+  jsx(mounted.root);
+  for (const name of names.values()) expect(uses).toContain(name);
+  expect(uses.filter((name) => name === names.get("FormSection"))).toHaveLength(
+    2,
+  );
+  expect(uses.filter((name) => name === "form")).toHaveLength(1);
+  expect(
+    uses.filter((name) => name === "fieldset" || name === "legend"),
+  ).toEqual([]);
+  const form = mounted.root.children.find(ts.isJsxElement)!;
+  expect(form.openingElement.tagName.getText(file)).toBe("form");
+  expect(
+    form.children
+      .filter(ts.isJsxElement)
+      .map((node) => node.openingElement.tagName.getText(file)),
+  ).toEqual([
+    names.get("FormSection"),
+    names.get("FormSection"),
+    names.get("FormActions"),
+  ]);
 }
 
 export function verifyFeedEntryProvenance() {

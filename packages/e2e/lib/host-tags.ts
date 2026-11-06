@@ -183,6 +183,16 @@ export const publicReadonlyPattern = patternFor(
   publicReadonlyOriginals.map(({ title }) => title),
 );
 
+export const publicSpecialtyMemoryTitles = [
+  "The home collapses the catalog to the remembered specialty",
+  "Re-choosing opens the newly chosen specialty's feed without a save step",
+  "The link surface is named after the link",
+] as const;
+
+export const publicSpecialtyMemoryPattern = patternFor(
+  publicSpecialtyMemoryTitles,
+);
+
 export function publicReadonlyPatternFor(host: StorefrontHostId) {
   return patternFor(
     publicReadonlyOriginals

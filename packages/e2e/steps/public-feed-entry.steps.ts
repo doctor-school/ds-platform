@@ -1,9 +1,12 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page, type BrowserContext } from "@playwright/test";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { Given, When, Then, After } from "./support/fixtures.js";
 import { chooseGuestSpecialty } from "../lib/specialty-choice.js";
 import { waitForClientReady } from "../lib/page-ready.js";
+import { signInAsAdmin } from "../admin/sign-in.js";
+import { createReadonlyOperator } from "../lib/public-readonly-fixture.js";
+import { publicSpecialtyMemoryTitles } from "../lib/host-tags.js";
 import {
   feedEntryLog,
   feedEntryRoot,
@@ -15,7 +18,16 @@ import {
 type Specialty = { id: string; code: string; name: string; isOther: boolean };
 const state = new WeakMap<
   Page,
-  { book: Specialty[]; chosen?: Specialty; commands: string[] }
+  {
+    book: Specialty[];
+    chosen?: Specialty;
+    commands: string[];
+    backgrounds: string[];
+    rechoiceStart?: number;
+    operator?: Awaited<ReturnType<typeof createReadonlyOperator>>;
+    adminContext?: BrowserContext;
+    admin?: Page;
+  }
 >();
 function entry(page: Page) {
   const value = state.get(page);
@@ -46,7 +58,7 @@ Given(
   async ({ page, host, world }) => {
     expect(host.id).toBe("doctor");
     verifyOwnedFeedEntryListeners();
-    state.set(page, { book: [], commands: [] });
+    state.set(page, { book: [], commands: [], backgrounds: [] });
     page.on("request", (request) => {
       if (
         new URL(request.url()).pathname === "/v1/public/specialty-choice" &&
@@ -67,6 +79,7 @@ Given(
     await expect(page.getByTestId("shell-nav-desktop")).toBeVisible();
     await expect(page.getByTestId("storefront-footer")).toBeVisible();
     verifyFeedEntryProvenance();
+    entry(page).backgrounds.push("storefront and shared design system");
   },
 );
 
@@ -92,6 +105,7 @@ Given(
       book.entries.filter((row) => row.isOther).map((row) => row.name),
     ).toEqual(["Другое"]);
     entry(page).book = book.entries;
+    entry(page).backgrounds.push("closed Ministry book plus Other");
   },
 );
 
@@ -103,6 +117,7 @@ Given(
     );
     expect(specialty).toBeDefined();
     await verifyManagedFeedEntryAdjacency(specialty!.id);
+    entry(page).backgrounds.push("managed links and adjacency");
   },
 );
 
@@ -122,6 +137,7 @@ Given(
         (cookie) => cookie.name === "__Host-ds_session",
       ),
     ).toBe(false);
+    entry(page).backgrounds.push("anonymous readable home");
   },
 );
 
@@ -138,6 +154,7 @@ Given(
     await expect(
       page.getByRole("button", { name: /корзина|купить|подписка|оплатить/i }),
     ).toHaveCount(0);
+    entry(page).backgrounds.push("no financing or commerce");
   },
 );
 
@@ -156,6 +173,7 @@ Given(
     expect(boxes.every(Boolean)).toBe(true);
     expect(boxes[0]!.y).toBeLessThan(boxes[1]!.y);
     expect(boxes[1]!.y).toBeLessThan(boxes[2]!.y);
+    entry(page).backgrounds.push("vendored composition and shell provenance");
   },
 );
 
@@ -170,23 +188,46 @@ Given(
   },
 );
 
-Given("a visitor with a remembered specialty", async ({ page, world }) => {
+async function rememberSpecialty(page: Page, home: string) {
   const chosen = entry(page).book.find(
     (row) => row.name === "Травматология и ортопедия",
   );
   expect(chosen).toBeDefined();
   entry(page).chosen = chosen!;
-  expect(
-    await chooseGuestSpecialty(page, world.hostBaseUrl, chosen!.name),
-  ).toBe(chosen!.code);
+  expect(await chooseGuestSpecialty(page, home, chosen!.name)).toBe(
+    chosen!.code,
+  );
   await page.reload();
   expect(await remembered(page)).toEqual({
     specialty: chosen,
     storedIn: "session",
   });
+}
+
+Given("a visitor with a remembered specialty", async ({ page, world }) => {
+  await rememberSpecialty(page, world.hostBaseUrl);
 });
 
-When("they choose a specialty in the catalog", async ({ page }) => {
+Given(
+  "a visitor with a remembered specialty and the catalog re-opened",
+  async ({ page, world }) => {
+    await rememberSpecialty(page, world.hostBaseUrl);
+    await waitForClientReady(page);
+    await page.getByTestId("specialty-change").click();
+    await expect(page.getByTestId("specialty-catalog")).toHaveAttribute(
+      "data-state",
+      "open",
+    );
+    await expect(page.getByTestId("specialty-search")).toBeVisible();
+    await expect(page.getByTestId("specialty-entries")).toBeVisible();
+    entry(page).rechoiceStart = entry(page).commands.length;
+    await expect(page.getByRole("button", { name: /сохранить/i })).toHaveCount(
+      0,
+    );
+  },
+);
+
+async function chooseCatalogSpecialty(page: Page) {
   await waitForClientReady(page);
   const chosen = entry(page).book.find((row) => row.name === "Кардиология");
   expect(chosen).toBeDefined();
@@ -207,6 +248,16 @@ When("they choose a specialty in the catalog", async ({ page }) => {
     specialty: chosen,
     storedIn: "session",
   });
+}
+
+When("they choose a specialty in the catalog", async ({ page }) => {
+  await chooseCatalogSpecialty(page);
+});
+
+When("they choose a different specialty", async ({ page }) => {
+  const previous = entry(page).chosen!;
+  await chooseCatalogSpecialty(page);
+  expect(entry(page).chosen!.id).not.toBe(previous.id);
 });
 
 When("they activate «Моя лента» in the header navigation", async ({ page }) => {
@@ -219,7 +270,7 @@ When("they activate «Моя лента» in the header navigation", async ({ pa
 });
 
 Then(
-  /^the shell lands on that specialty's "\/feed\/<code>" showing the data-surface "specialty-feed" marker$/,
+  /^the shell lands on (?:that|the new) specialty's "\/feed\/<code>" showing the data-surface "specialty-feed" marker$/,
   async ({ page }) => {
     const chosen = entry(page).chosen!;
     await expect(page).toHaveURL(new RegExp(`/feed/${chosen.code}$`));
@@ -243,7 +294,7 @@ Then(
   },
 );
 
-Then("the choice is remembered", async ({ page }) => {
+Then(/^the (?:new )?choice is remembered$/, async ({ page }) => {
   await page.reload();
   expect(await remembered(page)).toEqual({
     specialty: entry(page).chosen,
@@ -257,6 +308,69 @@ Then("the choice is remembered", async ({ page }) => {
     }),
   ).toBeVisible();
 });
+
+Then(
+  "the catalog renders collapsed to a single row naming that specialty with a «сменить» control",
+  async ({ page }) => {
+    const catalog = page.getByTestId("specialty-catalog");
+    await expect(catalog).toHaveAttribute("data-state", "chosen");
+    await expect(catalog.getByTestId("specialty-chosen")).toHaveCount(1);
+    await expect(catalog.getByTestId("specialty-chosen")).toHaveText(
+      entry(page).chosen!.name,
+    );
+    await expect(catalog.getByTestId("specialty-change")).toHaveAccessibleName(
+      "сменить",
+    );
+    await expect(catalog.getByTestId("specialty-change")).toBeVisible();
+    for (const id of [
+      "specialty-search",
+      "specialty-entries",
+      "specialty-entry",
+      "specialty-expand",
+    ])
+      await expect(catalog.getByTestId(id)).toHaveCount(0);
+  },
+);
+
+Then("no separate save action was required", async ({ page }) => {
+  expect(entry(page).commands.length - entry(page).rechoiceStart!).toBe(1);
+  await expect(page.getByRole("button", { name: /сохранить/i })).toHaveCount(0);
+  expect((await remembered(page)).specialty).toEqual(entry(page).chosen);
+});
+
+When("an operator opens the admin navigation", async ({ page, browser }) => {
+  const value = entry(page);
+  expect(value.backgrounds).toHaveLength(6);
+  value.operator = await createReadonlyOperator(3789);
+  value.adminContext = await browser.newContext({
+    baseURL: process.env.E2E_ADMIN_URL!,
+    locale: "ru-RU",
+    viewport: { width: 1440, height: 1000 },
+  });
+  value.admin = await value.adminContext.newPage();
+  await signInAsAdmin(value.admin, value.operator.credentials);
+});
+
+Then(
+  "the entry for the specialty link surface reads «Связи специальностей»",
+  async ({ page }) => {
+    const admin = entry(page).admin!;
+    const link = admin.getByTestId("nav-direction-specialties");
+    await expect(link).toHaveCount(1);
+    await expect(link).toHaveText("Связи специальностей");
+    await expect(link).toHaveAccessibleName("Связи специальностей");
+    await expect(link).toHaveAttribute("href", "/direction-specialties");
+    await link.click();
+    await expect(admin).toHaveURL(/\/direction-specialties$/);
+    await expect(
+      admin.getByRole("heading", {
+        level: 1,
+        name: "Направления и специальности",
+        exact: true,
+      }),
+    ).toBeVisible();
+  },
+);
 
 Then(
   /^the shell lands on "\/#specialties" showing the open specialty catalog in view$/,
@@ -273,8 +387,9 @@ Then(
   },
 );
 
-After("@public-feed-entry", async ({ page, $testInfo }) => {
+After(async ({ page, $testInfo }) => {
   const value = state.get(page);
+  if (!value) return;
   feedEntryLog({
     command:
       "owned public preference proof complete; cookie is the only guest preference store",
@@ -288,7 +403,24 @@ After("@public-feed-entry", async ({ page, $testInfo }) => {
       chosen: value?.chosen,
       idempotencyKeys: value?.commands,
       url: page.url(),
+      backgrounds: value.backgrounds,
     }),
     contentType: "application/json",
   });
+  try {
+    if (
+      publicSpecialtyMemoryTitles.some(
+        (title) =>
+          $testInfo.title === title || $testInfo.title.startsWith(title + " @"),
+      )
+    )
+      expect(value.backgrounds).toHaveLength(6);
+  } finally {
+    try {
+      await value.adminContext?.close();
+    } finally {
+      await value.operator?.cleanup();
+      state.delete(page);
+    }
+  }
 });

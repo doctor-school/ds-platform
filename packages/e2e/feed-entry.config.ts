@@ -13,10 +13,12 @@ import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
 import {
   publicFeedStatePattern,
   publicReadonlyPatternFor,
+  publicSpecialtyMemoryPattern,
 } from "./lib/host-tags.js";
 
 const states = process.env.E2E_PUBLIC_FEED_STATES === "1";
 const readonly = process.env.E2E_PUBLIC_READONLY === "1";
+const memory = process.env.E2E_PUBLIC_SPECIALTY_MEMORY === "1";
 const task = feedEntryTask();
 
 const testDir = defineBddConfig({
@@ -25,9 +27,14 @@ const testDir = defineBddConfig({
     : "../../apps/docs/content/specs/features/017-doctor-shell-specialties/017-scenarios.feature",
   featuresRoot: "../../apps/docs/content/specs/features",
   steps: ["steps/**/*.ts"],
-  outputDir: states ? ".features-gen/feed-states" : ".features-gen/feed-entry",
-  tags: states ? "@host:doctor" : "@host:doctor and @public-feed-entry",
-  missingSteps: states ? "skip-scenario" : "fail-on-gen",
+  outputDir: memory
+    ? ".features-gen/specialty-memory"
+    : states
+      ? ".features-gen/feed-states"
+      : ".features-gen/feed-entry",
+  tags:
+    states || memory ? "@host:doctor" : "@host:doctor and @public-feed-entry",
+  missingSteps: states || memory ? "skip-scenario" : "fail-on-gen",
 });
 const api = process.env.E2E_API_URL;
 const doctor = process.env.E2E_DOCTOR_URL;
@@ -43,6 +50,8 @@ if (boot && (!api || !doctor))
   );
 if (boot && readonly && (!academy || !admin))
   throw new Error("Read-only originals require owned Academy and Admin URLs");
+if (boot && memory && !admin)
+  throw new Error("Specialty memory originals require an owned Admin URL");
 if (boot && process.env.REDIS_URL)
   throw new Error(
     "Feed-entry proof uses the API's isolated in-memory stores; unset REDIS_URL",
@@ -78,6 +87,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   ...(states ? { grep: publicFeedStatePattern } : {}),
+  ...(memory ? { grep: publicSpecialtyMemoryPattern } : {}),
   timeout: 120_000,
   expect: { timeout: 20_000 },
   reporter: reportersFor({
@@ -153,8 +163,11 @@ export default defineConfig({
               ACADEMY_PUBLIC_ORIGIN: readonly ? academy! : doctor!,
             },
           },
-          ...(readonly
-            ? (["portal", "admin"] as const).map((app) => {
+          ...(readonly || memory
+            ? (readonly
+                ? (["portal", "admin"] as const)
+                : (["admin"] as const)
+              ).map((app) => {
                 const url = app === "portal" ? academy! : admin!;
                 const appNext = createRequire(
                   resolve(feedEntryRoot, `apps/${app}/package.json`),

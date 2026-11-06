@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs";
-import { publicFeedStateTitles } from "./host-tags.js";
+import {
+  publicFeedStateTitles,
+  publicSpecialtyMemoryTitles,
+} from "./host-tags.js";
 import { assertPublicReadonlyReport } from "./public-readonly-originals.js";
 import {
   assertOperationalReport,
@@ -11,9 +14,11 @@ if (process.env.E2E_PUBLIC_READONLY === "1") assertPublicReadonlyReport(report);
 else
   assertOperationalReport(
     report,
-    process.env.E2E_PUBLIC_FEED_STATES === "1"
-      ? publicFeedStateTitles
-      : operationalOriginals.feedEntry,
+    process.env.E2E_PUBLIC_SPECIALTY_MEMORY === "1"
+      ? publicSpecialtyMemoryTitles
+      : process.env.E2E_PUBLIC_FEED_STATES === "1"
+        ? publicFeedStateTitles
+        : operationalOriginals.feedEntry,
     "doctor",
   );
 console.log(

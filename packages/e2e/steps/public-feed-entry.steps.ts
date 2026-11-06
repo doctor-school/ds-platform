@@ -40,7 +40,7 @@ const state = new WeakMap<
     chosenKind?: string;
   }
 >();
-function entry(page: Page) {
+export function entry(page: Page) {
   const value = state.get(page);
   if (!value) throw new Error("017 feed-entry Background did not run");
   return value;

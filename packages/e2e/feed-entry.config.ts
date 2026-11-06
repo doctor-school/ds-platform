@@ -12,6 +12,7 @@ import {
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
 import {
   publicFeedStatePattern,
+  publicBookFieldPattern,
   publicReadonlyPatternFor,
   publicRecordFormPattern,
   publicSpecialtyMemoryPattern,
@@ -21,6 +22,7 @@ const states = process.env.E2E_PUBLIC_FEED_STATES === "1";
 const readonly = process.env.E2E_PUBLIC_READONLY === "1";
 const memory = process.env.E2E_PUBLIC_SPECIALTY_MEMORY === "1";
 const records = process.env.E2E_PUBLIC_RECORD_FORMS === "1";
+const fields = process.env.E2E_PUBLIC_BOOK_FIELDS === "1";
 const task = feedEntryTask();
 
 const testDir = defineBddConfig({
@@ -29,18 +31,21 @@ const testDir = defineBddConfig({
     : "../../apps/docs/content/specs/features/017-doctor-shell-specialties/017-scenarios.feature",
   featuresRoot: "../../apps/docs/content/specs/features",
   steps: ["steps/**/*.ts"],
-  outputDir: records
-    ? ".features-gen/record-forms"
-    : memory
-      ? ".features-gen/specialty-memory"
-      : states
-        ? ".features-gen/feed-states"
-        : ".features-gen/feed-entry",
+  outputDir: fields
+    ? ".features-gen/book-fields"
+    : records
+      ? ".features-gen/record-forms"
+      : memory
+        ? ".features-gen/specialty-memory"
+        : states
+          ? ".features-gen/feed-states"
+          : ".features-gen/feed-entry",
   tags:
-    states || memory || records
+    states || memory || records || fields
       ? "@host:doctor"
       : "@host:doctor and @public-feed-entry",
-  missingSteps: states || memory || records ? "skip-scenario" : "fail-on-gen",
+  missingSteps:
+    states || memory || records || fields ? "skip-scenario" : "fail-on-gen",
 });
 const api = process.env.E2E_API_URL;
 const doctor = process.env.E2E_DOCTOR_URL;
@@ -56,7 +61,7 @@ if (boot && (!api || !doctor))
   );
 if (boot && readonly && (!academy || !admin))
   throw new Error("Read-only originals require owned Academy and Admin URLs");
-if (boot && (memory || records) && !admin)
+if (boot && (memory || records || fields) && !admin)
   throw new Error(
     "Specialty memory and record originals require an owned Admin URL",
   );
@@ -97,6 +102,7 @@ export default defineConfig({
   ...(states ? { grep: publicFeedStatePattern } : {}),
   ...(memory ? { grep: publicSpecialtyMemoryPattern } : {}),
   ...(records ? { grep: publicRecordFormPattern } : {}),
+  ...(fields ? { grep: publicBookFieldPattern } : {}),
   timeout: 120_000,
   expect: { timeout: 20_000 },
   reporter: reportersFor({
@@ -172,7 +178,7 @@ export default defineConfig({
               ACADEMY_PUBLIC_ORIGIN: readonly ? academy! : doctor!,
             },
           },
-          ...(readonly || memory || records
+          ...(readonly || memory || records || fields
             ? (readonly
                 ? (["portal", "admin"] as const)
                 : (["admin"] as const)

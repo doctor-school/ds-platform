@@ -214,3 +214,48 @@ post-merge cleanup. Log every stand/SQL/process/port operation; preserve failed
 reports and snapshots. App-local layout, lifecycle, API rejection and Field
 primitive tests retain their distinct boundaries. No product visual changes or
 owner Stage-B stand are introduced.
+
+## Hidden fields, derived address and status readability — 017 EARS-18
+
+`E2E_PUBLIC_BOOK_FIELDS=1` selects exactly three original templates at 017:423,
+436 and 443. The Outline at 423 executes every Examples row: list (431), record
+(432), and create form (433). This is **five actual cases**, each with all six
+real Doctor Background groups, for thirty completed groups. CI retains the
+previous fifteen cases and adds task 3804, making twenty actual cases overall.
+The canonical feature bytes, host, prose, steps and Examples stay unchanged.
+
+Use the same generation, execution and strict-report commands with the dedicated
+`ds_dev_3804` or job-owned `ds_probe_3804`, compiled API/Doctor/Admin, and the
+existing development operator fixture. All three surfaces inspect real direction,
+adjacency and specialty-link content; guarded reads establish persisted slug,
+internal weight and relation identity. Browser assertions exclude visible fields,
+columns and derived-address notes. JSX and value-import provenance supplement
+the actual DOM checks; technical hrefs and IDs are not operator fields.
+
+The address case creates a unique Russian title through the real UI, checks an
+independently spelled transliteration, publishes through the UI, renames through
+the UI, reloads and compares normal authenticated GET and exact database reads.
+Slug and first-publication instant must survive the rename. Status fixtures use
+normal authenticated browser-origin authoring and lifecycle commands, including
+the direction's impact preview. All seven family/status combinations run in both themes,
+before and during real row hover. Computed colors must resolve to the semantic
+foreground/background pair, maintain AA normal-text contrast, and remain distinct
+from the hovered row ground. No color-equality constraint between interaction
+states substitutes for that readability contract.
+
+The receipt identifies each case by the entire generated-file/Feature/Rule path,
+the Outline parent where applicable, and its leaf. Runtime BDD source row and
+expanded surface must match the canonical row attachment; a bare `Example #1`
+cannot identify a case. It requires five unique passes, thirty typed Background
+groups, and zero failures, skipped, retries, flaky results or runner errors.
+Ordinary runs exclude these exact dedicated-resource cases.
+
+For every local execution derive both `E2E_FEED_ENTRY_ARTIFACT_DIR` and
+`E2E_REPORT_DIR` from one unique head/run root. Refuse an existing root or report
+before launch, record the chosen paths and head, and preserve every failed and
+successful JSON/log/trace. Generation/listing use separate destinations and are
+never execution proof. CI similarly reserves a head/run/attempt/task directory.
+Clean only exact created records and IdP actors with absence readbacks, including
+failures; retain the task DB, mirrors, snapshots and private DB receipt for the
+lead's post-merge cleanup. App-local lifecycle, hidden-field and primitive/API
+tests retain their distinct boundaries; none are deleted by this contour.

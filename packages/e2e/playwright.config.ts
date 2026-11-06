@@ -7,6 +7,7 @@ import { authLimitTagsFor } from "./lib/default-auth-limits.js";
 import {
   ordinaryStorefrontTagsFor,
   publicFeedStatePattern,
+  publicBookFieldPattern,
   publicReadonlyPattern,
   publicRecordFormPattern,
   publicSpecialtyMemoryPattern,
@@ -166,7 +167,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   ...(grep ? { grep } : {}),
   grepInvert: new RegExp(
-    `${publicFeedStatePattern.source}|${publicReadonlyPattern.source}|${publicSpecialtyMemoryPattern.source}|${publicRecordFormPattern.source}`,
+    `${publicFeedStatePattern.source}|${publicReadonlyPattern.source}|${publicSpecialtyMemoryPattern.source}|${publicRecordFormPattern.source}|${publicBookFieldPattern.source}`,
   ),
   retries: 0,
   timeout: 120_000,

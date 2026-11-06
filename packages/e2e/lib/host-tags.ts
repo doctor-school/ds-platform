@@ -201,6 +201,16 @@ export const publicRecordFormTitles = [
 
 export const publicRecordFormPattern = patternFor(publicRecordFormTitles);
 
+export const publicBookFieldTitles = [
+  "Derived and internal fields never reach the operator interface",
+  "The page address is derived on create and frozen on first publish",
+  "Status chips stay readable over the row hover state",
+] as const;
+
+export const publicBookFieldPattern = new RegExp(
+  `(?:${patternFor(publicBookFieldTitles.slice(1)).source})|(?:^|\\s)${publicBookFieldTitles[0]} Example #[123](?: @[^ ]+)*$`,
+);
+
 export function publicReadonlyPatternFor(host: StorefrontHostId) {
   return patternFor(
     publicReadonlyOriginals

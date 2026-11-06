@@ -36,7 +36,7 @@ it("EARS-18: the dedicated runner selects the three on Doctor and CI preserves a
     ),
   );
   expect(workflow.jobs["public-feed-entry"].strategy.matrix.task).toEqual([
-    3751, 3772, 3785, 3789, 3797,
+    3751, 3772, 3785, 3789, 3797, 3804,
   ]);
 });
 

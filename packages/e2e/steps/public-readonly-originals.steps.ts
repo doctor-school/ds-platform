@@ -103,6 +103,7 @@ async function calendarCard(
   format: "online" | "offline",
   day: string,
   time: string,
+  zone: string,
 ) {
   const event = state(page).calendar!.events.find(
     (item) => item.format === format,
@@ -112,7 +113,8 @@ async function calendarCard(
     .locator("[data-webinar-card]")
     .filter({ has: page.locator(`a[href$="/${event.slug}"]`) });
   await expect(card).toHaveCount(1);
-  await expect(card).toContainText(time);
+  await expect(card.getByText(time, { exact: true })).toBeVisible();
+  await expect(card.getByText(zone, { exact: true })).toBeVisible();
   const group = card.locator("xpath=ancestor::section[1]");
   await expect(group.locator("[data-event-list-group-header]")).toContainText(
     day,
@@ -125,13 +127,13 @@ async function calendarCard(
 Then(
   'the online event is grouped under 14 October and reads "23:00 GMT+1"',
   async ({ page }) => {
-    await calendarCard(page, "online", "14 октября", "23:00 GMT+1");
+    await calendarCard(page, "online", "14 октября", "23:00", "GMT+1");
   },
 );
 Then(
   'the offline event is grouped under 15 October and reads "01:00 МСК"',
   async ({ page }) => {
-    await calendarCard(page, "offline", "15 октября", "01:00 МСК");
+    await calendarCard(page, "offline", "15 октября", "01:00", "МСК");
   },
 );
 

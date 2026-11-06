@@ -79,6 +79,7 @@ test("3157: the local plan is the operator plan minus the pre-flight, the releas
     "previous-sha",
     "ship",
     "install",
+    "rehearse",
     "data-prod-env",
     "data-prod-up",
     "backup",
@@ -299,6 +300,7 @@ test("3157: --local takes only --images-file, and no operator flag", () => {
     ["--skip-ci-check"],
     ["--allow-live-broadcast"],
     ["--release-gate-exempt", "x"],
+    ["--skip-rehearsal", "x"],
     ["--postgres-artifacts", "c.json"],
     ["--retry-failed"],
   ]) {
@@ -622,6 +624,7 @@ test(
 import {
   DATA_READ_VERBS,
   DATA_VERBS,
+  RELEASE_GATE_VERBS,
   createDataProdClient,
   dataVerbCommand,
   servesDataVerbs,
@@ -861,6 +864,20 @@ test("3646: the release probe does not require the read verbs, so a box from bef
   assert.equal(servesDataVerbs(JSON.stringify({ role: "data", verbs: DATA_VERBS })), true);
 });
 
+test("3648: the release gate reaches the rehearsal verbs it calls; the capabilities probe still does not require them", async () => {
+  assert.deepEqual([...RELEASE_GATE_VERBS], ["rehearse", "rehearsal-status"]);
+  for (const verb of RELEASE_GATE_VERBS) assert.ok(DATA_READ_VERBS.includes(verb), verb);
+  assert.equal(dataVerbCommand(`rehearse ${SHA_3313}`, "forced"), `rehearse ${SHA_3313}`);
+  assert.equal(
+    dataVerbCommand(`rehearsal-status ${SHA_3313}`, "sudo"),
+    `sudo -n env SSH_ORIGINAL_COMMAND='rehearsal-status ${SHA_3313}' /usr/local/bin/ds-deploy-entrypoint`,
+  );
+  // rehearse-restore stays a read-path verb only: the release never measures the headroom.
+  assert.throws(() => dataVerbCommand(`rehearse-restore ${SHA_3313}`, "forced"), /serves no rehearse-restore verb/);
+  assert.throws(() => dataVerbCommand("read-schema", "forced"), /serves no read-schema verb/);
+  assert.equal(servesDataVerbs(JSON.stringify({ role: "data", verbs: DATA_VERBS })), true);
+});
+
 test("3313: prod.mjs reaches ds-data-prod only through its verbs — no script, no shell form", () => {
   const source = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
   assert.doesNotMatch(source, /(sshScript|sshCapture|boxStep)\(\s*DATA_PROD\b/);
@@ -934,7 +951,7 @@ test("3354: a redeploy skips what a rollback skips: no box tooling install, no d
   // that rule: it ships no data-prod tree and touches ds-data-prod not at all.
   assert.deepEqual(
     [...REDEPLOY_SKIPPED_STEPS],
-    ["postgres-verify", "install", "data-prod-env", "data-prod-up", "backup"],
+    ["postgres-verify", "install", "rehearse", "data-prod-env", "data-prod-up", "backup"],
   );
   const redeploy = deployPlan({ local: true, redeploy: true });
   assert.deepEqual(
@@ -1154,4 +1171,48 @@ test("3439: die() writes the note to the driver's file, the smoke hands its fail
   assert.match(smoke.slice(0, 2000), /smokeFailureReason\(code, /);
   const smokeSrc = readFileSync(new URL("./smoke-prod.mjs", import.meta.url), "utf8");
   assert.match(smokeSrc, /process\.env\.DS_SMOKE_FAILED_FILE/);
+});
+
+test("3648: the rehearsal runs after install and its converges, before the first data-prod state change and migrate", () => {
+  const at = (id) => DEPLOY_PLAN.indexOf(id);
+  assert.equal(at("rehearse"), at("install") + 1);
+  assert.equal(at("data-prod-env"), at("rehearse") + 1);
+  for (const later of ["data-prod-up", "backup", "migrate"]) assert.ok(at(later) > at("rehearse"), later);
+  for (const plan of [deployPlan(), deployPlan({ local: true })]) assert.ok(plan.includes("rehearse"));
+  assert.ok(!deployPlan({ local: true, redeploy: true }).includes("rehearse"), "a redeploy rehearses nothing");
+  // A rollback walks no plan: rollback() applies no migration and runs no gate.
+  const src = readFileSync(new URL("./prod.mjs", import.meta.url), "utf8");
+  const rollback = src.slice(src.indexOf("async function rollback("), src.indexOf("// --- entry"));
+  assert.doesNotMatch(rollback, /runRehearsalGate|rehearsal-status|"rehearse"/);
+});
+
+test("3648: the rehearse phase: after the converges, the target tree's archive through the hop, a fixed failure note", () => {
+  const install = deployBody.indexOf('walk.releasePhase("install")');
+  const phase = deployBody.indexOf('walk.releasePhase("rehearse")');
+  const dataEnv = deployBody.indexOf('walk.releasePhase("data-prod-env")');
+  assert.ok(install < phase && phase < dataEnv);
+  assert.ok(deployBody.indexOf("dataProd().converge(sha)") < phase, "after the data-prod converge");
+  assert.ok(deployBody.indexOf("openReleaseSha = sha;") < phase, "a refusal closes the open release failed");
+  const body = deployBody.slice(phase, dataEnv);
+  assert.match(body, /parseSkipRehearsal\(process\.argv\)/);
+  assert.match(body, /SKIP_REHEARSAL_FLAG/);
+  assert.match(body, /this line is the audit record/);
+  assert.match(body, /runRehearsalGate\(\{/);
+  assert.match(body, /migrationArchive\(/);
+  assert.match(body, /dataProd\(\)\.call\(/);
+  assert.match(body, /die\(gate\.reason, \{ authored: true \}\)/);
+  // The failure note carries the verdict and nothing more.
+  assert.deepEqual(
+    releaseFailureNote("rehearse", "migration 0042_x failed (SQLSTATE 23505)", { authored: true }),
+    { phase: "rehearse", reason: "migration 0042_x failed (SQLSTATE 23505)" },
+  );
+});
+
+test("3648: --skip-rehearsal is validated at start-up and never reaches the Actions path", () => {
+  const src = readFileSync(new URL("./prod.mjs", import.meta.url), "utf8");
+  const main = src.slice(src.indexOf("async function main("));
+  assert.match(main, /parseSkipRehearsal\(process\.argv\)[\s\S]*?die\(skipUsage\.error\)/);
+  assert.ok(main.indexOf("parseSkipRehearsal") < main.indexOf("await deploy(refUsage.ref)"));
+  const workflow = readFileSync(new URL("../../.github/workflows/deploy-prod.yml", import.meta.url), "utf8");
+  assert.doesNotMatch(workflow, /skip[-_]rehearsal/);
 });

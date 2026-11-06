@@ -51,7 +51,7 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
   `live-broadcast-check.mjs`, `lib/registry.mjs`); `stage-suite` (set by
   `stage.yml`) replaces the operator's stage `main` check, as it does on the
   workstation path for a `main` target. `--skip-ci-check`,
-  `--release-gate-exempt`, `--allow-live-broadcast` and `--ref` exist only on
+  `--release-gate-exempt`, `--allow-live-broadcast`, `--skip-rehearsal` and `--ref` exist only on
   `pnpm deploy:prod` (break-glass); the rollback runs here in rollback mode
   (below), and `pnpm deploy:prod --rollback` stays its break-glass twin. The CI check drops the
   check-runs of `deploy-prod.yml` itself (an earlier failed attempt on the same
@@ -151,7 +151,8 @@ and reports the cause afterwards — runbook
   and follows the rollback's rule for box tooling and ds-data-prod (tech spec §5
   «Two trees» (a)): it **skips** `postgres-verify`, `install` (no `ds-release` /
   entrypoint / release-driver install, `installed-tree` stays the newest forward
-  release's, no ds-data-prod converge), `data-prod-env`, `data-prod-up` (so
+  release's, no ds-data-prod converge), `rehearse` (it applies no migration),
+  `data-prod-env`, `data-prod-up` (so
   neither the persistence plane nor GlitchTip is recreated), `backup`, the IdP converge and the migrate (`REDEPLOY_SKIPPED_STEPS` in
   `prod.mjs`), and ships the api-prod tree only. It **runs** the test-token
   refusal, the runtime-env check (#1468), the previous-SHA read, the runtime config backup, the api-prod ship,
@@ -236,8 +237,8 @@ gh workflow run deploy-prod.yml --ref main -f mode=rollback -f sha=<target sha> 
   serves the running ones, and says to put the running configs back from
   `/var/lib/ds-platform/runtime-config/previous/` before any restart.
 - **Break-glass stays on the workstation.** `pnpm deploy:prod --rollback`, the
-  hotfix `--ref`, `--skip-ci-check`, `--allow-live-broadcast` and
-  `--release-gate-exempt` are not on this path.
+  hotfix `--ref`, `--skip-ci-check`, `--allow-live-broadcast`,
+  `--release-gate-exempt` and `--skip-rehearsal` are not on this path.
 
 ## Break-glass: `pnpm deploy:prod`
 
@@ -258,6 +259,7 @@ pnpm deploy:prod --rollback <sha>   # app-only rollback to a prior SHA-tagged im
 pnpm deploy:prod --skip-ci-check    # escape hatch (loud warning)
 pnpm deploy:prod --allow-live-broadcast  # эфир-hold escape hatch (owner-approved urgent ship only)
 pnpm deploy:prod --release-gate-exempt "<reason>"  # release-gate + stage-gate escape hatch (reason mandatory, printed)
+pnpm deploy:prod --skip-rehearsal "<reason>"  # migration-rehearsal escape hatch (owner's explicit go only; reason mandatory, printed)
 ```
 
 Pipeline, fail-closed, stops at the first red step and prints a rollback pointer:
@@ -636,6 +638,28 @@ stay on the operator path above.
   The log shows `↻ ds-data-prod: converge <sha12>: …` then `✓ … converged`; a
   converged box prints `nothing to change`. The workstation path never converges. No owner
   server step is in the path.
+  **Migration rehearsal (#3648)** — phase `rehearse`, right after `install` and its
+  converges and before `data-prod-env`, in a release only (a redeploy and a rollback apply
+  no migration and rehearse nothing; tech spec §5 «Migration rehearsal.» → «Release gate.»).
+  `lib/rehearsal-gate.mjs` builds the target tree's migration archive (`drizzle/<tag>.sql`
+  and `drizzle/meta/_journal.json`, the shape `ds-read-entrypoint` sends — on the box from
+  the extracted tree, on the workstation from the SHA's blobs), sends it as the stdin of the
+  data verb `rehearse <sha>` and polls `rehearsal-status <sha>` every 10 s to a terminal
+  report, within the unit's 15-min cap. `no pending migrations` prints
+  `rehearsal: no pending migrations` and restores nothing; a `succeeded` report with
+  `restoreOnly: false` goes on. A `rehearse-restore` of the same SHA shares the unit and
+  the report path, so a restore-only report is never the gate's pass: the gate starts its
+  own rehearsal once, and a second restore-only report refuses `a rehearsal is running`.
+  Anything else fails the release in phase `rehearse`, before any data-prod state change,
+  with the failure note `migration <tag> failed (SQLSTATE <code>)` or one fixed reason
+  (`insufficient headroom (disk)`, `copy behind prod`, `the rehearsal did not finish`, …;
+  an unlisted one reads `the rehearsal could not run`) — never a message or a row value;
+  the report waits on the box. **On a refusal:** read the report with
+  `gh workflow run prod-observe.yml --ref main -f verb=rehearsal-status -f sha=<sha>` and
+  `pnpm prod:read <run-id>`, fix the migration on `main`, release the fixed SHA. Never
+  weaken the gate; `pnpm deploy:prod --skip-rehearsal "<reason>"` only on the owner's
+  explicit go (its `⚠ … (this line is the audit record)` line is the record; the Actions
+  path has no skip input).
 - **No downgrade.** The driver (before it starts the unit) and the run itself (right
   after its previous-SHA read) refuse a SHA that does not descend from the live prod SHA,
   the running `ds-api:<sha>` tag: GitHub `compare <live>...<sha>` must answer `ahead` or

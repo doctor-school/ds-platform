@@ -17,7 +17,8 @@
 #                          applied migration (read-only transaction), answers
 #                          `no pending migrations` (a report with "pending":0, nothing
 #                          restored) or checks the headroom and starts the durable unit
-#                          ds-rehearse-<sha12>; prints one JSON answer
+#                          ds-rehearse-<sha12>, which runs outside the lock; prints
+#                          one JSON answer
 #   start <sha> <archive> --restore-only
 #                          the data verb `rehearse-restore <sha>`: the same with the
 #                          pending list forced empty — no `no pending migrations`
@@ -57,7 +58,6 @@ if os.path.realpath(__file__) != INSTALLED:
 
 REHEARSAL_DIR = ROOT + "/var/lib/ds-platform/rehearsal"
 SCRATCH_DIR = REHEARSAL_DIR + "/scratch"
-LOCK = ROOT + "/run/ds-platform/ds-rehearsal.lock"
 COMPOSE = ROOT + "/home/deploy/ds-platform/infra/deploy/compose/data-prod"
 PGBACKREST_CONF = COMPOSE + "/pgbackrest/pgbackrest.conf"
 STATE_FILE = ROOT + "/home/deploy/ds-platform-postgres-state.json"
@@ -581,7 +581,10 @@ def cmd_start(sha, archive, restore_only=False):
         "--description=DS Platform migration rehearsal of " + sha12(sha),
         "-p", "RuntimeMaxSec=%d" % RUNTIME_MAX_SEC,
         "-p", "ExecStopPost=" + CLEANUP_BIN + " " + sha,
-        "--", "/usr/bin/flock", "-w", "60", LOCK, PYTHON_BIN, "-I", SELF_BIN, "run", sha,
+        # No lock in the unit: the entrypoint's lock serialises the starts, and the running
+        # unit itself excludes another (unit_active / other_unit_active above), so a same-SHA
+        # call answers `running` (spec «Durable unit.»).
+        "--", PYTHON_BIN, "-I", SELF_BIN, "run", sha,
     ], timeout=30)
     if done.returncode != 0:
         shutil.rmtree(base, ignore_errors=True)

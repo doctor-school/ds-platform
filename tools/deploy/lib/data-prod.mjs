@@ -39,9 +39,10 @@ export const DATA_VERBS = [
 /**
  * The data verbs of the prod read path (#3646; spec §5 «Data verbs of the read
  * path»): served on the data box beside DATA_VERBS (the entrypoint's DATA_VERBS is
- * both lists, pinned), reached by ds-read-entrypoint on ds-api-prod only. The release
- * never calls them, so its `capabilities` probe does not require them: a box whose
- * entrypoint predates them still takes the release that installs them.
+ * both lists, pinned), reached by ds-read-entrypoint on ds-api-prod — and, of them, the
+ * release calls only RELEASE_GATE_VERBS, after it installed them. Its `capabilities`
+ * probe does not require them: a box whose entrypoint predates them still takes the
+ * release that installs them.
  */
 export const DATA_READ_VERBS = [
   "read-schema",
@@ -58,6 +59,13 @@ export const DATA_READ_VERBS = [
   "recovery-latest",
 ];
 
+/**
+ * The read-path verbs the release itself calls: its `rehearse` phase (#3648; spec §5
+ * «Migration rehearsal.» → «Release gate.»). They run after this release's own install
+ * and converge of ds-data-prod, so the `capabilities` probe still does not require them.
+ */
+export const RELEASE_GATE_VERBS = Object.freeze(["rehearse", "rehearsal-status"]);
+
 // The entrypoint's own COMMAND_RE / COMMAND_MAX: what it admits as a request.
 const REQUEST_RE = /^[a-z0-9-]+( [a-z0-9-]+)*$/;
 const REQUEST_MAX = 200;
@@ -73,7 +81,7 @@ export function dataVerbCommand(request, form) {
     throw new Error(`not a data-prod request: ${JSON.stringify(request)}`);
   }
   const verb = request.split(" ")[0];
-  if (verb !== "status" && !DATA_VERBS.includes(verb)) {
+  if (verb !== "status" && !DATA_VERBS.includes(verb) && !RELEASE_GATE_VERBS.includes(verb)) {
     throw new Error(`ds-data-prod serves no ${verb} verb`);
   }
   if (form === "forced") return request;

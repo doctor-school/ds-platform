@@ -1355,7 +1355,7 @@ rehearse() {
   size=$(sudo stat -c %s -- "$rehearse_work/drizzle.tar.gz")
   ((size <= MAX_REHEARSE_BYTES)) || reject "the migration archive exceeds $MAX_REHEARSE_BYTES bytes"
   sudo install -d -m 0755 -o root -g root "$REHEARSAL_LOCK_DIR"
-  # One rehearsal at a time; the unit takes the same lock for its whole run.
+  # One start at a time; the running unit holds no lock, so a same-SHA start answers `running`.
   out=$(sudo flock -n -E "$REHEARSAL_BUSY" "$REHEARSAL_LOCK" \
     python3 -I "$REHEARSE_PY" start "$sha" "$rehearse_work/drizzle.tar.gz" ${mode:+"$mode"} </dev/null) || rc=$?
   rehearse_result "$rc" "$out"

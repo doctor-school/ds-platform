@@ -272,8 +272,8 @@ export const DEPLOY_PLAN = Object.freeze([
   "runtime-config-backup",
   "ship",
   "install",
-  "rehearse",
   "data-prod-env",
+  "rehearse",
   "data-prod-up",
   "backup",
   "pull",
@@ -307,8 +307,8 @@ export const OPERATOR_ONLY_STEPS = Object.freeze(["preflight", "release-cut", "d
 export const REDEPLOY_SKIPPED_STEPS = Object.freeze([
   "postgres-verify",
   "install",
-  "rehearse",
   "data-prod-env",
+  "rehearse",
   "data-prod-up",
   "backup",
 ]);
@@ -2440,11 +2440,25 @@ async function deploy(hotfixRef = null, local = null) {
   openReleaseSha = sha;
   openReleaseHosts = redeploy ? [API_PROD] : [API_PROD, DATA_PROD];
 
+  // The compose interpolation files live INSIDE the shipped tree, which every ship
+  // replaces — so they are rewritten on every run, outside the durable unit: a
+  // re-run whose `up` returns its recorded verdict still leaves them in place for
+  // the compose calls after it (#2982).
+  if (walk.releasePhase("data-prod-env")) {
+    step("data-prod: bring up persistence plane (idempotent)");
+    t = Date.now();
+    await postgres.run(({ live }) =>
+      dataProd().call(["data-env"], { input: dataProdEnvPayload(live) }),
+    );
+  }
+
   // #3648: the pending migrations of this tree run first on a throw-away restore of prod
   // on ds-data-prod (spec §5 «Migration rehearsal.» → «Release gate.»), so a breaking
-  // migration refuses here, before any data-prod state change and the migrate.
+  // migration refuses here, before any container starts, the backup and the migrate.
+  // #3819: after data-prod-env — `ship` replaced the live tree and its compose env, and
+  // the gate's live read is a `docker compose exec` in that tree.
   if (walk.releasePhase("rehearse")) {
-    step("#3648: rehearse the pending migrations on a restored copy (BEFORE any data-prod change)");
+    step("#3648: rehearse the pending migrations on a restored copy (BEFORE data-prod up, backup and migrate)");
     t = Date.now();
     const skip = parseSkipRehearsal(process.argv);
     if (skip.error) die(skip.error); // already caught at start-up; belt-and-braces
@@ -2465,17 +2479,6 @@ async function deploy(hotfixRef = null, local = null) {
     }
   }
 
-  // The compose interpolation files live INSIDE the shipped tree, which every ship
-  // replaces — so they are rewritten on every run, outside the durable unit: a
-  // re-run whose `up` returns its recorded verdict still leaves them in place for
-  // the compose calls after it (#2982).
-  if (walk.releasePhase("data-prod-env")) {
-    step("data-prod: bring up persistence plane (idempotent)");
-    t = Date.now();
-    await postgres.run(({ live }) =>
-      dataProd().call(["data-env"], { input: dataProdEnvPayload(live) }),
-    );
-  }
   if (walk.releasePhase("data-prod-up")) {
     await postgres.run(() => dataProdStep(sha, "up", "data-prod up"));
     // #3395: the checkpoint verb also answers one `log bound:` line per data-prod

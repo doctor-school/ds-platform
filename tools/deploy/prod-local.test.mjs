@@ -951,7 +951,7 @@ test("3354: a redeploy skips what a rollback skips: no box tooling install, no d
   // that rule: it ships no data-prod tree and touches ds-data-prod not at all.
   assert.deepEqual(
     [...REDEPLOY_SKIPPED_STEPS],
-    ["postgres-verify", "install", "rehearse", "data-prod-env", "data-prod-up", "backup"],
+    ["postgres-verify", "install", "data-prod-env", "rehearse", "data-prod-up", "backup"],
   );
   const redeploy = deployPlan({ local: true, redeploy: true });
   assert.deepEqual(
@@ -1173,10 +1173,13 @@ test("3439: die() writes the note to the driver's file, the smoke hands its fail
   assert.match(smokeSrc, /process\.env\.DS_SMOKE_FAILED_FILE/);
 });
 
-test("3648: the rehearsal runs after install and its converges, before the first data-prod state change and migrate", () => {
+test("3819: the rehearsal runs after install, its converges and data-prod-env, before data-prod-up, backup and migrate", () => {
   const at = (id) => DEPLOY_PLAN.indexOf(id);
-  assert.equal(at("rehearse"), at("install") + 1);
-  assert.equal(at("data-prod-env"), at("rehearse") + 1);
+  // `ship` replaces the data-prod live tree and drops its compose env; only `data-prod-env`
+  // writes it again, and the gate's live read is a `docker compose exec` in that tree.
+  assert.equal(at("data-prod-env"), at("install") + 1);
+  assert.equal(at("rehearse"), at("data-prod-env") + 1);
+  assert.equal(at("data-prod-up"), at("rehearse") + 1);
   for (const later of ["data-prod-up", "backup", "migrate"]) assert.ok(at(later) > at("rehearse"), later);
   for (const plan of [deployPlan(), deployPlan({ local: true })]) assert.ok(plan.includes("rehearse"));
   assert.ok(!deployPlan({ local: true, redeploy: true }).includes("rehearse"), "a redeploy rehearses nothing");
@@ -1186,14 +1189,15 @@ test("3648: the rehearsal runs after install and its converges, before the first
   assert.doesNotMatch(rollback, /runRehearsalGate|rehearsal-status|"rehearse"/);
 });
 
-test("3648: the rehearse phase: after the converges, the target tree's archive through the hop, a fixed failure note", () => {
+test("3648: the rehearse phase: after the converges and data-prod-env, the target tree's archive through the hop, a fixed failure note", () => {
   const install = deployBody.indexOf('walk.releasePhase("install")');
-  const phase = deployBody.indexOf('walk.releasePhase("rehearse")');
   const dataEnv = deployBody.indexOf('walk.releasePhase("data-prod-env")');
-  assert.ok(install < phase && phase < dataEnv);
+  const phase = deployBody.indexOf('walk.releasePhase("rehearse")');
+  const dataUp = deployBody.indexOf('walk.releasePhase("data-prod-up")');
+  assert.ok(install < dataEnv && dataEnv < phase && phase < dataUp, "#3819: after data-prod-env, before data-prod-up");
   assert.ok(deployBody.indexOf("dataProd().converge(sha)") < phase, "after the data-prod converge");
   assert.ok(deployBody.indexOf("openReleaseSha = sha;") < phase, "a refusal closes the open release failed");
-  const body = deployBody.slice(phase, dataEnv);
+  const body = deployBody.slice(phase, dataUp);
   assert.match(body, /parseSkipRehearsal\(process\.argv\)/);
   assert.match(body, /SKIP_REHEARSAL_FLAG/);
   assert.match(body, /this line is the audit record/);

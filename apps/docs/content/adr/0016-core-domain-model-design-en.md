@@ -151,7 +151,7 @@ Invariants: at most one `confirmed` link per expert; at most one `confirmed` exp
 
 ### 2.11 Ledger account
 
-`id` · `subject_kind` (`person` · `project_fund` · `organisation` · `system`) · `subject_id` · `unit` (`attention_points` · `money`) · `opened_at` · `closed_at`. One person has one attention-points account across web and mobile (OWD-10, REQ-3). On erasure the person's account is **closed and its balance frozen** — postings are never deleted or rewritten (§2.12); the posting subject is re-pointed to an anonymised subject under the ADR-0009 erasure procedure (Q-35).
+`id` · `subject_kind` (`person` · `project_fund` · `organisation` · `system`) · `subject_id` · `unit` (`attention_points` · `money`) · `opened_at` · `closed_at`. One person has one attention-points account across web and mobile (OWD-10, REQ-3); that one account carries all three denominations of §2.12. System accounts carry a `system_code` instead of a `subject_id`. On erasure the person's account is **closed and its balance frozen** — postings are never deleted or rewritten (§2.12); the posting subject is re-pointed to an anonymised subject under the ADR-0009 erasure procedure (Q-35).
 
 ### 2.12 Posting
 
@@ -160,6 +160,8 @@ Invariants: at most one `confirmed` link per expert; at most one `confirmed` exp
 | `id`                                                  | uuid           | append-only, never updated or deleted (ADR-0003 §2.7)                                                                                                           |
 | `debit_account_id` / `credit_account_id`              | fk → §2.11     | double-entry style                                                                                                                                              |
 | `amount` / `unit`                                     | numeric / enum |                                                                                                                                                                 |
+| `denomination`                                        | enum, nullable | `pul` · `bre` · `con` when `unit = attention_points`; null for money                                                                                            |
+| `event_id` / `leg`                                    | text / text    | the domain fact that produced the posting and the posting's place within it (denomination + entry kind); unique together                                        |
 | `project_id`                                          | fk → §2.5      | traceability across both storefronts (OWD-9)                                                                                                                    |
 | `output_id` / `output_type`                           | fk / enum      | the lesson/event the accrual is attributed to (REQ-31)                                                                                                          |
 | `rule_id` / `rule_version`                            | fk / text      | the accrual rule that produced it — rules themselves out of scope (REQ-36/48/49)                                                                                |
@@ -168,6 +170,8 @@ Invariants: at most one `confirmed` link per expert; at most one `confirmed` exp
 | `reverses_posting_id`                                 | fk, nullable   | corrections are compensating postings                                                                                                                           |
 
 A balance is a fold over postings; there is **no** mutable balance column anywhere. The "contributed → unit fund → accruals" chain (OWD-3) is a report over §2.11 + §2.12.
+
+**Posting keys — how the ledger satisfies ADR-0003 §3.** Postings are partitioned by month on `occurred_at` and refused UPDATE/DELETE by a trigger. Because a partitioned table can only enforce uniqueness that includes the partition key, global dedupe lives in a non-partitioned `points_posting_keys` table: one row per domain fact, `event_id` primary key and a unique dedupe key (for attention points: doctor + content item + action), inserted in the same transaction before the fact's postings. A replayed fact hits the key row and writes nothing; the postings of one fact share its `occurred_at`, so (`event_id`, `leg`) uniqueness holds inside one partition.
 
 ### 2.13 Document record
 

@@ -132,6 +132,17 @@ export function runtimeConsoleFailure(
   return null;
 }
 
+/**
+ * #3798 — what the DC runtime draws for a canvas it could not render as
+ * drawn, without a `[dc-runtime]` console line: a sub-canvas whose logic
+ * threw (`support.js` logs the bare error and renders it "with props only",
+ * host `.sc-has-error` + `.sc-logic-error`), a render error, a circular
+ * import, or an `x-import` that failed (`.sc-placeholder-error`). Any of
+ * them fails the load, naming the canvas and the class.
+ */
+export const RUNTIME_ERROR_SELECTOR =
+  ".sc-has-error, .sc-logic-error, .sc-placeholder-error";
+
 export interface OpenCanvasOptions extends CanvasServeOptions {
   /**
    * Variant props, applied through the runtime's
@@ -217,15 +228,59 @@ export async function openRuntimeCanvas(
         // Settled = the template is mounted, and no `x-import` / `dc-import`
         // still draws its loading placeholder (a DS component waits for the
         // bundle a sub-canvas's <helmet> loads; a sibling canvas is fetched).
-        (selector) =>
-          !document.querySelector("x-dc") &&
-          !!document.querySelector(selector) &&
-          !document.querySelector(".sc-placeholder, .sc-streaming-html"),
-        ready,
+        // A canvas the runtime drew as failed (`RUNTIME_ERROR_SELECTOR`) or an
+        // `x-import` of a global the loaded bundle does not carry (the runtime
+        // would only warn after 30 s) ends the wait at once.
+        ({ selector, errorSelector }) => {
+          const broken = document.querySelector(errorSelector);
+          if (broken) {
+            const kind = errorSelector
+              .split(", ")
+              .find((one) => broken.matches(one));
+            const text = (
+              broken.querySelector(".sc-logic-error, .sc-placeholder-error") ??
+              broken
+            ).textContent;
+            return {
+              failure: `the runtime drew «${kind}»: ${(text ?? "").trim() || "(no message)"}`,
+            };
+          }
+          for (const placeholder of document.querySelectorAll(
+            ".sc-placeholder[title*='.']",
+          )) {
+            const name = placeholder.getAttribute("title") ?? "";
+            const [root, ...path] = name.split(".");
+            let value: unknown = (window as unknown as Record<string, unknown>)[
+              root ?? ""
+            ];
+            if (!value || typeof value !== "object") continue;
+            for (const key of path)
+              value =
+                value && typeof value === "object"
+                  ? (value as Record<string, unknown>)[key]
+                  : undefined;
+            if (value === undefined)
+              return {
+                failure: `x-import: ${name} is not in window.${root ?? ""} (the bundle loaded without it)`,
+              };
+          }
+          const done =
+            !document.querySelector("x-dc") &&
+            !!document.querySelector(selector) &&
+            !document.querySelector(".sc-placeholder, .sc-streaming-html");
+          return done ? { failure: null } : null;
+        },
+        { selector: ready, errorSelector: RUNTIME_ERROR_SELECTOR },
         { timeout: 15_000 },
       )
       .then(
-        () => "rendered" as const,
+        async (handle) => {
+          const { failure } = (await handle.jsonValue()) as {
+            failure: string | null;
+          };
+          if (failure) report(failure);
+          return failure ? ("failed" as const) : ("rendered" as const);
+        },
         () => "timeout" as const,
       );
     return (await Promise.race([rendered, failure])) === "rendered";

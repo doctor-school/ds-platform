@@ -98,4 +98,53 @@ test.describe("#3798 runtime canvas loader", () => {
       openRuntimeCanvas(context, "page.dc.html", { root }),
     ).rejects.toThrow("[dc-runtime] sibling fetch for <unit-missing/> failed");
   });
+
+  /** A runtime-only fixture folder: `support.js` + the given canvases. */
+  const fixture = (canvases: Record<string, string>): string => {
+    const root = mkdtempSync(join(tmpdir(), "canvas-runtime-"));
+    copyFileSync(join(DESIGN_SOURCE, "support.js"), join(root, "support.js"));
+    for (const [name, body] of Object.entries(canvases))
+      writeFileSync(
+        join(root, name),
+        `<!DOCTYPE html><html><head><script src="./support.js"></script></head><body>${body}</body></html>`,
+      );
+    return root;
+  };
+
+  test("RED: a sub-canvas whose logic throws fails the load (the runtime logs it bare)", async ({
+    context,
+  }) => {
+    const root = fixture({
+      "page.dc.html":
+        `<x-dc><div data-screen-label="page"><dc-import name="unit-broken"></dc-import></div></x-dc>` +
+        `<script type="text/x-dc" data-dc-script data-props="{}">class Component extends DCLogic {}</script>`,
+      "unit-broken.dc.html":
+        `<x-dc><div>card</div></x-dc>` +
+        `<script type="text/x-dc" data-dc-script data-props="{}">class Component extends DCLogic { constructor(p) { super(p); throw new Error("logic boom"); } }</script>`,
+    });
+    await expect(
+      openRuntimeCanvas(context, "page.dc.html", { root }),
+    ).rejects.toThrow(
+      /page\.dc\.html: .*the runtime drew «\.sc-has-error».*logic boom/,
+    );
+  });
+
+  test("RED: an x-import of a component the DS bundle does not carry fails the load promptly", async ({
+    context,
+  }) => {
+    const root = fixture({
+      "page.dc.html":
+        `<x-dc><helmet><script src="_ds/fixture/_ds_bundle.js"></script></helmet>` +
+        `<div data-screen-label="page"><x-import component-from-global-scope="DsDesignSystem.NoSuchCard" hint-size="100%,100px"></x-import></div></x-dc>` +
+        `<script type="text/x-dc" data-dc-script data-props="{}">class Component extends DCLogic {}</script>`,
+    });
+    const started = Date.now();
+    await expect(
+      openRuntimeCanvas(context, "page.dc.html", { root }),
+    ).rejects.toThrow(
+      "x-import: DsDesignSystem.NoSuchCard is not in window.DsDesignSystem",
+    );
+    // Well before the 15 s settle timeout (and the runtime's own 30 s warning).
+    expect(Date.now() - started).toBeLessThan(10_000);
+  });
 });

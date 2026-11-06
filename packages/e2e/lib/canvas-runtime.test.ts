@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   CANVAS_ORIGIN,
   DESIGN_SOURCE,
+  RUNTIME_ERROR_SELECTOR,
   RUNTIME_VENDOR,
   decideCanvasRequest,
   runtimeConsoleFailure,
@@ -146,5 +147,16 @@ describe("#3798 a runtime console failure fails the canvas load", () => {
       runtimeConsoleFailure("error", "Failed to load resource: 404"),
     ).toBeNull();
     expect(runtimeConsoleFailure("log", "[dc-runtime] booted")).toBeNull();
+  });
+});
+
+describe("#3798 a canvas the runtime drew as failed fails the load", () => {
+  it("names every error class the vendored support.js draws without a [dc-runtime] line", () => {
+    const runtime = readFileSync(join(DESIGN_SOURCE, "support.js"), "utf8");
+    for (const one of RUNTIME_ERROR_SELECTOR.split(", ")) {
+      const cls = one.replace(/^\./, "");
+      // a className the runtime sets: `"sc-x"` or appended `" sc-x"`
+      expect(runtime).toMatch(new RegExp(`"\\s?${cls}"`));
+    }
   });
 });

@@ -2,27 +2,26 @@ import { readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 import {
-  DS_SHELL_FOOTER_REGION,
-  DS_SHELL_HEADER_REGION,
   applyAllowlist,
   diffStructures,
-  extractCanvasStructure,
   formatStructure,
   type AllowlistEntry,
-  type CanvasInput,
-  type RegionSpec,
   type RegionStructure,
   type StructureItem,
 } from "./canvas-structure.js";
+import { openRuntimeCanvas } from "./canvas-runtime.js";
 import { waitForClientReady } from "./page-ready.js";
 
 /**
- * #3682 — the APP half of the structural canvas-parity check: read the same
- * semantic tree `./canvas-structure.ts` extracts from a canvas, but from the
- * rendered page, and compare the two.
+ * #3682 — the structural canvas-parity check: read one semantic tree from the
+ * rendered app page and from the canvas, and compare the two. For the ds-shell
+ * header/footer (#3793) the canvas side is the SAME reader on the canvas as the
+ * real Claude Design runtime renders it (`./canvas-runtime.ts`, offline, in the
+ * spec's own browser context); the page checks still evaluate their canvases
+ * in the Node sandbox (`./canvas-structure.ts`) until #3793 slice 2.
  *
  * bar  = the region's interactive elements visible with the menu closed;
  * menu = the ones that BECOME visible once the `≡` toggle is opened.
@@ -150,25 +149,57 @@ export async function readRenderedStructure(
   };
 }
 
+/** A region of a runtime-rendered canvas page, read like an app region. */
+export interface CanvasRegion extends RenderedRegion {
+  /** The region's name in `canvas-structure-allowlist.json` (`header`, `footer`). */
+  name: string;
+  /**
+   * Siblings read after `root` and appended to its bar — the ds-shell mobile
+   * search band, which the canvas draws right after `<header>`, inside the
+   * header region, while the app draws it inside its header element.
+   */
+  after?: string;
+}
+
+/** The canvas side: `canvas` rendered by the real runtime with `props`, read. */
+export async function readRuntimeCanvasStructure(
+  context: BrowserContext,
+  canvas: string,
+  props: Record<string, unknown>,
+  region: CanvasRegion,
+): Promise<RegionStructure> {
+  const runtime = await openRuntimeCanvas(context, canvas, { props });
+  try {
+    const structure = await readRenderedStructure(runtime.page, region);
+    if (region.after && (await runtime.page.locator(region.after).count())) {
+      const band = await readRenderedStructure(runtime.page, { root: region.after });
+      structure.bar.push(...band.bar);
+    }
+    return structure;
+  } finally {
+    await runtime.close();
+  }
+}
+
 /**
- * Compare a rendered region with the canvas evaluated for `input`; returns the
- * readable failure report, or `null` when the trees match (after the decided
- * deviations in `canvas-structure-allowlist.json`).
+ * Compare a rendered region with the canvas region rendered by the runtime for
+ * `props`; returns the readable failure report, or `null` when the trees match
+ * (after the decided deviations in `canvas-structure-allowlist.json`, keyed by
+ * `allowlistProps`).
  */
 export async function canvasStructureMismatch(
   page: Page,
   canvas: string,
-  input: CanvasInput,
+  props: Record<string, unknown>,
+  allowlistProps: Record<string, unknown>,
+  canvasRegion: CanvasRegion,
   rendered: RenderedRegion,
-  region?: RegionSpec,
 ): Promise<string | null> {
-  const file = canvasPath(canvas);
-  const fromCanvas = extractCanvasStructure(file, input, region);
+  const fromCanvas = await readRuntimeCanvasStructure(page.context(), canvas, props, canvasRegion);
   const fromApp = await readRenderedStructure(page, rendered);
-  const props = input.props ?? {};
   const decided = applyAllowlist(
     ALLOWLIST.entries,
-    { canvas: basename(file), props, region: (region ?? DS_SHELL_HEADER_REGION).name },
+    { canvas: basename(canvas), props: allowlistProps, region: canvasRegion.name },
     fromCanvas,
     fromApp,
   );
@@ -190,9 +221,15 @@ export async function canvasStructureMismatch(
 }
 
 /** The storefront regions checked against `design-source/ds-shell.dc.html`. */
+const SHELL_HEADER = 'header[data-screen-label="ds-shell · шапка"]';
 const STOREFRONT_REGIONS = {
   header: {
-    canvas: DS_SHELL_HEADER_REGION,
+    canvas: {
+      name: "header",
+      root: SHELL_HEADER,
+      menuToggle: `${SHELL_HEADER} details > summary`,
+      after: `${SHELL_HEADER} + div`,
+    },
     rendered: {
       root: '[data-testid="storefront-header"]',
       menuToggle: '[data-testid="shell-mobile-menu"] > summary',
@@ -201,14 +238,14 @@ const STOREFRONT_REGIONS = {
     title: " (bar / ≡ menu)",
   },
   footer: {
-    canvas: DS_SHELL_FOOTER_REGION,
+    canvas: { name: "footer", root: 'footer[data-screen-label="ds-shell · футер"]', order: "document" },
     rendered: { root: '[data-testid="storefront-footer"]', order: "document" },
     issue: "#3727",
     title: "",
   },
 } satisfies Record<
   string,
-  { canvas: RegionSpec; rendered: RenderedRegion; issue: string; title: string }
+  { canvas: CanvasRegion; rendered: RenderedRegion; issue: string; title: string }
 >;
 
 export interface StorefrontCanvasParityOptions {
@@ -248,12 +285,15 @@ function defineStorefrontCanvasParity(
           .locator(`[data-testid="shell-auth-cluster"][data-cluster="${loggedIn ? "doctor" : "guest"}"]`)
           .waitFor({ state: "attached" });
         await page.evaluate(() => document.fonts.ready);
+        // `embedded: true` = the shell as a page draws it: ≡ starts closed
+        // (standalone ds-shell opens it at 390) and the editor panel is off.
         const mismatch = await canvasStructureMismatch(
           page,
           "ds-shell.dc.html",
-          { props: { host: options.host, loggedIn, mobile } },
-          rendered,
+          { host: options.host, loggedIn, embedded: true },
+          { host: options.host, loggedIn, mobile },
           canvas,
+          rendered,
         );
         expect(mismatch, mismatch ?? "").toBeNull();
       });
@@ -278,4 +318,50 @@ export function defineStorefrontHeaderCanvasParity(options: StorefrontCanvasPari
  */
 export function defineStorefrontFooterCanvasParity(options: StorefrontCanvasParityOptions): void {
   defineStorefrontCanvasParity("footer", options);
+}
+
+/**
+ * #3793 RED proof, kept in the suite: the #3629 class — the auth chip in the
+ * mobile bar instead of the `≡` panel — must still fail on the runtime path.
+ * The guest header at 390 is read once as shipped (it must match), then with
+ * the one `shell-auth-cluster` moved out of the `≡` panel into the bar, where
+ * the parent of #3629 drew it; the check must name the misplaced chip.
+ */
+export function defineStorefrontHeaderCanvasRedProof(
+  options: Omit<StorefrontCanvasParityOptions, "signIn">,
+): void {
+  const { canvas, rendered } = STOREFRONT_REGIONS.header;
+  test.describe(`#3793 header ≡ ds-shell canvas · ${options.host} · guest · 390 · RED proof`, () => {
+    test.use({ viewport: { width: 390, height: 800 } });
+    test("the auth chip moved from the ≡ panel to the mobile bar fails the runtime check", async ({
+      page,
+      context,
+    }) => {
+      await context.clearCookies();
+      await page.goto(options.path);
+      await waitForClientReady(page);
+      await page
+        .locator('[data-testid="shell-auth-cluster"][data-cluster="guest"]')
+        .waitFor({ state: "attached" });
+      const check = () =>
+        canvasStructureMismatch(
+          page,
+          "ds-shell.dc.html",
+          { host: options.host, loggedIn: false, embedded: true },
+          { host: options.host, loggedIn: false, mobile: true },
+          canvas,
+          rendered,
+        );
+      expect(await check(), "the shipped header must match before the mutation").toBeNull();
+      await page.evaluate(() => {
+        const cluster = document.querySelector('[data-testid="shell-auth-cluster"]');
+        const menu = document.querySelector('[data-testid="shell-mobile-menu"]');
+        const group = menu?.parentElement;
+        if (!cluster || !group?.parentElement) throw new Error("header markup changed");
+        group.parentElement.insertBefore(cluster, group);
+      });
+      const mismatch = await check();
+      expect(mismatch).toContain("wrong container: link «Войти / Регистрация» — canvas menu, app bar");
+    });
+  });
 }

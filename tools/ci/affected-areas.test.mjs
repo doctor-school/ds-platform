@@ -315,6 +315,12 @@ test("EARS-12: files a job reads outside its dependency closure run that job", (
     pr(["packages/design-system/src/button.tsx"]).jobs["api-e2e"],
     false,
   );
+  // #3793 — the storefront header/footer canvas checks render ds-shell with
+  // the vendored DC runtime.
+  assert.deepEqual(running(pr(["design-source/support.js"])), [
+    "playwright-axe-doctor",
+    "playwright-axe-portal",
+  ]);
 });
 
 test("EARS-13: a HEAVY_JOBS package missing from the workspace throws (the caller fails open)", () => {

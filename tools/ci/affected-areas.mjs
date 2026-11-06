@@ -76,8 +76,11 @@ export const HEAVY_JOBS = {
     // card canvas it imports; home- and documents-canvas-structure.spec.ts
     // (#3757) read the home, documents-list and document page canvases;
     // account-canvas-structure-live.spec.ts (#3758) reads the R1 account canvas.
+    // The header/footer checks render ds-shell with the vendored DC runtime
+    // design-source/support.js (#3793).
     extraInputs: [
       /^design-source\/ds-shell\.dc\.html$/,
+      /^design-source\/support\.js$/,
       /^design-source\/doctor-feed\.dc\.html$/,
       /^design-source\/unit-event-card\.dc\.html$/,
       /^design-source\/doctor-home\.dc\.html$/,
@@ -99,8 +102,12 @@ export const HEAVY_JOBS = {
   },
   "playwright-axe-portal": {
     packages: ["@ds/portal"],
-    // apps/portal/e2e/header-canvas-structure.e2e.spec.ts (#3682) reads the canvas.
-    extraInputs: [/^design-source\/ds-shell\.dc\.html$/],
+    // apps/portal/e2e/header-canvas-structure.e2e.spec.ts (#3682) reads the
+    // canvas, rendered by the vendored DC runtime design-source/support.js (#3793).
+    extraInputs: [
+      /^design-source\/ds-shell\.dc\.html$/,
+      /^design-source\/support\.js$/,
+    ],
   },
   "standalone-boot": {
     packages: ["@ds/portal", "@ds/admin", "@ds/doctor", "@ds/login"],

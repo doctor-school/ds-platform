@@ -1,6 +1,7 @@
 import {
   defineStorefrontFooterCanvasParity,
   defineStorefrontHeaderCanvasParity,
+  defineStorefrontHeaderCanvasRedProof,
 } from "@ds/e2e/canvas-structure";
 
 /**
@@ -10,6 +11,9 @@ import {
  * and of the `≡` menu, and the footer's links, in order, by kind and visible
  * label. The signed-in header runs on the live tier (`shell-live.spec.ts`).
  * Decided deviations live in `packages/e2e/lib/canvas-structure-allowlist.json`.
+ * The canvas is rendered by the real Claude Design runtime
+ * (`design-source/support.js`) in the browser, offline (#3793).
  */
 defineStorefrontHeaderCanvasParity({ host: "doctor", path: "/" });
 defineStorefrontFooterCanvasParity({ host: "doctor", path: "/" });
+defineStorefrontHeaderCanvasRedProof({ host: "doctor", path: "/" });

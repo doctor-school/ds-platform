@@ -1,6 +1,7 @@
 import {
   defineStorefrontFooterCanvasParity,
   defineStorefrontHeaderCanvasParity,
+  defineStorefrontHeaderCanvasRedProof,
 } from "@ds/e2e/canvas-structure";
 
 /**
@@ -11,7 +12,10 @@ import {
  * label. `/documents` renders the shared chrome with no backend (028 V-4). The
  * signed-in header runs on the live tier
  * (`e2e/shell/header-canvas-structure-signed-in.spec.ts`). Decided deviations
- * live in `packages/e2e/lib/canvas-structure-allowlist.json`.
+ * live in `packages/e2e/lib/canvas-structure-allowlist.json`. The canvas is
+ * rendered by the real Claude Design runtime (`design-source/support.js`) in
+ * the browser, offline (#3793).
  */
 defineStorefrontHeaderCanvasParity({ host: "academy", path: "/documents" });
 defineStorefrontFooterCanvasParity({ host: "academy", path: "/documents" });
+defineStorefrontHeaderCanvasRedProof({ host: "academy", path: "/documents" });

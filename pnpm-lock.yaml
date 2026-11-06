@@ -1089,6 +1089,9 @@ importers:
       '@types/node':
         specifier: ^26.2.0
         version: 26.5.0
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
       playwright-bdd:
         specifier: ^9.2.0
         version: 9.2.1(@playwright/test@1.63.0)

@@ -81,7 +81,7 @@ async function request<T>(
         headers["idempotency-key"] = crypto.randomUUID();
         headers["content-type"] = "application/json";
         if (version !== undefined) headers["if-match"] = `"${version}"`;
-        if(impactToken) headers["lifecycle-impact-token"] = impactToken;
+        if (impactToken) headers["lifecycle-impact-token"] = impactToken;
       }
       const response = await fetch(path, {
         method,
@@ -94,7 +94,12 @@ async function request<T>(
     { path, method, body, version, impactToken },
   );
   expect(result.status).toBe(
-    method === "POST" && /^\/v1\/admin\/(directions|direction-adjacency|direction-specialties)$/.test(path) ? 201 : 200,
+    method === "POST" &&
+      /^\/v1\/admin\/(directions|direction-adjacency|direction-specialties)$/.test(
+        path,
+      )
+      ? 201
+      : 200,
   );
   return result.body as T;
 }
@@ -178,9 +183,22 @@ async function seedFamilies(value: Proof, statuses = false) {
           direction.version,
         );
       else {
-        const impact=await request<{affected:unknown[];impactToken:string}>(value.admin!,`/v1/admin/directions/${direction.id}/lifecycle-impact?transition=retire`);
+        const impact = await request<{
+          affected: unknown[];
+          impactToken: string;
+        }>(
+          value.admin!,
+          `/v1/admin/directions/${direction.id}/lifecycle-impact?transition=retire`,
+        );
         expect(impact.affected).toEqual([]);
-        await request(value.admin!,`/v1/admin/directions/${direction.id}/retire`,"POST",{},direction.version,impact.impactToken);
+        await request(
+          value.admin!,
+          `/v1/admin/directions/${direction.id}/retire`,
+          "POST",
+          {},
+          direction.version,
+          impact.impactToken,
+        );
       }
       value.rows.push({
         family: "directions",
@@ -201,8 +219,20 @@ async function seedFamilies(value: Proof, statuses = false) {
       directionId: c.id,
       specialtyMinzdravId: specialty.id,
     });
-    await request(value.admin!,`/v1/admin/direction-adjacency/${retiredEdge.id}/retire`,"POST",{},retiredEdge.version);
-    await request(value.admin!,`/v1/admin/direction-specialties/${retiredLink.id}/retire`,"POST",{},retiredLink.version);
+    await request(
+      value.admin!,
+      `/v1/admin/direction-adjacency/${retiredEdge.id}/retire`,
+      "POST",
+      {},
+      retiredEdge.version,
+    );
+    await request(
+      value.admin!,
+      `/v1/admin/direction-specialties/${retiredLink.id}/retire`,
+      "POST",
+      {},
+      retiredLink.version,
+    );
     value.rows.push(
       {
         family: "direction-adjacency",
@@ -442,7 +472,7 @@ async function style(value: Proof, hover: boolean) {
         document.documentElement.style.colorScheme = theme;
       }, theme);
       if (row.status === "retired") {
-        const toggle=admin.getByTestId(`${row.family}-include-retired`);
+        const toggle = admin.getByTestId(`${row.family}-include-retired`);
         await toggle.focus();
         await toggle.press("Space");
         await expect(toggle).toBeChecked();
@@ -517,6 +547,11 @@ async function style(value: Proof, hover: boolean) {
             expectedBg: rgb(expectedBg),
             tint: rgb(root.getPropertyValue("--color-tint").trim()),
             contrast,
+            cssForeground: cs.color,
+            cssBackground: cs.backgroundColor,
+            fontSize: cs.fontSize,
+            fontWeight: cs.fontWeight,
+            opacity: cs.opacity,
             hover,
             hovered: row.matches(":hover"),
             text: el.textContent,
@@ -524,25 +559,42 @@ async function style(value: Proof, hover: boolean) {
         },
         { status: row.status, hover },
       );
-      const tone=row.status === "draft" ? "warning" : row.status === "retired" ? "destructive" : "success";
-      await expect(chip).toHaveClass(new RegExp(`(?:^|\\s)bg-${tone}-tint(?:\\s|$)`));
-      if(!hover) {
-        expect(result.fg).toEqual(result.expectedFg);
-        expect(result.bg).toEqual(result.expectedBg);
-      }
-      expect(result.bg).not.toEqual(result.tint);
-      expect(result.contrast).toBeGreaterThanOrEqual(4.5);
-      if (hover) {
-        expect(result.hovered).toBe(true);
-        expect(result.bg).not.toEqual(result.ground);
-      }
-      value.styles.push({
+      const observation = {
         family: row.family,
         id: row.id,
         status: row.status,
         theme,
         ...result,
+      };
+      value.styles.push(observation);
+      feedEntryLog({
+        command: "computed actual owned status chip and row state",
+        ...observation,
       });
+      const tone =
+        row.status === "draft"
+          ? "warning"
+          : row.status === "retired"
+            ? "destructive"
+            : "success";
+      await expect(chip).toHaveClass(
+        new RegExp(`(?:^|\\s)bg-${tone}-tint(?:\\s|$)`),
+      );
+      if (!hover) {
+        expect(result.fg).toEqual(result.expectedFg);
+        expect(result.bg).toEqual(result.expectedBg);
+      }
+      expect(result.bg).not.toEqual(result.tint);
+      expect
+        .soft(
+          result.contrast,
+          `${row.family}/${row.status}/${theme}/${hover ? "hover" : "rest"}: AA normal-text contrast`,
+        )
+        .toBeGreaterThanOrEqual(4.5);
+      if (hover) {
+        expect(result.hovered).toBe(true);
+        expect(result.bg).not.toEqual(result.ground);
+      }
     }
   }
 }
@@ -557,6 +609,7 @@ Then("no status renders as a bare badge on bg-tint", async ({ page }) => {
 });
 Then("the chip stays readable while the row is hovered", async ({ page }) => {
   await style(state(page), true);
+  expect(state(page).styles).toHaveLength(28);
 });
 
 After(async ({ page, $testInfo }) => {

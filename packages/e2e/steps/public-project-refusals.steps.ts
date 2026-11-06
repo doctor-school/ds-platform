@@ -21,6 +21,8 @@ type State = {
   admin?: Page;
   backgrounds: { group: string; ids: string[] }[];
   before?: unknown;
+  after?: unknown;
+  ui?: { publishError?: string; linkError?: string };
   refusal?: {
     status: number;
     body: { errorCode?: string; errors?: { path: string }[] };
@@ -255,6 +257,9 @@ Then(
     await expect(
       value.admin!.getByTestId("publish-blockers").getByRole("listitem"),
     ).toHaveCount(1);
+    value.ui = {
+      publishError: await value.admin!.getByTestId("publish-error").innerText(),
+    };
   },
 );
 Then('"Педиатрия" stays a draft', async ({ page }) => {
@@ -290,6 +295,7 @@ Then('"Педиатрия" stays a draft', async ({ page }) => {
   await expect(value.admin!.getByTestId("project-status")).toHaveText(
     "Черновик",
   );
+  value.after = { project: actual, results: await results(page) };
 });
 When(
   /^the administrator saves a result of "Ортобиология" with the link "https:\/\/example\.com\/school"$/,
@@ -327,19 +333,20 @@ Then("the save is refused with a field error on the link", async ({ page }) => {
     "aria-invalid",
     "true",
   );
-  await expect(
-    value.admin!.getByText(
-      "Ссылка должна вести на doctor.school и начинаться с https://.",
-      { exact: true },
-    ),
-  ).toBeVisible();
+  const alert = value.admin!.getByTestId("result-row-0").getByRole("alert");
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText(
+    "Ссылка должна вести на doctor.school и начинаться с https://.",
+  );
+  value.ui = { linkError: await alert.innerText() };
   await expect(value.admin!.getByTestId("results-error")).toContainText(
     "Не удалось сохранить результаты. Ничего не изменилось",
   );
 });
 Then('the results of "Ортобиология" are unchanged', async ({ page }) => {
   const value = state(page);
-  expect(await results(page)).toEqual(value.before);
+  value.after = await results(page);
+  expect(value.after).toEqual(value.before);
   await value.admin!.reload();
   await value.admin!.getByTestId("tab-results").click();
   await expect(value.admin!.getByTestId("result-url-0")).toHaveValue("");
@@ -350,18 +357,21 @@ Then('the results of "Ортобиология" are unchanged', async ({ page })
     "Результат 2",
   );
 });
-When(/^a doctor opens "\/projects" on doctor\.school$/, async ({ page, host }) => {
-  expect(host.id).toBe("academy");
-  const origin = new URL(process.env.E2E_DOCTOR_URL!).origin;
-  const response = await page.goto(`${origin}/projects`);
-  state(page).doctor = {
-    origin,
-    path: "/projects",
-    status: response!.status(),
-  };
-  expect(response!.status()).toBe(404);
-  await expect(page).toHaveURL(`${origin}/projects`);
-});
+When(
+  /^a doctor opens "\/projects" on doctor\.school$/,
+  async ({ page, host }) => {
+    expect(host.id).toBe("academy");
+    const origin = new URL(process.env.E2E_DOCTOR_URL!).origin;
+    const response = await page.goto(`${origin}/projects`);
+    state(page).doctor = {
+      origin,
+      path: "/projects",
+      status: response!.status(),
+    };
+    expect(response!.status()).toBe(404);
+    await expect(page).toHaveURL(`${origin}/projects`);
+  },
+);
 Then("the doctor storefront's not-found page is shown", async ({ page }) => {
   const value = state(page);
   const target = maskNotFoundVariant(await page.locator("body").innerText());
@@ -401,6 +411,8 @@ After(async ({ page, $testInfo }) => {
         backgrounds: value?.backgrounds,
         project: value?.fixture.project,
         before: value?.before,
+        after: value?.after,
+        ui: value?.ui,
         refusal: value?.refusal,
         doctor: value?.doctor,
       }),

@@ -3859,7 +3859,7 @@ export interface components {
             eventId?: string;
             fullName: string;
             /** @enum {string} */
-            role: "platform_admin" | "event-registrar" | "congress-program-committee";
+            role: "platform_admin" | "event-registrar" | "congress-program-committee" | "broadcast_director";
         };
         StaffAccessGrantResponseDto: {
             row: {
@@ -3867,8 +3867,9 @@ export interface components {
                 eventId: string | null;
                 eventTitle: string | null;
                 fullName: string | null;
+                revocable: boolean;
                 /** @enum {string} */
-                role: "platform_admin" | "event-registrar" | "congress-program-committee";
+                role: "superadmin" | "platform_admin" | "event-registrar" | "congress-program-committee" | "broadcast_director";
                 userId: string;
             };
             temporaryPassword?: string;
@@ -3879,8 +3880,9 @@ export interface components {
                 eventId: string | null;
                 eventTitle: string | null;
                 fullName: string | null;
+                revocable: boolean;
                 /** @enum {string} */
-                role: "platform_admin" | "event-registrar" | "congress-program-committee";
+                role: "superadmin" | "platform_admin" | "event-registrar" | "congress-program-committee" | "broadcast_director";
                 userId: string;
             }[];
         };
@@ -3888,7 +3890,7 @@ export interface components {
             /** Format: uuid */
             eventId?: string;
             /** @enum {string} */
-            role: "platform_admin" | "event-registrar" | "congress-program-committee";
+            role: "platform_admin" | "event-registrar" | "congress-program-committee" | "broadcast_director";
             userId: string;
         };
         TransitionEventRequestDto: {

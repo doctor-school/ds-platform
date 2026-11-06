@@ -6,7 +6,7 @@ lang: en
 
 # Grant and revoke staff access
 
-A procedure for the platform administrator who has been asked to give a staff
+A procedure for the superadministrator who has been asked to give a staff
 member access to the admin panel at `https://admin.doctor.school`, or to take it
 away. Staff access is managed in the admin section «Доступы» (`/access`,
 feature 047): the grant finds or creates the account, adds the role and the event
@@ -26,15 +26,18 @@ Related: the [auth operations runbook](./auth-operations.md) — especially
 ## When to use / prerequisites
 
 - **Owner decision first.** The roles are `platform_admin` («Администратор
-  платформы» — the full admin panel, «Доступы» included), `event-registrar`
-  (the congress roster of one event, 044 EARS-17/38) and
-  `congress-program-committee` (the submissions of the events it is bound to).
+  платформы» — the full admin panel except «Доступы», which only a
+  superadministrator opens), `event-registrar` (the congress roster of one
+  event, 044 EARS-17/38), `congress-program-committee` (the submissions of the
+  events it is bound to) and `broadcast_director` («Режиссёр трансляций», no
+  event binding). `superadmin` is not granted here: only the operator command
+  grants and removes it.
   The owner must have decided which role, and for which event, this person gets.
 - **Inputs:** the person's corporate email, ФИО (family name first), the role,
   the event for an event-bound role, their Mattermost account on
   `https://chat.bbm.academy`, and a one-phrase description of the work they are
   being given access for (used in the greeting).
-- **You need** a `platform_admin` account with an enrolled authenticator, and —
+- **You need** a `superadmin` account with an enrolled authenticator, and —
   to deliver a temporary password — ssh access to `tools-prod-tw`, the
   Mattermost box (bbm-owned infra, compose dir `~/mattermost-deploy`).
 
@@ -233,9 +236,12 @@ waiting period and no manual session clean-up.
   event binding is already removed; repeat the same «Отозвать» to finish the
   revocation. Until then the row stays in the list (for an event-bound role, with
   an empty event).
-- **Your own «Администратор платформы» cannot be revoked** — so the last platform
-  administrator can never lock everyone out. Another platform administrator
-  revokes it.
+- **No «Отозвать» on a superadministrator's rows.** «Суперадминистратор» and a
+  superadministrator's «Администратор платформы» cannot be revoked from
+  «Доступы», and neither can your own «Администратор платформы» — so «Доступы»
+  never loses its holder. `superadmin` is removed only by the operator command;
+  after that, another superadministrator revokes the remaining
+  «Администратор платформы».
 - **A person leaving the organization altogether:** besides revoking their
   rows, the identity-provider account itself can be deactivated by the operator
   ([auth operations runbook](./auth-operations.md)); «Доступы» does not

@@ -32,6 +32,11 @@ const platformAdmin: AdminSessionResponse = {
   roles: ["platform_admin"],
   eventGrants: [],
 };
+/** 049: a superadministrator always also holds `platform_admin`. */
+const superadmin: AdminSessionResponse = {
+  roles: ["superadmin", "platform_admin"],
+  eventGrants: [],
+};
 
 describe("044 EARS-20 admin access projection", () => {
   it("044 EARS-20.1: a registrar bound to an event gets only that event's roster", () => {
@@ -73,7 +78,10 @@ describe("044 EARS-20 admin access projection", () => {
   it("044 EARS-20.3: platform_admin keeps the full section set, unbound by grants", () => {
     const access = adminAccess(platformAdmin);
 
-    expect(adminNavItems(access)).toEqual(ADMIN_SECTION_NAV);
+    // 049 EARS-3: «Доступы» is the superadministrator's, not the platform administrator's.
+    expect(adminNavItems(access)).toEqual(
+      ADMIN_SECTION_NAV.filter((item) => item.href !== "/access"),
+    );
     expect(ADMIN_SECTION_NAV.map((item) => item.href)).toEqual([
       "/events",
       "/materials",
@@ -97,24 +105,48 @@ describe("044 EARS-20 admin access projection", () => {
       roles: ["platform_admin", "event-registrar"],
       eventGrants: registrarBoundToA.eventGrants,
     });
-    expect(adminNavItems(both)).toEqual(ADMIN_SECTION_NAV);
+    expect(adminNavItems(both)).toEqual(adminNavItems(access));
     expect(canAccessPath(both, "/projects")).toBe(true);
   });
 
-  it("047 EARS-1: «Доступы» is drawn for platform_admin only and its route opens for no one else", () => {
-    const admin = adminAccess(platformAdmin);
-    expect(adminNavItems(admin)).toContainEqual({
+  it("049 EARS-3: «Доступы» is drawn and opens only with superadmin; a superadministrator session is full", () => {
+    const owner = adminAccess(superadmin);
+    expect(owner.full).toBe(true);
+    expect(owner.superadmin).toBe(true);
+    expect(adminNavItems(owner)).toEqual(ADMIN_SECTION_NAV);
+    expect(adminNavItems(owner)).toContainEqual({
       href: "/access",
       testId: "nav-access",
       labelKey: "app.nav.access",
     });
-    expect(canAccessPath(admin, "/access")).toBe(true);
+    expect(canAccessPath(owner, "/access")).toBe(true);
+    expect(canAccessResource(owner, "staff-access")).toBe(true);
+    expect(canAccessPath(owner, "/events")).toBe(true);
+
+    const admin = adminAccess(platformAdmin);
+    expect(admin.superadmin).toBe(false);
+    expect(adminNavItems(admin).map((item) => item.href)).not.toContain(
+      "/access",
+    );
+    expect(canAccessPath(admin, "/access")).toBe(false);
+    expect(canAccessPath(admin, "/access/")).toBe(false);
+    expect(canAccessResource(admin, "staff-access")).toBe(false);
+    expect(canAccessPath(admin, "/projects")).toBe(true);
 
     const registrar = adminAccess(registrarBoundToA);
     expect(adminNavItems(registrar).map((item) => item.href)).not.toContain(
       "/access",
     );
     expect(canAccessPath(registrar, "/access")).toBe(false);
+    expect(canAccessResource(registrar, "staff-access")).toBe(false);
+    // `superadmin` without `platform_admin` does not exist (049 «Role keys»);
+    // the chrome draws nothing for it rather than inventing a state.
+    expect(
+      canAccessPath(
+        adminAccess({ roles: ["superadmin"], eventGrants: [] }),
+        "/events",
+      ),
+    ).toBe(false);
   });
 
   it("048 EARS-8: «Материалы» is drawn for platform_admin only and its route opens for no one else", () => {

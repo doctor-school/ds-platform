@@ -26,7 +26,7 @@ Feature: 049 — Admin staff roles
     When the platform administrator looks at the admin navigation
     Then the navigation has every section but «Доступы»
     When the platform administrator opens "/access" directly
-    Then the shell lands on "/access" showing "У этой учётной записи нет прав администратора."
+    Then the shell lands on "/access" showing "У этой учётной записи нет доступа к этому разделу."
     And every staff-access endpoint refuses the platform administrator
 
   @EARS-4 @EARS-5
@@ -92,7 +92,7 @@ Feature: 049 — Admin staff roles
   Scenario: Everything outside events is closed to the broadcast director
     Given a broadcast director is signed in to the admin
     When the director opens "/projects" directly
-    Then the shell lands on "/projects" showing "У этой учётной записи нет прав администратора."
+    Then the shell lands on "/projects" showing "У этой учётной записи нет доступа к этому разделу."
     And the project write, recording, legacy-broadcast, roster and staff-access endpoints refuse the director
     Given the IdP has withdrawn the director's role
     When the director sends a live-revalidated write on an event

@@ -54,10 +54,10 @@ export class StaffAccessListResponseDto extends createZodDto(
 const UNAVAILABLE = "the service is temporarily unavailable";
 
 /**
- * 047 — «Доступы»: the platform administrator's list, grant and revocation of
+ * 047 — «Доступы»: the superadministrator's list, grant and revocation of
  * staff roles
- * (047-design §Endpoints). Every route is `platform_admin` only with live IdP
- * revalidation (EARS-1); the grant and the revocation also declare `stepUp` — a second factor no
+ * (047-design §Endpoints). Every route is `superadmin` only with live IdP
+ * revalidation of that grant (049 EARS-3); the grant and the revocation also declare `stepUp` — a second factor no
  * older than 30 minutes, re-verified in the same session at `STEP_UP_URL`
  * (EARS-8). An IdP fault is `503`, which the console shows with «Повторить»,
  * never as a credential refusal or an empty list.
@@ -70,19 +70,25 @@ export class StaffAccessAdminController {
     @Inject(StaffAccessService) private readonly staff: StaffAccessService,
   ) {}
 
-  /** `GET /v1/admin/staff-access` — every holder of a grantable role (EARS-2). */
+  /** `GET /v1/admin/staff-access` — every holder of a listed role (EARS-2; 049 EARS-5). */
   @Get()
   @ApiOkResponse({ type: StaffAccessListResponseDto })
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["superadmin"],
     check: "fast-path",
     revalidate: "live",
     audit: "none",
     tests: ["EARS-1", "EARS-2"],
   })
-  async list(): Promise<StaffAccessListResponse> {
-    return { items: await this.mapIdpFault(() => this.staff.list()) };
+  async list(
+    @Req() req: { user?: AdminSessionPrincipal },
+  ): Promise<StaffAccessListResponse> {
+    const caller = req.user;
+    if (!caller) throw new UnauthorizedException();
+    return {
+      items: await this.mapIdpFault(() => this.staff.list(caller.sub)),
+    };
   }
 
   /**
@@ -96,7 +102,7 @@ export class StaffAccessAdminController {
   @ApiCreatedResponse({ type: StaffAccessGrantResponseDto })
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["superadmin"],
     check: "fast-path",
     revalidate: "live",
     stepUp: true,
@@ -117,7 +123,8 @@ export class StaffAccessAdminController {
   /**
    * `POST /v1/admin/staff-access/revocations` — revoke a staff role (EARS-7,
    * EARS-9). `204` once the revocation is complete. A refusal is a `403` (own
-   * `platform_admin`) or `409` (already revoked) with an `errorCode`; an IdP
+   * `platform_admin`) or `409` (already revoked; the `platform_admin` of a
+   * holder of `superadmin` — 049 EARS-5) with an `errorCode`; an IdP
    * fault is `503` after the person's admin sessions were still ended, and the
    * same request repeated finishes it.
    */
@@ -126,7 +133,7 @@ export class StaffAccessAdminController {
   @ApiNoContentResponse()
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["superadmin"],
     check: "fast-path",
     revalidate: "live",
     stepUp: true,

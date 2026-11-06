@@ -65,8 +65,9 @@ export interface StaffAccessGrantResume {
 }
 
 /**
- * 047 EARS-3…EARS-6, EARS-8 — «Выдать доступ»: a platform administrator grants
- * a staff role to a person by email.
+ * 047 EARS-3…EARS-6, EARS-8 — «Выдать доступ»: a superadministrator grants a
+ * staff role to a person by email (049 EARS-3/EARS-4 — «Режиссёр трансляций»
+ * included, with no event binding).
  *
  * Approved-non-canvas source `feature-047-staff-access-v1` (owner «1»,
  * #2901): the form opens the way «Добавить участника» opens on the congress
@@ -237,7 +238,7 @@ export function StaffAccessGrantForm({
       case "stepUp":
         return t("staffAccess.grant.errors.stepUpAgain");
       case "forbidden":
-        return t("login.errorForbidden");
+        return t("shell.sectionForbidden");
       case "invalid":
         return t("staffAccess.grant.errors.invalid");
       default:

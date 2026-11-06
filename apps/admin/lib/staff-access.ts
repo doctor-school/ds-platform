@@ -7,6 +7,7 @@ import {
   StaffAccessGrantRequestSchema,
   StaffAccessGrantResponseSchema,
   type GrantableStaffRole,
+  type ListedStaffRole,
   type StaffAccessGrantRequest,
   type StaffAccessRevokeRequest,
   type StaffAccessRow,
@@ -21,7 +22,7 @@ import { isStepUpRequired } from "./step-up";
  * the decisions live here so the Node-only unit tier pins them.
  */
 
-/** `GET` — every holder of a grantable role (EARS-2). */
+/** `GET` — every holder of a listed role (047 EARS-2, 049 EARS-5). */
 export const STAFF_ACCESS_PATH = "/v1/admin/staff-access";
 /** `POST` — the grant (EARS-3…EARS-6). */
 export const STAFF_ACCESS_GRANTS_PATH = "/v1/admin/staff-access/grants";
@@ -39,8 +40,8 @@ export const STAFF_ACCESS_ROUTE = "/access";
 export const STAFF_ACCESS_ROLES: readonly GrantableStaffRole[] =
   GRANTABLE_STAFF_ROLES;
 
-/** The RU label key of a role («Администратор платформы», …). */
-export function staffAccessRoleLabelKey(role: GrantableStaffRole): string {
+/** The RU label key of a role («Администратор платформы», «Суперадминистратор», …). */
+export function staffAccessRoleLabelKey(role: ListedStaffRole): string {
   return `staffAccess.roles.${role}`;
 }
 
@@ -66,6 +67,22 @@ export function staffAccessCells(row: StaffAccessRow): StaffAccessCells {
     roleKey: staffAccessRoleLabelKey(row.role),
     event: row.eventTitle ?? "",
   };
+}
+
+/** A row whose «Отозвать» the API would take: never a `superadmin` row. */
+export type RevocableStaffAccessRow = StaffAccessRow & {
+  role: GrantableStaffRole;
+};
+
+/**
+ * 049 EARS-5 — whether the row draws «Отозвать»: the API's `revocable`, and
+ * never for a `superadmin` row, which changes only through the operator
+ * command.
+ */
+export function staffAccessRowRevocable(
+  row: StaffAccessRow,
+): row is RevocableStaffAccessRow {
+  return row.revocable && row.role !== "superadmin";
 }
 
 /** One row per person, role and event (EARS-2). */
@@ -215,7 +232,9 @@ export function grantRefusal(
 // ── the revocation ──────────────────────────────────────────────────────────
 
 /** The revocation of one row: the row's own identity, nothing typed. */
-export function revokeRequestOf(row: StaffAccessRow): StaffAccessRevokeRequest {
+export function revokeRequestOf(
+  row: RevocableStaffAccessRow,
+): StaffAccessRevokeRequest {
   return {
     userId: row.userId,
     role: row.role,
@@ -229,6 +248,8 @@ export type RevokeRefusal =
   | { kind: "alreadyComplete" }
   /** The caller's own platform-administrator row. */
   | { kind: "selfPlatformAdmin" }
+  /** 049 EARS-5 — the `platform_admin` of a holder of `superadmin`. */
+  | { kind: "superadminHolder" }
   | { kind: "unavailable" }
   | { kind: "forbidden" }
   | { kind: "invalid" }
@@ -243,9 +264,13 @@ export function revokeRefusal(error: unknown): RevokeRefusal {
     typeof error === "object" && error !== null
       ? (error as { statusCode?: unknown; errorCode?: unknown })
       : {};
-  if (errorCode === "REVOKE_ALREADY_COMPLETE") return { kind: "alreadyComplete" };
+  if (errorCode === "REVOKE_ALREADY_COMPLETE")
+    return { kind: "alreadyComplete" };
   if (errorCode === "REVOKE_SELF_PLATFORM_ADMIN") {
     return { kind: "selfPlatformAdmin" };
+  }
+  if (errorCode === "STAFF_REVOKE_SUPERADMIN_HOLDER") {
+    return { kind: "superadminHolder" };
   }
   if (statusCode === 503) return { kind: "unavailable" };
   if (statusCode === 403) return { kind: "forbidden" };

@@ -5269,7 +5269,8 @@
             "enum": [
               "platform_admin",
               "event-registrar",
-              "congress-program-committee"
+              "congress-program-committee",
+              "broadcast_director"
             ],
             "type": "string"
           }
@@ -5325,11 +5326,16 @@
                   }
                 ]
               },
+              "revocable": {
+                "type": "boolean"
+              },
               "role": {
                 "enum": [
+                  "superadmin",
                   "platform_admin",
                   "event-registrar",
-                  "congress-program-committee"
+                  "congress-program-committee",
+                  "broadcast_director"
                 ],
                 "type": "string"
               },
@@ -5344,7 +5350,8 @@
               "email",
               "role",
               "eventId",
-              "eventTitle"
+              "eventTitle",
+              "revocable"
             ],
             "type": "object"
           },
@@ -5404,11 +5411,16 @@
                     }
                   ]
                 },
+                "revocable": {
+                  "type": "boolean"
+                },
                 "role": {
                   "enum": [
+                    "superadmin",
                     "platform_admin",
                     "event-registrar",
-                    "congress-program-committee"
+                    "congress-program-committee",
+                    "broadcast_director"
                   ],
                   "type": "string"
                 },
@@ -5423,7 +5435,8 @@
                 "email",
                 "role",
                 "eventId",
-                "eventTitle"
+                "eventTitle",
+                "revocable"
               ],
               "type": "object"
             },
@@ -5445,7 +5458,8 @@
             "enum": [
               "platform_admin",
               "event-registrar",
-              "congress-program-committee"
+              "congress-program-committee",
+              "broadcast_director"
             ],
             "type": "string"
           },

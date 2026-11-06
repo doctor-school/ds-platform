@@ -105,6 +105,15 @@ const ADMIN_ENTRY_CLASSIFICATION: Record<
  * real route omits the role — is proven in
  * `apps/api/test/congress/registrar-denial-set.e2e-spec.ts`.
  */
+const SUPERADMIN_ONLY = new Set([
+  "GET /v1/admin/staff-access",
+  "POST /v1/admin/staff-access/grants",
+  "POST /v1/admin/staff-access/revocations",
+]);
+const SUPERADMIN_ONLY_ROUTES: Record<string, string[]> = Object.fromEntries(
+  [...SUPERADMIN_ONLY].map((endpoint) => [endpoint, ["superadmin"]]),
+);
+
 const REGISTRAR_ADMITTED: Record<string, string[]> = {
   // Holding a session: reading back one's own roles, and ending the session.
   "GET /v1/admin/auth/session": [
@@ -168,6 +177,11 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
     "platform_admin",
     "congress-program-committee",
   ],
+  // 049 EARS-3 (#3740) — «Доступы» moved to the superadministrator: these rows
+  // name `superadmin` alone (a holder of it always also holds `platform_admin`);
+  // the refusal of a platform administrator is proven in
+  // `apps/api/test/staff-access/staff-access.e2e-spec.ts`.
+  ...SUPERADMIN_ONLY_ROUTES,
 };
 
 /** A path-parameterised id that resolves to nothing — the floor is about authz, not existence. */
@@ -209,7 +223,7 @@ const FLOOR_ROUTES: {
     url: "/v1/admin/auth/mfa/reverify",
     payload: { code: "000000", endpoint: "GET /v1/admin/events" },
   },
-  // 047 EARS-1 — the staff-access list and grant, platform_admin only.
+  // 047 EARS-1 / 049 EARS-3 — the staff-access list, grant and revocation, superadmin only.
   {
     endpoint: "GET /v1/admin/staff-access",
     method: "GET",
@@ -1057,21 +1071,33 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
     }
 
-    async function registerAdmin(prefix: string): Promise<{
+    async function registerAdmin(
+      prefix: string,
+      superadmin = false,
+    ): Promise<{
       email: string;
       sub: string;
     }> {
       const identity = await registerUser(prefix);
-      await fake.grantProjectRole(identity.sub, "platform_admin");
+      await fake.grantProjectRole(
+        identity.sub,
+        superadmin ? ["platform_admin", "superadmin"] : "platform_admin",
+      );
       return identity;
     }
 
-    /** Headers for an established, MFA-verified admin session (the allowed principal). */
-    async function adminHeadersFor(prefix: string): Promise<{
+    /**
+     * Headers for an established, MFA-verified admin session (the allowed
+     * principal) — a superadministrator (049 EARS-3) when `superadmin`.
+     */
+    async function adminHeadersFor(
+      prefix: string,
+      superadmin = false,
+    ): Promise<{
       headers: Record<string, string>;
       sub: string;
     }> {
-      const { email, sub } = await registerAdmin(prefix);
+      const { email, sub } = await registerAdmin(prefix, superadmin);
       const handle = await establishAdminSession(app, {
         identifier: email,
         password,
@@ -1323,7 +1349,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
         // A fresh session per route: `logout` consumes the one it is given, so
         // reusing one session would make later routes fail for reasons that are
         // not the floor.
-        const { headers } = await adminHeadersFor("ok");
+        // A superadministrator for the `[superadmin]` rows (049 EARS-3).
+        const { headers } = await adminHeadersFor(
+          "ok",
+          SUPERADMIN_ONLY.has(route.endpoint),
+        );
         const res = await app.inject({
           method: route.method,
           url: route.url,

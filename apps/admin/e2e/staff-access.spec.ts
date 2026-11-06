@@ -11,6 +11,7 @@ import {
   bootstrapAdminSession,
   bootstrapDoctorSession,
   bootstrapRegistrarAccount,
+  bootstrapSuperadminAccount,
   createPublishedEvent,
   eventSlugFromDetail,
   signInAsAdmin,
@@ -29,10 +30,11 @@ import {
 
 /**
  * 047 V-9 (grant half) — «Доступы» driven against the real admin → api →
- * Zitadel → Postgres → Redis chain: a platform administrator grants staff
- * roles from the admin, the person signs in with the temporary password, the
+ * Zitadel → Postgres → Redis chain: a superadministrator (049 EARS-3) grants
+ * staff roles from the admin — «Режиссёр трансляций» included (049 V-8) — the person signs in with the temporary password, the
  * step-up sends a stale second factor through the code screen and back, the
- * refusals change nothing, and a registrar never sees the section; «Отозвать»
+ * refusals change nothing, and a registrar or a platform administrator never
+ * sees the section; «Отозвать»
  * revokes a row, the person's open admin session ends at once (V-9 revocation
  * half), and a stale second factor sends the revocation through the code screen
  * and back once.
@@ -125,7 +127,7 @@ async function fillGrant(
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("047 «Доступы» — a platform administrator grants staff access", () => {
+test.describe("047 / 049 «Доступы» — a superadministrator grants staff access", () => {
   let adminContext: BrowserContext | undefined;
   let admin: Page;
   let adminAccount: BootstrapResult;
@@ -146,14 +148,14 @@ test.describe("047 «Доступы» — a platform administrator grants staff 
     await adminContext?.close();
   });
 
-  test("047 EARS-1/EARS-2: a platform administrator opens «Доступы» and sees every staff holder", async ({
+  test("049 EARS-3/EARS-5: a superadministrator opens «Доступы» and sees every staff holder, their own rows without «Отозвать»", async ({
     browser,
   }) => {
     test.setTimeout(300_000);
     adminContext = await browser.newContext({ locale: "ru-RU" });
     admin = await adminContext.newPage();
     await admin.setViewportSize({ width: 1440, height: 900 });
-    adminAccount = await bootstrapAdminSession(ADMIN_ORIGIN);
+    adminAccount = await bootstrapSuperadminAccount(ADMIN_ORIGIN);
     adminSecret = await signInAsAdmin(admin, adminAccount);
     signedInAt = Date.now();
 
@@ -178,10 +180,25 @@ test.describe("047 «Доступы» — a platform administrator grants staff 
     await expect(
       admin.getByRole("table", { name: "Сотрудники с доступом к админке" }),
     ).toBeVisible();
+    const ownRows = await rowOf(admin, adminAccount.email);
+    await expect(ownRows).toHaveCount(2);
+    await expect(ownRows.first()).toContainText("Суперадминистратор");
+    await expect(ownRows.nth(1)).toContainText("Администратор платформы");
+    // 049 EARS-5: neither the superadministrator row nor the caller's own
+    // platform administrator row offers «Отозвать».
+    await expect(ownRows.getByRole("button", { name: "Отозвать" })).toHaveCount(
+      0,
+    );
+    // The shots are taken once the list has resolved, never on its skeleton:
+    // first the caller's own rows found by the search, then the whole list.
+    await evidenceShot(admin, "staff-access-list-superadmin");
+    await admin
+      .getByRole("searchbox", { name: "Поиск по ФИО и почте" })
+      .fill("");
+    await expect(
+      admin.locator("tbody tr", { hasText: "@" }).first(),
+    ).toBeVisible();
     await evidenceShot(admin, "staff-access-list");
-    const ownRow = await rowOf(admin, adminAccount.email);
-    await expect(ownRow.first()).toBeVisible();
-    await expect(ownRow.first()).toContainText("Администратор платформы");
   });
 
   test("047 EARS-3/EARS-5/EARS-6 (V-9): a new email gets «Программный комитет» for an event, a one-time password, signs in with it and lands on the event's «Заявки»", async ({
@@ -447,7 +464,7 @@ test.describe("047 «Доступы» — a platform administrator grants staff 
     expect(admin.url()).toMatch(/\/access$/);
   });
 
-  test("047 EARS-7/EARS-9 (V-9): «Отозвать» removes the row and the person's open admin session ends at once; the own platform-administrator row is refused", async () => {
+  test("047 EARS-7/EARS-9 (V-9): «Отозвать» removes the row and the person's open admin session ends at once; the own rows offer no «Отозвать»", async () => {
     test.setTimeout(180_000);
     await admin.goto("/access");
     const listed = await rowOf(admin, committee.email);
@@ -489,29 +506,13 @@ test.describe("047 «Доступы» — a platform administrator grants staff 
     await person.goto(`/events/${eventA.id}/submissions`);
     await person.waitForURL(/\/login/, { timeout: 20_000 });
 
-    // The caller's own platform-administrator row: the API refusal, by name,
-    // with nothing to retry.
-    const own = await openRevoke(
-      admin,
-      adminAccount.email,
-      "Администратор платформы",
-    );
-    await own.getByRole("button", { name: "Отозвать" }).click();
-    const refusal = admin.getByTestId("staff-access-revoke-error");
-    await expect(refusal).toHaveAttribute("data-refusal", "selfPlatformAdmin", {
-      timeout: 30_000,
-    });
-    await expect(refusal).toContainText(
-      "Нельзя отозвать собственную роль администратора платформы. Ничего не изменено.",
-    );
-    await expect(admin.getByTestId("staff-access-revoke-submit")).toHaveCount(
-      0,
-    );
-    await own.getByRole("button", { name: "Отмена" }).click();
-    await expect(own).toBeHidden();
+    // 049 EARS-5: the caller's own rows draw no «Отозвать» at all — the API
+    // refusal of its own platform_admin (047 EARS-7) is never offered.
+    const own = await rowOf(admin, adminAccount.email);
     await expect(
-      (await rowOf(admin, adminAccount.email)).first(),
-    ).toContainText("Администратор платформы");
+      own.filter({ hasText: "Администратор платформы" }),
+    ).toHaveCount(1);
+    await expect(own.getByRole("button", { name: "Отозвать" })).toHaveCount(0);
   });
 
   test("047 EARS-8: with a 31-minute-old second factor «Отозвать» opens the code screen, and after the code the revocation completes once", async () => {
@@ -622,6 +623,100 @@ test.describe("047 «Доступы» — a platform administrator grants staff 
     await expect
       .poll(() => idpRoleKeysOf(email).catch(() => []))
       .not.toContain("platform_admin");
+  });
+
+  test("049 EARS-4/EARS-5 (V-8, V-9): a new email gets «Режиссёр трансляций» with no event, signs in with the temporary password and enrols TOTP; the row is revocable and «Доступы» is axe-clean with the new rows", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const email = uniqueEmail("director-new");
+    await admin.goto("/access");
+    await openGrantForm(admin);
+    const roleSelect = admin.getByTestId("staff-access-role");
+    await expect(
+      roleSelect.locator("option", { hasText: "Режиссёр трансляций" }),
+    ).toHaveCount(1);
+    await expect(
+      roleSelect.locator("option", { hasText: "Суперадминистратор" }),
+    ).toHaveCount(0);
+    await fillGrant(admin, {
+      email,
+      fullName: "Режиссёров Пётр Ильич",
+      role: "broadcast_director",
+    });
+    // A director is bound to no event: the form asks for none.
+    await expect(admin.getByTestId("staff-access-event")).toHaveCount(0);
+    await admin.getByTestId("staff-access-grant-submit").click();
+    const password = admin.getByTestId("staff-access-password");
+    await expect(password).toBeVisible({ timeout: 30_000 });
+    const temporaryPassword = await password.inputValue();
+    await admin.getByTestId("staff-access-grant-done").click();
+
+    const row = await rowOf(admin, email);
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText("Режиссёр трансляций");
+    await expect(row.getByRole("button", { name: "Отозвать" })).toBeVisible();
+    expect(await idpRoleKeysOf(email)).toEqual([
+      "broadcast_director",
+      "doctor_guest",
+    ]);
+
+    // V-9: «Доступы» is axe-clean showing the director row and, after the
+    // section's search (the list pages, so a row is found the way an
+    // administrator finds it), the superadministrator row.
+    const axeViolations = async (): Promise<string[]> => {
+      const results = await new AxeBuilder({ page: admin })
+        .withTags(WCAG_TAGS)
+        .analyze();
+      return results.violations.map(
+        (v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,
+      );
+    };
+    expect(await axeViolations(), "axe violations on «Доступы»").toEqual([]);
+    await evidenceShot(admin, "staff-access-list-director");
+    const superadminRows = await rowOf(admin, adminAccount.email);
+    await expect(
+      superadminRows.filter({ hasText: "Суперадминистратор" }),
+    ).toHaveCount(1);
+    expect(await axeViolations(), "axe violations on «Доступы»").toEqual([]);
+
+    // The director signs in with the temporary password and enrols TOTP (011).
+    const context = await browser.newContext({ locale: "ru-RU" });
+    try {
+      const director = await context.newPage();
+      const secret = await signInAsAdmin(director, {
+        email,
+        password: temporaryPassword,
+      });
+      expect(secret.length).toBeGreaterThan(0);
+      await expect(director).not.toHaveURL(/\/(login|mfa)/);
+      await expect(director.getByTestId("nav-access")).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("049 EARS-3 (V-8): a platform administrator sees no «Доступы» and the route shows the refusal page", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const platformAdmin = await bootstrapAdminSession(ADMIN_ORIGIN);
+    const context = await browser.newContext({ locale: "ru-RU" });
+    try {
+      const page = await context.newPage();
+      await signInAsAdmin(page, platformAdmin);
+      await page.goto("/events");
+      await expect(page.getByTestId("nav-events")).toBeVisible();
+      await expect(page.getByTestId("nav-access")).toHaveCount(0);
+      await page.goto("/access");
+      await expect(page.getByTestId("access-refused")).toHaveText(
+        "У этой учётной записи нет доступа к этому разделу.",
+      );
+      await expect(page.getByTestId("staff-access-grant-open")).toHaveCount(0);
+      await evidenceShot(page, "staff-access-platform-admin-refused");
+    } finally {
+      await context.close();
+    }
   });
 
   test("047 EARS-1: a congress registrar sees no «Доступы» and the route refuses them", async ({

@@ -31,6 +31,7 @@ import {
   STAFF_ACCESS_REVOCATIONS_PATH,
   staffAccessCells,
   staffAccessRowKey,
+  staffAccessRowRevocable,
   type GrantFormFields,
   type StaffAccessCells,
 } from "@/lib/staff-access";
@@ -42,19 +43,21 @@ import { useAdminAccess } from "@/lib/use-admin-access";
  * 047 EARS-1/EARS-2 — «Доступы»: every account holding a grantable staff role,
  * one row per person, role and event, on the `AdminDataList` composition the
  * congress roster uses (approved-non-canvas `feature-047-staff-access-v1`,
- * states `staff-access-nav` and `staff-access-list`). Platform administrator
- * only: the chrome draws the section for no one else (`lib/admin-access.ts`),
- * the shell refuses the route to anyone else, and the API refuses every
- * staff-access endpoint server-side.
+ * states `staff-access-nav` and `staff-access-list`); 049 EARS-3/EARS-5 move
+ * it to the superadministrator and list superadministrator rows too.
+ * Superadministrator only: the chrome draws the section for no one else
+ * (`lib/admin-access.ts`), the shell refuses the route to anyone else, and the
+ * API refuses every staff-access endpoint server-side.
  *
  * The list read (`GET /v1/admin/staff-access`) answers the whole set — a few
  * dozen staff — so the ФИО/почта search and the pager run over it here.
  *
  * «Выдать доступ» opens the grant panel (`StaffAccessGrantForm`); each row's
- * «Отозвать» opens the confirmation (`StaffAccessRevokeDialog`, 047 EARS-7). The
- * caller's own platform-administrator row draws it too: the session read the
- * console holds names roles, not the caller's account, so the API refusal
- * (`REVOKE_SELF_PLATFORM_ADMIN`) is what the dialog shows there.
+ * «Отозвать» opens the confirmation (`StaffAccessRevokeDialog`, 047 EARS-7). It
+ * is drawn only on a row the API marks `revocable` (049 EARS-5): never on a
+ * `superadmin` row, on the caller's own `platform_admin` row or on a
+ * superadministrator's `platform_admin` row — `superadmin` itself is granted
+ * and removed only by the operator command (049 EARS-6).
  *
  * A grant or a revocation the step-up interrupted (047 EARS-8) comes back here
  * from the code screen. One saved request exists at a time, so it is read once
@@ -81,7 +84,9 @@ export default function StaffAccessPage() {
     );
     if (saved?.path === STAFF_ACCESS_REVOCATIONS_PATH) {
       const row = StaffAccessRowSchema.safeParse(saved.context.row);
-      if (row.success) setRevoking({ row: row.data, replay: true });
+      if (row.success && staffAccessRowRevocable(row.data)) {
+        setRevoking({ row: row.data, replay: true });
+      }
       return;
     }
     const fields = saved?.context.fields as
@@ -149,22 +154,29 @@ export default function StaffAccessPage() {
       key: "actions",
       header: t("staffAccess.columns.actions"),
       width: "12%",
-      fullValue: () => t("staffAccess.revoke.trigger"),
-      render: (row) => (
-        <Button
-          variant="outline"
-          size="sm"
-          data-testid={`staff-access-revoke-${row.key}`}
-          onClick={() => {
-            // The list item itself, not the display row: it is what the
-            // step-up saves and reads back against the row schema.
-            const item = items.find((i) => staffAccessRowKey(i) === row.key);
-            if (item) setRevoking({ row: item, replay: false });
-          }}
-        >
-          {t("staffAccess.revoke.trigger")}
-        </Button>
-      ),
+      // 049 EARS-5: «Отозвать» only on a revocable row — never a
+      // superadministrator row, the caller's own platform administrator row or
+      // that of a holder of `superadmin`.
+      fullValue: (row) =>
+        staffAccessRowRevocable(row) ? t("staffAccess.revoke.trigger") : "",
+      render: (row) =>
+        !staffAccessRowRevocable(row) ? null : (
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid={`staff-access-revoke-${row.key}`}
+            onClick={() => {
+              // The list item itself, not the display row: it is what the
+              // step-up saves and reads back against the row schema.
+              const item = items.find((i) => staffAccessRowKey(i) === row.key);
+              if (item && staffAccessRowRevocable(item)) {
+                setRevoking({ row: item, replay: false });
+              }
+            }}
+          >
+            {t("staffAccess.revoke.trigger")}
+          </Button>
+        ),
     },
   ];
 

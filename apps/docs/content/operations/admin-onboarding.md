@@ -261,15 +261,23 @@ running `api` container, which already holds that environment's API
 configuration; there is no second-factor confirmation, so the post-action note
 below is the record of who acted and why.
 
-**Production** (ds-api-prod, from a `breakglass` session — `deploy` has no shell
-there). The api image carries the compiled command in `dist/`, so it runs with
-plain `node`; no pnpm, tsx or repository checkout is needed:
+**Production** (ds-api-prod, over the owner's `breakglass` key — `deploy` has no
+shell there). The api image carries the compiled command in `dist/`, so it runs
+with plain `node`; no pnpm, tsx or repository checkout is needed. `breakglass`
+cannot enter `/home/deploy`, so the whole step runs inside `sudo bash -c`. From
+the workstation, in one call (`ssh` refuses a key file other users can read:
+on Windows copy it to `~/.ssh` and leave only your own read access with
+`icacls <file> /inheritance:r` + `icacls <file> /grant:r "$env:USERNAME:R"`):
 
 ```bash
-cd /home/deploy/ds-platform/infra/deploy/compose/api-prod
-sudo docker compose exec -T api node dist/staff-access/superadmin-main.js grant  --email <account email> --by-admin <operator IdP sub>
-sudo docker compose exec -T api node dist/staff-access/superadmin-main.js remove --email <account email> --by-admin <operator IdP sub>
+ssh -t -i <breakglass key> -o IdentitiesOnly=yes breakglass@<ds-api-prod IP>   "sudo bash -c 'cd /home/deploy/ds-platform/infra/deploy/compose/api-prod && docker compose exec -T api node dist/staff-access/superadmin-main.js grant --email <account email> --by-admin <operator IdP sub>'"
 ```
+
+`remove` is the same call with `remove` in place of `grant`. The operator's IdP
+sub is the user's ID in the prod IdP console (Users → the account); without
+console rights, read it from the `users` mirror in an interactive session
+(`ssh … breakglass@<ds-api-prod IP>`, then `sudo -i`, then the `cd` above):
+`docker compose exec -T api node -e 'const {Client}=require("pg");const c=new Client({connectionString:process.env.DATABASE_URL});c.connect().then(()=>c.query("select zitadel_sub from users where email=$1",[process.argv[1]])).then(r=>{console.log(r.rows);return c.end()})' <account email>`.
 
 A stage PR slot runs the same `node dist/staff-access/superadmin-main.js …` in
 its own `api` container.

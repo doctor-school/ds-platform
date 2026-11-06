@@ -7,6 +7,7 @@ import { authLimitTagsFor } from "./lib/default-auth-limits.js";
 import {
   ordinaryStorefrontTagsFor,
   publicFeedStatePattern,
+  publicReadonlyPattern,
   signInHostTags,
 } from "./lib/host-tags.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
@@ -162,7 +163,9 @@ export default defineConfig({
   workers,
   forbidOnly: !!process.env.CI,
   ...(grep ? { grep } : {}),
-  grepInvert: publicFeedStatePattern,
+  grepInvert: new RegExp(
+    `${publicFeedStatePattern.source}|${publicReadonlyPattern.source}`,
+  ),
   retries: 0,
   timeout: 120_000,
   expect: { timeout: 20_000 },

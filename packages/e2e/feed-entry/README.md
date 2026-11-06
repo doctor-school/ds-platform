@@ -100,3 +100,48 @@ personalization claim. Canonical 018:137 checks real offline projection and
 same-card rendering; its local case remains for the otherwise unavailable
 positive НМО chip. First-block ordering, all-events navigation, failed-read
 retry, axe and API tests retain their separate boundaries.
+
+## Public read-only originals — 004 / 017 / 018
+
+`E2E_PUBLIC_READONLY=1` selects exactly the three originals at 004:253,
+017:450 and 018:316 without editing their canonical feature files. The matrix is
+Academy 1 and Doctor 2; the closed-book scenario keeps its Doctor Background
+before opening a separate real Admin context. The strict report checks each
+title once on its canonical host with zero failures, skips, retries, flakes or
+runner errors. Ordinary storefront runs exclude these owned-fixture identities.
+The existing 3751 and 3772 selections remain separate and unchanged.
+Pure title/host selection lives in the existing `lib/host-tags.ts` control
+module. Strict receipt validation stays outside the ordinary config's import
+graph in `lib/public-readonly-originals.ts`.
+
+Build API, Doctor, Academy and Admin with `API_PROXY_TARGET` pointing to the
+owned API. Use `ds_dev_3785` (the snapshot/migrate branch wrapper) or the CI-owned
+`ds_probe_3785`. In addition to the environment above, supply `E2E_PORTAL_URL`,
+`E2E_ADMIN_URL` and the development `IDP_ISSUER`, `IDP_SERVICE_TOKEN` and
+`IDP_PROJECT_ID`. Playwright owns all four compiled listeners and refuses reuse.
+The same three commands above generate, execute and validate this contour.
+
+The calendar fixture derives a future October from the API's actual horizon
+day, commits two owned events at the same instant, and reads the explicit
+October range through the actual Academy. The feed scenario reuses all four
+real specialty-feed Background assertions and preserves the footer's single
+Academy crossing. The book scenario retains all six real 017 Backgrounds,
+walks every seeded record across pagination, checks loading/search/empty/list
+states and inert rows, then verifies authenticated writes are refused and the
+exact public book is unchanged.
+
+An operator is test access infrastructure, not a new auth scenario. The existing
+compiled Zitadel adapter proves a unique email absent, returns the newly-created
+subject and grants its existing admin role; the normal browser helper completes
+the real MFA session. A duplicate create authorizes no deletion. `After` deletes
+only the returned owned subject and verifies absence, including setup failures.
+Its branch-only user mirror is removed with the owned branch database after
+proof. Never delete a shared actor or reset the stand. The workflow's 3785 arm
+reuses the existing Admin CI IdP provisioning recipe and uploads the actual
+`public-feed-originals-3785` report and head receipt. It uses the provisioner's
+existing headless Admin mode: the project, admin client and admin secret support
+the operator's real MFA, while the public Doctor/Academy originals remain
+anonymous. It does not configure storefront clients, sign-in-host routes or
+their internal credential; those belong to the separate auth contour. Supplying
+that credential would start a real silent SSO navigation requiring a login host
+this non-auth runner does not own.

@@ -159,3 +159,34 @@ export const publicFeedStateTitles = [
 export const publicFeedStatePattern = new RegExp(
   `(?:^|\\s)(?:${publicFeedStateTitles.join("|")})(?: @[^ ]+)*$`,
 );
+
+export const publicReadonlyOriginals = [
+  {
+    host: "academy",
+    title: "A mixed week list groups each event under the day it shows",
+  },
+  { host: "doctor", title: "The feed carries no Academy crossing of its own" },
+  {
+    host: "doctor",
+    title: "The closed Минздрав book is visible but never editable",
+  },
+] as const;
+
+function patternFor(titles: readonly string[]) {
+  const escaped = titles.map((title) =>
+    title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+  );
+  return new RegExp(`(?:^|\\s)(?:${escaped.join("|")})(?: @[^ ]+)*$`);
+}
+
+export const publicReadonlyPattern = patternFor(
+  publicReadonlyOriginals.map(({ title }) => title),
+);
+
+export function publicReadonlyPatternFor(host: StorefrontHostId) {
+  return patternFor(
+    publicReadonlyOriginals
+      .filter((item) => item.host === host)
+      .map(({ title }) => title),
+  );
+}

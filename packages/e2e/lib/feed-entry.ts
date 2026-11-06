@@ -21,9 +21,17 @@ const apiRequire = createRequire(
   resolve(feedEntryRoot, "apps/api/package.json"),
 );
 
+export function feedEntryTask(): 3751 | 3772 | 3785 {
+  return process.env.E2E_PUBLIC_READONLY === "1"
+    ? 3785
+    : process.env.E2E_PUBLIC_FEED_STATES === "1"
+      ? 3772
+      : 3751;
+}
+
 export function ownedFeedEntryDatabase(
   value: string,
-  task: 3751 | 3772 = 3751,
+  task: 3751 | 3772 | 3785 = feedEntryTask(),
 ): string {
   if (!new RegExp(`^/ds_(dev|probe)_${task}$`).test(new URL(value).pathname))
     throw new Error(
@@ -45,7 +53,7 @@ export function feedEntryLog(event: Record<string, unknown>) {
 }
 
 interface FeedEntryProcessIdentity {
-  name: "api" | "doctor";
+  name: "api" | "doctor" | "portal" | "admin";
   platform: NodeJS.Platform;
   root: string;
   command: string;
@@ -75,7 +83,7 @@ export function assertFeedEntryProcessIdentity(
       throw new Error("Feed-entry listener is not the owning Node executable");
     // Next replaces /proc cmdline with this title after boot; cwd + exe remain OS-owned.
     if (
-      identity.name === "doctor" &&
+      identity.name !== "api" &&
       /^next-server \(v[^()\s]+\)\s*$/.test(identity.command)
     )
       return;
@@ -97,6 +105,12 @@ export function verifyOwnedFeedEntryListeners() {
   for (const [name, url] of [
     ["api", process.env.E2E_API_URL],
     ["doctor", process.env.E2E_DOCTOR_URL],
+    ...(process.env.E2E_PUBLIC_READONLY === "1"
+      ? ([
+          ["portal", process.env.E2E_PORTAL_URL],
+          ["admin", process.env.E2E_ADMIN_URL],
+        ] as const)
+      : []),
   ] as const) {
     const port = Number(new URL(url!).port);
     let pid: number;
@@ -383,7 +397,7 @@ export async function verifyManagedFeedEntryAdjacency(specialtyId: string) {
   );
   const pool = new Pool({
     connectionString: database,
-    application_name: "feed-entry-3751-precondition",
+    application_name: `feed-entry-${feedEntryTask()}-precondition`,
   });
   const client = await pool.connect();
   const own = randomUUID(),
@@ -394,10 +408,19 @@ export async function verifyManagedFeedEntryAdjacency(specialtyId: string) {
     feedEntryLog({ command: "SQL", database: new URL(database).pathname, sql });
     return client.query(sql, values);
   }
+  feedEntryLog({
+    command:
+      "reserved exact transaction-local managed adjacency before mutation",
+    own,
+    adjacent,
+    link,
+    edge,
+  });
   try {
     const facts = (
       await query(
-        "SELECT current_database() AS name, (SELECT count(*)::int FROM pg_stat_activity WHERE application_name='feed-entry-3751-api') AS api_connections",
+        "SELECT current_database() AS name, (SELECT count(*)::int FROM pg_stat_activity WHERE application_name=$1) AS api_connections",
+        [`feed-entry-${feedEntryTask()}-api`],
       )
     ).rows[0];
     expect(`/${facts.name}`).toBe(new URL(database).pathname);

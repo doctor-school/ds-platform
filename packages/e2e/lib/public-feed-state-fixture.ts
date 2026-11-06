@@ -6,6 +6,7 @@ import { expect } from "@playwright/test";
 import {
   feedEntryLog,
   feedEntryRoot,
+  feedEntryTask,
   ownedFeedEntryDatabase,
 } from "./feed-entry.js";
 
@@ -15,13 +16,13 @@ const require = createRequire(resolve(feedEntryRoot, "apps/api/package.json"));
 export async function createPublicFeedStateFixture(specialtyId: string) {
   const database = ownedFeedEntryDatabase(
     process.env.E2E_FEED_ENTRY_DATABASE_URL ?? "",
-    3772,
+    process.env.E2E_PUBLIC_READONLY === "1" ? 3785 : 3772,
   );
   const { Pool } = require("pg");
   const { drizzle } = require("drizzle-orm/node-postgres");
   const pool = new Pool({
     connectionString: database,
-    application_name: "feed-states-3772-fixture",
+    application_name: `feed-states-${feedEntryTask()}-fixture`,
   });
   const client = await pool.connect();
   const own = randomUUID(),
@@ -91,10 +92,19 @@ export async function createPublicFeedStateFixture(specialtyId: string) {
       await pool.end();
     }
   }
+  feedEntryLog({
+    command: "reserved exact owned 018 fixture before mutation",
+    events,
+    own,
+    adjacent,
+    kind,
+    user,
+  });
   try {
     const facts = (
       await query(
-        "SELECT current_database() AS name, (SELECT count(*)::int FROM pg_stat_activity WHERE application_name='feed-entry-3772-api') AS api_connections",
+        "SELECT current_database() AS name, (SELECT count(*)::int FROM pg_stat_activity WHERE application_name=$1) AS api_connections",
+        [`feed-entry-${feedEntryTask()}-api`],
       )
     ).rows[0];
     expect(`/${facts.name}`).toBe(new URL(database).pathname);

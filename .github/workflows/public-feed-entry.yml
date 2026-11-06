@@ -7,6 +7,8 @@ on:
       - ".github/workflows/public-feed-entry.yml"
       - "packages/e2e/**"
       - "apps/doctor/**"
+      - "apps/admin/**"
+      - "apps/portal/**"
       - "apps/api/**"
       - "packages/db/**"
       - "packages/schemas/**"
@@ -14,6 +16,7 @@ on:
       - "packages/specialty-catalog/**"
       - "packages/events-storefront/**"
       - "packages/design-system/**"
+      - "apps/docs/content/specs/features/004-event-page-listing/**"
       - "apps/docs/content/specs/features/017-doctor-shell-specialties/**"
       - "apps/docs/content/specs/features/018-specialty-feed/**"
       - "design-source/doctor-home.dc.html"
@@ -27,6 +30,8 @@ on:
       - ".github/workflows/public-feed-entry.yml"
       - "packages/e2e/**"
       - "apps/doctor/**"
+      - "apps/admin/**"
+      - "apps/portal/**"
       - "apps/api/**"
       - "packages/db/**"
       - "packages/schemas/**"
@@ -34,6 +39,7 @@ on:
       - "packages/specialty-catalog/**"
       - "packages/events-storefront/**"
       - "packages/design-system/**"
+      - "apps/docs/content/specs/features/004-event-page-listing/**"
       - "apps/docs/content/specs/features/017-doctor-shell-specialties/**"
       - "apps/docs/content/specs/features/018-specialty-feed/**"
       - "design-source/doctor-home.dc.html"
@@ -56,16 +62,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        task: [3751, 3772]
-    timeout-minutes: 15
+        task: [3751, 3772, 3785]
+    timeout-minutes: 25
     env:
       TURBO_TELEMETRY_DISABLED: "1"
       DATABASE_URL: postgres://ds:ds@127.0.0.1:5432/ds_probe_${{ matrix.task }}
       API_PROXY_TARGET: http://127.0.0.1:3000
       E2E_API_URL: http://127.0.0.1:3000
       E2E_DOCTOR_URL: http://localhost:3004
+      E2E_PORTAL_URL: http://localhost:3001
+      E2E_ADMIN_URL: http://localhost:3200
       E2E_FEED_ENTRY_DATABASE_URL: postgres://ds:ds@127.0.0.1:5432/ds_probe_${{ matrix.task }}
       E2E_FEED_ENTRY_BOOT: "1"
+      E2E_PUBLIC_READONLY: ${{ matrix.task == 3785 && '1' || '0' }}
       E2E_PUBLIC_FEED_STATES: ${{ matrix.task == 3772 && '1' || '0' }}
     steps:
       - name: Resolve task-owned receipt paths on the runner
@@ -95,9 +104,103 @@ jobs:
           done
           docker logs ds-feed-entry-postgres
           exit 1
+      - name: Configure the existing Admin actor fixture for the read-only task
+        if: matrix.task == 3785
+        run: |
+          echo 'IDP_ISSUER=http://localhost:9080' >> "$GITHUB_ENV"
+          echo 'IDP_REDIRECT_URI=http://localhost:3000/auth/callback' >> "$GITHUB_ENV"
+      - name: Prepare the PAT mount
+        if: matrix.task == 3785
+        run: mkdir -p "$RUNNER_TEMP/idp-pat" && chmod 0777 "$RUNNER_TEMP/idp-pat"
+      - name: Start the IdP (Zitadel)
+        if: matrix.task == 3785
+        run: |
+          # ZITADEL_HTTPCLIENT_DENYLIST — the same SSRF-guard override as api-e2e
+          # (see the note there), the dev stand and stage/prod: the default list
+          # denies `localhost`, which refuses every runner-local URI the
+          # provisioner registers (e.g. a back-channel logout URI).
+          docker run -d --name ds-idp --network host \
+            -e ZITADEL_HTTPCLIENT_DENYLIST=169.254.0.0/16,fe80::/10,fc00::/7 \
+            -v "$RUNNER_TEMP/idp-pat":/pat \
+            -e ZITADEL_MASTERKEY=MasterkeyNeedsToHave32Characters \
+            -e ZITADEL_EXTERNALSECURE=false \
+            -e ZITADEL_TLS_ENABLED=false \
+            -e ZITADEL_EXTERNALDOMAIN=localhost \
+            -e ZITADEL_EXTERNALPORT=9080 \
+            -e ZITADEL_PORT=9080 \
+            -e ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED=true \
+            -e ZITADEL_DATABASE_POSTGRES_HOST=localhost \
+            -e ZITADEL_DATABASE_POSTGRES_PORT=5432 \
+            -e ZITADEL_DATABASE_POSTGRES_DATABASE=zitadel \
+            -e ZITADEL_DATABASE_POSTGRES_USER_USERNAME=ds \
+            -e ZITADEL_DATABASE_POSTGRES_USER_PASSWORD=ds \
+            -e ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE=disable \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME=ds \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD=ds \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE=disable \
+            -e ZITADEL_FIRSTINSTANCE_PATPATH=/pat/pat.txt \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME=ds-bootstrap \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME=ds-bootstrap \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE=2099-12-31T23:59:59Z \
+            ghcr.io/zitadel/zitadel:v4.17.3 \
+            start-from-init --masterkeyFromEnv
+      - name: Wait for the IdP to be ready
+        if: matrix.task == 3785
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:9080/debug/ready >/dev/null 2>&1; then
+              echo "IdP is ready"; exit 0
+            fi
+            echo "waiting for the IdP ($i/60)..."; sleep 5
+          done
+          echo "the IdP did not become ready in time"; docker logs ds-idp; exit 1
+      - name: Read the bootstrap PAT
+        if: matrix.task == 3785
+        run: |
+          for i in $(seq 1 30); do
+            if [ -s "$RUNNER_TEMP/idp-pat/pat.txt" ]; then
+              cp "$RUNNER_TEMP/idp-pat/pat.txt" ./idp-pat.txt
+              echo "::add-mask::$(cat ./idp-pat.txt)"
+              echo "IDP_SERVICE_TOKEN=$(cat ./idp-pat.txt)" >> "$GITHUB_ENV"
+              echo "bootstrap PAT read"; exit 0
+            fi
+            echo "waiting for the bootstrap PAT ($i/30)..."; sleep 2
+          done
+          echo "the bootstrap PAT never appeared"; docker logs ds-idp; exit 1
+      # /debug/ready can pass before the management API's internal gRPC listener
+      # is usable (#1887). Share the authenticated wait with api-e2e.
+      - name: Wait for authenticated IdP management readiness
+        if: matrix.task == 3785
+        run: node infra/dev-stand/idp/wait-ready.mjs
+      # The dev stand's own provisioner, unmodified — it is idempotent, needs
+      # only curl + jq (both on ubuntu-latest), seeds the
+      # `doctor_guest,platform_admin` roles the flows tier grants, and prints
+      # the three IDP_* values on STDOUT (diagnostics go to stderr). STDOUT
+      # goes to the FILE only — this repo is public, and the values include the
+      # OIDC client secret, so the log gets the stderr diagnostics and nothing
+      # else; the secret is masked before it enters $GITHUB_ENV. The secrets
+      # are per-run ephemeral (the IdP lives and dies on this runner), but a
+      # public log stays clean regardless.
+      - name: Provision the IdP project, client and roles
+        if: matrix.task == 3785
+        env:
+          IDP_BASE_URL: http://localhost:9080
+          # 017 EARS-19 needs the headless Admin actor. The public originals
+          # use the provisioner's existing mode without storefront clients.
+        run: |
+          set -euo pipefail
+          bash infra/dev-stand/idp/provision.sh --pat-file ./idp-pat.txt > ./idp-provision.out
+          client_secret="$(grep -E '^IDP_CLIENT_SECRET=' ./idp-provision.out | cut -d= -f2- || true)"
+          if [ -n "$client_secret" ]; then echo "::add-mask::$client_secret"; fi
+          grep -E '^IDP_(PROJECT_ID|CLIENT_ID|CLIENT_SECRET)=' ./idp-provision.out >> "$GITHUB_ENV"
+
       - name: Build committed API and Doctor, then migrate the owned DB
         run: |
-          pnpm exec turbo run build --filter=@ds/api --filter=@ds/doctor --filter=@ds/e2e...
+          if [ '${{ matrix.task }}' = '3785' ]; then
+            pnpm exec turbo run build --filter=@ds/api --filter=@ds/doctor --filter=@ds/portal --filter=@ds/admin --filter=@ds/e2e...
+          else
+            pnpm exec turbo run build --filter=@ds/api --filter=@ds/doctor --filter=@ds/e2e...
+          fi
           printf '%s\n' '{"command":"drizzle:migrate:ci against job-owned ds_probe_${{ matrix.task }}"}' >> "$E2E_FEED_ENTRY_LOG"
           pnpm --filter @ds/api drizzle:migrate:ci
       - name: Install Chromium
@@ -112,6 +215,7 @@ jobs:
         run: |
           mkdir -p "$E2E_FEED_ENTRY_ARTIFACT_DIR"
           printf '%s\n' '{"command":"Playwright webServer teardown completed; remove exact job-owned Postgres container"}' >> "$E2E_FEED_ENTRY_LOG"
+          if docker inspect ds-idp >/dev/null 2>&1; then docker rm -f ds-idp; fi
           if docker inspect ds-feed-entry-postgres >/dev/null 2>&1; then docker rm -f ds-feed-entry-postgres; fi
       - name: Upload strict feed-entry receipts
         if: always()

@@ -1,12 +1,11 @@
 import { expect, it } from "vitest";
 import ordinaryConfig from "../playwright.config.js";
-import {
-  publicFeedStatePattern,
-  publicFeedStateTitles,
-} from "./host-tags.js";
+import { publicFeedStatePattern, publicFeedStateTitles } from "./host-tags.js";
 
 it("EARS-1: ordinary storefront runs cannot execute fixture-only 018 originals even with a matching grep", () => {
-  expect(ordinaryConfig.grepInvert).toBe(publicFeedStatePattern);
+  expect((ordinaryConfig.grepInvert as RegExp).source).toContain(
+    publicFeedStatePattern.source,
+  );
   for (const title of publicFeedStateTitles)
     expect(
       (ordinaryConfig.grepInvert as RegExp).test(

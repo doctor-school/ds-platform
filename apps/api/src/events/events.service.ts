@@ -159,6 +159,20 @@ export const EVENT_ENDED_AUDIT_TYPE = "event.ended";
 export const EVENT_HIDDEN_AUDIT_TYPE = "event.hidden";
 
 /**
+ * 049 EARS-7 — the audit id per platform-machine target, so the generic
+ * `:id/transition` guard stamps the same row the named command for that edge
+ * does. The closed set ({@link canTransition}) under `platform` origin admits
+ * exactly these four targets; any other target is refused as an invalid move.
+ */
+type PlatformTarget = "published" | "live" | "ended" | "hidden";
+const PLATFORM_TRANSITION_AUDIT_TYPE: Record<PlatformTarget, string> = {
+  published: EVENT_PUBLISHED_AUDIT_TYPE,
+  live: EVENT_WENT_LIVE_AUDIT_TYPE,
+  ended: EVENT_ENDED_AUDIT_TYPE,
+  hidden: EVENT_HIDDEN_AUDIT_TYPE,
+};
+
+/**
  * 014 EARS-25 (#1741) — canonical `audit_ledger` event id for the legacy
  * machine's `hidden → in_archive` transition (`ArchiveLegacyBroadcast`,
  * 014-design §3.1; ADR-0003 §6). A DISTINCT type from the 007 transitions: it
@@ -831,15 +845,18 @@ export class EventsService {
    * read-side `validTransitions` derives, so the admin UI and the API cannot
    * disagree about what is legal.
    *
-   * This is the bare guarded transition every command runs through; the named
-   * transition commands (publish / open / close / hide — EARS-4/5/6) layer
-   * their product side-effects and the terminal `audit_ledger` row on top of it.
+   * A move made here is audited exactly like the named command for the same
+   * edge (publish / open / close / hide — EARS-4/5/6): the state change and one
+   * terminal `audit_ledger` row keyed to the acting principal are written
+   * atomically, so «every 007 lifecycle transition records its actor» holds for
+   * this entry point too (049 EARS-7).
    *
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
    */
   async transition(
     id: string,
     to: EventLifecycleState,
+    actorSub: string | null,
     expectedVersion?: number,
   ): Promise<EventAdminDetail | null> {
     const current = await this.repo.findById(id);
@@ -850,8 +867,8 @@ export class EventsService {
     // are NAMED routes: `ArchiveLegacyBroadcast` carries the published-recording
     // precondition (409 `EVENT_NOT_FINISHED`) and `event.archived_legacy`,
     // `HideLegacyBroadcast` carries `event.hidden_legacy`. This generic endpoint
-    // writes state through the bare `updateState` — no precondition, no audit
-    // row — so letting it reach either legacy edge would be precisely the
+    // carries none of their preconditions or audit ids, so letting it reach
+    // either legacy edge would be precisely the
     // «set-any-state escape hatch» 014-design §3.1 rules out: an эфир archived
     // with no recording to show and no feature-010 row to read it back from.
     // Refused 409 `INVALID_TRANSITION` before the version check and any write,
@@ -863,9 +880,22 @@ export class EventsService {
     if (!canTransition(from, to, current.event.origin)) {
       throw new InvalidTransitionError(from, to);
     }
+    const auditType: string | undefined =
+      PLATFORM_TRANSITION_AUDIT_TYPE[to as PlatformTarget];
+    if (!auditType) throw new InvalidTransitionError(from, to);
     assertVersion(current.event, expectedVersion);
 
-    const updated = await this.repo.updateState(id, to, expectedVersion);
+    const updated = await this.repo.updateStateWithAudit(
+      id,
+      to,
+      {
+        eventType: auditType,
+        subjectId: actorSub,
+        from,
+      },
+      undefined,
+      expectedVersion,
+    );
     return this.resolveWriteOutcome(id, updated, expectedVersion);
   }
 
@@ -899,7 +929,7 @@ export class EventsService {
    * {@link InvalidTransitionError} and the state is left untouched. On success
    * the state change and exactly one terminal `audit_ledger` row are written
    * atomically ({@link EventsRepository.updateStateWithAudit}), keyed to the
-   * acting `platform_admin` (`actorSub`).
+   * acting principal (`actorSub`).
    *
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
    */
@@ -929,7 +959,7 @@ export class EventsService {
    * {@link InvalidTransitionError} and the state is left untouched. On success
    * the state change and exactly one terminal `audit_ledger` row are written
    * atomically ({@link EventsRepository.updateStateWithAudit}), keyed to the
-   * acting `platform_admin` (`actorSub`). 006's own admission/heartbeat/chat
+   * acting principal (`actorSub`). 006's own admission/heartbeat/chat
    * logic consumes this `live` window — it is not this handler's concern.
    *
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
@@ -958,7 +988,7 @@ export class EventsService {
    * closed-set guard: close is **refused unless the event is in `live`** — any
    * other origin raises {@link InvalidTransitionError} with the state untouched.
    * On success the state change and exactly one terminal `audit_ledger` row are
-   * written atomically, keyed to the acting `platform_admin`.
+   * written atomically, keyed to the acting principal.
    *
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
    */
@@ -998,7 +1028,7 @@ export class EventsService {
    * state left untouched and no audit row. On success the state change and
    * exactly one terminal `audit_ledger` row are written atomically
    * ({@link EventsRepository.updateStateWithAudit}), keyed to the acting
-   * `platform_admin` (`actorSub`). `hidden` is terminal (no reopen — EARS-7).
+   * principal (`actorSub`). `hidden` is terminal (no reopen — EARS-7).
    *
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
    */

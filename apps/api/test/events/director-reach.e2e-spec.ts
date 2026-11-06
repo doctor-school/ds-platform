@@ -341,6 +341,65 @@ describe.skipIf(!process.env.DATABASE_URL)(
       for (const row of rows) expect(row.subject_id).toBe(director.sub);
     }, 60_000);
 
+    it("049 EARS-7: a lifecycle transition made through the generic :id/transition guard records its actor in audit_ledger — the director and platform_admin alike", async () => {
+      const director = await staff("dirtr", [DIRECTOR]);
+      const admin = await staff("patr", ["platform_admin"]);
+
+      for (const actor of [director, admin]) {
+        const mp = multipartBody({
+          payload: JSON.stringify({
+            title: "Эфир через переход",
+            school: "Кардиология",
+            startsAtMsk: futureMskStart(31, "19:00"),
+            ...eventClassification(),
+            durationMin: 90,
+            specialties: ["cardiology"],
+          }),
+        });
+        const created = await app.inject({
+          method: "POST",
+          url: "/v1/admin/events",
+          headers: { ...actor.headers, "content-type": mp.contentType },
+          payload: mp.body,
+        });
+        expect(created.statusCode).toBe(201);
+        const { id } = created.json() as { id: string };
+        createdEvents.push(id);
+
+        for (const to of ["published", "live", "ended", "hidden"] as const) {
+          const res = await app.inject({
+            method: "POST",
+            url: `/v1/admin/events/${id}/transition`,
+            headers: {
+              ...actor.headers,
+              ...(await ifMatch(id)),
+              "content-type": "application/json",
+            },
+            payload: { to },
+          });
+          expect(res.statusCode, to).toBe(200);
+          expect((res.json() as { state: string }).state, to).toBe(to);
+        }
+
+        const { rows } = await pool.query<{
+          event_type: string;
+          subject_id: string | null;
+        }>(
+          `SELECT event_type, subject_id FROM audit_ledger
+             WHERE metadata->>'aggregateId' = $1
+               AND event_type IN ('event.published', 'event.went_live', 'event.ended', 'event.hidden')`,
+          [id],
+        );
+        expect(rows.map((r) => r.event_type).sort()).toEqual([
+          "event.ended",
+          "event.hidden",
+          "event.published",
+          "event.went_live",
+        ]);
+        for (const row of rows) expect(row.subject_id).toBe(actor.sub);
+      }
+    }, 60_000);
+
     it("049 EARS-7: a director edits the event's experts, projects and directions links and makes the event screens' dictionary reads", async () => {
       const admin = await staff("pa", ["platform_admin"]);
       const director = await staff("dir", [DIRECTOR]);

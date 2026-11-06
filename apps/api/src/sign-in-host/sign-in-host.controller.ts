@@ -122,10 +122,9 @@ export class SignInHostController {
   ) {}
 
   /**
-   * The entry carries no `@RateLimited`: which bucket it counts in depends on
-   * the auth request Zitadel holds, so the service consumes it after the read
-   * (003 EARS-63 (f)) — a silent check in `oidc:silent-check` only, every other
-   * entry in `sign-in-host:entry` with the guard's 429 and `Retry-After`.
+   * The entry carries no `@RateLimited`: the service applies its limits itself,
+   * before any form-state or Zitadel read (003 EARS-13, EARS-63 (f)); a
+   * `throttled` outcome is the guard's own 429 via `refuseThrottled`.
    */
   @Get("entry")
   @Public()
@@ -133,7 +132,16 @@ export class SignInHostController {
     access: "public",
     check: "none",
     audit: "high-stakes",
-    tests: ["EARS-60", "EARS-64", "EARS-66", "EARS-67", "EARS-68", "EARS-71"],
+    tests: [
+      "EARS-13",
+      "EARS-60",
+      "EARS-63",
+      "EARS-64",
+      "EARS-66",
+      "EARS-67",
+      "EARS-68",
+      "EARS-71",
+    ],
   })
   async entry(
     @Query() query: SignInHostEntryQueryDto,

@@ -4,13 +4,17 @@ import {
   publicSpecialtyMemoryTitles,
 } from "./host-tags.js";
 import { assertPublicReadonlyReport } from "./public-readonly-originals.js";
+import { assertRecordFormsReport } from "./record-forms-report.js";
 import {
   assertOperationalReport,
   operationalOriginals,
 } from "../api-probes/operational-report.js";
 
 const report = JSON.parse(readFileSync(process.argv[2]!, "utf8"));
-if (process.env.E2E_PUBLIC_READONLY === "1") assertPublicReadonlyReport(report);
+if (process.env.E2E_PUBLIC_RECORD_FORMS === "1")
+  assertRecordFormsReport(report);
+else if (process.env.E2E_PUBLIC_READONLY === "1")
+  assertPublicReadonlyReport(report);
 else
   assertOperationalReport(
     report,

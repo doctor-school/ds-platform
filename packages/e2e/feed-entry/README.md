@@ -179,3 +179,38 @@ ownership before mutation, deletes the created IdP actor and verifies absence.
 The branch-only mirror remains in the owned database for canonical cleanup.
 App-local specialty-memory, feed-layout and taxonomy author/reject/retire/restore
 tests remain because they cover distinct mocked or broader boundaries.
+
+## Record tabs, vocabulary and Field layout — 017 EARS-18
+
+`E2E_PUBLIC_RECORD_FORMS=1` selects exactly 017:401, 017:407 and 017:415 on
+Doctor. It preserves the canonical feature and executes all six real Doctor
+Background groups before opening a separate Admin context. The strict receipt
+requires all three passes and the eighteen completed groups in their actual
+JSON attachments, with no failure, skip, retry, flake or runner error. Ordinary
+storefront runs exclude these exact titles. CI adds task 3797 alongside the
+preceding twelve cases.
+
+Use the existing commands with `ds_dev_3797` (snapshot/migrate wrapper) or the
+job-owned `ds_probe_3797`, compiled API/Doctor/Admin and development IdP variables.
+Only the existing task-scoped operator infrastructure establishes access. The
+browser creates unique direction records and adjacency edges through the normal
+forms. The single-tab case checks loaded edge content and absent tabs, then
+switches both real direction tabs and their panels. The vocabulary case checks
+all three Russian labels and explanation lines, submits a choice, reads its
+exact API and database slug, and requires a normal authenticated/CSRF-protected
+invalid-kind PATCH to return a field-level 400 while preserving the whole row.
+
+The form case checks one framed form, two fieldsets with statement legends and
+associated descriptions, and the computed separating hairline. The existing
+TypeScript provenance mechanism also verifies the owning imported Field-family
+bindings are mounted in the returned form tree, including one terminal action
+row; a dead import or local layout cannot establish that evidence.
+
+The fixture permits only the exact 3797 database with the owning API application
+name, records API-created IDs, and removes and reads back only those rows in
+`After`, including failures. Created IdP subjects are deleted with absence
+readbacks. Branch-only user mirrors and the database remain for the lead's
+post-merge cleanup. Log every stand/SQL/process/port operation; preserve failed
+reports and snapshots. App-local layout, lifecycle, API rejection and Field
+primitive tests retain their distinct boundaries. No product visual changes or
+owner Stage-B stand are introduced.

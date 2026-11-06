@@ -24,12 +24,7 @@ export interface LifecycleAction {
    * design §3.1 for the two `*-legacy` commands of the second machine).
    */
   readonly command:
-    | "publish"
-    | "open"
-    | "close"
-    | "hide"
-    | "archive-legacy"
-    | "hide-legacy";
+    "publish" | "open" | "close" | "hide" | "archive-legacy" | "hide-legacy";
   /** The message-catalog key (under `events.action.*`) for the button label. */
   readonly labelKey: string;
   /** A stable test id / data attribute so the e2e can address the button. */
@@ -125,11 +120,23 @@ const ACTIONS: readonly LifecycleAction[] = [
 export function actionsFor(
   state: EventLifecycleState,
   validTransitions: readonly EventLifecycleState[],
+  /**
+   * 049 EARS-8 — `legacy: false` withholds the legacy machine's commands
+   * («Архивировать» / «Скрыть» of an архивный эфир): a broadcast director is
+   * not admitted to them, so its bar never offers them.
+   */
+  opts: { legacy?: boolean } = {},
 ): LifecycleAction[] {
   return validTransitions
     .map((to) => ACTIONS.find((a) => a.from === state && a.to === to))
-    .filter((a): a is LifecycleAction => a !== undefined);
+    .filter((a): a is LifecycleAction => a !== undefined)
+    .filter((a) => opts.legacy !== false || !LEGACY_COMMANDS.has(a.command));
 }
+
+const LEGACY_COMMANDS: ReadonlySet<LifecycleAction["command"]> = new Set([
+  "archive-legacy",
+  "hide-legacy",
+]);
 
 /**
  * Build the `useCustomMutation` request for one named lifecycle command

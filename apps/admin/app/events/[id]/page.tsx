@@ -30,6 +30,7 @@ import { EventDirectionsPanel } from "@/components/event-directions-panel";
 import { StateBadge } from "@/components/state-badge";
 import { eventUpdateVars } from "@/lib/event-update-vars";
 import { formatMskDateTime } from "@/lib/msk";
+import { useAdminAccess } from "@/lib/use-admin-access";
 
 /**
  * Event edit page (design §8) — the single detail surface carrying the aggregate
@@ -49,6 +50,10 @@ export default function EventEditPage() {
   const t = useTranslations();
   const params = useParams();
   const id = String(params.id);
+  // 049 EARS-8 — a broadcast director sees this card without the roster /
+  // intake / submissions links, the recordings tab and the legacy commands:
+  // those surfaces belong to the platform administrator alone.
+  const full = useAdminAccess()?.full === true;
   const { result: detail, query } = useOne<EventAdminDetail>({
     resource: "events",
     id,
@@ -88,36 +93,41 @@ export default function EventEditPage() {
                 </p>
                 {/* 044 EARS-21 — the platform administrator's way into the
                     event's registrations; view-only, like the roster itself. */}
-                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                  <DsLink asChild variant="standalone" size="sm">
-                    <Link
-                      href={`/events/${id}/roster`}
-                      data-testid="event-roster-link"
-                    >
-                      {t("congressRoster.entryLink")}
-                    </Link>
-                  </DsLink>
-                  {/* 046 EARS-2 — the event's congress intake settings, beside
+                {full ? (
+                  <div
+                    className="flex flex-wrap gap-x-4 gap-y-1"
+                    data-testid="event-staff-links"
+                  >
+                    <DsLink asChild variant="standalone" size="sm">
+                      <Link
+                        href={`/events/${id}/roster`}
+                        data-testid="event-roster-link"
+                      >
+                        {t("congressRoster.entryLink")}
+                      </Link>
+                    </DsLink>
+                    {/* 046 EARS-2 — the event's congress intake settings, beside
                       its roster; platform administrator only. */}
-                  <DsLink asChild variant="standalone" size="sm">
-                    <Link
-                      href={`/events/${id}/congress-intake`}
-                      data-testid="event-congress-intake-link"
-                    >
-                      {t("congressIntake.entryLink")}
-                    </Link>
-                  </DsLink>
-                  {/* 046 EARS-31 — the event's congress submissions registry,
+                    <DsLink asChild variant="standalone" size="sm">
+                      <Link
+                        href={`/events/${id}/congress-intake`}
+                        data-testid="event-congress-intake-link"
+                      >
+                        {t("congressIntake.entryLink")}
+                      </Link>
+                    </DsLink>
+                    {/* 046 EARS-31 — the event's congress submissions registry,
                       beside its intake settings. */}
-                  <DsLink asChild variant="standalone" size="sm">
-                    <Link
-                      href={`/events/${id}/submissions`}
-                      data-testid="event-submissions-link"
-                    >
-                      {t("congressSubmissions.entryLink")}
-                    </Link>
-                  </DsLink>
-                </div>
+                    <DsLink asChild variant="standalone" size="sm">
+                      <Link
+                        href={`/events/${id}/submissions`}
+                        data-testid="event-submissions-link"
+                      >
+                        {t("congressSubmissions.entryLink")}
+                      </Link>
+                    </DsLink>
+                  </div>
+                ) : null}
               </div>
               <StateBadge state={detail.state} />
             </div>
@@ -127,9 +137,11 @@ export default function EventEditPage() {
                 <TabsTrigger value="main" data-testid="tab-main">
                   {t("events.tabs.main")}
                 </TabsTrigger>
-                <TabsTrigger value="recordings" data-testid="tab-recordings">
-                  {t("events.tabs.recordings")}
-                </TabsTrigger>
+                {full ? (
+                  <TabsTrigger value="recordings" data-testid="tab-recordings">
+                    {t("events.tabs.recordings")}
+                  </TabsTrigger>
+                ) : null}
                 {/* 012 EARS-7 (#1289) — the event↔expert link editor lives on the
                     event, per 012-design §7 («relationship editors embedded in
                     the existing 007 event form»), in the Stage-A tabbed
@@ -152,7 +164,11 @@ export default function EventEditPage() {
                     <CardTitle>{t("events.sections.lifecycle")}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <LifecycleActions detail={detail} refetch={() => refetch()} />
+                    <LifecycleActions
+                      detail={detail}
+                      refetch={() => refetch()}
+                      legacy={full}
+                    />
                   </CardContent>
                 </Card>
 
@@ -241,19 +257,21 @@ export default function EventEditPage() {
                   event-level readiness date. It re-fetches the event detail on a
                   readiness-date save so the badge/aggregate above stays the one
                   the server just wrote (EARS-9). */}
-              <TabsContent value="recordings">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{t("recordings.title")}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <RecordingsPanel
-                      eventId={id}
-                      onEventChanged={() => refetch()}
-                    />
-                  </CardContent>
-                </Card>
-              </TabsContent>
+              {full ? (
+                <TabsContent value="recordings">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>{t("recordings.title")}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <RecordingsPanel
+                        eventId={id}
+                        onEventChanged={() => refetch()}
+                      />
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              ) : null}
 
               {/* «Эксперты» (012 EARS-7) — the event↔expert link editor. */}
               <TabsContent value="experts">

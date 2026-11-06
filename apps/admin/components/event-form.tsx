@@ -160,9 +160,15 @@ export function EventForm({
   onSubmit,
   submitting,
   savedAt,
+  offerLegacy = false,
 }: {
   detail?: EventAdminDetail;
   submitLabel: string;
+  /**
+   * 049 EARS-8 — draw the «Это архивный эфир» create option. Only a platform
+   * administrator creates an архивный эфир; a broadcast director never sees it.
+   */
+  offerLegacy?: boolean;
   onSubmit: (values: EventFormValues) => void;
   submitting?: boolean;
   /**
@@ -287,7 +293,7 @@ export function EventForm({
               {t("events.legacyBadge")}
             </p>
           ) : null
-        ) : (
+        ) : offerLegacy ? (
           <FormField
             control={form.control}
             name="legacy"
@@ -310,7 +316,7 @@ export function EventForm({
               </FormItem>
             )}
           />
-        )}
+        ) : null}
 
         <FormField
           control={form.control}

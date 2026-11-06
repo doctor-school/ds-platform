@@ -19,7 +19,8 @@ import { fetchAdminSession } from "@/lib/admin-session-cache";
  * `GET /v1/admin/auth/session` read (`roles` + `eventGrants`), projected by
  * `lib/admin-access.ts` — the same cached read the chrome draws from
  * (`lib/admin-session-cache.ts`): `platform_admin` → everything; a registrar → only the
- * `congress-roster` resource of its bound event; anything unreadable → nothing.
+ * `congress-roster` resource of its bound event; a broadcast director (049
+ * EARS-8) → the event screens' resources only; anything unreadable → nothing.
  */
 export const accessControlProvider: AccessControlProvider = {
   can: async ({ resource, params }) => {

@@ -92,6 +92,8 @@ READ_REASONS = (
     "insufficient headroom (disk)",
     "insufficient headroom (memory)",
     "copy behind prod",
+    "copy exited before promotion",
+    "copy did not promote in time",
     "archive check failed",
     "the read failed",
 )
@@ -283,13 +285,14 @@ def parse_apply(stdout, stderr, tags, returncode=0):
 
 
 def report(sha, *, pending, state, backup=None, recovered_to=None, migrations=(),
-           catalogue_after=None, reason=None, restore_only=False, headroom=None):
+           catalogue_after=None, reason=None, restore_only=False, headroom=None, copy_exit=None):
     """The report shape of spec «Report.»."""
     if state not in ("succeeded", "failed"):
         raise ValueError(state)
     return {"verb": "rehearse", "sha": sha, "backup": backup, "recoveredTo": recovered_to,
             "pending": pending, "migrations": list(migrations), "catalogueAfter": catalogue_after,
-            "state": state, "reason": reason, "restoreOnly": bool(restore_only), "headroom": headroom}
+            "state": state, "reason": reason, "restoreOnly": bool(restore_only), "headroom": headroom,
+            "copyExit": copy_exit}
 
 
 def headroom_required(db_size):
@@ -586,8 +589,27 @@ def cmd_start(sha, archive, restore_only=False):
     return answer({"verb": verb, "sha": sha, "state": "started", "pending": len(pending)})
 
 
-def wait_promoted(sha, deadline):
-    """Until the copy has replayed the archive and promoted (pg_is_in_recovery() = f)."""
+def promote_deadline(started):
+    """The copy's promotion deadline: 120 s of the unit's runtime cap stay for the apply
+    and the report. A test root may shorten the wait (DS_REHEARSE_PROMOTE_SEC)."""
+    override = os.environ.get("DS_REHEARSE_PROMOTE_SEC") if ROOT else None
+    return time.monotonic() + float(override) if override else started + RUNTIME_MAX_SEC - 120
+
+
+def copy_exit(sha):
+    """The stopped copy's exit code and OOM kill (aggregates of `docker inspect`, never
+    its log), or None when the state does not read."""
+    done = docker("inspect", "-f", "{{.State.ExitCode}} {{.State.OOMKilled}}", "ds-rehearse-" + sha12(sha),
+                  timeout=30)
+    m = re.fullmatch(r"(-?[0-9]{1,5}) (true|false)", done.stdout.decode("utf-8", "replace").strip())
+    if done.returncode != 0 or not m:
+        return None
+    return {"exitCode": int(m.group(1)), "oomKilled": m.group(2) == "true"}
+
+
+def wait_promoted(sha, deadline, ctx):
+    """Until the copy has replayed the archive and promoted (pg_is_in_recovery() = f).
+    A stopped copy records its exit in ctx before the teardown removes the container."""
     while time.monotonic() < deadline:
         done = run(copy_prefix(sha) + ["psql", "-X", "-qAt", "-U", "ds", "-d", DATABASE, "-c",
                                        "SELECT pg_is_in_recovery()"], timeout=30)
@@ -595,9 +617,10 @@ def wait_promoted(sha, deadline):
             return
         state = docker("inspect", "-f", "{{.State.Running}}", "ds-rehearse-" + sha12(sha), timeout=30)
         if state.stdout.decode("utf-8", "replace").strip() != "true":
-            raise Stop(1, "copy behind prod")
+            ctx["copy_exit"] = copy_exit(sha)
+            raise Stop(1, "copy exited before promotion")
         time.sleep(2)
-    raise Stop(1, "copy behind prod")
+    raise Stop(1, "copy did not promote in time")
 
 
 def cmd_run(sha):
@@ -613,7 +636,7 @@ def cmd_run(sha):
         return 1
     pending, backup = plan["pending"], plan["backup"]
     restore_only = plan.get("restoreOnly") is True
-    ctx = {"backup": backup, "recovered_to": None, "migrations": []}
+    ctx = {"backup": backup, "recovered_to": None, "migrations": [], "copy_exit": None}
 
     def measured():
         # The plan's headroom inputs plus the scratch the run occupies now, read before
@@ -625,7 +648,7 @@ def cmd_run(sha):
     def done_report(state, **kw):
         write_report(sha, report(sha, pending=len(pending), state=state, backup=backup,
                                  recovered_to=ctx["recovered_to"], restore_only=restore_only,
-                                 headroom=measured(), **kw))
+                                 headroom=measured(), copy_exit=ctx["copy_exit"], **kw))
 
     try:
         migrations = load_migrations(base, pending)
@@ -654,12 +677,21 @@ def cmd_run(sha):
                       timeout=600)
         if done.returncode != 0:
             raise Stop(1, "the read failed")
-        done = docker("run", "-d", "--rm", "--name", "ds-rehearse-" + sha12(sha), *CAPS, *mounts,
+        # No --rm: a copy that stops stays inspectable for its exit; the `finally` below,
+        # rehearse-cleanup and the next start's remove_leftovers remove it.
+        # hot_standby=off: with hot standby on, recovery requires max_connections & co.
+        # to be >= the primary's values recorded in WAL and aborts or pauses otherwise
+        # (PostgreSQL 17 docs §26.4.3 hot-standby.html#HOT-STANDBY-ADMIN; the check runs
+        # only under `ArchiveRecoveryRequested && EnableHotStandby`, xlog.c
+        # CheckRequiredParameterValues). The copy is never queried before promotion
+        # (wait_promoted tolerates a failed psql), so the small settings stay.
+        done = docker("run", "-d", "--name", "ds-rehearse-" + sha12(sha), *CAPS, *mounts,
                       pg_image, "postgres", "-c", "listen_addresses=", "-c", "archive_mode=off",
-                      "-c", "shared_buffers=128MB", "-c", "max_connections=10", timeout=60)
+                      "-c", "hot_standby=off", "-c", "shared_buffers=128MB", "-c", "max_connections=10",
+                      timeout=60)
         if done.returncode != 0:
             raise Stop(1, "the read failed")
-        wait_promoted(sha, started + RUNTIME_MAX_SEC - 120)
+        wait_promoted(sha, promote_deadline(started), ctx)
         # The copy replayed WAL past the backup end up to the switch `check` forced.
         logs = docker("logs", "ds-rehearse-" + sha12(sha), timeout=60)
         replayed = ('restored log file "%s" from archive' % switch.group(1)) in (

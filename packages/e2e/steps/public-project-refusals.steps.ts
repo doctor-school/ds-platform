@@ -291,7 +291,7 @@ Then('"Педиатрия" stays a draft', async ({ page }) => {
   );
 });
 When(
-  'the administrator saves a result of "Ортобиология" with the link "https://example.com/school"',
+  /^the administrator saves a result of "Ортобиология" with the link "https:\/\/example\.com\/school"$/,
   async ({ page }) => {
     const value = state(page);
     await value.fixture.createProject("Ортобиология", true);
@@ -348,7 +348,7 @@ Then('the results of "Ортобиология" are unchanged', async ({ page })
     "Результат 2",
   );
 });
-When('a doctor opens "/projects" on doctor.school', async ({ page, host }) => {
+When(/^a doctor opens "\/projects" on doctor\.school$/, async ({ page, host }) => {
   expect(host.id).toBe("academy");
   const origin = new URL(process.env.E2E_DOCTOR_URL!).origin;
   const response = await page.goto(`${origin}/projects`);

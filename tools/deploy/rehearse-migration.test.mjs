@@ -148,6 +148,23 @@ test("3648: the copy's catalogue is the `schema` catalogue, character for charac
   assert.equal(harness, entrypoint);
 });
 
+test("3648: the harness, the data and read entrypoints and prod-read.mjs carry the same read reasons", async () => {
+  const { READ_REASONS } = await import("./lib/prod-read.mjs");
+  const py = readFileSync(HARNESS, "utf8");
+  const from = py.indexOf("READ_REASONS = (\n");
+  const tuple = py.slice(from, py.indexOf("\n)\n", from));
+  const bash = (file) => {
+    const text = readFileSync(file, "utf8");
+    const start = text.indexOf("READ_REASONS=(\n");
+    return [...text.slice(start, text.indexOf("\n)\n", start)).matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  };
+  for (const reason of ["copy exited before promotion", "copy did not promote in time", "copy behind prod"])
+    assert.ok(READ_REASONS.includes(reason), reason);
+  assert.deepEqual([...tuple.matchAll(/"([^"]+)"/g)].map((m) => m[1]), READ_REASONS);
+  assert.deepEqual(bash(ENTRYPOINT), READ_REASONS);
+  assert.deepEqual(bash(resolve(here, "../../infra/deploy/bin/ds-read-entrypoint")), READ_REASONS);
+});
+
 describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, () => {
   let dir, root;
   const JOURNAL = {
@@ -385,7 +402,8 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     const r = harness(["run", SHA]);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     const report = reportOf();
-    assert.deepEqual(Object.keys(report), ["verb", "sha", "backup", "recoveredTo", "pending", "migrations", "catalogueAfter", "state", "reason", "restoreOnly", "headroom"]);
+    assert.deepEqual(Object.keys(report), ["verb", "sha", "backup", "recoveredTo", "pending", "migrations", "catalogueAfter", "state", "reason", "restoreOnly", "headroom", "copyExit"]);
+    assert.equal(report.copyExit, null);
     assert.equal(report.verb, "rehearse");
     assert.equal(report.restoreOnly, false);
     // The measured headroom (bytes): the check's inputs from `start`, the scratch the copy used.
@@ -410,9 +428,12 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     assert.ok(restore.args.includes(`sha256:${"2".repeat(64)}`), "the recorded pgbackrest image");
     for (const a of ["--type=default", "--archive-mode=off", "restore", "--user", "postgres"]) assert.ok(restore.args.includes(a), a);
     assert.ok(!restore.args.some((a) => /^--target-action/.test(a)));
-    assert.deepEqual(copy.args.slice(0, 5), ["run", "-d", "--rm", "--name", `ds-rehearse-${SHA12}`]);
+    // No --rm: a stopped copy stays inspectable (its exit code); teardown removes it.
+    assert.deepEqual(copy.args.slice(0, 4), ["run", "-d", "--name", `ds-rehearse-${SHA12}`]);
+    assert.ok(!copy.args.includes("--rm"));
     assert.ok(copy.args.includes(`sha256:${"1".repeat(64)}`), "the recorded postgres image");
-    for (const a of ["listen_addresses=", "archive_mode=off", "shared_buffers=128MB", "max_connections=10"]) assert.ok(copy.args.includes(a), a);
+    // hot_standby=off: no floor of the primary's max_connections & co. during recovery.
+    for (const a of ["listen_addresses=", "archive_mode=off", "hot_standby=off", "shared_buffers=128MB", "max_connections=10"]) assert.ok(copy.args.includes(a), a);
     for (const run of [restore, copy]) {
       const s = run.args.join(" ");
       assert.match(s, /--memory 768m --memory-swap 768m --oom-score-adj 1000/);
@@ -456,19 +477,46 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     ["`pgbackrest check` names no WAL switch", { noSwitch: true }, "archive check failed", false],
     ["the copy did not replay the segment the check archived", { noReplay: true }, "copy behind prod", true],
     ["the copy's newest migration differs from prod's", { copyNewest: 900 }, "copy behind prod", true],
+    ["the copy did not promote before the deadline", { neverPromotes: true, env: { DS_REHEARSE_PROMOTE_SEC: "1" } }, "copy did not promote in time", true],
   ]) {
     it(`run fails (exit 1, ${reason}) when ${label}; nothing is applied, everything is torn down`, () => {
       started();
-      const r = harness(["run", SHA], scenario);
+      const { env, ...sc } = scenario;
+      const r = harness(["run", SHA], sc, env);
       assert.equal(r.status, 1, r.stdout + r.stderr);
       const report = reportOf();
       assert.equal(report.state, "failed");
       assert.equal(report.reason, reason);
+      assert.equal(report.copyExit, null);
       assert.deepEqual(report.migrations, []);
       assert.equal(dockerRuns().length > 0, restored);
       assert.ok(!calls().some((c) => c.stdin.includes("VERBOSITY verbose")), "nothing applied");
       assert.ok(scratchEmpty());
       assert.ok(calls().some((c) => c.args.join(" ") === `rm -f ds-rehearse-${SHA12}`));
+    });
+  }
+
+  for (const [label, exit, copyExit] of [
+    ["was OOM-killed", { exitCode: 137, oomKilled: true }, { exitCode: 137, oomKilled: true }],
+    ["exited on its own", { exitCode: 1, oomKilled: false }, { exitCode: 1, oomKilled: false }],
+    ["left an unreadable state", { garbled: true }, null],
+  ]) {
+    it(`run fails (copy exited before promotion) when the copy ${label}; copyExit from its stopped container`, () => {
+      started();
+      const r = harness(["run", SHA], { copyExits: exit });
+      assert.equal(r.status, 1, r.stdout + r.stderr);
+      const report = reportOf();
+      assert.equal(report.state, "failed");
+      assert.equal(report.reason, "copy exited before promotion");
+      assert.deepEqual(report.copyExit, copyExit);
+      assert.equal(report.recoveredTo, null);
+      const names = calls().map((c) => c.args.join(" "));
+      const inspected = names.findIndex((a) => a.startsWith(`inspect -f {{.State.ExitCode}} {{.State.OOMKilled}} ds-rehearse-${SHA12}`));
+      assert.ok(inspected >= 0, "the stopped copy is inspected");
+      assert.ok(inspected < names.lastIndexOf(`rm -f ds-rehearse-${SHA12}`), "before its removal");
+      assert.ok(!calls().some((c) => c.args[0] === "logs"), "nothing of the log is read");
+      assert.ok(!calls().some((c) => c.stdin.includes("VERBOSITY verbose")), "nothing applied");
+      assert.ok(scratchEmpty());
     });
   }
 

@@ -51,8 +51,16 @@ if tool != "docker":
 
 if args[:2] == ["ps", "-aq"]:
     out("".join(i + "\n" for i in sc.get("leftovers", [])))
-if args[0] in ("rm", "inspect"):
-    out("true\n" if args[0] == "inspect" else "")
+if args[0] == "rm":
+    out("")
+if args[0] == "inspect":
+    exited = sc.get("copyExits")
+    if "{{.State.Running}}" in args:
+        out("false\n" if exited else "true\n")
+    if exited and exited.get("garbled"):
+        out("<no value> x\n")
+    exited = exited or {"exitCode": 0, "oomKilled": False}
+    out("%d %s\n" % (exited["exitCode"], "true" if exited["oomKilled"] else "false"))
 if args[0] == "logs":
     out("", 0, "" if sc.get("noReplay") else 'LOG:  restored log file "%s" from archive\n' % SEG)
 if args[:2] == ["compose", "exec"]:
@@ -72,7 +80,7 @@ if args[0] == "run":
     out("" if "-d" not in args else "c0ffee\n", sc.get("restoreRc", 0) if "-d" not in args else 0)
 if args[0] == "exec":
     if "-c" in args:
-        out("f\n")
+        out("t\n" if sc.get("neverPromotes") or sc.get("copyExits") else "f\n")
     if "VERBOSITY verbose" in stdin:
         tags = re.findall(r"^\\echo @@BEGIN (\S+)$", stdin, re.M)
         text = reading(0)

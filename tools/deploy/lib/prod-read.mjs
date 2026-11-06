@@ -46,6 +46,8 @@ export const READ_REASONS = [
   "insufficient headroom (disk)",
   "insufficient headroom (memory)",
   "copy behind prod",
+  "copy exited before promotion",
+  "copy did not promote in time",
   "archive check failed",
   "the read failed",
 ];

@@ -80,10 +80,10 @@ export class EventProjectsAdminController {
   @Get()
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-6", "EARS-15", "EARS-16"],
+    tests: ["EARS-6", "EARS-15", "EARS-16", "EARS-7"],
   })
   list(
     @Query() rawQuery: Record<string, string>,
@@ -107,7 +107,7 @@ export class EventProjectsAdminController {
   @HttpCode(201)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     // #1304 (ADR-0001 §10): a state-changing admin command re-establishes the
     // role against the LIVE IdP before anything happens, so a revoked grant
@@ -116,7 +116,7 @@ export class EventProjectsAdminController {
     // The domain audit row is written by feature 010's capture trigger inside
     // the command transaction (012-design §6), not by an authz-tier emission.
     audit: "low-stakes",
-    tests: ["EARS-6", "EARS-16", "EARS-17"],
+    tests: ["EARS-6", "EARS-16", "EARS-17", "EARS-7"],
   })
   async create(
     @Req() req: FastifyRequest,
@@ -155,10 +155,10 @@ export class EventProjectsAdminController {
   @Get(":id")
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-6", "EARS-16"],
+    tests: ["EARS-6", "EARS-16", "EARS-7"],
   })
   async detail(
     @Param("id") id: string,
@@ -186,10 +186,10 @@ export class EventProjectsAdminController {
   @Get(":id/lifecycle-impact")
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-6", "EARS-16"],
+    tests: ["EARS-6", "EARS-16", "EARS-7"],
   })
   lifecycleImpact(
     @Param("id") id: string,
@@ -208,11 +208,11 @@ export class EventProjectsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     revalidate: "live",
     audit: "low-stakes",
-    tests: ["EARS-6", "EARS-16", "EARS-17"],
+    tests: ["EARS-6", "EARS-16", "EARS-17", "EARS-7"],
   })
   retire(
     @Param("id") id: string,
@@ -231,11 +231,11 @@ export class EventProjectsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     revalidate: "live",
     audit: "low-stakes",
-    tests: ["EARS-6", "EARS-16", "EARS-17"],
+    tests: ["EARS-6", "EARS-16", "EARS-17", "EARS-7"],
   })
   restore(
     @Param("id") id: string,

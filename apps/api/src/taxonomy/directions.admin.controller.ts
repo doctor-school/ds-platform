@@ -74,10 +74,10 @@ export class DirectionsAdminController {
   @Get()
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-3", "EARS-15", "EARS-16"],
+    tests: ["EARS-3", "EARS-15", "EARS-16", "EARS-7"],
   })
   list(@Query() rawQuery: Record<string, string>): Promise<DirectionAdminList> {
     const parsed = AdminTaxonomyListQuerySchema.safeParse(rawQuery);

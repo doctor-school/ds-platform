@@ -87,10 +87,10 @@ export class ExpertsAdminController {
   @ApiOkResponse({ type: ExpertAdminListDto })
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-2", "EARS-15", "EARS-16"],
+    tests: ["EARS-2", "EARS-15", "EARS-16", "EARS-7"],
   })
   list(@Query() rawQuery: Record<string, string>): Promise<ExpertAdminList> {
     const parsed = AdminTaxonomyListQuerySchema.safeParse(rawQuery);
@@ -227,10 +227,10 @@ export class ExpertsAdminController {
   @ApiOkResponse({ type: ExpertAdminDetailDto })
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-2", "EARS-16"],
+    tests: ["EARS-2", "EARS-16", "EARS-7"],
   })
   async detail(
     @Param("id") id: string,

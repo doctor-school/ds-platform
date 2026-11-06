@@ -87,13 +87,13 @@ export class EventsAdminController {
   @HttpCode(201)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     // Create is an authenticated admin write but not a lifecycle transition —
     // 007's audit_ledger obligation attaches to the transitions (EARS-4/5/6),
     // not to create — so it does not owe a terminal auth-audit row (low-stakes).
     audit: "low-stakes",
-    tests: ["EARS-1", "EARS-8"],
+    tests: ["EARS-1", "EARS-8", "EARS-7"],
   })
   async create(
     @Req() req: FastifyRequest,
@@ -243,10 +243,10 @@ export class EventsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "low-stakes",
-    tests: ["EARS-2", "EARS-8"],
+    tests: ["EARS-2", "EARS-8", "EARS-7"],
   })
   async update(
     @Param("id") id: string,
@@ -296,10 +296,10 @@ export class EventsAdminController {
   @ApiOkResponse({ type: EventAdminListDto })
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-8"],
+    tests: ["EARS-8", "EARS-7"],
   })
   list(@Query() rawQuery: Record<string, string>): Promise<EventAdminList> {
     const parsed = EventAdminListQuerySchema.safeParse(rawQuery);
@@ -319,10 +319,10 @@ export class EventsAdminController {
   @Get(":id")
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-8"],
+    tests: ["EARS-8", "EARS-7"],
   })
   async detail(
     @Param("id") id: string,
@@ -352,13 +352,13 @@ export class EventsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     // A `platform_admin` authoring write, not a lifecycle transition — no
     // terminal `audit_ledger` row is owed (the audit obligation attaches to the
     // transitions, EARS-4/5/6), so it is low-stakes like create.
     audit: "low-stakes",
-    tests: ["EARS-3", "EARS-8"],
+    tests: ["EARS-3", "EARS-8", "EARS-7"],
   })
   async configureStream(
     @Param("id") id: string,
@@ -400,7 +400,7 @@ export class EventsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     // `audit` here is the endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8) — a
     // `platform_admin` write, not an auth security event, so it owes no
@@ -408,7 +408,7 @@ export class EventsAdminController {
     // domain `audit_ledger` transition row is a separate ADR-0003 §6 obligation,
     // written atomically in the service — not this classification field.
     audit: "low-stakes",
-    tests: ["EARS-4", "EARS-8"],
+    tests: ["EARS-4", "EARS-8", "EARS-7"],
   })
   async publish(
     @Param("id") id: string,
@@ -453,14 +453,14 @@ export class EventsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): a `platform_admin`
     // write, not an auth security event — no AuthAuditLog emission (low-stakes).
     // The EARS-5 domain `audit_ledger` row is a separate ADR-0003 §6 obligation
     // written atomically in the service, not this classification field.
     audit: "low-stakes",
-    tests: ["EARS-5", "EARS-8"],
+    tests: ["EARS-5", "EARS-8", "EARS-7"],
   })
   async open(
     @Param("id") id: string,
@@ -485,10 +485,10 @@ export class EventsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "low-stakes",
-    tests: ["EARS-5", "EARS-8"],
+    tests: ["EARS-5", "EARS-8", "EARS-7"],
   })
   async close(
     @Param("id") id: string,
@@ -739,14 +739,14 @@ export class EventsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): a `platform_admin`
     // write, not an auth security event — no AuthAuditLog emission (low-stakes).
     // The EARS-6 domain `audit_ledger` row is a separate ADR-0003 §6 obligation
     // written atomically in the service, not this classification field.
     audit: "low-stakes",
-    tests: ["EARS-6", "EARS-8"],
+    tests: ["EARS-6", "EARS-8", "EARS-7"],
   })
   async hide(
     @Param("id") id: string,
@@ -805,7 +805,7 @@ export class EventsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     // The bare guarded state change carries no terminal audit row — that
     // obligation attaches to the named transition commands (EARS-4/5/6), each

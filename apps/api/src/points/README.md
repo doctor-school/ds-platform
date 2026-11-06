@@ -1,13 +1,21 @@
 # `points` — 025 attention-points engine
 
-Spec: `apps/docs/content/specs/features/025-attention-points-engine/` (design §1–§3, §9). Tables: `packages/db/src/schema/points-ledger.ts` + migration `apps/api/drizzle/0058_points_ledger.sql`. Contracts: `packages/schemas/src/points/`.
+Spec: `apps/docs/content/specs/features/025-attention-points-engine/` (design §1–§4, §6, §8, §9). Tables: `packages/db/src/schema/points-ledger.ts` + migrations `apps/api/drizzle/0058_points_ledger.sql` (ledger) and `0059_points_rule_book.sql` (rule-book seed, `issuance` account, rule-version immutability). Contracts: `packages/schemas/src/points/` (`points-ledger.schema.ts`, `rules.ts`).
 
 ## What ships (#3807 — the ledger core)
 
 - `PointsLedgerService.resolvePersonAccount(personId)` — **the** account-resolution API (EARS-1). Opens the person's one `attention_points` account on first need; concurrent first needs converge on the unique (`subject_kind`, `subject_id`, `unit`). `resolveSystemAccount(code)` does the same for `issuance` / `reserve` / `sink` / `advance`.
 - `PointsLedgerService.post(fact, tx?)` — **the** write entry point. Joins the caller's drizzle transaction when given (as a savepoint — a refusal rolls back only the fact; design §1), else opens its own. Refuses a fact dated more than one day ahead before touching the database (`points-occurred-at-future`, 422, EARS-27) → open every account the legs name in sorted key order, then lock the person accounts `FOR UPDATE` in id order (per-account serialisation without lock-order deadlocks, EARS-22) → insert the fact's `points_posting_keys` row; a conflict on `event_id` or dedupe key writes nothing and answers `{ status: "duplicate", postings }` (EARS-4) — even if the account has closed since → refuse a closed account (`points-account-closed`, EARS-31) → refuse a leg taking a person's available Pul below zero (`points-insufficient-pul`, EARS-22) → write the postings. System accounts are not locked: they carry no balance check, and locking `issuance` would serialise every accrual on the platform.
 - `PointsLedgerService.close(personId, at)` — the personal-data-lifecycle seam (EARS-31): sets `closed_at` once; postings are untouched, no reserve is released and no obligation settled.
-- Refusals are `PointsLedgerError` (RFC 7807 body via `toProblemDetails`).
+- `PointsLedgerService.post` also refuses a leg debiting Bre or Con from a person account unless it reverses a specific earlier posting (`points-bre-con-debit`, 422, EARS-12) — no penalty and no conversion between denominations can be written. The one-day future skew is the exported `POINTS_FUTURE_SKEW_MS`; `points-skew.spec.ts` pins it to the 0058 CHECK interval.
+- Refusals are `PointsLedgerError` (RFC 7807 body via `toProblemDetails`; `PointsProblemFilter` writes it on the admin routes and hands every other exception to the shared 012 admin filter).
+
+## What ships (#3808 — rule book and accrual intake)
+
+- `RuleBookService.activeVersion(ruleId, at)` — the highest version with `effective_from ≤ at`, parameters parsed by the rule's schema (`POINTS_RULE_PARAMETER_SCHEMAS`). Every amount, cap, window and weight is read from here, never a literal (EARS-25). Version 1 of every rule (`POINTS_RULE_DEFAULTS`, the PRD defaults) is seeded by 0059 at the epoch, so a back-dated fact always finds a version.
+- `RuleBookService.publish` / `POST /v1/admin/points/rules/:ruleId/versions` (`PointsRulesAdminController`, `platform_admin`, live revalidation) — validates against the rule's schema (404 `points-rule-unknown`, 422 `points-rule-parameters-invalid` with field errors, 422 `points-rule-effective-from-past`), stores the next version under a per-rule advisory lock in a request-audit-context transaction (the 0058 row-audit trigger attributes it to the admin) with `published_by` = the admin's user id, and answers 201 with the version. A stored version is immutable (0059 trigger; only `published_by` may be re-pointed by erasure). No Idempotency-Key: a retried publish stores one more identical version, which changes no amount.
+- `PointsFactIntake.accept(fact, tx?)` — the one entry point for an accrual fact of the closed action set (`PointsAccrualFactSchema`). Evaluates `accrual.<action>` active at `occurredAt`, posts one leg `accrual:<denomination>` issuance → person per non-zero denomination (dedupe key `<personId>:<contentRef>:<action>`, project/output/attribution when named) through `PointsLedgerService.post` in one transaction, then publishes `PointsCredited`. Outcomes: `posted` (with the `credited` event), `duplicate` (no event), `nothing-to-credit` (all-zero version: nothing written, no event). With a producer's `tx` the producer calls `publishCommitted(outcome)` after its own COMMIT.
+- `PointsEventsPublisher` — the in-process typed publisher (apps/api has no event bus): `onCredited(subscriber)` / `publishCredited(event)`, after COMMIT only, at-most-once, a subscriber failure is logged and never reaches the producer. No subscriber is registered in this slice.
 
 ## Invariants the database enforces
 
@@ -17,4 +25,4 @@ Spec: `apps/docs/content/specs/features/025-attention-points-engine/` (design §
 
 ## Not here yet
 
-Rule evaluation and the default rule book (#3808), reserves/spend/obligations (#3810), leaderboard (#3812), HTTP reads (#3813), corrections and aggregates (#3814). `points_rule_versions` exists as a table only; no publish API and no seeded rule. No expiry posting exists anywhere (EARS-22). There is no HTTP controller in this module.
+Per-action award conditions and producer wiring (#3809), reserves/spend (#3810), advance and the `obligation-settle:pul` leg (#3811), leaderboard (#3812), HTTP reads (#3813), corrections and aggregates (#3814), referral award and its monthly cap (#3816), admin UI (#3815). No producer calls the intake yet and no `PointsCredited` subscriber exists. No expiry posting exists anywhere (EARS-22).

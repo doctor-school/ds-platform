@@ -100,28 +100,33 @@ sequenceDiagram
   participant P as Producer (024 / 022 / 020)
   participant I as PointsFactIntake
   participant R as RuleBook
-  participant L as Ledger (tx)
-  participant B as Event bus
+  participant L as Ledger core (tx)
+  participant B as PointsEventsPublisher
   P->>I: fact {eventId, personId, action, contentRef, occurredAt}
-  I->>L: BEGIN; lock person account (SELECT … FOR UPDATE)
-  I->>L: insert points_posting_keys(eventId, dedupeKey)
+  I->>L: BEGIN (or a savepoint in the producer's transaction)
+  I->>R: activeVersion(accrual.<action>, occurredAt)
+  R-->>I: {ruleId, version, amounts per denomination}
+  I->>L: post(fact: dedupe key <personId>:<contentRef>:<action>, one leg accrual:<denomination> issuance→person per non-zero denomination)
+  L->>L: lock person account (SELECT … FOR UPDATE); insert points_posting_keys(eventId, dedupeKey)
   alt unique violation
-    L-->>I: conflict → ROLLBACK
-    I-->>P: duplicate (original postings)
+    L-->>I: duplicate (original postings), nothing written
+    I-->>P: duplicate
   else new
-    I->>R: activeVersion(action, occurredAt)
-    R-->>I: {ruleId, version, amounts per denomination}
-    I->>L: insert postings issuance→person, one leg per non-zero denomination (eventId, leg accrual:<denomination>)
     opt open obligation and Pul > 0
-      I->>L: insert leg obligation-settle:pul person→advance (min(pul, remaining))
+      I->>L: leg obligation-settle:pul person→advance (min(pul, remaining))
     end
+    L->>L: insert postings
     I->>L: COMMIT
     I->>B: PointsCredited (+ AdvanceSettled)
     I-->>P: credited
   end
 ```
 
-The account row lock serialises every posting of one person (EARS-22); concurrent first facts race on the account's unique constraint and the loser re-reads (EARS-1). The mobile offline sync replays its queued facts through the same intake; its pending entries become `credited` or `duplicate` from the intake's answer (EARS-4).
+The rule is read before the ledger core runs, because the legs are built from it; the dedupe key is computed from the fact alone, so a replay still answers `duplicate` from the key row and never from the rule. The account row lock serialises every posting of one person (EARS-22); concurrent first facts race on the account's unique constraint and the loser re-reads (EARS-1). The mobile offline sync replays its queued facts through the same intake; its pending entries become `credited` or `duplicate` from the intake's answer (EARS-4).
+
+- **Event publication.** apps/api has no event bus; `PointsCredited` is published through the module's one typed in-process provider, `PointsEventsPublisher`, strictly after COMMIT, so a subscriber never sees a credit that rolled back. A duplicate or a zero credit (a rule version crediting 0 in every denomination writes nothing, not even a key row) publishes nothing. When the producer passes its own transaction the commit is the producer's: the intake returns the outcome, and the producer hands it to `publishCommitted` once its transaction committed. Delivery is in-process and at-most-once; the postings, not the event, are the record.
+- **EARS-12 in the ledger core.** Whatever the caller, the ledger core refuses a leg that debits Bre or Con from a person account without reversing a specific earlier posting (`points-bre-con-debit`, 422, nothing written). Every leg carries one denomination, so no fact can express a penalty or a conversion between denominations.
+- **Built by later slices.** The `obligation-settle:pul` leg (#3811), the per-action award conditions — offline/open learning without Pul, the presence share (#3809) — and the referral monthly cap (#3816). The engagement cap of EARS-10 needs no state: the dedupe key per (person, event, action) is the cap.
 
 ## 5. Reserve lifecycle (EARS-14–21)
 
@@ -147,7 +152,7 @@ stateDiagram-v2
 
 ## 6. Rule book (EARS-25, 26)
 
-Each `rule_id` has a zod parameter schema in `packages/schemas/src/points/rules.ts` — `accrual.<action>` (amount per denomination, non-negative), `cap.engagement`, `cap.referral.monthly`, `presence.share`, `advance.cap`, `reserve.limitedSeats.max`, `noShow.window`, `leaderboard.{conWeight, breWeight, top, neighbours}`. The seed migration inserts version 1 of every rule with the PRD defaults. `activeVersion(ruleId, at)` = the highest version with `effective_from ≤ at`. The action set is a closed enum; the schema has no field that could take an arrival source, a sponsor or a sales input. Gating rows live in `points_gating`; until an admin sets a row, an event is `open` with price 0, which is today's `eventEconomyFacts()` behaviour and its `DEBT.md` line closes once 020 reads `GatingDecision`.
+Each `rule_id` has a strict zod parameter schema in `packages/schemas/src/points/rules.ts` — `accrual.<action>` for the closed action set (`registration`, `profile`, `lesson`, `module`, `participation`, `question`, `rating`, `interactive`, `referral-inviter`, `referral-invitee`; `{ pul, bre, con }`, non-negative integers), `cap.engagement` (fixed at 1 by EARS-10), `cap.referral.monthly`, `presence.share` (whole percent), `advance.cap`, `reserve.limitedSeats.max`, `noShow.window` (hours), `leaderboard.{conWeight, breWeight, top, neighbours}`, and `manual-correction` (no parameters — the rule identity a manual adjustment cites, EARS-28). The seed migration (0059) inserts version 1 of every rule with the PRD defaults (`POINTS_RULE_DEFAULTS`), `effective_from` at the epoch so a back-dated fact always finds a version, `published_by` null; a trigger keeps a stored version immutable (only `published_by` may be re-pointed by the erasure procedure). Publishing (`POST /v1/admin/points/rules/:ruleId/versions`) refuses an unknown rule (`points-rule-unknown`, 404), parameters failing the rule's schema (`points-rule-parameters-invalid`, 422, field errors) and an `effectiveFrom` before now (`points-rule-effective-from-past`, 422); the next version number is allocated under a per-rule transaction-scoped advisory lock. `activeVersion(ruleId, at)` = the highest version with `effective_from ≤ at`. The action set is a closed enum; the schema has no field that could take an arrival source, a sponsor or a sales input. Gating rows live in `points_gating`; until an admin sets a row, an event is `open` with price 0, which is today's `eventEconomyFacts()` behaviour and its `DEBT.md` line closes once 020 reads `GatingDecision`.
 
 ## 7. Leaderboard read model (EARS-23, 24)
 

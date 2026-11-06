@@ -28,3 +28,27 @@ describe("PointsLedgerError", () => {
     expect(body.status).toBe(422);
   });
 });
+
+describe("PointsLedgerError — rule book", () => {
+  it("025 EARS-12: a Bre/Con debit refuses with problem points-bre-con-debit (422)", () => {
+    const body = new PointsLedgerError("POINTS_BRE_CON_DEBIT").toProblemDetails(
+      "t",
+    );
+    expect(body.type.endsWith("/points-bre-con-debit")).toBe(true);
+    expect(body.status).toBe(422);
+  });
+
+  it("025 EARS-25: publish refusals are 404 unknown rule and 422 invalid parameters with field errors", () => {
+    expect(new PointsLedgerError("POINTS_RULE_UNKNOWN").getStatus()).toBe(404);
+    const body = new PointsLedgerError(
+      "POINTS_RULE_PARAMETERS_INVALID",
+      undefined,
+      [{ path: "pul", message: "Too small" }],
+    ).toProblemDetails("t");
+    expect(body.status).toBe(422);
+    expect(body.errors).toEqual([{ path: "pul", message: "Too small" }]);
+    expect(
+      new PointsLedgerError("POINTS_RULE_EFFECTIVE_FROM_PAST").getStatus(),
+    ).toBe(422);
+  });
+});

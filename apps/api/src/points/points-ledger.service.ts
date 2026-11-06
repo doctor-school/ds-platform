@@ -26,8 +26,12 @@ type Executor = Db | Tx;
 
 const UNIT = "attention_points" as const;
 
-/** Clock-skew bound for a fact's `occurredAt` (EARS-27; DB CHECK in 0058). */
-const FUTURE_SKEW_MS = 24 * 60 * 60 * 1000;
+/**
+ * Clock-skew bound for a fact's `occurredAt` (EARS-27). The 0058 CHECK
+ * `occurred_at <= recorded_at + interval '1 day'` is the database backstop of
+ * the same bound; a test pins the two together.
+ */
+export const POINTS_FUTURE_SKEW_MS = 24 * 60 * 60 * 1000;
 
 /** A deterministic key per account ref — also the global open order. */
 function refKey(ref: PointsAccountRef): string {
@@ -105,7 +109,9 @@ export class PointsLedgerService {
    * transaction; the fact runs in a savepoint, so a refusal rolls back only
    * the fact), else its own:
    *  0. refuses a fact dated more than a day ahead, writing nothing (EARS-27 —
-   *     it would land in the default partition and block partition creation);
+   *     it would land in the default partition and block partition creation),
+   *     and a fact with a leg debiting Bre or Con from a person account that
+   *     is not a compensating reversal (EARS-12 — no penalty, no conversion);
    *  1. opens every account the legs name in one deterministic key order, then
    *     locks the person accounts (`SELECT … FOR UPDATE`, id order) —
    *     per-account serialisation (EARS-22). Both orders are global, so two
@@ -125,8 +131,11 @@ export class PointsLedgerService {
     executor: Executor = this.db,
   ): Promise<PointsPostOutcome> {
     const fact = PointsFactSchema.parse(input);
-    if (fact.occurredAt.getTime() > Date.now() + FUTURE_SKEW_MS) {
+    if (fact.occurredAt.getTime() > Date.now() + POINTS_FUTURE_SKEW_MS) {
       throw new PointsLedgerError("POINTS_OCCURRED_AT_FUTURE");
+    }
+    if (fact.legs.some(debitsBreOrCon)) {
+      throw new PointsLedgerError("POINTS_BRE_CON_DEBIT");
     }
     return executor.transaction(async (tx) => {
       const refs = new Map<string, PointsAccountRef>();
@@ -271,6 +280,21 @@ export class PointsLedgerService {
       .orderBy(asc(pointsPostings.leg));
     return rows.map(toPosting);
   }
+}
+
+/**
+ * EARS-12 — Bre and Con only grow: a leg may debit them from a person account
+ * only as a compensating posting that reverses a specific earlier posting
+ * (EARS-28). Every leg carries one denomination, so with this refusal no fact
+ * can move value out of a person's Bre/Con — a conversion between
+ * denominations has no leg to stand on.
+ */
+export function debitsBreOrCon(leg: PointsFact["legs"][number]): boolean {
+  return (
+    leg.debit.kind === "person" &&
+    leg.denomination !== "pul" &&
+    leg.reverses === undefined
+  );
 }
 
 /** First day (UTC) of the fact's month, as a SQL `date` literal. */

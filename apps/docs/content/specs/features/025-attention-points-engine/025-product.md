@@ -72,7 +72,7 @@ An event never accrues Pul, open events included [PL]: otherwise the sink become
 
 At launch a lesson can be set to **Open** only [lead-proposed]; podcasts may enter the gating experiment but default to open.
 
-**One advance rule for every doctor** [owner]. The advance is a **per-event flag** and is the same for every doctor. A medrep or partner link **records the arrival source only** — it never grants a per-doctor advance and never switches an event from threshold to advance for one doctor. This supersedes the per-arrival reading of REQ-49 and of spec 020.
+**One advance rule for every doctor** [owner]. The advance is a **per-event flag** and is the same for every doctor. A medrep or partner link **records the arrival source only** — it never grants a per-doctor advance and never switches an event from threshold to advance for one doctor. This supersedes the per-arrival reading of REQ-49 and of spec 020; 020 and 021 are aligned in #3801.
 
 **Reserve, debit on attendance, release** [lead-proposed]:
 
@@ -100,7 +100,7 @@ At launch a lesson can be set to **Open** only [lead-proposed]; podcasts may ent
 - Platform points are **never called «баллы»** in the НМО sense, never summed with НМО credits and never converted to them; an НМО badge, when present, is a separate statement.
 - The advance is never called «кредит», «долг» or «минус»; a reserve is described as «will be counted after participation», not «will be debited» [lead-proposed].
 
-**Consumer requirement (020).** Today the event page's «Бесплатно для врача» line is wired to `pulCost === 0`, and `eventEconomyFacts()` returns `pulCost: 0` for every event (`DEBT.md`). When events get real Pul prices from this engine, that line must become an **independent money statement** shown on every event, next to a separate «N Pul» line when the cost is > 0.
+**Consumer requirement (020).** Today the event page's «Бесплатно для врача» line is wired to `pulCost === 0`, and `eventEconomyFacts()` returns `pulCost: 0` for every event (`DEBT.md`). When events get real Pul prices from this engine, that line must become an **independent money statement** shown on every event, next to a separate «N Pul» line when the cost is > 0. Tracked in #3801.
 
 ## Anti-farming
 

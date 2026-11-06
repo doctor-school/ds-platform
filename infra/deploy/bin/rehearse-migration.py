@@ -529,7 +529,7 @@ def unit_active(sha):
 
 
 def other_unit_active(sha):
-    done = run(tool("systemctl") + ["list-units", "--type=service", "--state=active,activating",
+    done = run(tool("systemctl") + ["list-units", "--type=service", "--state=active,activating,deactivating",
                                     "--plain", "--no-legend", "ds-rehearse-*"], timeout=30)
     mine = "ds-rehearse-" + sha12(sha) + ".service"
     units = [line.split()[0] for line in done.stdout.decode("utf-8", "replace").splitlines() if line.strip()]

@@ -401,6 +401,14 @@ describe("3648: the rehearsal verbs end to end on a test root", { skip: SKIP }, 
     assert.ok(!calls().some((c) => c.tool === "systemd-run"));
   });
 
+  it("start refuses (1) while another SHA's unit is still cleaning up (deactivating), before removing any leftover", () => {
+    const r = harness(["start", SHA, archive()], { otherUnitsDeactivating: ["ds-rehearse-fedcba987654.service"] });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.equal(r.stdout, "a rehearsal is running\n");
+    assert.ok(!calls().some((c) => c.tool === "systemd-run"), "no unit");
+    assert.ok(!calls().some((c) => c.args.join(" ") === "ps -aq --filter name=^ds-rehearse-"), "its cleanup is left alone");
+  });
+
   for (const [label, members] of [
     ["a member outside drizzle/", { "drizzle/meta/_journal.json": "{}", "etc/passwd": "x" }],
     ["a .. path", { "drizzle/meta/_journal.json": "{}", "drizzle/../x.sql": "x" }],

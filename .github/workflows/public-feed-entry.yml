@@ -109,11 +109,6 @@ jobs:
         run: |
           echo 'IDP_ISSUER=http://localhost:9080' >> "$GITHUB_ENV"
           echo 'IDP_REDIRECT_URI=http://localhost:3000/auth/callback' >> "$GITHUB_ENV"
-          echo 'IDP_SIGN_IN_BASE_URI=http://localhost:3005' >> "$GITHUB_ENV"
-          echo 'SIGN_IN_ACADEMY_LOGIN_URL=http://localhost:3001/login' >> "$GITHUB_ENV"
-          echo 'SIGN_IN_DOCTOR_LOGIN_URL=http://localhost:3004/login' >> "$GITHUB_ENV"
-          echo 'SIGN_IN_RECORD_KEY=Y2ktb25seS1zaWduLWluLXJlY29yZC1rZXktMzJieXQ=' >> "$GITHUB_ENV"
-          echo 'INTERNAL_API_URL=http://localhost:3000' >> "$GITHUB_ENV"
       - name: Prepare the PAT mount
         if: matrix.task == 3785
         run: mkdir -p "$RUNNER_TEMP/idp-pat" && chmod 0777 "$RUNNER_TEMP/idp-pat"
@@ -190,29 +185,14 @@ jobs:
         if: matrix.task == 3785
         env:
           IDP_BASE_URL: http://localhost:9080
-          # The storefront OIDC clients (003 EARS-60, provision.sh step 3.bis), as
-          # in `api-e2e`: they exist only where their URIs are configured. Step
-          # 3.bis.2 writes their JSON keys and INTERNAL_API_TOKEN into the secret
-          # env file only (never stdout); each value is masked before it enters
-          # $GITHUB_ENV, as the client secret is.
-          IDP_BACK_CHANNEL_LOGOUT_URI: http://localhost:3000/v1/auth/back-channel-logout
-          IDP_ACADEMY_REDIRECT_URI: http://localhost:3001/auth/callback
-          IDP_ACADEMY_POST_LOGOUT_URI: http://localhost:3001/
-          IDP_DOCTOR_REDIRECT_URI: http://localhost:3004/auth/callback
-          IDP_DOCTOR_POST_LOGOUT_URI: http://localhost:3004/
-          IDP_SECRET_ENV_FILE: ${{ runner.temp }}/idp-secret.env
+          # 017 EARS-19 needs the headless Admin actor. The public originals
+          # use the provisioner's existing mode without storefront clients.
         run: |
           set -euo pipefail
           bash infra/dev-stand/idp/provision.sh --pat-file ./idp-pat.txt > ./idp-provision.out
           client_secret="$(grep -E '^IDP_CLIENT_SECRET=' ./idp-provision.out | cut -d= -f2- || true)"
           if [ -n "$client_secret" ]; then echo "::add-mask::$client_secret"; fi
-          grep -E '^IDP_(PROJECT_ID|CLIENT_ID|CLIENT_SECRET|ACADEMY_CLIENT_ID|DOCTOR_CLIENT_ID)=' ./idp-provision.out >> "$GITHUB_ENV"
-          for name in IDP_ACADEMY_CLIENT_KEY IDP_DOCTOR_CLIENT_KEY INTERNAL_API_TOKEN; do
-            value="$(grep -E "^${name}=" "$IDP_SECRET_ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
-            if [ -z "$value" ]; then echo "provision.sh wrote no ${name}" >&2; exit 1; fi
-            echo "::add-mask::$value"
-            echo "${name}=${value}" >> "$GITHUB_ENV"
-          done
+          grep -E '^IDP_(PROJECT_ID|CLIENT_ID|CLIENT_SECRET)=' ./idp-provision.out >> "$GITHUB_ENV"
 
       - name: Build committed API and Doctor, then migrate the owned DB
         run: |

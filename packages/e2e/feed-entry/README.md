@@ -135,4 +135,10 @@ only the returned owned subject and verifies absence, including setup failures.
 Its branch-only user mirror is removed with the owned branch database after
 proof. Never delete a shared actor or reset the stand. The workflow's 3785 arm
 reuses the existing Admin CI IdP provisioning recipe and uploads the actual
-`public-feed-originals-3785` report and head receipt.
+`public-feed-originals-3785` report and head receipt. It uses the provisioner's
+existing headless Admin mode: the project, admin client and admin secret support
+the operator's real MFA, while the public Doctor/Academy originals remain
+anonymous. It does not configure storefront clients, sign-in-host routes or
+their internal credential; those belong to the separate auth contour. Supplying
+that credential would start a real silent SSO navigation requiring a login host
+this non-auth runner does not own.

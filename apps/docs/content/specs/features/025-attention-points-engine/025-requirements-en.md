@@ -13,6 +13,7 @@ prior_decisions:
   - ADR-0006 — Documentation & SSOT (§4 feature-spec triplet + flat EARS numbering)
   - ADR-0009 — Per-purpose consent versioning (the leaderboard-dissemination purpose is one more versioned purpose)
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace)
+issues: [1794, 3807, 3808, 3809, 3810, 3811, 3812, 3813, 3814, 3815, 3816]
 lang: en
 ---
 
@@ -49,7 +50,7 @@ lang: en
 **Out (each with its owner):**
 
 - **Every screen.** The event page's price line, advance progress, threshold hint and the money statement «бесплатно для врача» decoupled from `pulCost` — feature **020**, aligned in [#3801](https://github.com/doctor-school/ds-platform/issues/3801); the registration promise and the credit on the success state — feature **021**, aligned in [#3801](https://github.com/doctor-school/ds-platform/issues/3801); the account's three balances, open advance and posting history — feature **022**, Issue [#1791](https://github.com/doctor-school/ds-platform/issues/1791); the consent-gated specialty leaderboard block and the consent toggle — feature **018**, Issue [#1495](https://github.com/doctor-school/ds-platform/issues/1495); the learning screens — feature **024**; the mobile app — its own track (functional map, owner decision 2026-08-22), consuming this API.
-- **The admin screens** for rules, prices, gating modes and corrections. 025 ships the admin **API** only; the admin UI is deferred to a follow-up Issue the lead opens with the EARS set (`open-ears-issues`), which owns the `apps/admin` surface and its browser verification.
+- **The admin screens** for rules, prices, gating modes and corrections. 025 ships the admin **API** only; the admin UI is deferred to the follow-up Issue [#3815](https://github.com/doctor-school/ds-platform/issues/3815), which owns the `apps/admin` surface and its browser verification.
 - **The waiting list** on limited-seat events — event registration (**020** / **005**); 025 only refuses a reserve beyond the concurrent-reserve limit (EARS-21).
 - **Attendance confirmation itself** — the presence beats and the attendance fact are the room's and the event registration's; 025 consumes the confirmed-attendance fact and owns only the presence share parameter it is computed against (EARS-9).
 - **Phone verification and profile verification** — the account's (feature **022**, over **003**); 025 consumes the facts.
@@ -223,7 +224,7 @@ Backend-only (F-22): Vitest e2e against `apps/api` plus unit tests is complete c
 - **Accrual sources wait for their producers**: EARS-5/6 on 022's `PhoneVerified` / `ProfileVerified` (022 Issue #1791), EARS-7/8 on 024's completion facts, EARS-9/10/18/19 on 020's registration and attendance facts. A producer that has not shipped leaves its clause unexercisable, not stubbed; the engine clause ships with its e2e driving the real fact once the producer exists.
 - **Spend** (EARS-13–21) precedes 020's priced events; `eventEconomyFacts()` keeps `pulCost: 0` (`DEBT.md`) until EARS-26 gives events real prices.
 - **Leaderboard** (EARS-23/24) precedes 018 #1495; **aggregates** (EARS-29) precede 036.
-- **Admin UI** for EARS-25/26/28 is a follow-up Issue opened with this set.
+- **Admin UI** for EARS-25/26/28 is the follow-up Issue #3815.
 
 ## Open questions carried forward
 

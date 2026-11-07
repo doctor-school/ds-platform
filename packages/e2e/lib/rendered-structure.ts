@@ -17,11 +17,11 @@ import { waitForClientReady } from "./page-ready.js";
 
 /**
  * #3682 — the structural canvas-parity check: read one semantic tree from the
- * rendered app page and from the canvas, and compare the two. For the ds-shell
- * header/footer (#3793) the canvas side is the SAME reader on the canvas as the
- * real Claude Design runtime renders it (`./canvas-runtime.ts`, offline, in the
- * spec's own browser context); the page checks still evaluate their canvases
- * in the Node sandbox (`./canvas-structure.ts`) until #3793 slice 2.
+ * rendered app page and from the canvas, and compare the two. The canvas side
+ * is the SAME reader on the canvas as the real Claude Design runtime renders it
+ * (`./canvas-runtime.ts`, offline, in the spec's own browser context) — the
+ * ds-shell header/footer here (#3793), the page sections in
+ * `./rendered-slots.ts` (#3798).
  *
  * bar  = the region's interactive elements visible with the menu closed;
  * menu = the ones that BECOME visible once the `≡` toggle is opened.
@@ -38,7 +38,10 @@ export function canvasPath(name: string): string {
 }
 
 const ALLOWLIST = JSON.parse(
-  readFileSync(new URL("./canvas-structure-allowlist.json", import.meta.url), "utf8"),
+  readFileSync(
+    new URL("./canvas-structure-allowlist.json", import.meta.url),
+    "utf8",
+  ),
 ) as { entries: AllowlistEntry[] };
 
 interface Seen extends StructureItem {
@@ -102,11 +105,14 @@ function rowOrder(items: Seen[]): StructureItem[] {
   for (const item of byCentre) {
     const row = rows[rows.length - 1];
     const centre = item.top + item.height / 2;
-    if (row && Math.abs(row[0]!.top + row[0]!.height / 2 - centre) <= 12) row.push(item);
+    if (row && Math.abs(row[0]!.top + row[0]!.height / 2 - centre) <= 12)
+      row.push(item);
     else rows.push([item]);
   }
   return rows.flatMap((row) =>
-    row.sort((a, b) => a.left - b.left).map(({ kind, label }) => ({ kind, label })),
+    row
+      .sort((a, b) => a.left - b.left)
+      .map(({ kind, label }) => ({ kind, label })),
   );
 }
 
@@ -124,7 +130,9 @@ export interface RenderedRegion {
 }
 
 function documentOrder(items: Seen[]): StructureItem[] {
-  return [...items].sort((a, b) => a.index - b.index).map(({ kind, label }) => ({ kind, label }));
+  return [...items]
+    .sort((a, b) => a.index - b.index)
+    .map(({ kind, label }) => ({ kind, label }));
 }
 
 export async function readRenderedStructure(
@@ -172,7 +180,9 @@ export async function readRuntimeCanvasStructure(
   try {
     const structure = await readRenderedStructure(runtime.page, region);
     if (region.after && (await runtime.page.locator(region.after).count())) {
-      const band = await readRenderedStructure(runtime.page, { root: region.after });
+      const band = await readRenderedStructure(runtime.page, {
+        root: region.after,
+      });
       structure.bar.push(...band.bar);
     }
     return structure;
@@ -195,11 +205,20 @@ export async function canvasStructureMismatch(
   canvasRegion: CanvasRegion,
   rendered: RenderedRegion,
 ): Promise<string | null> {
-  const fromCanvas = await readRuntimeCanvasStructure(page.context(), canvas, props, canvasRegion);
+  const fromCanvas = await readRuntimeCanvasStructure(
+    page.context(),
+    canvas,
+    props,
+    canvasRegion,
+  );
   const fromApp = await readRenderedStructure(page, rendered);
   const decided = applyAllowlist(
     ALLOWLIST.entries,
-    { canvas: basename(canvas), props: allowlistProps, region: canvasRegion.name },
+    {
+      canvas: basename(canvas),
+      props: allowlistProps,
+      region: canvasRegion.name,
+    },
     fromCanvas,
     fromApp,
   );
@@ -238,14 +257,23 @@ const STOREFRONT_REGIONS = {
     title: " (bar / ≡ menu)",
   },
   footer: {
-    canvas: { name: "footer", root: 'footer[data-screen-label="ds-shell · футер"]', order: "document" },
+    canvas: {
+      name: "footer",
+      root: 'footer[data-screen-label="ds-shell · футер"]',
+      order: "document",
+    },
     rendered: { root: '[data-testid="storefront-footer"]', order: "document" },
     issue: "#3727",
     title: "",
   },
 } satisfies Record<
   string,
-  { canvas: CanvasRegion; rendered: RenderedRegion; issue: string; title: string }
+  {
+    canvas: CanvasRegion;
+    rendered: RenderedRegion;
+    issue: string;
+    title: string;
+  }
 >;
 
 export interface StorefrontCanvasParityOptions {
@@ -282,7 +310,9 @@ function defineStorefrontCanvasParity(
         // The cluster resolves its branch after hydration on the Academy host
         // (a client profile read); read only once it is the signed-in one.
         await page
-          .locator(`[data-testid="shell-auth-cluster"][data-cluster="${loggedIn ? "doctor" : "guest"}"]`)
+          .locator(
+            `[data-testid="shell-auth-cluster"][data-cluster="${loggedIn ? "doctor" : "guest"}"]`,
+          )
           .waitFor({ state: "attached" });
         await page.evaluate(() => document.fonts.ready);
         // `embedded: true` = the shell as a page draws it: ≡ starts closed
@@ -307,7 +337,9 @@ function defineStorefrontCanvasParity(
  * the canvas mobile branch, 1440 the desktop one; bar and `≡` menu. Guest, or
  * signed in (`loggedIn: true`) when `signIn` is given.
  */
-export function defineStorefrontHeaderCanvasParity(options: StorefrontCanvasParityOptions): void {
+export function defineStorefrontHeaderCanvasParity(
+  options: StorefrontCanvasParityOptions,
+): void {
   defineStorefrontCanvasParity("header", options);
 }
 
@@ -316,7 +348,9 @@ export function defineStorefrontHeaderCanvasParity(options: StorefrontCanvasPari
  * at 320 / 390 / 1440: its links in document (column) order; the decorative
  * giant wordmark is `aria-hidden` and carries none.
  */
-export function defineStorefrontFooterCanvasParity(options: StorefrontCanvasParityOptions): void {
+export function defineStorefrontFooterCanvasParity(
+  options: StorefrontCanvasParityOptions,
+): void {
   defineStorefrontCanvasParity("footer", options);
 }
 
@@ -352,16 +386,26 @@ export function defineStorefrontHeaderCanvasRedProof(
           canvas,
           rendered,
         );
-      expect(await check(), "the shipped header must match before the mutation").toBeNull();
+      expect(
+        await check(),
+        "the shipped header must match before the mutation",
+      ).toBeNull();
       await page.evaluate(() => {
-        const cluster = document.querySelector('[data-testid="shell-auth-cluster"]');
-        const menu = document.querySelector('[data-testid="shell-mobile-menu"]');
+        const cluster = document.querySelector(
+          '[data-testid="shell-auth-cluster"]',
+        );
+        const menu = document.querySelector(
+          '[data-testid="shell-mobile-menu"]',
+        );
         const group = menu?.parentElement;
-        if (!cluster || !group?.parentElement) throw new Error("header markup changed");
+        if (!cluster || !group?.parentElement)
+          throw new Error("header markup changed");
         group.parentElement.insertBefore(cluster, group);
       });
       const mismatch = await check();
-      expect(mismatch).toContain("wrong container: link «Войти / Регистрация» — canvas menu, app bar");
+      expect(mismatch).toContain(
+        "wrong container: link «Войти / Регистрация» — canvas menu, app bar",
+      );
     });
   });
 }

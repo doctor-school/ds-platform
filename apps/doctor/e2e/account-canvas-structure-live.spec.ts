@@ -31,10 +31,22 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * ENV SET: as `shell-live.spec.ts` (`playwright.shell.config.ts`).
  */
 
-requireLiveStandEnv(["E2E_DOCTOR_URL", "E2E_DOCTOR_EMAIL", "E2E_DOCTOR_PASSWORD"]);
+requireLiveStandEnv([
+  "E2E_DOCTOR_URL",
+  "E2E_DOCTOR_EMAIL",
+  "E2E_DOCTOR_PASSWORD",
+]);
 
 /** The canvas's phone `phase` for an account, as the app's `initialPhase`. */
 type CanvasPhonePhase = "none" | "app" | "unconfirmed" | "confirmed";
+
+/** The canvas's `phone` prop that seeds each phase (its constructor's map). */
+const PHONE_PROP: Record<CanvasPhonePhase, string> = {
+  none: "не указан",
+  app: "из заявки",
+  unconfirmed: "не подтверждён",
+  confirmed: "подтверждён",
+};
 
 interface AccountState {
   phase: CanvasPhonePhase;
@@ -52,7 +64,9 @@ for (const width of [390, 1440]) {
       await page.getByTestId("logout").waitFor();
 
       const state = await page.evaluate(async (): Promise<AccountState> => {
-        const res = await fetch("/v1/me/profile", { credentials: "same-origin" });
+        const res = await fetch("/v1/me/profile", {
+          credentials: "same-origin",
+        });
         if (!res.ok) throw new Error(`GET /v1/me/profile → ${res.status}`);
         const p = (await res.json()) as {
           phone: string | null;
@@ -72,24 +86,32 @@ for (const width of [390, 1440]) {
           credentials: "same-origin",
         });
         const registered =
-          section.ok && ((await section.json()) as { registered?: boolean }).registered === true;
+          section.ok &&
+          ((await section.json()) as { registered?: boolean }).registered ===
+            true;
         return { phase, congress: registered ? "есть заявка" : "нет заявки" };
       });
       // The congress row is read after the profile resolves; let it settle.
       if (state.congress === "есть заявка") {
-        await page.getByRole("link", { name: /Мои заявки на Конгресс/ }).waitFor();
+        await page
+          .getByRole("link", { name: /Мои заявки на Конгресс/ })
+          .waitFor();
       }
 
       await expectSlotSectionMatchesCanvas(page, {
         canvas: "account-profile.dc.html",
-        input: {
-          props: { host: "витрина врача", variant: "Разделы", congress: state.congress },
-          // `isMobile` is the canvas's own `(max-width: 1023px)` query. The
-          // canvas constructor seeds `phase` from its `phone` prop; the
-          // check evaluates `renderVals()` on state, so the phase goes there.
-          state: { isMobile: width <= 1023, phase: state.phase },
+        // The runtime renders the canvas on this viewport (its own
+        // `(max-width: 1023px)` query); `phone` seeds the phone row's phase.
+        props: {
+          host: "витрина врача",
+          variant: "Разделы",
+          congress: state.congress,
+          phone: PHONE_PROP[state.phase],
         },
-        section: { section: ["data-screen-label", "Профиль · Разделы"], cards: [] },
+        section: {
+          section: ["data-screen-label", "Профиль · Разделы"],
+          cards: [],
+        },
         rendered: { root: "main" },
       });
     });

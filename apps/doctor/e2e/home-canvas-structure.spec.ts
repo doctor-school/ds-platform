@@ -1,7 +1,3 @@
-import { spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
-
 import { test } from "@playwright/test";
 import { expectSlotSectionMatchesCanvas } from "@ds/e2e/canvas-slots";
 
@@ -19,33 +15,11 @@ import { expectSlotSectionMatchesCanvas } from "@ds/e2e/canvas-slots";
  * drops the canvas's «▾» — no recorded decision yet, #3757 PR body);
  * «что исследовать» and «лидерборд» (not shipped — EARS-10/11 land later).
  *
- * The event card canvas mounts `DsDesignSystem.WebinarCard`; as in
- * `feed-canvas-structure.spec.ts`, the repository's `@ds/design-system`
- * component renders it (`support/render-ds-component.ts`, its own process).
+ * The canvas is rendered by the real Claude Design runtime, offline; the event
+ * card canvas mounts `DsDesignSystem.WebinarCard` from the DS bundle built
+ * from this repo (#3798), as in `feed-canvas-structure.spec.ts`.
  */
-const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli");
-const RENDERER = fileURLToPath(
-  new URL("./support/render-ds-component.ts", import.meta.url),
-);
-
-const renderComponent = (
-  name: string,
-  props: Record<string, unknown>,
-): string => {
-  const run = spawnSync(
-    process.execPath,
-    [TSX_CLI, RENDERER, name, JSON.stringify(props)],
-    {
-      encoding: "utf8",
-    },
-  );
-  if (run.status !== 0) throw new Error(`render ${name} failed: ${run.stderr}`);
-  return run.stdout;
-};
-const INPUT = (width: number) => ({
-  props: { loggedIn: false, specialtyChosen: false, catalogVariant: "Б" },
-  state: { isMobile: width < 900 },
-});
+const PROPS = { loggedIn: false, specialtyChosen: false, catalogVariant: "Б" };
 
 for (const width of [390, 1440]) {
   test.describe(`#3757 doctor home ≡ doctor-home canvas · guest · ${width}`, () => {
@@ -64,7 +38,7 @@ for (const width of [390, 1440]) {
         .waitFor();
       await expectSlotSectionMatchesCanvas(page, {
         canvas: "doctor-home.dc.html",
-        input: INPUT(width),
+        props: PROPS,
         section: {
           section: ["data-screen-label", "d-home · события"],
           cards: ["unit-event-card"],
@@ -73,7 +47,6 @@ for (const width of [390, 1440]) {
           root: '[data-testid="home-events"]',
           card: "[data-webinar-card]",
         },
-        renderComponent,
       });
     });
   });

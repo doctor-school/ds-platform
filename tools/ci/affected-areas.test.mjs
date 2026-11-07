@@ -321,6 +321,19 @@ test("EARS-12: files a job reads outside its dependency closure run that job", (
     "playwright-axe-doctor",
     "playwright-axe-portal",
   ]);
+  // #3798 — the runtime canvas loader check renders the DS-bundle canvases and
+  // the siblings / helmet scripts they load.
+  for (const file of [
+    "design-source/academy-home.dc.html",
+    "design-source/academy-material.dc.html",
+    "design-source/events-feed.dc.html",
+    "design-source/events-feed-kit.js",
+    "design-source/sign-in-refusal.dc.html",
+    "design-source/unit-feed-card.dc.html",
+    "design-source/unit-project-card.dc.html",
+    "design-source/unit-content-card.dc.html",
+  ])
+    assert.deepEqual(running(pr([file])), ["playwright-axe-doctor"], file);
 });
 
 test("EARS-13: a HEAVY_JOBS package missing from the workspace throws (the caller fails open)", () => {

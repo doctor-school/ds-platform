@@ -77,12 +77,22 @@ export const HEAVY_JOBS = {
     // (#3757) read the home, documents-list and document page canvases;
     // account-canvas-structure-live.spec.ts (#3758) reads the R1 account canvas.
     // The header/footer checks render ds-shell with the vendored DC runtime
-    // design-source/support.js (#3793).
+    // design-source/support.js (#3793). The #3798 runtime canvas loader check
+    // (feed-canvas-structure.spec.ts) renders the six DS-bundle canvases and
+    // every sibling / helmet script they load.
     extraInputs: [
       /^design-source\/ds-shell\.dc\.html$/,
       /^design-source\/support\.js$/,
       /^design-source\/doctor-feed\.dc\.html$/,
+      /^design-source\/unit-content-card\.dc\.html$/,
       /^design-source\/unit-event-card\.dc\.html$/,
+      /^design-source\/academy-home\.dc\.html$/,
+      /^design-source\/academy-material\.dc\.html$/,
+      /^design-source\/events-feed\.dc\.html$/,
+      /^design-source\/events-feed-kit\.js$/,
+      /^design-source\/sign-in-refusal\.dc\.html$/,
+      /^design-source\/unit-feed-card\.dc\.html$/,
+      /^design-source\/unit-project-card\.dc\.html$/,
       /^design-source\/doctor-home\.dc\.html$/,
       /^design-source\/doctor-docs\.dc\.html$/,
       /^design-source\/document\.dc\.html$/,

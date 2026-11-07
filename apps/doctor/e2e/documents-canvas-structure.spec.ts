@@ -21,11 +21,9 @@ import { expectSlotSectionMatchesCanvas } from "@ds/e2e/canvas-slots";
 const DOCUMENT = "/documents/privacy-policy";
 
 for (const width of [390, 1440]) {
-  const isMobile = width < 900;
-
   test.describe(`#3757 documents list ≡ doctor-docs canvas · guest · ${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
-    const input = { props: { loggedIn: false }, state: { isMobile } };
+    const props = { loggedIn: false };
 
     test.beforeEach(async ({ page, context }) => {
       await context.clearCookies();
@@ -36,7 +34,7 @@ for (const width of [390, 1440]) {
     test("the poster has the canvas structure", async ({ page }) => {
       await expectSlotSectionMatchesCanvas(page, {
         canvas: "doctor-docs.dc.html",
-        input,
+        props,
         section: { section: ["data-screen-label", "d-docs · постер-шапка"] },
         rendered: { root: '[data-testid="documents-page"] > div:first-child' },
       });
@@ -47,7 +45,7 @@ for (const width of [390, 1440]) {
     }) => {
       await expectSlotSectionMatchesCanvas(page, {
         canvas: "doctor-docs.dc.html",
-        input,
+        props,
         section: {
           section: ["data-screen-label", "d-docs · документы"],
           repeats: ["doc"],
@@ -62,7 +60,7 @@ for (const width of [390, 1440]) {
     test("the contacts section has the canvas structure", async ({ page }) => {
       await expectSlotSectionMatchesCanvas(page, {
         canvas: "doctor-docs.dc.html",
-        input,
+        props,
         section: { section: ["data-screen-label", "d-docs · контакты"] },
         rendered: { root: "section#contacts" },
       });
@@ -71,10 +69,7 @@ for (const width of [390, 1440]) {
 
   test.describe(`#3757 document page ≡ document canvas · guest · ${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
-    const input = {
-      props: { loggedIn: false, shell: "витрина врача" },
-      state: { isMobile },
-    };
+    const props = { loggedIn: false, shell: "витрина врача" };
 
     test.beforeEach(async ({ page, context }) => {
       await context.clearCookies();
@@ -87,7 +82,7 @@ for (const width of [390, 1440]) {
     test("the poster has the canvas structure", async ({ page }) => {
       await expectSlotSectionMatchesCanvas(page, {
         canvas: "document.dc.html",
-        input,
+        props,
         section: { section: ["data-screen-label", "document · постер-шапка"] },
         rendered: { root: '[data-testid="legal-document"] > div:first-child' },
       });
@@ -98,7 +93,7 @@ for (const width of [390, 1440]) {
     }) => {
       await expectSlotSectionMatchesCanvas(page, {
         canvas: "document.dc.html",
-        input,
+        props,
         section: {
           section: ["data-screen-label", "document · другие документы"],
           repeats: ["doc"],

@@ -302,7 +302,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     /**
      * POST the GENERIC guarded transition (`:id/transition`) — the bare
-     * closed-set state change that carries no precondition and no audit row.
+     * closed-set state change that carries no command-specific precondition;
+     * it records its actor in `audit_ledger` (049 EARS-7).
      */
     async function genericTransition(
       cookie: string,

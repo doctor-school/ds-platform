@@ -114,6 +114,47 @@ const SUPERADMIN_ONLY_ROUTES: Record<string, string[]> = Object.fromEntries(
   [...SUPERADMIN_ONLY].map((endpoint) => [endpoint, ["superadmin"]]),
 );
 
+/**
+ * 049 EARS-7 (#3743) — the broadcast director's reach: exactly the rows of
+ * `049-design.md` «Director reach», each `platform_admin, broadcast_director`.
+ * The director's admission and its refusal everywhere else are proven in
+ * `apps/api/test/events/director-reach.e2e-spec.ts`.
+ */
+const DIRECTOR_REACH = [
+  "GET /v1/admin/events",
+  "GET /v1/admin/events/:id",
+  "POST /v1/admin/events",
+  "PATCH /v1/admin/events/:id",
+  "PUT /v1/admin/events/:id/stream",
+  "POST /v1/admin/events/:id/publish",
+  "POST /v1/admin/events/:id/open",
+  "POST /v1/admin/events/:id/close",
+  "POST /v1/admin/events/:id/hide",
+  "POST /v1/admin/events/:id/transition",
+  ...["event-experts", "event-projects", "event-directions"].flatMap((r) => [
+    `GET /v1/admin/${r}`,
+    `GET /v1/admin/${r}/:id`,
+    `POST /v1/admin/${r}`,
+    `POST /v1/admin/${r}/:id/retire`,
+    `POST /v1/admin/${r}/:id/restore`,
+  ]),
+  "PATCH /v1/admin/event-experts/:id",
+  "GET /v1/admin/event-projects/:id/lifecycle-impact",
+  "GET /v1/admin/event-directions/:id/lifecycle-impact",
+  "GET /v1/admin/event-kinds",
+  "GET /v1/admin/projects",
+  "GET /v1/admin/projects/:id",
+  "GET /v1/admin/experts",
+  "GET /v1/admin/experts/:id",
+  "GET /v1/admin/directions",
+];
+const DIRECTOR_REACH_ROUTES: Record<string, string[]> = Object.fromEntries(
+  DIRECTOR_REACH.map((endpoint) => [
+    endpoint,
+    ["platform_admin", "broadcast_director"],
+  ]),
+);
+
 const REGISTRAR_ADMITTED: Record<string, string[]> = {
   // Holding a session: reading back one's own roles, and ending the session.
   "GET /v1/admin/auth/session": [
@@ -182,6 +223,7 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
   // the refusal of a platform administrator is proven in
   // `apps/api/test/staff-access/staff-access.e2e-spec.ts`.
   ...SUPERADMIN_ONLY_ROUTES,
+  ...DIRECTOR_REACH_ROUTES,
 };
 
 /** A path-parameterised id that resolves to nothing — the floor is about authz, not existence. */

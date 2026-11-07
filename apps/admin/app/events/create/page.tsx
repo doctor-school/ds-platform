@@ -2,11 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Authenticated,
-  useCreate,
-  useCustomMutation,
-} from "@refinedev/core";
+import { Authenticated, useCreate, useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import NextLink from "next/link";
 import { Alert, Link } from "@ds/design-system";
@@ -15,6 +11,7 @@ import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { EventForm } from "@/components/event-form";
 import { eventCreateVars } from "@/lib/event-create-vars";
+import { useAdminAccess } from "@/lib/use-admin-access";
 import {
   type CreateLegacyBroadcastVars,
   eventProjectsUrl,
@@ -38,6 +35,8 @@ import {
  */
 export default function CreateEventPage() {
   const t = useTranslations();
+  // 049 EARS-8 — «Это архивный эфир» is the platform administrator's option.
+  const access = useAdminAccess();
   const router = useRouter();
   const { mutate: create, mutation } = useCreate();
   const { mutate: link, mutation: linking } = useCustomMutation();
@@ -74,6 +73,7 @@ export default function CreateEventPage() {
         ) : null}
         <EventForm
           submitLabel={t("common.save")}
+          offerLegacy={access?.full === true}
           submitting={mutation.isPending || linking.isPending}
           onSubmit={(values) => {
             setError(null);

@@ -20,7 +20,10 @@ import type { AdminSessionResponse } from "@ds/schemas";
  * - only `congress-program-committee` (046 EARS-31) → exactly the «Заявки»
  *   (submissions registry) of each bound event — a member may be bound to
  *   several — and nothing else; with no binding row → nothing at all.
- * - both coarse roles → the union, each grant opening only its own role's
+ * - `broadcast_director` without `platform_admin` (049 EARS-8) → «Мероприятия»
+ *   alone: the event list, the create form and the event card, never the
+ *   event's roster / intake / submissions screens nor any other section.
+ * - several of these roles → the union, each grant opening only its own role's
  *   screen of its own event.
  * - an unreadable session (`null`) → nothing: fail closed, like
  *   `readAdminAuthState`.
@@ -30,6 +33,32 @@ const PLATFORM_ADMIN = "platform_admin";
 const SUPERADMIN = "superadmin";
 const EVENT_REGISTRAR = "event-registrar";
 const PROGRAM_COMMITTEE = "congress-program-committee";
+const BROADCAST_DIRECTOR = "broadcast_director";
+
+/** 049 EARS-8 — the director's routes: the event list, create and card. */
+const DIRECTOR_PATH = /^\/events(?:\/[^/]+)?\/?$/;
+
+/**
+ * 049 EARS-7 / EARS-8 — the Refine resources of the event screens the director
+ * reaches (`049-design.md` «Director reach»): the events themselves, the
+ * dictionaries the form and panels read, and the event's three link books.
+ */
+const DIRECTOR_RESOURCES = new Set([
+  "events",
+  "event-kinds",
+  "projects",
+  "experts",
+  "directions",
+  "event-experts",
+  "event-projects",
+  "event-directions",
+]);
+
+const DIRECTOR_NAV: AdminNavItem = {
+  href: "/events",
+  testId: "nav-events",
+  labelKey: "app.nav.events",
+};
 
 type EventRef = { eventId: string; eventSlug: string };
 
@@ -49,6 +78,11 @@ export interface AdminAccess {
   readonly full: boolean;
   /** 049 EARS-3 — `superadmin` (with `full`): «Доступы» too. */
   readonly superadmin: boolean;
+  /**
+   * 049 EARS-8 — `broadcast_director`: without `full`, the event list, create
+   * form and card only.
+   */
+  readonly director: boolean;
   /** Events whose roster a registrar is bound to — ids and slugs both match. */
   readonly rosterEvents: ReadonlyArray<EventRef>;
   /** 046 EARS-31 — events whose submissions a committee member is bound to. */
@@ -131,6 +165,7 @@ export const ADMIN_SECTION_NAV: readonly AdminNavItem[] = [
 const NO_ACCESS: AdminAccess = {
   full: false,
   superadmin: false,
+  director: false,
   rosterEvents: [],
   committeeEvents: [],
 };
@@ -150,11 +185,13 @@ export function adminAccess(session: AdminSessionResponse | null): AdminAccess {
       ...NO_ACCESS,
       full: true,
       superadmin: session.roles.includes(SUPERADMIN),
+      director: session.roles.includes(BROADCAST_DIRECTOR),
     };
   }
   return {
     full: false,
     superadmin: false,
+    director: session.roles.includes(BROADCAST_DIRECTOR),
     rosterEvents: grantsOf(session, EVENT_REGISTRAR),
     committeeEvents: grantsOf(session, PROGRAM_COMMITTEE),
   };
@@ -167,6 +204,7 @@ export function adminNavItems(access: AdminAccess): AdminNavItem[] {
     );
   }
   return [
+    ...(access.director ? [DIRECTOR_NAV] : []),
     ...access.rosterEvents.map(({ eventId }) => ({
       href: `/events/${eventId}/roster`,
       testId: "nav-roster",
@@ -213,6 +251,9 @@ const EVENT_SCREENS: ReadonlyArray<{
 export function canAccessPath(access: AdminAccess, pathname: string): boolean {
   if (isStaffAccessPath(pathname)) return access.full && access.superadmin;
   if (access.full) return true;
+  // `/events/create` is one segment like `/events/<id>`; the event's roster,
+  // intake and submissions screens are deeper and stay grant-bound.
+  if (access.director && DIRECTOR_PATH.test(pathname)) return true;
   return EVENT_SCREENS.some((screen) => {
     const match = screen.path.exec(pathname);
     return (
@@ -236,6 +277,13 @@ export function canAccessResource(
     return access.full && access.superadmin;
   }
   if (access.full) return true;
+  if (
+    access.director &&
+    resource !== undefined &&
+    DIRECTOR_RESOURCES.has(resource)
+  ) {
+    return true;
+  }
   const screen = EVENT_SCREENS.find((entry) => entry.resource === resource);
   return (
     screen !== undefined &&

@@ -347,3 +347,110 @@ describe("046 EARS-31 programme committee access projection", () => {
     ).toBe(true);
   });
 });
+
+describe("049 EARS-8 broadcast director access projection", () => {
+  const director: AdminSessionResponse = {
+    roles: ["broadcast_director"],
+    eventGrants: [],
+  };
+  const directorAndRegistrar: AdminSessionResponse = {
+    roles: ["broadcast_director", "event-registrar"],
+    eventGrants: [
+      { role: "event-registrar", eventId: EVENT_A, eventSlug: "congress-a" },
+    ],
+  };
+  const EVENTS_LINK = {
+    href: "/events",
+    testId: "nav-events",
+    labelKey: "app.nav.events",
+  };
+
+  it("049 EARS-8: a director-only session draws «Мероприятия» alone and opens the event list, create and card only", () => {
+    const access = adminAccess(director);
+
+    expect(access.full).toBe(false);
+    expect(access.director).toBe(true);
+    expect(adminNavItems(access)).toEqual([EVENTS_LINK]);
+    for (const path of [
+      "/events",
+      "/events/",
+      "/events/create",
+      `/events/${EVENT_A}`,
+    ])
+      expect(canAccessPath(access, path), path).toBe(true);
+    for (const path of [
+      "/",
+      `/events/${EVENT_A}/roster`,
+      `/events/${EVENT_A}/submissions`,
+      `/events/${EVENT_A}/congress-intake`,
+      "/projects",
+      "/experts",
+      "/directions",
+      "/event-kinds",
+      "/materials",
+      "/access",
+    ])
+      expect(canAccessPath(access, path), path).toBe(false);
+  });
+
+  it("049 EARS-8: a director-only session reaches the event resources the event screens read, and nothing else", () => {
+    const access = adminAccess(director);
+
+    for (const resource of [
+      "events",
+      "event-kinds",
+      "projects",
+      "experts",
+      "directions",
+      "event-experts",
+      "event-projects",
+      "event-directions",
+    ])
+      expect(canAccessResource(access, resource), resource).toBe(true);
+    for (const resource of [
+      "legacy-broadcasts",
+      "recordings",
+      "materials",
+      "organisations",
+      "specialties",
+      "staff-access",
+      "congress-roster",
+      "congress-submissions",
+    ])
+      expect(canAccessResource(access, resource), resource).toBe(false);
+  });
+
+  it("049 EARS-8: every director sign-in lands on the event list", () => {
+    const access = adminAccess(director);
+
+    expect(landingRedirect(access, "/events")).toBeNull();
+    expect(landingRedirect(access, "/")).toBe("/events");
+  });
+
+  it("049 EARS-8: a director who is also a bound registrar gets the union of both navigations", () => {
+    const access = adminAccess(directorAndRegistrar);
+
+    expect(adminNavItems(access)).toEqual([
+      EVENTS_LINK,
+      {
+        href: `/events/${EVENT_A}/roster`,
+        testId: "nav-roster",
+        labelKey: "congressRoster.entryLink",
+      },
+    ]);
+    expect(canAccessPath(access, "/events")).toBe(true);
+    expect(canAccessPath(access, `/events/${EVENT_A}/roster`)).toBe(true);
+    expect(canAccessPath(access, `/events/${EVENT_B}/roster`)).toBe(false);
+    expect(canAccessResource(access, "congress-roster", { id: EVENT_A })).toBe(
+      true,
+    );
+    expect(canAccessResource(access, "events")).toBe(true);
+  });
+
+  it("049 EARS-8: a platform administrator is never a director-only session", () => {
+    const access = adminAccess(platformAdmin);
+
+    expect(access.full).toBe(true);
+    expect(access.director).toBe(false);
+  });
+});

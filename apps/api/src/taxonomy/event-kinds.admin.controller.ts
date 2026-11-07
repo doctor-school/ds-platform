@@ -62,10 +62,10 @@ export class EventKindsAdminController {
   @Get()
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-25"],
+    tests: ["EARS-25", "EARS-7"],
   })
   list(@Query() rawQuery: Record<string, string>): Promise<EventKindAdminList> {
     const parsed = AdminTaxonomyListQuerySchema.safeParse(rawQuery);

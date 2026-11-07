@@ -752,51 +752,6 @@ export class EventsRepository {
   }
 
   /**
-   * Persist a lifecycle state change and bump `updated_at`. The caller (the
-   * EARS-7 guard in `EventsService`) has already validated the move against the
-   * closed transition set — this is the bare write. Returns the updated
-   * aggregate, or `null` when the id does not exist.
-   *
-   * @param expectedVersion #1593 — when supplied, the write is a COMPARE-AND-SET:
-   * the row moves only while its `version` is still the one the caller read. The
-   * service pre-checks the same value, but only this clause closes the window
-   * between that read and this write, so a concurrent transition cannot be
-   * silently overwritten. Zero rows updated is therefore ambiguous here (gone, or
-   * moved) — the SERVICE disambiguates 404 from 412, not the repository.
-   */
-  async updateState(
-    id: string,
-    state: Event["state"],
-    expectedVersion?: number,
-  ): Promise<EventAggregate | null> {
-    // 010 EARS-3/5 — attribute the bare lifecycle-state write to the acting admin.
-    const [row] = await withRequestAuditContext(this.db, (tx) =>
-      tx
-        .update(events)
-        .set({
-          state,
-          updatedAt: new Date(),
-          version: sql`${events.version} + 1`,
-        })
-        .where(
-          and(
-            eq(events.id, id),
-            ACTIVE_EVENT,
-            ...(expectedVersion === undefined
-              ? []
-              : [eq(events.version, expectedVersion)]),
-          ),
-        )
-        .returning(),
-    );
-    if (!row) return null;
-    return {
-      event: row,
-      streamConfig: await this.loadStreamConfig(id),
-    };
-  }
-
-  /**
    * Apply a lifecycle state change AND append exactly one terminal
    * `audit_ledger` row (EARS-4; ADR-0003 §6) in a single transaction — the state
    * write and its audit row land together or not at all, so a transition can

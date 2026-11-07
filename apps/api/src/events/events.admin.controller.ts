@@ -58,12 +58,13 @@ import { withProtocolRefusalShape } from "./protocol-refusal-shape.js";
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 
 /**
- * 007 admin event surface (`platform_admin`, role fast-path — design §7). EARS-1
+ * 007 admin event surface (role fast-path — design §7). EARS-1
  * lands `CreateEvent` (`POST /v1/admin/events`) plus the two admin reads
  * (`EventAdminList` / `EventAdminDetail`); the edit / stream-config / transition
- * commands are sibling handlers (EARS-2…7). Every route carries the EARS-8
- * classification `authenticated` / `platform_admin` / `fast-path`; the global
- * `AuthzGuard` refuses `doctor_guest` and public callers fail-closed.
+ * commands are sibling handlers (EARS-2…7). Every route is `authenticated` /
+ * `fast-path`; its role set is per route — `platform_admin`, and on the rows
+ * 049 EARS-7 lists also `broadcast_director` (each `@Authz` below is the
+ * source). The global `AuthzGuard` refuses every other caller fail-closed.
  *
  * The create request is `multipart/form-data`: a `payload` JSON field (validated
  * against the `@ds/schemas` SSOT) plus an optional `programPdf` file uploaded to
@@ -87,13 +88,13 @@ export class EventsAdminController {
   @HttpCode(201)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     // Create is an authenticated admin write but not a lifecycle transition —
     // 007's audit_ledger obligation attaches to the transitions (EARS-4/5/6),
     // not to create — so it does not owe a terminal auth-audit row (low-stakes).
     audit: "low-stakes",
-    tests: ["EARS-1", "EARS-8"],
+    tests: ["EARS-1", "EARS-8", "EARS-7"],
   })
   async create(
     @Req() req: FastifyRequest,
@@ -160,7 +161,10 @@ export class EventsAdminController {
    * the same key against a different validator is a different bound request) and
    * the parsed version.
    */
-  private requireIfMatch(req: FastifyRequest): { raw: string; version: number } {
+  private requireIfMatch(req: FastifyRequest): {
+    raw: string;
+    version: number;
+  } {
     const raw = req.headers[IF_MATCH_HEADER] as string | undefined;
     if (!raw || raw.trim().length === 0) {
       throw new TaxonomyError(
@@ -235,18 +239,18 @@ export class EventsAdminController {
    * edits); a present payload is validated against the `@ds/schemas` partial SSOT
    * — a bad field (e.g. a non-МСК datetime) is a 400 and nothing is mutated. An
    * edit to a `hidden` event is a 409 ({@link EventNotEditableError}). A
-   * missing event id is a 404. `platform_admin`-only (EARS-8); like create it is a
-   * `platform_admin` authoring write, not a lifecycle transition, so it owes no
+   * missing event id is a 404. Reach: 007 EARS-8 + 049 EARS-7 (the `@Authz` role
+   * set below). Like create it is an authoring write, not a lifecycle transition, so it owes no
    * terminal `audit_ledger` row (that obligation attaches to EARS-4/5/6).
    */
   @Patch(":id")
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "low-stakes",
-    tests: ["EARS-2", "EARS-8"],
+    tests: ["EARS-2", "EARS-8", "EARS-7"],
   })
   async update(
     @Param("id") id: string,
@@ -296,10 +300,10 @@ export class EventsAdminController {
   @ApiOkResponse({ type: EventAdminListDto })
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-8"],
+    tests: ["EARS-8", "EARS-7"],
   })
   list(@Query() rawQuery: Record<string, string>): Promise<EventAdminList> {
     const parsed = EventAdminListQuerySchema.safeParse(rawQuery);
@@ -319,10 +323,10 @@ export class EventsAdminController {
   @Get(":id")
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-8"],
+    tests: ["EARS-8", "EARS-7"],
   })
   async detail(
     @Param("id") id: string,
@@ -343,7 +347,7 @@ export class EventsAdminController {
    * 400 and no config is recorded for it (EARS-3). The write is an idempotent
    * upsert — one config per event — so a wrong reference is correctable while
    * `published` with no state reversal (US-3). Configuring outside the pre-air
-   * window (design §2) is a 409. `platform_admin`-only (EARS-8). The 006 room
+   * window (design §2) is a 409. Reach: 007 EARS-8 + 049 EARS-7. The 006 room
    * later instantiates the player from exactly this config, never sniffing the
    * URL. `PUT` because the resource is the single stream-config sub-resource of
    * the event (create-or-replace).
@@ -352,13 +356,13 @@ export class EventsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
-    // A `platform_admin` authoring write, not a lifecycle transition — no
+    // An authoring write, not a lifecycle transition — no
     // terminal `audit_ledger` row is owed (the audit obligation attaches to the
     // transitions, EARS-4/5/6), so it is low-stakes like create.
     audit: "low-stakes",
-    tests: ["EARS-3", "EARS-8"],
+    tests: ["EARS-3", "EARS-8", "EARS-7"],
   })
   async configureStream(
     @Param("id") id: string,
@@ -389,7 +393,7 @@ export class EventsAdminController {
    * EARS-4 — `PublishEvent` (`POST /v1/admin/events/:id/publish`): the named
    * `draft → published` transition. It runs through the EARS-7 guard (publish is
    * refused with a 409 unless the event is in `draft`) and, on success, appends
-   * exactly one terminal `audit_ledger` row keyed to the acting `platform_admin`
+   * exactly one terminal `audit_ledger` row keyed to the acting principal
    * (ADR-0003 §6). Publishing is the single visibility signal — the event
    * becomes publicly reachable on 004 and 005 registration opens off the same
    * `EventLifecycleState`, with no second flag (EARS-9). Idempotent re-publish is
@@ -400,15 +404,15 @@ export class EventsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
-    // `audit` here is the endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8) — a
-    // `platform_admin` write, not an auth security event, so it owes no
+    // `audit` here is the endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8) — an
+    // admin write, not an auth security event, so it owes no
     // AuthAuditLog emission (low-stakes, as create/transition). The EARS-4
     // domain `audit_ledger` transition row is a separate ADR-0003 §6 obligation,
     // written atomically in the service — not this classification field.
     audit: "low-stakes",
-    tests: ["EARS-4", "EARS-8"],
+    tests: ["EARS-4", "EARS-8", "EARS-7"],
   })
   async publish(
     @Param("id") id: string,
@@ -446,21 +450,21 @@ export class EventsAdminController {
    * 006 room (admission of registered doctors + presence capture start). It runs
    * through the EARS-7 guard (open is refused with a 409 unless the event is in
    * `published`) and, on success, appends exactly one terminal `audit_ledger`
-   * row keyed to the acting `platform_admin` (ADR-0003 §6). The `live` state is
+   * row keyed to the acting principal (ADR-0003 §6). The `live` state is
    * the single source of truth the 006 room gates admission on (EARS-9).
    */
   @Post(":id/open")
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
-    // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): a `platform_admin`
+    // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): an admin
     // write, not an auth security event — no AuthAuditLog emission (low-stakes).
     // The EARS-5 domain `audit_ledger` row is a separate ADR-0003 §6 obligation
     // written atomically in the service, not this classification field.
     audit: "low-stakes",
-    tests: ["EARS-5", "EARS-8"],
+    tests: ["EARS-5", "EARS-8", "EARS-7"],
   })
   async open(
     @Param("id") id: string,
@@ -478,17 +482,17 @@ export class EventsAdminController {
    * (admission + heartbeat/chat acceptance stop) and **bounds the presence
    * window** (006 EARS-7). It runs through the EARS-7 guard (close is refused
    * with a 409 unless the event is in `live`) and, on success, appends exactly
-   * one terminal `audit_ledger` row keyed to the acting `platform_admin`
+   * one terminal `audit_ledger` row keyed to the acting principal
    * (ADR-0003 §6).
    */
   @Post(":id/close")
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "low-stakes",
-    tests: ["EARS-5", "EARS-8"],
+    tests: ["EARS-5", "EARS-8", "EARS-7"],
   })
   async close(
     @Param("id") id: string,
@@ -529,7 +533,7 @@ export class EventsAdminController {
     access: "authenticated",
     roles: ["platform_admin"],
     check: "fast-path",
-    // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): a `platform_admin`
+    // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): an admin
     // write, not an auth security event — no AuthAuditLog emission (low-stakes).
     // The domain `audit_ledger` row is a separate ADR-0003 §6 obligation written
     // atomically in the service.
@@ -577,7 +581,7 @@ export class EventsAdminController {
     access: "authenticated",
     roles: ["platform_admin"],
     check: "fast-path",
-    // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): a `platform_admin`
+    // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): an admin
     // write, not an auth security event — no AuthAuditLog emission (low-stakes).
     // The domain `audit_ledger` row is a separate ADR-0003 §6 obligation written
     // atomically in the service.
@@ -729,7 +733,7 @@ export class EventsAdminController {
    * action (LD-2 — no scheduler, no time-based automation fires it in wave 1).
    * It runs through the EARS-7 guard (hide is refused with a 409 unless the
    * event is in `ended`) and, on success, appends exactly one terminal
-   * `audit_ledger` row keyed to the acting `platform_admin` (ADR-0003 §6). After
+   * `audit_ledger` row keyed to the acting principal (ADR-0003 §6). After
    * hide the event leaves all public surfaces off the same
    * `EventLifecycleState` (EARS-9): 004 drops it from the upcoming listing and
    * its public page degrades to the hidden notice (004 EARS-5, a consumer
@@ -739,14 +743,14 @@ export class EventsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
-    // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): a `platform_admin`
+    // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): an admin
     // write, not an auth security event — no AuthAuditLog emission (low-stakes).
     // The EARS-6 domain `audit_ledger` row is a separate ADR-0003 §6 obligation
     // written atomically in the service, not this classification field.
     audit: "low-stakes",
-    tests: ["EARS-6", "EARS-8"],
+    tests: ["EARS-6", "EARS-8", "EARS-7"],
   })
   async hide(
     @Param("id") id: string,
@@ -805,11 +809,12 @@ export class EventsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
-    // The bare guarded state change carries no terminal audit row — that
-    // obligation attaches to the named transition commands (EARS-4/5/6), each
-    // of which appends exactly one `audit_ledger` row on top of this guard.
+    // Endpoint-authz AUTH-audit tier: not an auth security event (low-stakes).
+    // The domain `audit_ledger` row — the same one the named command for that
+    // edge writes, keyed to the acting principal (049 EARS-7) — is written
+    // atomically in the service, not by this classification field.
     audit: "low-stakes",
     tests: ["EARS-7", "EARS-8"],
   })
@@ -827,7 +832,12 @@ export class EventsAdminController {
       this.requireIfMatch(req),
     );
     try {
-      const updated = await this.events.transition(id, dto.to, version);
+      const updated = await this.events.transition(
+        id,
+        dto.to,
+        actorSub(req),
+        version,
+      );
       if (!updated) throw new NotFoundException("event not found");
       return this.withETag(reply, updated);
     } catch (err) {

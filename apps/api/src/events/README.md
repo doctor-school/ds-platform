@@ -77,8 +77,9 @@ The webinar event module. It hosts two surfaces over one aggregate:
   surface ships end-to-end, the read side is driven against **seeded fixture
   events** (seam → parent #549).
 
-The admin routes are classified `access: authenticated`, `required_roles:
-platform_admin`, `auth_check: fast-path` (007 EARS-8, ADR-0001 §2); the public
+The admin routes are classified `access: authenticated`, `auth_check:
+fast-path` (007 EARS-8, ADR-0001 §2); `required_roles` is `platform_admin`, plus
+`broadcast_director` on the rows 049 EARS-7 lists (the endpoint table below); the public
 read route is `access: public`, `auth_check: none` (004 EARS-10). The global
 `AuthzGuard` refuses `doctor_guest`/public callers on the admin routes and serves
 the public routes without a subject. The DTO SSOT is `@ds/schemas`
@@ -102,9 +103,10 @@ server-side with a **409** state conflict (`InvalidTransitionError`), and the
 state is never mutated. A target outside the closed enum is a **400** (the
 `ZodValidationPipe`, before the guard). The read models carry `validTransitions`
 derived from the same map, so the admin UI offers only the currently-valid move
-and can never disagree with the server. This bare guarded transition is what the
-named commands (EARS-4/5/6) run through, layering their side-effects + audit rows
-on top; it carries no `audit_ledger` row itself.
+and can never disagree with the server. This guarded transition is what the
+named commands (EARS-4/5/6) run through; a move made through it directly writes
+the same terminal `audit_ledger` row the named command for that edge does, keyed
+to the acting principal (049 EARS-7).
 
 ## EARS-4 — the publish transition (`draft → published`)
 
@@ -114,7 +116,7 @@ lifecycle command. It runs through the EARS-7 guard — publish is refused with 
 `InvalidTransitionError`, the state untouched) — and, on success, applies the
 `draft → published` move **and appends exactly one** terminal `audit_ledger` row
 **atomically** (`updateStateWithAudit`, one transaction), keyed to the acting
-`platform_admin` (`event_type = event.published`; `metadata` carries the
+principal (`event_type = event.published`; `metadata` carries the
 aggregate id + `from`/`to`, no PD — ADR-0003 §6). Publishing is the single
 visibility signal: the same `EventLifecycleState` write flips the 004 public
 page + upcoming listing reachable and opens 005 registration gating — one state,
@@ -145,11 +147,12 @@ ending through the room-control command, which would write the `event.ended`
 audit type and bypass the EARS-18 preconditions + `Idempotency-Key`. On refusal
 the state is untouched and no audit row is written. 006's own admission/heartbeat/chat
 refusal logic **consumes** this `live` window — it is out of this handler's scope
-(publish EARS-4 and hide EARS-6 are the sibling transitions). `platform_admin`
--only (EARS-8). The admin open/close **actions** (stock Refine, each offered only
-from its valid state via `EventAdminDetail.validTransitions`) + the browser E2E
-are the integration slice (#595); this handler ships the backend commands + their
-Vitest e2e.
+(publish EARS-4 and hide EARS-6 are the sibling transitions). Reach: 007 EARS-8
+
+- 049 EARS-7. The admin open/close **actions** (stock Refine, each offered only
+  from its valid state via `EventAdminDetail.validTransitions`) + the browser E2E
+  are the integration slice (#595); this handler ships the backend commands + their
+  Vitest e2e.
 
 ## EARS-2 — the edit command + replaceable program PDF (`UpdateEvent`)
 
@@ -188,7 +191,7 @@ orphan key (`superseded program-PDF delete failed …`) and the edit still
 succeeds — a rare orphan from a failed delete is acceptable; the upload is never
 failed over GC. Full rationale: 007 design §3.
 
-`platform_admin`-only (EARS-8); like create it is an authoring write, not a
+Reach: 007 EARS-8 + 049 EARS-7 (endpoint table). Like create it is an authoring write, not a
 lifecycle transition, so it owes **no** `audit_ledger` row (that obligation
 attaches to EARS-4/5/6). The admin edit **form** (stock Refine, incl. the PDF
 re-upload affordance) + its browser E2E are the integration slice (#595); this
@@ -209,7 +212,7 @@ public event page degrades to the hidden-notice body (a **200**, never a dead
 (EARS-7). Hiding is manual by design — **LD-2**: wave 1 has **no scheduler and no
 time-based automation** that could fire the transition; a time-based auto-hide
 policy is a named wave-2 candidate (a source-scan test asserts no timer primitive
-exists in this module). `platform_admin`-only (EARS-8). The admin hide
+exists in this module). Reach: 007 EARS-8 + 049 EARS-7. The admin hide
 **action** (stock Refine, offered only from `ended` via
 `EventAdminDetail.validTransitions`) + the browser E2E are the integration slice
 (#595); this handler ships the backend command + its Vitest e2e.
@@ -253,13 +256,14 @@ per event (`event_id` PK) — so a wrong reference is **correctable while
 `published`** by replacing the single row, **with no state reversal** (US-3).
 Configuring outside the pre-air window (`draft` / `published` only, design §2 —
 `STREAM_CONFIGURABLE_STATES`) is a **409** (`StreamNotConfigurableError`); the
-config is meaningless once the broadcast is live/ended/hidden. `platform_admin`
--only (EARS-8); it owes **no** `audit_ledger` row (that obligation attaches to the
-lifecycle transitions, EARS-4/5/6). The config is surfaced on `EventAdminDetail`
-(`streamConfig`, `null` until configured) and the 006 room instantiates the
-player from exactly this persisted config, switching on `provider`. The admin
-stream-config **form** (stock Refine) + its browser E2E are the integration slice
-(#595); this handler ships the backend command + its Vitest e2e/unit.
+config is meaningless once the broadcast is live/ended/hidden. Reach: 007 EARS-8
+
+- 049 EARS-7; it owes **no** `audit_ledger` row (that obligation attaches to the
+  lifecycle transitions, EARS-4/5/6). The config is surfaced on `EventAdminDetail`
+  (`streamConfig`, `null` until configured) and the 006 room instantiates the
+  player from exactly this persisted config, switching on `provider`. The admin
+  stream-config **form** (stock Refine) + its browser E2E are the integration slice
+  (#595); this handler ships the backend command + its Vitest e2e/unit.
 
 ## What's here
 
@@ -344,9 +348,9 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
   transactional field-patch + optional wholesale speaker-list replacement behind
   the EARS-2 edit command), `listAdminPage()` (active-row SQL search over
   title/slug, stable title+id order, limit/offset and matching total), the detail read,
-  `updateState()` (the bare lifecycle-state write behind the guard),
   `updateStateWithAudit()` (the state write + one terminal `audit_ledger` row in
-  a single transaction — behind the named transition commands, EARS-4),
+  a single transaction — behind the named transition commands, EARS-4, and the
+  generic `:id/transition` guard, 049 EARS-7),
   `findByIdOrSlug()` (resolves the public read by stable slug or id), and
   `listUpcoming()` (the `published`/`live`-at-or-after-cutoff read ordered nearest
   first, with speaker rows batched in one query — no N+1), `listMonthBroadcasts()`
@@ -356,24 +360,24 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 
 ## Endpoints
 
-| Route                                          | Access               | Command / read                                                                                                                                                                              |
-| ---------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /v1/admin/events`                        | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)                                                                                                                      |
-| `PATCH /v1/admin/events/:id`                   | `platform_admin`     | `UpdateEvent` (EARS-2 pre-hide edit; multipart: optional `payload` JSON + optional `programPdf`; replace supersedes ref; 409 if `hidden`)                                                   |
-| `GET /v1/admin/events?q=&page=&pageSize=`      | `platform_admin`     | Paged `EventAdminList`; strict server-side title/slug search in stable title+id order                                                                                                       |
-| `GET /v1/admin/events/:id`                     | `platform_admin`     | `EventAdminDetail`                                                                                                                                                                          |
-| `PUT /v1/admin/events/:id/stream`              | `platform_admin`     | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window)                                                                                      |
-| `POST /v1/admin/events/:id/publish`            | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                                                                                                                |
-| `POST /v1/admin/events/:id/open`               | `platform_admin`     | `OpenRoom` (EARS-5 `published → live`; refused ≠ `published`; +1 `event.went_live` audit row)                                                                                               |
-| `POST /v1/admin/events/:id/close`              | `platform_admin`     | `CloseRoom` (EARS-5 `live → ended`; refused ≠ `live`; +1 `event.ended` audit row)                                                                                                           |
-| `POST /v1/admin/events/:id/mark-ended`         | `platform_admin`     | `MarkEventEnded` (014 EARS-18 `published → ended` for an off-platform эфир; `Idempotency-Key` AND `If-Match` required; refused unless past + never live; +1 `event.marked_ended` audit row) |
-| `POST /v1/admin/events/:id/hide`               | `platform_admin`     | `HideEvent` (EARS-6 `ended → hidden`; manual/LD-2; refused ≠ `ended`; +1 `event.hidden` audit row)                                                                                          |
-| `POST /v1/admin/events/:id/transition`         | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                                                                                                                                  |
-| `GET /v1/public/events/:idOrSlug`              | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                                                                                                      |
-| `GET /v1/public/events` (`?upcoming`)          | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                                                                                                        |
-| `GET /v1/public/events?timeframe=upcoming      | past`                | **public** (no auth)                                                                                                                                                                        | `PublicEventListingPage` (014 EARS-11) — opaque cursor, both tab counts; past is ended-only newest-first with canonical recording state |
-| `GET /v1/public/events?month=YYYY-MM`          | **public** (no auth) | `MonthBroadcastEntry[]` (004 EARS-15) — МСК month window incl. the month's past events; malformed month → 400; empty → `[]`                                                                 |
-| `GET /v1/public/events/month-counts?year=YYYY` | **public** (no auth) | `MonthlyEventCount[12]` (004 EARS-16) — publish-visible counts per МСК month, zero months included; malformed year → 400                                                                    |
+| Route                                          | Access                                 | Command / read                                                                                                                                                                              |
+| ---------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/admin/events`                        | `platform_admin`, `broadcast_director` | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)                                                                                                                      |
+| `PATCH /v1/admin/events/:id`                   | `platform_admin`, `broadcast_director` | `UpdateEvent` (EARS-2 pre-hide edit; multipart: optional `payload` JSON + optional `programPdf`; replace supersedes ref; 409 if `hidden`)                                                   |
+| `GET /v1/admin/events?q=&page=&pageSize=`      | `platform_admin`, `broadcast_director` | Paged `EventAdminList`; strict server-side title/slug search in stable title+id order                                                                                                       |
+| `GET /v1/admin/events/:id`                     | `platform_admin`, `broadcast_director` | `EventAdminDetail`                                                                                                                                                                          |
+| `PUT /v1/admin/events/:id/stream`              | `platform_admin`, `broadcast_director` | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window)                                                                                      |
+| `POST /v1/admin/events/:id/publish`            | `platform_admin`, `broadcast_director` | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                                                                                                                |
+| `POST /v1/admin/events/:id/open`               | `platform_admin`, `broadcast_director` | `OpenRoom` (EARS-5 `published → live`; refused ≠ `published`; +1 `event.went_live` audit row)                                                                                               |
+| `POST /v1/admin/events/:id/close`              | `platform_admin`, `broadcast_director` | `CloseRoom` (EARS-5 `live → ended`; refused ≠ `live`; +1 `event.ended` audit row)                                                                                                           |
+| `POST /v1/admin/events/:id/mark-ended`         | `platform_admin`                       | `MarkEventEnded` (014 EARS-18 `published → ended` for an off-platform эфир; `Idempotency-Key` AND `If-Match` required; refused unless past + never live; +1 `event.marked_ended` audit row) |
+| `POST /v1/admin/events/:id/hide`               | `platform_admin`, `broadcast_director` | `HideEvent` (EARS-6 `ended → hidden`; manual/LD-2; refused ≠ `ended`; +1 `event.hidden` audit row)                                                                                          |
+| `POST /v1/admin/events/:id/transition`         | `platform_admin`, `broadcast_director` | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`; +1 audit row, the named command's id for that edge, actor-keyed — 049 EARS-7)                                                    |
+| `GET /v1/public/events/:idOrSlug`              | **public** (no auth)                   | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                                                                                                      |
+| `GET /v1/public/events` (`?upcoming`)          | **public** (no auth)                   | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                                                                                                        |
+| `GET /v1/public/events?timeframe=upcoming      | past`                                  | **public** (no auth)                                                                                                                                                                        | `PublicEventListingPage` (014 EARS-11) — opaque cursor, both tab counts; past is ended-only newest-first with canonical recording state |
+| `GET /v1/public/events?month=YYYY-MM`          | **public** (no auth)                   | `MonthBroadcastEntry[]` (004 EARS-15) — МСК month window incl. the month's past events; malformed month → 400; empty → `[]`                                                                 |
+| `GET /v1/public/events/month-counts?year=YYYY` | **public** (no auth)                   | `MonthlyEventCount[12]` (004 EARS-16) — publish-visible counts per МСК month, zero months included; malformed year → 400                                                                    |
 
 ### The admin write precondition (`ETag` / `If-Match`)
 

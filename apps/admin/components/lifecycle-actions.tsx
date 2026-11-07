@@ -54,9 +54,12 @@ import {
 export function LifecycleActions({
   detail,
   refetch,
+  legacy,
 }: {
   detail: EventAdminDetail;
   refetch: () => void;
+  /** 049 EARS-8 — offer the legacy machine's commands (platform administrator only). */
+  legacy: boolean;
 }) {
   const t = useTranslations();
   const { mutate, mutation } = useCustomMutation();
@@ -66,7 +69,9 @@ export function LifecycleActions({
     message: string;
     signature: string;
   } | null>(null);
-  const actions = actionsFor(detail.state, detail.validTransitions);
+  const actions = actionsFor(detail.state, detail.validTransitions, {
+    legacy,
+  });
   const signature = lifecycleSignature(detail);
 
   useEffect(() => {
@@ -88,26 +93,27 @@ export function LifecycleActions({
         </Alert>
       ) : null}
       {bar.emptyNotice ? (
-        <p className="text-sm text-muted-foreground" data-testid="no-transitions">
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="no-transitions"
+        >
           {t("events.action.none")}
         </p>
       ) : (
-      <div className="flex flex-wrap gap-3" data-testid="lifecycle-actions">
-        {actions.map((action) => (
-          <Button
-            key={action.command}
-            type="button"
-            disabled={mutation.isPending}
-            data-testid={action.testId}
-            onClick={() => {
-              setRefusal(null);
-              // Captured BEFORE the command: the alert is about the screen the
-              // operator clicked on, and the refetch that follows a refusal is
-              // exactly what makes that screen obsolete.
-              const raisedAgainst = signature;
-              mutate(
-                lifecycleCommandRequest(detail, action.command),
-                {
+        <div className="flex flex-wrap gap-3" data-testid="lifecycle-actions">
+          {actions.map((action) => (
+            <Button
+              key={action.command}
+              type="button"
+              disabled={mutation.isPending}
+              data-testid={action.testId}
+              onClick={() => {
+                setRefusal(null);
+                // Captured BEFORE the command: the alert is about the screen the
+                // operator clicked on, and the refetch that follows a refusal is
+                // exactly what makes that screen obsolete.
+                const raisedAgainst = signature;
+                mutate(lifecycleCommandRequest(detail, action.command), {
                   onSuccess: () => refetch(),
                   onError: (failure) => {
                     const outcome = lifecycleErrorOutcome(failure);
@@ -117,14 +123,13 @@ export function LifecycleActions({
                     });
                     if (outcome.refetch) refetch();
                   },
-                },
-              );
-            }}
-          >
-            {t(action.labelKey)}
-          </Button>
-        ))}
-      </div>
+                });
+              }}
+            >
+              {t(action.labelKey)}
+            </Button>
+          ))}
+        </div>
       )}
     </div>
   );

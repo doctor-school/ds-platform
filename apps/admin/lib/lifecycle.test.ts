@@ -53,9 +53,9 @@ describe("007 EARS-7 admin lifecycle action derivation", () => {
   });
 
   it("EARS-7: a terminal hidden event offers no lifecycle action", () => {
-    expect(actionsFor("hidden", validTransitions("hidden", "platform"))).toEqual(
-      [],
-    );
+    expect(
+      actionsFor("hidden", validTransitions("hidden", "platform")),
+    ).toEqual([]);
   });
 
   it("EARS-7: each derived action targets exactly the schema-legal next state", () => {
@@ -104,12 +104,7 @@ describe("007 EARS-7 admin lifecycle action derivation", () => {
 describe("007 EARS-7 lifecycle command request", () => {
   it("EARS-7: every offered command carries the rendered version as mutation meta", () => {
     const detail = { id: "evt-1", version: 7 };
-    for (const command of [
-      "publish",
-      "open",
-      "close",
-      "hide",
-    ] as const) {
+    for (const command of ["publish", "open", "close", "hide"] as const) {
       const request = lifecycleCommandRequest(detail, command);
       expect(request).toEqual({
         url: `/v1/admin/events/evt-1/${command}`,
@@ -121,10 +116,12 @@ describe("007 EARS-7 lifecycle command request", () => {
   });
 
   it("EARS-7: the request reflects the version it was built from, never a default", () => {
-    expect(lifecycleCommandRequest({ id: "evt-2", version: 1 }, "publish").meta)
-      .toEqual({ version: 1 });
-    expect(lifecycleCommandRequest({ id: "evt-2", version: 42 }, "publish").meta)
-      .toEqual({ version: 42 });
+    expect(
+      lifecycleCommandRequest({ id: "evt-2", version: 1 }, "publish").meta,
+    ).toEqual({ version: 1 });
+    expect(
+      lifecycleCommandRequest({ id: "evt-2", version: 42 }, "publish").meta,
+    ).toEqual({ version: 42 });
   });
 });
 
@@ -238,7 +235,10 @@ describe("#1593 refusal-alert dismissal", () => {
 
   it("EARS-7: with actions offered, the refusal shows and the empty notice does not", () => {
     expect(
-      lifecycleBarContent("Недопустимый переход статуса", actionsFor("draft", ["published"])),
+      lifecycleBarContent(
+        "Недопустимый переход статуса",
+        actionsFor("draft", ["published"]),
+      ),
     ).toEqual({ refusal: "Недопустимый переход статуса", emptyNotice: false });
   });
 
@@ -278,12 +278,15 @@ describe("014 EARS-25/27 legacy broadcast lifecycle commands", () => {
       validTransitions("in_archive", "legacy"),
     );
     expect(actions.map((a) => a.command)).toEqual(["hide-legacy"]);
-    expect(actions.map((a) => a.labelKey)).toEqual(["events.action.hideLegacy"]);
+    expect(actions.map((a) => a.labelKey)).toEqual([
+      "events.action.hideLegacy",
+    ]);
   });
 
   it("014 EARS-25: each legacy command posts to its own named endpoint", () => {
     expect(
-      lifecycleCommandRequest({ id: "evt-1", version: 3 }, "archive-legacy").url,
+      lifecycleCommandRequest({ id: "evt-1", version: 3 }, "archive-legacy")
+        .url,
     ).toBe("/v1/admin/events/evt-1/archive-legacy");
     expect(
       lifecycleCommandRequest({ id: "evt-1", version: 3 }, "hide-legacy").url,
@@ -339,9 +342,9 @@ describe("014 EARS-25/27 legacy broadcast lifecycle commands", () => {
   });
 
   it("#1815 NIT D: a stale-detail EVENT_NOT_FINISHED refusal re-reads the event", () => {
-    expect(lifecycleErrorOutcome({ errorCode: "EVENT_NOT_FINISHED" }).refetch).toBe(
-      true,
-    );
+    expect(
+      lifecycleErrorOutcome({ errorCode: "EVENT_NOT_FINISHED" }).refetch,
+    ).toBe(true);
   });
 
   it("014 EARS-25: an EVENT_NOT_FINISHED refusal on the BAR reads as a stale detail, not as the recordings sentence", () => {
@@ -353,9 +356,12 @@ describe("014 EARS-25/27 legacy broadcast lifecycle commands", () => {
     });
     // …and the recordings panel keeps its own sentence for the very same code:
     // the override lives on the lifecycle path, not in the shared mapper.
-    expect(taxonomyErrorKey({ errorCode: "EVENT_NOT_FINISHED" }, "recordings.errors.saveFailed")).toBe(
-      "recordings.errors.eventNotFinished",
-    );
+    expect(
+      taxonomyErrorKey(
+        { errorCode: "EVENT_NOT_FINISHED" },
+        "recordings.errors.saveFailed",
+      ),
+    ).toBe("recordings.errors.eventNotFinished");
     // Both keys are real rows in the shipped catalogue.
     const messages = JSON.parse(
       readFileSync(
@@ -368,5 +374,29 @@ describe("014 EARS-25/27 legacy broadcast lifecycle commands", () => {
     };
     expect(messages.events.errors.stale).toBeTruthy();
     expect(messages.recordings.errors.eventNotFinished).toBeTruthy();
+  });
+});
+
+describe("049 EARS-8 lifecycle actions offered to a broadcast director", () => {
+  it("049 EARS-8: without the legacy machine the bar keeps every platform command and drops «Архивировать» / «Скрыть» of a legacy эфир", () => {
+    for (const state of ["draft", "published", "live", "ended"] as const) {
+      expect(
+        actionsFor(state, validTransitions(state, "platform"), {
+          legacy: false,
+        }).map((a) => a.command),
+      ).toEqual(
+        actionsFor(state, validTransitions(state, "platform")).map(
+          (a) => a.command,
+        ),
+      );
+    }
+    for (const state of ["hidden", "in_archive"] as const) {
+      expect(actionsFor(state, validTransitions(state, "legacy"))).not.toEqual(
+        [],
+      );
+      expect(
+        actionsFor(state, validTransitions(state, "legacy"), { legacy: false }),
+      ).toEqual([]);
+    }
   });
 });

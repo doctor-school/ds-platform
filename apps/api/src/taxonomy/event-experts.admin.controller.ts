@@ -71,7 +71,7 @@ export class EventExpertsAdminController {
   @Get()
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
     tests: ["EARS-7", "EARS-15", "EARS-16"],
@@ -103,7 +103,7 @@ export class EventExpertsAdminController {
   @HttpCode(201)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     // #1304 (ADR-0001 §10): a state-changing admin command re-establishes the
     // role against the LIVE IdP before validation or the idempotency
@@ -162,7 +162,7 @@ export class EventExpertsAdminController {
   @Get(":id")
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     audit: "none",
     tests: ["EARS-7", "EARS-16"],
@@ -190,7 +190,7 @@ export class EventExpertsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     revalidate: "live",
     audit: "low-stakes",
@@ -258,7 +258,7 @@ export class EventExpertsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     revalidate: "live",
     audit: "low-stakes",
@@ -277,7 +277,7 @@ export class EventExpertsAdminController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "broadcast_director"],
     check: "fast-path",
     revalidate: "live",
     audit: "low-stakes",

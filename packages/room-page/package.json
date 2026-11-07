@@ -1,6 +1,6 @@
 {
   "name": "@ds/room-page",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "DS Platform shared live-room route mount — the one /…/room page (server entry resolution, refusal redirects, the event and display-name reads, the client wrapper with the JIT name prompt and the shell header cluster) over @ds/room, mounted by both storefronts with a data-only host config (ADR-0013 A1, feature 006, epic #2020 wave 4).",

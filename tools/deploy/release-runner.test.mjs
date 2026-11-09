@@ -269,12 +269,65 @@ describe("runRecord", () => {
         prevSha: PREV,
         sha: SHA,
         state: "success",
+        releaseTag: "release-2026.10.21-1",
         ownerQuote: "катим",
         failure: null,
         log: undefined,
         healthUrl: undefined,
       },
     );
+  });
+
+  it("succeeded with a failed cut: the record is untagged, never another SHA's newest tag (#3656)", async () => {
+    const deps = make();
+    deps.cut = (args) => {
+      deps.calls.push(["cut", args]);
+      return { cut: false, failed: true, reason: "release create refused (HTTP 403)" };
+    };
+    const lines = [];
+    deps.log = (l) => lines.push(l);
+    const res = await runRecord({
+      sha: SHA,
+      state: "succeeded",
+      previousSha: PREV,
+      ownerQuote: "катим",
+      ...deps,
+    });
+    assert.equal(res.ok, true, "the cut alone never fails the step");
+    assert.equal(deps.calls[2][1].releaseTag, null);
+    assert.ok(lines.some((l) => /release NOT cut/.test(l)));
+  });
+
+  it("succeeded on an already-released SHA: the record names the tag at that SHA", async () => {
+    const deps = make();
+    deps.cut = () => ({
+      cut: false,
+      tag: "release-2026.10.20-1",
+      reason: "deployed SHA already released (empty range)",
+    });
+    await runRecord({
+      sha: SHA,
+      state: "succeeded",
+      previousSha: PREV,
+      ownerQuote: "катим",
+      ...deps,
+    });
+    assert.equal(deps.calls[1][1].releaseTag, "release-2026.10.20-1");
+  });
+
+  it("succeeded with a throwing cut: the record is untagged", async () => {
+    const deps = make();
+    deps.cut = () => {
+      throw new Error("boom");
+    };
+    await runRecord({
+      sha: SHA,
+      state: "succeeded",
+      previousSha: PREV,
+      ownerQuote: "катим",
+      ...deps,
+    });
+    assert.equal(deps.calls[1][1].releaseTag, null);
   });
 
   it("failed: no release cut, a failure record with the quote", async () => {
@@ -292,6 +345,7 @@ describe("runRecord", () => {
     );
     assert.equal(deps.calls[0][1].state, "failure");
     assert.equal(deps.calls[0][1].ownerQuote, "катим");
+    assert.equal(deps.calls[0][1].releaseTag, null);
   });
 
   it("unknown (lost contact): no cut, no lookup, an `error` record with the quote", async () => {

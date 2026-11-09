@@ -559,13 +559,19 @@ export async function runRecord({
     );
     return { ok: true, recorded: "existing" };
   }
+  // The record names the tag the cut reports for THIS SHA (cut, or already at
+  // it on a redeploy) — never the repository's newest tag (#3656).
+  let releaseTag = null;
   if (state === "succeeded") {
     try {
       const res = cut({ targetSha: sha });
+      releaseTag = res?.tag ?? null;
       log(
         res?.cut
           ? `✓ release ${res.tag} cut at ${sha.slice(0, 12)}`
-          : `↷ no release cut (${res?.reason})`,
+          : res?.failed
+            ? `⚠ release NOT cut at ${sha.slice(0, 12)} (${res.reason}) — recorded untagged`
+            : `↷ no release cut (${res?.reason})`,
       );
     } catch (e) {
       log(
@@ -577,6 +583,7 @@ export async function runRecord({
     prevSha: previousSha,
     sha,
     state: deploymentState,
+    releaseTag,
     ownerQuote,
     healthUrl: PROD_HEALTH_URL,
     failure,

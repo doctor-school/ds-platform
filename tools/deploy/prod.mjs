@@ -2596,14 +2596,17 @@ ${deployShaEnvScript(sha)}
   step("#2982: close the release on both boxes (frees the env lease)");
   await finishReleaseSucceeded(sha);
 
+  // undefined when the cut phase did not run in this process (a resumed walk):
+  // the record then resolves the tag AT the SHA itself.
+  let releaseTag;
   if (walk.operatorPhase("release-cut")) {
     step("Cut the release at the deployed SHA (#996/§10.5 — Option A)");
-    cutReleaseAtDeployedSha(sha, { hotfix: Boolean(hotfixRef) });
+    releaseTag = cutReleaseAtDeployedSha(sha, { hotfix: Boolean(hotfixRef) });
   }
 
   if (walk.operatorPhase("deployment-record")) {
     step("Record the deploy as a GitHub Deployment (#927/#942)");
-    await recordDeployment(prevSha, sha);
+    await recordDeployment(prevSha, sha, releaseTag);
   }
   walk.done();
 
@@ -2615,11 +2618,11 @@ ${deployShaEnvScript(sha)}
 }
 
 // Cut the repo-level release at the DEPLOYED SHA (#996/§10.5, Option A). The
-// agent-run deploy is the release initiator: this runs BEFORE recordDeployment so
-// the Deployment record (which reads `gh release list --limit 1`) references the
-// freshly-cut tag. NON-FATAL by contract — the deploy has already succeeded, and
-// `cutDeployRelease` never throws (it logs + returns { cut:false } on any failure
-// or an empty range). A redeploy of an already-released SHA cuts nothing.
+// agent-run deploy is the release initiator: this runs BEFORE recordDeployment and
+// returns the tag the record names — the freshly-cut one, the one already at the
+// SHA on a redeploy, or null when the cut failed (#3656). NON-FATAL by contract —
+// the deploy has already succeeded, and `cutDeployRelease` never throws (a failed
+// cut prints its `::error` annotation and returns { cut:false, failed:true }).
 function cutReleaseAtDeployedSha(sha, { hotfix = false } = {}) {
   try {
     const res = cutDeployRelease({
@@ -2628,23 +2631,28 @@ function cutReleaseAtDeployedSha(sha, { hotfix = false } = {}) {
       cwd: process.cwd(),
     });
     if (res.cut) ok(`release ${res.tag} cut at ${sha.slice(0, 12)}`);
+    else if (res.failed)
+      console.log(`  ⚠ release NOT cut (${res.reason}) — recorded untagged`);
     else console.log(`  ↷ no release cut (${res.reason})`);
+    return res.tag ?? null;
   } catch (e) {
     // Defensive: the seam is contractually non-throwing, but never let a release
     // cut fail a deploy that already succeeded.
     console.log(
       `  ⚠ release cut errored (deploy already succeeded): ${e?.message ?? String(e)}`,
     );
+    return null;
   }
 }
 
 // Record a successful deploy as a GitHub Deployment(production, sha) + success
 // status (#942, spec §D3); the seam lives in ./deployment-record.mjs, shared with
 // the release workflow's runner (#3158). NON-FATAL by contract.
-function recordDeployment(prevSha, sha) {
+function recordDeployment(prevSha, sha, releaseTag) {
   return recordDeploymentRecord({
     prevSha,
     sha,
+    releaseTag,
     state: "success",
     healthUrl: PROD_HEALTH_URL,
     cwd: process.cwd(),

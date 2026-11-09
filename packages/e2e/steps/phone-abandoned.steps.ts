@@ -23,6 +23,7 @@ import {
 } from "../lib/sms-sink.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 import { browserOf, closeOwnedLoginWindow } from "../lib/host-sign-in.js";
+import { gotoStorefrontSignIn } from "../lib/storefront-entry-watch.js";
 
 interface AbandonedPhone {
   context: BrowserContext;
@@ -115,9 +116,7 @@ async function logout(state: AbandonedPhone) {
 }
 
 async function passwordSignIn(state: AbandonedPhone, base: string) {
-  await state.page.goto(`${base}/login?returnTo=%2Faccount`, {
-    waitUntil: "load",
-  });
+  await gotoStorefrontSignIn(state.page, `${base}/login?returnTo=%2Faccount`);
   await waitForClientReady(state.page);
   await inputSecret(
     state.page.locator('input[autocomplete="username"]'),
@@ -262,9 +261,9 @@ Then(
       deadline: number;
     }[] = [];
     for (const phone of [state.original, state.replacement]) {
-      await state.page.goto(
+      await gotoStorefrontSignIn(
+        state.page,
         `${world.hostBaseUrl}/login?method=code&returnTo=%2Faccount`,
-        { waitUntil: "load" },
       );
       await waitForClientReady(state.page);
       await state.page.getByTestId("otp-channel-sms").click();

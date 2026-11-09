@@ -34,6 +34,7 @@ import {
   genericRefusal,
   replayOnHostForm,
 } from "../lib/host-sign-in.js";
+import { gotoStorefrontSignIn } from "../lib/storefront-entry-watch.js";
 
 const SESSION = "__Host-ds_session";
 interface SmsResetReuse {
@@ -156,7 +157,7 @@ async function passwordLogin(
   state: SmsResetReuse,
   password: string,
 ) {
-  await page.goto(`${base}/login?returnTo=%2Faccount`, { waitUntil: "load" });
+  await gotoStorefrontSignIn(page, `${base}/login?returnTo=%2Faccount`);
   await waitForClientReady(page);
   await inputSecret(
     page.locator('input[autocomplete="username"]'),

@@ -19,6 +19,7 @@ import {
 import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 import { browserOf, closeOwnedLoginWindow } from "../lib/host-sign-in.js";
+import { gotoStorefrontSignIn } from "../lib/storefront-entry-watch.js";
 
 const SESSION = "__Host-ds_session";
 interface PasswordOwner {
@@ -130,7 +131,7 @@ async function preparePassword(
   state: PasswordOwner,
   password: string,
 ) {
-  await page.goto(base + "/login?returnTo=%2Faccount", { waitUntil: "load" });
+  await gotoStorefrontSignIn(page, base + "/login?returnTo=%2Faccount");
   await waitForClientReady(page);
   await inputSecret(
     page.locator('input[autocomplete="username"]'),

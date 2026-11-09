@@ -33,6 +33,7 @@ import { runGatedLoginAttempt } from "../lib/login-failure-gate.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 import { browserOf, closeOwnedLoginWindow } from "../lib/host-sign-in.js";
+import { gotoStorefrontSignIn } from "../lib/storefront-entry-watch.js";
 
 const SESSION = "__Host-ds_session";
 interface ResentReset extends OwnedCredentials {
@@ -446,9 +447,10 @@ Then(
         process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
       );
       const guest = await context.newPage();
-      await guest.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
-        waitUntil: "load",
-      });
+      await gotoStorefrontSignIn(
+        guest,
+        `${world.hostBaseUrl}/login?returnTo=%2Faccount`,
+      );
       await waitForClientReady(guest);
       await inputSecret(
         guest.locator('input[autocomplete="username"]'),

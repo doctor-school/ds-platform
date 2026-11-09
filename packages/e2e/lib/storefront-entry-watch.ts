@@ -134,3 +134,39 @@ export async function expectAtSignInHostFrom(
   await page.waitForURL((url) => isSignInHostForm(url));
   expectEnteredThrough(page, base, expected);
 }
+
+/** The message Playwright gives a `goto` whose navigation another one replaced. */
+const ABORTED_NAVIGATION = "net::ERR_ABORTED";
+
+/**
+ * #3782: a guest opens a storefront sign-in entry (`<storefront>/login…`) and
+ * the step waits for the sign-in host's form it lands on. The entry renders no
+ * form — it answers a `303` to the IdP, which hands the browser to the sign-in
+ * host — so the navigation crosses hosts, and a `goto(entry, { waitUntil:
+ * "load" })` waits on the storefront URL and can abort mid-chain
+ * (`net::ERR_ABORTED; maybe frame was detached?`, stage slot pr-3773). The
+ * wait is for a NEW main-frame navigation onto the form, so a page still
+ * standing on a form from an earlier attempt does not satisfy it, and then for
+ * that document's `load`. Only an aborted `goto` is tolerated; any other
+ * navigation error fails the step.
+ */
+export async function gotoStorefrontSignIn(
+  page: Page,
+  entryUrl: string,
+): Promise<void> {
+  const mainFrame = page.mainFrame();
+  const atForm = page.waitForEvent("framenavigated", {
+    predicate: (frame) => frame === mainFrame && isSignInHostForm(frame.url()),
+  });
+  // Observed below; this only keeps a rejection after a failed `goto` from
+  // surfacing as an unhandled one.
+  atForm.catch(() => undefined);
+  try {
+    await page.goto(entryUrl, { waitUntil: "commit" });
+  } catch (error) {
+    if (!(error instanceof Error && error.message.includes(ABORTED_NAVIGATION)))
+      throw error;
+  }
+  await atForm;
+  await page.waitForLoadState("load");
+}

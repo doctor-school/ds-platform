@@ -7,6 +7,7 @@ import {
 import {
   expectEnteredThrough,
   watchStorefrontEntries,
+  gotoStorefrontSignIn,
 } from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import {
@@ -174,9 +175,10 @@ async function passwordSignIn(
   base: string,
   password: string,
 ) {
-  await page.goto(`${base}/login?method=password&returnTo=%2Faccount`, {
-    waitUntil: "load",
-  });
+  await gotoStorefrontSignIn(
+    page,
+    `${base}/login?method=password&returnTo=%2Faccount`,
+  );
   await waitForClientReady(page);
   await inputSecret(
     page.locator('input[autocomplete="username"]'),

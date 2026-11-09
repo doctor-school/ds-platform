@@ -23,7 +23,10 @@ import {
   verificationEvidence,
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
-import { openHostCodeStep } from "../lib/storefront-entry-watch.js";
+import {
+  openHostCodeStep,
+  gotoStorefrontSignIn,
+} from "../lib/storefront-entry-watch.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { test, After, Given, Then, When } from "./support/auth-fixtures.js";
 
@@ -334,9 +337,10 @@ Then(
       baseURL ?? world.hostBaseUrl,
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    await guest.page.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
-      waitUntil: "load",
-    });
+    await gotoStorefrontSignIn(
+      guest.page,
+      `${world.hostBaseUrl}/login?returnTo=%2Faccount`,
+    );
     await waitForClientReady(guest.page);
     await inputSecret(
       guest.page.locator('input[autocomplete="username"]'),

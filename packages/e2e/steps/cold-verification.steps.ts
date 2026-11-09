@@ -32,6 +32,7 @@ import {
 import { assertSecureSession } from "../lib/secure-session.js";
 import { gatedPasswordLogin } from "../lib/gated-password-login.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
+import { gotoStorefrontSignIn } from "../lib/storefront-entry-watch.js";
 
 const SESSION = "__Host-ds_session";
 interface ColdVerification extends OwnedCredentials {
@@ -318,9 +319,10 @@ When(
       "guest starts without the owner's session",
     ).toBe(false);
     await installCaptchaStub(context);
-    await guest.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
-      waitUntil: "load",
-    });
+    await gotoStorefrontSignIn(
+      guest,
+      `${world.hostBaseUrl}/login?returnTo=%2Faccount`,
+    );
     await waitForClientReady(guest);
     await assertNoPrivateRegistrationAccess(guest, "", state);
     await inputSecret(

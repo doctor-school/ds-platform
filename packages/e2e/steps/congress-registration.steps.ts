@@ -8,6 +8,7 @@ import {
 import {
   expectEnteredThrough,
   watchStorefrontEntries,
+  gotoStorefrontSignIn,
 } from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -126,7 +127,7 @@ async function passwordProbe(
   state: CongressRegistration,
   accepted: boolean,
 ): Promise<void> {
-  await page.goto(`${base}/login?returnTo=%2Faccount`, { waitUntil: "load" });
+  await gotoStorefrontSignIn(page, `${base}/login?returnTo=%2Faccount`);
   await waitForClientReady(page);
   await inputSecret(
     page.locator('input[autocomplete="username"]'),

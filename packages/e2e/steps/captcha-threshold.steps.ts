@@ -18,6 +18,7 @@ import {
 import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 import { signInDetachedThroughHost } from "../lib/host-sign-in.js";
+import { gotoStorefrontSignIn } from "../lib/storefront-entry-watch.js";
 
 interface CaptchaObservation {
   executes: number;
@@ -190,9 +191,10 @@ Given(
       )
         state.posts++;
     });
-    await owned.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
-      waitUntil: "load",
-    });
+    await gotoStorefrontSignIn(
+      owned,
+      `${world.hostBaseUrl}/login?returnTo=%2Faccount`,
+    );
     await waitForClientReady(owned);
     await expect
       .poll(async () => (await observations(owned)).renders)

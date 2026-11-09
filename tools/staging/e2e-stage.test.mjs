@@ -24,6 +24,7 @@ import {
 } from "./e2e-stage.mjs";
 import {
   AXE_LEG_CONFIGS,
+  GOLDEN_MATERIAL_SLUG,
   GOLDEN_SLUGS,
   HERMETIC_CONFIGS,
   GOLDEN_EVENT_SLUGS,
@@ -1706,6 +1707,18 @@ describe("golden live env (#3191) — derived from the dataset every slot is clo
     const ids = repoFile("packages/db/src/seed/golden/ids.ts");
     for (const [key, slug] of Object.entries(GOLDEN_EVENT_SLUGS))
       assert.ok(ids.includes(`slug: "${slug}"`), `${key}: ${slug}`);
+  });
+
+  it("hands the Academy default leg the golden material (#3829)", () => {
+    const ids = repoFile("packages/db/src/seed/golden/ids.ts");
+    assert.ok(ids.includes(`slug: "${GOLDEN_MATERIAL_SLUG}"`));
+    const leg = LIVE_TIERS.find((t) => t.name === "live/academy/default");
+    assert.equal(leg.seededEnv.E2E_MATERIAL_SLUG, GOLDEN_MATERIAL_SLUG);
+    assert.ok(
+      leg.gated.some(
+        (g) => g.file === "e2e/account-canvas-structure-live.spec.ts",
+      ),
+    );
   });
 
   it("hands each storefront's legs its own golden slugs, an operator export winning", () => {

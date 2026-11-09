@@ -208,6 +208,30 @@
       },
       "decision": "The password reset is code-only (the email carries a code, no link), so the «Сменить пароль» helper says «код», not the canvas «ссылку»; the canvas row predates the rewording.",
       "source": "apps/docs/content/specs/features/003-user-authentication/003-design.md §13.4 (reset mail = code); PR #1062 (Closes #898); packages/account/src/copy/account-copy.ts passwordHelper"
+    },
+    {
+      "canvas": "account-profile.dc.html",
+      "props": { "host": "Академия", "variant": "Разделы" },
+      "regions": ["Профиль · Разделы"],
+      "delta": "missing",
+      "item": {
+        "kind": "link",
+        "label": "Пароль Сменить пароль Отправим ссылку для сброса на email →"
+      },
+      "decision": "The password reset is a six-digit emailed code (one code kind), so the «Сменить пароль» helper says «код», not the canvas «ссылку».",
+      "source": "apps/docs/content/specs/features/003-user-authentication/003-requirements-en.md One code kind (EARS-6/7/29 amended), owner decision #2636; canvas redraw #3848"
+    },
+    {
+      "canvas": "account-profile.dc.html",
+      "props": { "host": "Академия", "variant": "Разделы" },
+      "regions": ["Профиль · Разделы"],
+      "delta": "extra",
+      "item": {
+        "kind": "link",
+        "label": "Пароль Сменить пароль Отправим код для сброса пароля на email →"
+      },
+      "decision": "The password reset is a six-digit emailed code (one code kind), so the «Сменить пароль» helper says «код», not the canvas «ссылку».",
+      "source": "apps/docs/content/specs/features/003-user-authentication/003-requirements-en.md One code kind (EARS-6/7/29 amended), owner decision #2636; canvas redraw #3848"
     }
   ]
 }

@@ -9,9 +9,11 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  * `e2e/webinar-archive.spec.ts` (014 EARS-4/5/7/8/21) read event slugs whose
  * shape they assert: an upcoming event with speakers, an ended one with a
  * published montage, an ended one awaiting a dated recording, hybrid / offline
- * events with seats and sold out. Their own config so a staging slot can hand
- * them the golden slugs (`tools/staging/live-tiers.mjs` → `seededEnv`) without
- * switching on every default-tier spec that also reads `E2E_WEBINAR_SLUG`. Like
+ * events with seats and sold out; `e2e/event-page-canvas-structure.e2e.spec.ts`
+ * (#3829) compares the page with its canvas on the same seeded slugs. Their
+ * own config so a staging slot can hand them the golden slugs
+ * (`tools/staging/live-tiers.mjs` → `seededEnv`) without switching on every
+ * default-tier spec that also reads `E2E_WEBINAR_SLUG`. Like
  * the other live tiers it boots NO server; every test `test.skip`s when its env
  * is absent, so a stray CI invocation is inert.
  *
@@ -29,7 +31,7 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  */
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /(^|[/\\])(event-page-020\.e2e|webinar-archive)\.spec\.ts$/,
+  testMatch: /(^|[/\\])(event-page-020\.e2e|event-page-canvas-structure\.e2e|webinar-archive)\.spec\.ts$/,
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

@@ -428,6 +428,13 @@
       "when": 1794207174114,
       "tag": "0060_points_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1794238760680,
+      "tag": "0061_points_spend",
+      "breakpoints": true
     }
   ]
 }

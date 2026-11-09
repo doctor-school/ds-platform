@@ -3,6 +3,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   type DrizzleHandle,
   type PointsFactRow,
+  type PointsPriceRow,
   pointsAccounts,
   pointsFacts,
   pointsPostingKeys,
@@ -13,6 +14,7 @@ import {
   pointsFactAttributesSchema,
   PointsRecordFactSchema,
   type PointsCreditedEvent,
+  type PointsEarnHint,
   type PointsFactTypeEntry,
   type PointsParsedRecordFact,
   type PointsPosting,
@@ -20,6 +22,7 @@ import {
   type PointsRecordFact,
   type PointsRecordOutcome,
   type PointsRule,
+  type PointsRuleEffectKind,
   type PointsRuleLimit,
   type PointsSettingId,
   type PointsTraceEntry,
@@ -32,6 +35,7 @@ import { POINTS_FUTURE_SKEW_MS, PointsLedgerService } from "../points-ledger.ser
 import { PointsLedgerError } from "../points.errors.js";
 import { type CandidateRule, RuleBookService } from "../rule-book.service.js";
 import { conditionTypeContext, evaluateCondition } from "./condition.js";
+import { HoldBook, isChargeable } from "./holds.js";
 import { moscowPeriod } from "./period.js";
 import { JournalPredicateResolver } from "./predicates.js";
 
@@ -39,6 +43,8 @@ type Db = DrizzleHandle["db"];
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 const DENOMINATIONS = ["pul", "bre", "con"] as const;
+/** Stands in for an account a `quote` reads that does not exist yet (it matches no row). */
+const NO_ACCOUNT = "00000000-0000-0000-0000-000000000000";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** EARS-33 — a fact its catalog entry refuses; thrown, nothing written. */
@@ -56,9 +62,43 @@ export class PointsFactRefusedError extends Error {
 export interface PointsApplication {
   ruleId: string;
   ruleVersion: number;
-  effect: "credit" | "debit";
+  effect: PointsRuleEffectKind;
   /** The ledger fact `<fact event id>#<rule id>`. */
   ledgerEventId: string;
+  postings: PointsPosting[];
+}
+
+/** One rule a `quote` says would apply (EARS-41): its legs, nothing written. */
+export interface PointsQuoteApplication {
+  ruleId: string;
+  ruleVersion: number;
+  effect: PointsRuleEffectKind;
+  ledgerEventId: string;
+  legs: PointsPostingLeg[];
+}
+
+/**
+ * EARS-41 — what `quote` answers: the would-be outcome of `record`, the rules
+ * that would apply with their legs, and the problem a refusal would raise
+ * (`outcome: "refused"`, nothing applies). Nothing is written, locked or
+ * published.
+ */
+export interface PointsQuoteResult {
+  outcome: PointsRecordOutcome | "refused";
+  applied: PointsQuoteApplication[];
+  trace: PointsTraceEntry[];
+  refusal?: PointsLedgerError;
+}
+
+type EvaluationMode = "record" | "quote";
+
+/** One applied rule inside an evaluation, before it is shaped for `record` or `quote`. */
+interface Applied {
+  ruleId: string;
+  ruleVersion: number;
+  effect: PointsRuleEffectKind;
+  ledgerEventId: string;
+  legs: PointsPostingLeg[];
   postings: PointsPosting[];
 }
 
@@ -113,12 +153,16 @@ class JournalRaceLost extends Error {}
  * the ledger core, debit-side effects before credits (EARS-35), with the
  * fact's journal row and full trace in the same transaction (EARS-40).
  *
- * Effects that need the hold projections or the price list ship with #3810
- * (025-design H): a `reserve` and a `debit` of the price-list amount throw
- * (fail closed — the producer's write rolls back); a `settle` or `release`
- * finds no open hold, because none can exist yet, and is traced
- * `no-open-hold` as EARS-35 states. Publishing any of them is refused
- * (`engine/publish-check.ts`); only the 0060 seed carries them.
+ * The spend effects (EARS-35; 025-design E) read the price list and write
+ * the hold projections in the same transaction as their postings: `reserve`
+ * holds the item's price from the balance (`points-threshold-short` when it
+ * does not cover it — the advance of EARS-15/16 ships with #3811), `settle`
+ * moves a held price to the sink, `release` reverses the hold's postings, and
+ * a `settle` / `release` with no open hold is traced `no-open-hold`.
+ *
+ * `quote` (EARS-41) runs the very same evaluation in a READ ONLY transaction
+ * with no locks and no inserts — one code path, so an advertised decision and
+ * the enforced one cannot diverge.
  */
 @Injectable()
 export class PointsEngine {
@@ -129,6 +173,44 @@ export class PointsEngine {
     @Inject(PointsEventsPublisher)
     private readonly events: PointsEventsPublisher,
   ) {}
+
+  private readonly holds = new HoldBook();
+
+  /**
+   * EARS-41 — the same evaluation as {@link record} for `personId`'s draft
+   * fact, in a READ ONLY transaction with no locks and no inserts. A fact
+   * whose event id is already journaled answers `duplicate`; a refusing
+   * debit-side effect answers `refused` with its problem.
+   */
+  async quote(
+    personId: string,
+    draft: Omit<PointsRecordFact, "personId">,
+  ): Promise<PointsQuoteResult> {
+    const { fact, entry } = validate({ ...draft, personId });
+    if (fact.occurredAt.getTime() > Date.now() + POINTS_FUTURE_SKEW_MS) {
+      throw new PointsLedgerError("POINTS_OCCURRED_AT_FUTURE");
+    }
+    return this.db.transaction(
+      async (tx): Promise<PointsQuoteResult> => {
+        if (await this.journalRow(tx, fact.eventId)) {
+          return { outcome: "duplicate", applied: [], trace: [] };
+        }
+        const trace: PointsTraceEntry[] = [];
+        try {
+          const evaluated = await this.evaluate(tx, fact, entry, "quote", trace);
+          return {
+            outcome: evaluated.outcome,
+            applied: evaluated.applied.map(({ postings: _p, ...a }) => a),
+            trace,
+          };
+        } catch (error) {
+          if (!(error instanceof PointsLedgerError)) throw error;
+          return { outcome: "refused", applied: [], trace, refusal: error };
+        }
+      },
+      { accessMode: "read only" },
+    );
+  }
 
   /** Record in a transaction of the engine's own; publishes after its COMMIT. */
   async record(fact: PointsRecordFact): Promise<PointsRecordResult>;
@@ -160,7 +242,41 @@ export class PointsEngine {
     const journaled = await this.journalRow(tx, fact.eventId);
     if (journaled) return this.duplicateOf(tx, journaled);
     try {
-      return await tx.transaction((sp) => this.evaluate(sp, fact, entry));
+      return await tx.transaction(async (sp) => {
+        const trace: PointsTraceEntry[] = [];
+        const { outcome, applied, accounts } = await this.evaluate(
+          sp,
+          fact,
+          entry,
+          "record",
+          trace,
+        );
+        const inserted = await sp
+          .insert(pointsFacts)
+          .values({
+            eventId: fact.eventId,
+            type: fact.type,
+            personId: fact.personId,
+            refKind: fact.ref !== undefined ? entry.refKind : null,
+            refId: fact.ref ?? null,
+            attributes: fact.attributes,
+            occurredAt: fact.occurredAt,
+            outcome,
+            trace,
+          })
+          .onConflictDoNothing()
+          .returning({ eventId: pointsFacts.eventId });
+        if (inserted.length === 0) throw new JournalRaceLost();
+        const applications: PointsApplication[] = applied.map(
+          ({ legs: _l, ...a }) => a,
+        );
+        return {
+          outcome,
+          applied: applications,
+          trace,
+          publishAfterCommit: this.publisher(fact.eventId, applications, accounts),
+        };
+      });
     } catch (error) {
       if (!(error instanceof JournalRaceLost)) throw error;
       const original = await this.journalRow(tx, fact.eventId);
@@ -173,11 +289,25 @@ export class PointsEngine {
     }
   }
 
+  /**
+   * The one evaluation of `record` and `quote` (025-design D). `record`
+   * locks the person accounts and the `countPer` scopes and writes postings
+   * and projections; `quote` reads the same state and writes nothing. The
+   * caller writes the journal row (`record`) from the returned outcome and
+   * the `trace` it passed in, which is filled as the evaluation goes.
+   */
   private async evaluate(
     sp: Tx,
     fact: PointsParsedRecordFact,
     entry: PointsFactTypeEntry,
-  ): Promise<PointsRecordResult> {
+    mode: EvaluationMode,
+    trace: PointsTraceEntry[],
+  ): Promise<{
+    outcome: PointsRecordOutcome;
+    applied: Applied[];
+    accounts: Map<string, string>;
+  }> {
+    const write = mode === "record";
     const candidates = await this.rules.candidatesFor(
       fact.type,
       fact.occurredAt,
@@ -200,13 +330,23 @@ export class PointsEngine {
         );
       }
     }
-    const accounts = await this.lockAccounts(sp, [
+    const persons = [
       fact.personId,
       ...[...beneficiaries.values()].filter((v): v is string => v !== null),
-    ]);
-    // Under the subject's lock: a concurrent equal event id has committed.
-    if (await this.journalRow(sp, fact.eventId)) throw new JournalRaceLost();
-    await this.lockCountScopes(sp, fact, candidates, beneficiaries);
+    ];
+    const accounts = write
+      ? await this.lockAccounts(sp, persons)
+      : await this.existingAccounts(sp, persons);
+    if (write) {
+      // Under the subject's lock: a concurrent equal event id has committed.
+      if (await this.journalRow(sp, fact.eventId)) throw new JournalRaceLost();
+      await this.lockCountScopes(sp, fact, candidates, beneficiaries);
+    }
+    // EARS-26 — the item's price-list row, read after the person locks.
+    const price =
+      entry.refKind === "item"
+        ? await this.holds.priceOf(sp, fact.ref)
+        : undefined;
 
     const predicates = new JournalPredicateResolver(sp, fact);
     const env = {
@@ -215,7 +355,6 @@ export class PointsEngine {
       predicates,
       settings,
     };
-    const trace: PointsTraceEntry[] = [];
     const eligible: Eligible[] = [];
     for (const candidate of candidates) {
       const rule = candidate.rule;
@@ -238,7 +377,8 @@ export class PointsEngine {
         continue;
       }
       const beneficiaryId =
-        rule.effect.kind === "credit" && typeof rule.effect.beneficiary === "object"
+        rule.effect.kind === "credit" &&
+        typeof rule.effect.beneficiary === "object"
           ? (beneficiaries.get(candidate.ruleId) ?? null)
           : fact.personId;
       t.condition =
@@ -247,21 +387,13 @@ export class PointsEngine {
         t.verdict = "condition-false";
         continue;
       }
-      if (rule.effect.kind === "reserve") {
-        throw new Error(
-          `points: ${candidate.ruleId} reserves — the hold projections ship with #3810`,
-        );
-      }
-      if (rule.effect.kind === "debit" && rule.effect.amounts === "price") {
-        throw new Error(
-          `points: ${candidate.ruleId} debits the price-list amount — the price list ships with #3810`,
-        );
-      }
       const { reached, dedupeKey } = await this.checkLimits(sp, {
         candidate,
         fact,
         beneficiaryId,
-        beneficiaryAccountId: accounts.get(beneficiaryId)!,
+        beneficiaryAccountId: accounts.get(beneficiaryId) ?? NO_ACCOUNT,
+        subjectAccountId: accounts.get(fact.personId),
+        price,
         settings,
         trace: t,
       });
@@ -282,30 +414,33 @@ export class PointsEngine {
       ...winners.filter((e) => e.candidate.rule.effect.kind !== "credit"),
       ...winners.filter((e) => e.candidate.rule.effect.kind === "credit"),
     ];
-    const applied: PointsApplication[] = [];
+    const applied: Applied[] = [];
     for (const e of ordered) {
       const effect = e.candidate.rule.effect;
-      if (effect.kind === "settle" || effect.kind === "release") {
-        e.trace.verdict = "no-open-hold";
+      const ledgerEventId = `${fact.eventId}#${e.candidate.ruleId}`;
+      const planned = await this.planEffect(sp, {
+        fact,
+        e,
+        effect,
+        price,
+        predicates,
+        subjectAccountId: accounts.get(fact.personId),
+        ledgerEventId,
+      });
+      if ("verdict" in planned) {
+        e.trace.verdict = planned.verdict;
         continue;
       }
-      if (effect.kind === "debit") {
-        if ((await predicates.resolve("person.phoneVerified", {})) !== true) {
-          throw new PointsLedgerError("POINTS_PHONE_UNVERIFIED");
-        }
-      }
-      const ledgerEventId = `${fact.eventId}#${e.candidate.ruleId}`;
-      const legs = buildLegs(fact, e, effect);
-      if (legs.length === 0) continue;
-      const posted = await this.ledger.post(
-        {
-          eventId: ledgerEventId,
-          ...(e.dedupeKey !== undefined ? { dedupeKey: e.dedupeKey } : {}),
-          occurredAt: fact.occurredAt,
-          legs,
-        },
-        sp,
-      );
+      if (planned.legs.length === 0) continue;
+      const ledgerFact = {
+        eventId: ledgerEventId,
+        ...(e.dedupeKey !== undefined ? { dedupeKey: e.dedupeKey } : {}),
+        occurredAt: fact.occurredAt,
+        legs: planned.legs,
+      };
+      const posted = write
+        ? await this.ledger.post(ledgerFact, sp)
+        : { ...(await this.ledger.preview(ledgerFact, sp)), postings: [] };
       if (posted.status === "duplicate") {
         // Another rule of this fact took the shared limit key first.
         e.trace.verdict = "limit-reached";
@@ -313,41 +448,248 @@ export class PointsEngine {
         if (once) once.verdict = "limit-reached";
         continue;
       }
+      if (write && planned.project) await planned.project(sp);
       e.trace.verdict = "applied";
       e.trace.ledgerEventId = ledgerEventId;
       applied.push({
         ruleId: e.candidate.ruleId,
         ruleVersion: e.candidate.version,
-        effect: effect.kind === "debit" ? "debit" : "credit",
+        effect: effect.kind,
         ledgerEventId,
+        legs: planned.legs,
         postings: posted.postings,
       });
     }
 
-    const outcome = outcomeOf(trace, applied);
-    const inserted = await sp
-      .insert(pointsFacts)
-      .values({
-        eventId: fact.eventId,
-        type: fact.type,
-        personId: fact.personId,
-        refKind: fact.ref !== undefined ? entry.refKind : null,
-        refId: fact.ref ?? null,
-        attributes: fact.attributes,
-        occurredAt: fact.occurredAt,
-        outcome,
-        trace,
-      })
-      .onConflictDoNothing()
-      .returning({ eventId: pointsFacts.eventId });
-    if (inserted.length === 0) throw new JournalRaceLost();
+    return { outcome: outcomeOf(trace, applied), applied, accounts };
+  }
 
+  /**
+   * The legs of one effect and, for a spend effect, the projection write
+   * that goes with them (EARS-35; 025-design E) — or the verdict that it has
+   * nothing to do. A refusal throws its problem.
+   */
+  private async planEffect(
+    sp: Tx,
+    ctx: {
+      fact: PointsParsedRecordFact;
+      e: Eligible;
+      effect: PointsRule["effect"];
+      price: PointsPriceRow | undefined;
+      predicates: JournalPredicateResolver;
+      subjectAccountId: string | undefined;
+      ledgerEventId: string;
+    },
+  ): Promise<
+    | { legs: PointsPostingLeg[]; project?: (tx: Tx) => Promise<void> }
+    | { verdict: "no-price" | "no-open-hold" | "limit-reached" }
+  > {
+    const { fact, e, effect, price, subjectAccountId } = ctx;
+    const common = commonOf(fact, e);
+    const person = { kind: "person", personId: fact.personId } as const;
+    switch (effect.kind) {
+      case "credit":
+        return {
+          legs: DENOMINATIONS.filter((d) => effect.amounts[d] > 0).map(
+            (d): PointsPostingLeg => ({
+              leg: `accrual:${d}`,
+              debit: { kind: "system", code: "issuance" },
+              credit: { kind: "person", personId: e.beneficiaryId },
+              denomination: d,
+              amount: effect.amounts[d],
+              ...common,
+            }),
+          ),
+        };
+      case "debit": {
+        const amount =
+          effect.amounts === "price"
+            ? isChargeable(price)
+              ? price.pulCost
+              : 0
+            : effect.amounts.pul;
+        if (amount === 0) return { verdict: "no-price" };
+        await requirePhone(ctx.predicates);
+        return {
+          legs: [
+            {
+              leg: "debit:pul",
+              debit: person,
+              credit: { kind: "system", code: "sink" },
+              denomination: "pul",
+              amount,
+              ...common,
+            },
+          ],
+        };
+      }
+      case "reserve": {
+        // EARS-14 — an open item or a zero price writes nothing.
+        if (!isChargeable(price)) return { verdict: "no-price" };
+        const registrationId = String(fact.attributes.registrationId);
+        if (await this.holds.anyReserve(sp, registrationId)) {
+          // The hold key is the registration: one hold per registration.
+          return { verdict: "limit-reached" };
+        }
+        await requirePhone(ctx.predicates);
+        const available = subjectAccountId
+          ? await this.ledger.availablePul(subjectAccountId, sp)
+          : 0;
+        if (available < price.pulCost) {
+          // EARS-17 — the advance of EARS-15/16 ships with #3811; until then
+          // an advance-mode item is refused like a threshold one.
+          throw await this.thresholdShort(
+            sp,
+            fact.occurredAt,
+            subjectAccountId,
+            price.pulCost - available,
+          );
+        }
+        return {
+          legs: [
+            {
+              leg: "reserve:balance",
+              debit: person,
+              credit: { kind: "system", code: "reserve" },
+              denomination: "pul",
+              amount: price.pulCost,
+              ...common,
+            },
+          ],
+          project: (tx) =>
+            this.holds.insertReserve(tx, {
+              registrationId,
+              personAccountId: subjectAccountId!,
+              itemRef: price.itemRef,
+              price: price.pulCost,
+              reserveEventId: ctx.ledgerEventId,
+              heldAt: fact.occurredAt,
+            }),
+        };
+      }
+      case "settle":
+      case "release": {
+        const registrationId = fact.attributes.registrationId;
+        const hold =
+          typeof registrationId === "string" && subjectAccountId
+            ? await this.holds.heldReserve(
+                sp,
+                registrationId,
+                subjectAccountId,
+                fact.ref,
+              )
+            : undefined;
+        if (!hold) return { verdict: "no-open-hold" };
+        const close = (tx: Tx) =>
+          this.holds.closeReserve(
+            tx,
+            hold.registrationId,
+            effect.kind === "settle" ? "settled" : "released",
+            ctx.ledgerEventId,
+            fact.occurredAt,
+          );
+        if (effect.kind === "settle") {
+          // EARS-19 — the held price moves to the sink, once per registration.
+          return {
+            legs: [
+              {
+                leg: "settle:pul",
+                debit: { kind: "system", code: "reserve" },
+                credit: { kind: "system", code: "sink" },
+                denomination: "pul",
+                amount: hold.price,
+                ...common,
+              },
+            ],
+            project: close,
+          };
+        }
+        // EARS-18 — one compensating `reverse:<postingId>` leg per
+        // reserve-side posting; the person ends as if never registered.
+        const reserved = await this.holds.reservePostings(
+          sp,
+          hold.reserveEventId,
+        );
+        return {
+          legs: reserved.map(
+            (p): PointsPostingLeg => ({
+              leg: `reverse:${p.id}`,
+              debit: p.credit,
+              credit: p.debit,
+              denomination: "pul",
+              amount: p.amount,
+              reverses: { postingId: p.id, occurredAt: p.occurredAt },
+              ...common,
+            }),
+          ),
+          project: close,
+        };
+      }
+    }
+  }
+
+  /** EARS-17 / EARS-13 — the threshold refusal with its shortfall and earn hint. */
+  private async thresholdShort(
+    executor: Tx,
+    at: Date,
+    subjectAccountId: string | undefined,
+    shortfall: number,
+  ): Promise<PointsLedgerError> {
+    const earnHint = await this.earnHint(
+      executor,
+      at,
+      subjectAccountId,
+      shortfall,
+    );
+    return new PointsLedgerError(
+      "POINTS_THRESHOLD_SHORT",
+      `short by ${shortfall} Pul`,
+      undefined,
+      { shortfall, earnHint },
+    );
+  }
+
+  /**
+   * EARS-13 — `pulToEarn` = shortfall + the remaining open obligations
+   * (EARS-20 nets new Pul to them first); `lessonsNeeded` =
+   * ceil(pulToEarn / the Pul credit of the active `accrual.lesson`), null
+   * when no active version credits Pul.
+   */
+  private async earnHint(
+    executor: Tx,
+    at: Date,
+    subjectAccountId: string | undefined,
+    shortfall: number,
+  ): Promise<PointsEarnHint> {
+    const remaining = subjectAccountId
+      ? (await this.holds.projection(executor, subjectAccountId)).advance
+          .remaining
+      : 0;
+    const pulToEarn = shortfall + remaining;
+    const lesson = (
+      await this.rules.candidatesFor("lesson.completed", at, executor)
+    ).find((c) => c.ruleId === "accrual.lesson");
+    const credit =
+      lesson && lesson.rule.active && lesson.rule.effect.kind === "credit"
+        ? lesson.rule.effect.amounts.pul
+        : 0;
     return {
-      outcome,
-      applied,
-      trace,
-      publishAfterCommit: this.publisher(fact.eventId, applied, accounts),
+      pulToEarn,
+      lessonsNeeded: credit > 0 ? Math.ceil(pulToEarn / credit) : null,
     };
+  }
+
+  /** `quote` — the person accounts that exist, never opened, never locked. */
+  private async existingAccounts(
+    executor: Tx,
+    personIds: string[],
+  ): Promise<Map<string, string>> {
+    const ids = new Map<string, string>();
+    for (const personId of new Set(personIds)) {
+      const account = await this.ledger.findPersonAccount(personId, executor);
+      if (account) ids.set(personId, account.id);
+    }
+    return ids;
   }
 
   /** Opens (EARS-1) and locks `FOR UPDATE` the person accounts, ascending id. */
@@ -415,6 +757,8 @@ export class PointsEngine {
       fact: PointsParsedRecordFact;
       beneficiaryId: string;
       beneficiaryAccountId: string;
+      subjectAccountId: string | undefined;
+      price: PointsPriceRow | undefined;
       settings: Record<PointsSettingId, number>;
       trace: PointsTraceEntry;
     },
@@ -453,11 +797,29 @@ export class PointsEngine {
         reached ||= count >= n;
         continue;
       }
-      // concurrentOpen is refused at publish until #3810; only the seeded
-      // `spend.reserve` names it, and a reserve throws before its limits.
-      throw new Error(
-        `points: ${candidate.ruleId} names concurrentOpen — the hold projections ship with #3810`,
-      );
+      // EARS-21 — at most n open holds of the person on items matching the
+      // filter. It refuses the fact (not a skipped rule); the person lock of
+      // `record` serialises it against concurrent reserves.
+      const { filter } = limit.concurrentOpen;
+      if (reached || !this.holds.matches(ctx.price, filter)) {
+        trace.limits.push({ kind: "concurrentOpen", verdict: "pass" });
+        continue;
+      }
+      const n =
+        typeof limit.concurrentOpen.n === "number"
+          ? limit.concurrentOpen.n
+          : ctx.settings[limit.concurrentOpen.n.setting];
+      const open = ctx.subjectAccountId
+        ? await this.holds.openCount(sp, ctx.subjectAccountId, filter)
+        : 0;
+      if (open >= n) {
+        trace.limits.push({ kind: "concurrentOpen", verdict: "limit-reached" });
+        throw new PointsLedgerError(
+          "POINTS_RESERVE_LIMIT",
+          `${open} open reserves on matching items (limit ${n})`,
+        );
+      }
+      trace.limits.push({ kind: "concurrentOpen", verdict: "pass" });
     }
     return { reached, dedupeKey };
   }
@@ -550,11 +912,9 @@ export class PointsEngine {
       applied: appliedTrace.map((t) => ({
         ruleId: t.ruleId,
         ruleVersion: t.version,
-        effect: postings.some(
-          (p) => p.eventId === t.ledgerEventId && p.leg.startsWith("debit:"),
-        )
-          ? "debit"
-          : "credit",
+        effect: effectOfLegs(
+          postings.filter((p) => p.eventId === t.ledgerEventId).map((p) => p.leg),
+        ),
         ledgerEventId: t.ledgerEventId!,
         postings: postings
           .filter((p) => p.eventId === t.ledgerEventId)
@@ -673,13 +1033,9 @@ function resolveStacking(eligible: Eligible[]): Eligible[] {
   });
 }
 
-/** The legs of one applied credit or debit (amended EARS-3). */
-function buildLegs(
-  fact: PointsParsedRecordFact,
-  e: Eligible,
-  effect: PointsRule["effect"],
-): PointsPostingLeg[] {
-  const common = {
+/** The fields every leg of one applied rule carries (amended EARS-3). */
+function commonOf(fact: PointsParsedRecordFact, e: Eligible) {
+  return {
     ruleId: e.candidate.ruleId,
     ruleVersion: e.candidate.version,
     action: fact.type,
@@ -692,29 +1048,22 @@ function buildLegs(
       ? { attributedMemberId: fact.attribution.memberId }
       : {}),
   };
-  if (effect.kind === "credit") {
-    return DENOMINATIONS.filter((d) => effect.amounts[d] > 0).map((d) => ({
-      leg: `accrual:${d}`,
-      debit: { kind: "system", code: "issuance" },
-      credit: { kind: "person", personId: e.beneficiaryId },
-      denomination: d,
-      amount: effect.amounts[d],
-      ...common,
-    }));
+}
+
+/** EARS-5 / EARS-35 — no Pul is spendable by a person whose phone is not verified. */
+async function requirePhone(predicates: JournalPredicateResolver): Promise<void> {
+  if ((await predicates.resolve("person.phoneVerified", {})) !== true) {
+    throw new PointsLedgerError("POINTS_PHONE_UNVERIFIED");
   }
-  if (effect.kind === "debit" && effect.amounts !== "price") {
-    return [
-      {
-        leg: "debit:pul",
-        debit: { kind: "person", personId: fact.personId },
-        credit: { kind: "system", code: "sink" },
-        denomination: "pul",
-        amount: effect.amounts.pul,
-        ...common,
-      },
-    ];
-  }
-  return [];
+}
+
+/** The effect kind of a ledger fact, told from its legs (a `duplicate` answer). */
+function effectOfLegs(legs: string[]): PointsRuleEffectKind {
+  if (legs.some((l) => l.startsWith("debit:"))) return "debit";
+  if (legs.some((l) => l.startsWith("reserve:"))) return "reserve";
+  if (legs.some((l) => l.startsWith("settle:"))) return "settle";
+  if (legs.some((l) => l.startsWith("reverse:"))) return "release";
+  return "credit";
 }
 
 /**
@@ -724,7 +1073,7 @@ function buildLegs(
  */
 function outcomeOf(
   trace: PointsTraceEntry[],
-  applied: PointsApplication[],
+  applied: readonly unknown[],
 ): PointsRecordOutcome {
   if (applied.length > 0) return "applied";
   const reachedLimits = trace.filter(

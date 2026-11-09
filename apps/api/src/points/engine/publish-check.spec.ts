@@ -97,13 +97,47 @@ describe("025 rule publish catalog checks", () => {
     ).toEqual(["limits.1.oncePer"]);
   });
 
-  it("025 EARS-35: reserve, settle, release, a price-list debit and concurrentOpen wait for the spend slice (#3810)", () => {
-    const spend = (effect: PointsRule["effect"]) =>
-      paths({ trigger: ["registration.created"], effect, limits: [{ unlimited: true }] });
-    expect(spend({ kind: "reserve", allowAdvance: true })).toEqual(["effect.kind"]);
-    expect(spend({ kind: "settle" })).toEqual(["effect.kind"]);
-    expect(spend({ kind: "release" })).toEqual(["effect.kind"]);
-    expect(spend({ kind: "debit", amounts: "price" })).toEqual(["effect.amounts"]);
+  it("025 EARS-35: reserve, settle and release publish on a registration fact; a price-list debit on an item fact", () => {
+    const spend = (trigger: PointsRule["trigger"], effect: PointsRule["effect"]) =>
+      paths({ trigger, effect, limits: [{ oncePer: ["subject", "registrationId"] }] });
+    expect(spend(["registration.created"], { kind: "reserve", allowAdvance: true })).toEqual([]);
+    expect(spend(["attendance.confirmed"], { kind: "settle" })).toEqual([]);
+    expect(spend(["registration.cancelled"], { kind: "release" })).toEqual([]);
+    expect(
+      paths({
+        trigger: ["item.access-requested"],
+        effect: { kind: "debit", amounts: "price" },
+        limits: [{ oncePer: ["subject", "ref"] }],
+      }),
+    ).toEqual([]);
+  });
+
+  it("025 EARS-35: a hold effect on a fact with no item ref or registrationId, and a price-list debit with no item, are refused", () => {
+    expect(
+      paths({ trigger: ["lesson.completed"], effect: { kind: "settle" } }),
+    ).toEqual(["effect.kind"]);
+    expect(
+      paths({
+        trigger: ["item.access-requested"],
+        effect: { kind: "reserve", allowAdvance: false },
+      }),
+    ).toEqual(["effect.kind"]);
+    expect(
+      paths({ effect: { kind: "debit", amounts: "price" } }),
+    ).toEqual(["effect.amounts"]);
+  });
+
+  it("025 EARS-21: concurrentOpen is accepted on a reserve and refused on any other effect", () => {
+    expect(
+      paths({
+        trigger: ["registration.created"],
+        effect: { kind: "reserve", allowAdvance: true },
+        limits: [
+          { oncePer: ["subject", "registrationId"] },
+          { concurrentOpen: { n: 3, filter: { limitedSeats: true } } },
+        ],
+      }),
+    ).toEqual([]);
     expect(
       paths({
         limits: [{ concurrentOpen: { n: 1, filter: { limitedSeats: true } } }],

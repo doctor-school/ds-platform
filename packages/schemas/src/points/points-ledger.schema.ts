@@ -127,6 +127,14 @@ export type PointsPostOutcome = z.infer<typeof PointsPostOutcomeSchema>;
  *  - POINTS_HISTORY_QUERY_INVALID — EARS-46: the posting-history page query
  *    is out of range — a `limit` outside `POINTS_POSTING_HISTORY_LIMIT` or a
  *    `cursor` that is not a `nextCursor` the route issued.
+ *  - POINTS_THRESHOLD_SHORT — EARS-17: a `reserve` on a threshold-mode item
+ *    (or an advance-mode item beyond the advance) with available Pul below
+ *    the price; the body carries `shortfall` and `earnHint`.
+ *  - POINTS_RESERVE_LIMIT — EARS-21: a `reserve` beyond the `concurrentOpen`
+ *    limit of open holds on limited-seat items.
+ *  - POINTS_GATING_INVALID — EARS-26: a price-list row the item's kind or
+ *    accreditation refuses (any mode but `open` for a lesson, a module or an
+ *    НМО-accredited event), or a row for an item that does not exist.
  */
 export const POINTS_LEDGER_ERROR_CODES = [
   "POINTS_ACCOUNT_CLOSED",
@@ -138,6 +146,9 @@ export const POINTS_LEDGER_ERROR_CODES = [
   "POINTS_RULE_RETIRED",
   "POINTS_RULE_EFFECTIVE_FROM_PAST",
   "POINTS_HISTORY_QUERY_INVALID",
+  "POINTS_THRESHOLD_SHORT",
+  "POINTS_RESERVE_LIMIT",
+  "POINTS_GATING_INVALID",
 ] as const;
 export const PointsLedgerErrorCodeSchema = z.enum(POINTS_LEDGER_ERROR_CODES);
 export type PointsLedgerErrorCode = z.infer<typeof PointsLedgerErrorCodeSchema>;
@@ -151,6 +162,15 @@ export const PointsLedgerProblemDetailsSchema = z.strictObject({
   errorCode: PointsLedgerErrorCodeSchema,
   errors: z
     .array(z.strictObject({ path: z.string(), message: z.string() }))
+    .optional(),
+  /** EARS-17 — `points-threshold-short` only: price − available Pul. */
+  shortfall: z.number().int().min(0).optional(),
+  /** EARS-17 — `points-threshold-short` only: the earn hint of EARS-13. */
+  earnHint: z
+    .strictObject({
+      pulToEarn: z.number().int().min(0),
+      lessonsNeeded: z.number().int().min(0).nullable(),
+    })
     .optional(),
   traceId: z.string(),
 });

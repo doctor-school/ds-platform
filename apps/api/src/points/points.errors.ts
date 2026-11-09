@@ -1,5 +1,6 @@
 import { HttpException } from "@nestjs/common";
 import type {
+  PointsEarnHint,
   PointsLedgerErrorCode,
   PointsLedgerProblemDetails,
 } from "@ds/schemas";
@@ -31,6 +32,10 @@ export const POINTS_LEDGER_ERROR_STATUS: Readonly<
   POINTS_RULE_EFFECTIVE_FROM_PAST: 422,
   // 400: the posting-history page query is malformed (EARS-46).
   POINTS_HISTORY_QUERY_INVALID: 400,
+  // 422: spend refusals (025-design I).
+  POINTS_THRESHOLD_SHORT: 422,
+  POINTS_RESERVE_LIMIT: 422,
+  POINTS_GATING_INVALID: 422,
 };
 
 const POINTS_LEDGER_ERROR_TITLE: Readonly<
@@ -46,6 +51,10 @@ const POINTS_LEDGER_ERROR_TITLE: Readonly<
   POINTS_RULE_EFFECTIVE_FROM_PAST:
     "A rule version cannot take effect in the past",
   POINTS_HISTORY_QUERY_INVALID: "The posting history page query is invalid",
+  POINTS_THRESHOLD_SHORT: "Not enough Pul to reserve this item",
+  POINTS_RESERVE_LIMIT:
+    "Too many open reserves on limited-seat items",
+  POINTS_GATING_INVALID: "This price-list row is not allowed for the item",
 };
 
 /** Problem `type` slug: `POINTS_ACCOUNT_CLOSED` → `points-account-closed`. */
@@ -58,6 +67,8 @@ export class PointsLedgerError extends HttpException {
     readonly errorCode: PointsLedgerErrorCode,
     readonly detail?: string,
     readonly fieldErrors?: ReadonlyArray<{ path: string; message: string }>,
+    /** EARS-17 — `points-threshold-short` only. */
+    readonly short?: { shortfall: number; earnHint: PointsEarnHint },
   ) {
     super(
       POINTS_LEDGER_ERROR_TITLE[errorCode],
@@ -82,6 +93,9 @@ export class PointsLedgerError extends HttpException {
       ...(instance ? { instance } : {}),
       errorCode: this.errorCode,
       ...(this.fieldErrors ? { errors: [...this.fieldErrors] } : {}),
+      ...(this.short
+        ? { shortfall: this.short.shortfall, earnHint: { ...this.short.earnHint } }
+        : {}),
       traceId,
     };
   }

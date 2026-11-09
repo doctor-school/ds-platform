@@ -4,6 +4,7 @@ import {
   Get,
   Header,
   Inject,
+  Param,
   Req,
   UnauthorizedException,
   UseFilters,
@@ -15,6 +16,8 @@ import { type DrizzleHandle, users } from "@ds/db";
 import {
   type PointsAccount,
   PointsAccountSchema,
+  type PointsGatingDecision,
+  PointsGatingDecisionSchema,
   POINTS_POSTING_HISTORY_LIMIT,
   type PointsPostingHistory,
   PointsPostingHistoryQuerySchema,
@@ -28,6 +31,7 @@ import { decodePostingCursor } from "./points-history-cursor.js";
 import { PointsLedgerService } from "./points-ledger.service.js";
 import { PointsLedgerError } from "./points.errors.js";
 import { PointsProblemFilter } from "./points.problem-filter.js";
+import { PointsPricesService } from "./points-prices.service.js";
 
 /** The `PointsAccount` read model (025 EARS-2, EARS-30). */
 export class PointsAccountDto extends createZodDto(PointsAccountSchema) {}
@@ -35,6 +39,11 @@ export class PointsAccountDto extends createZodDto(PointsAccountSchema) {}
 /** The `PostingHistory` read model (025 EARS-46, EARS-30). */
 export class PointsPostingHistoryDto extends createZodDto(
   PointsPostingHistorySchema,
+) {}
+
+/** The `GatingDecision` read model (025 EARS-13, EARS-30). */
+export class PointsGatingDecisionDto extends createZodDto(
+  PointsGatingDecisionSchema,
 ) {}
 
 /** Same account audience as the sibling `/v1/me/*` reads (003, #2456). */
@@ -58,6 +67,7 @@ export class PointsMeController {
   constructor(
     @Inject(PointsLedgerService) private readonly ledger: PointsLedgerService,
     @Inject(DRIZZLE_DB) private readonly db: DrizzleHandle["db"],
+    @Inject(PointsPricesService) private readonly prices: PointsPricesService,
   ) {}
 
   @Get()
@@ -123,6 +133,32 @@ export class PointsMeController {
       );
     }
     return this.ledger.readPersonPostings(personId, { limit, after });
+  }
+
+  /**
+   * 025 EARS-13 (#3810) — `GET /v1/me/points/gating/:itemRef`: the CALLER's
+   * `GatingDecision` on an item of any kind — `quote` (EARS-41) of a draft
+   * sign-up, so it equals what the sign-up's `record` would do and writes
+   * nothing. Same person resolution and refusals as the balance read. A
+   * refusal the decision cannot state answers its problem (422
+   * `points-phone-unverified` / `points-reserve-limit`).
+   */
+  @Get("gating/:itemRef")
+  @Header("Cache-Control", "no-store")
+  @UseFilters(PointsProblemFilter)
+  @ApiOkResponse({ type: PointsGatingDecisionDto })
+  @Authz({
+    access: "authenticated",
+    roles: ACCOUNT_ROLES,
+    check: "fast-path",
+    audit: "none",
+    tests: ["EARS-13"],
+  })
+  async gating(
+    @Param("itemRef") itemRef: string,
+    @Req() req: FastifyRequest,
+  ): Promise<PointsGatingDecision> {
+    return this.prices.gating(await this.callerPersonId(req), itemRef);
   }
 
   /**

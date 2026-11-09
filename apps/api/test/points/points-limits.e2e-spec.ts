@@ -107,6 +107,35 @@ describe.skipIf(!process.env.DATABASE_URL)("025 points limits and validity (e2e)
     expect(verdictOf(await h.engine.record(testFact(runId)), literal)).toBe("applied");
   });
 
+  it("025 EARS-36: countPer over a scope no person lock covers is serialised — N concurrent facts of distinct persons under a cap of k apply exactly k times", async () => {
+    // The scope `runId` is shared by every fact of this test while each fact
+    // locks only its own subject, so without the limit-scope lock the
+    // count-then-compare of concurrent facts would exceed the cap
+    // (the EARS-11 referral-cap shape: many invitees, one counted scope).
+    const runId = randomUUID();
+    const ruleId = testRuleId();
+    const k = 3;
+    const n = 8;
+    await publishRule(
+      h.rules,
+      ruleId,
+      testRule(runId, {
+        limits: [{ countPer: { scope: ["runId"], period: "day", n: k } }],
+      }),
+    );
+    const results = await Promise.all(
+      Array.from({ length: n }, () => h.engine.record(testFact(runId))),
+    );
+    const verdicts = results.map((r) => verdictOf(r, ruleId));
+    expect(verdicts.filter((v) => v === "applied")).toHaveLength(k);
+    expect(verdicts.filter((v) => v === "limit-reached")).toHaveLength(n - k);
+    const { rows } = await h.handle.pool.query<{ n: string }>(
+      `SELECT count(distinct event_id) AS n FROM points_postings WHERE rule_id = $1`,
+      [ruleId],
+    );
+    expect(Number(rows[0]?.n)).toBe(k);
+  });
+
   it("025 EARS-36: a credit without a limit is refused at publish; concurrentOpen waits for the spend slice", async () => {
     const runId = randomUUID();
     await expect(

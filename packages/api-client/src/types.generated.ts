@@ -3669,16 +3669,6 @@ export interface components {
             /** @enum {string} */
             status: "open" | "closed";
         };
-        PointsRuleVersionDto: {
-            createdAt: string;
-            effectiveFrom: string;
-            parameters: {
-                [key: string]: unknown;
-            };
-            publishedBy: string | null;
-            ruleId: string;
-            version: number;
-        };
         PostChatMessageRequestDto: {
             text: string;
         };
@@ -3773,6 +3763,24 @@ export interface components {
                 hasMore: boolean;
                 nextCursor: string | null;
             };
+        };
+        PublishedPointsRuleVersionDto: {
+            createdAt: string;
+            effectiveFrom: string;
+            /** @enum {string} */
+            kind: "rule" | "setting" | "system";
+            parameters: {
+                [key: string]: unknown;
+            };
+            publishedBy: string | null;
+            ruleId: string;
+            version: number;
+            warnings: {
+                /** @constant */
+                code: "stacking";
+                factType: string;
+                otherRuleId: string;
+            }[];
         };
         PublishPointsRuleVersionRequestDto: {
             /** Format: date-time */
@@ -6009,7 +6017,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PointsRuleVersionDto"];
+                    "application/json": components["schemas"]["PublishedPointsRuleVersionDto"];
                 };
             };
         };

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import {
   type DrizzleHandle,
@@ -80,6 +81,23 @@ interface Eligible {
   trace: PointsTraceEntry;
   beneficiaryId: string;
   dedupeKey: string | undefined;
+}
+
+/** The value of one limit scope field for this fact (EARS-36). */
+function limitScopeValue(
+  fact: PointsParsedRecordFact,
+  beneficiaryId: string,
+  name: string,
+): string {
+  if (name === "subject") return fact.personId;
+  if (name === "beneficiary") return beneficiaryId;
+  if (name === "ref") return fact.ref ?? "";
+  return String(fact.attributes[name] ?? null);
+}
+
+/** A deterministic signed 64-bit advisory-lock key of `text`. */
+function advisoryKey(text: string): bigint {
+  return createHash("sha256").update(text).digest().readBigInt64BE(0);
 }
 
 /** Raised inside the savepoint when a concurrent equal event id won the journal row. */
@@ -188,6 +206,7 @@ export class PointsEngine {
     ]);
     // Under the subject's lock: a concurrent equal event id has committed.
     if (await this.journalRow(sp, fact.eventId)) throw new JournalRaceLost();
+    await this.lockCountScopes(sp, fact, candidates, beneficiaries);
 
     const predicates = new JournalPredicateResolver(sp, fact);
     const env = {
@@ -349,6 +368,45 @@ export class PointsEngine {
     return ids;
   }
 
+  /**
+   * EARS-36 — serialises every `countPer` scope this fact may count. The
+   * count-then-compare is race-safe only while no concurrent fact can add to
+   * the same scope; the person locks cover that only when the counted
+   * account is a locked one, and a scope such as an attribute or a shared
+   * beneficiary of many subjects (EARS-11) is not. So each scope —
+   * (rule id, scope values, period start) — takes a transaction-scoped
+   * advisory lock, held to COMMIT, before any count is read. The keys are
+   * 64-bit digests acquired in ascending order after the person locks, so two
+   * facts that share several scopes never deadlock.
+   */
+  private async lockCountScopes(
+    sp: Tx,
+    fact: PointsParsedRecordFact,
+    candidates: CandidateRule[],
+    beneficiaries: Map<string, string | null>,
+  ): Promise<void> {
+    const keys = new Set<bigint>();
+    for (const c of candidates) {
+      if (!c.rule.active) continue;
+      const beneficiaryId =
+        c.rule.effect.kind === "credit" && typeof c.rule.effect.beneficiary === "object"
+          ? (beneficiaries.get(c.ruleId) ?? null)
+          : fact.personId;
+      if (beneficiaryId === null) continue;
+      for (const limit of c.rule.limits) {
+        if (!("countPer" in limit)) continue;
+        const { start } = moscowPeriod(limit.countPer.period, fact.occurredAt);
+        const values = limit.countPer.scope.map((name) =>
+          limitScopeValue(fact, beneficiaryId, name),
+        );
+        keys.add(advisoryKey(JSON.stringify([c.ruleId, values, start.toISOString()])));
+      }
+    }
+    for (const key of [...keys].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
+      await sp.execute(sql`SELECT pg_advisory_xact_lock(${key.toString()}::bigint)`);
+    }
+  }
+
   /** EARS-36 — every limit of the rule; all must pass. */
   private async checkLimits(
     sp: Tx,
@@ -364,12 +422,8 @@ export class PointsEngine {
     const { candidate, fact, trace } = ctx;
     let dedupeKey: string | undefined;
     let reached = false;
-    const scopeValue = (name: string): string => {
-      if (name === "subject") return fact.personId;
-      if (name === "beneficiary") return ctx.beneficiaryId;
-      if (name === "ref") return fact.ref ?? "";
-      return String(fact.attributes[name] ?? null);
-    };
+    const scopeValue = (name: string): string =>
+      limitScopeValue(fact, ctx.beneficiaryId, name);
     for (const limit of candidate.rule.limits) {
       if ("unlimited" in limit) {
         trace.limits.push({ kind: "unlimited", verdict: "pass" });
@@ -413,7 +467,7 @@ export class PointsEngine {
    * Europe/Moscow calendar period of `occurredAt`: distinct ledger facts with
    * the rule's id, joined to their journal row (`<fact>#<rule>`) for the
    * subject, ref and attribute scope fields; `beneficiary` is the credited
-   * account. Read under the beneficiary's lock.
+   * account. Read under the scope's advisory lock (`lockCountScopes`).
    */
   private async countApplications(
     sp: Tx,

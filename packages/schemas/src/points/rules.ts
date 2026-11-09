@@ -291,9 +291,11 @@ const oncePerRegistration: PointsRuleLimit[] = [
 ];
 
 /**
- * The rows migration 0060 inserts at the epoch (025-design G): version 2 of
- * each mapped 0059 accrual id, version 1 of each new rule and setting id, the
- * PRD amounts unchanged. points-seed-v2.e2e-spec pins the migration to this.
+ * The rows migration 0060 inserts at the epoch (025-design G), the PRD
+ * amounts unchanged. The migration numbers each row max(version) + 1 for its
+ * id; `version` is that number on a database holding only the 0059 rows —
+ * 2 for each mapped 0059 accrual id, 1 for each new rule and setting id.
+ * points-seed-v2.e2e-spec pins the migration to this.
  */
 export const POINTS_ENGINE_SEED: readonly {
   ruleId: string;

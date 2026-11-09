@@ -15,14 +15,14 @@ The ledger core (migration 0058) and the rule book with its accrual intake (migr
 
 ### A. Layers
 
-| Layer                       | Lives in                                                   | Changed by                                                     |
-| --------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------- |
-| Fact-type catalog           | `packages/schemas/src/points/facts.ts`                     | a developer (code; unit test + lint over forbidden attributes) |
-| Predicate registry          | `apps/api/src/points/predicates/` (types in `schemas`)     | a developer                                                    |
-| Effect and limit kinds      | `apps/api/src/points/engine/` (closed unions in `schemas`) | a developer                                                    |
-| Rules and settings          | `points_rule_versions` rows                                | an admin (`POST /v1/admin/points/rules/:ruleId/versions`)      |
-| Price list                  | `points_prices` rows                                       | an admin (`PUT /v1/admin/points/prices/:itemRef`)              |
-| Ledger core and projections | `apps/api/src/points/ledger/`, `points_*` tables           | nobody at run time — invariants (§3, EARS-12, 20, 22, 27)      |
+| Layer                       | Lives in                                                   | Changed by                                                                      |
+| --------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Fact-type catalog           | `packages/schemas/src/points/fact-types.ts`                | a developer (code; CI unit test `fact-types.spec.ts` over forbidden attributes) |
+| Predicate registry          | `apps/api/src/points/predicates/` (types in `schemas`)     | a developer                                                                     |
+| Effect and limit kinds      | `apps/api/src/points/engine/` (closed unions in `schemas`) | a developer                                                                     |
+| Rules and settings          | `points_rule_versions` rows                                | an admin (`POST /v1/admin/points/rules/:ruleId/versions`)                       |
+| Price list                  | `points_prices` rows                                       | an admin (`PUT /v1/admin/points/prices/:itemRef`)                               |
+| Ledger core and projections | `apps/api/src/points/ledger/`, `points_*` tables           | nobody at run time — invariants (§3, EARS-12, 20, 22, 27)                       |
 
 The engine stays the one module `apps/api/src/points/` on the platform database. `PointsFactIntake` is replaced by `PointsEngine` with `record(tx, fact)`, `record(fact)` and `quote(personId, draftFact)`; the after-commit contract of §4 («Event publication») is unchanged — `record(tx, fact)` returns `publishAfterCommit`.
 
@@ -111,7 +111,8 @@ sequenceDiagram
 
 - **Duplicate detection** is the journal's unique `event_id` (amended EARS-4, first sentence); a race between two equal event ids ends on that constraint, the loser answers `duplicate`. The **limit dedupe** is `points_posting_keys.dedupe_key = <limit key>:<scope values>` (unique), inserted per application before its postings; a unique violation under the per-application savepoint becomes `limit-reached`, never an error.
 - **Locks.** The subject's account and every beneficiary a predicate names are locked `FOR UPDATE` in ascending account id before any limit is read, so `countPer`, `concurrentOpen` and the available-Pul check read a stable state and two facts touching the same two people cannot deadlock. A missing account is opened first (EARS-1 race unchanged).
-- **countPer** counts distinct ledger `event_id`s on postings with that `rule_id` crediting the beneficiary in the Europe/Moscow calendar period of `occurredAt` (index in F).
+- **countPer** counts distinct ledger `event_id`s on postings with that `rule_id` for the scope (the credited beneficiary account, or the subject, ref and attributes through the fact's journal row joined on `<fact>#<rule>`) in the Europe/Moscow calendar period of `occurredAt` (index in F). The person locks make that count-then-compare race-safe only when the counted account is a locked one, and a scope need not be (EARS-11: many invitees' facts count against one inviter's cap; an attribute scope spans persons). So, after the person locks and before any count is read, the fact takes one transaction-scoped `pg_advisory_xact_lock` per `countPer` scope it may count — key a 64-bit digest of (rule id, scope values, period start) — in ascending key order, so two facts sharing several scopes cannot deadlock; the lock is held to COMMIT.
+- **One `oncePer` per rule** (one `dedupe_key` per ledger fact); a second is refused at publish.
 - **Trace** (EARS-40): `{ ruleId, version, trigger: true, valid, active, condition, limits: [{ kind, verdict }], stacking, ledgerEventId? }[]`, verdicts `applied` · `not-valid` · `inactive` · `condition-false` · `limit-reached` · `superseded` · `no-open-hold`.
 - **No cache.** The candidate query is index-backed per fact; a published version is visible to the next fact, so no invalidation exists to get wrong.
 - **quote** runs the same functions in a `READ ONLY` transaction with no locks and no inserts; limits are evaluated by reading the same keys and counts. `GET /v1/me/points/gating/:itemRef` is `quote` of a draft `registration.created` (EARS-13); `lessonsNeeded` reads the Pul credit of the active `accrual.lesson` version.
@@ -211,11 +212,11 @@ erDiagram
 - `points_facts` is not partitioned: its `event_id` must be globally unique (the reason `points_posting_keys` is not partitioned, §2). A `BEFORE UPDATE OR DELETE` trigger raises except an UPDATE that changes only `person_id` under the erasure procedure's session flag — the same carve-out as postings. Index (`person_id`, `received_at DESC`) serves EARS-45.
 - `points_rule_versions` gains `kind` (nullable, so the 0059 rows stay untouched; every new row sets it) and `trigger_fact_types text[] NOT NULL DEFAULT '{}'` with a GIN index. `ALTER TABLE … ADD COLUMN` with a constant default is a catalog change that fires no row trigger, so the immutability trigger of 0059 is not bypassed or edited.
 - `points_postings` gains the index (`rule_id`, `credit_account_id`, `occurred_at`) for `countPer`. `points_posting_keys` keeps its shape; only the content of `dedupe_key` changes.
-- `points_prices`, `points_reserves`, `points_obligations` carry `audit_row_change()`; a price-list write also goes through the request audit context (§8).
+- `points_prices`, `points_reserves`, `points_obligations` ship with the spend slice (#3810), in its own migration; until then no hold, obligation or price-list row can exist. They carry `audit_row_change()`; a price-list write also goes through the request audit context (§8).
 
 ### G. Clause map
 
-No EARS number moves; Issues #3809–#3816 keep their references.
+No EARS number moves; Issues #3809–#3816 keep their references. The fact types are those the catalog `packages/schemas/src/points/fact-types.ts` registers — `account.registered`, `phone.verified`, `profile.verified`, `lesson.completed`, `module.completed`, `attendance.confirmed`, `event.question-asked`, `event.rated`, `event.interactive-answered`, `referral.attributed`, `registration.created` / `.cancelled` / `.voided` / `.no-show`, `item.access-requested`, `person.starter-bonus-eligible` (requirements, Events).
 
 | Clause         | Rule or mechanism                                                                                                                                                                                                                       |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -263,17 +264,17 @@ New at the epoch: `accrual.lesson.any-mode`, `accrual.module.any-mode`, `accrual
 
 One new hand-written migration after 0059, forward-only like 0058/0059:
 
-1. A guard `DO` block raises — applying nothing — when `points_postings` has any row or `points_rule_versions` any `version > 1` (EARS-44).
-2. `ALTER TABLE points_rule_versions` adds `kind`, `trigger_fact_types` and the GIN index; creates `points_facts`, `points_prices`, `points_reserves`, `points_obligations` with their triggers; adds the postings index.
-3. Inserts the rows of G with `effective_from` at the epoch and `published_by` null.
+1. No refusing guard (EARS-44). Every seeded rule and setting id is inserted as version `max(version) + 1` of that id (1 when it has none), so the seed never collides with a stored version and, the active version being the highest one in effect, supersedes every earlier version of its id. Existing postings do not matter: they are immutable, cite their version by FK and are never re-evaluated (EARS-42). A guard is ruled out because the dev and stage databases hold postings and versions above 1 that the #3807/#3808 e2e runs wrote (`advance.cap`, `leaderboard.top`, `noShow.window`, `accrual.*`), and the stage deploy gates every release.
+2. `ALTER TABLE points_rule_versions` adds `kind`, `trigger_fact_types` and the GIN index; creates `points_facts` with its trigger; adds the postings index. The hold, obligation and price-list tables come with #3810 (F).
+3. Inserts the rows of G with `effective_from` at the epoch and `published_by` null, numbered as in step 1 — on a database holding only the 0059 rows, version 2 of each mapped 0059 accrual id and version 1 of each new id.
 
-The implementation PR declares `Release-requires:` an Issue for a read-only prod pre-check of the guard's two counts before the release that carries the migration. The live `/v1/admin/points/rules/:ruleId/versions` route keeps its path; its body schema becomes B.
+The implementation PR declares `Release-requires: #3850`, a read-only prod pre-check that no admin-published version above 1 exists before the release that carries the migration (such a version would be superseded silently). The live `/v1/admin/points/rules/:ruleId/versions` route keeps its path; its body schema becomes B.
 
 ### I. Problem codes
 
 | Code                                                                         | Status | Raised by                                                 |
 | ---------------------------------------------------------------------------- | ------ | --------------------------------------------------------- |
-| `points-insufficient-pul`                                                    | 422    | ledger core (EARS-22)                                     |
+| `points-insufficient-pul`                                                    | 409    | ledger core (EARS-22; live since #3807)                   |
 | `points-threshold-short`                                                     | 422    | `reserve` (EARS-17), body carries `shortfall`, `earnHint` |
 | `points-reserve-limit`                                                       | 422    | `concurrentOpen` on `reserve` (EARS-21)                   |
 | `points-phone-unverified`                                                    | 422    | `debit` / `reserve` (EARS-5)                              |
@@ -285,6 +286,8 @@ The implementation PR declares `Release-requires:` an Issue for a read-only prod
 | `points-account-closed`, `points-bre-con-debit`, `points-occurred-at-future` | 422    | ledger core, unchanged (§3, §4)                           |
 
 `points-rule-unknown` (live in 0059's publish route) disappears: any new slug is accepted.
+
+Until the spend slice (#3810) ships the hold projections and the price list, publish refuses (`points-rule-parameters-invalid`, field path `effect.kind`, `effect.amounts` or `limits.N.concurrentOpen`) a `reserve`, `settle` or `release` effect, a `debit` of the price-list amount and a `concurrentOpen` limit; only the 0060 seed carries them. `record` treats the seeded ones fail-closed: a `reserve` or a price-list `debit` throws and the producer's write rolls back, and a `settle` or `release` finds no open hold — none can exist yet — and is traced `no-open-hold` (EARS-35).
 
 ### J. Starter-bonus grant
 

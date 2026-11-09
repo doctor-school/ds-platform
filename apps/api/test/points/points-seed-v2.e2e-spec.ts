@@ -12,27 +12,30 @@ import {
 
 // 025 EARS-44 — migration 0060 against a real Postgres migrated through it:
 // the 21 version-1 rows of 0059 are untouched, the engine seed equals
-// `POINTS_ENGINE_SEED`, the seeded version is the one active at every
-// instant, nothing is seeded for a retired id, and the migration's guard
-// raises — applying nothing — when a version above 1 exists, while existing
-// postings (immutable, citing their version-1 rule) do not block it.
+// `POINTS_ENGINE_SEED`, each seeded row is numbered max(version) + 1 for its
+// id and is the version active at every instant, nothing is seeded for a
+// retired id, and the migration carries no refusing guard — neither an
+// existing posting nor an existing version above 1 blocks it.
 //
-// The guard is re-run from the migration file itself (between its
-// `points-engine-guard:begin/end` markers) inside a rolled-back transaction,
-// so the test proves the shipped SQL, not a copy.
+// A seed row is told apart by `effective_from = epoch AND kind IS NOT NULL`:
+// the 0059 rows carry no kind and an admin publish is never back-dated
+// (EARS-25). The seed INSERT is re-run from the migration file itself
+// (between its `points-engine-seed:begin/end` markers) inside a rolled-back
+// transaction, so the test proves the shipped SQL, not a copy.
 
 const MIGRATION = fileURLToPath(
   new URL("../../drizzle/0060_points_engine.sql", import.meta.url),
 );
 const EPOCH = new Date("1970-01-01T00:00:00Z").getTime();
+const SEED_ROW = `effective_from = 'epoch' AND kind IS NOT NULL`;
 
-function guardSql(): string {
+function seedSql(): string {
   const sql = readFileSync(MIGRATION, "utf8");
   const match =
-    /-- points-engine-guard:begin\n([\s\S]*?)-- points-engine-guard:end/.exec(
+    /-- points-engine-seed:begin\n([\s\S]*?)-- points-engine-seed:end/.exec(
       sql.replace(/\r\n/g, "\n"),
     );
-  if (!match?.[1]) throw new Error("0060 guard markers not found");
+  if (!match?.[1]) throw new Error("0060 seed markers not found");
   return match[1];
 }
 
@@ -86,8 +89,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
           published_by: string | null;
         }>(
           `SELECT kind, trigger_fact_types, parameters, effective_from, published_by
-             FROM points_rule_versions WHERE rule_id = $1 AND version = $2`,
-          [seed.ruleId, seed.version],
+             FROM points_rule_versions WHERE rule_id = $1 AND ${SEED_ROW}`,
+          [seed.ruleId],
         );
         expect(rows, seed.ruleId).toHaveLength(1);
         const [row] = rows;
@@ -101,16 +104,29 @@ describe.skipIf(!process.env.DATABASE_URL)(
       }
     });
 
-    it("025 EARS-44: the seeded version is the one active at every instant; v1 of a mapped id is never selected", async () => {
+    it("025 EARS-44: each seeded version is max(version) + 1 for its id and the one active at every instant", async () => {
       // Instants before any publish this database may have seen (other suites
-      // publish at "now", never in the past), plus the epoch-dated rows — only
-      // a migration writes one — at any time.
+      // publish at "now", never in the past); only a migration writes an
+      // epoch-dated row.
       const instants = [
         "1970-01-01T00:00:00Z",
         "2000-01-01T00:00:00Z",
         "2026-11-07T00:00:00Z",
       ];
       for (const seed of POINTS_ENGINE_SEED) {
+        const { rows: own } = await handle.pool.query<{ version: number }>(
+          `SELECT version FROM points_rule_versions WHERE rule_id = $1 AND ${SEED_ROW}`,
+          [seed.ruleId],
+        );
+        const version = own[0]?.version;
+        expect(version, seed.ruleId).toBeDefined();
+        // Versions are contiguous: every one below the seed's is stored.
+        const { rows: below } = await handle.pool.query<{ n: string }>(
+          `SELECT count(*) AS n FROM points_rule_versions
+            WHERE rule_id = $1 AND version < $2`,
+          [seed.ruleId, version],
+        );
+        expect(Number(below[0]?.n) + 1, seed.ruleId).toBe(version);
         for (const at of instants) {
           const { rows } = await handle.pool.query<{ version: number }>(
             `SELECT version FROM points_rule_versions
@@ -118,16 +134,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
               ORDER BY version DESC LIMIT 1`,
             [seed.ruleId, at],
           );
-          expect(rows[0]?.version, `${seed.ruleId} at ${at}`).toBe(
-            seed.version,
-          );
+          expect(rows[0]?.version, `${seed.ruleId} at ${at}`).toBe(version);
         }
-        const { rows: seeded } = await handle.pool.query<{ version: number }>(
-          `SELECT max(version) AS version FROM points_rule_versions
-            WHERE rule_id = $1 AND effective_from = 'epoch'`,
-          [seed.ruleId],
-        );
-        expect(seeded[0]?.version, seed.ruleId).toBe(seed.version);
       }
       const { rows: triggered } = await handle.pool.query<{ rule_id: string }>(
         `SELECT DISTINCT rule_id FROM points_rule_versions
@@ -145,7 +153,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("025 EARS-44: nothing is seeded for a retired 0059 id", async () => {
       const { rows } = await handle.pool.query<{ rule_id: string }>(
         `SELECT rule_id FROM points_rule_versions
-          WHERE rule_id = ANY($1) AND version > 1 AND effective_from = 'epoch'`,
+          WHERE rule_id = ANY($1) AND ${SEED_ROW}`,
         [[...POINTS_RETIRED_RULE_IDS]],
       );
       expect(rows).toEqual([]);
@@ -166,7 +174,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       ).rejects.toThrow(/immutable/);
     });
 
-    it("025 EARS-44: an existing posting does not block the guard; only a version above 1 does", async () => {
+    it("025 EARS-44: the seed numbers each row max(version) + 1 — an existing posting and an existing version 2 block nothing, and every earlier row stays unchanged", async () => {
       const client = await handle.pool.connect();
       try {
         await client.query("BEGIN");
@@ -178,7 +186,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         const { rows: issuance } = await client.query<{ id: string }>(
           `SELECT id FROM points_accounts WHERE system_code = 'issuance' AND unit = 'attention_points'`,
         );
-        const eventId = `seed-guard:${randomUUID()}`;
+        const eventId = `seed-v2:${randomUUID()}`;
         await client.query(
           `INSERT INTO points_posting_keys (event_id, occurred_month) VALUES ($1, date_trunc('month', now())::date)`,
           [eventId],
@@ -188,37 +196,55 @@ describe.skipIf(!process.env.DATABASE_URL)(
            VALUES ($1, 'accrual:pul', $2, $3, 'pul', 1, 'accrual.lesson', 1, now())`,
           [eventId, issuance[0]?.id, person[0]?.id],
         );
-        // 0060 is applied here, so its own version-2 seed rows exist. A
-        // temporary table shadows `points_rule_versions` (pg_temp is searched
-        // first) with the 0059 rows only — the database the guard ran on.
-        await client.query("SAVEPOINT guard");
+        // 0060 is applied here, so its own seed rows exist. A temporary table
+        // shadows `points_rule_versions` (pg_temp is searched first) with the
+        // 0059 rows plus a version 2 an earlier e2e run published — the
+        // database the seed meets on a dev or stage stand.
         await client.query(
           `CREATE TEMP TABLE points_rule_versions ON COMMIT DROP AS
-             SELECT * FROM public.points_rule_versions WHERE version = 1`,
+             SELECT * FROM public.points_rule_versions WHERE version = 1 AND kind IS NULL`,
         );
-        // A posting exists and no version above 1: the guard passes.
-        await client.query(guardSql());
         await client.query(
           `INSERT INTO points_rule_versions (rule_id, version, parameters, effective_from)
-           VALUES ('accrual.lesson', 2, '{}'::jsonb, now())`,
+           VALUES ('accrual.lesson', 2, '{"e2e":true}'::jsonb, now() - interval '1 day')`,
         );
-        await expect(client.query(guardSql())).rejects.toThrow(
-          /version above 1 exists/,
+        const listAll = `SELECT rule_id, version, parameters, effective_from FROM points_rule_versions`;
+        const { rows: before } = await client.query(
+          `${listAll} ORDER BY rule_id, version`,
         );
-        await client.query("ROLLBACK TO SAVEPOINT guard");
-      } finally {
-        await client.query("ROLLBACK");
-        client.release();
-      }
-    });
 
-    it("025 EARS-44: the guard raises when a version above 1 exists (the seed's own, once applied)", async () => {
-      const client = await handle.pool.connect();
-      try {
-        await client.query("BEGIN");
-        await expect(client.query(guardSql())).rejects.toThrow(
-          /version above 1 exists/,
+        await client.query(seedSql());
+
+        const { rows: seededRows } = await client.query<{
+          rule_id: string;
+          version: number;
+          parameters: unknown;
+        }>(`SELECT rule_id, version, parameters FROM points_rule_versions WHERE ${SEED_ROW}`);
+        const seeded = new Map(seededRows.map((r) => [r.rule_id, r]));
+        expect(seeded.size).toBe(POINTS_ENGINE_SEED.length);
+        for (const seed of POINTS_ENGINE_SEED) {
+          expect(seeded.get(seed.ruleId)?.parameters, seed.ruleId).toEqual(seed.body);
+        }
+        // max + 1: over the e2e version 2, over a 0059 version 1, from none.
+        expect(seeded.get("accrual.lesson")?.version).toBe(3);
+        expect(seeded.get("accrual.profile")?.version).toBe(2);
+        expect(seeded.get("accrual.lesson.any-mode")?.version).toBe(1);
+        expect(seeded.get("setting.effect.maxAmount")?.version).toBe(1);
+        // Every pre-existing row is unchanged.
+        const { rows: after } = await client.query(
+          `${listAll} WHERE NOT (${SEED_ROW}) ORDER BY rule_id, version`,
         );
+        expect(after).toEqual(before);
+        // The seed supersedes the e2e version 2 now and before it.
+        for (const at of ["2000-01-01T00:00:00Z", new Date().toISOString()]) {
+          const { rows: active } = await client.query<{ version: number }>(
+            `SELECT version FROM points_rule_versions
+              WHERE rule_id = 'accrual.lesson' AND effective_from <= $1
+              ORDER BY version DESC LIMIT 1`,
+            [at],
+          );
+          expect(active[0]?.version, at).toBe(3);
+        }
       } finally {
         await client.query("ROLLBACK");
         client.release();

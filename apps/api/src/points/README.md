@@ -1,6 +1,6 @@
 # `points` — 025 attention-points engine
 
-Spec: `apps/docs/content/specs/features/025-attention-points-engine/` (design §1–§4, §6, §8, §9). Tables: `packages/db/src/schema/points-ledger.ts` + migrations `apps/api/drizzle/0058_points_ledger.sql` (ledger) and `0059_points_rule_book.sql` (rule-book seed, `issuance` account, rule-version immutability). Contracts: `packages/schemas/src/points/` (`points-ledger.schema.ts`, `rules.ts`).
+Spec: `apps/docs/content/specs/features/025-attention-points-engine/` (design §1–§4, §6, §8, §9). Tables: `packages/db/src/schema/points-ledger.ts` + migrations `apps/api/drizzle/0058_points_ledger.sql` (ledger) and `0059_points_rule_book.sql` (rule-book seed, `issuance` account, rule-version immutability). Contracts: `packages/schemas/src/points/` (`points-ledger.schema.ts`, `rules.ts`, `points-account.schema.ts`).
 
 ## What ships (#3807 — the ledger core)
 
@@ -17,6 +17,12 @@ Spec: `apps/docs/content/specs/features/025-attention-points-engine/` (design §
 - `PointsFactIntake.accept(fact)` / `acceptWithin(tx, fact)` — the one entry point for an accrual fact of the closed action set (`PointsAccrualFactSchema`). Evaluates `accrual.<action>` active at `occurredAt`, posts one leg `accrual:<denomination>` issuance → person per non-zero denomination (dedupe key `<personId>:<contentRef>:<action>`, project/output/attribution when named) through `PointsLedgerService.post` in one transaction, then publishes `PointsCredited`. Outcomes: `posted` (with the `credited` event), `duplicate` (no event), `nothing-to-credit` (all-zero version: nothing written, no event). A fact refused by `PointsAccrualFactSchema` — e.g. a content-scoped action (every action except registration and profile, `POINTS_PER_PERSON_ACTIONS`) without `contentRef`, or a registration / profile fact with one — throws its `ZodError` and writes nothing (EARS-4: a content-scoped key would otherwise collapse to `<personId>::<action>`, and a once-per-person key must always be exactly that). `accept` owns its transaction and publishes after its own COMMIT. `acceptWithin(tx, fact)` runs inside the producer's transaction and returns `{ outcome, publishAfterCommit }`: **the producer must call `publishAfterCommit()` after its own COMMIT** (it publishes at most once; a duplicate or zero credit publishes nothing), and a producer whose transaction rolled back never calls it — nothing was stored, nothing is published.
 - `PointsEventsPublisher` — the in-process typed publisher (apps/api has no event bus): `onCredited(subscriber)` / `publishCredited(event)`, after COMMIT only, at-most-once, a subscriber failure is logged and never reaches the producer. No subscriber is registered in this slice.
 
+## What ships (#3813 — consumer read)
+
+- `GET /v1/me/points` (`PointsMeController`, `doctor_guest` / `platform_admin`, fast-path) → `PointsAccount` (EARS-2): the caller's own account, the person being the session subject's live `users.id`. The route takes no person identifier; a `?personId=` naming another person is refused with 403. Unauthenticated → 401.
+- `PointsLedgerService.readPersonAccount(personId)` folds the postings at read time with the pure `foldPointsAccount` (`points-balance.ts`): available per denomination = Σ credits − Σ debits of the person account; `pul.reserved` = the person's `reserve:balance` Pul of every `reserve:<registration>` fact with no `settle:` / `release:` fact yet; `advance` = the `reserve:advance` amounts of unreleased reserves, netted oldest first by the person's `obligation-settle:pul` postings (`open` = obligations not fully netted, `remaining` = what is owed). A person with no account yet reads the zero fold of an open account — the read opens no account (a read never writes). `status` is `closed` once `closed_at` is set (EARS-31).
+- EARS-30: Pul is an integer with `pul.unit = "Pul"`; no field states «free» or money; `points.errors.spec.ts` sweeps every `points-*` problem detail for «бесплатно» / «баллы» / free.
+
 ## Invariants the database enforces
 
 - Postings are immutable: a `BEFORE UPDATE OR DELETE` trigger refuses every row, and the same for `points_posting_keys` (EARS-27, EARS-4).
@@ -25,4 +31,4 @@ Spec: `apps/docs/content/specs/features/025-attention-points-engine/` (design §
 
 ## Not here yet
 
-Per-action award conditions and producer wiring (#3809), reserves/spend (#3810), advance and the `obligation-settle:pul` leg (#3811), leaderboard (#3812), HTTP reads (#3813), corrections and aggregates (#3814), referral award and its monthly cap (#3816), admin UI (#3815). No producer calls the intake yet and no `PointsCredited` subscriber exists. No expiry posting exists anywhere (EARS-22).
+Per-action award conditions and producer wiring (#3809), reserves/spend (#3810), advance and the `obligation-settle:pul` leg (#3811), leaderboard (#3812), the posting history `GET /v1/me/points/postings` and the gating read, corrections and aggregates (#3814), referral award and its monthly cap (#3816), admin UI (#3815). No producer calls the intake yet and no `PointsCredited` subscriber exists. No expiry posting exists anywhere (EARS-22).

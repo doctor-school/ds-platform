@@ -14,7 +14,8 @@ import {
 // the 21 version-1 rows of 0059 are untouched, the engine seed equals
 // `POINTS_ENGINE_SEED`, the seeded version is the one active at every
 // instant, nothing is seeded for a retired id, and the migration's guard
-// raises — applying nothing — when a posting or a version above 1 exists.
+// raises — applying nothing — when a version above 1 exists, while existing
+// postings (immutable, citing their version-1 rule) do not block it.
 //
 // The guard is re-run from the migration file itself (between its
 // `points-engine-guard:begin/end` markers) inside a rolled-back transaction,
@@ -165,7 +166,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       ).rejects.toThrow(/immutable/);
     });
 
-    it("025 EARS-44: the guard raises when a posting exists, applying nothing", async () => {
+    it("025 EARS-44: an existing posting does not block the guard; only a version above 1 does", async () => {
       const client = await handle.pool.connect();
       try {
         await client.query("BEGIN");
@@ -187,9 +188,22 @@ describe.skipIf(!process.env.DATABASE_URL)(
            VALUES ($1, 'accrual:pul', $2, $3, 'pul', 1, 'accrual.lesson', 1, now())`,
           [eventId, issuance[0]?.id, person[0]?.id],
         );
+        // 0060 is applied here, so its own version-2 seed rows exist. A
+        // temporary table shadows `points_rule_versions` (pg_temp is searched
+        // first) with the 0059 rows only — the database the guard ran on.
         await client.query("SAVEPOINT guard");
+        await client.query(
+          `CREATE TEMP TABLE points_rule_versions ON COMMIT DROP AS
+             SELECT * FROM public.points_rule_versions WHERE version = 1`,
+        );
+        // A posting exists and no version above 1: the guard passes.
+        await client.query(guardSql());
+        await client.query(
+          `INSERT INTO points_rule_versions (rule_id, version, parameters, effective_from)
+           VALUES ('accrual.lesson', 2, '{}'::jsonb, now())`,
+        );
         await expect(client.query(guardSql())).rejects.toThrow(
-          /points_postings has rows/,
+          /version above 1 exists/,
         );
         await client.query("ROLLBACK TO SAVEPOINT guard");
       } finally {
@@ -202,15 +216,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const client = await handle.pool.connect();
       try {
         await client.query("BEGIN");
-        const { rows } = await client.query<{ n: string }>(
-          "SELECT count(*) AS n FROM points_postings",
-        );
-        // On a database with postings the first branch fires instead; both
-        // branches refuse, which is the guarantee under test.
         await expect(client.query(guardSql())).rejects.toThrow(
-          rows[0]?.n === "0"
-            ? /version above 1 exists/
-            : /points_postings has rows|version above 1 exists/,
+          /version above 1 exists/,
         );
       } finally {
         await client.query("ROLLBACK");

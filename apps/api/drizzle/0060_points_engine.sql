@@ -5,9 +5,11 @@
 -- triggers and the seed are hand-written.
 --
 --   1. Guard (EARS-44): raise — applying nothing, the migration runs in one
---      transaction — when `points_postings` has any row or
---      `points_rule_versions` any `version > 1`, so the migration never
---      re-interprets a credited posting or an admin-published version.
+--      transaction — when `points_rule_versions` has any `version > 1`, whose
+--      number the seed's version 2 would collide with or supersede. Existing
+--      postings do not block: they are immutable, cite their version-1 rule
+--      by FK and are never re-evaluated (EARS-42), and the dev and stage
+--      databases already hold e2e postings of #3807/#3808.
 --   2. `points_rule_versions` gains `kind` (nullable: the 0059 rows stay as
 --      stored) and `trigger_fact_types` (GIN); `ADD COLUMN` with a constant
 --      default fires no row trigger. The 0059 immutability function is
@@ -26,9 +28,6 @@
 -- points-engine-guard:begin
 DO $$
 BEGIN
-	IF EXISTS (SELECT 1 FROM "points_postings") THEN
-		RAISE EXCEPTION '0060_points_engine: points_postings has rows — the engine seed would re-interpret credited postings (025 EARS-44)';
-	END IF;
 	IF EXISTS (SELECT 1 FROM "points_rule_versions" WHERE "version" > 1) THEN
 		RAISE EXCEPTION '0060_points_engine: a points_rule_versions version above 1 exists — an admin-published version would be superseded (025 EARS-44)';
 	END IF;

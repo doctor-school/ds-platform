@@ -573,9 +573,11 @@ export const PointsCreditedEventSchema = z.strictObject({
 export type PointsCreditedEvent = z.infer<typeof PointsCreditedEventSchema>;
 
 /**
- * EARS-25 — `POST /v1/admin/points/rules/:ruleId/versions` body. Phase 2 of
- * #3838 types `parameters` as {@link PointsRuleBodySchema}; until then the
- * 0059 route validates it against `./rules-v1.ts`.
+ * Amended EARS-25 — `POST /v1/admin/points/rules/:ruleId/versions` body.
+ * `parameters` is the version's body; the route validates it per id with
+ * {@link parsePointsRuleBody} and the catalog checks, so a failure is the 422
+ * `points-rule-parameters-invalid` with field paths relative to the body,
+ * never a transport 400.
  */
 export const PublishPointsRuleVersionRequestSchema = z.strictObject({
   parameters: z.record(z.string(), z.unknown()),
@@ -597,3 +599,20 @@ export const PointsRuleVersionSchema = z.strictObject({
   createdAt: z.string(),
 });
 export type PointsRuleVersion = z.infer<typeof PointsRuleVersionSchema>;
+
+/** EARS-38 — a publish that stacks with another active credit rule (accepted). */
+export const PointsStackingWarningSchema = z.strictObject({
+  code: z.literal("stacking"),
+  factType: z.string(),
+  otherRuleId: z.string(),
+});
+export type PointsStackingWarning = z.infer<typeof PointsStackingWarningSchema>;
+
+/** Amended EARS-25 — the publish answer: the stored version and any stacking warning. */
+export const PublishedPointsRuleVersionSchema = PointsRuleVersionSchema.extend({
+  kind: z.enum(["rule", "setting", "system"]),
+  warnings: z.array(PointsStackingWarningSchema),
+});
+export type PublishedPointsRuleVersion = z.infer<
+  typeof PublishedPointsRuleVersionSchema
+>;

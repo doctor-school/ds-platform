@@ -74,8 +74,10 @@ export {
   PointsRuleVersionSchema,
   PointsSettingIdSchema,
   PointsSettingSchema,
+  PointsStackingWarningSchema,
   PointsSystemRuleSchema,
   pointsRuleTriggerFactTypes,
+  PublishedPointsRuleVersionSchema,
   PublishPointsRuleVersionRequestSchema,
   type PointsCreditedEvent,
   type PointsRule,
@@ -87,9 +89,23 @@ export {
   type PointsRuleVersion,
   type PointsSetting,
   type PointsSettingId,
+  type PointsStackingWarning,
+  type PublishedPointsRuleVersion,
   type PublishPointsRuleVersionRequest,
 } from "./rules.js";
-// Compatibility only — the 0059 rule book until #3838 phase 2 (see rules-v1.ts).
+export {
+  POINTS_TRACE_VERDICTS,
+  PointsRecordFactSchema,
+  PointsRecordOutcomeSchema,
+  PointsTraceEntrySchema,
+  PointsTraceLimitSchema,
+  type PointsParsedRecordFact,
+  type PointsRecordFact,
+  type PointsRecordOutcome,
+  type PointsTraceEntry,
+  type PointsTraceVerdict,
+} from "./record.js";
+// The 0059 rule book as stored (its v1 rows) — read by the 0060 seed test only; no runtime path parses it.
 export {
   accrualDedupeKey,
   accrualRuleId,

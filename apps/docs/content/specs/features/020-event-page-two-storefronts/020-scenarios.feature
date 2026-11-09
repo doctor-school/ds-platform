@@ -487,11 +487,58 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
       Then the bottom CTA band reads «Войдите — и смотрите целиком.» with the action «Войти ↗»
 
     @EARS-28 @EARS-29 @EARS-3 @happy
-    Scenario: The post-live hero leads to the recording, states the end and shows no sign-up count
-      Given the event started at 19:00 МСК on 28 August with a duration of 92 minutes
+    Scenario: The post-live hero leads to the recording, states the actual end and shows no sign-up count
+      Given the online event was scheduled at 19:00 МСК on 28 August with a duration of 92 minutes
+      And the director closed the room at 20:47 МСК on 28 August
       And the event has 37 sign-ups
-      When an anonymous reader reads the event on doctor.school
+      And a viewer whose browser timezone is Europe/Moscow
+      When the viewer reads the event on doctor.school as an anonymous reader
       Then the hero carries the «К записи ↓» link
       And pressing it moves focus to the player position without a navigation
-      And the page states «Эфир завершился 28 августа в 20:32»
+      And the page states «Эфир завершился 28 августа в 20:47 МСК»
       And no sign-up count is rendered and the read carries no sign-up proof
+
+    @EARS-29 @happy
+    Scenario: Closing the room stamps the end instant once
+      Given the event is live
+      When the director closes the room
+      Then the event's ended_at is the instant of the live → ended transition, written in the transaction of its event.ended audit entry
+      And the public event read serves that instant as endedAt
+
+    @EARS-29 @failure
+    Scenario Outline: An ended event with no recorded end instant states the date only
+      Given <event> scheduled at 19:00 МСК on 28 August with a duration of 92 minutes and no recorded end instant
+      When an anonymous reader reads the event on doctor.school
+      Then the page states «Эфир завершился 28 августа.»
+      And no clock time derived from the schedule is rendered in the end line
+
+      Examples:
+        | event                                                  |
+        | a platform event that ended before ended_at existed    |
+        | a legacy in_archive event                              |
+
+    @EARS-28 @happy
+    Scenario: «К записи ↓» also leads to the plaque while the recording is in preparation
+      Given the event's recording state is preparing
+      When an anonymous reader reads the event on doctor.school
+      Then the hero carries the «К записи ↓» link
+      And pressing it moves focus to the recording-in-preparation plaque at the player position without a navigation
+
+    @EARS-28 @failure
+    Scenario Outline: «К записи ↓» is absent before the event has ended
+      Given the event «Новый эфир» of the school «Школа ортопедии» is <state>
+      When an anonymous reader reads «Новый эфир» on doctor.school
+      Then the hero carries no «К записи ↓» link
+
+      Examples:
+        | state     |
+        | published |
+        | live      |
+
+    @EARS-25 @EARS-26 @failure
+    Scenario: A guest's chapter press on a provider without a seek adapter still leads to the sign-in gate
+      Given the event's edited recording is published on cdnvideo with chapters
+      And an anonymous reader reads the event on doctor.school
+      When the reader presses a chapter row
+      Then the player position with the sign-in invitation is scrolled into view
+      And no player source is requested

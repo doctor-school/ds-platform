@@ -261,6 +261,9 @@ The EARS-6 row is the deepest cut of the seven: release 3 ships the registered c
 - `recording.chapters: { startSec, title, description? }[] | null` — the main-player recording's chapters (014 EARS-30); `null` for `preparing` and for an empty list.
 - `nextSchoolEvent: { slug, startsAt } | null` — one bounded query: events joined to the same school record as this event (the target of EARS-2's school link), state `published`, not live, inside this storefront's content set (004 «Amendment — 2026-10-01» for the Academy, the doctor storefront's own set), `id <> this`, ordered by `starts_at` ascending, `LIMIT 1`. The storefront is the read's existing host context, never a client parameter.
 - `signUps` is `null` on the post-live page (EARS-3 amended), so the hide rule and the past rule share one absent shape.
+- `endedAt: string | null` — the new nullable `events.ended_at` (EARS-29), copied as is.
+
+**The end instant (EARS-29).** One additive migration adds `events.ended_at timestamptz NULL` beside `live_at` (`packages/db/src/schema/events.ts`). `EventsService.closeRoom` (`apps/api/src/events/events.service.ts`, the `live → ended` named transition that writes `EVENT_ENDED_AUDIT_TYPE`) sets it to the transition instant inside the same transaction as that audit row, exactly as `OpenRoom` sets `live_at`; the closed lifecycle map allows `live → ended` once, so it is never overwritten. No back-fill: the audit ledger is not read on the public path, and a row closed before the column (or a legacy `in_archive` event, which has no transition at all) keeps `null` and renders the date-only line. Reading the instant from `audit_ledger.created_at` at request time was rejected — it would put the audit ledger on the public read path for one display field.
 
 No expiry or availability field is added anywhere (owner decision 2026-11-09).
 
@@ -293,13 +296,13 @@ sequenceDiagram
 
 **The page state (post-live only).**
 
-| Element         | Shown when                                                   | Source                                        |
-| --------------- | ------------------------------------------------------------ | --------------------------------------------- |
-| «К записи ↓»    | `montage` · `raw-only` · `preparing` (every post-live state) | fixed; scroll + focus to `#player`            |
-| Timecode list   | main-player recording has chapters                           | `recording.chapters`                          |
-| Rows as buttons | signed in ∧ `SEEK[provider]` non-null                        | session + provider                            |
-| End line        | always                                                       | `startsAt + durationMin`, EARS-19 time rule   |
-| Bottom CTA      | guest ∧ ready → always; otherwise `nextSchoolEvent` non-null | recording state + session + `nextSchoolEvent` |
-| Social proof    | never                                                        | `signUps: null`                               |
+| Element         | Shown when                                                                          | Source                                               |
+| --------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| «К записи ↓»    | `montage` · `raw-only` · `preparing` (every post-live state)                        | fixed; scroll + focus to `#player`                   |
+| Timecode list   | main-player recording has chapters                                                  | `recording.chapters`                                 |
+| Rows as buttons | guest (scroll to gate, any provider) · signed in ∧ `SEEK[provider]` non-null (seek) | session + provider                                   |
+| End line        | always; with time when `endedAt` non-null, date-only else                           | `endedAt` (EARS-19 time rule) · else `startsAt` date |
+| Bottom CTA      | guest ∧ ready → always; otherwise `nextSchoolEvent` non-null                        | recording state + session + `nextSchoolEvent`        |
+| Social proof    | never                                                                               | `signUps: null`                                      |
 
-**Canvas differences carried by this amendment.** The canvas draws chapter marks on its own mock progress bar (`chapterMarks`); the real player is a provider iframe whose timeline cannot be drawn on, so no marks render and the list is the only seek control. The canvas `range` line per chapter («19:00–19:25 МСК») has no source in the owner's time + title decision and is not rendered. The «нет записи» variants have no source state. «Доступна ещё 30 дней» leaves the canvas through a vendoring change.
+**Canvas differences carried by this amendment.** The canvas draws chapter marks on its own mock progress bar (`chapterMarks`); the real player is a provider iframe whose timeline cannot be drawn on, so no marks render and the list is the only seek control. The canvas draws a description under every chapter title (`c.desc`, `design-source/event-page.dc.html` :351, :357; `chapDefs` :1050-1052), so the chapter carries an optional description beside the owner's time + title. The canvas `range` line per chapter («19:00–19:25 МСК», :356) is not rendered: it appears only on the canvas's non-seekable rows (`fixed`), and it is the broadcast's wall-clock span of the chapter, which is redundant with the start offsets plus the broadcast start and is not a position in a recording — the seekable rows of the canvas show the recording offset instead (:350), and that offset is what EARS-25 renders. In `preparing` the canvas still draws the chapter list as those fixed rows with clock ranges (`fixed: !recPlayer`, :354-358); EARS-25 renders no list there, because no recording is published and so no chapters exist on the read. «К записи ↓» is drawn whenever the past page has a recording or one in preparation (`pastHasRec: recPlayer || recPrep`, :1120), so EARS-28 keeps it in `preparing`. The «нет записи» variants have no source state. «Доступна ещё 30 дней» leaves the canvas through a vendoring change.

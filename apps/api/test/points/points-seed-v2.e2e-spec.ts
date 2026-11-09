@@ -19,9 +19,10 @@ import {
 //
 // A seed row is told apart by `effective_from = epoch AND kind IS NOT NULL`:
 // the 0059 rows carry no kind and an admin publish is never back-dated
-// (EARS-25). The seed INSERT is re-run from the migration file itself
-// (between its `points-engine-seed:begin/end` markers) inside a rolled-back
-// transaction, so the test proves the shipped SQL, not a copy.
+// (EARS-25). The seed INSERT and its closing NOTICE are re-run from the
+// migration file itself (between their `points-engine-seed` and
+// `points-engine-notice` markers) inside a rolled-back transaction, so the
+// test proves the shipped SQL, not a copy.
 
 const MIGRATION = fileURLToPath(
   new URL("../../drizzle/0060_points_engine.sql", import.meta.url),
@@ -29,14 +30,13 @@ const MIGRATION = fileURLToPath(
 const EPOCH = new Date("1970-01-01T00:00:00Z").getTime();
 const SEED_ROW = `effective_from = 'epoch' AND kind IS NOT NULL`;
 
-function seedSql(): string {
-  const sql = readFileSync(MIGRATION, "utf8");
-  const match =
-    /-- points-engine-seed:begin\n([\s\S]*?)-- points-engine-seed:end/.exec(
-      sql.replace(/\r\n/g, "\n"),
-    );
-  if (!match?.[1]) throw new Error("0060 seed markers not found");
-  return match[1];
+function migrationBlock(name: "seed" | "notice"): string {
+  const sql = readFileSync(MIGRATION, "utf8").replace(/\r\n/g, "\n");
+  const begin = `-- points-engine-${name}:begin\n`;
+  const start = sql.indexOf(begin);
+  const end = sql.indexOf(`-- points-engine-${name}:end`, start);
+  if (start < 0 || end < 0) throw new Error(`0060 ${name} markers not found`);
+  return sql.slice(start + begin.length, end);
 }
 
 describe.skipIf(!process.env.DATABASE_URL)(
@@ -213,7 +213,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
           `${listAll} ORDER BY rule_id, version`,
         );
 
-        await client.query(seedSql());
+        await client.query(migrationBlock("seed"));
 
         const { rows: seededRows } = await client.query<{
           rule_id: string;
@@ -230,6 +230,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
         expect(seeded.get("accrual.profile")?.version).toBe(2);
         expect(seeded.get("accrual.lesson.any-mode")?.version).toBe(1);
         expect(seeded.get("setting.effect.maxAmount")?.version).toBe(1);
+        // The closing NOTICE names the id whose non-migration version the
+        // seed supersedes, and only that one.
+        const notices: string[] = [];
+        const onNotice = (n: { message?: string }) => notices.push(n.message ?? "");
+        client.on("notice", onNotice);
+        await client.query(migrationBlock("notice"));
+        client.off("notice", onNotice);
+        expect(notices).toEqual([
+          "0060_points_engine: accrual.lesson seeded as version 3, superseding non-seed version(s) 2",
+        ]);
         // Every pre-existing row is unchanged.
         const { rows: after } = await client.query(
           `${listAll} WHERE NOT (${SEED_ROW}) ORDER BY rule_id, version`,

@@ -10,9 +10,14 @@
 --      highest one in effect, so the seed supersedes every earlier version of
 --      its id — 0059's and any an earlier e2e run published on a dev or stage
 --      database alike. Existing postings are immutable, cite their version by
---      FK and are never re-evaluated (EARS-42). That production holds no
---      admin-published version above 1 is checked read-only before the
---      release (#3850).
+--      FK and are never re-evaluated (EARS-42). The trade-off: a real admin
+--      publish would be superseded too, so production's protection is the
+--      read-only pre-check #3850, which blocks the release while one exists;
+--      a guard here is ruled out because the #3808 e2e rows on dev and stage
+--      also carry an admin publisher, and skipping such an id would leave its
+--      v1-schema body — which the engine cannot parse — active. A closing
+--      NOTICE names every id whose seed supersedes a non-migration version;
+--      the superseded rows stay in place, unchanged, as history.
 --   2. `points_rule_versions` gains `kind` (nullable: the 0059 rows stay as
 --      stored) and `trigger_fact_types` (GIN); `ADD COLUMN` with a constant
 --      default fires no row trigger. The 0059 immutability function is
@@ -121,3 +126,29 @@ FROM (VALUES
 	('setting.effect.maxAmount', 'setting', '{}'::text[], '{"kind":"setting","value":500}'::jsonb)
 ) AS s("rule_id", "kind", "trigger_fact_types", "parameters");
 -- points-engine-seed:end
+--> statement-breakpoint
+-- EARS-44 — name in the deploy log every id whose seed supersedes a version
+-- not written by a migration (anything but the 0059 epoch version 1): on dev
+-- and stage these are e2e publishes; on production #3850 proves there are
+-- none before the release. The superseded rows stay unchanged, as history.
+-- points-engine-notice:begin
+DO $$
+DECLARE
+	r record;
+BEGIN
+	FOR r IN
+		SELECT s."rule_id", s."version" AS seeded,
+		       string_agg(o."version"::text, ', ' ORDER BY o."version") AS superseded
+		  FROM "points_rule_versions" s
+		  JOIN "points_rule_versions" o
+		    ON o."rule_id" = s."rule_id" AND o."version" < s."version"
+		 WHERE s."effective_from" = 'epoch' AND s."kind" IS NOT NULL
+		   AND NOT (o."version" = 1 AND o."kind" IS NULL AND o."effective_from" = 'epoch')
+		 GROUP BY s."rule_id", s."version"
+		 ORDER BY s."rule_id"
+	LOOP
+		RAISE NOTICE '0060_points_engine: % seeded as version %, superseding non-seed version(s) %', r."rule_id", r.seeded, r.superseded;
+	END LOOP;
+END;
+$$;
+-- points-engine-notice:end

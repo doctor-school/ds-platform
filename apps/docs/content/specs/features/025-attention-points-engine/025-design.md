@@ -1,6 +1,6 @@
 ---
 title: "025 — Design"
-description: "Design companion to the 025 attention points engine requirements: the module placement, the ledger ER fragment (accounts, postings with denomination and a fact-level event id unique with its leg, the posting-keys table, rule versions, gating, obligations), the immutability and partitioning mirrored from audit_ledger, the accrual cascade with dedupe and obligation settlement, the reserve lifecycle state machine, the gating decision, the leaderboard read model, the admin API and the reconciliation of ADR-0003 with ADR-0016."
+description: "Design companion to the 025 attention points engine requirements: the production amendment of 2026-11-09 (one universal rule engine — layers, the rule schema, the condition grammar, the record evaluation, the hold lifecycle, the data-model delta, the clause map with the fate of the 0059 rule ids, the migration path, problem codes and the starter-bonus grant), the module placement, the ledger ER fragment (accounts, postings with denomination and a fact-level event id unique with its leg, the posting-keys table, rule versions), the immutability and partitioning mirrored from audit_ledger, the accrual cascade with dedupe and obligation settlement, the reserve lifecycle state machine, the gating decision, the leaderboard read model, the admin API and the reconciliation of ADR-0003 with ADR-0016."
 slug: 025-attention-points-engine-design
 lang: en
 ---
@@ -8,6 +8,282 @@ lang: en
 > Requirements: [`025-requirements-en.md`](./025-requirements-en.md) · PRD: [`025-product.md`](./025-product.md) · Scenarios: [`025-scenarios.feature`](./025-scenarios.feature)
 
 # 025 — Design
+
+## Production amendment — one universal rule engine (2026-11-09, #3835)
+
+The ledger core (migration 0058) and the rule book with its accrual intake (migration 0059) run in production since release-2026.11.07-1 with no producer calling the intake. This amendment overrides §4 (the accrual cascade becomes the `record` evaluation of D) and §6 (the per-id parameter schemas and the closed action set become the one rule schema of B and the clause map of G); §1, §3, §7, §8 and §9 stand, and §2 and §5 — never shipped — are rewritten inline to point here. Requirements: production amendment of `025-requirements-en.md` (amended EARS-3, EARS-4, EARS-25; added EARS-32…46).
+
+### A. Layers
+
+| Layer                       | Lives in                                                   | Changed by                                                     |
+| --------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------- |
+| Fact-type catalog           | `packages/schemas/src/points/facts.ts`                     | a developer (code; unit test + lint over forbidden attributes) |
+| Predicate registry          | `apps/api/src/points/predicates/` (types in `schemas`)     | a developer                                                    |
+| Effect and limit kinds      | `apps/api/src/points/engine/` (closed unions in `schemas`) | a developer                                                    |
+| Rules and settings          | `points_rule_versions` rows                                | an admin (`POST /v1/admin/points/rules/:ruleId/versions`)      |
+| Price list                  | `points_prices` rows                                       | an admin (`PUT /v1/admin/points/prices/:itemRef`)              |
+| Ledger core and projections | `apps/api/src/points/ledger/`, `points_*` tables           | nobody at run time — invariants (§3, EARS-12, 20, 22, 27)      |
+
+The engine stays the one module `apps/api/src/points/` on the platform database. `PointsFactIntake` is replaced by `PointsEngine` with `record(tx, fact)`, `record(fact)` and `quote(personId, draftFact)`; the after-commit contract of §4 («Event publication») is unchanged — `record(tx, fact)` returns `publishAfterCommit`.
+
+### B. Rule schema
+
+One discriminated union in `packages/schemas/src/points/rules.ts`, stored in `points_rule_versions.parameters`; `kind` is also a column (F) so a reader never parses the body to tell a rule from a setting.
+
+```jsonc
+// kind: "rule"
+{
+  "kind": "rule",
+  "label": "Lesson award, online", // admin-facing text
+  "trigger": ["lesson.completed"], // ≥1 registered fact type (EARS-32)
+  "condition": { "eq": [{ "attr": "mode" }, "online"] }, // C; absent = true
+  "effect": {
+    // exactly one (EARS-35)
+    "kind": "credit", // credit | debit | reserve | settle | release
+    "beneficiary": "subject", // credit: "subject" | { "pred": "person.referrer" }
+    "amounts": { "pul": 10, "bre": 1, "con": 0 }, // credit: per denomination; debit: { "pul": n } | "price"
+    // reserve: { "allowAdvance": true } — price and mode read from points_prices
+  },
+  "limits": [{ "oncePer": ["subject", "ref"], "key": "lesson" }], // ≥1, or [{ "unlimited": true }]
+  // { "countPer": { "scope": ["beneficiary"], "period": "month", "n": 5 | { "setting": "…" } } }
+  // { "concurrentOpen": { "n": { "setting": "setting.reserve.limitedSeats.max" }, "filter": { "limitedSeats": true } } }
+  "validFrom": null,
+  "validUntil": null, // EARS-37, ISO instants or null
+  "active": true,
+  "stacking": { "priority": 0, "exclusiveGroup": null }, // EARS-38
+}
+// kind: "setting" — the body is that setting's own strict schema, e.g. { "kind": "setting", "value": 30 }
+// kind: "system" — manual-correction only; no body fields
+```
+
+Publish-time validation (amended EARS-25) runs in this order and stops at the first failing field path: shape → trigger types registered → condition type-check (C) against every trigger type → effect legality (denominations, `debit`/`reserve`/`settle`/`release` Pul-only, no Pul credit on a type the catalog marks `earnsPul: false`) → limit scope fields present on every trigger type, a credit with ≥1 limit or `unlimited` → amounts ≤ `setting.effect.maxAmount` → `kind` equal to the id's earlier versions → the stacking check (warning only). `effectiveFrom` stays a column, as in 0059.
+
+### C. Condition grammar
+
+```text
+Cond    := { "all": Cond[] } | { "any": Cond[] } | { "not": Cond }
+         | { Cmp: [Operand, Operand] }              Cmp := eq | ne | gt | gte | lt | lte
+         | { "in": [Operand, Literal[]] }
+Operand := { "attr": Name }                          a declared attribute of the trigger type
+         | { "pred": Name, "args"?: { Name: Operand } }  a registered predicate
+         | { "setting": SettingId }
+         | Literal                                   string | integer | boolean | null
+```
+
+Language constants (not settings): depth ≤ 8, ≤ 64 nodes, `in` lists ≤ 100 literals. Types are `string`, `integer`, `boolean`, `instant` and nullable variants; `gt`…`lte` take integers or instants, `eq`/`ne`/`in` take equal types. A predicate declares its argument and result types and its subject (`person` of the fact, `item` of the ref); it runs inside the evaluation transaction after the locks of D, reads only, and is memoised per evaluation. Seeded predicates: `person.registered`, `person.phoneVerified`, `person.completedLessons` (integer), `person.referrer` (person id or null), `item.price`, `item.mode`, `item.limitedSeats`.
+
+### D. `record` evaluation
+
+```mermaid
+sequenceDiagram
+  participant P as Producer
+  participant E as PointsEngine
+  participant J as points_facts
+  participant R as Rule versions
+  participant L as Ledger core
+  participant B as PointsEventsPublisher
+  P->>E: record(tx, fact) — type, eventId, personId, ref, occurredAt, attributes
+  E->>E: validate against the catalog entry (throws, nothing written)
+  E->>L: SAVEPOINT in the producer's tx (record(fact): BEGIN)
+  E->>J: lookup eventId
+  alt already journaled
+    J-->>E: original outcome
+    E-->>P: duplicate (original applications)
+  else new
+    E->>R: rules whose active version at occurredAt triggers on type
+    R-->>E: candidate versions (GIN on trigger_fact_types)
+    E->>L: lock person accounts of subject and beneficiaries, ascending account id
+    E->>E: per candidate — validity, active, condition, limits (trace)
+    E->>E: resolve exclusive groups (trace superseded)
+    E->>L: apply debit, reserve, settle, release, then credit — each as ledger fact eventId#ruleId
+    alt a debit-side effect refuses
+      L-->>E: problem (insufficient Pul / threshold short / reserve limit / phone unverified)
+      E->>L: ROLLBACK TO SAVEPOINT
+      E-->>P: throw problem, nothing written
+    else applied or no-effect
+      L->>L: posting_keys row and postings per ledger fact; EARS-20 netting after each Pul credit; projections
+      E->>J: insert journal row with outcome and trace
+      E-->>P: outcome, applied, publishAfterCommit
+      P->>B: publishAfterCommit() after the producer's COMMIT
+    end
+  end
+```
+
+- **Duplicate detection** is the journal's unique `event_id` (amended EARS-4, first sentence); a race between two equal event ids ends on that constraint, the loser answers `duplicate`. The **limit dedupe** is `points_posting_keys.dedupe_key = <limit key>:<scope values>` (unique), inserted per application before its postings; a unique violation under the per-application savepoint becomes `limit-reached`, never an error.
+- **Locks.** The subject's account and every beneficiary a predicate names are locked `FOR UPDATE` in ascending account id before any limit is read, so `countPer`, `concurrentOpen` and the available-Pul check read a stable state and two facts touching the same two people cannot deadlock. A missing account is opened first (EARS-1 race unchanged).
+- **countPer** counts distinct ledger `event_id`s on postings with that `rule_id` crediting the beneficiary in the Europe/Moscow calendar period of `occurredAt` (index in F).
+- **Trace** (EARS-40): `{ ruleId, version, trigger: true, valid, active, condition, limits: [{ kind, verdict }], stacking, ledgerEventId? }[]`, verdicts `applied` · `not-valid` · `inactive` · `condition-false` · `limit-reached` · `superseded` · `no-open-hold`.
+- **No cache.** The candidate query is index-backed per fact; a published version is visible to the next fact, so no invalidation exists to get wrong.
+- **quote** runs the same functions in a `READ ONLY` transaction with no locks and no inserts; limits are evaluated by reading the same keys and counts. `GET /v1/me/points/gating/:itemRef` is `quote` of a draft `registration.created` (EARS-13); `lessonsNeeded` reads the Pul credit of the active `accrual.lesson` version.
+
+### E. Hold lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> quoted: registration.created
+  quoted --> none: no price row, open, zero price
+  quoted --> refused: threshold short, beyond the advance cap, reserve limit, phone unverified
+  quoted --> held: balance covers the price
+  quoted --> held_advance: advance mode, shortfall within the cap
+  held --> settled: attendance.confirmed at or above the presence share
+  held_advance --> settled: attendance.confirmed at or above the presence share
+  held --> released: cancelled, voided, no-show
+  held_advance --> released: cancelled, voided, no-show — advance and its netting reversed
+  settled --> [*]
+  released --> [*]
+  none --> [*]
+  refused --> [*]
+```
+
+| Transition (ledger fact)         | Legs                                                                                                                                                                     | Projection                                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| reserve (`<fact>#spend.reserve`) | `reserve:balance` person→reserve (available part, omitted when 0) · `reserve:advance` advance→reserve (shortfall)                                                        | `points_reserves` row `held`, `balance_part`, `advance_part`; `points_obligations` row opened at `advance_part` |
+| settle (`<fact>#spend.settle`)   | `settle:pul` reserve→sink, the full price                                                                                                                                | reserve `settled`; the obligation stays open and nets (EARS-20)                                                 |
+| release (`<fact>#spend.release`) | one `reverse:<postingId>` leg per reserve-side posting and per `obligation-settle:<obligationId>` leg of this registration's obligation, each with `reverses_posting_id` | reserve `released`; obligation `annulled`, `remaining` 0                                                        |
+| Pul credit (`<fact>#<rule>`)     | `accrual:pul` issuance→person, then `obligation-settle:<obligationId>` person→advance per open obligation, oldest `opened_at` first, `min(left, remaining)`              | each obligation's `netted` grows, `remaining` falls; `netted` when 0                                            |
+
+- **Projections.** The diagram's `held_advance` is a `held` row with `advance_part > 0`. `pul.reserved` = Σ `balance_part` of `held` rows; `advance.remaining` = Σ `remaining` of open obligations; `pul.available` stays the fold of the person account (§2). A reserve wholly from the advance writes no person-account posting, so `reserved` cannot be folded from the person account alone — that is why the projections exist. Both are written in the transaction of their postings, carry `audit_row_change()`, and are rebuildable: the ledger `event_id` names the journal row whose `attributes.registrationId` and person identify the hold.
+- **Release of a partly netted obligation.** Reversing that obligation's own `obligation-settle` legs returns its netted Pul to the person, and reversing `reserve:advance` closes the advance side; other obligations' legs are untouched, so their `remaining` stays true and the person ends as if the registration had never been made (EARS-35, EARS-18).
+- **No-show sweep.** A scheduled job, after each item end + `setting.noShow.window`, records `registration.no-show` with event id `no-show:<registrationId>` for every still-held registration; a re-run answers `duplicate`. A late `attendance.confirmed` meets no open hold (`no-open-hold`) and still credits participation.
+
+### F. Data model delta
+
+```mermaid
+erDiagram
+  points_facts ||--o{ points_posting_keys : "ledger event_id = fact event_id # rule id"
+  points_rule_versions ||--o{ points_postings : "rule_id + rule_version"
+  points_prices ||--o{ points_reserves : "item_ref, price at reserve time"
+  points_accounts ||--o{ points_reserves : "person_account_id"
+  points_reserves ||--o| points_obligations : "registration_id"
+  points_obligations ||--o{ points_postings : "obligation-settle legs"
+
+  points_facts {
+    text event_id PK
+    text type
+    uuid person_id "ADR-0009 re-pointing only"
+    text ref_kind
+    text ref_id
+    jsonb attributes "catalog-declared only"
+    timestamptz occurred_at
+    timestamptz received_at
+    text outcome "applied|duplicate|no-effect"
+    jsonb trace
+  }
+  points_rule_versions {
+    text rule_id PK
+    integer version PK
+    text kind "new, nullable: rule|setting|system"
+    text_array trigger_fact_types "new, default empty, GIN"
+    jsonb parameters
+    timestamptz effective_from
+    uuid published_by
+  }
+  points_prices {
+    text item_ref PK
+    text item_kind
+    text mode "open|advance|threshold"
+    integer pul_cost
+    boolean limited_seats
+    timestamptz updated_at
+  }
+  points_reserves {
+    uuid registration_id PK
+    uuid person_account_id FK
+    text item_ref
+    integer price
+    integer balance_part
+    integer advance_part
+    text state "held|settled|released"
+    text reserve_event_id
+  }
+  points_obligations {
+    uuid id PK
+    uuid person_account_id FK
+    uuid registration_id FK
+    integer opened
+    integer netted
+    integer remaining "opened - netted, 0 once annulled"
+    text state "open|netted|annulled"
+    timestamptz opened_at
+  }
+```
+
+- `points_facts` is not partitioned: its `event_id` must be globally unique (the reason `points_posting_keys` is not partitioned, §2). A `BEFORE UPDATE OR DELETE` trigger raises except an UPDATE that changes only `person_id` under the erasure procedure's session flag — the same carve-out as postings. Index (`person_id`, `received_at DESC`) serves EARS-45.
+- `points_rule_versions` gains `kind` (nullable, so the 0059 rows stay untouched; every new row sets it) and `trigger_fact_types text[] NOT NULL DEFAULT '{}'` with a GIN index. `ALTER TABLE … ADD COLUMN` with a constant default is a catalog change that fires no row trigger, so the immutability trigger of 0059 is not bypassed or edited.
+- `points_postings` gains the index (`rule_id`, `credit_account_id`, `occurred_at`) for `countPer`. `points_posting_keys` keeps its shape; only the content of `dedupe_key` changes.
+- `points_prices`, `points_reserves`, `points_obligations` carry `audit_row_change()`; a price-list write also goes through the request audit context (§8).
+
+### G. Clause map
+
+No EARS number moves; Issues #3809–#3816 keep their references.
+
+| Clause         | Rule or mechanism                                                                                                      |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| EARS-3, 4      | D (evaluation, journal and limit dedupe)                                                                               |
+| EARS-5         | `accrual.registration` on `account.registered`, `phone.verified`; key `welcome`; phone check in debit-side effects     |
+| EARS-6         | `accrual.profile`                                                                                                      |
+| EARS-7, 8      | `accrual.lesson` + `accrual.lesson.offline` (key `lesson`), `accrual.module` + `accrual.module.offline` (key `module`) |
+| EARS-9         | `accrual.participation`, condition `presenceSharePercent ≥ setting.presence.share`                                     |
+| EARS-10        | `accrual.question`, `accrual.rating`, `accrual.interactive`, `oncePer(subject, ref)`                                   |
+| EARS-11        | `accrual.referral-inviter` (beneficiary `person.referrer`, `countPer` month 5), `accrual.referral-invitee`             |
+| EARS-13        | `quote` (D)                                                                                                            |
+| EARS-14…17, 21 | `spend.reserve` with `allowAdvance`, `setting.advance.cap`, `concurrentOpen` (E)                                       |
+| EARS-18        | `spend.release` on cancelled / voided / no-show (E)                                                                    |
+| EARS-19        | `spend.settle`                                                                                                         |
+| EARS-20        | ledger-core netting step, not a rule (E)                                                                               |
+| EARS-26        | `points_prices` + `spend.debit` on `item.access-requested`                                                             |
+| EARS-43        | `accrual.starter-bonus` (key `welcome`) + J                                                                            |
+
+Fate of the 21 rows 0059 seeded (all stay as stored):
+
+| 0059 rule id                                                                                                                                                 | Fate                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `accrual.registration`, `.profile`, `.lesson`, `.module`, `.participation`, `.question`, `.rating`, `.interactive`, `.referral-inviter`, `.referral-invitee` | version 2 at the epoch in the rule schema, same PRD amounts; v1 never selected again (empty trigger)                      |
+| `cap.engagement`                                                                                                                                             | retired — `oncePer(subject, ref)` of each engagement rule                                                                 |
+| `cap.referral.monthly`                                                                                                                                       | retired — `countPer` literal 5 inside `accrual.referral-inviter`                                                          |
+| `presence.share`, `advance.cap`, `reserve.limitedSeats.max`, `noShow.window`                                                                                 | retired — `setting.presence.share`, `setting.advance.cap`, `setting.reserve.limitedSeats.max`, `setting.noShow.window` v1 |
+| `leaderboard.conWeight`, `.breWeight`, `.top`, `.neighbours`                                                                                                 | retired — `setting.leaderboard.*` v1                                                                                      |
+| `manual-correction`                                                                                                                                          | unchanged (`kind: system`, EARS-28)                                                                                       |
+
+New at the epoch: `accrual.lesson.offline`, `accrual.module.offline`, `accrual.starter-bonus`, `spend.reserve`, `spend.settle`, `spend.release`, `spend.debit`, the eight `setting.*` above and `setting.effect.maxAmount` [500]. Publishing to a retired id answers `points-rule-retired` (422).
+
+### H. Migration path
+
+One new hand-written migration after 0059, forward-only like 0058/0059:
+
+1. A guard `DO` block raises — applying nothing — when `points_postings` has any row or `points_rule_versions` any `version > 1` (EARS-44).
+2. `ALTER TABLE points_rule_versions` adds `kind`, `trigger_fact_types` and the GIN index; creates `points_facts`, `points_prices`, `points_reserves`, `points_obligations` with their triggers; adds the postings index.
+3. Inserts the rows of G with `effective_from` at the epoch and `published_by` null.
+
+The implementation PR declares `Release-requires:` an Issue for a read-only prod pre-check of the guard's two counts before the release that carries the migration. The live `/v1/admin/points/rules/:ruleId/versions` route keeps its path; its body schema becomes B.
+
+### I. Problem codes
+
+| Code                                                                         | Status | Raised by                                                 |
+| ---------------------------------------------------------------------------- | ------ | --------------------------------------------------------- |
+| `points-insufficient-pul`                                                    | 422    | ledger core (EARS-22)                                     |
+| `points-threshold-short`                                                     | 422    | `reserve` (EARS-17), body carries `shortfall`, `earnHint` |
+| `points-reserve-limit`                                                       | 422    | `concurrentOpen` on `reserve` (EARS-21)                   |
+| `points-phone-unverified`                                                    | 422    | `debit` / `reserve` (EARS-5)                              |
+| `points-rule-parameters-invalid`                                             | 422    | publish (amended EARS-25), body carries the field path    |
+| `points-rule-effective-from-past`                                            | 422    | publish                                                   |
+| `points-rule-retired`                                                        | 422    | publish to a retired 0059 id (G)                          |
+| `points-gating-invalid`                                                      | 422    | price list (EARS-26)                                      |
+| `points-starter-bonus-no-rule`                                               | 422    | starter-bonus grant (EARS-43)                             |
+| `points-account-closed`, `points-bre-con-debit`, `points-occurred-at-future` | 422    | ledger core, unchanged (§3, §4)                           |
+
+`points-rule-unknown` (live in 0059's publish route) disappears: any new slug is accepted.
+
+### J. Starter-bonus grant
+
+`POST /v1/admin/points/starter-bonus { registeredBefore, reason }` (admin role):
+
+1. Refuse with `points-starter-bonus-no-rule` unless an active version triggers on `person.starter-bonus-eligible`; refuse `registeredBefore` after now (`points-rule-parameters-invalid`).
+2. Allocate a run id; write the opening `audit_ledger` record (run id, admin `sub`, reason, `registeredBefore`).
+3. Walk doctors with `created_at < registeredBefore` in keyset batches of 500 by user id; skip a closed points account (counted `skipped`); for each doctor call `record(fact)` in its own transaction with `type: person.starter-bonus-eligible`, `eventId: starter-bonus:<personId>`, `attributes: { runId }`.
+4. Write the closing `audit_ledger` record with the counts; answer them.
+
+A run cut short by a timeout or a deploy is resumed by running it again: every already-granted doctor answers `duplicate` on the journal. The shared limit key `welcome` makes the bonus and the registration grant mutually exclusive whichever comes first, and publishing `accrual.starter-bonus` never starts a run (EARS-42).
 
 ## 1. Placement
 
@@ -24,9 +300,6 @@ erDiagram
   points_posting_keys ||--|{ points_postings : "event_id (one fact, its legs)"
   projects ||--o{ points_postings : "project_id"
   organisations ||--o{ points_postings : "attributed_organisation_id"
-  points_gating ||--o{ points_reserves : "price at reserve time"
-  registrations ||--o| points_reserves : "registration_id"
-  points_reserves ||--o| points_obligations : "advance part"
 
   points_accounts {
     uuid id PK
@@ -64,30 +337,12 @@ erDiagram
     timestamptz effective_from
     uuid published_by
   }
-  points_gating {
-    text content_ref PK
-    text mode "open|advance|threshold"
-    integer pul_cost
-    boolean limited_seats
-  }
-  points_reserves {
-    uuid registration_id PK
-    text state "reserved|settled|released"
-    integer price
-    uuid reserve_posting_id FK
-  }
-  points_obligations {
-    uuid id PK
-    uuid person_account_id FK
-    integer opened_amount
-    uuid reserve_registration_id FK
-  }
 ```
 
 - **Accounts.** Unique (`subject_kind`, `subject_id`, `unit`) for subjects; system accounts are keyed by a `system_code` (`issuance`, `reserve`, `sink`, `advance`) — one per unit. `amount` is a positive integer; direction is the debit/credit pair, so a fold is `Σ credits − Σ debits` per (account, denomination).
 - **Event id, leg and dedupe key** (ADR-0016 §6 / design §2.12 as rewritten in this PR). **One domain fact = one `event_id`**: the producer's event id, or a derived fact id for the engine's own facts (`reserve:<registration>`, `settle:<registration>`, `release:<registration>`). A fact may write several postings — a module award in three denominations, a reserve plus an advance, a release reversing both, an accrual plus its obligation settlement — so a posting is unique on (`event_id`, `leg`), where the `leg` names the posting within the fact (denomination + entry kind: `accrual:pul`, `accrual:bre`, `reserve:balance`, `reserve:advance`, `settle:pul`, `release:balance`, `obligation-settle:pul`, …). Postgres requires the partition key in every unique constraint of a partitioned table, which is why `audit_ledger` scopes its `event_id` uniqueness to `(event_id, created_at)` — dedup within one monthly partition, acceptable for an audit trail. For points that is **not** acceptable: a lesson completed in March and replayed by an offline sync in April must still be a duplicate (EARS-4). So global dedupe lives in the non-partitioned **`points_posting_keys (event_id PK, dedupe_key UNIQUE NULLS DISTINCT, occurred_month)`** — **one row per fact**, the dedupe key being the PRD key `<personId>:<contentRef>:<action>` for an accrual fact and null for a spend fact (whose `event_id` alone is its key) — inserted in the same transaction **before** the fact's postings, so the key is known before the rule is evaluated. The postings of one fact share its `occurred_at` and therefore one partition, so the partition-local unique index on (`event_id`, `leg`, `occurred_at`) is effectively (`event_id`, `leg`). This is how the points ledger satisfies ADR-0003 §3; it is the one deliberate departure from the `audit_ledger` template.
 - **Reversal reference.** A reversing posting names the posting it reverses by its full key (`reverses_posting_id`, `reverses_occurred_at`) — a two-column foreign key into `points_postings` (`id`, `occurred_at`). Postgres requires the partition key in every unique key of a partitioned table, so the primary key is (`id`, `occurred_at`) and a foreign key into it must carry both columns; a `CHECK` keeps the pair all-null or all-set.
-- **Derived state tables** (`points_reserves`, `points_obligations`) are projections rebuilt from postings; they hold no amount the postings do not already prove and carry the `audit_row_change()` trigger like `registration_attendance`. A cached balance, if ever needed, is the same kind of rebuildable projection.
+- **Engine tables** — the fact journal, the price list, the hold and obligation projections and the new rule-version columns — are in the production amendment, F. The projections hold no amount the postings and the journal do not already prove and carry the `audit_row_change()` trigger like `registration_attendance`. A cached balance, if ever needed, is the same kind of rebuildable projection.
 
 ## 3. Immutability and partitions
 
@@ -130,25 +385,10 @@ The rule is read before the ledger core runs, because the legs are built from it
 
 ## 5. Reserve lifecycle (EARS-14–21)
 
-```mermaid
-stateDiagram-v2
-  [*] --> decided: RegistrationCreated
-  decided --> none: open / zero price
-  decided --> refused: threshold short / beyond cap / reserve limit
-  decided --> reserved: balance covers
-  decided --> reserved_advance: advance mode, shortfall ≤ cap
-  reserved --> settled: AttendanceConfirmed (share ≥ param)
-  reserved_advance --> settled: AttendanceConfirmed
-  reserved --> released: doctor cancel / event cancel / reschedule / no-show
-  reserved_advance --> released: same — advance posting reversed, obligation annulled
-  settled --> [*]
-  released --> [*]
-```
+A hold is reserved, settled and released by the effects of the seeded rules `spend.reserve`, `spend.settle` and `spend.release` on the registration facts; its state diagram, the legs of each transition, the projections and the no-show sweep are in the production amendment, E.
 
-- **Postings per transition** (each transition is one fact with its own `event_id`, its postings told apart by `leg`). reserve (`reserve:<registration>`): leg `reserve:balance` person→reserve and leg `reserve:advance` advance→reserve (shortfall, opening the obligation); settle (`settle:<registration>`): leg `settle:pul` reserve→sink (full price); release (`release:<registration>`): one reversal leg per reserve-side posting.
-- **No-show.** A scheduled sweep after `EventEnded` + the no-show window [24 h, rule-book parameter `noShow.window`, EARS-18] releases every still-`reserved` registration of that event with reason `no-show`; the sweep is idempotent through the derived `release:<registration>` event id. A late `AttendanceConfirmed` for a released registration finds the `release:` key row, writes no `settle:` fact and accrues only the participation award (EARS-18).
-- **After settle**, the obligation stays open and is netted by later Pul accruals (§4); it is never a negative balance — the read model reports `advance.remaining`, and `pul.available` is the fold of the person account, which no posting takes below zero.
-- **Gating decision** (EARS-13) is a pure function `decide(gating, balance, openObligations, ruleVersion)` in `packages/schemas/src/points/gating.ts` — `shortfall = price − available`, `pulToEarn = shortfall + Σ remaining obligations` (EARS-20 nets new Pul to obligations first), `lessonsNeeded = ceil(pulToEarn / lesson award)` — shared by the read endpoint and the reserve command so the advertised decision and the enforced one cannot diverge. It never takes an attribution argument (EARS-15 invariant).
+- **After settle**, the obligation stays open and is netted by later Pul accruals (EARS-20); it is never a negative balance — the read model reports `advance.remaining`, and `pul.available` is the fold of the person account, which no posting takes below zero.
+- **Gating decision** (EARS-13) is `quote` of a draft `registration.created` on the item (amendment D): the same evaluation the `record` of the sign-up runs, so the advertised decision and the enforced one cannot diverge. `shortfall = price − available`, `pulToEarn = shortfall + Σ remaining obligations` (EARS-20 nets new Pul to obligations first), `lessonsNeeded = ceil(pulToEarn / the Pul credit of the active accrual.lesson version)`. No rule can read an attribution (EARS-15 invariant, EARS-33).
 
 ## 6. Rule book (EARS-25, 26)
 

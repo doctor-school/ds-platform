@@ -143,6 +143,17 @@ export const pointsRuleVersions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    /**
+     * 025 production amendment (0060) — `rule` | `setting` | `system`, so a
+     * reader never parses the body to tell them apart. Nullable: the 0059
+     * rows stay as stored (immutable); every row from 0060 on sets it.
+     */
+    kind: text("kind"),
+    /** The fact types the version triggers on (EARS-3 amended selection); empty for a setting or a 0059 row. */
+    triggerFactTypes: text("trigger_fact_types")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
   },
   (table) => [
     primaryKey({
@@ -150,6 +161,70 @@ export const pointsRuleVersions = pgTable(
       columns: [table.ruleId, table.version],
     }),
     check("points_rule_versions_version_check", sql`${table.version} >= 1`),
+    check(
+      "points_rule_versions_kind_check",
+      sql`${table.kind} IS NULL OR ${table.kind} IN ('rule', 'setting', 'system')`,
+    ),
+    index("points_rule_versions_trigger_fact_types_idx").using(
+      "gin",
+      table.triggerFactTypes,
+    ),
+  ],
+);
+
+/** EARS-40 — the outcomes a journaled fact answered with. */
+export const POINTS_FACT_OUTCOMES = [
+  "applied",
+  "duplicate",
+  "no-effect",
+] as const;
+
+/**
+ * EARS-40 — the fact journal: every accepted fact, once per `event_id`, with
+ * its evaluation trace, written in the transaction of its postings. Not
+ * partitioned — `event_id` must be globally unique (the reason
+ * `points_posting_keys` is not partitioned). Immutable by a trigger in 0060
+ * (an UPDATE changing only `person_id` under the ADR-0009 erasure session
+ * flag `app.points_erasure = 'on'` excepted). Carries only refs and
+ * catalog-declared attributes, never attribution.
+ */
+export const pointsFacts = pgTable(
+  "points_facts",
+  {
+    eventId: text("event_id").primaryKey(),
+    /** A registered fact type (packages/schemas `POINTS_FACT_TYPES`). */
+    type: text("type").notNull(),
+    personId: uuid("person_id").notNull(),
+    /** The catalog entry's ref kind; null for a fact about no ref. */
+    refKind: text("ref_kind"),
+    refId: text("ref_id"),
+    attributes: jsonb("attributes")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    outcome: text("outcome").notNull(),
+    /** Per rule considered: id, version, trigger, condition, validity, limits, stacking, applied ledger event id. */
+    trace: jsonb("trace")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+  },
+  (table) => [
+    check(
+      "points_facts_outcome_check",
+      sql`${table.outcome} IN ('applied', 'duplicate', 'no-effect')`,
+    ),
+    check(
+      "points_facts_ref_check",
+      sql`(${table.refKind} IS NULL) = (${table.refId} IS NULL)`,
+    ),
+    // EARS-45 — a person's journal, newest first.
+    index("points_facts_person_received_idx").on(
+      table.personId,
+      table.receivedAt.desc(),
+    ),
   ],
 );
 
@@ -250,6 +325,12 @@ export const pointsPostings = pgTable(
       table.creditAccountId,
       table.denomination,
     ),
+    // EARS-36 — `countPer` counts a rule's postings to a beneficiary per period.
+    index("points_postings_rule_credit_occurred_idx").on(
+      table.ruleId,
+      table.creditAccountId,
+      table.occurredAt,
+    ),
   ],
 );
 
@@ -257,4 +338,5 @@ export type PointsAccountRow = typeof pointsAccounts.$inferSelect;
 export type PointsPostingKeyRow = typeof pointsPostingKeys.$inferSelect;
 export type PointsRuleVersionRow = typeof pointsRuleVersions.$inferSelect;
 export type PointsPostingRow = typeof pointsPostings.$inferSelect;
+export type PointsFactRow = typeof pointsFacts.$inferSelect;
 export type NewPointsPostingRow = typeof pointsPostings.$inferInsert;

@@ -80,6 +80,8 @@ export class PointsAdminReadService {
         createdAt: row.createdAt.toISOString(),
       });
     }
+    // Code-point order: rule ids are ASCII-only slugs, so this JS sort and
+    // Postgres `ORDER BY rule_id COLLATE "C"` agree.
     const rules = [...byId.values()].sort((a, b) =>
       a.ruleId < b.ruleId ? -1 : a.ruleId > b.ruleId ? 1 : 0,
     );

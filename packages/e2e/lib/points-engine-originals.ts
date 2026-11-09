@@ -24,10 +24,14 @@ export interface EngineResult {
 interface Engine {
   record(fact: EngineFact): Promise<EngineResult>;
 }
+interface Ledger {
+  close(personId: string, at: Date): Promise<{ closedAt: Date | null }>;
+}
 type Constructor<T> = new (...args: unknown[]) => T;
 export interface PointsWorld {
   handle: DrizzleHandle;
   engine: Engine;
+  ledger: Ledger;
   personId: string;
   lessonId: string;
   facts: EngineFact[];
@@ -35,6 +39,9 @@ export interface PointsWorld {
   result?: EngineResult;
   refused?: unknown;
   before?: unknown[];
+  answers: EngineResult[];
+  postingSnapshot?: unknown[];
+  journalSnapshot?: unknown[];
 }
 
 export function pointsOperation(command: string): void {
@@ -53,13 +60,13 @@ export async function startPointsWorld(): Promise<PointsWorld> {
     !connection ||
     !database ||
     !(
-      database === "ds_dev_3876" ||
+      database === "ds_dev_3878" ||
       (process.env.CI === "true" && database === "ds_test")
     ) ||
     decodeURIComponent(new URL(connection).pathname.slice(1)) !== database
   ) {
     throw new Error(
-      "025 originals require the explicitly owned #3876 database (or CI ds_test)",
+      "025 originals require the explicitly owned #3878 database (or CI ds_test)",
     );
   }
   pointsOperation(`CONNECT ${database}`);
@@ -85,7 +92,7 @@ export async function startPointsWorld(): Promise<PointsWorld> {
       import(pathToFileURL(resolve(root, path)).href);
     const { PointsLedgerService } = (await load(
       "apps/api/dist/points/points-ledger.service.js",
-    )) as { PointsLedgerService: Constructor<unknown> };
+    )) as { PointsLedgerService: Constructor<Ledger> };
     const { RuleBookService } = (await load(
       "apps/api/dist/points/rule-book.service.js",
     )) as { RuleBookService: Constructor<unknown> };
@@ -95,19 +102,22 @@ export async function startPointsWorld(): Promise<PointsWorld> {
     const { PointsEngine } = (await load(
       "apps/api/dist/points/engine/points-engine.service.js",
     )) as { PointsEngine: Constructor<Engine> };
+    const ledger = new PointsLedgerService(handle.db);
     const engine = new PointsEngine(
       handle.db,
       new RuleBookService(handle.db),
-      new PointsLedgerService(handle.db),
+      ledger,
       new PointsEventsPublisher(),
     );
     return {
       handle,
       engine,
+      ledger,
       personId: randomUUID(),
       lessonId: randomUUID(),
       facts: [],
       seedVersions: new Map(),
+      answers: [],
     };
   } catch (error) {
     await handle.pool.end();

@@ -22,12 +22,14 @@ import { expectSlotSectionMatchesCanvas } from "@ds/e2e/canvas-slots";
  * Not compared (every other section the canvas labels):
  * - «d-event · блок записи» in «прошло» — the canvas turns it into a «К записи ↓»
  *   jump link the app does not build (no such control in `@ds/event-page`);
- *   a deviation for #3829, not compared until decided.
+ *   the fix is tracked in #3846.
  * - «d-event · прошло · нижний CTA» («Войти ↗») — the app renders no closing
- *   CTA band on a past event (`@ds/event-page` builds none); same.
+ *   CTA band on a past event (`@ds/event-page` builds none); the fix is
+ *   tracked in #3846.
  * - «d-event · после события» (rating, «Отправить отзыв», «Зашла / Не зашла»)
  *   — the canvas draws the post-event feedback form for a guest on «прошло»;
- *   the app builds no such form; same.
+ *   the app builds no such form, a deliberate wave-2 deferral (#1784,
+ *   020 EARS-16).
  * - «d-event · открытая часть», «d-event · связи», «d-event · прошло ·
  *   таймкоды» — program, speaker cards, partner rows, school / expert links
  *   and chapter buttons are drawn from the canvas's sample event (the

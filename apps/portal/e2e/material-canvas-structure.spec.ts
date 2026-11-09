@@ -12,7 +12,9 @@ import { expectSlotSectionMatchesCanvas } from "@ds/e2e/canvas-slots";
  * over its sample `blocks`. The body is the material's data, so its links are
  * compared as shapes, never as labels or counts. The canvas draws its long
  * body (`length` «длинный»): it carries every block shape the editor allows,
- * a paragraph with one link among them, which the golden body also holds.
+ * and its blocks read as shapes `[]` (no link) and `[link]` (one link, in a
+ * paragraph). The golden body's blocks read as the same two shapes: its one
+ * link sits in a list item, and a list block is one card.
  *
  * Live-stand tier (`live/academy/default`): the page reads
  * `GET /v1/public/materials/{slug}` from the api, which no CI double serves; a

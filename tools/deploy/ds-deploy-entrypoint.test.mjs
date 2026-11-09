@@ -1051,6 +1051,75 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     );
   });
 
+  // #3822: the data-prod compose env data-env wrote describes the running containers;
+  // a ship keeps it until the release's data-prod-env phase rewrites it.
+  const COMPOSE_REL = "infra/deploy/compose/data-prod";
+  const GENERATED = { ".env": "VPC_IP=192.168.0.10\n", ".postgres-artifacts.json": '{"services":{}}\n' };
+  const composeTree = (extra = []) =>
+    shipped([
+      { name: "ds-platform/infra/", type: "5" },
+      { name: "ds-platform/infra/deploy/", type: "5" },
+      { name: "ds-platform/infra/deploy/compose/", type: "5" },
+      { name: `ds-platform/${COMPOSE_REL}/`, type: "5" },
+      { name: `ds-platform/${COMPOSE_REL}/compose.yml`, body: "services: {}\n" },
+      ...extra,
+    ]);
+  const liveGenerated = () => {
+    const compose = join(tree(), COMPOSE_REL);
+    mkdirSync(compose, { recursive: true });
+    for (const [name, body] of Object.entries(GENERATED)) {
+      writeFileSync(join(compose, name), body);
+      chmodSync(join(compose, name), 0o600);
+    }
+    return compose;
+  };
+
+  it("3822: ship carries the live tree's generated data-prod compose env into the new tree, byte-equal, same mode", () => {
+    setRole("data");
+    liveGenerated();
+    const r = run(`ship ${SHA}`, { input: composeTree() });
+    assert.equal(r.status, 0, String(r.stderr));
+    const compose = join(tree(), COMPOSE_REL);
+    assert.equal(readFileSync(join(compose, "compose.yml"), "utf8"), "services: {}\n", "the new tree is live");
+    for (const [name, body] of Object.entries(GENERATED)) {
+      assert.equal(readFileSync(join(compose, name), "utf8"), body, name);
+      assert.equal(statSync(join(compose, name)).mode & 0o777, 0o600, `${name} mode`);
+    }
+  });
+
+  it("3822: a first ship (no live tree) succeeds and carries nothing", () => {
+    setRole("data");
+    mkdirSync(join(root, "home/deploy"), { recursive: true });
+    const r = run(`ship ${SHA}`, { input: composeTree() });
+    assert.equal(r.status, 0, String(r.stderr));
+    for (const name of Object.keys(GENERATED)) {
+      assert.equal(existsSync(join(tree(), COMPOSE_REL, name)), false, name);
+    }
+  });
+
+  it("3822: ship refuses a tree without the data-prod compose directory while the live env exists, keeping the live tree", () => {
+    setRole("data");
+    const compose = liveGenerated();
+    const r = run(`ship ${SHA}`, { input: shipped([{ name: "ds-platform/infra/", type: "5" }]) });
+    assert.equal(r.status, 3, String(r.stderr));
+    for (const [name, body] of Object.entries(GENERATED)) {
+      assert.equal(readFileSync(join(compose, name), "utf8"), body, `${name} intact`);
+    }
+  });
+
+  for (const name of Object.keys(GENERATED)) {
+    it(`3822: ship refuses a tree that carries its own ${name}, keeping the live tree's`, () => {
+      setRole("data");
+      const compose = liveGenerated();
+      const r = run(`ship ${SHA}`, {
+        input: composeTree([{ name: `ds-platform/${COMPOSE_REL}/${name}`, body: "VPC_IP=10.9.9.9\n" }]),
+      });
+      assert.equal(r.status, 3, String(r.stderr));
+      assert.equal(readFileSync(join(compose, name), "utf8"), GENERATED[name], "live file intact");
+      assert.equal(existsSync(join(compose, "compose.yml")), false, "the live tree was not swapped");
+    });
+  }
+
   for (const [what, entries] of [
     ["a link outside the tree", [{ name: "ds-platform/x", type: "2", link: "../../etc/passwd" }]],
     ["an absolute link", [{ name: "ds-platform/x", type: "2", link: "/etc/passwd" }]],

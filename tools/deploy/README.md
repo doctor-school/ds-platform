@@ -639,7 +639,7 @@ stay on the operator path above.
   converged box prints `nothing to change`. The workstation path never converges. No owner
   server step is in the path.
   **Migration rehearsal (#3648)** — phase `rehearse`, right after `install`, its
-  converges and `data-prod-env` (which only rewrites the compose env `ship` dropped — the
+  converges and `data-prod-env` (which only rewrites the compose env `ship` carried from the previous tree — the
   gate's live read is a `docker compose exec`) and before `data-prod-up`, in a release only (a redeploy and a rollback apply
   no migration and rehearse nothing; tech spec §5 «Migration rehearsal.» → «Release gate.»).
   `lib/rehearsal-gate.mjs` builds the target tree's migration archive (`drizzle/<tag>.sql`

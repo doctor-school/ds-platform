@@ -2220,7 +2220,7 @@ jobs:
           login_pid=$!
           trap 'kill "$portal_pid" "$login_pid"' EXIT
           for i in $(seq 1 60); do
-            if curl -fsS http://localhost:3005/login >/dev/null 2>&1; then break; fi
+            if curl -fsS http://localhost:3005/healthz >/dev/null 2>&1; then break; fi
             if [ "$i" = 60 ]; then cat "$RUNNER_TEMP/recording-attachment/login.log"; exit 1; fi
             sleep 2
           done

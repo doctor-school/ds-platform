@@ -23,8 +23,11 @@
 # Requires: bash, curl, jq. Run it on Linux/macOS (the prod box, CI, a
 # container) — NOT from a Windows-native jq: Windows argv conversion mangles
 # the non-ASCII message texts in steps 8.bis/8.quinquies (Cyrillic -> `?`, em-dash ->
-# an invalid-UTF-8 byte), silently corrupting the stored copy (proven live,
-# #877 — a Windows run wrote `?`-mangled verifysmsotp/ru until restored).
+# an invalid-UTF-8 byte), and Zitadel stores the mangled copy without complaint
+# (#877 verifysmsotp/ru, #3595 passwordreset/ru). Request bodies therefore reach
+# curl on stdin (api()), a shell whose jq mangles non-ASCII arguments is refused
+# by the non-ASCII pre-flight before any write (exit 4), and every message-text
+# write is read back and compared with its source (put_message_text).
 #
 # Regression note (#897): an empty Caddy vhost on the IdP origin answers EVERY
 # path 200-with-an-empty-body, which made each api_idempotent step report
@@ -100,6 +103,23 @@ BASE_URL="${BASE_URL%/}"
 for bin in curl jq; do
   command -v "$bin" >/dev/null || { echo "missing dependency: $bin" >&2; exit 3; }
 done
+
+# ── pre-flight: non-ASCII round-trip (#3595, fail-closed) ────────────────────
+# The message texts (steps 8.bis/8.quinquies) are Cyrillic with em-dashes and
+# reach the API through `jq --arg`. A shell that converts argv to a legacy code
+# page (Windows-native jq) turns them into `?` and Zitadel stores that silently
+# (#877, #3595). Round-trip a sample through the same path and refuse to run on
+# any byte difference — before the first Admin API call, so nothing is written.
+_NONASCII_SAMPLE='Здравствуйте — код для входа'
+_nonascii_json="$(jq -njc --arg t "$_NONASCII_SAMPLE" '{text:$t}' 2>/dev/null || true)"
+_nonascii_back="$(jq -j '.text' <<< "$_nonascii_json" 2>/dev/null || true)"
+if [[ "$_nonascii_json" != "{\"text\":\"${_NONASCII_SAMPLE}\"}" || "$_nonascii_back" != "$_NONASCII_SAMPLE" ]]; then
+  echo "FATAL: this shell mangles non-ASCII text on its way through jq (sample" >&2
+  echo "  '${_NONASCII_SAMPLE}' came back as '${_nonascii_back}'); the message texts" >&2
+  echo "  would be stored corrupted (#877, #3595). Run provision.sh from Linux/macOS" >&2
+  echo "  (the prod box, CI, a container, WSL) — not with a Windows-native jq." >&2
+  exit 4
+fi
 
 # ── pre-flight: delivery-mode ↔ creds coherence (#902, fail-closed) ──────────
 # Validated BEFORE any provisioning step so a misconfigured real mode aborts
@@ -250,19 +270,23 @@ storefront_client_payload() {
 
 # ── http helper ──────────────────────────────────────────────────────────────
 # api <METHOD> <PATH> [json-body]  ->  prints response body, fails on non-2xx
+# The body goes to curl on stdin, never as an argument: a native Windows curl
+# receives its argv through the ANSI code page, which turned every Cyrillic
+# character of a message text into `?` before it left the machine (#3595).
 api() {
   local method="$1" path="$2" body="${3:-}" resp code grpc_code
-  local timeout_args=()
+  local timeout_args=() data_args=()
   if [[ -n "${SMTP_DEADLINE:-}" ]]; then
     local remaining=$((SMTP_DEADLINE - SECONDS))
     (( remaining > 0 )) || return 1
     (( remaining > 5 )) && remaining=5
     timeout_args=(--max-time "$remaining")
   fi
-  resp="$(curl -sS "${timeout_args[@]}" -w $'\n%{http_code}' -X "$method" "${BASE_URL}${path}" \
+  [[ -n "$body" ]] && data_args=(--data-binary @-)
+  resp="$(printf '%s' "$body" | curl -sS "${timeout_args[@]}" -w $'\n%{http_code}' -X "$method" "${BASE_URL}${path}" \
     -H "Authorization: Bearer ${PAT_VALUE}" \
     -H "Content-Type: application/json" \
-    ${body:+-d "$body"})" || return 1
+    "${data_args[@]}")" || return 1
   code="${resp##*$'\n'}"
   body="${resp%$'\n'*}"
   if [[ "$code" -lt 200 || "$code" -ge 300 ]]; then
@@ -336,6 +360,42 @@ api_activate() {
   fi
   cat /tmp/.idperr >&2
   return 1
+}
+
+# put_message_text <type> <lang> <label> <field> <value> [<field> <value>...]
+# The one write path of the custom message texts (steps 8.bis/8.quinquies).
+# Zitadel stores whatever bytes arrive — a mangled run (#877, #3595) was
+# reported «ensured» while the stored copy read `?`. So every write is read
+# back and each field it sets is compared, in bash, with the source string;
+# a difference fails the run. The read-back re-reads while the asynchronous
+# read model still serves the previous row (as in 8.octies), then fails closed.
+put_message_text() {
+  local type="$1" lang="$2" label="$3" path body live got f v i deadline mismatch
+  path="/admin/v1/text/message/${type}/${lang}"
+  shift 3
+  local -a fields=("$@")
+  body='{}'
+  for (( i = 0; i < ${#fields[@]}; i += 2 )); do
+    body="$(jq -c --arg k "${fields[i]}" --arg v "${fields[i+1]}" '. + {($k): $v}' <<< "$body")"
+  done
+  api_idempotent PUT "$path" "$body" >/dev/null
+  deadline=$((SECONDS + 30))
+  while :; do
+    live="$(api GET "$path")"
+    mismatch=""
+    for (( i = 0; i < ${#fields[@]}; i += 2 )); do
+      f="${fields[i]}" v="${fields[i+1]}"
+      got="$(jq -j --arg k "$f" '.customText[$k] // ""' <<< "$live")"
+      [[ "$got" == "$v" ]] || mismatch+=" ${f}"
+    done
+    [[ -z "$mismatch" ]] && break
+    if (( SECONDS >= deadline )); then
+      echo "FATAL: message text ${type}/${lang} read-back differs from the source after 30s in field(s):${mismatch} — the stored copy is not what provision.sh sent (#3595); restore it from a Linux/macOS shell" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+  echo "ensured ${type}/${lang} ${label} (read-back ok)" >&2
 }
 
 echo "Provisioning Zitadel OIDC at ${BASE_URL}" >&2
@@ -1070,12 +1130,8 @@ fi
 # Optional log-cleanup tracked in #230.
 RU_SMS_OTP_TEXT='Doctor.School: код для входа - {{.OTP}}, никому его не сообщайте'
 EN_SMS_OTP_TEXT='Doctor.School: your sign-in code is {{.OTP}}, do not share it with anyone'
-api_idempotent PUT /admin/v1/text/message/verifysmsotp/ru \
-  "$(jq -nc --arg t "$RU_SMS_OTP_TEXT" '{text:$t}')" >/dev/null \
-  && echo "ensured verifysmsotp/ru branded SMS OTP text" >&2
-api_idempotent PUT /admin/v1/text/message/verifysmsotp/en \
-  "$(jq -nc --arg t "$EN_SMS_OTP_TEXT" '{text:$t}')" >/dev/null \
-  && echo "ensured verifysmsotp/en branded SMS OTP text" >&2
+put_message_text verifysmsotp ru "branded SMS OTP text" text "$RU_SMS_OTP_TEXT"
+put_message_text verifysmsotp en "branded SMS OTP text" text "$EN_SMS_OTP_TEXT"
 
 # ── 8.quater. disable PUBLIC self-registration on the default login policy (#877) ─
 # Product registration is HEADLESS: the api BFF creates users via the Management
@@ -1191,18 +1247,14 @@ EN_LOGIN_OTP_PREHEADER='Enter the code on the Doctor.School sign-in page'
 EN_LOGIN_OTP_GREETING='Hello!'
 EN_LOGIN_OTP_TEXT='Your Doctor.School sign-in code:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{.OTP}}</strong></span><br><br>Enter it on the sign-in page you requested the code from. The code is valid for 5 minutes.<br><br>If you did not request a sign-in, please ignore this email.'
 EN_LOGIN_OTP_BUTTON='Open the sign-in page'
-api_idempotent PUT /admin/v1/text/message/verifyemailotp/ru \
-  "$(jq -nc --arg s "$RU_LOGIN_OTP_SUBJECT" --arg ti "$RU_LOGIN_OTP_TITLE" \
-        --arg p "$RU_LOGIN_OTP_PREHEADER" --arg g "$RU_LOGIN_OTP_GREETING" \
-        --arg t "$RU_LOGIN_OTP_TEXT" --arg b "$RU_LOGIN_OTP_BUTTON" \
-        '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
-  && echo "ensured verifyemailotp/ru code-only branded login-OTP email" >&2
-api_idempotent PUT /admin/v1/text/message/verifyemailotp/en \
-  "$(jq -nc --arg s "$EN_LOGIN_OTP_SUBJECT" --arg ti "$EN_LOGIN_OTP_TITLE" \
-        --arg p "$EN_LOGIN_OTP_PREHEADER" --arg g "$EN_LOGIN_OTP_GREETING" \
-        --arg t "$EN_LOGIN_OTP_TEXT" --arg b "$EN_LOGIN_OTP_BUTTON" \
-        '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
-  && echo "ensured verifyemailotp/en code-only branded login-OTP email" >&2
+put_message_text verifyemailotp ru "code-only branded login-OTP email" \
+  subject "$RU_LOGIN_OTP_SUBJECT" title "$RU_LOGIN_OTP_TITLE" \
+  preHeader "$RU_LOGIN_OTP_PREHEADER" greeting "$RU_LOGIN_OTP_GREETING" \
+  text "$RU_LOGIN_OTP_TEXT" buttonText "$RU_LOGIN_OTP_BUTTON"
+put_message_text verifyemailotp en "code-only branded login-OTP email" \
+  subject "$EN_LOGIN_OTP_SUBJECT" title "$EN_LOGIN_OTP_TITLE" \
+  preHeader "$EN_LOGIN_OTP_PREHEADER" greeting "$EN_LOGIN_OTP_GREETING" \
+  text "$EN_LOGIN_OTP_TEXT" buttonText "$EN_LOGIN_OTP_BUTTON"
 
 # (b) the dormant `init` type — MINIMAL override: only the greeting is
 # neutralized (the bundled ru/en bodies carry no {{.DisplayName}} — verified
@@ -1219,12 +1271,8 @@ api_idempotent PUT /admin/v1/text/message/verifyemailotp/en \
 # carries the greeting-free SMS body, so the greeting override is not needed.
 RU_VERIFY_PHONE_TEXT='Doctor.School: код подтверждения номера - {{.Code}}, никому его не сообщайте'
 EN_VERIFY_PHONE_TEXT='Doctor.School: your phone confirmation code is {{.Code}}, do not share it with anyone'
-api_idempotent PUT /admin/v1/text/message/verifyphone/ru \
-  "$(jq -nc --arg t "$RU_VERIFY_PHONE_TEXT" '{text:$t}')" >/dev/null \
-  && echo "ensured verifyphone/ru branded phone confirmation text" >&2
-api_idempotent PUT /admin/v1/text/message/verifyphone/en \
-  "$(jq -nc --arg t "$EN_VERIFY_PHONE_TEXT" '{text:$t}')" >/dev/null \
-  && echo "ensured verifyphone/en branded phone confirmation text" >&2
+put_message_text verifyphone ru "branded phone confirmation text" text "$RU_VERIFY_PHONE_TEXT"
+put_message_text verifyphone en "branded phone confirmation text" text "$EN_VERIFY_PHONE_TEXT"
 # `passwordreset` SMS text — 003 EARS-53 (#2449): a reset requested with a
 # confirmed phone is sent by Zitadel's notifier (`sendLink` with
 # NOTIFICATION_TYPE_SMS) and the SMS carries this type's `text`. Branded like
@@ -1235,19 +1283,11 @@ api_idempotent PUT /admin/v1/text/message/verifyphone/en \
 # must revisit it (003-design → Provisioning).
 RU_PASSWORD_RESET_SMS_TEXT='Doctor.School: код для сброса пароля - {{.Code}}, никому его не сообщайте'
 EN_PASSWORD_RESET_SMS_TEXT='Doctor.School: your password reset code is {{.Code}}, do not share it with anyone'
-api_idempotent PUT /admin/v1/text/message/passwordreset/ru \
-  "$(jq -nc --arg t "$RU_PASSWORD_RESET_SMS_TEXT" '{text:$t}')" >/dev/null \
-  && echo "ensured passwordreset/ru branded reset SMS text" >&2
-api_idempotent PUT /admin/v1/text/message/passwordreset/en \
-  "$(jq -nc --arg t "$EN_PASSWORD_RESET_SMS_TEXT" '{text:$t}')" >/dev/null \
-  && echo "ensured passwordreset/en branded reset SMS text" >&2
+put_message_text passwordreset ru "branded reset SMS text" text "$RU_PASSWORD_RESET_SMS_TEXT"
+put_message_text passwordreset en "branded reset SMS text" text "$EN_PASSWORD_RESET_SMS_TEXT"
 for _mt in init; do
-  api_idempotent PUT "/admin/v1/text/message/${_mt}/ru" \
-    '{"greeting":"Здравствуйте!"}' >/dev/null \
-    && echo "ensured ${_mt}/ru neutral greeting" >&2
-  api_idempotent PUT "/admin/v1/text/message/${_mt}/en" \
-    '{"greeting":"Hello!"}' >/dev/null \
-    && echo "ensured ${_mt}/en neutral greeting" >&2
+  put_message_text "$_mt" ru "neutral greeting" greeting 'Здравствуйте!'
+  put_message_text "$_mt" en "neutral greeting" greeting 'Hello!'
 done
 
 # (c) password-change notice — SUPPRESS at the notification-policy level, not via

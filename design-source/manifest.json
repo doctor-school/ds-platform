@@ -94,11 +94,11 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "account-profile.dc.html": {
-      "sha256": "7513a53f75b51e051eb7f29917e09f78785229decd9c5fdbfd30e2cfbcc62311",
-      "pulledSha256": "c1fc281a743643a1efdf92bc17c4bdbf595aa6d37cca572c96155d64a0f0c876",
-      "pulledAt": "2026-10-20T06:31:04.389Z",
+      "sha256": "f495d3cab15de908e76cebffbbbb9acdb383c7b1f884605292368c7e213dc198",
+      "pulledSha256": "8dbb3466e3944322562c2272f8d2865c7d198a2001410c20abb30e8431f29981",
+      "pulledAt": "2026-11-09T07:49:55.391Z",
       "remotePath": "account-profile.dc.html",
-      "note": "#3078: owner redraw 2026-10-20 — host prop (Академия | витрина врача) drives ds-shell; doctor-only «Мои заявки на Конгресс» row (congress switch), 046 EARS-4"
+      "note": "#3848: password-reset helper «ссылку» → «код для сброса пароля» (003 One code kind, owner decision #2636); host prop + doctor-only congress row from the #3078 redraw"
     },
     "archive/archive-auth-v1.dc.html": {
       "sha256": "1bdd6860724481d8461e0c72c21f84076ba24d7cc627e3664b420749d2337def",

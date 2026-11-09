@@ -2128,7 +2128,25 @@ jobs:
       - name: Install the Playwright browser
         id: pw-install
         run: pnpm --filter @ds/admin exec playwright install --with-deps chromium
+      - name: Admin spec-owned registry originals
+        env:
+          E2E_REGISTRY_CONTRACTS_DATABASE: ds_admin_e2e
+          E2E_REGISTRY_CONTRACTS_LOG: ${{ runner.temp }}/registry-contracts/stand-ops.jsonl
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/registry-contracts/results.json
+        run: |
+          mkdir "$RUNNER_TEMP/registry-contracts"
+          pnpm --filter @ds/admin test:e2e --project registry-contracts --reporter=list,json
+          pnpm --filter @ds/e2e exec tsx api-probes/assert-registry-report.ts "$PLAYWRIGHT_JSON_OUTPUT_NAME"
+      - name: Upload registry original receipts
+        if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: registry-contracts-originals
+          path: ${{ runner.temp }}/registry-contracts
+          if-no-files-found: error
+          retention-days: 7
       - name: Admin flows tier
+        if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
         run: pnpm --filter @ds/admin test:flows
       - name: Admin spec-owned taxonomy journeys
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}

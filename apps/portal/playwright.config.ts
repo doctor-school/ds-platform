@@ -107,7 +107,8 @@ const GOLDEN_ACCOUNT_SPECS = [
  * #2996 event-page specs theirs (`playwright.event-page.config.ts`). #3172:
  * the sign-in entry spec reads the internal-API double's transaction log, so
  * it runs only on the backend-free tier (`playwright.ci.config.ts`); so does
- * the 003 EARS-72 refusal-page spec (#3379), which drives the same double.
+ * the 003 EARS-72 refusal-page spec (#3379), which drives the same double,
+ * and its canvas-structure check (#3829).
  */
 const OWN_CONFIG_SPECS = [
   /a11y\//,
@@ -116,6 +117,7 @@ const OWN_CONFIG_SPECS = [
   /event-page-020\.e2e\.spec\.ts/,
   /storefront-entry\.e2e\.spec\.ts/,
   /storefront-entry-refusal\.e2e\.spec\.ts/,
+  /refusal-canvas-structure\.e2e\.spec\.ts/,
   /webinar-archive\.spec\.ts/,
 ];
 

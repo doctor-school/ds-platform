@@ -328,12 +328,25 @@ test("EARS-12: files a job reads outside its dependency closure run that job", (
     "design-source/academy-material.dc.html",
     "design-source/events-feed.dc.html",
     "design-source/events-feed-kit.js",
-    "design-source/sign-in-refusal.dc.html",
     "design-source/unit-feed-card.dc.html",
     "design-source/unit-project-card.dc.html",
     "design-source/unit-content-card.dc.html",
   ])
     assert.deepEqual(running(pr([file])), ["playwright-axe-doctor"], file);
+  // #3829 — the Academy page canvas checks read the documents-list, document
+  // and refusal canvases (the doctor tier reads the latter two as well).
+  assert.deepEqual(running(pr(["design-source/academy-docs.dc.html"])), [
+    "playwright-axe-portal",
+  ]);
+  for (const file of [
+    "design-source/document.dc.html",
+    "design-source/sign-in-refusal.dc.html",
+  ])
+    assert.deepEqual(
+      running(pr([file])),
+      ["playwright-axe-doctor", "playwright-axe-portal"],
+      file,
+    );
 });
 
 test("EARS-13: a HEAVY_JOBS package missing from the workspace throws (the caller fails open)", () => {

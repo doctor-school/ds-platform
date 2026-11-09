@@ -113,10 +113,16 @@ export const HEAVY_JOBS = {
   "playwright-axe-portal": {
     packages: ["@ds/portal"],
     // apps/portal/e2e/header-canvas-structure.e2e.spec.ts (#3682) reads the
-    // canvas, rendered by the vendored DC runtime design-source/support.js (#3793).
+    // canvas, rendered by the vendored DC runtime design-source/support.js (#3793);
+    // documents- and refusal-canvas-structure.e2e.spec.ts (#3829) read the
+    // Academy documents-list, document page and refusal page canvases (each
+    // dc-imports ds-shell; the refusal canvas loads the DS bundle).
     extraInputs: [
       /^design-source\/ds-shell\.dc\.html$/,
       /^design-source\/support\.js$/,
+      /^design-source\/academy-docs\.dc\.html$/,
+      /^design-source\/document\.dc\.html$/,
+      /^design-source\/sign-in-refusal\.dc\.html$/,
     ],
   },
   "standalone-boot": {

@@ -6,6 +6,8 @@ import {
   resolveRoomChatConfig,
   type RoomChatConfig,
 } from "./chat.gateway.js";
+import { PointsModule } from "../points/points.module.js";
+import { AttendanceFactsProducer } from "./attendance-facts.producer.js";
 import { PresenceDerivationService } from "./presence-derivation.service.js";
 import { PresencePublisher } from "./presence-publisher.service.js";
 import { PresenceRepository } from "./presence.repository.js";
@@ -54,7 +56,9 @@ import {
  * the `2 × N` freshness grace adds no sponsor minutes.
  */
 @Module({
-  imports: [RegistrationModule],
+  // 025 EARS-9 (#3845): the room reports attendance at the event's end
+  // through `PointsEngine.record` ({@link AttendanceFactsProducer}).
+  imports: [RegistrationModule, PointsModule],
   controllers: [RoomController],
   providers: [
     RoomService,
@@ -62,6 +66,7 @@ import {
     PresenceRepository,
     PresenceDerivationService,
     PresencePublisher,
+    AttendanceFactsProducer,
     CentrifugoChatGateway,
     {
       provide: ROOM_HEARTBEAT_INTERVAL_SECONDS,
@@ -77,10 +82,13 @@ import {
   // uses, so both surfaces can never disagree about how many colleagues are in
   // the room. 006 EARS-19 (#2911): `PresencePublisher` too, so an edit of the
   // event's «Показывать зрителям число участников» setting re-publishes the live
-  // count to the audience the new value names. Nothing else is exported.
+  // count to the audience the new value names. 025 EARS-9 (#3845):
+  // `AttendanceFactsProducer`, run by the event's end in 007 `CloseRoom`.
+  // Nothing else is exported.
   exports: [
     PresenceRepository,
     PresencePublisher,
+    AttendanceFactsProducer,
     ROOM_HEARTBEAT_INTERVAL_SECONDS,
   ],
 })

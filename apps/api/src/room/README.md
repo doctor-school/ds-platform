@@ -160,7 +160,14 @@ evaluates the resource-scoped rule and refuses server-side. See
 
 - `RoomModule` — the Nest module (controller + service + repositories + the
   `ROOM_HEARTBEAT_INTERVAL_SECONDS` config binding). Imports `RegistrationModule`
-  (the 005 `EventRoster` read).
+  (the 005 `EventRoster` read) and `PointsModule` (025 `PointsEngine.record`).
+- `AttendanceFactsProducer` — 025 EARS-9 (#3845): `recordEventEnd(tx, event)`
+  reports one `attendance.confirmed` per doctor with presence when the event
+  ends, inside the end's transaction (`PresenceRepository.attendanceAtEnd` —
+  the same N-bucket minutes as EARS-5 plus the doctor's active registration);
+  share over the scheduled `duration_min`, floored and clamped 0…100; returns
+  the after-COMMIT publish. Run by 007 `CloseRoom`; it reports facts only, the
+  seeded rule decides the award.
 - `RoomService` — the admission gate (`admit`, reused by both operations),
   `roomConfig(idOrSlug, sub)` issuing the `RoomConfig` grant, and
   `recordHeartbeat(idOrSlug, sub)` appending one beat + returning the ack. Domain

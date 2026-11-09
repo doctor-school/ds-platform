@@ -98,6 +98,11 @@ export default defineConfig({
     // #3682: the header-vs-canvas structure check reads `/documents`, which
     // renders the shared chrome with no backend.
     /[\\/]e2e[\\/]header-canvas-structure\.e2e\.spec\.ts$/,
+    // #3829: the documents pages and the refusal page against their page
+    // canvases — the same hermetic surfaces `documents.spec.ts` and
+    // `storefront-entry-refusal.e2e.spec.ts` read.
+    /[\\/]e2e[\\/]documents-canvas-structure\.e2e\.spec\.ts$/,
+    /[\\/]e2e[\\/]refusal-canvas-structure\.e2e\.spec\.ts$/,
     // #2478: the not-found page, guest and signed in, against the session double.
     /[\\/]e2e[\\/]not-found\.e2e\.spec\.ts$/,
   ],

@@ -7,6 +7,7 @@ import {
 } from "@ds/db";
 import { DRIZZLE_DB } from "../../database/database.tokens.js";
 import { loadEnv } from "../../config/env.schema.js";
+import { normalizeSignInIdentifier } from "../idp/idp.types.js";
 import type { AuthAuditEvent, AuthAuditLog } from "./auth-audit.types.js";
 
 type Db = DrizzleHandle["db"];
@@ -16,7 +17,8 @@ type Db = DrizzleHandle["db"];
  * DB-gated e2e suite runs without provisioning a secret. Never reached in any
  * non-test runtime — the writer fails closed there when no real pepper is set.
  */
-export const TEST_FALLBACK_PEPPER = "test-only-insecure-audit-identifier-pepper";
+export const TEST_FALLBACK_PEPPER =
+  "test-only-insecure-audit-identifier-pepper";
 
 /**
  * 011 EARS-9 tier discriminator. The admin tier shares the canonical
@@ -31,7 +33,10 @@ export const ADMIN_TIER = "admin";
  * Mask a raw identifier (email / phone) for the ledger (ADR-0001 §7, ADR-0003
  * §6): the `auth.login.failure` / `auth.password.reset_requested` /
  * `auth.otp.sent` rows record an `identifier_hash`, never the raw PD. The mask is
- * a keyed **HMAC-SHA256** over the lowercased identifier: a bare digest over a
+ * a keyed **HMAC-SHA256** over the normalized sign-in identifier
+ * ({@link normalizeSignInIdentifier}: trimmed, NFKC, lower-cased — the spelling
+ * the sign-in path and the EARS-13 per-user window key on), so every variant
+ * spelling of one account lands on one `identifier_hash`. A bare digest over a
  * low-entropy identifier space is a reproducible existence oracle (a rainbow
  * table over a phone range), so without the server-side `pepper` the masked value
  * is not reproducible. The pepper is threaded in explicitly (resolved once in the
@@ -39,7 +44,7 @@ export const ADMIN_TIER = "admin";
  */
 export function hashIdentifier(identifier: string, pepper: string): string {
   return createHmac("sha256", pepper)
-    .update(identifier.toLowerCase())
+    .update(normalizeSignInIdentifier(identifier))
     .digest("hex");
 }
 

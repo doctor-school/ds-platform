@@ -33,6 +33,24 @@ describe("hashIdentifier (#141 keyed HMAC pepper)", () => {
     expect(hashIdentifier("User@Example.com", pepper)).toBe(expected);
   });
 
+  it("gives ONE hash for the whitespace, case and NFKC variants of one address — the sign-in spelling (#3555)", () => {
+    const plain = hashIdentifier("doctor@example.com", pepper);
+    expect(hashIdentifier(" Doctor@Example.COM ", pepper)).toBe(plain);
+    expect(hashIdentifier("ｄｏｃｔｏｒ@example.com", pepper)).toBe(plain);
+  });
+
+  it("hashes a phone with surrounding whitespace like the trimmed phone (#3555)", () => {
+    expect(hashIdentifier("  +79991234567\t", pepper)).toBe(
+      hashIdentifier("+79991234567", pepper),
+    );
+  });
+
+  it("still DIFFERS for two different identifiers under one pepper", () => {
+    expect(hashIdentifier("doctor@example.com", pepper)).not.toBe(
+      hashIdentifier("other@example.com", pepper),
+    );
+  });
+
   it("DIFFERS for two different peppers on the same identifier (non-reproducible without the secret)", () => {
     expect(hashIdentifier("user@example.com", "pepper-A")).not.toBe(
       hashIdentifier("user@example.com", "pepper-B"),

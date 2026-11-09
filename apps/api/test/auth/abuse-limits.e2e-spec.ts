@@ -438,7 +438,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
         200,
       );
       await app.close();
-    });
+      // About 85 full sign-in pipeline requests plus an app boot; Vitest's
+      // default 5 s limit timed this out on a loaded CI runner (#3824).
+    }, 60_000);
 
     it("EARS-13: when 20 verifications from one address fail, the system shall refuse the 21st, and a success interleaved shall not reset that count", async () => {
       await bootWithDoctor();

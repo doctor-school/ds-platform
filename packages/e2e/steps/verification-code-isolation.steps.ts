@@ -18,6 +18,7 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { test, After, Given, When, Then } from "./support/auth-fixtures.js";
+import { gotoStorefrontSignIn } from "../lib/storefront-entry-watch.js";
 
 const SESSION = "__Host-ds_session";
 interface OwnedBrowser {
@@ -281,7 +282,7 @@ Then(
 );
 
 async function passwordLogin(page: Page, owner: Registrant, base: string) {
-  await page.goto(`${base}/login?returnTo=%2Faccount`, { waitUntil: "load" });
+  await gotoStorefrontSignIn(page, `${base}/login?returnTo=%2Faccount`);
   await waitForClientReady(page);
   await inputSecret(
     page.locator('input[autocomplete="username"]'),

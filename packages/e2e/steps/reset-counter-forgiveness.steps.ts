@@ -18,6 +18,7 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
+import { gotoStorefrontSignIn } from "../lib/storefront-entry-watch.js";
 
 interface ResetForgivenessJourney {
   context: BrowserContext;
@@ -101,9 +102,7 @@ async function passwordAttempt(
   base: string,
   password: string,
 ) {
-  await state.page.goto(`${base}/login?returnTo=%2Faccount`, {
-    waitUntil: "load",
-  });
+  await gotoStorefrontSignIn(state.page, `${base}/login?returnTo=%2Faccount`);
   await waitForClientReady(state.page);
   await inputSecret(
     state.page.locator('input[autocomplete="username"]'),

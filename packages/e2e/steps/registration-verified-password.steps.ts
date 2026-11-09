@@ -7,6 +7,7 @@ import {
 import {
   expectEnteredThrough,
   watchStorefrontEntries,
+  gotoStorefrontSignIn,
 } from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -510,9 +511,10 @@ Then(
         email: state.email,
         password: isOriginal ? state.password : state.replacementPassword,
       };
-      await guest.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
-        waitUntil: "load",
-      });
+      await gotoStorefrontSignIn(
+        guest,
+        `${world.hostBaseUrl}/login?returnTo=%2Faccount`,
+      );
       await waitForClientReady(guest);
       await assertNoPrivateRegistrationAccess(guest, "", account);
       await inputSecret(

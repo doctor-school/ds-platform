@@ -30,6 +30,7 @@ import {
 import { assertSecureSession } from "../lib/secure-session.js";
 import { gatedPasswordLogin } from "../lib/gated-password-login.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
+import { gotoStorefrontSignIn } from "../lib/storefront-entry-watch.js";
 
 const SESSION = "__Host-ds_session";
 
@@ -356,9 +357,10 @@ When(
       world.hostBaseUrl,
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    await guest.goto(`${world.hostBaseUrl}/login?returnTo=%2Faccount`, {
-      waitUntil: "load",
-    });
+    await gotoStorefrontSignIn(
+      guest,
+      `${world.hostBaseUrl}/login?returnTo=%2Faccount`,
+    );
     await waitForClientReady(guest);
     await assertNoPrivateRegistrationAccess(guest, "", state);
     await inputSecret(

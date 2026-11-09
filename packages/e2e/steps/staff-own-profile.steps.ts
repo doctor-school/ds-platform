@@ -21,6 +21,7 @@ import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import {
   expectAtSignInHostFrom,
   watchStorefrontEntries,
+  gotoStorefrontSignIn,
 } from "../lib/storefront-entry-watch.js";
 import {
   assertStaffProfileFixtureScope,
@@ -77,9 +78,7 @@ async function login(
   // #3172: the storefront's `/login` is a 303 entry; the form is the sign-in
   // host's, and the return path rides the API transaction, not the form URL.
   watchStorefrontEntries(owner.page, base);
-  await owner.page.goto(`${base}/login?returnTo=%2Faccount`, {
-    waitUntil: "load",
-  });
+  await gotoStorefrontSignIn(owner.page, `${base}/login?returnTo=%2Faccount`);
   await expectAtSignInHostFrom(owner.page, base, {
     pathname: "/login",
     returnTo: "/account",

@@ -7,8 +7,10 @@ import { describe, expect, it } from "vitest";
 import {
   CANVAS_ORIGIN,
   DESIGN_SOURCE,
+  RUNTIME_ERROR_SELECTOR,
   RUNTIME_VENDOR,
   decideCanvasRequest,
+  runtimeConsoleFailure,
 } from "./canvas-runtime.js";
 
 /** `sha384-<base64>` as `support.js` pins it for `<script integrity>`. */
@@ -48,6 +50,20 @@ describe("#3793 the runtime canvas page answers every request locally", () => {
         files: { "_ds/x/_ds_bundle.js": bundle },
       }),
     ).toEqual({ kind: "file", path: bundle });
+  });
+
+  it("#3798: answers the DS bundle a DS-bundle canvas loads with the bundle built from the repo", () => {
+    expect(
+      decideCanvasRequest(
+        `${CANVAS_ORIGIN}/_ds/doctor-school-design-system-1366789c-9a05-4137-952e-61147c7a9550/_ds_bundle.js`,
+      ),
+    ).toEqual({ kind: "ds-bundle" });
+    // Its stylesheet is not built: the structure read carries no styling.
+    expect(
+      decideCanvasRequest(
+        `${CANVAS_ORIGIN}/_ds/doctor-school-design-system-1366789c-9a05-4137-952e-61147c7a9550/_ds_bundle.css`,
+      ),
+    ).toEqual({ kind: "missing" });
   });
 
   it("serves React/ReactDOM 18.3.1 from the npm aliases, matching the SRI support.js pins", () => {
@@ -92,5 +108,55 @@ describe("#3793 the runtime canvas page answers every request locally", () => {
       kind: "abort",
       report: true,
     });
+  });
+});
+
+describe("#3798 a runtime console failure fails the canvas load", () => {
+  it("fails on a dc-import sibling the runtime could not fetch", () => {
+    const text =
+      "[dc-runtime] sibling fetch for <unit-missing/> failed: ./unit-missing.dc.html returned 404";
+    expect(runtimeConsoleFailure("error", text)).toBe(text);
+  });
+
+  it("fails on every runtime error and on an x-import whose component never appeared", () => {
+    expect(
+      runtimeConsoleFailure(
+        "error",
+        "[dc-runtime] template compile FAILED for x",
+      ),
+    ).not.toBeNull();
+    expect(
+      runtimeConsoleFailure("error", "[dc] failed to load React or boot:"),
+    ).not.toBeNull();
+    expect(
+      runtimeConsoleFailure(
+        "warning",
+        '[dc-runtime] x-import: global "DsDesignSystem.Card" never appeared on window after 5000ms',
+      ),
+    ).not.toBeNull();
+  });
+
+  it("does not fail on an unresolved {{ }} hole warning or on a page's own console output", () => {
+    expect(
+      runtimeConsoleFailure(
+        "warning",
+        "[dc-runtime] doctor-feed: unresolved {{ x }}",
+      ),
+    ).toBeNull();
+    expect(
+      runtimeConsoleFailure("error", "Failed to load resource: 404"),
+    ).toBeNull();
+    expect(runtimeConsoleFailure("log", "[dc-runtime] booted")).toBeNull();
+  });
+});
+
+describe("#3798 a canvas the runtime drew as failed fails the load", () => {
+  it("names every error class the vendored support.js draws without a [dc-runtime] line", () => {
+    const runtime = readFileSync(join(DESIGN_SOURCE, "support.js"), "utf8");
+    for (const one of RUNTIME_ERROR_SELECTOR.split(", ")) {
+      const cls = one.replace(/^\./, "");
+      // a className the runtime sets: `"sc-x"` or appended `" sc-x"`
+      expect(runtime).toMatch(new RegExp(`"\\s?${cls}"`));
+    }
   });
 });

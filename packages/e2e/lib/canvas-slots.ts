@@ -1,17 +1,8 @@
-import { basename, dirname, resolve } from "node:path";
-
 import {
   applyAllowlist,
   diffStructures,
-  itemKindOf,
-  parseTemplate,
-  resolveCanvas,
-  visibleLabelOf,
   type AllowlistEntry,
-  type CanvasInput,
   type ItemKind,
-  type ResolvedElement,
-  type ResolvedNode,
   type StructureItem,
 } from "./canvas-structure.js";
 
@@ -33,28 +24,25 @@ import {
  * cards into the chrome (or back), a control missing from every card, a card
  * drawn as a different component — and never compares sample data.
  *
- * Region cut: the page canvas wraps its content in `<dc-import name="ds-shell">`;
- * that import is NOT expanded (the shell is the header check's region,
- * `./rendered-structure.ts`) — its slot children are the page. A card import
- * (`dc-import name="unit-event-card"`) IS expanded: the imported canvas is
- * evaluated with the import's props (kebab attributes → camelCase props, the
- * DC runtime's mapping), because the card's controls live there. A design-
- * system component a canvas mounts (`<x-import component-from-global-scope=
- * "DsDesignSystem.WebinarCard" dc-props="{{ card }}">`) is rendered by the
- * caller's `renderComponent` — the DS bundle the canvas loads is not vendored
- * (design-source/README.md), so the repository's `@ds/design-system` export of
- * the same name stands for it.
+ * Both sides are read by the same browser reader (`./rendered-slots.ts`): the
+ * canvas as the real Claude Design runtime renders it (#3798) — a card import
+ * (`dc-import name="unit-event-card"`) is the runtime's import host, a DS
+ * component a card mounts (`DsDesignSystem.WebinarCard`) is the DS bundle
+ * built from this repo, and the page's `dc-import name="ds-shell"` is outside
+ * every section (the shell is the header check's region,
+ * `./rendered-structure.ts`).
  */
 
 export interface SlotSectionSpec {
   /** The canvas section: an element whose attribute has this value. */
   section: [attr: string, value: string];
-  /** `dc-import` names that are one repeated card each. */
+  /** `dc-import` names that are one repeated card each (the runtime's `[data-sc-name]` hosts). */
   cards?: string[];
   /**
    * #3757 — `sc-for` aliases (`as`) whose every iteration is one repeated card
    * although no card import draws it (the catalog's chips, a list's rows):
-   * the elements one iteration produced are read as that card's controls.
+   * the elements one iteration produced (the `data-dc-tpl` of the loop's
+   * direct children) are read as that card's controls.
    */
   repeats?: string[];
   /**
@@ -72,130 +60,8 @@ export interface SlotStructure {
   cards: ItemKind[][];
 }
 
-/** Server-render one design-system component to static HTML. */
-export type RenderComponent = (name: string, props: Record<string, unknown>) => string;
-
-const camel = (name: string) => name.replace(/-([a-z])/g, (_m, c: string) => c.toUpperCase());
-
-function findSection(nodes: ResolvedNode[], [attr, value]: [string, string]): ResolvedElement | null {
-  for (const node of nodes) {
-    if (node.type !== "el") continue;
-    if (node.attrs[attr] === value) return node;
-    const inner = findSection(node.children, [attr, value]);
-    if (inner) return inner;
-  }
-  return null;
-}
-
-interface Ctx {
-  file: string;
-  render: RenderComponent | undefined;
-}
-
-/** The controls under `nodes`, imports and DS components expanded. */
-function controls(nodes: ResolvedNode[], ctx: Ctx, out: StructureItem[]): void {
-  for (const node of nodes) {
-    if (node.type !== "el") continue;
-    if (node.tag === "dc-import") {
-      out.push(...importedControls(node, ctx));
-      continue;
-    }
-    if (node.tag === "x-import") {
-      out.push(...componentControls(node, ctx));
-      continue;
-    }
-    const kind = itemKindOf(node.tag);
-    if (kind) {
-      out.push({ kind, label: visibleLabelOf(node) });
-      continue;
-    }
-    controls(node.children, ctx, out);
-  }
-}
-
-function importedControls(node: ResolvedElement, ctx: Ctx): StructureItem[] {
-  const name = String(node.attrs.name);
-  const file = resolve(dirname(ctx.file), `${name}.dc.html`);
-  const props = Object.fromEntries(
-    Object.entries(node.attrs)
-      .filter(([k]) => k !== "name")
-      .map(([k, v]) => [camel(k), v]),
-  );
-  const out: StructureItem[] = [];
-  controls(resolveCanvas(file, { props }), { ...ctx, file }, out);
-  return out;
-}
-
-function componentControls(node: ResolvedElement, ctx: Ctx): StructureItem[] {
-  const global = String(node.attrs["component-from-global-scope"] ?? "");
-  const name = global.replace(/^DsDesignSystem\./, "");
-  if (!ctx.render || name === global) {
-    throw new Error(
-      `${basename(ctx.file)}: <x-import component-from-global-scope="${global}"> needs a component renderer`,
-    );
-  }
-  const props = (node.attrs["dc-props"] ?? {}) as Record<string, unknown>;
-  const out: StructureItem[] = [];
-  // Static markup parses with the canvas tokenizer; it has no `{{ }}` left.
-  controls(parseTemplate(ctx.render(name, props)) as ResolvedNode[], ctx, out);
-  return out;
-}
-
-function split(
-  nodes: ResolvedNode[],
-  spec: SlotSectionSpec,
-  ctx: Ctx,
-  out: SlotStructure,
-  iterations: Map<number, ItemKind[]> = new Map(),
-): void {
-  for (const node of nodes) {
-    if (node.type !== "el") continue;
-    if (node.repeat && spec.repeats?.includes(node.repeat.alias)) {
-      let card = iterations.get(node.repeat.iteration);
-      if (!card) {
-        card = [];
-        iterations.set(node.repeat.iteration, card);
-        out.cards.push(card);
-      }
-      const found: StructureItem[] = [];
-      controls([node], ctx, found);
-      card.push(...found.map((i) => i.kind));
-      continue;
-    }
-    if (node.tag === "dc-import" && (spec.cards ?? []).includes(String(node.attrs.name))) {
-      out.cards.push(importedControls(node, ctx).map((i) => i.kind));
-      continue;
-    }
-    if (node.tag === "dc-import" || node.tag === "x-import") {
-      controls([node], ctx, out.chrome);
-      continue;
-    }
-    const kind = itemKindOf(node.tag);
-    if (kind) {
-      out.chrome.push({ kind, label: visibleLabelOf(node) });
-      continue;
-    }
-    split(node.children, spec, ctx, out, iterations);
-  }
-}
-
-/** The chrome + card shapes of one repeated-card section of a page canvas. */
-export function extractCanvasSlots(
-  file: string,
-  input: CanvasInput,
-  spec: SlotSectionSpec,
-  render?: RenderComponent,
-): SlotStructure {
-  const section = findSection(resolveCanvas(file, input), spec.section);
-  if (!section) {
-    throw new Error(`${basename(file)}: no section [${spec.section[0]}="${spec.section[1]}"]`);
-  }
-  const out: SlotStructure = { chrome: [], cards: [] };
-  split(section.children, spec, { file, render }, out);
-  return out;
-}
-
-const shapeKey = (shape: ItemKind[]) => `[${shape.join(" · ") || "no controls"}]`;
+const shapeKey = (shape: ItemKind[]) =>
+  `[${shape.join(" · ") || "no controls"}]`;
 
 /**
  * Readable differences, empty when the section matches: chrome as the header
@@ -233,7 +99,9 @@ export function diffSlots(
 }
 
 export function formatSlots(slots: SlotStructure): string {
-  const chrome = slots.chrome.map((i) => `${i.kind} «${i.label ?? "icon"}»`).join(" · ");
+  const chrome = slots.chrome
+    .map((i) => `${i.kind} «${i.label ?? "icon"}»`)
+    .join(" · ");
   const shapes = [...new Set(slots.cards.map(shapeKey))].join(", ");
   return `chrome: ${chrome || "—"}\ncards: ${slots.cards.length} · shapes ${shapes || "—"}`;
 }
@@ -244,7 +112,9 @@ const DIGIT_RUN = /\p{Nd}+/gu;
 export function maskSlotDigits(slots: SlotStructure): SlotStructure {
   return {
     chrome: slots.chrome.map((item) =>
-      item.label === null ? item : { ...item, label: item.label.replace(DIGIT_RUN, "#") },
+      item.label === null
+        ? item
+        : { ...item, label: item.label.replace(DIGIT_RUN, "#") },
     ),
     cards: slots.cards,
   };

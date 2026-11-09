@@ -283,6 +283,7 @@ The implementation PR declares `Release-requires: #3850`, a read-only prod pre-c
 | `points-rule-retired`                                                        | 422    | publish to a retired 0059 id (G)                                                                                                     |
 | `points-gating-invalid`                                                      | 422    | price list (EARS-26): a mode the kind does not take, or an `itemRef` that does not resolve as its kind (only `event` resolves today) |
 | `points-item-ref-invalid`                                                    | 400    | gating read and price list: a malformed `:itemRef`                                                                                   |
+| `points-facts-query-invalid`                                                 | 400    | admin fact journal (EARS-45): a missing or non-uuid `personId`, a `limit` outside 1…100 or a foreign `cursor`                        |
 | `points-starter-bonus-no-rule`                                               | 422    | starter-bonus grant (EARS-43)                                                                                                        |
 | `points-account-closed`, `points-bre-con-debit`, `points-occurred-at-future` | 422    | ledger core, unchanged (§3, §4)                                                                                                      |
 
@@ -414,9 +415,11 @@ Each `rule_id` has a strict zod parameter schema in `packages/schemas/src/points
 
 A SQL view over postings of the month (credits to person accounts in `bre` / `con`, minus reversals in the month), joined to `doctor_specialties` and to the active `leaderboard-dissemination` records in `consent_records` (ADR-0009), ranked with `RANK()` over the consenting set only. A non-consenting requester's own position is computed as `1 + count(consenting scores > own score)` and returned only to them. The view reads consent at query time, so a revocation takes effect on the next response with no cache to invalidate; if a materialised refresh is ever introduced, consent filtering stays at read time.
 
-## 8. Admin API and audit (EARS-25, 26, 28)
+## 8. Admin API and audit (EARS-25, 26, 28, 45)
 
 `/v1/admin/points/*` sits behind the admin role guard (ADR-0001). Each write runs through the request audit context so `audit_ledger` records the actor `sub`, source `admin-ui` / `api`, and the payload (rule version, gating row, correction with its reason and posting ids). The admin UI is a follow-up Issue; the API is complete without it.
+
+The reads of EARS-45 sit behind the same role (`platform_admin`, fast-path, no live revalidation) and answer `Cache-Control: no-store`: `GET /v1/admin/points/fact-types` returns the code catalog, `GET /v1/admin/points/rules` every rule and setting id with its active version at now and its history, `GET /v1/admin/points/facts?personId=` one person's journal keyset-paged on the (`person_id`, `received_at DESC`) index with each trace as stored (read models: requirements «Read models»). A read writes no audit row — the posture of the platform's other admin reads of person data.
 
 ## 9. Erasure (EARS-31)
 

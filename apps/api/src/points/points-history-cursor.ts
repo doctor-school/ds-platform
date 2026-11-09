@@ -41,3 +41,44 @@ export function decodePostingCursor(
   if (Number.isNaN(Date.parse(occurredAt))) return null;
   return { occurredAt, id };
 }
+
+// 025 EARS-45 — the opaque `nextCursor` of `GET /v1/admin/points/facts`: the
+// keyset position (`received_at`, `event_id`) of the last journal row of a
+// page, in the same base64url JSON shape. `received_at` is Postgres's
+// microsecond UTC text for the same reason as above; `event_id` is the
+// journal's text primary key (a producer's id, not a uuid).
+
+export interface FactJournalPosition {
+  /** `YYYY-MM-DDTHH:MM:SS.ffffffZ` — microsecond UTC, as Postgres stores it. */
+  readonly receivedAt: string;
+  readonly eventId: string;
+}
+
+const JournalPositionSchema = z.tuple([
+  z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/),
+  z.string().min(1).max(512),
+]);
+
+export function encodeFactJournalCursor(position: FactJournalPosition): string {
+  return Buffer.from(
+    JSON.stringify([position.receivedAt, position.eventId]),
+    "utf8",
+  ).toString("base64url");
+}
+
+/** The position a cursor names, or null when it is not one this route issued. */
+export function decodeFactJournalCursor(
+  cursor: string,
+): FactJournalPosition | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+  const parsed = JournalPositionSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  const [receivedAt, eventId] = parsed.data;
+  if (Number.isNaN(Date.parse(receivedAt))) return null;
+  return { receivedAt, eventId };
+}

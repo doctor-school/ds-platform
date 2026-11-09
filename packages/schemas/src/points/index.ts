@@ -151,3 +151,23 @@ export {
   type PointsPrice,
   type PutPointsPriceRequest,
 } from "./prices.js";
+export {
+  POINTS_FACT_JOURNAL_LIMIT,
+  PointsAttributeDeclarationSchema,
+  PointsFactJournalEntrySchema,
+  PointsFactJournalPageSchema,
+  PointsFactJournalQuerySchema,
+  PointsFactTypeCatalogSchema,
+  PointsFactTypeEntrySchema,
+  PointsPredicateDeclarationSchema,
+  PointsRuleBookEntrySchema,
+  PointsRuleBookSchema,
+  PointsRuleBookVersionSchema,
+  type PointsFactJournalEntry,
+  type PointsFactJournalPage,
+  type PointsFactJournalQuery,
+  type PointsFactTypeCatalog,
+  type PointsRuleBook,
+  type PointsRuleBookEntry,
+  type PointsRuleBookVersion,
+} from "./admin-read.js";

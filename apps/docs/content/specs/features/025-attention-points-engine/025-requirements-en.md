@@ -192,7 +192,9 @@ The leaderboard consent (`ConsentGranted` / `ConsentRevoked`, `leaderboard-disse
 - `GatingDecision { itemRef, mode, pulCost, decision: 'open' | 'reserve' | 'reserve-with-advance' | 'short' | 'blocked', reason?: 'points-phone-unverified' | 'points-reserve-limit' | 'points-account-closed', reservedFromBalance, coveredByAdvance, shortfall, earnHint?: { pulToEarn, lessonsNeeded } }` — `GET /v1/me/points/gating/:itemRef`; `reason` is present on `blocked` only.
 - `MonthlyLeaderboard { specialtyCode, month, top: Row[10], own?: { rank, score, neighbours: Row[] } }` with `Row { rank, displayName, city?, photoRef?, score }` — `GET /v1/points/leaderboard/:specialtyCode?month=YYYY-MM`.
 - `AttentionAggregate { projectId, outputType?, outputId?, month, denomination, ruleId, ruleVersion, amount, persons }` — `GET /v1/admin/points/aggregates` (service/admin scope, consumed by 036).
-- `FactJournalEntry { eventId, type, ref?, occurredAt, receivedAt, outcome, trace }` — `GET /v1/admin/points/facts` (EARS-45).
+- `FactTypeCatalog { factTypes: { type, refKind, earnsPul, attributes }[], predicates: { name, subject, args?, result }[] }` — `GET /v1/admin/points/fact-types` (EARS-45); the code registry as declared.
+- `RuleBook { rules: { ruleId, kind, activeVersion, versions: { version, kind, triggerFactTypes, parameters, effectiveFrom, publishedBy, createdAt }[] }[] }` — `GET /v1/admin/points/rules` (EARS-45); every rule and setting id, `activeVersion` the highest version with `effectiveFrom ≤ now` (null when none is in effect yet), `versions` in version order.
+- `FactJournalEntry { eventId, type, ref?, occurredAt, receivedAt, outcome, trace }` — `GET /v1/admin/points/facts?personId=&cursor=&limit=` (EARS-45) as `{ items, nextCursor }`, newest first by (`receivedAt`, `eventId`), the trace as stored.
 
 ### Policies
 

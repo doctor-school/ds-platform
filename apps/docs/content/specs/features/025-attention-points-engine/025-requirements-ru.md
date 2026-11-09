@@ -192,7 +192,9 @@ lang: ru
 - `GatingDecision { itemRef, mode, pulCost, decision: 'open' | 'reserve' | 'reserve-with-advance' | 'short' | 'blocked', reason?: 'points-phone-unverified' | 'points-reserve-limit' | 'points-account-closed', reservedFromBalance, coveredByAdvance, shortfall, earnHint?: { pulToEarn, lessonsNeeded } }` — `GET /v1/me/points/gating/:itemRef`; `reason` есть только у `blocked`.
 - `MonthlyLeaderboard { specialtyCode, month, top: Row[10], own?: { rank, score, neighbours: Row[] } }`, где `Row { rank, displayName, city?, photoRef?, score }` — `GET /v1/points/leaderboard/:specialtyCode?month=YYYY-MM`.
 - `AttentionAggregate { projectId, outputType?, outputId?, month, denomination, ruleId, ruleVersion, amount, persons }` — `GET /v1/admin/points/aggregates` (сервисная/админская область, потребитель — 036).
-- `FactJournalEntry { eventId, type, ref?, occurredAt, receivedAt, outcome, trace }` — `GET /v1/admin/points/facts` (EARS-45).
+- `FactTypeCatalog { factTypes: { type, refKind, earnsPul, attributes }[], predicates: { name, subject, args?, result }[] }` — `GET /v1/admin/points/fact-types` (EARS-45); реестр кода как он объявлен.
+- `RuleBook { rules: { ruleId, kind, activeVersion, versions: { version, kind, triggerFactTypes, parameters, effectiveFrom, publishedBy, createdAt }[] }[] }` — `GET /v1/admin/points/rules` (EARS-45); каждый id правила и настройки, `activeVersion` — наибольшая версия с `effectiveFrom ≤ now` (null, если ни одна ещё не действует), `versions` — по порядку версий.
+- `FactJournalEntry { eventId, type, ref?, occurredAt, receivedAt, outcome, trace }` — `GET /v1/admin/points/facts?personId=&cursor=&limit=` (EARS-45) как `{ items, nextCursor }`, от новых к старым по (`receivedAt`, `eventId`), трасса — как сохранена.
 
 ### Политики
 

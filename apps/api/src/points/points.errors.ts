@@ -32,6 +32,8 @@ export const POINTS_LEDGER_ERROR_STATUS: Readonly<
   POINTS_RULE_EFFECTIVE_FROM_PAST: 422,
   // 400: the posting-history page query is malformed (EARS-46).
   POINTS_HISTORY_QUERY_INVALID: 400,
+  // 400: the admin fact-journal page query is malformed (EARS-45).
+  POINTS_FACTS_QUERY_INVALID: 400,
   // 422: spend refusals (025-design I).
   POINTS_THRESHOLD_SHORT: 422,
   POINTS_RESERVE_LIMIT: 422,
@@ -53,6 +55,7 @@ const POINTS_LEDGER_ERROR_TITLE: Readonly<
   POINTS_RULE_EFFECTIVE_FROM_PAST:
     "A rule version cannot take effect in the past",
   POINTS_HISTORY_QUERY_INVALID: "The posting history page query is invalid",
+  POINTS_FACTS_QUERY_INVALID: "The fact journal page query is invalid",
   POINTS_THRESHOLD_SHORT: "Not enough Pul to reserve this item",
   POINTS_RESERVE_LIMIT:
     "Too many open reserves on limited-seat items",

@@ -127,6 +127,9 @@ export type PointsPostOutcome = z.infer<typeof PointsPostOutcomeSchema>;
  *  - POINTS_HISTORY_QUERY_INVALID — EARS-46: the posting-history page query
  *    is out of range — a `limit` outside `POINTS_POSTING_HISTORY_LIMIT` or a
  *    `cursor` that is not a `nextCursor` the route issued.
+ *  - POINTS_FACTS_QUERY_INVALID — EARS-45: the admin fact-journal page query
+ *    is invalid — a missing or non-uuid `personId`, a `limit` outside
+ *    `POINTS_FACT_JOURNAL_LIMIT` or a `cursor` the route did not issue.
  *  - POINTS_THRESHOLD_SHORT — EARS-17: a `reserve` on a threshold-mode item
  *    (or an advance-mode item beyond the advance) with available Pul below
  *    the price; the body carries `shortfall` and `earnHint`.
@@ -149,6 +152,7 @@ export const POINTS_LEDGER_ERROR_CODES = [
   "POINTS_RULE_RETIRED",
   "POINTS_RULE_EFFECTIVE_FROM_PAST",
   "POINTS_HISTORY_QUERY_INVALID",
+  "POINTS_FACTS_QUERY_INVALID",
   "POINTS_THRESHOLD_SHORT",
   "POINTS_RESERVE_LIMIT",
   "POINTS_GATING_INVALID",

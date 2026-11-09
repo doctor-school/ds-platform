@@ -6,8 +6,16 @@
 #
 # Format: one `# role: <role>` comment line, then that custodian's native X25519
 # recipient (`age1` + 58 bech32 characters) on its own line. At least two distinct
-# recipients, held by two different custodians; until then every recovery verb
-# refuses ("custodian ceremony pending"). Roles only, never names. Plugin recipients
-# (`age1yubikey1…`) are refused: the boxes carry no age plugin.
+# recipients, or every recovery verb refuses ("custodian ceremony pending"). Roles
+# only, never names. Plugin recipients (`age1yubikey1…`) are refused: the boxes carry
+# no age plugin.
 #
-# The custodian ceremony has not happened yet, so this file holds no recipient.
+# Current custody (interim, RECOVERY.md §2.1): both recipients are held by the owner,
+# in two independent places. A second custodian (another person, another location)
+# is added by a later PR; until then the bus factor stays open.
+
+# role: owner — key 1 (password manager)
+age1u6py358feuhe9f2czkn0kashjzlckjxz6wkav6nt7yja7yxtvyzsjpm3e7
+
+# role: owner — key 2 (offline media, separate location)
+age149ypgydchj3wsk3fgjq3996nhxr9sydh0cwlsrq0d00zmxutndrq6n8dz5

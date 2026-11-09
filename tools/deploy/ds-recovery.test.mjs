@@ -314,13 +314,7 @@ describe("3662: the key custody, box side", { skip: SKIP }, () => {
   });
 
   for (const [what, text] of [
-    [
-      "no recipient (the committed file)",
-      readFileSync(
-        resolve(here, "../../infra/deploy/recovery/custodians.txt"),
-        "utf8",
-      ),
-    ],
+    ["no recipient (comments only)", "# role: one\n\n# nothing yet\n"],
     ["one recipient", `# role: one\n${R1}\n`],
     ["the same recipient twice", `${R1}\n${R1}\n`],
     ["a plugin recipient", `${R1}\nage1yubikey1${"q".repeat(58)}\n`],

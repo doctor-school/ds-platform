@@ -1192,7 +1192,8 @@ repository) and `--identity <ssh key>`. The remote scripts are parsed whole befo
 run, with stdin from `/dev/null`, and a signal on the workstation runs the teardown
 before Node exits. The agent has no prod shell: only the owner runs
 it. It is the interim path until the first CI-built bundle (`recovery-custody.yml`) has been
-test-decrypted by a custodian and a restore with a bundle-supplied
-`PGBACKREST_REPO1_CIPHER_PASS` has passed; only then is it retired. The manual commands in
+test-decrypted by a custodian and a restore has passed with the
+`PGBACKREST_REPO1_CIPHER_PASS` taken from a CI-built bundle (a restore from an
+owner-run bundle does not count); only then is it retired. The manual commands in
 RECOVERY.md stay the reference and the fallback; the safety
 invariants are unit-tested in `recovery.test.mjs`.

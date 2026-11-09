@@ -4,6 +4,7 @@ import {
   type PointsAccountRow,
   type PointsPostingRow,
   pointsAccounts,
+  pointsFacts,
   pointsPostingKeys,
   pointsPostings,
 } from "@ds/db";
@@ -15,11 +16,17 @@ import {
   type PointsFact,
   PointsFactSchema,
   type PointsPosting,
+  type PointsPostingHistory,
+  PointsPostingHistorySchema,
   type PointsPostOutcome,
   type PointsSystemCode,
 } from "@ds/schemas";
-import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import {
+  encodePostingCursor,
+  type PostingHistoryPosition,
+} from "./points-history-cursor.js";
 import {
   firstOverdrawingLeg,
   type FoldPosting,
@@ -119,6 +126,105 @@ export class PointsLedgerService {
       con: fold.con,
       advance: fold.advance,
       status: account?.closedAt ? "closed" : "open",
+    });
+  }
+
+  /**
+   * EARS-46 — the person's `PostingHistory`: every posting on the person
+   * account, newest first by (`occurred_at`, `id`), one keyset page of
+   * `limit` after `after`. The amount is signed from the person's side
+   * (credit +, debit −). `contentRef` is the ref of the journaled fact that
+   * produced the posting — the engine writes a rule's postings under the
+   * ledger event id `<fact event id>#<rule id>` — unless that ref names a
+   * person (a referral link), which the history never exposes. No
+   * attribution column, counterparty account or fact subject is selected.
+   * A read never writes: a person with no account reads an empty page.
+   */
+  async readPersonPostings(
+    personId: string,
+    page: { limit: number; after: PostingHistoryPosition | null },
+  ): Promise<PointsPostingHistory> {
+    const [account] = await this.db
+      .select({ id: pointsAccounts.id })
+      .from(pointsAccounts)
+      .where(
+        and(
+          eq(pointsAccounts.subjectKind, "person"),
+          eq(pointsAccounts.subjectId, personId),
+          eq(pointsAccounts.unit, UNIT),
+        ),
+      );
+    if (!account) return { items: [], nextCursor: null };
+    const rows = await this.db
+      .select({
+        id: pointsPostings.id,
+        occurredAt: pointsPostings.occurredAt,
+        occurredAtKey: sql<string>`to_char(${pointsPostings.occurredAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+        creditAccountId: pointsPostings.creditAccountId,
+        denomination: pointsPostings.denomination,
+        amount: pointsPostings.amount,
+        action: pointsPostings.action,
+        ruleId: pointsPostings.ruleId,
+        ruleVersion: pointsPostings.ruleVersion,
+        reversesPostingId: pointsPostings.reversesPostingId,
+        contentRef: pointsFacts.refId,
+      })
+      .from(pointsPostings)
+      .leftJoin(
+        pointsFacts,
+        and(
+          // The PK lookup, then the exact `<fact>#<rule>` match.
+          eq(
+            pointsFacts.eventId,
+            sql`left(${pointsPostings.eventId}, length(${pointsPostings.eventId}) - length(${pointsPostings.ruleId}) - 1)`,
+          ),
+          eq(
+            pointsPostings.eventId,
+            sql`${pointsFacts.eventId} || '#' || ${pointsPostings.ruleId}`,
+          ),
+          ne(pointsFacts.refKind, "person"),
+        ),
+      )
+      .where(
+        and(
+          or(
+            eq(pointsPostings.creditAccountId, account.id),
+            eq(pointsPostings.debitAccountId, account.id),
+          ),
+          page.after
+            ? sql`(${pointsPostings.occurredAt}, ${pointsPostings.id}) < (${page.after.occurredAt}::timestamptz, ${page.after.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(desc(pointsPostings.occurredAt), desc(pointsPostings.id))
+      .limit(page.limit + 1);
+    const items = rows.slice(0, page.limit);
+    const last = items.at(-1);
+    return PointsPostingHistorySchema.parse({
+      items: items.map((row) => {
+        if (row.denomination === null) {
+          throw new Error(
+            `points: person posting ${row.id} has no denomination`,
+          );
+        }
+        return {
+          postingId: row.id,
+          occurredAt: row.occurredAt.toISOString(),
+          denomination: row.denomination,
+          amount: row.creditAccountId === account.id ? row.amount : -row.amount,
+          action: row.action,
+          ...(row.contentRef !== null ? { contentRef: row.contentRef } : {}),
+          ruleId: row.ruleId,
+          ruleVersion: row.ruleVersion,
+          ...(row.reversesPostingId !== null
+            ? { reversesPostingId: row.reversesPostingId }
+            : {}),
+        };
+      }),
+      nextCursor:
+        rows.length > page.limit && last
+          ? encodePostingCursor({ occurredAt: last.occurredAtKey, id: last.id })
+          : null,
     });
   }
 

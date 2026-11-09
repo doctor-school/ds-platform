@@ -2036,6 +2036,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/points/postings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PointsMeController_postings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/profile": {
         parameters: {
             query?: never;
@@ -3668,6 +3684,24 @@ export interface components {
             };
             /** @enum {string} */
             status: "open" | "closed";
+        };
+        PointsPostingHistoryDto: {
+            items: {
+                action: string | null;
+                amount: number;
+                contentRef?: string;
+                /** @enum {string} */
+                denomination: "pul" | "bre" | "con";
+                /** Format: date-time */
+                occurredAt: string;
+                /** Format: uuid */
+                postingId: string;
+                /** Format: uuid */
+                reversesPostingId?: string;
+                ruleId: string;
+                ruleVersion: number;
+            }[];
+            nextCursor: string | null;
         };
         PostChatMessageRequestDto: {
             text: string;
@@ -7250,6 +7284,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PointsAccountDto"];
+                };
+            };
+        };
+    };
+    PointsMeController_postings: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                /** @description Page size, 1–100 (default 50). */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointsPostingHistoryDto"];
                 };
             };
         };

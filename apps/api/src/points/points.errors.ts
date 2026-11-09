@@ -29,6 +29,8 @@ export const POINTS_LEDGER_ERROR_STATUS: Readonly<
   POINTS_RULE_PARAMETERS_INVALID: 422,
   POINTS_RULE_RETIRED: 422,
   POINTS_RULE_EFFECTIVE_FROM_PAST: 422,
+  // 400: the posting-history page query is malformed (EARS-46).
+  POINTS_HISTORY_QUERY_INVALID: 400,
 };
 
 const POINTS_LEDGER_ERROR_TITLE: Readonly<
@@ -43,6 +45,7 @@ const POINTS_LEDGER_ERROR_TITLE: Readonly<
   POINTS_RULE_RETIRED: "This attention-points rule id is retired",
   POINTS_RULE_EFFECTIVE_FROM_PAST:
     "A rule version cannot take effect in the past",
+  POINTS_HISTORY_QUERY_INVALID: "The posting history page query is invalid",
 };
 
 /** Problem `type` slug: `POINTS_ACCOUNT_CLOSED` → `points-account-closed`. */

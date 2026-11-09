@@ -1100,8 +1100,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
   it("3822: ship refuses a tree without the data-prod compose directory while the live env exists, keeping the live tree", () => {
     setRole("data");
     const compose = liveGenerated();
+    mkdirSync(join(tree(), "old"), { recursive: true });
     const r = run(`ship ${SHA}`, { input: shipped([{ name: "ds-platform/infra/", type: "5" }]) });
     assert.equal(r.status, 3, String(r.stderr));
+    assert.ok(existsSync(join(tree(), "old")), "the live tree was not swapped");
     for (const [name, body] of Object.entries(GENERATED)) {
       assert.equal(readFileSync(join(compose, name), "utf8"), body, `${name} intact`);
     }

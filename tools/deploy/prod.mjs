@@ -2440,10 +2440,11 @@ async function deploy(hotfixRef = null, local = null) {
   openReleaseSha = sha;
   openReleaseHosts = redeploy ? [API_PROD] : [API_PROD, DATA_PROD];
 
-  // The compose interpolation files live INSIDE the shipped tree, which every ship
-  // replaces — so they are rewritten on every run, outside the durable unit: a
-  // re-run whose `up` returns its recorded verdict still leaves them in place for
-  // the compose calls after it (#2982).
+  // The compose interpolation files live INSIDE the shipped tree; a ship carries the
+  // previous tree's (#3822), which describe the running containers, so they are
+  // rewritten for this release on every run, outside the durable unit: a re-run whose
+  // `up` returns its recorded verdict still leaves them in place for the compose calls
+  // after it (#2982).
   if (walk.releasePhase("data-prod-env")) {
     step("data-prod: bring up persistence plane (idempotent)");
     t = Date.now();
@@ -2455,8 +2456,9 @@ async function deploy(hotfixRef = null, local = null) {
   // #3648: the pending migrations of this tree run first on a throw-away restore of prod
   // on ds-data-prod (spec §5 «Migration rehearsal.» → «Release gate.»), so a breaking
   // migration refuses here, before any container starts, the backup and the migrate.
-  // #3819: after data-prod-env — `ship` replaced the live tree and its compose env, and
-  // the gate's live read is a `docker compose exec` in that tree.
+  // #3819: after data-prod-env — the gate's live read is a `docker compose exec` in the
+  // data-prod tree, which holds the env `ship` carried from the previous tree until
+  // data-prod-env rewrites it for this release.
   if (walk.releasePhase("rehearse")) {
     step("#3648: rehearse the pending migrations on a restored copy (BEFORE data-prod up, backup and migrate)");
     t = Date.now();

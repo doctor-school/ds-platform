@@ -2020,6 +2020,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PointsMeController_read"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/profile": {
         parameters: {
             query?: never;
@@ -3634,6 +3650,24 @@ export interface components {
         PasswordResetRequestDto: {
             captchaToken?: string;
             identifier: string;
+        };
+        PointsAccountDto: {
+            advance: {
+                open: number;
+                remaining: number;
+            };
+            bre: number;
+            con: number;
+            /** Format: uuid */
+            personId: string;
+            pul: {
+                available: number;
+                reserved: number;
+                /** @constant */
+                unit: "Pul";
+            };
+            /** @enum {string} */
+            status: "open" | "closed";
         };
         PointsRuleVersionDto: {
             createdAt: string;
@@ -7190,6 +7224,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    PointsMeController_read: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointsAccountDto"];
+                };
             };
         };
     };

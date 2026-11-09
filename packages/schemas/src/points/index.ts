@@ -1,4 +1,9 @@
 export {
+  PointsAccountSchema,
+  PUL_UNIT,
+  type PointsAccount,
+} from "./points-account.schema.js";
+export {
   POINTS_LEDGER_ERROR_CODES,
   PointsAccountRefSchema,
   PointsDenominationSchema,

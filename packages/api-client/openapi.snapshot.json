@@ -4284,6 +4284,70 @@
         "required": ["identifier"],
         "type": "object"
       },
+      "PointsAccountDto": {
+        "additionalProperties": false,
+        "properties": {
+          "advance": {
+            "additionalProperties": false,
+            "properties": {
+              "open": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "remaining": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": ["open", "remaining"],
+            "type": "object"
+          },
+          "bre": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "con": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "personId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "pul": {
+            "additionalProperties": false,
+            "properties": {
+              "available": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reserved": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unit": {
+                "const": "Pul",
+                "type": "string"
+              }
+            },
+            "required": ["unit", "available", "reserved"],
+            "type": "object"
+          },
+          "status": {
+            "enum": ["open", "closed"],
+            "type": "string"
+          }
+        },
+        "required": ["personId", "pul", "bre", "con", "advance", "status"],
+        "type": "object"
+      },
       "PointsRuleVersionDto": {
         "additionalProperties": false,
         "properties": {
@@ -9526,6 +9590,25 @@
           }
         },
         "tags": ["Phone"]
+      }
+    },
+    "/v1/me/points": {
+      "get": {
+        "operationId": "PointsMeController_read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PointsAccountDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["PointsMe"]
       }
     },
     "/v1/me/profile": {

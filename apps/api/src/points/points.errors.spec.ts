@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { POINTS_LEDGER_ERROR_CODES } from "@ds/schemas";
 import { PointsLedgerError } from "./points.errors.js";
 
 describe("PointsLedgerError", () => {
@@ -50,5 +51,17 @@ describe("PointsLedgerError — rule book", () => {
     expect(
       new PointsLedgerError("POINTS_RULE_EFFECTIVE_FROM_PAST").getStatus(),
     ).toBe(422);
+  });
+
+  it("025 EARS-30: no points-* problem detail calls a Pul price «бесплатно», points «баллы» or anything free", () => {
+    for (const code of POINTS_LEDGER_ERROR_CODES) {
+      const body = new PointsLedgerError(code, "detail").toProblemDetails(
+        "trace",
+        "/v1/x",
+      );
+      expect(JSON.stringify(body), code).not.toMatch(
+        /бесплатн|балл|\bfree\b|money/i,
+      );
+    }
   });
 });

@@ -8,7 +8,10 @@ import {
   pointsPostings,
 } from "@ds/db";
 import {
+  type PointsAccount,
   type PointsAccountRef,
+  PointsAccountSchema,
+  PUL_UNIT,
   type PointsFact,
   PointsFactSchema,
   type PointsPosting,
@@ -17,7 +20,15 @@ import {
 } from "@ds/schemas";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
-import { firstOverdrawingLeg, type ResolvedLeg } from "./points-balance.js";
+import {
+  firstOverdrawingLeg,
+  type FoldPosting,
+  foldPointsAccount,
+  RELEASE_FACT,
+  RESERVE_FACT,
+  type ResolvedLeg,
+  SETTLE_FACT,
+} from "./points-balance.js";
 import { PointsLedgerError } from "./points.errors.js";
 
 type Db = DrizzleHandle["db"];
@@ -80,6 +91,91 @@ export class PointsLedgerService {
       );
     if (!row) throw new Error("points: person account vanished after open");
     return row;
+  }
+
+  /**
+   * EARS-2 — the person's `PointsAccount`, folded over postings at read time
+   * (no balance column exists to read). A read never writes: a person with no
+   * account yet gets the zero fold of an open account WITHOUT opening one —
+   * the account opens on the first accrual (EARS-1).
+   */
+  async readPersonAccount(personId: string): Promise<PointsAccount> {
+    const [account] = await this.db
+      .select()
+      .from(pointsAccounts)
+      .where(
+        and(
+          eq(pointsAccounts.subjectKind, "person"),
+          eq(pointsAccounts.subjectId, personId),
+          eq(pointsAccounts.unit, UNIT),
+        ),
+      );
+    const postings = account ? await this.foldPostings(account.id) : [];
+    const fold = foldPointsAccount(account?.id ?? "", postings);
+    return PointsAccountSchema.parse({
+      personId,
+      pul: { unit: PUL_UNIT, ...fold.pul },
+      bre: fold.bre,
+      con: fold.con,
+      advance: fold.advance,
+      status: account?.closedAt ? "closed" : "open",
+    });
+  }
+
+  /**
+   * The postings {@link foldPointsAccount} reads: every posting of the account,
+   * plus the reserve / settle / release facts of the person's reserves — their
+   * `reserve:advance` and settle legs move Pul between system accounts only.
+   */
+  private async foldPostings(accountId: string): Promise<FoldPosting[]> {
+    const columns = {
+      id: pointsPostings.id,
+      eventId: pointsPostings.eventId,
+      leg: pointsPostings.leg,
+      debitAccountId: pointsPostings.debitAccountId,
+      creditAccountId: pointsPostings.creditAccountId,
+      denomination: pointsPostings.denomination,
+      amount: pointsPostings.amount,
+      occurredAt: pointsPostings.occurredAt,
+    };
+    const own = await this.db
+      .select(columns)
+      .from(pointsPostings)
+      .where(
+        or(
+          eq(pointsPostings.creditAccountId, accountId),
+          eq(pointsPostings.debitAccountId, accountId),
+        ),
+      );
+    const registrations = [
+      ...new Set(
+        own
+          .filter((p) => p.eventId.startsWith(RESERVE_FACT))
+          .map((p) => p.eventId.slice(RESERVE_FACT.length)),
+      ),
+    ];
+    const lifecycle =
+      registrations.length === 0
+        ? []
+        : await this.db
+            .select(columns)
+            .from(pointsPostings)
+            .where(
+              inArray(
+                pointsPostings.eventId,
+                registrations.flatMap((r) => [
+                  `${RESERVE_FACT}${r}`,
+                  `${SETTLE_FACT}${r}`,
+                  `${RELEASE_FACT}${r}`,
+                ]),
+              ),
+            );
+    const byId = new Map([...own, ...lifecycle].map((p) => [p.id, p]));
+    return [...byId.values()].map(({ id: _id, ...p }) => ({
+      ...p,
+      // Attention-points postings always carry a denomination (0058 trigger).
+      denomination: p.denomination as FoldPosting["denomination"],
+    }));
   }
 
   /** A system account of the attention-points unit, opened on first need. */

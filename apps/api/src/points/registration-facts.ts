@@ -12,9 +12,10 @@ export function registrationCreatedFactEventId(registrationId: string): string {
  * 025 EARS-14…17, 21 — the `registration.created` fact a sign-up reports
  * inside the transaction that inserts the registration row (EARS-33: a
  * producer reports facts only; the seeded `spend.reserve` holds the item's
- * price when the price list prices it). One builder for every sign-up door —
- * the 005 one-tap registration and the 044 congress intake — so the event id
- * and the attributes cannot drift between them.
+ * price when the price list prices it). One builder for every authenticated
+ * sign-up door (today the 005 one-tap registration) and the e2e harness, so
+ * the event id and the attributes cannot drift between them. The public 044
+ * congress intake is out of the spend path and never reports it (044 EARS-41).
  */
 export function registrationCreatedFact(input: {
   registrationId: string;

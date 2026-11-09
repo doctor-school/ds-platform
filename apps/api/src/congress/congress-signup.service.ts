@@ -12,7 +12,7 @@ import type {
   IntakeOrigin,
   RegistrationAnswers,
 } from "@ds/db";
-import { consentRecords, events, registrations } from "@ds/db";
+import { consentRecords, events, pointsPrices, registrations } from "@ds/db";
 import {
   CONGRESS_PERSONAL_DATA_PURPOSE,
   isRegistrable,
@@ -23,8 +23,6 @@ import {
   type CongressSignUpWindowRefusal,
   type EventLifecycleState,
 } from "@ds/schemas";
-import { PointsEngine } from "../points/engine/points-engine.service.js";
-import { registrationCreatedFact } from "../points/registration-facts.js";
 import { AuthService } from "../auth/auth.service.js";
 import { MAILER, type Mailer } from "../mailer/mailer.types.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
@@ -174,7 +172,6 @@ export class CongressSignUpService {
     // Explicit, like every other parameter: the route-scan gate and the
     // api-client codegen boot under `tsx`, which emits no `design:paramtypes`.
     @Inject(AuthService) private readonly auth: AuthService,
-    @Inject(PointsEngine) private readonly points: PointsEngine,
   ) {}
 
   /**
@@ -207,7 +204,6 @@ export class CongressSignUpService {
     const consentOrigin: ConsentOrigin | null =
       intake.origin === "desk" ? intake.consentOrigin : null;
     let outcome: CongressIntakeOutcome | undefined;
-    let publishPoints: () => Promise<void> = async () => {};
 
     const consent: {
       purpose: CongressSignUpConsentPurpose;
@@ -272,21 +268,6 @@ export class CongressSignUpService {
           created: inserted !== undefined,
           accountId: userId,
         };
-        // 025 EARS-14…17, 21 — a new registration reports its sign-up fact in
-        // this transaction; a priced congress is reserved, and a refusal rolls
-        // the registration back (the sign-up fails closed, EARS-17).
-        if (inserted) {
-          const recorded = await this.points.record(
-            tx,
-            registrationCreatedFact({
-              registrationId,
-              personId: userId,
-              itemRef: event.id,
-              occurredAt: new Date(),
-            }),
-          );
-          publishPoints = recorded.publishAfterCommit;
-        }
         await this.recordConsentIfNewVersion(
           tx,
           userId,
@@ -295,8 +276,6 @@ export class CongressSignUpService {
         );
       },
     );
-
-    await publishPoints();
 
     // EARS-11: the transaction above has COMMITTED by the time
     // `createPasswordlessAccount` resolves, and the dispatch below is started
@@ -592,6 +571,28 @@ export class CongressSignUpService {
     if (venue == null || venue === "") {
       this.logger.error(
         `congress sign-up refused: event ${eventId} has no venue (set «Место проведения» in the admin event form)`,
+      );
+      throw new UnprocessableEntityException(CONGRESS_SIGN_UP_UNAVAILABLE);
+    }
+
+    // 044 EARS-41 (#3810) — this intake is out of the spend
+    // path. An email is enough to submit it, so running the points engine here
+    // would let anyone hold or debit an existing doctor's Pul by typing that
+    // doctor's address, and a threshold / reserve-limit / phone refusal would
+    // tell a stranger that account's balance state. An event the 025 price
+    // list prices above zero Pul is therefore refused with the same generic
+    // refusal as an unregistrable event — it depends only on the event, never
+    // on the email — before any account or registration; a priced item is
+    // registered only through the authenticated doctor path (005). Unpriced
+    // events (every congress event today) report nothing to points.
+    const [price] = await this.db
+      .select({ pulCost: pointsPrices.pulCost })
+      .from(pointsPrices)
+      .where(eq(pointsPrices.itemRef, event.id))
+      .limit(1);
+    if (price && price.pulCost > 0) {
+      this.logger.error(
+        `congress sign-up refused: event ${eventId} is priced in the 025 price list (a priced item registers only through the authenticated doctor path)`,
       );
       throw new UnprocessableEntityException(CONGRESS_SIGN_UP_UNAVAILABLE);
     }

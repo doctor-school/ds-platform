@@ -1059,6 +1059,14 @@ const FLOOR_ROUTES: {
     url: "/v1/admin/points/rules/floor-absent-rule/versions",
     payload: {},
   },
+  // 025 EARS-26 (#3810) — pricing an item. The body is empty, so an admitted
+  // principal gets a 400 and no price is ever stored by this suite.
+  {
+    endpoint: "PUT /v1/admin/points/prices/:itemRef",
+    method: "PUT",
+    url: "/v1/admin/points/prices/event:floor-absent-item",
+    payload: {},
+  },
 ];
 
 /** An authz refusal — never a 2xx, never a partially-served admin answer. */

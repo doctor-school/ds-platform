@@ -164,6 +164,16 @@ This amendment moves where the congress participant's first entry and the «Во
 | V-38 | Playwright / E2E — doctor storefront | Live stage-slot drive (auth: the agent's own run): sign-up response reference → `/login?method=code&handoff=<ref>&returnTo=/account/congress` → the sign-in host's code step with the address and the code sent → «Мои заявки на Конгресс» signed in; the reference absent from every URL after the entry; a reload sends nothing (EARS-40). |
 | V-39 | Playwright / E2E — doctor storefront | The same link in a browser signed in as the participant goes to `/account/congress` with no form and no code; in a browser signed in as another account the code goes to the participant and, after it, neither storefront holds the other account's session (EARS-39 amended).                                                              |
 
+## Production amendment — a priced event is out of the intake (2026-11-09, #3810)
+
+This amendment adds one refusal to the EARS-1 intake (site form and desk, EARS-35) for the 025 price list; every other handler is unchanged, and unpriced events (every congress event at the time of writing) behave exactly as before. The intake is reached with an email alone, so it stays out of the 025 spend path: it never runs the points engine, because a hold or debit through it would let anyone spend an existing doctor's Pul by typing that doctor's address, and a points refusal would disclose that account's balance state.
+
+- **EARS-41** (`realizes: US-1`) — WHEN a congress submission is written against an event that the 025 price list prices above zero Pul, THE SYSTEM SHALL refuse it with the one generic refusal of EARS-5 — an answer that depends only on the event and is identical for every email, known or not — before any account, registration, consent row, points fact or email, and SHALL NOT run the 025 points engine (`quote` or `record`) for any congress submission. A priced item is registered only through the authenticated doctor registration (005).
+
+| ID   | Test type               | Proves                                                                                                                                                                                                                                                                                                             |
+| ---- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| V-40 | Vitest e2e — `apps/api` | A priced event refuses the submission of an existing doctor who holds enough Pul and of an unknown email with byte-identical bodies, writing no account, registration, posting or hold; an unpriced event still accepts with no points fact (EARS-41) — `apps/api/test/points/points-congress-intake.e2e-spec.ts`. |
+
 ## Outcomes
 
 - A congress sign-up submitted on the congress site becomes, in one transaction, a Doctor.School account and a registration on the existing `registrations` table — the participant never registers a second time.

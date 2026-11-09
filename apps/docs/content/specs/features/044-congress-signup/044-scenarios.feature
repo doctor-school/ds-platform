@@ -295,3 +295,13 @@ Feature: 044 — Congress sign-up
     When the participant opens «Войти в кабинет» and enters the code sent to the participant's address
     Then the participant is signed in on "/account/congress"
     And neither storefront holds the colleague's session any longer
+
+  # --- Production amendment 2026-11-09 (#3810): a priced event is out of the intake ---
+
+  @EARS-41
+  Scenario: A priced event refuses every congress submission alike and spends no Pul
+    Given the congress event is priced above zero Pul in the 025 price list
+    And an existing doctor holds enough Pul for it
+    When that doctor's email and an unknown email are each submitted
+    Then both submissions get the same generic refusal
+    And no account, registration, posting or hold is written for either

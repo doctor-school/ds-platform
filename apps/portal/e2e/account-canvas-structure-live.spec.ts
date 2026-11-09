@@ -21,6 +21,11 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * canvas and the cabinet alike, so the Academy check holds it off. Sample values
  * (name, email, phone number) are text, not controls, and are never compared.
  *
+ * Decided deviation (`canvas-structure-allowlist.json`, as on the doctor host):
+ * the «Сменить пароль» helper says «код», not the canvas «ссылку» — the reset
+ * is a six-digit emailed code (003 «One code kind», owner decision #2636);
+ * the canvas redraw is #3848.
+ *
  * Not compared: `/account/events` ↔ `account-my-events.dc.html` — that canvas
  * labels no section (no `data-screen-label`), so the slot reader has no
  * section to read; it is compared once a vendoring pass labels it.

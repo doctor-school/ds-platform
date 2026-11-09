@@ -16,17 +16,20 @@
 //
 // Tag format (spec §D6): `release-YYYY.MM.DD-<n>` — calendar date + same-day
 // monotonic ordinal, decoupled from per-package semver. The GitHub Release title
-// mirrors the tag; notes are GitHub auto-generated (`--generate-notes` diffs since
-// the previous release), categorised by `.github/release.yml`.
+// mirrors the tag; notes are GitHub auto-generated (diffed since the base
+// release), categorised by `.github/release.yml`.
 //
-// Error handling (spec §5): the I/O seam NEVER throws. Any failure to cut a tag is
-// logged as a warning and the seam returns `{ cut: false }` — cutting a release is
-// non-fatal to the deploy, which has already succeeded. Mirrors the non-fatal
+// Error handling (spec §5): the I/O seam NEVER throws. A failure to cut a tag
+// returns `{ cut: false, failed: true }` and is made visible — a `::error
+// title=Release not cut::` annotation and a `$GITHUB_STEP_SUMMARY` block with the
+// HTTP status, request id and accepted permissions (#3656) — yet it does not fail
+// the deploy, which has already succeeded. Mirrors the non-fatal
 // posture of tools/deploy/release-notes.mjs. The pure seams (`parseReleaseTag`,
 // `nextReleaseTag`, `latestReleaseTag`, `shouldCutDeployRelease`) do no I/O and are
 // unit-tested directly (`tools/lint/guard-tests/cut-release.spec.ts`).
 
 import { spawnSync } from "node:child_process";
+import { appendFileSync } from "node:fs";
 
 import { extractPrNumbers } from "../deploy/release-notes.mjs";
 
@@ -205,6 +208,148 @@ function log(msg) {
   process.stdout.write(`[cut-release] ${msg}\n`);
 }
 
+/**
+ * Parse the stdout of `gh api -i` — status line, headers, blank line, body —
+ * into `{ status, headers (lower-cased names), body, message }`. Pure. A
+ * non-HTTP stdout (gh failed before any response) yields `status: null`.
+ */
+export function parseGhApiResponse(stdout) {
+  const text = String(stdout ?? "");
+  const statusLine = /^HTTP\/[\d.]+ (\d{3})[^\r\n]*\r?\n/.exec(text);
+  if (!statusLine) return { status: null, headers: {}, body: null, message: null };
+  const rest = text.slice(statusLine[0].length);
+  const sep = /\r?\n\r?\n/.exec(rest);
+  const headBlock = sep ? rest.slice(0, sep.index) : rest;
+  const bodyText = sep ? rest.slice(sep.index + sep[0].length) : "";
+  const headers = {};
+  for (const line of headBlock.split(/\r?\n/)) {
+    const colon = line.indexOf(":");
+    if (colon > 0)
+      headers[line.slice(0, colon).trim().toLowerCase()] = line.slice(colon + 1).trim();
+  }
+  let body;
+  try {
+    body = bodyText.trim() ? JSON.parse(bodyText) : null;
+  } catch {
+    body = bodyText;
+  }
+  const message =
+    body && typeof body === "object" && typeof body.message === "string"
+      ? body.message
+      : null;
+  return { status: Number(statusLine[1]), headers, body, message };
+}
+
+/** Escape a GitHub workflow-command value (the runner's own encoding). */
+function escapeCommandData(s) {
+  return String(s).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+}
+
+/** One `::error title=…::…` workflow-command line. Pure. */
+export function workflowErrorLine(title, message) {
+  const prop = escapeCommandData(title).replace(/:/g, "%3A").replace(/,/g, "%2C");
+  return `::error title=${prop}::${escapeCommandData(message)}`;
+}
+
+/**
+ * The default sink of a failed cut: the annotation on stdout (the Actions runner
+ * reads workflow commands there) and a block appended to `$GITHUB_STEP_SUMMARY`
+ * when the step has one — a failed cut must be visible on the run page even
+ * though it does not fail the deploy (spec §5).
+ */
+function defaultReport(env = process.env) {
+  return {
+    error: (line) => process.stdout.write(`${line}\n`),
+    summary: (md) => {
+      if (!env.GITHUB_STEP_SUMMARY) return;
+      try {
+        appendFileSync(env.GITHUB_STEP_SUMMARY, `${md}\n`);
+      } catch (e) {
+        log(`⚠ could not append the step summary: ${e?.message ?? String(e)}`);
+      }
+    },
+  };
+}
+
+/**
+ * One `gh api -i --method POST` call, so a refused request leaves its status and
+ * the headers GitHub Support needs (`X-GitHub-Request-Id`,
+ * `X-Accepted-GitHub-Permissions`) — `gh release create` prints only the message
+ * (#3656). Only those named headers are kept; the token is never echoed.
+ */
+function ghApiPost(exec, endpoint, fields) {
+  const args = ["api", "-i", "--method", "POST", endpoint];
+  for (const [name, value, typed] of fields) {
+    args.push(typed ? "-F" : "-f", `${name}=${value}`);
+  }
+  const res = exec("gh", args);
+  const parsed = parseGhApiResponse(res.stdout);
+  if (res.status === 0) return { ok: true, body: parsed.body };
+  return {
+    ok: false,
+    diagnostics: {
+      endpoint,
+      status: parsed.status,
+      message: parsed.message ?? ((res.stderr || "").trim() || null),
+      requestId: parsed.headers["x-github-request-id"] ?? null,
+      acceptedPermissions: parsed.headers["x-accepted-github-permissions"] ?? null,
+      oauthScopes: parsed.headers["x-oauth-scopes"] || null,
+    },
+  };
+}
+
+/** The one-line detail of a failed call's diagnostics. */
+function describeDiagnostics(d) {
+  const parts = [
+    `request id ${d.requestId ?? "(none)"}`,
+    `accepted permissions ${d.acceptedPermissions ?? "(not sent)"}`,
+  ];
+  if (d.oauthScopes) parts.push(`oauth scopes ${d.oauthScopes}`);
+  return `POST ${d.endpoint} → HTTP ${d.status ?? "(no response)"} ${
+    d.message ?? ""
+  } (${parts.join("; ")})`;
+}
+
+/**
+ * Make a failed cut visible — the annotation + the step-summary block — and
+ * return the `{ cut: false, failed: true }` result. Never throws.
+ */
+function cutFailed({ report, tag, targetSha, reason, detail, diagnostics }) {
+  const sha12 = String(targetSha ?? "").slice(0, 12) || "(no SHA)";
+  const tagLabel = tag ?? "(no tag chosen)";
+  const followUp = "open or append Issue #3656 with the request id";
+  try {
+    report.error(
+      workflowErrorLine(
+        "Release not cut",
+        `Release ${tagLabel} not cut at ${sha12}: ${detail}. The deployed SHA stays untagged — ` +
+          `no rollback target until the next release cuts; ${followUp}.`,
+      ),
+    );
+    const rows = [
+      "### Release not cut",
+      "",
+      `- Deployed SHA \`${sha12}\` stays **untagged** — no rollback target until the next release cuts.`,
+      `- Tag: \`${tagLabel}\``,
+      `- Reason: ${detail}`,
+    ];
+    if (diagnostics) {
+      rows.push(
+        `- HTTP status: ${diagnostics.status ?? "(no response)"}`,
+        `- Request id: \`${diagnostics.requestId ?? "(none)"}\``,
+        `- Accepted permissions: \`${diagnostics.acceptedPermissions ?? "(not sent)"}\``,
+      );
+    }
+    rows.push(`- Follow-up: ${followUp}.`);
+    report.summary(rows.join("\n"));
+  } catch (e) {
+    log(`⚠ could not report the failed cut: ${e?.message ?? String(e)}`);
+  }
+  const res = { cut: false, failed: true, reason };
+  if (diagnostics) res.diagnostics = diagnostics;
+  return res;
+}
+
 /** Today's calendar date in the `YYYY.MM.DD` shape the tag id uses (UTC). */
 function todayDateStr(now = new Date()) {
   const yyyy = now.getUTCFullYear();
@@ -217,8 +362,10 @@ function todayDateStr(now = new Date()) {
  * I/O seam — cut the tag + GitHub Release for the DEPLOYED SHA (spec §10.5,
  * Option A). Called in-process by `tools/deploy/prod.mjs` after a successful
  * deploy, BEFORE `recordDeployment`, so the Deployment record references the
- * freshly-cut tag. NEVER throws: every failure path logs a warning and returns
- * `{ cut: false }` — the cut is non-fatal to the deploy (spec §5). `gh` reads
+ * freshly-cut tag. NEVER throws: every failure path reports through `report`
+ * (annotation + step summary) and returns `{ cut: false, failed: true }`; a
+ * legitimate no-cut (empty range, behind/diverged) returns quietly, a redeploy
+ * with the `tag` already at the SHA. The cut is non-fatal to the deploy (spec §5). `gh` reads
  * `GH_TOKEN`/`GITHUB_TOKEN` (or the local `gh` auth) from the environment.
  *
  * `targetSha` is the explicit deployed SHA (`origin/main`'s SHA the deploy fixed
@@ -230,8 +377,8 @@ function todayDateStr(now = new Date()) {
  * cherry-picked PRs, because such a release does NOT contain everything on `main`
  * at cut time.
  *
- * @param {{ targetSha: string, hotfix?: boolean, cwd?: string, now?: Date, run?: (cmd: string, args: string[]) => { status: number|null, stdout?: string, stderr?: string } }} opts
- * @returns {{ cut: boolean, tag?: string, reason: string }}
+ * @param {{ targetSha: string, hotfix?: boolean, cwd?: string, now?: Date, run?: (cmd: string, args: string[]) => { status: number|null, stdout?: string, stderr?: string }, report?: { error: (line: string) => void, summary: (md: string) => void } }} opts
+ * @returns {{ cut: boolean, tag?: string, reason: string, failed?: true, diagnostics?: object }}
  */
 export function cutDeployRelease({
   targetSha,
@@ -239,18 +386,17 @@ export function cutDeployRelease({
   cwd = process.cwd(),
   now = new Date(),
   run,
+  report = defaultReport(),
 } = {}) {
   const exec =
     run || ((cmd, args) => spawnSync(cmd, args, { cwd, encoding: "utf8" }));
+  let tag;
 
   try {
     if (!targetSha || !/^[0-9a-f]{7,40}$/i.test(targetSha)) {
-      log(
-        `⚠ deploy-initiated cut needs an explicit target SHA, got: ${
-          targetSha ?? "(none)"
-        } — skipping (green).`,
-      );
-      return { cut: false, reason: "no valid target SHA" };
+      const detail = `no valid target SHA, got: ${targetSha ?? "(none)"}`;
+      log(`⚠ deploy-initiated cut needs an explicit target SHA — not cut: ${detail}`);
+      return cutFailed({ report, targetSha, reason: "no valid target SHA", detail });
     }
 
     // The deploy env fetches origin/main but not tags — make the `release-*` tags
@@ -267,10 +413,9 @@ export function cutDeployRelease({
 
     const tagRes = exec("git", ["tag", "-l", "release-*"]);
     if (tagRes.status !== 0) {
-      log(
-        `⚠ \`git tag -l\` failed — skipping (green): ${(tagRes.stderr || "").trim()}`,
-      );
-      return { cut: false, reason: "git tag -l failed" };
+      const detail = `\`git tag -l\` failed: ${(tagRes.stderr || "").trim()}`;
+      log(`⚠ ${detail} — not cut`);
+      return cutFailed({ report, targetSha, reason: "git tag -l failed", detail });
     }
     const existingTags = (tagRes.stdout || "").split(/\r?\n/).filter(Boolean);
 
@@ -325,19 +470,23 @@ export function cutDeployRelease({
     });
     if (!decision.cut) {
       log(`no release cut — ${decision.reason}.`);
-      return { cut: false, reason: decision.reason };
+      // A redeploy of a released SHA: name the tag already AT it, so the
+      // Deployment record describes that tag and never a newer one.
+      return latestReleaseSha === targetSha
+        ? { cut: false, tag: baseTag, reason: decision.reason }
+        : { cut: false, reason: decision.reason };
     }
 
-    const tag = nextReleaseTag(existingTags, todayDateStr(now));
+    tag = nextReleaseTag(existingTags, todayDateStr(now));
 
-    // Cut the GitHub Release with auto-generated, categorised notes diffed since
-    // the BASE tag (`--notes-start-tag`), not since whatever tag happens to sort
-    // newest. `gh` creates the underlying git tag at --target (the deployed SHA)
-    // when it does not yet exist.
-    const args = ["release", "create", tag, "--generate-notes"];
-    if (baseTag) args.push("--notes-start-tag", baseTag);
-    args.push("--target", targetSha);
-
+    // The Release is created through `gh api -i` (#3656) with the semantics of
+    // `gh release create --generate-notes [--notes-start-tag <base>] --target`:
+    // with a base tag the notes come from `releases/generate-notes` diffed since
+    // that BASE (not since whatever tag sorts newest) and any hotfix notes lead
+    // them; without one GitHub generates them in the create call. The create
+    // makes the git tag at `target_commitish` (the deployed SHA).
+    let title = tag;
+    let leadNotes = "";
     if (hotfix) {
       // The cherry-picked PR list, from the same `(#N)` subject convention the
       // release digest reads (shared `extractPrNumbers` — never re-parsed here).
@@ -355,20 +504,45 @@ export function cutDeployRelease({
         }
       }
       const copy = hotfixReleaseCopy({ tag, baseTag, prNumbers });
-      args.push("--title", copy.title, "--notes", copy.notes);
-    } else {
-      args.push("--title", tag);
+      title = copy.title;
+      leadNotes = copy.notes;
     }
 
-    const rel = exec("gh", args);
-    if (rel.status !== 0) {
-      log(
-        `⚠ \`gh release create ${tag}\` failed — skipping (green): ${(
-          rel.stderr || ""
-        ).trim()}`,
-      );
-      return { cut: false, reason: "gh release create failed" };
+    const refused = (diagnostics) => {
+      const detail = describeDiagnostics(diagnostics);
+      log(`⚠ release ${tag} not cut: ${detail}`);
+      return cutFailed({
+        report,
+        tag,
+        targetSha,
+        reason: `release create refused (HTTP ${diagnostics.status ?? "no response"})`,
+        detail,
+        diagnostics,
+      });
+    };
+
+    const fields = [
+      ["tag_name", tag],
+      ["target_commitish", targetSha],
+      ["name", title],
+    ];
+    if (baseTag) {
+      const notes = ghApiPost(exec, "repos/{owner}/{repo}/releases/generate-notes", [
+        ["tag_name", tag],
+        ["target_commitish", targetSha],
+        ["previous_tag_name", baseTag],
+      ]);
+      if (!notes.ok) return refused(notes.diagnostics);
+      const generated =
+        notes.body && typeof notes.body.body === "string" ? notes.body.body : "";
+      fields.push(["body", [leadNotes, generated].filter(Boolean).join("\n\n")]);
+    } else {
+      if (leadNotes) fields.push(["body", leadNotes]);
+      fields.push(["generate_release_notes", "true", true]);
     }
+
+    const rel = ghApiPost(exec, "repos/{owner}/{repo}/releases", fields);
+    if (!rel.ok) return refused(rel.diagnostics);
     log(
       `cut ${hotfix ? "HOTFIX release" : "release"} ${tag} at ${targetSha.slice(0, 12)}` +
         ` (base ${baseTag ?? "none"}; ${decision.reason}).`,
@@ -376,7 +550,8 @@ export function cutDeployRelease({
     return { cut: true, tag, reason: decision.reason };
   } catch (e) {
     // Belt-and-braces: never fail the deploy from here (spec §5).
-    log(`⚠ unexpected error, skipping (green): ${e?.message ?? String(e)}`);
-    return { cut: false, reason: "unexpected error" };
+    const detail = `unexpected error: ${e?.message ?? String(e)}`;
+    log(`⚠ ${detail} — not cut`);
+    return cutFailed({ report, tag, targetSha, reason: "unexpected error", detail });
   }
 }

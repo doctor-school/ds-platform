@@ -276,10 +276,11 @@ describe("deployment-record — state + owner quote (#3158)", () => {
 describe("deployment-record — recordDeployment (#3158, moved from prod.mjs)", () => {
   const PREV = "b".repeat(40);
   const make = () => {
-    const calls = { record: [], digest: [], tag: 0, log: [] };
+    const calls = { record: [], digest: [], tag: 0, tagSha: [], log: [] };
     const deps = {
-      latestReleaseTag: () => {
+      releaseTagAt: (sha: string) => {
         calls.tag += 1;
+        calls.tagSha.push(sha);
         return "release-2026.10.21-1";
       },
       composeDigest: async (args) => {
@@ -294,7 +295,42 @@ describe("deployment-record — recordDeployment (#3158, moved from prod.mjs)", 
     return { calls, deps, log: (l: string) => calls.log.push(l) };
   };
 
-  it("success: latest tag + notes over prev..sha + the quote", async () => {
+  it("success with the cut's tag: the record carries exactly that tag, no lookup (#3656)", async () => {
+    const { calls, deps, log } = make();
+    await recordDeployment({
+      prevSha: PREV,
+      sha: SHA,
+      state: "success",
+      releaseTag: "release-2026.11.06-2",
+      healthUrl: HEALTH,
+      log,
+      deps,
+    });
+    expect(calls.tag).toBe(0);
+    expect(calls.record[0].releaseTag).toBe("release-2026.11.06-2");
+  });
+
+  it("success with a failed cut (releaseTag null): untagged, never the newest tag of another SHA (#3656)", async () => {
+    const { calls, deps, log } = make();
+    await recordDeployment({
+      prevSha: PREV,
+      sha: SHA,
+      state: "success",
+      releaseTag: null,
+      healthUrl: HEALTH,
+      log,
+      deps,
+    });
+    expect(calls.tag).toBe(0);
+    expect(calls.record[0].releaseTag).toBeNull();
+    const { deployment } = buildDeploymentPayload({
+      ...calls.record[0],
+      nowIso: NOW,
+    });
+    expect(deployment.description).toMatch(/^release \(untagged\) @ aaaaaaaaaaaa/);
+  });
+
+  it("success: the tag AT the deployed SHA (lookup) + notes over prev..sha + the quote", async () => {
     const { calls, deps, log } = make();
     const res = await recordDeployment({
       prevSha: PREV,
@@ -306,6 +342,7 @@ describe("deployment-record — recordDeployment (#3158, moved from prod.mjs)", 
       deps,
     });
     expect(res).toEqual({ ok: true, deploymentId: 7 });
+    expect(calls.tagSha).toEqual([SHA]);
     expect(calls.digest[0]).toMatchObject({ prevSha: PREV, newSha: SHA });
     expect(calls.record[0]).toMatchObject({
       sha: SHA,

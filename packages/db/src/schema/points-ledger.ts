@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   foreignKey,
@@ -334,9 +335,130 @@ export const pointsPostings = pgTable(
   ],
 );
 
+/**
+ * EARS-26 — the price list: one row per priceable item of any kind (events,
+ * courses, trainings, internships, offline events, …; owner decision 1). No
+ * row = the item is `open` at price 0. A write goes through the request audit
+ * context and the `audit_row_change()` trigger (0061); a later price applies
+ * to reserves and debits created afterwards — a hold keeps the price it was
+ * reserved at (`points_reserves.price`).
+ */
+export const pointsPrices = pgTable(
+  "points_prices",
+  {
+    /** The item's id as a fact names it in `ref` (an event id for an event). */
+    itemRef: text("item_ref").primaryKey(),
+    /** A kind of the catalog `POINTS_ITEM_KINDS` (packages/schemas). */
+    itemKind: text("item_kind").notNull(),
+    mode: text("mode").notNull(),
+    pulCost: integer("pul_cost").notNull(),
+    limitedSeats: boolean("limited_seats").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** The acting admin's `users.id`; null when written by no session. */
+    updatedBy: uuid("updated_by").references(() => users.id),
+  },
+  (table) => [
+    check(
+      "points_prices_mode_check",
+      sql`${table.mode} IN ('open', 'advance', 'threshold')`,
+    ),
+    check("points_prices_pul_cost_check", sql`${table.pulCost} >= 0`),
+  ],
+);
+
+/**
+ * EARS-35 — the hold projection: one row per registration whose
+ * `spend.reserve` applied, written in the transaction of its postings. Its
+ * amounts are proven by the postings of the ledger facts named here; it is
+ * rebuildable from them and the journal (025-design E).
+ */
+export const pointsReserves = pgTable(
+  "points_reserves",
+  {
+    registrationId: uuid("registration_id").primaryKey(),
+    personAccountId: uuid("person_account_id")
+      .notNull()
+      .references(() => pointsAccounts.id),
+    itemRef: text("item_ref").notNull(),
+    /** The price at reserve time (EARS-26: a later price change never moves it). */
+    price: integer("price").notNull(),
+    balancePart: integer("balance_part").notNull(),
+    advancePart: integer("advance_part").notNull().default(0),
+    state: text("state").notNull().default("held"),
+    /** The ledger fact `<fact>#spend.reserve`. */
+    reserveEventId: text("reserve_event_id").notNull(),
+    /** The ledger fact that settled or released the hold. */
+    closeEventId: text("close_event_id"),
+    heldAt: timestamp("held_at", { withTimezone: true }).notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      "points_reserves_state_check",
+      sql`${table.state} IN ('held', 'settled', 'released')`,
+    ),
+    check(
+      "points_reserves_parts_check",
+      sql`${table.balancePart} >= 0 AND ${table.advancePart} >= 0 AND ${table.balancePart} + ${table.advancePart} = ${table.price}`,
+    ),
+    check(
+      "points_reserves_close_check",
+      sql`(${table.state} = 'held') = (${table.closeEventId} IS NULL)`,
+    ),
+    // EARS-21 / EARS-2 — a person's open holds.
+    index("points_reserves_person_state_idx").on(
+      table.personAccountId,
+      table.state,
+    ),
+  ],
+);
+
+/**
+ * EARS-35 / EARS-20 — the advance obligation projection, per obligation. The
+ * advance itself ships with #3811; the table ships here so the
+ * `PointsAccount.advance` read (EARS-2) is read from it from the start.
+ */
+export const pointsObligations = pgTable(
+  "points_obligations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    personAccountId: uuid("person_account_id")
+      .notNull()
+      .references(() => pointsAccounts.id),
+    registrationId: uuid("registration_id")
+      .notNull()
+      .references(() => pointsReserves.registrationId),
+    opened: integer("opened").notNull(),
+    netted: integer("netted").notNull().default(0),
+    remaining: integer("remaining").notNull(),
+    state: text("state").notNull().default("open"),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      "points_obligations_state_check",
+      sql`${table.state} IN ('open', 'netted', 'annulled')`,
+    ),
+    check(
+      "points_obligations_amounts_check",
+      sql`${table.opened} > 0 AND ${table.netted} >= 0 AND ${table.remaining} >= 0 AND ${table.netted} <= ${table.opened}`,
+    ),
+    unique("points_obligations_registration_unique").on(table.registrationId),
+    index("points_obligations_person_state_idx").on(
+      table.personAccountId,
+      table.state,
+    ),
+  ],
+);
+
 export type PointsAccountRow = typeof pointsAccounts.$inferSelect;
 export type PointsPostingKeyRow = typeof pointsPostingKeys.$inferSelect;
 export type PointsRuleVersionRow = typeof pointsRuleVersions.$inferSelect;
 export type PointsPostingRow = typeof pointsPostings.$inferSelect;
 export type PointsFactRow = typeof pointsFacts.$inferSelect;
+export type PointsPriceRow = typeof pointsPrices.$inferSelect;
+export type PointsReserveRow = typeof pointsReserves.$inferSelect;
+export type PointsObligationRow = typeof pointsObligations.$inferSelect;
 export type NewPointsPostingRow = typeof pointsPostings.$inferInsert;

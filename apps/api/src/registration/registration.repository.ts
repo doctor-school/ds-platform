@@ -47,6 +47,8 @@ import {
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { isParticipant } from "../auth/staff-role.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
+import { PointsEngine } from "../points/engine/points-engine.service.js";
+import { registrationCreatedFact } from "../points/registration-facts.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -267,7 +269,10 @@ const ACTIVE_EVENT = eq(events.recordStatus, "active");
  */
 @Injectable()
 export class RegistrationRepository {
-  constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
+  constructor(
+    @Inject(DRIZZLE_DB) private readonly db: Db,
+    @Inject(PointsEngine) private readonly points: PointsEngine,
+  ) {}
 
   /**
    * Resolve the authenticated Zitadel `sub` to its domain `users.id` (the 003
@@ -340,7 +345,8 @@ export class RegistrationRepository {
   ): Promise<RegistrationUpsert> {
     // 010 EARS-3/5 — attribute the registrations write to the acting caller
     // (source portal-api) via the audit-context wrapper.
-    return withRequestAuditContext(this.db, async (tx) => {
+    let publish: () => Promise<void> = async () => {};
+    const upsert = await withRequestAuditContext(this.db, async (tx) => {
       const [inserted] = await tx
         .insert(registrations)
         .values({ userId, eventId })
@@ -361,6 +367,20 @@ export class RegistrationRepository {
           // No PD — only the opaque subject + the aggregate/event ids.
           metadata: { registrationId: inserted.id, eventId },
         });
+        // 025 EARS-14…17, 21 — the sign-up's fact, in the same transaction:
+        // a priced item is reserved, and a refusal (`points-threshold-short`,
+        // `points-reserve-limit`, `points-phone-unverified`) rolls the
+        // registration back — the sign-up fails closed (EARS-17).
+        const recorded = await this.points.record(
+          tx,
+          registrationCreatedFact({
+            registrationId: inserted.id,
+            personId: userId,
+            itemRef: eventId,
+            occurredAt: inserted.registeredAt,
+          }),
+        );
+        publish = recorded.publishAfterCommit;
         return { registeredAt: inserted.registeredAt, created: true };
       }
 
@@ -381,6 +401,8 @@ export class RegistrationRepository {
       }
       return { registeredAt: existing.registeredAt, created: false };
     });
+    await publish();
+    return upsert;
   }
 
   /**

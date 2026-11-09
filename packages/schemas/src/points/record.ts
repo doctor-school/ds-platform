@@ -47,6 +47,8 @@ export const POINTS_TRACE_VERDICTS = [
   "limit-reached",
   "superseded",
   "no-open-hold",
+  // EARS-14 — a reserve or price-list debit on an item with no chargeable price row.
+  "no-price",
 ] as const;
 export type PointsTraceVerdict = (typeof POINTS_TRACE_VERDICTS)[number];
 

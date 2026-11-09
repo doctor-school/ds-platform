@@ -27,14 +27,12 @@ import {
   encodePostingCursor,
   type PostingHistoryPosition,
 } from "./points-history-cursor.js";
+import { HoldBook } from "./engine/holds.js";
 import {
   firstOverdrawingLeg,
   type FoldPosting,
   foldPointsAccount,
-  RELEASE_FACT,
-  RESERVE_FACT,
   type ResolvedLeg,
-  SETTLE_FACT,
 } from "./points-balance.js";
 import { PointsLedgerError } from "./points.errors.js";
 
@@ -101,13 +99,38 @@ export class PointsLedgerService {
   }
 
   /**
-   * EARS-2 — the person's `PointsAccount`, folded over postings at read time
-   * (no balance column exists to read). A read never writes: a person with no
-   * account yet gets the zero fold of an open account WITHOUT opening one —
-   * the account opens on the first accrual (EARS-1).
+   * EARS-2 — the person's `PointsAccount`: Pul available, Bre and Con are a
+   * fold over the person account's postings at read time (no balance column
+   * exists to read); `pul.reserved` and `advance` are read from the hold
+   * projections `points_reserves` / `points_obligations` (EARS-35), because a
+   * reserve covered by the advance writes no person-account posting and
+   * obligations net per obligation (025-design E). A read never writes: a
+   * person with no account yet gets the zero read of an open account WITHOUT
+   * opening one — the account opens on the first accrual (EARS-1).
    */
   async readPersonAccount(personId: string): Promise<PointsAccount> {
-    const [account] = await this.db
+    const account = await this.findPersonAccount(personId);
+    const postings = account ? await this.foldPostings(account.id) : [];
+    const fold = foldPointsAccount(account?.id ?? "", postings);
+    const holds = account
+      ? await new HoldBook().projection(this.db, account.id)
+      : { reserved: 0, advance: { open: 0, remaining: 0 } };
+    return PointsAccountSchema.parse({
+      personId,
+      pul: { unit: PUL_UNIT, available: fold.pul, reserved: holds.reserved },
+      bre: fold.bre,
+      con: fold.con,
+      advance: holds.advance,
+      status: account?.closedAt ? "closed" : "open",
+    });
+  }
+
+  /** The person's attention-points account, or undefined — never opens one. */
+  async findPersonAccount(
+    personId: string,
+    executor: Executor = this.db,
+  ): Promise<PointsAccountRow | undefined> {
+    const [account] = await executor
       .select()
       .from(pointsAccounts)
       .where(
@@ -117,16 +140,15 @@ export class PointsLedgerService {
           eq(pointsAccounts.unit, UNIT),
         ),
       );
-    const postings = account ? await this.foldPostings(account.id) : [];
-    const fold = foldPointsAccount(account?.id ?? "", postings);
-    return PointsAccountSchema.parse({
-      personId,
-      pul: { unit: PUL_UNIT, ...fold.pul },
-      bre: fold.bre,
-      con: fold.con,
-      advance: fold.advance,
-      status: account?.closedAt ? "closed" : "open",
-    });
+    return account;
+  }
+
+  /** EARS-22 — available Pul of a person account: Σ credits − Σ debits. */
+  async availablePul(
+    accountId: string,
+    executor: Executor = this.db,
+  ): Promise<number> {
+    return pulBalance(executor, accountId);
   }
 
   /**
@@ -228,24 +250,15 @@ export class PointsLedgerService {
     });
   }
 
-  /**
-   * The postings {@link foldPointsAccount} reads: every posting of the account,
-   * plus the reserve / settle / release facts of the person's reserves — their
-   * `reserve:advance` and settle legs move Pul between system accounts only.
-   */
+  /** The postings {@link foldPointsAccount} reads: every posting of the account. */
   private async foldPostings(accountId: string): Promise<FoldPosting[]> {
-    const columns = {
-      id: pointsPostings.id,
-      eventId: pointsPostings.eventId,
-      leg: pointsPostings.leg,
-      debitAccountId: pointsPostings.debitAccountId,
-      creditAccountId: pointsPostings.creditAccountId,
-      denomination: pointsPostings.denomination,
-      amount: pointsPostings.amount,
-      occurredAt: pointsPostings.occurredAt,
-    };
-    const own = await this.db
-      .select(columns)
+    const rows = await this.db
+      .select({
+        debitAccountId: pointsPostings.debitAccountId,
+        creditAccountId: pointsPostings.creditAccountId,
+        denomination: pointsPostings.denomination,
+        amount: pointsPostings.amount,
+      })
       .from(pointsPostings)
       .where(
         or(
@@ -253,33 +266,8 @@ export class PointsLedgerService {
           eq(pointsPostings.debitAccountId, accountId),
         ),
       );
-    const registrations = [
-      ...new Set(
-        own
-          .filter((p) => p.eventId.startsWith(RESERVE_FACT))
-          .map((p) => p.eventId.slice(RESERVE_FACT.length)),
-      ),
-    ];
-    const lifecycle =
-      registrations.length === 0
-        ? []
-        : await this.db
-            .select(columns)
-            .from(pointsPostings)
-            .where(
-              inArray(
-                pointsPostings.eventId,
-                registrations.flatMap((r) => [
-                  `${RESERVE_FACT}${r}`,
-                  `${SETTLE_FACT}${r}`,
-                  `${RELEASE_FACT}${r}`,
-                ]),
-              ),
-            );
-    const byId = new Map([...own, ...lifecycle].map((p) => [p.id, p]));
-    return [...byId.values()].map(({ id: _id, ...p }) => ({
+    return rows.map((p) => ({
       ...p,
-      // Attention-points postings always carry a denomination (0058 trigger).
       denomination: p.denomination as FoldPosting["denomination"],
     }));
   }
@@ -435,6 +423,61 @@ export class PointsLedgerService {
   }
 
   /**
+   * EARS-41 — {@link post} without a write or a lock: the same refusals in the
+   * same order (clock skew, EARS-12, duplicate event id or dedupe key, closed
+   * account, overdraw), answered for `quote`. A person with no account reads
+   * as an open account at zero; nothing is opened.
+   */
+  async preview(
+    input: PointsFact,
+    executor: Executor = this.db,
+  ): Promise<{ status: "posted" | "duplicate" }> {
+    const fact = PointsFactSchema.parse(input);
+    if (fact.occurredAt.getTime() > Date.now() + POINTS_FUTURE_SKEW_MS) {
+      throw new PointsLedgerError("POINTS_OCCURRED_AT_FUTURE");
+    }
+    if (fact.legs.some(debitsBreOrCon)) {
+      throw new PointsLedgerError("POINTS_BRE_CON_DEBIT");
+    }
+    const [taken] = await executor
+      .select({ eventId: pointsPostingKeys.eventId })
+      .from(pointsPostingKeys)
+      .where(
+        fact.dedupeKey === undefined
+          ? eq(pointsPostingKeys.eventId, fact.eventId)
+          : or(
+              eq(pointsPostingKeys.eventId, fact.eventId),
+              eq(pointsPostingKeys.dedupeKey, fact.dedupeKey),
+            ),
+      )
+      .limit(1);
+    if (taken) return { status: "duplicate" };
+    const balances = new Map<string, number>();
+    for (const leg of fact.legs) {
+      for (const ref of [leg.debit, leg.credit]) {
+        if (ref.kind !== "person" || balances.has(refKey(ref))) continue;
+        const account = await this.findPersonAccount(ref.personId, executor);
+        if (account?.closedAt) throw new PointsLedgerError("POINTS_ACCOUNT_CLOSED");
+        balances.set(
+          refKey(ref),
+          account ? await pulBalance(executor, account.id) : 0,
+        );
+      }
+    }
+    const legs: ResolvedLeg[] = fact.legs.map((leg) => ({
+      leg: leg.leg,
+      denomination: leg.denomination,
+      amount: leg.amount,
+      debitAccountId: refKey(leg.debit),
+      creditAccountId: refKey(leg.credit),
+    }));
+    if (firstOverdrawingLeg(balances, legs) !== null) {
+      throw new PointsLedgerError("POINTS_INSUFFICIENT_PUL");
+    }
+    return { status: "posted" };
+  }
+
+  /**
    * EARS-31 — the personal-data lifecycle closes (freezes) the person's
    * account. Idempotent: an already-closed account keeps its first
    * `closed_at`. Existing postings are untouched; no reserve is released and
@@ -505,7 +548,7 @@ function occurredMonth(at: Date): string {
 }
 
 /** EARS-22 fold — available Pul = Σ credits − Σ debits of the account. */
-async function pulBalance(tx: Tx, accountId: string): Promise<number> {
+async function pulBalance(tx: Executor, accountId: string): Promise<number> {
   const [row] = await tx
     .select({
       balance: sql<string>`coalesce(sum(case when ${pointsPostings.creditAccountId} = ${accountId} then ${pointsPostings.amount} else -${pointsPostings.amount} end), 0)`,

@@ -17,19 +17,16 @@ import {
 // issue names its field path relative to the body, e.g.
 // `condition.all.0.eq.0`, so the 422 problem points at the offending node.
 //
-// Effects and limits that need the hold projections or the price list —
-// `reserve`, `settle`, `release`, a `debit` of the price-list amount and
-// `concurrentOpen` — ship with the spend slice (#3810, 025-design H); until
-// then a publish refuses them, so no admin rule can name a mechanism that
-// does not run.
+// The spend effects (EARS-35) read the hold of the fact's `registrationId` on
+// its item ref and the price list of its ref: a `reserve`, `settle` or
+// `release` needs every trigger type to carry an item ref and the
+// `registrationId` attribute, a `debit` of the price-list amount an item
+// ref; `concurrentOpen` (EARS-21) bounds holds, so only a `reserve` names it.
 
 export interface PublishIssue {
   readonly path: string;
   readonly message: string;
 }
-
-const SPEND_SLICE =
-  "ships with the spend slice (#3810: price list and hold projections)";
 
 function join(path: readonly (string | number)[]): string {
   return path.join(".");
@@ -104,10 +101,14 @@ export function checkRuleBody(
     }
     case "debit":
       if (effect.amounts === "price") {
-        issues.push({
-          path: "effect.amounts",
-          message: `a debit of the price-list amount ${SPEND_SLICE}`,
-        });
+        for (const type of rule.trigger) {
+          if (getPointsFactType(type)?.refKind !== "item") {
+            issues.push({
+              path: "effect.amounts",
+              message: `${type} names no item, so it has no price`,
+            });
+          }
+        }
       } else if (effect.amounts.pul > opts.maxAmount) {
         issues.push({
           path: "effect.amounts.pul",
@@ -118,20 +119,31 @@ export function checkRuleBody(
     case "reserve":
     case "settle":
     case "release":
-      issues.push({
-        path: "effect.kind",
-        message: `the ${effect.kind} effect ${SPEND_SLICE}`,
-      });
+      for (const type of rule.trigger) {
+        const entry = getPointsFactType(type);
+        if (
+          entry &&
+          (entry.refKind !== "item" ||
+            !Object.hasOwn(entry.attributes, "registrationId"))
+        ) {
+          issues.push({
+            path: "effect.kind",
+            message: `a ${effect.kind} needs an item ref and a registrationId; ${type} lacks them`,
+          });
+        }
+      }
       break;
   }
 
   let oncePerSeen = false;
   rule.limits.forEach((limit, i) => {
     if ("concurrentOpen" in limit) {
-      issues.push({
-        path: `limits.${i}.concurrentOpen`,
-        message: `concurrentOpen ${SPEND_SLICE}`,
-      });
+      if (effect.kind !== "reserve") {
+        issues.push({
+          path: `limits.${i}.concurrentOpen`,
+          message: "concurrentOpen bounds holds, so only a reserve names it",
+        });
+      }
       return;
     }
     if ("oncePer" in limit) {

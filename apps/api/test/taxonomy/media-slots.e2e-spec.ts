@@ -30,6 +30,10 @@ const NOT_MEDIA_SLOTS: Readonly<Record<string, string>> = {
   "events.partner_ref": "free-text sponsor / partner reference (wave 1)",
   "feed_entries.source_ref":
     "048 feed source record key (the material id for an `academy` entry), not an object-storage key",
+  "points_prices.item_ref":
+    "025 price-list item reference (item kind + id), not a media object",
+  "points_reserves.item_ref":
+    "025 hold item reference (item kind + id), not a media object",
   "events.program_pdf_ref":
     "object key written by EventsService.storeProgramPdf, which notes no upload locator and enqueues no cleanup job — neither sweep is ever handed it",
 };

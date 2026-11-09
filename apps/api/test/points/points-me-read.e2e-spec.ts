@@ -26,7 +26,11 @@ import {
   type BotProtectionResult,
 } from "../../src/bot-protection/index.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { PointsEngine } from "../../src/points/engine/points-engine.service.js";
 import { PointsLedgerService } from "../../src/points/points-ledger.service.js";
+import { PointsPricesService } from "../../src/points/points-prices.service.js";
+import { registrationCreatedFact } from "../../src/points/registration-facts.js";
+import { seedEvent } from "./spend-harness.js";
 import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -47,15 +51,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     let app: NestFastifyApplication;
     let pool: pg.Pool;
     let ledger: PointsLedgerService;
+    let engine: PointsEngine;
+    let prices: PointsPricesService;
     const fake = new FakeIdpClient();
     const password = "Aa1!ufficiently-long-pw";
     const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const ruleId = `test-rule-${randomUUID()}`;
     const issuance = { kind: "system", code: "issuance" } as const;
-    const reserve = { kind: "system", code: "reserve" } as const;
-    const advance = { kind: "system", code: "advance" } as const;
-    const sink = { kind: "system", code: "sink" } as const;
 
     /** Register + sign in a doctor; their session cookie and `users.id`. */
     async function doctor(): Promise<{ cookie: string; personId: string }> {
@@ -118,6 +121,25 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return rows.length;
     }
 
+    /** A sign-up on a fresh event priced `pul` (threshold), recorded. */
+    async function signUpOn(personId: string, pul: number) {
+      const itemRef = await seedEvent({ pool });
+      await prices.put(
+        itemRef,
+        { itemKind: "event", mode: "threshold", pulCost: pul },
+        null,
+      );
+      const signUp = registrationCreatedFact({
+        registrationId: randomUUID(),
+        personId,
+        itemRef,
+        occurredAt: new Date(),
+      });
+      const result = await engine.record(signUp);
+      expect(result.applied.map((a) => a.effect)).toEqual(["reserve"]);
+      return signUp;
+    }
+
     beforeAll(async () => {
       const moduleRef: TestingModule = await withSignInHost(
         Test.createTestingModule({ imports: [AppModule] })
@@ -141,6 +163,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await app.getHttpAdapter().getInstance().ready();
       pool = app.get<pg.Pool>(DRIZZLE_POOL);
       ledger = app.get(PointsLedgerService);
+      engine = app.get(PointsEngine);
+      prices = app.get(PointsPricesService);
       // Every posting references a rule version (0058 FK); a per-run test rule.
       await pool.query(
         `INSERT INTO points_rule_versions (rule_id, version, parameters, effective_from)
@@ -156,8 +180,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("025 EARS-2: the signed-in doctor reads PointsAccount as a fold over their postings, the same on every request", async () => {
       const { cookie, personId } = await doctor();
       const me = person(personId);
-      const open = randomUUID();
-      const settled = randomUUID();
       await ledger.post(
         fact(randomUUID(), [
           leg("accrual:pul", issuance, me, 50),
@@ -165,23 +187,39 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           leg("accrual:con", issuance, me, 2, "con"),
         ]),
       );
-      await ledger.post(
-        fact(`reserve:${open}`, [
-          leg("reserve:balance", me, reserve, 10),
-          leg("reserve:advance", advance, reserve, 6),
-        ]),
-      );
-      await ledger.post(
-        fact(`reserve:${settled}`, [leg("reserve:balance", me, reserve, 20)]),
-      );
-      await ledger.post(
-        fact(`settle:${settled}`, [leg("settle:pul", reserve, sink, 20)]),
-      );
-      await ledger.post(
-        fact(randomUUID(), [
-          leg("accrual:pul", issuance, me, 4),
-          leg("obligation-settle:pul", me, advance, 4),
-        ]),
+      // Real holds through the engine (EARS-14 / EARS-19): one reserve of 10
+      // still held, one of 20 settled by attendance (which also credits the
+      // participation award, +2 Bre +1 Con).
+      await engine.record({
+        type: "phone.verified",
+        eventId: `e2e-phone:${randomUUID()}`,
+        personId,
+        occurredAt: new Date(),
+        attributes: {},
+      });
+      const held = await signUpOn(personId, 10);
+      const settled = await signUpOn(personId, 20);
+      await engine.record({
+        type: "attendance.confirmed",
+        eventId: `e2e-attendance:${randomUUID()}`,
+        personId,
+        ref: settled.ref,
+        occurredAt: new Date(),
+        attributes: {
+          registrationId: settled.attributes.registrationId,
+          presenceSharePercent: 100,
+        },
+      });
+      // The advance projection: its writer ships with the advance slice
+      // (#3811), so the read is driven from a projection row here — an
+      // obligation of 6 on the held reserve, 4 of it netted.
+      await pool.query(
+        `INSERT INTO points_obligations
+           (person_account_id, registration_id, opened, netted, remaining, state, opened_at)
+         SELECT a.id, $2, 6, 4, 2, 'open', now()
+           FROM points_accounts a
+          WHERE a.subject_kind = 'person' AND a.subject_id = $1`,
+        [personId, held.attributes.registrationId],
       );
 
       const first = await getPoints(cookie);
@@ -191,8 +229,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(PointsAccountSchema.parse(first.json())).toEqual({
         personId,
         pul: { unit: "Pul", available: 20, reserved: 10 },
-        bre: 3,
-        con: 2,
+        bre: 5,
+        con: 3,
         advance: { open: 1, remaining: 2 },
         status: "open",
       });

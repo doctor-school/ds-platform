@@ -1,5 +1,5 @@
 import type { DrizzleHandle } from "@ds/db";
-import { pointsFacts } from "@ds/db";
+import { pointsFacts, pointsPrices } from "@ds/db";
 import type { PointsParsedRecordFact } from "@ds/schemas";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { ConditionValue, PointsPredicateResolver } from "./condition.js";
@@ -19,9 +19,9 @@ type Executor = Db | Tx;
  * before any effect is applied, so nothing a rule of this fact writes is
  * visible to a predicate of the same fact.
  *
- * The `item.*` predicates read the price list, which ships with the spend
- * slice (#3810, 025-design H); until it exists no item has a price row, so
- * they answer the declared no-row values (`null`, `null`, `false`).
+ * The `item.*` predicates read the fact's `ref` row of the price list
+ * (EARS-26); an item with no row answers the declared no-row values
+ * (`null`, `null`, `false`).
  */
 export class JournalPredicateResolver implements PointsPredicateResolver {
   private readonly memo = new Map<string, Promise<ConditionValue>>();
@@ -55,13 +55,23 @@ export class JournalPredicateResolver implements PointsPredicateResolver {
       case "person.referrer":
         return this.referrer();
       case "item.price":
+        return (await this.price())?.pulCost ?? null;
       case "item.mode":
-        return null;
+        return (await this.price())?.mode ?? null;
       case "item.limitedSeats":
-        return false;
+        return (await this.price())?.limitedSeats ?? false;
       default:
         throw new Error(`points: unregistered predicate ${name}`);
     }
+  }
+
+  private async price() {
+    if (this.fact.ref === undefined) return undefined;
+    const [row] = await this.executor
+      .select()
+      .from(pointsPrices)
+      .where(eq(pointsPrices.itemRef, this.fact.ref));
+    return row;
   }
 
   private async hasFact(type: string): Promise<boolean> {

@@ -132,3 +132,22 @@ export {
   type PointsRuleId,
   type PointsRuleParameters,
 } from "./rules-v1.js";
+export {
+  POINTS_GATING_BLOCKED_REASONS,
+  POINTS_GATING_MODES,
+  POINTS_ITEM_KINDS,
+  PointsGatingBlockedReasonSchema,
+  PointsGatingDecisionSchema,
+  PointsGatingModeSchema,
+  PointsItemKindSchema,
+  PointsItemRefSchema,
+  PointsPriceSchema,
+  PutPointsPriceRequestSchema,
+  type PointsEarnHint,
+  type PointsGatingBlockedReason,
+  type PointsGatingDecision,
+  type PointsGatingMode,
+  type PointsItemKind,
+  type PointsPrice,
+  type PutPointsPriceRequest,
+} from "./prices.js";

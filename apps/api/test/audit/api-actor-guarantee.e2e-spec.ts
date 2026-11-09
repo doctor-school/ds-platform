@@ -6,6 +6,10 @@ import { auditContextStore } from "../../src/audit/audit-context.js";
 import { EventsRepository } from "../../src/events/events.repository.js";
 import { MeRepository } from "../../src/me/me.repository.js";
 import { RegistrationRepository } from "../../src/registration/registration.repository.js";
+import { PointsEngine } from "../../src/points/engine/points-engine.service.js";
+import { PointsEventsPublisher } from "../../src/points/points-events.js";
+import { PointsLedgerService } from "../../src/points/points-ledger.service.js";
+import { RuleBookService } from "../../src/points/rule-book.service.js";
 import { eventClassification } from "../setup/event-classification.js";
 
 // 010 — Universal edit audit, EARS-5 (Issue #1088): the API-path actor
@@ -40,7 +44,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
       handle = createDrizzle(process.env.DATABASE_URL!, { max: 4 });
       eventsRepo = new EventsRepository(handle.db);
       meRepo = new MeRepository(handle.db);
-      registrationRepo = new RegistrationRepository(handle.db);
+      // 025 EARS-14 — the sign-up reports `registration.created` to the engine.
+      const ledger = new PointsLedgerService(handle.db);
+      registrationRepo = new RegistrationRepository(
+        handle.db,
+        new PointsEngine(
+          handle.db,
+          new RuleBookService(handle.db),
+          ledger,
+          new PointsEventsPublisher(),
+        ),
+      );
     });
 
     afterAll(async () => {

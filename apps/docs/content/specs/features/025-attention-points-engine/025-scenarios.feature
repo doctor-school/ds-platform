@@ -28,6 +28,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     And "A" has 0 Pul, 4 Bre and 1 Con
 
   @EARS-4 @EARS-7
+  @points-record-boundaries
   Scenario: The same lesson reported from two storefronts and an offline sync accrues once
     When "lesson.completed" for "A" on lesson "L1" is recorded from the doctor storefront
     And "lesson.completed" for "A" on lesson "L1" is recorded from the Academy with another event id
@@ -249,6 +250,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     And no person identifier appears in the response
 
   @EARS-31 @failure
+  @points-record-boundaries
   Scenario: A closed account accepts no posting
     Given the account of "A" is closed for erasure
     When "lesson.completed" for "A" is recorded
@@ -276,6 +278,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then the response carries a pulCost of 0 in Pul and no field stating that the event is free
 
   @EARS-8
+  @points-record-boundaries
   Scenario: A completed module accrues all three units once
     When "module.completed" for "A" on module "M1" is recorded twice
     Then exactly one module award of 20 Pul, 3 Bre and 1 Con is posted for "A" on "M1"

@@ -5,9 +5,12 @@ const testDir = defineBddConfig({
   features:
     "../../apps/docs/content/specs/features/025-attention-points-engine/025-scenarios.feature",
   featuresRoot: "../../apps/docs/content/specs/features",
-  steps: ["steps/points-engine-originals.steps.ts"],
+  steps: [
+    "steps/points-engine-originals.steps.ts",
+    "steps/points-record-boundaries.steps.ts",
+  ],
   outputDir: ".features-gen/points-engine",
-  tags: "@points-engine-originals",
+  tags: "@points-engine-originals or @points-record-boundaries",
   missingSteps: "fail-on-gen",
 });
 

@@ -36,6 +36,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     And the second and third answers are "duplicate"
 
   @EARS-7 @failure
+  @points-engine-originals
   Scenario: An offline lesson earns Bre only and never a second Bre
     When "lesson.completed" for "A" on lesson "L5" is recorded with mode "offline"
     Then a posting of 1 Bre and no Pul is written under rule "accrual.lesson.any-mode"
@@ -136,11 +137,13 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then both fail naming the forbidden attribute
 
   @EARS-33 @failure
+  @points-engine-originals
   Scenario: A producer fact carrying an amount is refused and writes nothing
     When a producer records "lesson.completed" for "A" with an attribute "pul" of 100
     Then the call throws and no journal row and no posting are written
 
   @EARS-33 @EARS-40
+  @points-engine-originals
   Scenario: A fact no rule applies to is journaled with no effect
     When "referral.attributed" for "A" is recorded
     Then the outcome is "no-effect" and no posting is written

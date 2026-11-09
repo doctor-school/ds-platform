@@ -408,3 +408,90 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
       And the two renders differ only in the storefront header, the route envelope and copy defaults
       And a component-tree scan finds no second page composition, read model or CTA resolver in either application
       And no import from apps/portal exists in apps/doctor and none from apps/doctor in apps/portal
+
+  # --- Amendment 2026-11-09 (#3014): the post-live page — timecodes, bottom CTA, «К записи ↓», end line, no social proof ---
+
+  Rule: The post-live page follows the canvas «прошло» phase
+
+    Background:
+      Given the event «PRP при гонартрозе» of the school «Школа ортопедии» has ended
+      And the event is readable at the same stable slug on doctor.school and on academy.doctor.school
+
+    @EARS-25 @EARS-26 @happy
+    Scenario Outline: A signed-in doctor jumps to a chapter of the recording on either storefront
+      Given the event's edited recording is published on youtube with the chapters
+        | start | title                                                |
+        | 00:00 | Показания и доказательная база PRP при гонартрозе    |
+        | 25:10 | Протокол приготовления и введения: клинический случай |
+      And a signed-in doctor reads the event on <host>
+      When the doctor presses the chapter «Перейти к 25:10 — Протокол приготовления и введения: клинический случай»
+      Then the main player is sought to 1510 seconds
+      And that chapter row is marked as the current chapter
+      And the player is scrolled into view
+
+      Examples:
+        | host                  |
+        | doctor.school         |
+        | academy.doctor.school |
+
+    @EARS-25 @happy
+    Scenario: The list follows the main-player recording's kind
+      Given only the raw recording is published, with its own chapters
+      And a signed-in doctor reads the event on doctor.school
+      Then the timecode list shows the raw recording's chapters
+      When the edited recording with its own chapters is published
+      And the doctor reloads the page
+      Then the timecode list shows the edited recording's chapters
+
+    @EARS-25 @failure
+    Scenario: A guest's chapter press leads to the sign-in gate and seeks nothing
+      Given the event's edited recording is published with chapters
+      And an anonymous reader reads the event on doctor.school
+      When the reader presses a chapter row
+      Then the player position with the sign-in invitation is scrolled into view
+      And no player source is requested
+
+    @EARS-25 @EARS-26 @failure
+    Scenario: A provider without a seek adapter shows the chapters as a plain list
+      Given the event's edited recording is published on cdnvideo with chapters
+      And a signed-in doctor reads the event on doctor.school
+      Then the timecode list renders with no chapter button
+
+    @EARS-25 @failure
+    Scenario: No chapters, no block
+      Given the event's edited recording is published with no chapters
+      And a signed-in doctor reads the event on doctor.school
+      Then no timecode list, heading or empty box is rendered
+      And no «Доступна ещё» text is rendered anywhere on the page
+
+    @EARS-27 @happy
+    Scenario Outline: The bottom CTA band follows the recording state and the session
+      Given the school «Школа ортопедии» has its next published event on 11 September readable on doctor.school
+      And the event's recording state is <state>
+      And <reader> reads the event on doctor.school
+      Then the bottom CTA band reads «<title>» with the action «<action>»
+
+      Examples:
+        | state     | reader              | title                          | action       |
+        | montage   | an anonymous reader | Войдите — и смотрите целиком.  | Войти ↗      |
+        | montage   | a signed-in doctor  | Понравился разбор?             | Записаться ↗ |
+        | preparing | a signed-in doctor  | Запись готовится.              | Записаться ↗ |
+
+    @EARS-27 @failure
+    Scenario: No next event of the school on this storefront leaves only the guest sign-in band
+      Given the school's only upcoming event is readable on academy.doctor.school only
+      And the event's recording state is montage
+      When a signed-in doctor reads the event on doctor.school
+      Then no bottom CTA band is rendered
+      When an anonymous reader reads the event on doctor.school
+      Then the bottom CTA band reads «Войдите — и смотрите целиком.» with the action «Войти ↗»
+
+    @EARS-28 @EARS-29 @EARS-3 @happy
+    Scenario: The post-live hero leads to the recording, states the end and shows no sign-up count
+      Given the event started at 19:00 МСК on 28 August with a duration of 92 minutes
+      And the event has 37 sign-ups
+      When an anonymous reader reads the event on doctor.school
+      Then the hero carries the «К записи ↓» link
+      And pressing it moves focus to the player position without a navigation
+      And the page states «Эфир завершился 28 августа в 20:32»
+      And no sign-up count is rendered and the read carries no sign-up proof

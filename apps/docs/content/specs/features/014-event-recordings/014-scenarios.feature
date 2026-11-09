@@ -625,3 +625,44 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       When the visitor opens an entry
       Then the post-live page renders fully readable
       And the sign-in invitation is the next step in the player position
+
+  # --- Amendment 2026-11-09 (#3014): recording chapters entered by the operator ---
+
+  Rule: Each recording carries its own operator-entered chapters
+
+    @EARS-30 @EARS-31 @core @happy
+    Scenario: The operator enters chapters per recording kind and the page shows the main player's list
+      Given a finished event with a published raw recording and a draft edited recording
+      When a platform_admin saves the chapters «00:00 Показания» and «07:40 Протокол» on the raw recording
+      And saves the chapters «00:00 Показания» and «25:10 Протокол» on the edited recording
+      Then the public event read carries the raw recording's chapters
+      When the platform_admin publishes the edited recording
+      Then the public event read carries the edited recording's chapters with no page edit
+
+    @EARS-30 @core @failure
+    Scenario Outline: An invalid chapter list is refused with no mutation
+      Given a published recording of 5520 seconds
+      When a platform_admin saves chapters where <defect>
+      Then the response is 422 RECORDING_CHAPTERS_INVALID
+      And the recording row and its version are unchanged
+
+      Examples:
+        | defect                                  |
+        | two chapters share the offset 00:00     |
+        | an offset is 01:32:00 or later          |
+        | a title is blank                        |
+        | the list holds 51 chapters              |
+
+    @EARS-31 @core @failure
+    Scenario: A stale chapter save is refused
+      Given two operators have the same recording open
+      When the first saves its chapters and the second saves with the old version
+      Then the second save is refused with 412 PRECONDITION_FAILED
+      And the first operator's chapters stand
+
+    @EARS-30 @core @happy
+    Scenario: A guest reads the chapters but no source
+      Given a published recording with chapters
+      When a visitor with no account reads the event
+      Then the public read carries the chapters
+      And no playable source reference is in the response

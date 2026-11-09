@@ -36,6 +36,7 @@ import {
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
 import { RecordingsProjectionService } from "../recordings/recordings.projection.js";
 import { PresencePublisher } from "../room/presence-publisher.service.js";
+import { AttendanceFactsProducer } from "../room/attendance-facts.producer.js";
 import { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import {
   type EventAggregate,
@@ -555,7 +556,36 @@ export class EventsService {
     // 006 EARS-19 (#2911) — re-publishes the live count when the setting flips.
     @Inject(PresencePublisher)
     private readonly presencePublisher: PresencePublisher,
+    // 025 EARS-9 (#3845) — the event's end reports every doctor's attendance.
+    @Inject(AttendanceFactsProducer)
+    private readonly attendanceFacts: AttendanceFactsProducer,
   ) {}
+
+  /**
+   * 025 EARS-9 (#3845) — the work an `ended` target adds to its transition:
+   * `fence` records one `attendance.confirmed` per doctor with presence inside
+   * the transaction that commits the end, and `publish` (run only after that
+   * transaction committed) fires their `PointsCredited`. Every other target
+   * gets neither. `live → ended` is the only edge into `ended`, reached by
+   * `CloseRoom` and by the generic {@link transition}; both run this.
+   */
+  private endOfEvent(to: EventLifecycleState): {
+    fence?: (tx: Tx, row: EventAggregate) => Promise<void>;
+    publish: () => Promise<void>;
+  } {
+    if (to !== "ended") return { publish: async () => {} };
+    let publish: () => Promise<void> = async () => {};
+    return {
+      fence: async (tx, row) => {
+        publish = await this.attendanceFacts.recordEventEnd(tx, {
+          id: row.event.id,
+          durationMin: row.event.durationMin,
+          endedAt: row.event.updatedAt,
+        });
+      },
+      publish: () => publish(),
+    };
+  }
 
   /**
    * EARS-1 — create an event in `draft` with the full field set. The МСК
@@ -885,6 +915,7 @@ export class EventsService {
       PLATFORM_TRANSITION_AUDIT_TYPE[to as PlatformTarget];
     if (!auditType) throw new InvalidTransitionError(from, to);
     assertVersion(current.event, expectedVersion);
+    const end = this.endOfEvent(to);
 
     const updated = await this.repo.updateStateWithAudit(
       id,
@@ -894,10 +925,16 @@ export class EventsService {
         subjectId: actorSub,
         from,
       },
-      undefined,
+      end.fence,
       expectedVersion,
     );
-    return this.resolveWriteOutcome(id, updated, expectedVersion);
+    const outcome = await this.resolveWriteOutcome(
+      id,
+      updated,
+      expectedVersion,
+    );
+    if (updated) await end.publish();
+    return outcome;
   }
 
   /**
@@ -1243,6 +1280,7 @@ export class EventsService {
     extraGuard?.(current.event, from, to);
     await asyncGuard?.(current.event, from);
     assertVersion(current.event, expectedVersion);
+    const end = this.endOfEvent(to);
 
     const updated = await this.repo.updateStateWithAudit(
       id,
@@ -1250,11 +1288,23 @@ export class EventsService {
       { eventType: auditType, subjectId: actorSub, from },
       // The fence is handed the SAME projection this method returns, so the
       // completion the record stores and the body the caller receives cannot
-      // differ (012-design §6).
-      fence && (async (tx, row) => fence(tx, await this.toDetail(row))),
+      // differ (012-design §6). The end-of-event facts run first, so the
+      // idempotency completion stays the transaction's LAST write.
+      fence || end.fence
+        ? async (tx, row) => {
+            await end.fence?.(tx, row);
+            if (fence) await fence(tx, await this.toDetail(row));
+          }
+        : undefined,
       expectedVersion,
     );
-    return this.resolveWriteOutcome(id, updated, expectedVersion);
+    const outcome = await this.resolveWriteOutcome(
+      id,
+      updated,
+      expectedVersion,
+    );
+    if (updated) await end.publish();
+    return outcome;
   }
 
   /**

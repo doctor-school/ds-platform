@@ -1,12 +1,20 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle } from "@ds/db";
 import type { DoctorPresenceMinutes } from "@ds/schemas";
-import { presenceBeats, users } from "@ds/db";
+import { presenceBeats, registrations, users } from "@ds/db";
 import { eq, sql } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { isParticipant } from "../auth/staff-role.js";
 
 type Db = DrizzleHandle["db"];
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/** 025 EARS-9 — one doctor's presence on an event at its end, with the registration it attends under. */
+export interface AttendanceAtEnd {
+  userId: string;
+  minutes: number;
+  registrationId: string | null;
+}
 
 /**
  * Data access for the 006 EARS-4 durable append-only presence capture (design
@@ -204,6 +212,52 @@ export class PresenceRepository {
       minutes:
         Math.round(((Number(row.buckets) * intervalSeconds) / 60) * 1000) /
         1000,
+    }));
+  }
+  /**
+   * 025 EARS-9 — the attendance the event's end reports: the SAME distinct
+   * N-bucket minutes as {@link deriveEventMinutes} (participants only), each
+   * row with the doctor's active registration on the event, or `null`. Read
+   * through the transaction that commits the end (`executor`), so the beats it
+   * counts are the ones the closed room stopped accepting.
+   */
+  async attendanceAtEnd(
+    executor: Tx,
+    eventId: string,
+    intervalSeconds: number,
+  ): Promise<AttendanceAtEnd[]> {
+    const result = await executor.execute<{
+      userId: string;
+      buckets: string;
+      registrationId: string | null;
+    }>(
+      sql`
+        SELECT
+          b.user_id AS "userId",
+          b.buckets,
+          (SELECT ${registrations.id} FROM ${registrations}
+            WHERE ${registrations.userId} = b.user_id
+              AND ${registrations.eventId} = ${eventId}
+              AND ${registrations.recordStatus} = 'active'
+            LIMIT 1) AS "registrationId"
+        FROM (
+          SELECT
+            ${presenceBeats.userId} AS user_id,
+            count(DISTINCT floor(
+              extract(epoch from ${presenceBeats.beatAt}) / ${intervalSeconds}
+            )) AS buckets
+          FROM ${presenceBeats}
+          WHERE ${presenceBeats.eventId} = ${eventId}
+            AND ${isParticipant(presenceBeats.userId)}
+          GROUP BY ${presenceBeats.userId}
+        ) b
+        ORDER BY b.user_id
+      `,
+    );
+    return result.rows.map((row) => ({
+      userId: row.userId,
+      minutes: (Number(row.buckets) * intervalSeconds) / 60,
+      registrationId: row.registrationId,
     }));
   }
 }

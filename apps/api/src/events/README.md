@@ -139,7 +139,11 @@ now" signal off the same `EventLifecycleState`. `CloseRoom`
 (`POST /v1/admin/events/:id/close`) applies `live → ended` — **refused with a 409
 unless the event is in `live`** — and appends one terminal `audit_ledger` row
 (`event_type = event.ended`); it closes the 006 room (admission + heartbeat/chat
-acceptance stop) and **bounds the presence window** (006 EARS-7). Since 014
+acceptance stop) and **bounds the presence window** (006 EARS-7). The same
+transaction reports every doctor's attendance to 025 (`attendance.confirmed`,
+EARS-9, #3845) through the room's `AttendanceFactsProducer` — the generic
+`transition` into `ended` does too — and `PointsCredited` is published only
+after the end commits. Since 014
 EARS-18 gave `ended` a second origin, `close` carries an **explicit origin
 guard** (`from !== "live"`) rather than relying on `canTransition`: a past-dated
 `published` event is refused here with `INVALID_TRANSITION` instead of silently

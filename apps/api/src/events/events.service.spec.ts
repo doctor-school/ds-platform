@@ -11,6 +11,7 @@ import type { EventsRepository, EventAggregate } from "./events.repository.js";
 import type { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import type { RecordingsProjectionService } from "../recordings/recordings.projection.js";
 import type { PresencePublisher } from "../room/presence-publisher.service.js";
+import type { AttendanceFactsProducer } from "../room/attendance-facts.producer.js";
 import { EventsService, type UploadedPdf } from "./events.service.js";
 
 // 007 EARS-2 — GC-on-supersede (#627). When a program-PDF replacement commits
@@ -169,7 +170,13 @@ const PREPARING_PROJECTION = {
   durationSec: null,
 };
 
-function service(storage: RecordingStorage, repo: unknown): EventsService {
+function service(
+  storage: RecordingStorage,
+  repo: unknown,
+  attendanceFacts: unknown = {
+    recordEventEnd: () => Promise.resolve(() => Promise.resolve()),
+  },
+): EventsService {
   return new EventsService(
     storage,
     repo as EventsRepository,
@@ -183,6 +190,7 @@ function service(storage: RecordingStorage, repo: unknown): EventsService {
       resolveRecordingProjection: () => Promise.resolve(PREPARING_PROJECTION),
     } as unknown as RecordingsProjectionService,
     { refresh: () => Promise.resolve() } as unknown as PresencePublisher,
+    attendanceFacts as AttendanceFactsProducer,
   );
 }
 
@@ -314,5 +322,84 @@ describe("007 EARS-1 — event slug from the title (unit; #2616)", () => {
 
   it("EARS-1: a title with no sluggable character falls back to `event`", async () => {
     expect(await createdSlug("★ ✦ ★")).toMatch(/^event-[0-9a-f]{8}$/);
+  });
+});
+
+describe("025 EARS-9 — the event's end reports attendance (unit; #3845)", () => {
+  const ID = "11111111-1111-4111-8111-111111111111";
+  const TX = { tx: true };
+
+  /** A `live` event whose `updateStateWithAudit` runs the fence, then commits or rolls back. */
+  function endingRepo(ops: string[], rollback: boolean) {
+    const live = aggregate({ ...baseEvent(null), state: "live" });
+    const ended = aggregate({
+      ...live.event,
+      state: "ended",
+      updatedAt: new Date("2026-07-17T17:30:00.000Z"),
+    });
+    return {
+      findById: vi.fn(() => Promise.resolve(live)),
+      findKinds: vi.fn(() => Promise.resolve(new Map([[KIND.id, KIND]]))),
+      updateStateWithAudit: vi.fn(
+        async (
+          _id: string,
+          _to: string,
+          _audit: unknown,
+          fence?: (tx: unknown, row: EventAggregate) => Promise<void>,
+        ) => {
+          await fence?.(TX, ended);
+          if (rollback) throw new Error("rolled back");
+          ops.push("commit");
+          return ended;
+        },
+      ),
+    };
+  }
+
+  function producer(ops: string[]) {
+    return {
+      recordEventEnd: vi.fn(() => {
+        ops.push("record");
+        return Promise.resolve(() => {
+          ops.push("publish");
+          return Promise.resolve();
+        });
+      }),
+    };
+  }
+
+  it("EARS-9: CloseRoom records attendance inside the end's transaction (scheduled duration, end instant) and publishes only after the commit", async () => {
+    const ops: string[] = [];
+    const facts = producer(ops);
+    const svc = service(new RecordingStorage(), endingRepo(ops, false), facts);
+
+    await svc.closeRoom(ID, null);
+
+    expect(facts.recordEventEnd).toHaveBeenCalledWith(TX, {
+      id: ID,
+      durationMin: 90,
+      endedAt: new Date("2026-07-17T17:30:00.000Z"),
+    });
+    expect(ops).toEqual(["record", "commit", "publish"]);
+  });
+
+  it("EARS-9: the generic transition into `ended` reports attendance the same way", async () => {
+    const ops: string[] = [];
+    const facts = producer(ops);
+    const svc = service(new RecordingStorage(), endingRepo(ops, false), facts);
+
+    await svc.transition(ID, "ended", null);
+
+    expect(ops).toEqual(["record", "commit", "publish"]);
+  });
+
+  it("EARS-9: an end that rolls back never publishes PointsCredited", async () => {
+    const ops: string[] = [];
+    const facts = producer(ops);
+    const svc = service(new RecordingStorage(), endingRepo(ops, true), facts);
+
+    await expect(svc.closeRoom(ID, null)).rejects.toThrow("rolled back");
+
+    expect(ops).toEqual(["record"]);
   });
 });

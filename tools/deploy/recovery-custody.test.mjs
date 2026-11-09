@@ -102,15 +102,11 @@ test("3662: ds-recovery is installed on both prod boxes, and the release install
   );
 });
 
-test("3662: the committed custodians file holds no recipient until the ceremony (fail closed, no placeholder)", () => {
-  const text = readFileSync(
-    join(REPO, "infra/deploy/recovery/custodians.txt"),
-    "utf8",
+test("3662: the committed custodians file passes the gate (two distinct native recipients, nothing invalid)", () => {
+  const gate = custodianGate(
+    readFileSync(join(REPO, "infra/deploy/recovery/custodians.txt"), "utf8"),
   );
-  const live = text
-    .split("\n")
-    .filter((l) => l.trim() && !l.trim().startsWith("#"));
-  assert.deepEqual(live, []);
+  assert.deepEqual(gate, { count: MIN_RECIPIENTS, invalid: 0, ready: true });
 });
 
 describe("3662: recovery-custody.yml", () => {
@@ -160,23 +156,32 @@ describe("3662: recovery-custody.yml", () => {
     const dir = mkdtempSync(join(tmpdir(), "recovery-custody-"));
     try {
       const out = join(dir, "out");
+      // A custodians file with no recipient line: the schedule skips, a dispatch runs.
+      const custodians = join(dir, "custodians.txt");
+      writeFileSync(custodians, "# role: first custodian\n");
       assert.equal(
-        main(["verb", "schedule", CRONS.bundle, ""], { output: out }),
+        main(["verb", "schedule", CRONS.bundle, ""], {
+          output: out,
+          custodians,
+        }),
         0,
       );
       assert.equal(
-        main(["verb", "schedule", CRONS.check, ""], { output: out }),
+        main(["verb", "schedule", CRONS.check, ""], {
+          output: out,
+          custodians,
+        }),
         0,
       );
       assert.equal(
         main(["verb", "workflow_dispatch", "", "recovery-check"], {
           output: out,
+          custodians,
         }),
         0,
       );
       assert.equal(
         readFileSync(out, "utf8"),
-        // The committed custodians.txt holds no recipient yet: the schedule skips.
         "verb=recovery-bundle\nrun=false\nverb=recovery-check\nrun=false\nverb=recovery-check\nrun=true\n",
       );
       assert.equal(
@@ -394,6 +399,22 @@ describe("3662: the custodian gate before the ceremony", () => {
         assert.equal(r.status === 0, custodianGate(text).ready, name);
         if (r.status !== 0) assert.equal(r.status, 3, name);
       }
+    },
+  );
+  it(
+    "the box gate (`ds-recovery custodians`) accepts the committed custodians file",
+    { skip: !bash && "needs bash" },
+    () => {
+      const r = spawnSync(
+        "bash",
+        [
+          DS_RECOVERY,
+          "custodians",
+          join(REPO, "infra/deploy/recovery/custodians.txt"),
+        ],
+        { encoding: "utf8" },
+      );
+      assert.equal(r.status, 0, r.stderr);
     },
   );
 

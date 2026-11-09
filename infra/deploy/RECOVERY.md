@@ -85,18 +85,24 @@ not secrets; their values are in the templates or derive from the environment.
 
 ### 1.4 Gaps (2026-11-04)
 
-- **Custody not yet populated.** Two paths exist: the interim owner-run bundle
-  (`pnpm recovery`, §2.4) and CI custody, which produces its first bundle only after
-  the custodian ceremony (§2.1) and the next release. Neither has produced a bundle
-  yet; until one does, a loss of ds-data-prod loses `PGBACKREST_REPO1_CIPHER_PASS` and
-  with it every backup.
+- **Custody populated in the repository, not yet on the boxes.** The custodian
+  ceremony (§2.1) has run: `custodians.txt` holds two recipients, both held by the
+  owner in independent places (interim). The boxes read the file from their installed
+  tree, so CI custody produces its first bundle only after the next release and a
+  `recovery-bundle` dispatch. Two paths exist: the interim owner-run bundle
+  (`pnpm recovery`, §2.4) and CI custody. Neither has produced a bundle yet; until one
+  does, a loss of ds-data-prod loses `PGBACKREST_REPO1_CIPHER_PASS` and with it every
+  backup.
+- **Bus factor open.** Both custody keys are the owner's; recovery does not yet survive
+  the owner's unavailability. It closes when a second custodian (another person,
+  another location) is added (§2.1 «Adding a custodian»).
 - **Restore proof not yet run.** No restore has been completed with a bundle-supplied
   passphrase (§3). An S3 listing or object checksum is **not** accepted as proof: only
   a completed restore that recovers and promotes is.
 - **Interim path still in force.** The owner-run path (§2.4, §3 «Owner-run tool») is
   retired only after the first CI-built bundle has been test-decrypted by a custodian
-  (§2.2) and a restore with a bundle-supplied `PGBACKREST_REPO1_CIPHER_PASS` has passed
-  (§3).
+  (§2.2) and a restore has passed (§3) with the `PGBACKREST_REPO1_CIPHER_PASS` taken
+  from a CI-built bundle; a restore from an owner-run bundle (§2.4) does not count.
 - **Fresh-host DR drill not run.** §4 (recreate both boxes and restore) has never
   been exercised end to end; it, backup verification, alerts and a quarterly drill
   are #3671.
@@ -123,7 +129,8 @@ The bundle of a box is the set of its `/etc/ds-platform/*.env` files, encrypted 
 [`age`](https://age-encryption.org) to every recipient in
 `infra/deploy/recovery/custodians.txt`: at least **two custodians** in different
 locations, each holding one offline identity. Either identity alone opens the bundle,
-so recovery survives the unavailability of any one person. It is deliberately **not**
+so recovery survives the unavailability of any one person (not yet: both current keys
+are the owner's, §2.1 «Current custody»). It is deliberately **not**
 encrypted to the `breakglass` SSH key: losing or rotating the access key must not lose
 recovery, and one compromised key must not open both.
 
@@ -157,7 +164,7 @@ identity. The log carries status lines only; the repository is public and no art
 is uploaded. Nothing on the boxes deletes old bundles; a provider lifecycle rule on
 the prefix is tracked in `DEBT.md`.
 
-**Before the ceremony.** While `custodians.txt` holds no recipient line at all (only
+**No recipient line.** While `custodians.txt` holds no recipient line at all (only
 comments and blank lines), a scheduled run ends green without contacting the boxes and
 leaves the notice «custodian ceremony pending (#3662)» in the log and the job summary;
 a dispatched run reaches the boxes, which refuse with «#3662 custodian ceremony
@@ -178,6 +185,14 @@ gh workflow run recovery-custody.yml --ref main -f verb=recovery-check
 ### 2.1 The custodian ceremony (the only human step of CI custody)
 
 Runs once, and again only when a custodian changes or an identity is lost or exposed.
+
+**Current custody (interim).** The first ceremony ran with two identities both held by
+the owner, in two independent places: key 1 in the owner's password manager, key 2 as
+a passphrase-encrypted identity file on offline media stored in a separate place.
+`custodians.txt` records them as `# role: owner — key 1 (password manager)` and
+`# role: owner — key 2 (offline media, separate location)`. The box gate counts
+distinct recipients only, so this satisfies it; the bus factor stays open until a
+second custodian is added (below).
 
 1. Each of the two custodians generates an `age` identity on their own offline
    machine. The identity is passphrase-encrypted before it touches disk, and its
@@ -202,6 +217,15 @@ Runs once, and again only when a custodian changes or an identity is lost or exp
    deployed tree), dispatch `recovery-bundle` and then `recovery-check` (above). Each
    custodian test-decrypts the first bundle (§2.2) before the paper copy is sealed.
 
+**Adding a custodian** (another person, another location; closes the bus factor). The
+new custodian runs step 1 on their own offline machine and hands over the recipient
+(step 2). A PR adds it to `custodians.txt` under its own `# role: <role>` line (and,
+if the new custodian replaces an owner key, removes that key's two lines; at least
+two distinct recipients remain). After the merge and the next release, dispatch
+`recovery-bundle` and then `recovery-check`; the new custodian test-decrypts the new
+bundle (§2.2) and posts the status line on #3662. Bundles stored before the change
+stay encrypted to the old recipients only.
+
 ### 2.2 Quarterly test decrypt (each custodian)
 
 Every quarter, and once after the ceremony, each custodian fetches the latest bundle
@@ -210,6 +234,23 @@ extracting anything. The result is posted on #3662 as status words only:
 `custodian <role>: api-prod members <n> OK, data-prod members <n> OK`. A custodian
 whose identity no longer opens the bundle reports `FAIL`, and the ceremony is rerun
 for that custodian.
+
+The owner's two interim keys (§2.1) are tested one at a time, each in Git Bash under
+the rules of §2.3 «Shell», on the bundle fetched in §2.3 steps 1–2:
+
+```bash
+set -o pipefail
+# Key 1 (password manager): paste the AGE-SECRET-KEY-1… line as the identity on
+# stdin, then Ctrl-Z, Enter; the identity never touches disk.
+age -d -i - "$BOX.tar.age" | tar -tf -
+# Key 2 (offline media): age asks for the identity file's passphrase.
+age -d -i custodian-2.age "$BOX.tar.age" | tar -tf -
+```
+
+`age -i` accepts a passphrase-encrypted identity file and prompts for its passphrase
+(age ≥ 1.1, README «Passphrase-protected key files»,
+<https://github.com/FiloSottile/age#passphrase-protected-key-files>); `-i -` reads the
+identity from standard input. Both lists must equal the manifest's `members`.
 
 ### 2.3 Recovery time: fetch and decrypt a bundle
 
@@ -285,8 +326,9 @@ nothing without an identity, but they are not kept outside the bucket.
 ### 2.4 Interim: owner-run bundle until CI custody is proven
 
 This path stays in force until the first CI-built bundle has been test-decrypted by a
-custodian (§2.2) and a restore with a bundle-supplied `PGBACKREST_REPO1_CIPHER_PASS`
-has passed (§3); only then is it retired. Until then, run it after every change under
+custodian (§2.2) and a restore has passed (§3) with the `PGBACKREST_REPO1_CIPHER_PASS`
+taken from a CI-built bundle (a restore from an owner-run bundle does not count); only
+then is it retired. Until then, run it after every change under
 `/etc/ds-platform/` beside the CI dispatch of §2 «After a change».
 
 **Automated: `pnpm recovery init-keys` (§2.4.1, once) and `pnpm recovery bundle`
@@ -429,9 +471,12 @@ rotation never unseals paper B.
 a rotation, a new key in a template, a reissue from §1.3 — is followed by
 §2.4.2–§2.4.4 in the same session.
 
-**At recovery time** an owner-run bundle opens with identity A or paper B in place of
-`<identity>.age` in §2.3 steps 3–4; it is fetched from its storage place instead of the
-bucket.
+**At recovery time** an owner-run bundle is fetched from its storage place instead of
+the bucket, so the manifest checks of §2.3 steps 1–2 (and the member list of a
+manifest in step 3) do not apply to it; its members are the ones named in §2.4.2. It
+opens with identity A as `-i identity-A.age` in place of `<identity>.age` in §2.3
+steps 3–4, or with paper B typed in as `age -d -i -` (Ctrl-Z, Enter), as in the test
+decrypt with B above.
 
 ## 3. Restore proof (ds-data-prod)
 
@@ -449,8 +494,8 @@ are the proof.
 **Owner-run tool (interim, §2.4):
 `pnpm recovery restore-proof --bundle <out>/ds-recovery-<date>-data-prod.tar.age`.**
 It stays in force until the first CI-built bundle has been test-decrypted by a
-custodian (§2.2) and a restore with a bundle-supplied `PGBACKREST_REPO1_CIPHER_PASS`
-has passed. The manual commands below are the reference and the fallback. The tool
+custodian (§2.2) and a restore has passed with the `PGBACKREST_REPO1_CIPHER_PASS` taken
+from a CI-built bundle (a restore from an owner-run bundle does not count). The manual commands below are the reference and the fallback. The tool
 stages the bundle's `data.env` on tmpfs, runs §3.2–§3.4 as root scripts fed over ssh
 stdin (the image IDs come from the state file, SEG from `check`), tears down
 (container, scratch directory, tmpfs file) after a PASS, a failure, a Ctrl-C or a

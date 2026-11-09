@@ -30,6 +30,7 @@ import { PointsEngine } from "../../src/points/engine/points-engine.service.js";
 import { PointsLedgerService } from "../../src/points/points-ledger.service.js";
 import { PointsPricesService } from "../../src/points/points-prices.service.js";
 import { registrationCreatedFact } from "../../src/points/registration-facts.js";
+import { seedEvent } from "./spend-harness.js";
 import { signIn, withSignInHost } from "../setup/storefront-harness.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -120,10 +121,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return rows.length;
     }
 
-    /** A sign-up on a fresh course priced `pul` (threshold), recorded. */
+    /** A sign-up on a fresh event priced `pul` (threshold), recorded. */
     async function signUpOn(personId: string, pul: number) {
-      const itemRef = `course:${randomUUID()}`;
-      await prices.put(itemRef, { itemKind: "course", mode: "threshold", pulCost: pul }, null);
+      const itemRef = await seedEvent({ pool });
+      await prices.put(
+        itemRef,
+        { itemKind: "event", mode: "threshold", pulCost: pul },
+        null,
+      );
       const signUp = registrationCreatedFact({
         registrationId: randomUUID(),
         personId,

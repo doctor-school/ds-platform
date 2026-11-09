@@ -61,29 +61,41 @@ export class PointsPricesService {
     assertItemRef(itemRef);
     const body = PutPointsPriceRequestSchema.parse(input);
     const refuse = (path: string, message: string) =>
-      new PointsLedgerError("POINTS_GATING_INVALID", message, [{ path, message }]);
+      new PointsLedgerError("POINTS_GATING_INVALID", message, [
+        { path, message },
+      ]);
     if (!POINTS_ITEM_KINDS[body.itemKind].priceable && body.mode !== "open") {
       throw refuse("mode", `a ${body.itemKind} is always open`);
     }
-    if (body.itemKind === "event") {
-      const [event] = UUID.test(itemRef)
-        ? await this.db
-            .select({ id: events.id })
-            .from(events)
-            .where(eq(events.id, itemRef))
-        : [];
-      if (!event) throw refuse("itemRef", "no such event");
-      // The ONE reading of an event's НМО accreditation (020/019 share it).
-      if (eventEconomyFacts().nmo && body.mode !== "open") {
-        throw refuse("mode", "an НМО-accredited event is always open");
-      }
+    // The ref must resolve as the declared kind, so no row can price an
+    // event under another kind and skip the event checks below. Only `event`
+    // has a platform table today; every other kind is refused until its owning
+    // feature ships one (025 EARS-26).
+    if (body.itemKind !== "event") {
+      throw refuse(
+        "itemRef",
+        `no ${body.itemKind} can be priced yet: the platform has no ${body.itemKind} catalog`,
+      );
+    }
+    const [event] = UUID.test(itemRef)
+      ? await this.db
+          .select({ id: events.id })
+          .from(events)
+          .where(eq(events.id, itemRef))
+      : [];
+    if (!event) throw refuse("itemRef", "no such event");
+    // The ONE reading of an event's НМО accreditation (020/019 share it).
+    if (eventEconomyFacts().nmo && body.mode !== "open") {
+      throw refuse("mode", "an НМО-accredited event is always open");
     }
     const row = await withRequestAuditContext(this.db, async (tx) => {
       const [actor] = actorSub
         ? await tx
             .select({ id: users.id })
             .from(users)
-            .where(and(eq(users.zitadelSub, actorSub), isNull(users.deactivatedAt)))
+            .where(
+              and(eq(users.zitadelSub, actorSub), isNull(users.deactivatedAt)),
+            )
         : [];
       const values = {
         itemKind: body.itemKind,
@@ -114,7 +126,10 @@ export class PointsPricesService {
    * `reserve-with-advance` branch and the advance part of `pulToEarn` land
    * with the advance slice (#3811).
    */
-  async gating(personId: string, itemRef: string): Promise<PointsGatingDecision> {
+  async gating(
+    personId: string,
+    itemRef: string,
+  ): Promise<PointsGatingDecision> {
     assertItemRef(itemRef);
     const price = await this.holds.priceOf(this.db, itemRef);
     const quoted = await this.engine.quote(personId, {

@@ -72,8 +72,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const { cookie } = await doctor(h);
       const open = await pricedItem(h, { mode: "open", pulCost: 50 });
       const zero = await pricedItem(h, { mode: "threshold", pulCost: 0 });
+      // A lesson has no price row (none can be stored until 024 ships its
+      // catalog), and an unpriced ref reads open.
       const lesson = `lesson:${randomUUID()}`;
-      await h.prices.put(lesson, { itemKind: "lesson", mode: "open", pulCost: 0 }, null);
       for (const item of [`course:${randomUUID()}`, open, zero, lesson]) {
         expect(await decisionOf(item, cookie)).toMatchObject({
           itemRef: item,
@@ -89,7 +90,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await verifyPhone(h, personId);
       await fund(h, personId, 70);
       const eventId = await seedEvent(h);
-      await h.prices.put(eventId, { itemKind: "event", mode: "threshold", pulCost: 50 }, null);
+      await h.prices.put(
+        eventId,
+        { itemKind: "event", mode: "threshold", pulCost: 50 },
+        null,
+      );
 
       const before = await writes();
       const decision = await decisionOf(eventId, cookie);
@@ -143,10 +148,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await verifyPhone(h, busy.personId);
       await fund(h, busy.personId, 1000);
       for (let i = 0; i < 3; i++) {
-        const seat = await pricedItem(h, { mode: "threshold", pulCost: 50, limitedSeats: true });
+        const seat = await pricedItem(h, {
+          mode: "threshold",
+          pulCost: 50,
+          limitedSeats: true,
+        });
         await h.engine.record(signUp(busy.personId, seat));
       }
-      const fourth = await pricedItem(h, { mode: "threshold", pulCost: 50, limitedSeats: true });
+      const fourth = await pricedItem(h, {
+        mode: "threshold",
+        pulCost: 50,
+        limitedSeats: true,
+      });
       expect(await decisionOf(fourth, busy.cookie)).toMatchObject({
         decision: "blocked",
         reason: "points-reserve-limit",
@@ -163,7 +176,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         type: expect.stringContaining("points-item-ref-invalid"),
       });
       expect((await gating("course:x")).statusCode).toBe(401);
-      const foreign = await gating("course:x", cookie, `?personId=${other.personId}`);
+      const foreign = await gating(
+        "course:x",
+        cookie,
+        `?personId=${other.personId}`,
+      );
       expect(foreign.statusCode).toBe(403);
       const own = await gating("course:x", cookie, `?personId=${personId}`);
       expect(own.statusCode).toBe(200);

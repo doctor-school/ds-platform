@@ -32,9 +32,10 @@ import { eventClassificationSql } from "../setup/event-classification.js";
 // Shared harness of the 025 spend e2e specs (#3810) over the REAL stack
 // (Fastify + Postgres migrated through 0061 + the fake IdP). Persons, items,
 // registrations and fact ids are unique per run; postings, journal rows and
-// hold projections are append-only ledger state, so they are not tidied. An
-// item that is not an event is priced under a unique `course:<uuid>` ref —
-// the price list takes any registered kind (owner decision 1).
+// hold projections are append-only ledger state, so they are not tidied. A
+// priced item is a fresh event: the price list names any registered kind
+// (owner decision 1), but a ref must resolve as its kind and only events have
+// a platform table today.
 
 export const DEVICE = { "user-agent": "Test/1.0", "accept-language": "en-US" };
 const PASSWORD = "Aa1!ufficiently-long-pw";
@@ -152,15 +153,17 @@ export async function payer(h: SpendHarness, pul: number): Promise<string> {
   return personId;
 }
 
-/** Prices a fresh non-event item through the EARS-26 service; its ref. */
+/**
+ * Prices a fresh event through the EARS-26 service; its ref. An event is the
+ * one item kind with a platform table today, so it is the one a price row can
+ * name (a ref must resolve as its declared kind).
+ */
 export async function pricedItem(
   h: SpendHarness,
-  body: Omit<PutPointsPriceRequest, "itemKind"> & {
-    itemKind?: PutPointsPriceRequest["itemKind"];
-  },
+  body: Omit<PutPointsPriceRequest, "itemKind">,
 ): Promise<string> {
-  const itemRef = `course:${randomUUID()}`;
-  await h.prices.put(itemRef, { itemKind: "course", ...body }, null);
+  const itemRef = await seedEvent(h);
+  await h.prices.put(itemRef, { itemKind: "event", ...body }, null);
   return itemRef;
 }
 
@@ -208,7 +211,10 @@ export async function reserveOf(h: SpendHarness, registrationId: unknown) {
 }
 
 /** Pul available on the person's account (Σ credits − Σ debits). */
-export async function pulOf(h: SpendHarness, personId: string): Promise<number> {
+export async function pulOf(
+  h: SpendHarness,
+  personId: string,
+): Promise<number> {
   const { rows } = await h.pool.query<{ n: string }>(
     `SELECT coalesce(sum(CASE WHEN p.credit_account_id = a.id THEN p.amount ELSE -p.amount END), 0) AS n
        FROM points_accounts a
@@ -239,7 +245,7 @@ export async function postingsOfPerson(h: SpendHarness, personId: string) {
 
 /** A platform event in `state`, started `startedHoursAgo` hours ago. */
 export async function seedEvent(
-  h: SpendHarness,
+  h: Pick<SpendHarness, "pool">,
   opts: { state?: string; startedHoursAgo?: number; durationMin?: number } = {},
 ): Promise<string> {
   const id = randomUUID();
@@ -253,7 +259,9 @@ export async function seedEvent(
       `pts-spend-${id.slice(0, 8)}`,
       "Эфир с ценой",
       "Кардиология сегодня",
-      new Date(Date.now() - (opts.startedHoursAgo ?? 0) * 3600_000).toISOString(),
+      new Date(
+        Date.now() - (opts.startedHoursAgo ?? 0) * 3600_000,
+      ).toISOString(),
       opts.durationMin ?? 60,
       "",
       ["cardiology"],

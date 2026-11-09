@@ -272,19 +272,19 @@ The implementation PR declares `Release-requires: #3850`, a read-only prod pre-c
 
 ### I. Problem codes
 
-| Code                                                                         | Status | Raised by                                                 |
-| ---------------------------------------------------------------------------- | ------ | --------------------------------------------------------- |
-| `points-insufficient-pul`                                                    | 409    | ledger core (EARS-22; live since #3807)                   |
-| `points-threshold-short`                                                     | 422    | `reserve` (EARS-17), body carries `shortfall`, `earnHint` |
-| `points-reserve-limit`                                                       | 422    | `concurrentOpen` on `reserve` (EARS-21)                   |
-| `points-phone-unverified`                                                    | 422    | `debit` / `reserve` (EARS-5)                              |
-| `points-rule-parameters-invalid`                                             | 422    | publish (amended EARS-25), body carries the field path    |
-| `points-rule-effective-from-past`                                            | 422    | publish                                                   |
-| `points-rule-retired`                                                        | 422    | publish to a retired 0059 id (G)                          |
-| `points-gating-invalid`                                                      | 422    | price list (EARS-26)                                      |
-| `points-item-ref-invalid`                                                    | 400    | gating read and price list: a malformed `:itemRef`        |
-| `points-starter-bonus-no-rule`                                               | 422    | starter-bonus grant (EARS-43)                             |
-| `points-account-closed`, `points-bre-con-debit`, `points-occurred-at-future` | 422    | ledger core, unchanged (§3, §4)                           |
+| Code                                                                         | Status | Raised by                                                                                                                            |
+| ---------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `points-insufficient-pul`                                                    | 409    | ledger core (EARS-22; live since #3807)                                                                                              |
+| `points-threshold-short`                                                     | 422    | `reserve` (EARS-17), body carries `shortfall`, `earnHint`                                                                            |
+| `points-reserve-limit`                                                       | 422    | `concurrentOpen` on `reserve` (EARS-21)                                                                                              |
+| `points-phone-unverified`                                                    | 422    | `debit` / `reserve` (EARS-5)                                                                                                         |
+| `points-rule-parameters-invalid`                                             | 422    | publish (amended EARS-25), body carries the field path                                                                               |
+| `points-rule-effective-from-past`                                            | 422    | publish                                                                                                                              |
+| `points-rule-retired`                                                        | 422    | publish to a retired 0059 id (G)                                                                                                     |
+| `points-gating-invalid`                                                      | 422    | price list (EARS-26): a mode the kind does not take, or an `itemRef` that does not resolve as its kind (only `event` resolves today) |
+| `points-item-ref-invalid`                                                    | 400    | gating read and price list: a malformed `:itemRef`                                                                                   |
+| `points-starter-bonus-no-rule`                                               | 422    | starter-bonus grant (EARS-43)                                                                                                        |
+| `points-account-closed`, `points-bre-con-debit`, `points-occurred-at-future` | 422    | ledger core, unchanged (§3, §4)                                                                                                      |
 
 `points-rule-unknown` (live in 0059's publish route) disappears: any new slug is accepted.
 

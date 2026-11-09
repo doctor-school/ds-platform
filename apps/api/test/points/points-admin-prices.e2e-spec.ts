@@ -49,7 +49,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return { sid, sub };
     }
 
-    function put(itemRef: string, payload: unknown, session: string | null = sid) {
+    function put(
+      itemRef: string,
+      payload: unknown,
+      session: string | null = sid,
+    ) {
       return h.app.inject({
         method: "PUT",
         url: `/v1/admin/points/prices/${encodeURIComponent(itemRef)}`,
@@ -79,10 +83,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await h?.app.close();
     });
 
-    it("EARS-26: an admin prices a course in advance mode — stored, returned, audited to the admin", async () => {
-      const itemRef = `course:${randomUUID()}`;
+    it("EARS-26: an admin prices an event in advance mode — stored, returned, audited to the admin", async () => {
+      const itemRef = await seedEvent(h);
       const res = await put(itemRef, {
-        itemKind: "course",
+        itemKind: "event",
         mode: "advance",
         pulCost: 100,
         limitedSeats: true,
@@ -90,14 +94,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode, res.payload).toBe(200);
       expect(PointsPriceSchema.parse(res.json())).toMatchObject({
         itemRef,
-        itemKind: "course",
+        itemKind: "event",
         mode: "advance",
         pulCost: 100,
         unit: "Pul",
         limitedSeats: true,
       });
       expect(await rowOf(itemRef)).toEqual({ mode: "advance", pul_cost: 100 });
-      const { rows } = await h.pool.query<{ subject_id: string; source: string }>(
+      const { rows } = await h.pool.query<{
+        subject_id: string;
+        source: string;
+      }>(
         `SELECT subject_id, metadata ->> 'source' AS source FROM audit_ledger
           WHERE event_type = 'data.points_prices.insert'
             AND metadata -> 'pk' ->> 'item_ref' = $1`,
@@ -109,25 +116,79 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("EARS-26: a lesson or a module is refused any mode but open (points-gating-invalid); an unknown event is refused; nothing is stored", async () => {
       for (const itemKind of ["lesson", "module"]) {
         const itemRef = `${itemKind}:${randomUUID()}`;
-        const res = await put(itemRef, { itemKind, mode: "threshold", pulCost: 50 });
+        const res = await put(itemRef, {
+          itemKind,
+          mode: "threshold",
+          pulCost: 50,
+        });
         expect(res.statusCode, res.payload).toBe(422);
-        expect(res.json()).toMatchObject({ errorCode: "POINTS_GATING_INVALID" });
+        expect(res.json()).toMatchObject({
+          errorCode: "POINTS_GATING_INVALID",
+        });
         expect(await rowOf(itemRef)).toBeUndefined();
-        expect((await put(itemRef, { itemKind, mode: "open", pulCost: 0 })).statusCode).toBe(200);
       }
       const ghost = randomUUID();
-      const res = await put(ghost, { itemKind: "event", mode: "threshold", pulCost: 50 });
+      const res = await put(ghost, {
+        itemKind: "event",
+        mode: "threshold",
+        pulCost: 50,
+      });
       expect(res.statusCode).toBe(422);
       expect(await rowOf(ghost)).toBeUndefined();
     });
 
+    it("EARS-26: a ref must resolve as its declared kind — an event's id priced as any other kind is refused (points-gating-invalid), as is every kind with no platform table yet; nothing is stored", async () => {
+      const eventId = await seedEvent(h);
+      for (const itemKind of [
+        "course",
+        "training",
+        "internship",
+        "offline-event",
+      ]) {
+        const asOther = await put(eventId, {
+          itemKind,
+          mode: "threshold",
+          pulCost: 50,
+        });
+        expect(asOther.statusCode, asOther.payload).toBe(422);
+        expect(asOther.json()).toMatchObject({
+          errorCode: "POINTS_GATING_INVALID",
+        });
+        const ownRef = `${itemKind}:${randomUUID()}`;
+        const own = await put(ownRef, {
+          itemKind,
+          mode: "threshold",
+          pulCost: 50,
+        });
+        expect(own.statusCode, own.payload).toBe(422);
+        expect(await rowOf(ownRef)).toBeUndefined();
+      }
+      for (const itemKind of ["lesson", "module"]) {
+        const own = await put(`${itemKind}:${randomUUID()}`, {
+          itemKind,
+          mode: "open",
+          pulCost: 0,
+        });
+        expect(own.statusCode, own.payload).toBe(422);
+      }
+      expect(await rowOf(eventId)).toBeUndefined();
+    });
+
     it("EARS-26: a malformed body (400 validation-failed) or item ref (400 points-item-ref-invalid) stores nothing", async () => {
       const itemRef = `course:${randomUUID()}`;
-      const res = await put(itemRef, { itemKind: "course", mode: "threshold", pulCost: -1 });
+      const res = await put(itemRef, {
+        itemKind: "course",
+        mode: "threshold",
+        pulCost: -1,
+      });
       expect(res.statusCode, res.payload).toBe(400);
       expect(res.json().errorCode).toBe("VALIDATION_FAILED");
       expect(await rowOf(itemRef)).toBeUndefined();
-      const bad = await put("course x", { itemKind: "course", mode: "open", pulCost: 0 });
+      const bad = await put("course x", {
+        itemKind: "course",
+        mode: "open",
+        pulCost: 0,
+      });
       expect(bad.statusCode, bad.payload).toBe(400);
       expect(bad.json().errorCode).toBe("POINTS_ITEM_REF_INVALID");
       expect(await rowOf("course x")).toBeUndefined();
@@ -141,7 +202,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const viaPortal = await h.app.inject({
         method: "PUT",
         url: `/v1/admin/points/prices/${encodeURIComponent(itemRef)}`,
-        headers: { ...sessionHeaders(portal.cookie), "content-type": "application/json" },
+        headers: {
+          ...sessionHeaders(portal.cookie),
+          "content-type": "application/json",
+        },
         payload: body,
       });
       expect(viaPortal.statusCode).toBe(401);
@@ -154,20 +218,38 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("EARS-26: a price change applies to later reserves only — an existing hold keeps the price it was reserved at", async () => {
       const eventId = await seedEvent(h, { state: "live" });
       expect(
-        (await put(eventId, { itemKind: "event", mode: "threshold", pulCost: 50 })).statusCode,
+        (
+          await put(eventId, {
+            itemKind: "event",
+            mode: "threshold",
+            pulCost: 50,
+          })
+        ).statusCode,
       ).toBe(200);
       const personId = await payer(h, 300);
       const early = signUp(personId, eventId);
       await h.engine.record(early);
       expect(
-        (await put(eventId, { itemKind: "event", mode: "threshold", pulCost: 100 })).statusCode,
+        (
+          await put(eventId, {
+            itemKind: "event",
+            mode: "threshold",
+            pulCost: 100,
+          })
+        ).statusCode,
       ).toBe(200);
       const later = signUp(personId, eventId);
       await h.engine.record(later);
-      expect((await reserveOf(h, early.attributes.registrationId))?.price).toBe(50);
-      expect((await reserveOf(h, later.attributes.registrationId))?.price).toBe(100);
+      expect((await reserveOf(h, early.attributes.registrationId))?.price).toBe(
+        50,
+      );
+      expect((await reserveOf(h, later.attributes.registrationId))?.price).toBe(
+        100,
+      );
       await h.engine.record(attended(early, 100));
-      expect((await reserveOf(h, early.attributes.registrationId))?.state).toBe("settled");
+      expect((await reserveOf(h, early.attributes.registrationId))?.state).toBe(
+        "settled",
+      );
       expect(await pulOf(h, personId)).toBe(300 - 50 - 100);
     });
   },

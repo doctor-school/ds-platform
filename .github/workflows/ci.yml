@@ -2045,10 +2045,10 @@ jobs:
       # ignored. Verified locally on #1647 — an admin built without it proxied
       # `/v1/auth/register` to the config default and answered 404 while the api
       # answered on its real port.
-      - name: Build the api and the admin
+      - name: Build the api, admin and recording-proof storefront setup
         env:
           API_PROXY_TARGET: http://localhost:3000
-        run: pnpm exec turbo run build --filter=@ds/api --filter=@ds/admin
+        run: pnpm exec turbo run build --filter=@ds/api --filter=@ds/admin --filter=@ds/portal --filter=@ds/login
       # The legacy эфир the 014 lifecycle flow drives (`seed-006-legacy-archived`,
       # plus `seed-005-hidden`) cannot be authored through any admin or API path —
       # `EventAdminCreate.origin` is `z.never()` — until 014 slice 3, so this tier
@@ -2202,6 +2202,43 @@ jobs:
       - name: Admin axe sweep
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
         run: pnpm --filter @ds/admin test:axe
+
+      - name: Recording attachment originals on Academy
+        if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
+        env:
+          E2E_RECORDING_ATTACHMENT_DATABASE: ds_admin_e2e
+          E2E_RECORDING_ATTACHMENT_LOG: ${{ runner.temp }}/recording-attachment/stand-ops.jsonl
+          E2E_RECORDING_ATTACHMENT_PORTAL_URL: http://localhost:3001
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/recording-attachment/results.json
+          DOCTOR_PUBLIC_ORIGIN: http://localhost:3004
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/recording-attachment"
+          pnpm --filter @ds/portal start > "$RUNNER_TEMP/recording-attachment/portal.log" 2>&1 &
+          portal_pid=$!
+          pnpm --filter @ds/login start > "$RUNNER_TEMP/recording-attachment/login.log" 2>&1 &
+          login_pid=$!
+          trap 'kill "$portal_pid" "$login_pid"' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3005/login >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then cat "$RUNNER_TEMP/recording-attachment/login.log"; exit 1; fi
+            sleep 2
+          done
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3001/webinars >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then cat "$RUNNER_TEMP/recording-attachment/portal.log"; exit 1; fi
+            sleep 2
+          done
+          pnpm --filter @ds/admin test:e2e --project recording-attachment --reporter=list,json
+          pnpm --filter @ds/e2e exec tsx api-probes/assert-recording-attachment-report.ts "$PLAYWRIGHT_JSON_OUTPUT_NAME"
+      - name: Upload recording attachment receipts
+        if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: recording-attachment-originals
+          path: ${{ runner.temp }}/recording-attachment
+          if-no-files-found: error
+          retention-days: 7
 
       # ─ failure forensics ─ five processes, so a bare red step says nothing.
       - name: Dump the service logs

@@ -76,7 +76,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     Background:
       Given a finished event means EventLifecycleState is ended and nothing else
       And a hidden event keeps the feature 004 notice and appears in no 014 listing, tab or count
-      And every recording mutation carries a canonical Idempotency-Key and the target ETag
+      And every recording mutation carries a canonical Idempotency-Key and every non-create mutation carries the target ETag
       And event_recordings rows are retained with restrictive foreign keys and no Delete route
       And the display rule is derived at read time from published non-retired recordings only
       And Stage A uses vendored canvases for portal composition and the approved Refine decisions plus design-system blocks for admin composition

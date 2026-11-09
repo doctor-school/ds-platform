@@ -198,7 +198,7 @@ const ACCOUNT_CANVAS: SlotStructure = {
     { kind: "button", label: "Изменить" },
     {
       kind: "link",
-      label: "Пароль Сменить пароль Отправим ссылку для сброса на email →",
+      label: "Пароль Сменить пароль Отправим код для сброса пароля на email →",
     },
     {
       kind: "link",
@@ -223,7 +223,7 @@ describe("canvas-slots · a section with no repeated cards (#3758, /account)", (
     expect(diffSlots(canvas, { chrome: canvas.chrome, cards: [] })).toEqual([]);
   });
 
-  it("reconciles the cabinet's code-only «Сменить пароль» helper through the one allowlist step, no stale entry", () => {
+  it("matches the cabinet's code-only «Сменить пароль» helper with no allowlist step — the canvas was redrawn (#3848)", () => {
     const { entries } = JSON.parse(
       readFileSync(
         join(REPO, "packages/e2e/lib/canvas-structure-allowlist.json"),
@@ -232,18 +232,13 @@ describe("canvas-slots · a section with no repeated cards (#3758, /account)", (
     ) as { entries: AllowlistEntry[] };
     const canvas = ACCOUNT_CANVAS;
     const app: SlotStructure = {
-      chrome: canvas.chrome.map((i) =>
-        i.label?.startsWith("Пароль")
-          ? {
-              ...i,
-              label:
-                "Пароль Сменить пароль Отправим код для сброса пароля на email →",
-            }
-          : i,
-      ),
+      chrome: canvas.chrome.map((i) => ({ ...i })),
       cards: [],
     };
-    expect(diffSlots(canvas, app)).not.toEqual([]);
+    expect(diffSlots(canvas, app)).toEqual([]);
+    expect(
+      entries.filter((e) => e.canvas === "account-profile.dc.html"),
+    ).toEqual([]);
     const where = {
       canvas: "account-profile.dc.html",
       props: {

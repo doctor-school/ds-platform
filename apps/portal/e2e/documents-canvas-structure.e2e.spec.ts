@@ -11,11 +11,11 @@ import { expectSlotSectionMatchesCanvas } from "@ds/e2e/canvas-slots";
  * Both pages read a workspace package from disk and issue no api call (028
  * V-4), so they are hermetic on the backend-free tier.
  *
- * Not compared: «a-docs · контакты» — on its first run (#3829 PR body) the
- * page drew RuTube where the canvas draws YouTube (028 EARS-4) and none of the
- * two CJM exits the canvas nests in it («a-docs · выходы»: «Для инвесторов …»,
- * «Для экспертов …»), with no recorded decision on the exits yet; «a-docs ·
- * реквизиты» (a text line, no control). On the document
+ * Not compared: «a-docs · контакты» — its two exits target pages not built
+ * yet (investors #1824, author application #1802); compared once they ship
+ * (#3829 comment 6731008257); «a-docs · реквизиты» (a text line, no control).
+ * The «не найден» state (an unknown slug) is compared on its poster; its
+ * way-out text and link sit outside every labelled canvas section. On the document
  * page «document · подвал документа» (no control drawn), the table of contents
  * and back link (drawn outside every labelled section) and the document text
  * (data, not structure) — as in the doctor-storefront check
@@ -25,6 +25,7 @@ import { expectSlotSectionMatchesCanvas } from "@ds/e2e/canvas-slots";
  * (`@ds/e2e/canvas-runtime`, #3798).
  */
 const DOCUMENT = "/documents/privacy-policy";
+const UNKNOWN_DOCUMENT = "/documents/no-such-document";
 
 for (const width of [390, 1440]) {
   test.describe(`#3829 Academy documents list ≡ academy-docs canvas · guest · ${width}`, () => {
@@ -99,6 +100,32 @@ for (const width of [390, 1440]) {
           root: '[data-testid="legal-document-others"]',
           card: '[data-testid^="legal-document-row-"]',
         },
+      });
+    });
+  });
+
+  test.describe(`#3829 Academy unknown document ≡ document canvas «не найден» · guest · ${width}`, () => {
+    test.use({ viewport: { width, height: 900 } });
+    const props = {
+      loggedIn: false,
+      shell: "Академия",
+      dataState: "не найден",
+    };
+
+    test.beforeEach(async ({ page, context }) => {
+      await context.clearCookies();
+      await page.goto(UNKNOWN_DOCUMENT);
+      await page
+        .locator('[data-testid="legal-document"][data-state="not-found"]')
+        .waitFor();
+    });
+
+    test("the poster has the canvas structure", async ({ page }) => {
+      await expectSlotSectionMatchesCanvas(page, {
+        canvas: "document.dc.html",
+        props,
+        section: { section: ["data-screen-label", "document · постер-шапка"] },
+        rendered: { root: '[data-testid="legal-document"] > div:first-child' },
       });
     });
   });

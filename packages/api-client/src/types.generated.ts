@@ -1252,6 +1252,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/points/fact-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PointsReadAdminController_factTypes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/points/facts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PointsReadAdminController_facts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/points/prices/{itemRef}": {
         parameters: {
             query?: never;
@@ -1261,6 +1293,22 @@ export interface paths {
         };
         get?: never;
         put: operations["PointsPricesAdminController_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/points/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PointsReadAdminController_rules"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -3717,6 +3765,77 @@ export interface components {
             /** @enum {string} */
             status: "open" | "closed";
         };
+        PointsFactJournalPageDto: {
+            items: {
+                eventId: string;
+                /** Format: date-time */
+                occurredAt: string;
+                /** @enum {string} */
+                outcome: "applied" | "duplicate" | "no-effect";
+                /** Format: date-time */
+                receivedAt: string;
+                ref?: string;
+                trace: {
+                    active: boolean;
+                    condition: boolean | null;
+                    ledgerEventId?: string;
+                    limits: {
+                        key?: string;
+                        /** @enum {string} */
+                        kind: "oncePer" | "countPer" | "concurrentOpen" | "unlimited";
+                        /** @enum {string} */
+                        verdict: "pass" | "limit-reached";
+                    }[];
+                    ruleId: string;
+                    stacking: ("won" | "superseded") | null;
+                    /** @constant */
+                    trigger: true;
+                    valid: boolean | null;
+                    /** @enum {string} */
+                    verdict: "applied" | "not-valid" | "inactive" | "condition-false" | "limit-reached" | "superseded" | "no-open-hold" | "no-price";
+                    version: number;
+                }[];
+                type: string;
+            }[];
+            nextCursor: string | null;
+        };
+        PointsFactTypeCatalogDto: {
+            factTypes: {
+                attributes: {
+                    [key: string]: {
+                        enum?: string[];
+                        /** @constant */
+                        format?: "uuid";
+                        max?: number;
+                        min?: number;
+                        nullable?: boolean;
+                        /** @enum {string} */
+                        type: "string" | "integer" | "boolean" | "instant";
+                    };
+                };
+                earnsPul: boolean;
+                /** @enum {string} */
+                refKind: "lesson" | "module" | "item" | "person" | "none";
+                type: string;
+            }[];
+            predicates: {
+                args?: {
+                    [key: string]: {
+                        nullable?: boolean;
+                        /** @enum {string} */
+                        type: "string" | "integer" | "boolean" | "instant";
+                    };
+                };
+                name: string;
+                result: {
+                    nullable?: boolean;
+                    /** @enum {string} */
+                    type: "string" | "integer" | "boolean" | "instant";
+                };
+                /** @enum {string} */
+                subject: "person" | "item";
+            }[];
+        };
         PointsGatingDecisionDto: {
             coveredByAdvance: number;
             /** @enum {string} */
@@ -3766,6 +3885,26 @@ export interface components {
             unit: "Pul";
             /** Format: date-time */
             updatedAt: string;
+        };
+        PointsRuleBookDto: {
+            rules: {
+                activeVersion: number | null;
+                kind: ("rule" | "setting" | "system") | null;
+                ruleId: string;
+                versions: {
+                    /** Format: date-time */
+                    createdAt: string;
+                    /** Format: date-time */
+                    effectiveFrom: string;
+                    kind: ("rule" | "setting" | "system") | null;
+                    parameters: {
+                        [key: string]: unknown;
+                    };
+                    publishedBy: string | null;
+                    triggerFactTypes: string[];
+                    version: number;
+                }[];
+            }[];
         };
         PostChatMessageRequestDto: {
             text: string;
@@ -6104,6 +6243,49 @@ export interface operations {
             };
         };
     };
+    PointsReadAdminController_factTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointsFactTypeCatalogDto"];
+                };
+            };
+        };
+    };
+    PointsReadAdminController_facts: {
+        parameters: {
+            query: {
+                cursor?: string;
+                /** @description Page size, 1–100 (default 50). */
+                limit?: number;
+                personId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointsFactJournalPageDto"];
+                };
+            };
+        };
+    };
     PointsPricesAdminController_put: {
         parameters: {
             query?: never;
@@ -6125,6 +6307,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PointsPriceDto"];
+                };
+            };
+        };
+    };
+    PointsReadAdminController_rules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointsRuleBookDto"];
                 };
             };
         };

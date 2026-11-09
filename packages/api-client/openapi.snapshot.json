@@ -4348,6 +4348,290 @@
         "required": ["personId", "pul", "bre", "con", "advance", "status"],
         "type": "object"
       },
+      "PointsFactJournalPageDto": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "eventId": {
+                  "type": "string"
+                },
+                "occurredAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "type": "string"
+                },
+                "outcome": {
+                  "enum": ["applied", "duplicate", "no-effect"],
+                  "type": "string"
+                },
+                "receivedAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                },
+                "trace": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "active": {
+                        "type": "boolean"
+                      },
+                      "condition": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "ledgerEventId": {
+                        "type": "string"
+                      },
+                      "limits": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "kind": {
+                              "enum": [
+                                "oncePer",
+                                "countPer",
+                                "concurrentOpen",
+                                "unlimited"
+                              ],
+                              "type": "string"
+                            },
+                            "verdict": {
+                              "enum": ["pass", "limit-reached"],
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind", "verdict"],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "ruleId": {
+                        "type": "string"
+                      },
+                      "stacking": {
+                        "anyOf": [
+                          {
+                            "enum": ["won", "superseded"],
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "trigger": {
+                        "const": true,
+                        "type": "boolean"
+                      },
+                      "valid": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "verdict": {
+                        "enum": [
+                          "applied",
+                          "not-valid",
+                          "inactive",
+                          "condition-false",
+                          "limit-reached",
+                          "superseded",
+                          "no-open-hold",
+                          "no-price"
+                        ],
+                        "type": "string"
+                      },
+                      "version": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "ruleId",
+                      "version",
+                      "trigger",
+                      "active",
+                      "valid",
+                      "condition",
+                      "limits",
+                      "stacking",
+                      "verdict"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "eventId",
+                "type",
+                "occurredAt",
+                "receivedAt",
+                "outcome",
+                "trace"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["items", "nextCursor"],
+        "type": "object"
+      },
+      "PointsFactTypeCatalogDto": {
+        "additionalProperties": false,
+        "properties": {
+          "factTypes": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "attributes": {
+                  "additionalProperties": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "enum": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "format": {
+                        "const": "uuid",
+                        "type": "string"
+                      },
+                      "max": {
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
+                        "type": "integer"
+                      },
+                      "min": {
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
+                        "type": "integer"
+                      },
+                      "nullable": {
+                        "type": "boolean"
+                      },
+                      "type": {
+                        "enum": ["string", "integer", "boolean", "instant"],
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "type": "object"
+                  },
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "earnsPul": {
+                  "type": "boolean"
+                },
+                "refKind": {
+                  "enum": ["lesson", "module", "item", "person", "none"],
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": ["type", "refKind", "earnsPul", "attributes"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "predicates": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "args": {
+                  "additionalProperties": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "nullable": {
+                        "type": "boolean"
+                      },
+                      "type": {
+                        "enum": ["string", "integer", "boolean", "instant"],
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "type": "object"
+                  },
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "result": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "nullable": {
+                      "type": "boolean"
+                    },
+                    "type": {
+                      "enum": ["string", "integer", "boolean", "instant"],
+                      "type": "string"
+                    }
+                  },
+                  "required": ["type"],
+                  "type": "object"
+                },
+                "subject": {
+                  "enum": ["person", "item"],
+                  "type": "string"
+                }
+              },
+              "required": ["name", "subject", "result"],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["factTypes", "predicates"],
+        "type": "object"
+      },
       "PointsGatingDecisionDto": {
         "additionalProperties": false,
         "properties": {
@@ -4570,6 +4854,119 @@
           "limitedSeats",
           "updatedAt"
         ],
+        "type": "object"
+      },
+      "PointsRuleBookDto": {
+        "additionalProperties": false,
+        "properties": {
+          "rules": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "activeVersion": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": ["rule", "setting", "system"],
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ruleId": {
+                  "type": "string"
+                },
+                "versions": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "createdAt": {
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                        "type": "string"
+                      },
+                      "effectiveFrom": {
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "enum": ["rule", "setting", "system"],
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "parameters": {
+                        "additionalProperties": {},
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "type": "object"
+                      },
+                      "publishedBy": {
+                        "anyOf": [
+                          {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "triggerFactTypes": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "version": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "version",
+                      "kind",
+                      "triggerFactTypes",
+                      "parameters",
+                      "effectiveFrom",
+                      "publishedBy",
+                      "createdAt"
+                    ],
+                    "type": "object"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": ["ruleId", "kind", "activeVersion", "versions"],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["rules"],
         "type": "object"
       },
       "PostChatMessageRequestDto": {
@@ -8562,6 +8959,71 @@
         "tags": ["OrganisationsAdmin"]
       }
     },
+    "/v1/admin/points/fact-types": {
+      "get": {
+        "operationId": "PointsReadAdminController_factTypes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PointsFactTypeCatalogDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["PointsReadAdmin"]
+      }
+    },
+    "/v1/admin/points/facts": {
+      "get": {
+        "operationId": "PointsReadAdminController_facts",
+        "parameters": [
+          {
+            "description": "Page size, 1–100 (default 50).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "personId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PointsFactJournalPageDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["PointsReadAdmin"]
+      }
+    },
     "/v1/admin/points/prices/{itemRef}": {
       "put": {
         "operationId": "PointsPricesAdminController_put",
@@ -8598,6 +9060,25 @@
           }
         },
         "tags": ["PointsPricesAdmin"]
+      }
+    },
+    "/v1/admin/points/rules": {
+      "get": {
+        "operationId": "PointsReadAdminController_rules",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PointsRuleBookDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["PointsReadAdmin"]
       }
     },
     "/v1/admin/points/rules/{ruleId}/versions": {

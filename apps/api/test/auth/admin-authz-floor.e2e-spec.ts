@@ -1067,6 +1067,23 @@ const FLOOR_ROUTES: {
     url: "/v1/admin/points/prices/event:floor-absent-item",
     payload: {},
   },
+  // 025 EARS-45 (#3841) — the admin read API. Reads only; the journal names a
+  // person no row belongs to, so an admitted principal reads an empty page.
+  {
+    endpoint: "GET /v1/admin/points/fact-types",
+    method: "GET",
+    url: "/v1/admin/points/fact-types",
+  },
+  {
+    endpoint: "GET /v1/admin/points/rules",
+    method: "GET",
+    url: "/v1/admin/points/rules",
+  },
+  {
+    endpoint: "GET /v1/admin/points/facts",
+    method: "GET",
+    url: `/v1/admin/points/facts?personId=${ABSENT_ID}`,
+  },
 ];
 
 /** An authz refusal — never a 2xx, never a partially-served admin answer. */

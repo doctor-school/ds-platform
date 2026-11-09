@@ -204,7 +204,9 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
   Scenario: Only an admin reads the catalog, the rules and the journal
     When an admin requests the fact types, the rules and the facts of "A"
     Then the catalog, each rule with its version history and the journal rows with their traces are returned
-    When doctor "A" requests the facts of "A" on the admin route
+    When doctor "A" requests the facts of "A" on the admin route with a portal session
+    Then the request is refused with 401
+    When a staff member without the admin role requests the facts of "A" on the admin route
     Then the request is refused with 403
 
   @EARS-46 @EARS-30

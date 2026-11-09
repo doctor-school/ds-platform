@@ -14,10 +14,11 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * the Academy twin of the doctor check `apps/doctor/e2e/account-canvas-structure-live.spec.ts`
  * (#3758), over the same `@ds/account` surface.
  *
- * The canvas's phone row and congress row are STATE switches, not data: the
- * spec reads which state the signed-in account is in from the api the cabinet
- * itself reads (`GET /v1/me/profile`, `GET /v1/me/congress-submissions`), never
- * from the rendered page, and draws the canvas in that state. Sample values
+ * The canvas's phone row is a STATE switch, not data: the spec reads which
+ * state the signed-in account is in from the api the cabinet itself reads
+ * (`GET /v1/me/profile`), never from the rendered page, and draws the canvas
+ * in that state. The congress row is drawn on the doctor host only, by the
+ * canvas and the cabinet alike, so the Academy check holds it off. Sample values
  * (name, email, phone number) are text, not controls, and are never compared.
  *
  * Not compared: `/account/events` ↔ `account-my-events.dc.html` — that canvas
@@ -48,11 +49,6 @@ const PHONE_PROP: Record<CanvasPhonePhase, string> = {
   confirmed: "подтверждён",
 };
 
-interface AccountState {
-  phase: CanvasPhonePhase;
-  congress: "есть заявка" | "нет заявки";
-}
-
 for (const width of [390, 1440]) {
   test.describe(`#3829 Academy /account ≡ account-profile canvas · signed-in · ${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
@@ -66,7 +62,7 @@ for (const width of [390, 1440]) {
       await page.goto("/account", { waitUntil: "domcontentloaded" });
       await page.getByTestId("logout").waitFor();
 
-      const state = await page.evaluate(async (): Promise<AccountState> => {
+      const phase = await page.evaluate(async (): Promise<CanvasPhonePhase> => {
         const res = await fetch("/v1/me/profile", {
           credentials: "same-origin",
         });
@@ -76,37 +72,24 @@ for (const width of [390, 1440]) {
           phoneVerified: boolean | null;
           suggestedPhone: string | null;
         };
-        const phase: CanvasPhonePhase =
-          p.phone && p.phoneVerified
-            ? "confirmed"
-            : p.phone
-              ? "unconfirmed"
-              : p.suggestedPhone
-                ? "app"
-                : "none";
-        // The cabinet hides the row on any failed read (account-cabinet.tsx).
-        const section = await fetch("/v1/me/congress-submissions", {
-          credentials: "same-origin",
-        });
-        const registered =
-          section.ok &&
-          ((await section.json()) as { registered?: boolean }).registered ===
-            true;
-        return { phase, congress: registered ? "есть заявка" : "нет заявки" };
+        return p.phone && p.phoneVerified
+          ? "confirmed"
+          : p.phone
+            ? "unconfirmed"
+            : p.suggestedPhone
+              ? "app"
+              : "none";
       });
-      if (state.congress === "есть заявка") {
-        await page
-          .getByRole("link", { name: /Мои заявки на Конгресс/ })
-          .waitFor();
-      }
 
       await expectSlotSectionMatchesCanvas(page, {
         canvas: "account-profile.dc.html",
         props: {
           host: "Академия",
           variant: "Разделы",
-          congress: state.congress,
-          phone: PHONE_PROP[state.phase],
+          // The congress row is doctor-host only on both sides (canvas
+          // `showCongress = isDoctor && …`; the Academy cabinet has no congress path).
+          congress: "нет заявки",
+          phone: PHONE_PROP[phase],
         },
         section: {
           section: ["data-screen-label", "Профиль · Разделы"],

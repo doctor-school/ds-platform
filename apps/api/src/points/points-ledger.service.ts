@@ -24,7 +24,10 @@ import {
   firstOverdrawingLeg,
   type FoldPosting,
   foldPointsAccount,
+  RELEASE_FACT,
+  RESERVE_FACT,
   type ResolvedLeg,
+  SETTLE_FACT,
 } from "./points-balance.js";
 import { PointsLedgerError } from "./points.errors.js";
 
@@ -147,8 +150,8 @@ export class PointsLedgerService {
     const registrations = [
       ...new Set(
         own
-          .filter((p) => p.eventId.startsWith("reserve:"))
-          .map((p) => p.eventId.slice("reserve:".length)),
+          .filter((p) => p.eventId.startsWith(RESERVE_FACT))
+          .map((p) => p.eventId.slice(RESERVE_FACT.length)),
       ),
     ];
     const lifecycle =
@@ -161,9 +164,9 @@ export class PointsLedgerService {
               inArray(
                 pointsPostings.eventId,
                 registrations.flatMap((r) => [
-                  `reserve:${r}`,
-                  `settle:${r}`,
-                  `release:${r}`,
+                  `${RESERVE_FACT}${r}`,
+                  `${SETTLE_FACT}${r}`,
+                  `${RELEASE_FACT}${r}`,
                 ]),
               ),
             );

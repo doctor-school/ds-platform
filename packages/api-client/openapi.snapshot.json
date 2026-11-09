@@ -9595,16 +9595,7 @@
     "/v1/me/points": {
       "get": {
         "operationId": "PointsMeController_read",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "personId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "content": {

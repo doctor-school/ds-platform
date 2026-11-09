@@ -31,4 +31,6 @@ Spec: `apps/docs/content/specs/features/025-attention-points-engine/` (design §
 
 ## Not here yet
 
-Per-action award conditions and producer wiring (#3809), reserves/spend (#3810), advance and the `obligation-settle:pul` leg (#3811), leaderboard (#3812), the posting history `GET /v1/me/points/postings` and the gating read, corrections and aggregates (#3814), referral award and its monthly cap (#3816), admin UI (#3815). No producer calls the intake yet and no `PointsCredited` subscriber exists. No expiry posting exists anywhere (EARS-22).
+Per-action award conditions and producer wiring (#3809), reserves/spend (#3810), advance and the `obligation-settle:pul` leg (#3811), leaderboard (#3812), the posting history `GET /v1/me/points/postings` (#3835 adds its EARS and Issue), the gating read, corrections and aggregates (#3814), referral award and its monthly cap (#3816), admin UI (#3815). No producer calls the intake yet and no `PointsCredited` subscriber exists. No expiry posting exists anywhere (EARS-22).
+
+Read-side constraints on the reserve/advance writers (noted on #3810 and #3811): a reserve covered wholly by the advance writes no posting on the person account, so `foldPostings` cannot find it and `advance.remaining` under-reports until the writer gives it a person-attributable leg (or the fold re-grounds on the reserve rows); and `obligation-settle:pul` netting is global, applied oldest first, so a partially netted obligation whose reserve is later released re-applies its netting to younger obligations until settle postings name their reserve.

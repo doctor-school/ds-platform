@@ -69,7 +69,7 @@ describe("025 PointsAccount fold", () => {
       p("e1", "accrual:pul", issuance, me, 5, "pul", at(8)),
       p("reserve:r1", "reserve:balance", me, reserve, 5, "pul", at(9)),
       p("reserve:r1", "reserve:advance", advance, reserve, 15, "pul", at(9)),
-      p("reserve:r2", "reserve:balance", me, reserve, 0 + 1, "pul", at(10)),
+      p("reserve:r2", "reserve:balance", me, reserve, 1, "pul", at(10)),
       p("reserve:r2", "reserve:advance", advance, reserve, 4, "pul", at(10)),
       p("release:r2", "release:balance", reserve, me, 1, "pul", at(11)),
       p("release:r2", "release:advance", reserve, advance, 4, "pul", at(11)),

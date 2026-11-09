@@ -68,13 +68,14 @@ export interface PointsAccountFold {
 // reserve `reserve:<registration>` (legs `reserve:balance` person→reserve,
 // `reserve:advance` advance→reserve), settle `settle:<registration>`, release
 // `release:<registration>`; later Pul accruals net the obligation with leg
-// `obligation-settle:pul` person→advance (§4).
-const RESERVE_FACT = "reserve:";
-const SETTLE_FACT = "settle:";
-const RELEASE_FACT = "release:";
-const RESERVE_BALANCE_LEG = "reserve:balance";
-const RESERVE_ADVANCE_LEG = "reserve:advance";
-const OBLIGATION_SETTLE_LEG = "obligation-settle:pul";
+// `obligation-settle:pul` person→advance (§4). One definition, shared by this
+// fold, the ledger's posting fetch and the reserve writers (#3810, #3811).
+export const RESERVE_FACT = "reserve:";
+export const SETTLE_FACT = "settle:";
+export const RELEASE_FACT = "release:";
+export const RESERVE_BALANCE_LEG = "reserve:balance";
+export const RESERVE_ADVANCE_LEG = "reserve:advance";
+export const OBLIGATION_SETTLE_LEG = "obligation-settle:pul";
 
 /**
  * EARS-2 — the `PointsAccount` amounts as a pure fold over postings; no

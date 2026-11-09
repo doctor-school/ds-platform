@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Test, type TestingModule } from "@nestjs/testing";
 import {
   FastifyAdapter,
@@ -236,6 +239,32 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(own.statusCode).toBe(200);
       expect(own.json().personId).toBe(caller.personId);
+    });
+
+    it("025 EARS-2: the published contract of GET /v1/me/points takes no person identifier", () => {
+      const here = dirname(fileURLToPath(import.meta.url));
+      const snapshot = JSON.parse(
+        readFileSync(
+          join(
+            here,
+            "..",
+            "..",
+            "..",
+            "..",
+            "packages",
+            "api-client",
+            "openapi.snapshot.json",
+          ),
+          "utf8",
+        ),
+      ) as {
+        paths: Record<string, Record<string, { parameters?: unknown[] }>>;
+      };
+      const operation = snapshot.paths["/v1/me/points"]?.get;
+      expect(operation).toBeDefined();
+      // The person is the session subject: an SDK caller is never asked for
+      // (or offered) a person id; `?personId=` exists only to be refused.
+      expect(operation!.parameters ?? []).toEqual([]);
     });
 
     it("025 EARS-2: a closed account reads status closed with its postings unchanged", async () => {

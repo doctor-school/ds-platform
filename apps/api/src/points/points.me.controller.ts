@@ -4,7 +4,6 @@ import {
   Get,
   Header,
   Inject,
-  Query,
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -30,7 +29,9 @@ const ACCOUNT_ROLES: Role[] = ["doctor_guest", "platform_admin"];
  * a fold over postings (025-design §1). The person is always the session
  * subject's `users.id`; the route takes no person identifier, and a request
  * that names another person (`?personId=`) is refused with 403, never served
- * the caller's or the named account. Unauthenticated → 401 from the global
+ * the caller's or the named account. `personId` is read off the raw query
+ * rather than declared with `@Query`, so the published contract (OpenAPI
+ * snapshot / SDK) carries no person parameter at all. Unauthenticated → 401 from the global
  * `AuthzGuard`; a session subject with no live `users` row → 401. Per-caller ⇒
  * `Cache-Control: no-store`.
  */
@@ -53,10 +54,7 @@ export class PointsMeController {
     audit: "none",
     tests: ["EARS-2"],
   })
-  async read(
-    @Req() req: FastifyRequest,
-    @Query("personId") requested?: string,
-  ): Promise<PointsAccount> {
+  async read(@Req() req: FastifyRequest): Promise<PointsAccount> {
     const sub = (req as { user?: { sub?: string } }).user?.sub;
     if (!sub) throw new UnauthorizedException("authentication required");
     const [person] = await this.db
@@ -64,6 +62,9 @@ export class PointsMeController {
       .from(users)
       .where(and(eq(users.zitadelSub, sub), isNull(users.deactivatedAt)));
     if (!person) throw new UnauthorizedException("authentication required");
+    // Repeated `?personId=` arrives as an array, which never equals the id.
+    const requested = (req.query as Record<string, unknown> | undefined)
+      ?.personId;
     if (requested !== undefined && requested !== person.id) {
       throw new ForbiddenException("another person's points account");
     }

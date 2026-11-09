@@ -7229,9 +7229,7 @@ export interface operations {
     };
     PointsMeController_read: {
         parameters: {
-            query: {
-                personId: string;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;

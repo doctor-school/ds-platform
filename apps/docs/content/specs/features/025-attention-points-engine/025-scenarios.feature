@@ -36,11 +36,14 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     And the second and third answers are "duplicate"
 
   @EARS-7 @failure
-  Scenario: An offline lesson earns Bre only and never a second award
+  Scenario: An offline lesson earns Bre only and never a second Bre
     When "lesson.completed" for "A" on lesson "L5" is recorded with mode "offline"
-    Then a posting of 1 Bre and no Pul is written under rule "accrual.lesson.offline"
+    Then a posting of 1 Bre and no Pul is written under rule "accrual.lesson.any-mode"
     When "lesson.completed" for "A" on lesson "L5" is recorded with mode "online" and another event id
-    Then the answer is "duplicate" and no Pul is posted
+    Then 10 Pul are posted under rule "accrual.lesson" and "accrual.lesson.any-mode" is traced "limit-reached"
+    And "A" has 10 Pul and 1 Bre from lesson "L5"
+    When "lesson.completed" for "A" on lesson "L5" is recorded with mode "offline" and a third event id
+    Then the answer is "duplicate" and nothing is posted
 
   @EARS-15 @EARS-20
   Scenario: Advance covers the shortfall and later earnings settle it
@@ -280,3 +283,10 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     When a sixth invitee of "A" verifies the phone and completes a first lesson
     Then the invitee receives 30 Pul
     And no referral award is posted to "A" for that invitee and the inviter rule is traced "limit-reached"
+
+  @EARS-11 @EARS-34
+  Scenario: The invitee's first completed lesson counts itself for the referral
+    Given invitee "F" of "A" has a verified phone and no completed lesson
+    When "lesson.completed" for "F" on lesson "L8" is recorded
+    Then "person.completedLessons" reads 1 for that evaluation
+    And "F" receives 30 Pul under "accrual.referral-invitee" on that same fact

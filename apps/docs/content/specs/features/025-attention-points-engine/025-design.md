@@ -11,7 +11,7 @@ lang: en
 
 ## Production amendment — one universal rule engine (2026-11-09, #3835)
 
-The ledger core (migration 0058) and the rule book with its accrual intake (migration 0059) run in production since release-2026.11.07-1 with no producer calling the intake. This amendment overrides §4 (the accrual cascade becomes the `record` evaluation of D) and §6 (the per-id parameter schemas and the closed action set become the one rule schema of B and the clause map of G); §1, §3, §7, §8 and §9 stand, and §2 and §5 — never shipped — are rewritten inline to point here. Requirements: production amendment of `025-requirements-en.md` (amended EARS-3, EARS-4, EARS-25; added EARS-32…46).
+The ledger core (migration 0058) and the rule book with its accrual intake (migration 0059) run in production since release-2026.11.07-1 with no producer calling the intake. This amendment overrides §4 (the accrual cascade becomes the `record` evaluation of D), §6 (the per-id parameter schemas and the closed action set become the one rule schema of B and the clause map of G), the producer entry point named in §1 (`PointsFactIntake.acceptWithin/accept` becomes `PointsEngine.record/quote`, A) and the «Event id, leg and dedupe key» paragraph of §2 (derived `reserve:/settle:/release:<registration>` fact ids, the `obligation-settle:pul` leg and one `points_posting_keys` row per fact keyed `<personId>:<contentRef>:<action>` become the `<fact>#<rule>` ledger facts with one key row per applied rule of D and the `obligation-settle:<obligationId>` legs of E). The rest of §1 and §2 (shipped with 0058/0059), §3, §7, §8 and §9 stand; §5 — never shipped — is rewritten inline to point here. Requirements: production amendment of `025-requirements-en.md` (amended EARS-3, EARS-4, EARS-25; added EARS-32…46).
 
 ### A. Layers
 
@@ -34,17 +34,17 @@ One discriminated union in `packages/schemas/src/points/rules.ts`, stored in `po
 // kind: "rule"
 {
   "kind": "rule",
-  "label": "Lesson award, online", // admin-facing text
+  "label": "Lesson award, Pul part, online", // admin-facing text
   "trigger": ["lesson.completed"], // ≥1 registered fact type (EARS-32)
   "condition": { "eq": [{ "attr": "mode" }, "online"] }, // C; absent = true
   "effect": {
     // exactly one (EARS-35)
     "kind": "credit", // credit | debit | reserve | settle | release
     "beneficiary": "subject", // credit: "subject" | { "pred": "person.referrer" }
-    "amounts": { "pul": 10, "bre": 1, "con": 0 }, // credit: per denomination; debit: { "pul": n } | "price"
+    "amounts": { "pul": 10, "bre": 0, "con": 0 }, // credit: per denomination; debit: { "pul": n } | "price"
     // reserve: { "allowAdvance": true } — price and mode read from points_prices
   },
-  "limits": [{ "oncePer": ["subject", "ref"], "key": "lesson" }], // ≥1, or [{ "unlimited": true }]
+  "limits": [{ "oncePer": ["subject", "ref"], "key": "lesson.pul" }], // ≥1, or [{ "unlimited": true }]
   // { "countPer": { "scope": ["beneficiary"], "period": "month", "n": 5 | { "setting": "…" } } }
   // { "concurrentOpen": { "n": { "setting": "setting.reserve.limitedSeats.max" }, "filter": { "limitedSeats": true } } }
   "validFrom": null,
@@ -70,7 +70,7 @@ Operand := { "attr": Name }                          a declared attribute of the
          | Literal                                   string | integer | boolean | null
 ```
 
-Language constants (not settings): depth ≤ 8, ≤ 64 nodes, `in` lists ≤ 100 literals. Types are `string`, `integer`, `boolean`, `instant` and nullable variants; `gt`…`lte` take integers or instants, `eq`/`ne`/`in` take equal types. A predicate declares its argument and result types and its subject (`person` of the fact, `item` of the ref); it runs inside the evaluation transaction after the locks of D, reads only, and is memoised per evaluation. Seeded predicates: `person.registered`, `person.phoneVerified`, `person.completedLessons` (integer), `person.referrer` (person id or null), `item.price`, `item.mode`, `item.limitedSeats`.
+Language constants (not settings): depth ≤ 8, ≤ 64 nodes, `in` lists ≤ 100 literals. Types are `string`, `integer`, `boolean`, `instant` and nullable variants; `gt`…`lte` take integers or instants, `eq`/`ne`/`in` take equal types. A predicate declares its argument and result types and its subject (`person` of the fact, `item` of the ref); it runs inside the evaluation transaction after the locks of D, reads only, and is memoised per evaluation. **Timing:** a predicate evaluated for a fact sees the state **including that fact** — a journal-reading predicate counts the fact under evaluation as if it were already journaled (its journal row is inserted at the end of D), so the invitee's first `lesson.completed` counts itself in `person.completedLessons` (distinct `ref`s of the person's `lesson.completed` facts) and EARS-11 fires on that fact; account and projection reads see the state before this fact's own effects, because every condition is evaluated before any effect is applied. Seeded predicates: `person.registered`, `person.phoneVerified`, `person.completedLessons` (integer), `person.referrer` (person id or null), `item.price`, `item.mode`, `item.limitedSeats`.
 
 ### D. `record` evaluation
 
@@ -217,22 +217,32 @@ erDiagram
 
 No EARS number moves; Issues #3809–#3816 keep their references.
 
-| Clause         | Rule or mechanism                                                                                                      |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| EARS-3, 4      | D (evaluation, journal and limit dedupe)                                                                               |
-| EARS-5         | `accrual.registration` on `account.registered`, `phone.verified`; key `welcome`; phone check in debit-side effects     |
-| EARS-6         | `accrual.profile`                                                                                                      |
-| EARS-7, 8      | `accrual.lesson` + `accrual.lesson.offline` (key `lesson`), `accrual.module` + `accrual.module.offline` (key `module`) |
-| EARS-9         | `accrual.participation`, condition `presenceSharePercent ≥ setting.presence.share`                                     |
-| EARS-10        | `accrual.question`, `accrual.rating`, `accrual.interactive`, `oncePer(subject, ref)`                                   |
-| EARS-11        | `accrual.referral-inviter` (beneficiary `person.referrer`, `countPer` month 5), `accrual.referral-invitee`             |
-| EARS-13        | `quote` (D)                                                                                                            |
-| EARS-14…17, 21 | `spend.reserve` with `allowAdvance`, `setting.advance.cap`, `concurrentOpen` (E)                                       |
-| EARS-18        | `spend.release` on cancelled / voided / no-show (E)                                                                    |
-| EARS-19        | `spend.settle`                                                                                                         |
-| EARS-20        | ledger-core netting step, not a rule (E)                                                                               |
-| EARS-26        | `points_prices` + `spend.debit` on `item.access-requested`                                                             |
-| EARS-43        | `accrual.starter-bonus` (key `welcome`) + J                                                                            |
+| Clause         | Rule or mechanism                                                                                                                                                                                                                       |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EARS-3, 4      | D (evaluation, journal and limit dedupe)                                                                                                                                                                                                |
+| EARS-5         | `accrual.registration` on `account.registered`, `phone.verified`; key `welcome`; phone check in debit-side effects                                                                                                                      |
+| EARS-6         | `accrual.profile`                                                                                                                                                                                                                       |
+| EARS-7, 8      | `accrual.lesson` (online, Pul, key `lesson.pul`) + `accrual.lesson.any-mode` (Bre, key `lesson`); `accrual.module` (online, Pul, key `module.pul`) + `accrual.module.any-mode` (Bre and Con, key `module`) — the mode-order table below |
+| EARS-9         | `accrual.participation`, condition `presenceSharePercent ≥ setting.presence.share`                                                                                                                                                      |
+| EARS-10        | `accrual.question`, `accrual.rating`, `accrual.interactive`, `oncePer(subject, ref)`                                                                                                                                                    |
+| EARS-11        | `accrual.referral-inviter` (beneficiary `person.referrer`, `countPer` month 5), `accrual.referral-invitee`                                                                                                                              |
+| EARS-13        | `quote` (D)                                                                                                                                                                                                                             |
+| EARS-14…17, 21 | `spend.reserve` with `allowAdvance`, `setting.advance.cap`, `concurrentOpen` (E)                                                                                                                                                        |
+| EARS-18        | `spend.release` on cancelled / voided / no-show (E)                                                                                                                                                                                     |
+| EARS-19        | `spend.settle`                                                                                                                                                                                                                          |
+| EARS-20        | ledger-core netting step, not a rule (E)                                                                                                                                                                                                |
+| EARS-26        | `points_prices` + `spend.debit` on `item.access-requested`                                                                                                                                                                              |
+| EARS-43        | `accrual.starter-bonus` (key `welcome`) + J                                                                                                                                                                                             |
+
+Mode order of one lesson (EARS-7; a module behaves the same under `module.pul` / `module`). The Pul part and the Bre part carry separate `oncePer(subject, ref)` keys, so Bre is credited once whatever the mode and the Pul is credited once on the first online completion — the lead's default, an open question for the Product Lead (requirements, Open questions):
+
+| Completions of lesson L, in order | `accrual.lesson` (key `lesson.pul`)      | `accrual.lesson.any-mode` (key `lesson`) | Doctor ends with | Second answer |
+| --------------------------------- | ---------------------------------------- | ---------------------------------------- | ---------------- | ------------- |
+| online                            | applied, +10 Pul                         | applied, +1 Bre                          | 10 Pul, 1 Bre    | —             |
+| online, then online again         | applied; then `limit-reached`            | applied; then `limit-reached`            | 10 Pul, 1 Bre    | `duplicate`   |
+| offline, then online              | `condition-false`; then applied, +10 Pul | applied, +1 Bre; then `limit-reached`    | 10 Pul, 1 Bre    | `applied`     |
+| online, then offline              | applied; then `condition-false`          | applied; then `limit-reached`            | 10 Pul, 1 Bre    | `duplicate`   |
+| offline only                      | `condition-false`                        | applied, +1 Bre                          | 0 Pul, 1 Bre     | —             |
 
 Fate of the 21 rows 0059 seeded (all stay as stored):
 
@@ -245,7 +255,9 @@ Fate of the 21 rows 0059 seeded (all stay as stored):
 | `leaderboard.conWeight`, `.breWeight`, `.top`, `.neighbours`                                                                                                 | retired — `setting.leaderboard.*` v1                                                                                      |
 | `manual-correction`                                                                                                                                          | unchanged (`kind: system`, EARS-28)                                                                                       |
 
-New at the epoch: `accrual.lesson.offline`, `accrual.module.offline`, `accrual.starter-bonus`, `spend.reserve`, `spend.settle`, `spend.release`, `spend.debit`, the eight `setting.*` above and `setting.effect.maxAmount` [500]. Publishing to a retired id answers `points-rule-retired` (422).
+`accrual.lesson` and `accrual.module` version 2 carry only the Pul part of their PRD award (online `mode`); the Bre and Con part moves to the `any-mode` rules, so an online completion still totals the PRD award.
+
+New at the epoch: `accrual.lesson.any-mode`, `accrual.module.any-mode`, `accrual.starter-bonus`, `spend.reserve`, `spend.settle`, `spend.release`, `spend.debit`, the eight `setting.*` above and `setting.effect.maxAmount` [500]. Publishing to a retired id answers `points-rule-retired` (422).
 
 ### H. Migration path
 
@@ -287,7 +299,7 @@ A run cut short by a timeout or a deploy is resumed by running it again: every a
 
 ## 1. Placement
 
-One NestJS module `apps/api/src/points/` owns the ledger, the rule book, the gating decision and the read models; its request/response contracts live in `packages/schemas/src/points/` (the SDK is regenerated into `packages/api-client/`), its tables in `packages/db/src/schema/points-*.ts`. Consumers never import the module's internals: storefronts and the mobile app read over HTTP, and producer features (020, 022, 024, the room) hand facts to the module's in-process fact intake inside their own transaction boundary (`PointsFactIntake.acceptWithin(tx, fact)`, which returns the outcome with a `publishAfterCommit` the producer calls after its COMMIT; `accept(fact)` when the fact is the producer's whole write and the intake owns the transaction), or over the internal endpoint the mobile offline sync replays through. No package outside `apps/api` holds points logic (capability registry row «Attention points engine (025)»).
+One NestJS module `apps/api/src/points/` owns the ledger, the rule book, the gating decision and the read models; its request/response contracts live in `packages/schemas/src/points/` (the SDK is regenerated into `packages/api-client/`), its tables in `packages/db/src/schema/points-*.ts`. Consumers never import the module's internals: storefronts and the mobile app read over HTTP, and producer features (020, 022, 024, the room) hand facts to the module's in-process fact intake inside their own transaction boundary (`PointsFactIntake.acceptWithin(tx, fact)`, which returns the outcome with a `publishAfterCommit` the producer calls after its COMMIT; `accept(fact)` when the fact is the producer's whole write and the intake owns the transaction; _overridden by the production amendment: producers call `PointsEngine.record(tx, fact)` / `record(fact)` and `quote(personId, draftFact)`, A, with the same after-commit contract_), or over the internal endpoint the mobile offline sync replays through. No package outside `apps/api` holds points logic (capability registry row «Attention points engine (025)»).
 
 ## 2. Data model
 
@@ -340,7 +352,7 @@ erDiagram
 ```
 
 - **Accounts.** Unique (`subject_kind`, `subject_id`, `unit`) for subjects; system accounts are keyed by a `system_code` (`issuance`, `reserve`, `sink`, `advance`) — one per unit. `amount` is a positive integer; direction is the debit/credit pair, so a fold is `Σ credits − Σ debits` per (account, denomination).
-- **Event id, leg and dedupe key** (ADR-0016 §6 / design §2.12 as rewritten in this PR). **One domain fact = one `event_id`**: the producer's event id, or a derived fact id for the engine's own facts (`reserve:<registration>`, `settle:<registration>`, `release:<registration>`). A fact may write several postings — a module award in three denominations, a reserve plus an advance, a release reversing both, an accrual plus its obligation settlement — so a posting is unique on (`event_id`, `leg`), where the `leg` names the posting within the fact (denomination + entry kind: `accrual:pul`, `accrual:bre`, `reserve:balance`, `reserve:advance`, `settle:pul`, `release:balance`, `obligation-settle:pul`, …). Postgres requires the partition key in every unique constraint of a partitioned table, which is why `audit_ledger` scopes its `event_id` uniqueness to `(event_id, created_at)` — dedup within one monthly partition, acceptable for an audit trail. For points that is **not** acceptable: a lesson completed in March and replayed by an offline sync in April must still be a duplicate (EARS-4). So global dedupe lives in the non-partitioned **`points_posting_keys (event_id PK, dedupe_key UNIQUE NULLS DISTINCT, occurred_month)`** — **one row per fact**, the dedupe key being the PRD key `<personId>:<contentRef>:<action>` for an accrual fact and null for a spend fact (whose `event_id` alone is its key) — inserted in the same transaction **before** the fact's postings, so the key is known before the rule is evaluated. The postings of one fact share its `occurred_at` and therefore one partition, so the partition-local unique index on (`event_id`, `leg`, `occurred_at`) is effectively (`event_id`, `leg`). This is how the points ledger satisfies ADR-0003 §3; it is the one deliberate departure from the `audit_ledger` template.
+- **Event id, leg and dedupe key** (ADR-0016 §6 / design §2.12 as rewritten in this PR). **One domain fact = one `event_id`**: the producer's event id, or a derived fact id for the engine's own facts (`reserve:<registration>`, `settle:<registration>`, `release:<registration>`). A fact may write several postings — a module award in three denominations, a reserve plus an advance, a release reversing both, an accrual plus its obligation settlement — so a posting is unique on (`event_id`, `leg`), where the `leg` names the posting within the fact (denomination + entry kind: `accrual:pul`, `accrual:bre`, `reserve:balance`, `reserve:advance`, `settle:pul`, `release:balance`, `obligation-settle:pul`, …). Postgres requires the partition key in every unique constraint of a partitioned table, which is why `audit_ledger` scopes its `event_id` uniqueness to `(event_id, created_at)` — dedup within one monthly partition, acceptable for an audit trail. For points that is **not** acceptable: a lesson completed in March and replayed by an offline sync in April must still be a duplicate (EARS-4). So global dedupe lives in the non-partitioned **`points_posting_keys (event_id PK, dedupe_key UNIQUE NULLS DISTINCT, occurred_month)`** — **one row per fact**, the dedupe key being the PRD key `<personId>:<contentRef>:<action>` for an accrual fact and null for a spend fact (whose `event_id` alone is its key) — inserted in the same transaction **before** the fact's postings, so the key is known before the rule is evaluated. The postings of one fact share its `occurred_at` and therefore one partition, so the partition-local unique index on (`event_id`, `leg`, `occurred_at`) is effectively (`event_id`, `leg`). This is how the points ledger satisfies ADR-0003 §3; it is the one deliberate departure from the `audit_ledger` template. _(Overridden by the production amendment, D and E: a ledger fact is one applied rule, `event_id = <fact event id>#<rule id>`, so a journal fact has 0…n `points_posting_keys` rows — one per applied rule, its dedupe key the rule's limit key `<limit key>:<oncePer scope values>`; the engine's hold transitions are the ledger facts `<fact>#spend.reserve` / `#spend.settle` / `#spend.release`, and netting writes `obligation-settle:<obligationId>` legs, not `obligation-settle:pul`. The table shapes, the (`event_id`, `leg`) uniqueness and the non-partitioned global dedupe stand.)_
 - **Reversal reference.** A reversing posting names the posting it reverses by its full key (`reverses_posting_id`, `reverses_occurred_at`) — a two-column foreign key into `points_postings` (`id`, `occurred_at`). Postgres requires the partition key in every unique key of a partitioned table, so the primary key is (`id`, `occurred_at`) and a foreign key into it must carry both columns; a `CHECK` keeps the pair all-null or all-set.
 - **Engine tables** — the fact journal, the price list, the hold and obligation projections and the new rule-version columns — are in the production amendment, F. The projections hold no amount the postings and the journal do not already prove and carry the `audit_row_change()` trigger like `registration_attendance`. A cached balance, if ever needed, is the same kind of rebuildable projection.
 

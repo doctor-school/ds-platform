@@ -356,21 +356,39 @@ export function createDeploymentRecord({
   }
 }
 
-/** The newest GitHub Release tag, or null (none yet / gh failed — logged). */
-function latestReleaseTagViaGh(cwd, log) {
-  const r = spawnSync(
-    "gh",
-    ["release", "list", "--limit", "1", "--json", "tagName"],
-    { encoding: "utf8", cwd },
-  );
-  if (r.status !== 0) {
+/**
+ * The newest `release-*` tag pointing AT `sha` on GitHub, or null — never the
+ * repository's newest tag, which may sit on another SHA (#3656). The cut creates
+ * its tag server-side through the Releases API, so the tags are fetched from
+ * origin right before the lookup: the local clone alone would miss it. A failed
+ * fetch or lookup records untagged; it never throws.
+ */
+export function releaseTagAtSha(
+  sha,
+  {
+    cwd = process.cwd(),
+    log = (line) => console.log(line),
+    exec = (cmd, args) => spawnSync(cmd, args, { encoding: "utf8", cwd }),
+  } = {},
+) {
+  const untagged = (step, r) => {
     log(
-      `  ⚠ could not resolve the latest release tag (recording untagged): ${(r.stderr || "").trim()}`,
+      `  ⚠ could not ${step} for the release tag at ${String(sha).slice(0, SHORT)} (recording untagged): ${(r?.stderr || r?.error?.message || "").trim()}`,
     );
     return null;
-  }
-  const arr = JSON.parse(r.stdout || "[]");
-  return Array.isArray(arr) && arr[0] && arr[0].tagName ? arr[0].tagName : null;
+  };
+  const fetched = exec("git", ["fetch", "--tags", "--force", "origin"]);
+  if (fetched?.status !== 0) return untagged("fetch the tags", fetched);
+  const r = exec("git", [
+    "tag",
+    "--points-at",
+    sha,
+    "--list",
+    "release-*",
+    "--sort=-v:refname",
+  ]);
+  if (r?.status !== 0) return untagged("list the tags", r);
+  return (r.stdout || "").split(/\r?\n/).find(Boolean) ?? null;
 }
 
 /**
@@ -378,7 +396,9 @@ function latestReleaseTagViaGh(cwd, log) {
  * the release-notes digest over `prevSha..sha` into the payload — the ONE
  * composeDigest seam (#847). Shared by `deploy:prod` (success only) and the
  * release workflow's runner (#3158: success and failure, with the owner quote).
- * A failed release attributes no release tag: none was cut for it.
+ * A failed release attributes no release tag: none was cut for it. A success
+ * records `releaseTag` — the cut's own result (null when the cut failed, #3656);
+ * left undefined, the tag pointing AT `sha` on GitHub (fetched, then looked up).
  *
  * NON-FATAL by contract: every failure only logs, the result says what happened.
  *
@@ -388,6 +408,7 @@ export async function recordDeployment({
   prevSha,
   sha,
   state = "success",
+  releaseTag: givenReleaseTag,
   ownerQuote = null,
   healthUrl,
   failure = null,
@@ -395,19 +416,23 @@ export async function recordDeployment({
   log = (line) => console.log(line),
   deps = {},
 }) {
-  const latestReleaseTag =
-    deps.latestReleaseTag ?? (() => latestReleaseTagViaGh(cwd, log));
+  const releaseTagAt =
+    deps.releaseTagAt ?? ((s) => releaseTagAtSha(s, { cwd, log }));
   const compose = deps.composeDigest ?? composeDigest;
   const create = deps.createDeploymentRecord ?? createDeploymentRecord;
   try {
     let releaseTag = null;
     if (state === "success") {
-      try {
-        releaseTag = latestReleaseTag();
-      } catch (e) {
-        log(
-          `  ⚠ could not resolve the latest release tag (recording untagged): ${e.message}`,
-        );
+      if (givenReleaseTag !== undefined) {
+        releaseTag = givenReleaseTag;
+      } else {
+        try {
+          releaseTag = releaseTagAt(sha);
+        } catch (e) {
+          log(
+            `  ⚠ could not resolve the release tag (recording untagged): ${e.message}`,
+          );
+        }
       }
     }
 

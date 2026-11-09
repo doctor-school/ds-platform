@@ -183,15 +183,19 @@ describe("cut-release — shouldCutDeployRelease (pure)", () => {
 // ── cutDeployRelease (I/O seam, injected `run`) — target-SHA plumbing ────────
 // The seam never throws and returns { cut, tag?, reason }. We inject a fake `run`
 // that routes each `git`/`gh` invocation to a canned result and records the calls,
-// so we can assert the range-guard branch taken AND that `gh release create`
-// targets the DEPLOYED sha (not local HEAD) with the right tag id.
+// so we can assert the range-guard branch taken AND that the release create
+// targets the DEPLOYED sha (not local HEAD) with the right tag id. `QUIET` keeps a
+// reported failure's annotation and step summary out of the test run's own.
+const QUIET = { error: () => {}, summary: () => {} };
 type RunResult = { status: number | null; stdout?: string; stderr?: string };
 function fakeRun(
   routes: Array<{ match: RegExp; result: RunResult }>,
   calls: string[],
 ) {
-  return (cmd: string, args: string[]): RunResult => {
-    const line = `${cmd} ${args.join(" ")}`;
+  return (cmd: string, args: string[], opts?: { input?: string }): RunResult => {
+    // A stdin request body (`gh api --input -`) is recorded after `<<<`.
+    const line =
+      `${cmd} ${args.join(" ")}` + (opts?.input === undefined ? "" : ` <<< ${opts.input}`);
     calls.push(line);
     for (const r of routes) if (r.match.test(line)) return r.result;
     return { status: 0, stdout: "" };
@@ -218,7 +222,7 @@ describe("cut-release — cutDeployRelease (I/O seam)", () => {
           result: { status: 0, stdout: `${LATEST_SHA}\n` },
         },
         { match: /^git merge-base --is-ancestor/, result: { status: 0 } },
-        { match: /^gh release create/, result: { status: 0 } },
+        { match: /^gh api /, result: { status: 0 } },
       ],
       calls,
     );
@@ -226,15 +230,18 @@ describe("cut-release — cutDeployRelease (I/O seam)", () => {
       targetSha: DEPLOYED_SHA,
       now: AT_2026_07_16,
       run,
+      report: QUIET,
     });
     expect(res.cut).toBe(true);
     expect(res.tag).toBe("release-2026.07.16-1");
-    // target-SHA plumbing: gh release create targets the DEPLOYED sha, not HEAD.
-    expect(
-      calls.includes(
-        `gh release create release-2026.07.16-1 --generate-notes --notes-start-tag release-2026.07.15-1 --target ${DEPLOYED_SHA} --title release-2026.07.16-1`,
-      ),
-    ).toBe(true);
+    // target-SHA plumbing: the Release targets the DEPLOYED sha, not HEAD, with
+    // notes generated since the base tag.
+    expect(calls).toContain(
+      `gh api -i --method POST repos/{owner}/{repo}/releases/generate-notes --input - <<< ${JSON.stringify({ tag_name: "release-2026.07.16-1", target_commitish: DEPLOYED_SHA, previous_tag_name: "release-2026.07.15-1" })}`,
+    );
+    expect(calls).toContain(
+      `gh api -i --method POST repos/{owner}/{repo}/releases --input - <<< ${JSON.stringify({ tag_name: "release-2026.07.16-1", target_commitish: DEPLOYED_SHA, name: "release-2026.07.16-1", body: "" })}`,
+    );
   });
 
   it("redeploy of an already-released sha cuts nothing (empty range, skip green)", () => {
@@ -250,13 +257,13 @@ describe("cut-release — cutDeployRelease (I/O seam)", () => {
           match: /^git rev-list -n 1 release-2026\.07\.16-1/,
           result: { status: 0, stdout: `${DEPLOYED_SHA}\n` },
         },
-        { match: /^gh release create/, result: { status: 0 } },
+        { match: /^gh api /, result: { status: 0 } },
       ],
       calls,
     );
-    const res = cutDeployRelease({ targetSha: DEPLOYED_SHA, run });
+    const res = cutDeployRelease({ targetSha: DEPLOYED_SHA, run, report: QUIET });
     expect(res.cut).toBe(false);
-    expect(calls.some((c) => c.startsWith("gh release create"))).toBe(false);
+    expect(calls.some((c) => c.startsWith("gh api"))).toBe(false);
     // equal SHA short-circuits before the ancestry probe.
     expect(calls.some((c) => c.startsWith("git merge-base"))).toBe(false);
   });
@@ -267,7 +274,7 @@ describe("cut-release — cutDeployRelease (I/O seam)", () => {
       [
         { match: /^git fetch --tags/, result: { status: 0 } },
         { match: /^git tag -l release-\*/, result: { status: 0, stdout: "" } },
-        { match: /^gh release create/, result: { status: 0 } },
+        { match: /^gh api /, result: { status: 0 } },
       ],
       calls,
     );
@@ -275,6 +282,7 @@ describe("cut-release — cutDeployRelease (I/O seam)", () => {
       targetSha: DEPLOYED_SHA,
       now: AT_2026_07_16,
       run,
+      report: QUIET,
     });
     expect(res.cut).toBe(true);
     expect(res.tag).toBe("release-2026.07.16-1");
@@ -295,33 +303,33 @@ describe("cut-release — cutDeployRelease (I/O seam)", () => {
           result: { status: 0, stdout: `${LATEST_SHA}\n` },
         },
         { match: /^git merge-base --is-ancestor/, result: { status: 1 } },
-        { match: /^gh release create/, result: { status: 0 } },
+        { match: /^gh api /, result: { status: 0 } },
       ],
       calls,
     );
-    const res = cutDeployRelease({ targetSha: DEPLOYED_SHA, run });
+    const res = cutDeployRelease({ targetSha: DEPLOYED_SHA, run, report: QUIET });
     expect(res.cut).toBe(false);
     expect(res.reason).toMatch(/ancestor/i);
-    expect(calls.some((c) => c.startsWith("gh release create"))).toBe(false);
+    expect(calls.some((c) => c.startsWith("gh api"))).toBe(false);
   });
 
   it("an invalid / missing target sha skips green and touches no git/gh", () => {
     const calls: string[] = [];
     const run = fakeRun([], calls);
-    const res = cutDeployRelease({ targetSha: "", run });
+    const res = cutDeployRelease({ targetSha: "", run, report: QUIET });
     expect(res.cut).toBe(false);
     expect(res.reason).toMatch(/target SHA/i);
     expect(calls).toHaveLength(0);
   });
 
-  it("never throws — a failing gh release create returns { cut:false }", () => {
+  it("never throws — a failing release create returns { cut:false, failed:true }", () => {
     const calls: string[] = [];
     const run = fakeRun(
       [
         { match: /^git fetch --tags/, result: { status: 0 } },
         { match: /^git tag -l release-\*/, result: { status: 0, stdout: "" } },
         {
-          match: /^gh release create/,
+          match: /^gh api .*releases /,
           result: { status: 1, stderr: "boom" },
         },
       ],
@@ -331,8 +339,11 @@ describe("cut-release — cutDeployRelease (I/O seam)", () => {
       targetSha: DEPLOYED_SHA,
       now: AT_2026_07_16,
       run,
+      report: QUIET,
     });
     expect(res.cut).toBe(false);
-    expect(res.reason).toMatch(/gh release create failed/i);
+    expect(res.failed).toBe(true);
+    expect(res.reason).toMatch(/release create refused/i);
+    expect(res.diagnostics?.message).toBe("boom");
   });
 });

@@ -139,7 +139,7 @@ test("3157: deploy() walks exactly the plan, in its order", () => {
   );
   assert.match(
     deployBody,
-    /if \(walk\.operatorPhase\("release-cut"\)\) \{\s*step\("[^"]*"\);\s*cutReleaseAtDeployedSha\(/,
+    /if \(walk\.operatorPhase\("release-cut"\)\) \{\s*step\("[^"]*"\);\s*releaseTag = cutReleaseAtDeployedSha\(/,
   );
   assert.match(
     deployBody,

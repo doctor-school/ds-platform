@@ -216,7 +216,7 @@ jobs:
     permissions:
       actions: read
       checks: read
-      # The release cut (`gh release create`).
+      # The release cut: `gh api` POSTs to `releases/generate-notes` and `releases`.
       contents: write
       deployments: write
       issues: read

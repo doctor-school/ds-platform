@@ -87,6 +87,7 @@ if (!Number.isInteger(workers) || workers < 1) {
 
 /** The specs that sign in as the run's golden doctor pair (`E2E_DOCTOR*_*`). */
 const GOLDEN_ACCOUNT_SPECS = [
+  /[\\/]account-canvas-structure-live\.spec\.ts$/,
   /[\\/]event-page-parity\.e2e\.spec\.ts$/,
   /[\\/]event-page-registered\.spec\.ts$/,
   /[\\/]my-events\.spec\.ts$/,
@@ -115,6 +116,7 @@ const OWN_CONFIG_SPECS = [
   /a11y-axe\.e2e\.spec\.ts/,
   /account-auth-paths-live\.spec\.ts/,
   /event-page-020\.e2e\.spec\.ts/,
+  /event-page-canvas-structure\.e2e\.spec\.ts/,
   /storefront-entry\.e2e\.spec\.ts/,
   /storefront-entry-refusal\.e2e\.spec\.ts/,
   /refusal-canvas-structure\.e2e\.spec\.ts/,

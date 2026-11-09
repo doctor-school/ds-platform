@@ -76,6 +76,9 @@ export const GOLDEN_SLUGS = Object.freeze({
   academyUpcomingMarker: "golden-volume-event-424",
 });
 
+/** `golden.materials.published` — the one published Academy news item (048). */
+export const GOLDEN_MATERIAL_SLUG = "golden-material-published";
+
 const URL_DOCTOR = "E2E_DOCTOR_URL";
 const URL_ACADEMY = "E2E_PORTAL_URL";
 const ACCOUNT = ["E2E_DOCTOR_EMAIL", "E2E_DOCTOR_PASSWORD"];
@@ -118,6 +121,8 @@ export const LIVE_TIERS = Object.freeze([
       E2E_JOURNEY_SLUG_MARKER: GOLDEN_SLUGS.academyUpcomingMarker,
       E2E_JOURNEY_SLUG_ENDED: GOLDEN_SLUGS.academyEndedRecorded,
       E2E_JOURNEY_SLUG_HIDDEN: GOLDEN_SLUGS.academyHidden,
+      // #3829: the reading page's canvas check reads the golden material.
+      E2E_MATERIAL_SLUG: GOLDEN_MATERIAL_SLUG,
     },
     gated: [
       {
@@ -220,6 +225,11 @@ export const LIVE_TIERS = Object.freeze([
           "E2E_STAFF_PASSWORD",
           "E2E_ROOM_HIDDEN_SLUG",
         ],
+      },
+      {
+        // #3829: the signed-in /account against its account-profile canvas.
+        file: "e2e/account-canvas-structure-live.spec.ts",
+        requires: [URL_ACADEMY, ...ACCOUNT],
       },
     ],
   },

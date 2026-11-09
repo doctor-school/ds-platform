@@ -75,6 +75,17 @@ const materialsTestDir = defineBddConfig({
   tags: "@material-admin-authoring",
 });
 
+const registryContractsTestDir = defineBddConfig({
+  features: [
+    "../docs/content/specs/features/030-projects-catalog-and-page/030-scenarios.feature",
+    "../docs/content/specs/features/032-investors-leaderboard/032-scenarios.feature",
+  ],
+  featuresRoot: "../docs/content/specs/features",
+  steps: ["e2e/registry-contracts/steps.ts", "e2e/support/fixtures.ts"],
+  outputDir: ".features-gen/registry-contracts",
+  tags: "(@feature:030 and @EARS-3) or (@feature:032 and (@EARS-1 or @EARS-5))",
+});
+
 export default defineConfig({
   testDir,
   fullyParallel: false,
@@ -92,6 +103,11 @@ export default defineConfig({
     timezoneId: "America/New_York",
   },
   projects: [
+    {
+      name: "registry-contracts",
+      testDir: registryContractsTestDir,
+      use: { ...devices["Desktop Chrome"] },
+    },
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
     {
       name: "taxonomy",

@@ -14,7 +14,28 @@ prior_decisions:
   - ADR-0009 — Per-purpose consent versioning (the leaderboard-dissemination purpose is one more versioned purpose)
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace)
   - "Owner, 2026-11-09 (Issue #3835) — one universal rule engine: spend over a price list of any item kind, validity and stacking in the rule shape now, no automatic retro-evaluation plus a starter bonus for doctors registered before the engine"
-issues: [1794, 3807, 3808, 3809, 3810, 3811, 3812, 3813, 3814, 3815, 3816]
+issues:
+  [
+    1794,
+    3807,
+    3808,
+    3809,
+    3810,
+    3811,
+    3812,
+    3813,
+    3814,
+    3815,
+    3816,
+    3835,
+    3838,
+    3840,
+    3841,
+    3842,
+    3843,
+    3844,
+    3845,
+  ]
 lang: ru
 ---
 

@@ -50,6 +50,16 @@ export const REGISTRY_RETENTION_WORKFLOW_PATH =
   ".github/workflows/registry-retention.yml";
 
 /**
+ * Recovery custody (#3662). A scheduled read of the prod boxes' custody state,
+ * not a test of the SHA: a scheduled run attaches its check-run to whatever
+ * `main` head is current, so its red says nothing about that SHA — and counting
+ * it would refuse the very release that fixes the boxes. Its own red is the
+ * custody alarm, visible in Actions; it is dropped by path here.
+ */
+export const RECOVERY_CUSTODY_WORKFLOW_PATH =
+  ".github/workflows/recovery-custody.yml";
+
+/**
  * Repo workflows whose check-runs are not CI for the prod pre-flight — the set
  * both callers (`prod.mjs`, `release-runner.mjs`) pass as `ignoreWorkflowPaths`.
  */
@@ -57,6 +67,7 @@ export const NON_CI_WORKFLOW_PATHS = Object.freeze([
   DEPLOY_PROD_WORKFLOW_PATH,
   RELEASE_WORKFLOW_PATH,
   REGISTRY_RETENTION_WORKFLOW_PATH,
+  RECOVERY_CUSTODY_WORKFLOW_PATH,
 ]);
 
 /** Conclusions the deploy gate accepts as "not red". Unchanged from the
@@ -102,7 +113,11 @@ export function repoWorkflowSuiteFilter(
  * @returns {{runs: Array<object>, dropped: string[]}} `dropped` is a list of
  *   `"<name> (<path>)"` strings for logging.
  */
-export function filterCheckRunsToRepoWorkflows(checkRuns, workflowRuns, options) {
+export function filterCheckRunsToRepoWorkflows(
+  checkRuns,
+  workflowRuns,
+  options,
+) {
   const { dropped: droppedSuites } = repoWorkflowSuiteFilter(
     workflowRuns,
     options,
@@ -111,7 +126,11 @@ export function filterCheckRunsToRepoWorkflows(checkRuns, workflowRuns, options)
   const dropped = [];
   for (const r of checkRuns || []) {
     const suiteId = r?.check_suite?.id ?? r?.check_suite_id;
-    if (suiteId !== undefined && suiteId !== null && droppedSuites.has(suiteId)) {
+    if (
+      suiteId !== undefined &&
+      suiteId !== null &&
+      droppedSuites.has(suiteId)
+    ) {
       dropped.push(`${r.name} (${droppedSuites.get(suiteId)})`);
       continue;
     }

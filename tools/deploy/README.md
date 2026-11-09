@@ -55,8 +55,9 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
   `pnpm deploy:prod` (break-glass); the rollback runs here in rollback mode
   (below), and `pnpm deploy:prod --rollback` stays its break-glass twin. The CI check drops the
   check-runs of `deploy-prod.yml` itself (an earlier failed attempt on the same
-  SHA is not CI), of the changesets `release.yml` and of `registry-retention.yml`
-  (#3684) by workflow path; every other repo workflow (`ci.yml`, `stage.yml`,
+  SHA is not CI), of the changesets `release.yml`, of `registry-retention.yml`
+  (#3684) and of the scheduled `recovery-custody.yml` (#3662; a read of the prod
+  boxes, not of the SHA) by workflow path; every other repo workflow (`ci.yml`, `stage.yml`,
   `runtime-images.yml`) keeps gating.
 - **The registry still serves the target's images (#3654).** Every pre-flight
   (release, rollback, redeploy) ends with `registry-images`: each digest of

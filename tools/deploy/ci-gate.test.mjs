@@ -12,6 +12,7 @@ import {
   DEPLOY_PROD_WORKFLOW_PATH,
   RELEASE_WORKFLOW_PATH,
   REGISTRY_RETENTION_WORKFLOW_PATH,
+  RECOVERY_CUSTODY_WORKFLOW_PATH,
   NON_CI_WORKFLOW_PATHS,
   fetchDeployCiBoard,
 } from "./ci-gate.mjs";
@@ -292,9 +293,13 @@ test("3684: with the non-CI paths ignored, a red runtime-images.yml check-run st
     ...REPO_ROWS,
     run("build", SUITE_RUNTIME_IMAGES, { conclusion: "failure" }),
   ];
-  const v = classifyDeployCheckRuns(rows, [...WORKFLOW_RUNS, RUNTIME_IMAGES_RUN], {
-    ignoreWorkflowPaths: NON_CI_WORKFLOW_PATHS,
-  });
+  const v = classifyDeployCheckRuns(
+    rows,
+    [...WORKFLOW_RUNS, RUNTIME_IMAGES_RUN],
+    {
+      ignoreWorkflowPaths: NON_CI_WORKFLOW_PATHS,
+    },
+  );
   assert.equal(v.state, "red");
   assert.deepEqual(v.red, ["build=failure"]);
 });
@@ -349,13 +354,46 @@ test("3684: with the non-CI paths ignored, a red stage.yml check-run still refus
   assert.deepEqual(v.red, ["stage-deploy=failure"]);
 });
 
-test("3684: the non-CI workflow set is exactly deploy-prod.yml + release.yml + registry-retention.yml", () => {
+// Live shape of run 42622224249 (#3662): the scheduled custody read of the prod
+// boxes, attached to whatever main head was current (release candidate f1255d35a).
+const SUITE_CUSTODY = 92749280233;
+const CUSTODY_RUN = {
+  id: 42622224249,
+  name: "Recovery custody",
+  path: ".github/workflows/recovery-custody.yml",
+  event: "schedule",
+  conclusion: "failure",
+  check_suite_id: SUITE_CUSTODY,
+};
+
+test("3662: a red scheduled recovery-custody.yml check-run does not refuse the gate, selected by path", () => {
+  const rows = [
+    ...REPO_ROWS,
+    run("custody", SUITE_CUSTODY, { conclusion: "failure" }),
+  ];
+  const v = classifyDeployCheckRuns(rows, [...WORKFLOW_RUNS, CUSTODY_RUN], {
+    ignoreWorkflowPaths: NON_CI_WORKFLOW_PATHS,
+  });
+  assert.equal(v.state, "green");
+  assert.deepEqual(v.red, []);
+  assert.deepEqual(v.dropped, [
+    "release (.github/workflows/release.yml)",
+    "custody (.github/workflows/recovery-custody.yml)",
+  ]);
+  assert.equal(
+    RECOVERY_CUSTODY_WORKFLOW_PATH,
+    ".github/workflows/recovery-custody.yml",
+  );
+});
+
+test("3662: the non-CI workflow set is exactly deploy-prod.yml + release.yml + registry-retention.yml + recovery-custody.yml", () => {
   assert.deepEqual(
     [...NON_CI_WORKFLOW_PATHS].sort(),
     [
       DEPLOY_PROD_WORKFLOW_PATH,
       RELEASE_WORKFLOW_PATH,
       REGISTRY_RETENTION_WORKFLOW_PATH,
+      RECOVERY_CUSTODY_WORKFLOW_PATH,
     ].sort(),
   );
   assert.equal(Object.isFrozen(NON_CI_WORKFLOW_PATHS), true);

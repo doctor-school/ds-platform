@@ -1,7 +1,14 @@
 export {
+  POINTS_POSTING_HISTORY_LIMIT,
   PointsAccountSchema,
+  PointsPostingHistoryItemSchema,
+  PointsPostingHistoryQuerySchema,
+  PointsPostingHistorySchema,
   PUL_UNIT,
   type PointsAccount,
+  type PointsPostingHistory,
+  type PointsPostingHistoryItem,
+  type PointsPostingHistoryQuery,
 } from "./points-account.schema.js";
 export {
   POINTS_LEDGER_ERROR_CODES,

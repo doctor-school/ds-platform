@@ -124,6 +124,9 @@ export type PointsPostOutcome = z.infer<typeof PointsPostOutcomeSchema>;
  *    retired (025-design G).
  *  - POINTS_RULE_EFFECTIVE_FROM_PAST — EARS-25: a version takes effect from
  *    now or later, never retroactively.
+ *  - POINTS_HISTORY_QUERY_INVALID — EARS-46: the posting-history page query
+ *    is out of range — a `limit` outside `POINTS_POSTING_HISTORY_LIMIT` or a
+ *    `cursor` that is not a `nextCursor` the route issued.
  */
 export const POINTS_LEDGER_ERROR_CODES = [
   "POINTS_ACCOUNT_CLOSED",
@@ -134,6 +137,7 @@ export const POINTS_LEDGER_ERROR_CODES = [
   "POINTS_RULE_PARAMETERS_INVALID",
   "POINTS_RULE_RETIRED",
   "POINTS_RULE_EFFECTIVE_FROM_PAST",
+  "POINTS_HISTORY_QUERY_INVALID",
 ] as const;
 export const PointsLedgerErrorCodeSchema = z.enum(POINTS_LEDGER_ERROR_CODES);
 export type PointsLedgerErrorCode = z.infer<typeof PointsLedgerErrorCodeSchema>;

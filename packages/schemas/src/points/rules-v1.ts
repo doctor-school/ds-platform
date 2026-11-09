@@ -1,9 +1,8 @@
 import { z } from "zod";
 
-// COMPATIBILITY ONLY — the 0059 rule book, kept until #3838 phase 2 replaces
-// `RuleBookService` / `PointsFactIntake` with `PointsEngine` (025-design
-// production amendment, A). The one rule schema is `./rules.ts`; nothing new
-// may import from here. `POINTS_RULE_DEFAULTS` stays the pin of the 21
+// COMPATIBILITY ONLY — the 0059 rule book; no runtime reads it since
+// `PointsEngine` (025-design production amendment, A). The one rule schema is
+// `./rules.ts`; nothing new may import from here. `POINTS_RULE_DEFAULTS` stays the pin of the 21
 // immutable 0059 rows (they outlive this module: points-seed-v2.e2e-spec).
 //
 // 025 attention-points engine — the rule book (025-design §6, EARS-25). Every

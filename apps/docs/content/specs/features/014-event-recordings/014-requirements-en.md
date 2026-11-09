@@ -31,6 +31,8 @@ issues:
     1611,
     1612,
     1892,
+    3864,
+    3865,
   ]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; Stage A precedes user-facing implementation; the canvas is the composition source of truth)

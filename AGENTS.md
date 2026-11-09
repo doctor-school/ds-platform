@@ -19,7 +19,7 @@ Read the indexed reference in full before its action, once per session and after
 
 ## 1. What is DS Platform
 
-Medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). ADRs 0001–0008 accepted.
+Medical-education platform for Doctor.School with two storefronts on one code and one DB, funded by partners (B2B pharma sponsors) buying doctors' attention: the doctor storefront `doctor.school` serves doctors; the Academy `academy.doctor.school` serves experts and partners, not doctors (OWD-5, `specs/product/two-site-ia/one-way-doors-ru.md`). ADRs 0001–0008 accepted.
 
 **Production is live with users** on Timeweb (ru-3): `academy.doctor.school` / `api.` / `id.`. Never tell the owner "there is no production". Authoritative deployed scope = the derived `## Project reality` bootstrap section (`pnpm bootstrap`) + GitHub Releases/Deployments — never inferred from these docs.
 

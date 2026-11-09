@@ -111,7 +111,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(recorded.applied.map((a) => a.effect)).toEqual(["reserve"]);
     });
 
-    it("EARS-13: short on a priced course with the exact shortfall and an earn hint (pulToEarn, lessonsNeeded from the active accrual.lesson)", async () => {
+    it("EARS-13: short on a priced event with the exact shortfall and an earn hint (pulToEarn, lessonsNeeded from the active accrual.lesson)", async () => {
       const { cookie, personId } = await doctor(h);
       await verifyPhone(h, personId);
       await fund(h, personId, 20);

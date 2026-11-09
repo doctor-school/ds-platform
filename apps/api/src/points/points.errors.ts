@@ -23,9 +23,11 @@ export const POINTS_LEDGER_ERROR_STATUS: Readonly<
   POINTS_OCCURRED_AT_FUTURE: 422,
   // 422: no rule may express a penalty or a conversion (EARS-12).
   POINTS_BRE_CON_DEBIT: 422,
-  // EARS-25 publish refusals.
-  POINTS_RULE_UNKNOWN: 404,
+  // 422: a debit-side effect for a person whose phone is unverified (EARS-5).
+  POINTS_PHONE_UNVERIFIED: 422,
+  // Amended EARS-25 publish refusals.
   POINTS_RULE_PARAMETERS_INVALID: 422,
+  POINTS_RULE_RETIRED: 422,
   POINTS_RULE_EFFECTIVE_FROM_PAST: 422,
 };
 
@@ -36,8 +38,9 @@ const POINTS_LEDGER_ERROR_TITLE: Readonly<
   POINTS_INSUFFICIENT_PUL: "Not enough Pul available for this posting",
   POINTS_OCCURRED_AT_FUTURE: "The fact is dated too far in the future",
   POINTS_BRE_CON_DEBIT: "Bre and Con are never debited from a person account",
-  POINTS_RULE_UNKNOWN: "No such attention-points rule",
+  POINTS_PHONE_UNVERIFIED: "Pul can be spent only once the phone is verified",
   POINTS_RULE_PARAMETERS_INVALID: "The rule parameters are invalid",
+  POINTS_RULE_RETIRED: "This attention-points rule id is retired",
   POINTS_RULE_EFFECTIVE_FROM_PAST:
     "A rule version cannot take effect in the past",
 };

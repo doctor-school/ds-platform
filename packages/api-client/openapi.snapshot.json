@@ -4348,53 +4348,6 @@
         "required": ["personId", "pul", "bre", "con", "advance", "status"],
         "type": "object"
       },
-      "PointsRuleVersionDto": {
-        "additionalProperties": false,
-        "properties": {
-          "createdAt": {
-            "type": "string"
-          },
-          "effectiveFrom": {
-            "type": "string"
-          },
-          "parameters": {
-            "additionalProperties": {},
-            "propertyNames": {
-              "type": "string"
-            },
-            "type": "object"
-          },
-          "publishedBy": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "ruleId": {
-            "type": "string"
-          },
-          "version": {
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "ruleId",
-          "version",
-          "parameters",
-          "effectiveFrom",
-          "publishedBy",
-          "createdAt"
-        ],
-        "type": "object"
-      },
       "PostChatMessageRequestDto": {
         "properties": {
           "text": {
@@ -4861,6 +4814,79 @@
           }
         },
         "required": ["data", "counts", "pagination"],
+        "type": "object"
+      },
+      "PublishedPointsRuleVersionDto": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "effectiveFrom": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": ["rule", "setting", "system"],
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "publishedBy": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ruleId": {
+            "type": "string"
+          },
+          "version": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "const": "stacking",
+                  "type": "string"
+                },
+                "factType": {
+                  "type": "string"
+                },
+                "otherRuleId": {
+                  "type": "string"
+                }
+              },
+              "required": ["code", "factType", "otherRuleId"],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ruleId",
+          "version",
+          "parameters",
+          "effectiveFrom",
+          "publishedBy",
+          "createdAt",
+          "kind",
+          "warnings"
+        ],
         "type": "object"
       },
       "PublishPointsRuleVersionRequestDto": {
@@ -8308,7 +8334,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PointsRuleVersionDto"
+                  "$ref": "#/components/schemas/PublishedPointsRuleVersionDto"
                 }
               }
             },

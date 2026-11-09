@@ -115,9 +115,13 @@ export type PointsPostOutcome = z.infer<typeof PointsPostOutcomeSchema>;
  *  - POINTS_BRE_CON_DEBIT — EARS-12: a leg debits Bre or Con from a person
  *    account without reversing a specific earlier posting (no penalty, no
  *    conversion between denominations).
- *  - POINTS_RULE_UNKNOWN — EARS-25: the rule id is not in the rule book.
- *  - POINTS_RULE_PARAMETERS_INVALID — EARS-25: the parameters fail the rule's
- *    schema (field errors in `errors`).
+ *  - POINTS_PHONE_UNVERIFIED — EARS-5 / EARS-35: a debit-side effect for a
+ *    person whose phone is not verified; the whole fact is refused.
+ *  - POINTS_RULE_PARAMETERS_INVALID — amended EARS-25: the body fails the one
+ *    rule schema or a catalog check (field errors in `errors`, paths relative
+ *    to the body, e.g. `condition.all.0.eq.0`).
+ *  - POINTS_RULE_RETIRED — amended EARS-25: a publish to a 0059 id the engine
+ *    retired (025-design G).
  *  - POINTS_RULE_EFFECTIVE_FROM_PAST — EARS-25: a version takes effect from
  *    now or later, never retroactively.
  */
@@ -126,8 +130,9 @@ export const POINTS_LEDGER_ERROR_CODES = [
   "POINTS_INSUFFICIENT_PUL",
   "POINTS_OCCURRED_AT_FUTURE",
   "POINTS_BRE_CON_DEBIT",
-  "POINTS_RULE_UNKNOWN",
+  "POINTS_PHONE_UNVERIFIED",
   "POINTS_RULE_PARAMETERS_INVALID",
+  "POINTS_RULE_RETIRED",
   "POINTS_RULE_EFFECTIVE_FROM_PAST",
 ] as const;
 export const PointsLedgerErrorCodeSchema = z.enum(POINTS_LEDGER_ERROR_CODES);

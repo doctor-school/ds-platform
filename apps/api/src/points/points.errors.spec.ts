@@ -39,15 +39,24 @@ describe("PointsLedgerError — rule book", () => {
     expect(body.status).toBe(422);
   });
 
-  it("025 EARS-25: publish refusals are 404 unknown rule and 422 invalid parameters with field errors", () => {
-    expect(new PointsLedgerError("POINTS_RULE_UNKNOWN").getStatus()).toBe(404);
+  it("025 EARS-25: publish refusals are 422 retired rule and 422 invalid parameters with field errors", () => {
+    const retired = new PointsLedgerError("POINTS_RULE_RETIRED").toProblemDetails(
+      "t",
+    );
+    expect(retired.type.endsWith("/points-rule-retired")).toBe(true);
+    expect(retired.status).toBe(422);
+    expect(new PointsLedgerError("POINTS_PHONE_UNVERIFIED").getStatus()).toBe(
+      422,
+    );
     const body = new PointsLedgerError(
       "POINTS_RULE_PARAMETERS_INVALID",
       undefined,
-      [{ path: "pul", message: "Too small" }],
+      [{ path: "effect.amounts.pul", message: "Too small" }],
     ).toProblemDetails("t");
     expect(body.status).toBe(422);
-    expect(body.errors).toEqual([{ path: "pul", message: "Too small" }]);
+    expect(body.errors).toEqual([
+      { path: "effect.amounts.pul", message: "Too small" },
+    ]);
     expect(
       new PointsLedgerError("POINTS_RULE_EFFECTIVE_FROM_PAST").getStatus(),
     ).toBe(422);

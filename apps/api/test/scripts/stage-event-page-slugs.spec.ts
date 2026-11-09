@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 interface LiveTiersModule {
   readonly GOLDEN_SLUGS: Readonly<Record<string, string>>;
+  readonly GOLDEN_MATERIAL_SLUG: string;
   readonly LIVE_TIERS: readonly {
     readonly name: string;
     readonly seededEnv?: Readonly<Record<string, string>>;
@@ -12,7 +13,7 @@ interface LiveTiersModule {
 // The staging runner's mirror of the golden slugs (#2996) — untyped plain ESM
 // tooling, loaded by URL like `packages/e2e/lib/password-policy.ts` loads its
 // `tools/staging` modules. This spec is what keeps that mirror honest.
-const { GOLDEN_SLUGS, LIVE_TIERS } = (await import(
+const { GOLDEN_SLUGS, GOLDEN_MATERIAL_SLUG, LIVE_TIERS } = (await import(
   new URL("../../../../tools/staging/live-tiers.mjs", import.meta.url).href
 )) as LiveTiersModule;
 
@@ -145,6 +146,10 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
     });
   }
 
+  // The seeded env names whose value addresses a material (048 EARS-11), not an
+  // event; every other seeded name addresses an event.
+  const MATERIAL_ENV = new Set(["E2E_MATERIAL_SLUG"]);
+
   it("020 EARS-1: every event-page tier slug is one of the verified golden slugs", () => {
     const verified = new Set(Object.values(slugs));
     const tiers = LIVE_TIERS.filter((tier) => tier.seededEnv);
@@ -155,10 +160,29 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
     ]);
     for (const tier of tiers) {
       for (const [name, value] of Object.entries(tier.seededEnv!)) {
+        if (MATERIAL_ENV.has(name)) continue;
         for (const slug of value.split(",")) {
           expect(verified.has(slug), `${tier.name} ${name}=${slug}`).toBe(true);
         }
       }
     }
+  });
+
+  it("048 EARS-11: every seeded material reference is the published golden material", () => {
+    const published = new Set(
+      buildGoldenDataset(new Date("2026-10-22T09:00:00Z"), subjects)
+        .materials.filter((m) => m.status === "published" && !m.deletedAt)
+        .map((m) => m.slug),
+    );
+    expect([...published]).toEqual([GOLDEN_MATERIAL_SLUG]);
+    expect(Object.values(slugs)).not.toContain(GOLDEN_MATERIAL_SLUG);
+    const refs = LIVE_TIERS.flatMap((tier) =>
+      Object.entries(tier.seededEnv ?? {})
+        .filter(([name]) => MATERIAL_ENV.has(name))
+        .map(([name, value]) => `${tier.name} ${name}=${value}`),
+    );
+    expect(refs).toEqual([
+      `live/academy/default E2E_MATERIAL_SLUG=${GOLDEN_MATERIAL_SLUG}`,
+    ]);
   });
 });

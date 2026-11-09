@@ -2,6 +2,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Header,
   Inject,
   Query,
   Req,
@@ -31,7 +32,7 @@ const ACCOUNT_ROLES: Role[] = ["doctor_guest", "platform_admin"];
  * that names another person (`?personId=`) is refused with 403, never served
  * the caller's or the named account. Unauthenticated → 401 from the global
  * `AuthzGuard`; a session subject with no live `users` row → 401. Per-caller ⇒
- * never shared-cacheable.
+ * `Cache-Control: no-store`.
  */
 @Controller({ path: "me/points", version: "1" })
 export class PointsMeController {
@@ -43,6 +44,7 @@ export class PointsMeController {
   ) {}
 
   @Get()
+  @Header("Cache-Control", "no-store")
   @ApiOkResponse({ type: PointsAccountDto })
   @Authz({
     access: "authenticated",

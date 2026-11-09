@@ -183,6 +183,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const first = await getPoints(cookie);
       expect(first.statusCode).toBe(200);
+      // A per-caller response is never cacheable.
+      expect(first.headers["cache-control"]).toBe("no-store");
       expect(PointsAccountSchema.parse(first.json())).toEqual({
         personId,
         pul: { unit: "Pul", available: 20, reserved: 10 },

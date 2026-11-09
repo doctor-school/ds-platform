@@ -36,6 +36,8 @@ export const POINTS_LEDGER_ERROR_STATUS: Readonly<
   POINTS_THRESHOLD_SHORT: 422,
   POINTS_RESERVE_LIMIT: 422,
   POINTS_GATING_INVALID: 422,
+  // 400: the gating read's item ref is malformed (EARS-13).
+  POINTS_ITEM_REF_INVALID: 400,
 };
 
 const POINTS_LEDGER_ERROR_TITLE: Readonly<
@@ -55,6 +57,7 @@ const POINTS_LEDGER_ERROR_TITLE: Readonly<
   POINTS_RESERVE_LIMIT:
     "Too many open reserves on limited-seat items",
   POINTS_GATING_INVALID: "This price-list row is not allowed for the item",
+  POINTS_ITEM_REF_INVALID: "The item reference is invalid",
 };
 
 /** Problem `type` slug: `POINTS_ACCOUNT_CLOSED` → `points-account-closed`. */

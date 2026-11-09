@@ -139,9 +139,10 @@ export class PointsMeController {
    * 025 EARS-13 (#3810) — `GET /v1/me/points/gating/:itemRef`: the CALLER's
    * `GatingDecision` on an item of any kind — `quote` (EARS-41) of a draft
    * sign-up, so it equals what the sign-up's `record` would do and writes
-   * nothing. Same person resolution and refusals as the balance read. A
-   * refusal the decision cannot state answers its problem (422
-   * `points-phone-unverified` / `points-reserve-limit`).
+   * nothing. Same person resolution and refusals as the balance read. Every
+   * valid request answers 200 with a decision — an account-state refusal is
+   * the `blocked` decision with its problem slug; a malformed `itemRef` is
+   * 400 `points-item-ref-invalid`.
    */
   @Get("gating/:itemRef")
   @Header("Cache-Control", "no-store")

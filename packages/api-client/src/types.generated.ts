@@ -1252,6 +1252,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/points/prices/{itemRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["PointsPricesAdminController_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/points/rules/{ruleId}/versions": {
         parameters: {
             query?: never;
@@ -2028,6 +2044,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["PointsMeController_read"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/points/gating/{itemRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PointsMeController_gating"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3685,6 +3717,25 @@ export interface components {
             /** @enum {string} */
             status: "open" | "closed";
         };
+        PointsGatingDecisionDto: {
+            coveredByAdvance: number;
+            /** @enum {string} */
+            decision: "open" | "reserve" | "reserve-with-advance" | "short" | "blocked";
+            earnHint?: {
+                lessonsNeeded: number | null;
+                pulToEarn: number;
+            };
+            itemRef: string;
+            /** @enum {string} */
+            mode: "open" | "advance" | "threshold";
+            pulCost: number;
+            /** @enum {string} */
+            reason?: "points-phone-unverified" | "points-reserve-limit" | "points-account-closed";
+            reservedFromBalance: number;
+            shortfall: number;
+            /** @constant */
+            unit: "Pul";
+        };
         PointsPostingHistoryDto: {
             items: {
                 action: string | null;
@@ -3702,6 +3753,19 @@ export interface components {
                 ruleVersion: number;
             }[];
             nextCursor: string | null;
+        };
+        PointsPriceDto: {
+            /** @enum {string} */
+            itemKind: "event" | "course" | "training" | "internship" | "offline-event" | "lesson" | "module";
+            itemRef: string;
+            limitedSeats: boolean;
+            /** @enum {string} */
+            mode: "open" | "advance" | "threshold";
+            pulCost: number;
+            /** @constant */
+            unit: "Pul";
+            /** Format: date-time */
+            updatedAt: string;
         };
         PostChatMessageRequestDto: {
             text: string;
@@ -3822,6 +3886,15 @@ export interface components {
             parameters: {
                 [key: string]: unknown;
             };
+        };
+        PutPointsPriceRequestDto: {
+            /** @enum {string} */
+            itemKind: "event" | "course" | "training" | "internship" | "offline-event" | "lesson" | "module";
+            /** @default false */
+            limitedSeats: boolean;
+            /** @enum {string} */
+            mode: "open" | "advance" | "threshold";
+            pulCost: number;
         };
         RegisterRequestDto: {
             captchaToken?: string;
@@ -6031,6 +6104,31 @@ export interface operations {
             };
         };
     };
+    PointsPricesAdminController_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemRef: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutPointsPriceRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointsPriceDto"];
+                };
+            };
+        };
+    };
     PointsRulesAdminController_publish: {
         parameters: {
             query?: never;
@@ -7284,6 +7382,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PointsAccountDto"];
+                };
+            };
+        };
+    };
+    PointsMeController_gating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemRef: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointsGatingDecisionDto"];
                 };
             };
         };

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { CongressModule } from "../congress/congress.module.js";
+import { PointsModule } from "../points/points.module.js";
 import { RecordingsModule } from "../recordings/recordings.module.js";
 import { AttendanceAdminController } from "./attendance.admin.controller.js";
 import { CongressAttendanceService } from "./congress-attendance.service.js";
@@ -27,7 +28,9 @@ import { RegistrationService } from "./registration.service.js";
   // the public card have one implementation.
   // 044 EARS-35: the desk route enters walk-ins through the congress intake
   // use-case itself (`CongressSignUpService`), never through a copy of it.
-  imports: [RecordingsModule, CongressModule],
+  // 025 EARS-14 — a sign-up reports `registration.created` to the points
+  // engine inside the registration's transaction (`PointsEngine.record`).
+  imports: [RecordingsModule, CongressModule, PointsModule],
   // 044 EARS-18: the registrar's roster route is the third controller of this
   // module — the read model it serves is owned here, so the route lives beside
   // it rather than on the 007 `platform_admin` events surface (its own file

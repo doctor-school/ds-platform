@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { PointsModule } from "../points/points.module.js";
 import { loadEnv } from "../config/env.schema.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { MailerModule } from "../mailer/mailer.module.js";
@@ -35,7 +36,9 @@ import {
  * while the mailer owns the transport, the failover and the artifact.
  */
 @Module({
-  imports: [AuthModule, MailerModule],
+  // 025 EARS-14 — a new congress registration reports `registration.created`
+  // to the points engine inside the intake's account transaction.
+  imports: [AuthModule, MailerModule, PointsModule],
   // 046 EARS-1…3: the platform administrator's intake settings per event.
   controllers: [
     CongressSignUpController,

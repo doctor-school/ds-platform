@@ -10,6 +10,8 @@ import {
 import {
   POINTS_ITEM_KINDS,
   type PointsGatingDecision,
+  PointsGatingBlockedReasonSchema,
+  PointsItemRefSchema,
   type PointsGatingMode,
   type PointsItemKind,
   type PointsPrice,
@@ -56,6 +58,7 @@ export class PointsPricesService {
     input: PutPointsPriceRequest,
     actorSub: string | null,
   ): Promise<PointsPrice> {
+    assertItemRef(itemRef);
     const body = PutPointsPriceRequestSchema.parse(input);
     const refuse = (path: string, message: string) =>
       new PointsLedgerError("POINTS_GATING_INVALID", message, [{ path, message }]);
@@ -103,13 +106,16 @@ export class PointsPricesService {
   /**
    * EARS-13 — the calling doctor's gating decision on `itemRef`: `quote`
    * (EARS-41) of a draft `registration.created`, so the advertised decision
-   * is the one the sign-up's `record` enforces. Never a negative number. A
-   * refusal the decision cannot express (`points-phone-unverified`,
-   * `points-reserve-limit`) is raised as its problem. The
+   * is the one the sign-up's `record` enforces. Never a negative number. The
+   * read answers every valid request with a decision: a refusal for the
+   * account's state (`points-phone-unverified`, `points-reserve-limit`,
+   * `points-account-closed`) is the `blocked` decision with that slug as its
+   * `reason`; only a malformed `itemRef` is refused (400). The
    * `reserve-with-advance` branch and the advance part of `pulToEarn` land
    * with the advance slice (#3811).
    */
   async gating(personId: string, itemRef: string): Promise<PointsGatingDecision> {
+    assertItemRef(itemRef);
     const price = await this.holds.priceOf(this.db, itemRef);
     const quoted = await this.engine.quote(personId, {
       type: "registration.created",
@@ -128,15 +134,19 @@ export class PointsPricesService {
       shortfall: 0,
     };
     if (quoted.refusal) {
-      if (quoted.refusal.errorCode !== "POINTS_THRESHOLD_SHORT" || !quoted.refusal.short) {
-        throw quoted.refusal;
+      const { refusal } = quoted;
+      if (refusal.errorCode === "POINTS_THRESHOLD_SHORT" && refusal.short) {
+        return {
+          ...base,
+          decision: "short",
+          shortfall: refusal.short.shortfall,
+          earnHint: refusal.short.earnHint,
+        };
       }
-      return {
-        ...base,
-        decision: "short",
-        shortfall: quoted.refusal.short.shortfall,
-        earnHint: quoted.refusal.short.earnHint,
-      };
+      const reason = PointsGatingBlockedReasonSchema.safeParse(refusal.problem);
+      // A refusal no account state explains is a defect, not a decision.
+      if (!reason.success) throw refusal;
+      return { ...base, decision: "blocked", reason: reason.data };
     }
     const reserve = quoted.applied.find((a) => a.effect === "reserve");
     if (reserve) {
@@ -146,6 +156,18 @@ export class PointsPricesService {
       return { ...base, decision: "reserve", reservedFromBalance: held };
     }
     return { ...base, decision: "open" };
+  }
+}
+
+/** EARS-13 / EARS-26 — a malformed `:itemRef` is a 400, before any read. */
+function assertItemRef(itemRef: string): void {
+  const parsed = PointsItemRefSchema.safeParse(itemRef);
+  if (!parsed.success) {
+    throw new PointsLedgerError(
+      "POINTS_ITEM_REF_INVALID",
+      "not an item reference",
+      [{ path: "itemRef", message: parsed.error.issues[0]!.message }],
+    );
   }
 }
 

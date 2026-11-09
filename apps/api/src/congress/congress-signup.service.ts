@@ -23,6 +23,8 @@ import {
   type CongressSignUpWindowRefusal,
   type EventLifecycleState,
 } from "@ds/schemas";
+import { PointsEngine } from "../points/engine/points-engine.service.js";
+import { registrationCreatedFact } from "../points/registration-facts.js";
 import { AuthService } from "../auth/auth.service.js";
 import { MAILER, type Mailer } from "../mailer/mailer.types.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
@@ -172,6 +174,7 @@ export class CongressSignUpService {
     // Explicit, like every other parameter: the route-scan gate and the
     // api-client codegen boot under `tsx`, which emits no `design:paramtypes`.
     @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(PointsEngine) private readonly points: PointsEngine,
   ) {}
 
   /**
@@ -204,6 +207,7 @@ export class CongressSignUpService {
     const consentOrigin: ConsentOrigin | null =
       intake.origin === "desk" ? intake.consentOrigin : null;
     let outcome: CongressIntakeOutcome | undefined;
+    let publishPoints: () => Promise<void> = async () => {};
 
     const consent: {
       purpose: CongressSignUpConsentPurpose;
@@ -268,6 +272,21 @@ export class CongressSignUpService {
           created: inserted !== undefined,
           accountId: userId,
         };
+        // 025 EARS-14…17, 21 — a new registration reports its sign-up fact in
+        // this transaction; a priced congress is reserved, and a refusal rolls
+        // the registration back (the sign-up fails closed, EARS-17).
+        if (inserted) {
+          const recorded = await this.points.record(
+            tx,
+            registrationCreatedFact({
+              registrationId,
+              personId: userId,
+              itemRef: event.id,
+              occurredAt: new Date(),
+            }),
+          );
+          publishPoints = recorded.publishAfterCommit;
+        }
         await this.recordConsentIfNewVersion(
           tx,
           userId,
@@ -276,6 +295,8 @@ export class CongressSignUpService {
         );
       },
     );
+
+    await publishPoints();
 
     // EARS-11: the transaction above has COMMITTED by the time
     // `createPasswordlessAccount` resolves, and the dispatch below is started

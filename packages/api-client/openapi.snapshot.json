@@ -4348,6 +4348,97 @@
         "required": ["personId", "pul", "bre", "con", "advance", "status"],
         "type": "object"
       },
+      "PointsGatingDecisionDto": {
+        "additionalProperties": false,
+        "properties": {
+          "coveredByAdvance": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "decision": {
+            "enum": [
+              "open",
+              "reserve",
+              "reserve-with-advance",
+              "short",
+              "blocked"
+            ],
+            "type": "string"
+          },
+          "earnHint": {
+            "additionalProperties": false,
+            "properties": {
+              "lessonsNeeded": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pulToEarn": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": ["pulToEarn", "lessonsNeeded"],
+            "type": "object"
+          },
+          "itemRef": {
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9:._-]*$",
+            "type": "string"
+          },
+          "mode": {
+            "enum": ["open", "advance", "threshold"],
+            "type": "string"
+          },
+          "pulCost": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reason": {
+            "enum": [
+              "points-phone-unverified",
+              "points-reserve-limit",
+              "points-account-closed"
+            ],
+            "type": "string"
+          },
+          "reservedFromBalance": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "shortfall": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unit": {
+            "const": "Pul",
+            "type": "string"
+          }
+        },
+        "required": [
+          "itemRef",
+          "mode",
+          "pulCost",
+          "unit",
+          "decision",
+          "reservedFromBalance",
+          "coveredByAdvance",
+          "shortfall"
+        ],
+        "type": "object"
+      },
       "PointsPostingHistoryDto": {
         "additionalProperties": false,
         "properties": {
@@ -4426,6 +4517,59 @@
           }
         },
         "required": ["items", "nextCursor"],
+        "type": "object"
+      },
+      "PointsPriceDto": {
+        "additionalProperties": false,
+        "properties": {
+          "itemKind": {
+            "enum": [
+              "event",
+              "course",
+              "training",
+              "internship",
+              "offline-event",
+              "lesson",
+              "module"
+            ],
+            "type": "string"
+          },
+          "itemRef": {
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9:._-]*$",
+            "type": "string"
+          },
+          "limitedSeats": {
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": ["open", "advance", "threshold"],
+            "type": "string"
+          },
+          "pulCost": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unit": {
+            "const": "Pul",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "itemRef",
+          "itemKind",
+          "mode",
+          "pulCost",
+          "unit",
+          "limitedSeats",
+          "updatedAt"
+        ],
         "type": "object"
       },
       "PostChatMessageRequestDto": {
@@ -4986,6 +5130,38 @@
           }
         },
         "required": ["parameters"],
+        "type": "object"
+      },
+      "PutPointsPriceRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "itemKind": {
+            "enum": [
+              "event",
+              "course",
+              "training",
+              "internship",
+              "offline-event",
+              "lesson",
+              "module"
+            ],
+            "type": "string"
+          },
+          "limitedSeats": {
+            "default": false,
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": ["open", "advance", "threshold"],
+            "type": "string"
+          },
+          "pulCost": {
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": ["itemKind", "mode", "pulCost"],
         "type": "object"
       },
       "RegisterRequestDto": {
@@ -8386,6 +8562,44 @@
         "tags": ["OrganisationsAdmin"]
       }
     },
+    "/v1/admin/points/prices/{itemRef}": {
+      "put": {
+        "operationId": "PointsPricesAdminController_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "itemRef",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutPointsPriceRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PointsPriceDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["PointsPricesAdmin"]
+      }
+    },
     "/v1/admin/points/rules/{ruleId}/versions": {
       "post": {
         "operationId": "PointsRulesAdminController_publish",
@@ -9708,6 +9922,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PointsAccountDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["PointsMe"]
+      }
+    },
+    "/v1/me/points/gating/{itemRef}": {
+      "get": {
+        "operationId": "PointsMeController_gating",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "itemRef",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PointsGatingDecisionDto"
                 }
               }
             },

@@ -166,8 +166,10 @@ evaluates the resource-scoped rule and refuses server-side. See
   ends, inside the end's transaction (`PresenceRepository.attendanceAtEnd` —
   the same N-bucket minutes as EARS-5 plus the doctor's active registration);
   share over the scheduled `duration_min`, floored and clamped 0…100; returns
-  the after-COMMIT publish. Run by 007 `CloseRoom`; it reports facts only, the
-  seeded rule decides the award.
+  the after-COMMIT publish. Run by every move into `ended` — 007 `CloseRoom`
+  and the generic admin `transition` alike; it reports facts only, the seeded
+  rules decide the award (`accrual.participation`) and the settle of a held
+  price (`spend.settle`, 025 EARS-19).
 - `RoomService` — the admission gate (`admit`, reused by both operations),
   `roomConfig(idOrSlug, sub)` issuing the `RoomConfig` grant, and
   `recordHeartbeat(idOrSlug, sub)` appending one beat + returning the ack. Domain

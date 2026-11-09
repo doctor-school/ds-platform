@@ -33,8 +33,16 @@ export const POINTS_GATING_MODES = ["open", "advance", "threshold"] as const;
 export const PointsGatingModeSchema = z.enum(POINTS_GATING_MODES);
 export type PointsGatingMode = z.infer<typeof PointsGatingModeSchema>;
 
-/** An item ref as a fact names it (`PointsRecordFact.ref`). */
-export const PointsItemRefSchema = z.string().min(1).max(256);
+/**
+ * An item ref as a fact names it (`PointsRecordFact.ref`): an event's id, or
+ * `<kind>:<id>` for any other item — letters, digits and `:._-`, at most 256
+ * characters. The HTTP layer already refuses a path segment over 100
+ * characters (414) before the route runs.
+ */
+export const PointsItemRefSchema = z
+  .string()
+  .max(256)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9:._-]*$/, "an item ref: letters, digits and :._-");
 
 /** EARS-26 — body of `PUT /v1/admin/points/prices/:itemRef`. */
 export const PutPointsPriceRequestSchema = z.strictObject({
@@ -67,14 +75,39 @@ export type PointsPrice = z.infer<typeof PointsPriceSchema>;
  *  - `reserve`: the available Pul covers the price, held from the balance;
  *  - `reserve-with-advance`: advance mode, the shortfall fits the advance cap
  *    (lands with the advance slice #3811 — this read does not answer it yet);
- *  - `short`: `shortfall` = price − available, with the `earnHint`.
+ *  - `short`: `shortfall` = price − available, with the `earnHint`;
+ *  - `blocked`: the sign-up's `record` would refuse for a state of the
+ *    doctor's account other than the price — `reason` is the problem slug
+ *    the sign-up would raise (`points-phone-unverified`,
+ *    `points-reserve-limit`, `points-account-closed`). The read is a read: it
+ *    answers every valid request with a decision, never with that problem.
  */
+export const POINTS_GATING_BLOCKED_REASONS = [
+  "points-phone-unverified",
+  "points-reserve-limit",
+  "points-account-closed",
+] as const;
+export const PointsGatingBlockedReasonSchema = z.enum(
+  POINTS_GATING_BLOCKED_REASONS,
+);
+export type PointsGatingBlockedReason = z.infer<
+  typeof PointsGatingBlockedReasonSchema
+>;
+
 export const PointsGatingDecisionSchema = z.strictObject({
   itemRef: PointsItemRefSchema,
   mode: PointsGatingModeSchema,
   pulCost: z.number().int().min(0),
   unit: z.literal(PUL_UNIT),
-  decision: z.enum(["open", "reserve", "reserve-with-advance", "short"]),
+  decision: z.enum([
+    "open",
+    "reserve",
+    "reserve-with-advance",
+    "short",
+    "blocked",
+  ]),
+  /** `blocked` only — the problem slug the sign-up would raise. */
+  reason: PointsGatingBlockedReasonSchema.optional(),
   reservedFromBalance: z.number().int().min(0),
   coveredByAdvance: z.number().int().min(0),
   shortfall: z.number().int().min(0),

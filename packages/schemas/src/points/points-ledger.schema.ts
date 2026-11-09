@@ -132,6 +132,9 @@ export type PointsPostOutcome = z.infer<typeof PointsPostOutcomeSchema>;
  *    the price; the body carries `shortfall` and `earnHint`.
  *  - POINTS_RESERVE_LIMIT — EARS-21: a `reserve` beyond the `concurrentOpen`
  *    limit of open holds on limited-seat items.
+ *  - POINTS_ITEM_REF_INVALID — EARS-13 / EARS-26: the `:itemRef` of the
+ *    gating read or the price-list write is not an item ref
+ *    (`PointsItemRefSchema`).
  *  - POINTS_GATING_INVALID — EARS-26: a price-list row the item's kind or
  *    accreditation refuses (any mode but `open` for a lesson, a module or an
  *    НМО-accredited event), or a row for an item that does not exist.
@@ -149,6 +152,7 @@ export const POINTS_LEDGER_ERROR_CODES = [
   "POINTS_THRESHOLD_SHORT",
   "POINTS_RESERVE_LIMIT",
   "POINTS_GATING_INVALID",
+  "POINTS_ITEM_REF_INVALID",
 ] as const;
 export const PointsLedgerErrorCodeSchema = z.enum(POINTS_LEDGER_ERROR_CODES);
 export type PointsLedgerErrorCode = z.infer<typeof PointsLedgerErrorCodeSchema>;

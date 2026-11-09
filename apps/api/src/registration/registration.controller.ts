@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  HttpException,
   NotFoundException,
   Param,
   Post,
@@ -12,6 +13,7 @@ import {
 import type { FastifyRequest } from "fastify";
 import type { EventRegistrationState } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
+import { PointsLedgerError } from "../points/points.errors.js";
 import {
   EventNotRegistrableError,
   EventSoldOutError,
@@ -122,6 +124,20 @@ export class RegistrationController {
       }
       if (err instanceof UnknownSubjectError) {
         throw new UnauthorizedException("authentication required");
+      }
+      if (err instanceof PointsLedgerError) {
+        // 025 EARS-17 / EARS-21 / EARS-5 — the sign-up's points refusal: the
+        // registration was rolled back; the body names the problem and, when
+        // short, the shortfall and how to earn it.
+        throw new HttpException(
+          {
+            message: err.message,
+            errorCode: err.errorCode,
+            reason: err.problem,
+            ...(err.short ?? {}),
+          },
+          err.getStatus(),
+        );
       }
       throw err;
     }

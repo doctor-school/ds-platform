@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDeploymentPayload,
   recordDeployment,
+  releaseTagAtSha,
 } from "../../deploy/deployment-record.mjs";
 
 const SHA = "a".repeat(40);
@@ -270,6 +271,48 @@ describe("deployment-record — state + owner quote (#3158)", () => {
         state: "inactive",
       }),
     ).toThrow(/state/);
+  });
+});
+
+describe("deployment-record — releaseTagAtSha (resumed walk fallback, #3656)", () => {
+  type Res = { status: number | null; stdout?: string; stderr?: string };
+  const fake = (routes: { fetch: Res; tag: Res }) => {
+    const calls: string[] = [];
+    const exec = (cmd: string, args: string[]): Res => {
+      calls.push(`${cmd} ${args.join(" ")}`);
+      return args[0] === "fetch" ? routes.fetch : routes.tag;
+    };
+    return { calls, exec, log: () => {} };
+  };
+
+  it("fetches the tags from origin before the lookup — the cut tagged server-side", () => {
+    const { calls, exec, log } = fake({
+      fetch: { status: 0 },
+      tag: { status: 0, stdout: "release-2026.11.06-2\nrelease-2026.11.06-1\n" },
+    });
+    expect(releaseTagAtSha(SHA, { exec, log })).toBe("release-2026.11.06-2");
+    expect(calls).toEqual([
+      "git fetch --tags --force origin",
+      `git tag --points-at ${SHA} --list release-* --sort=-v:refname`,
+    ]);
+  });
+
+  it("a failed fetch records untagged without a stale local lookup, and never throws", () => {
+    const { calls, exec, log } = fake({
+      fetch: { status: 128, stderr: "fatal: unable to access" },
+      tag: { status: 0, stdout: "release-x\n" },
+    });
+    expect(releaseTagAtSha(SHA, { exec, log })).toBeNull();
+    expect(calls).toHaveLength(1);
+  });
+
+  it("a failed lookup records untagged; no tag at the sha is untagged", () => {
+    expect(
+      releaseTagAtSha(SHA, { ...fake({ fetch: { status: 0 }, tag: { status: 1 } }) }),
+    ).toBeNull();
+    expect(
+      releaseTagAtSha(SHA, { ...fake({ fetch: { status: 0 }, tag: { status: 0, stdout: "" } }) }),
+    ).toBeNull();
   });
 });
 

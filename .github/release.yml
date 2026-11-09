@@ -1,6 +1,7 @@
 # GitHub auto-generated release-notes configuration (Issue #943, W3/L1 of #927).
-# Consumed by `gh release create --generate-notes` (the L1 tag-release job in
-# release.yml). Categorises merged PRs by the repo's kind labels; the catch-all
+# Read by GitHub's `releases/generate-notes` API, which `tools/release/cut-release.mjs`
+# calls (and the `generate_release_notes` create of a first release) when the
+# deploy cuts a release. Categorises merged PRs by the repo's kind labels; the catch-all
 # `*` category collects anything unlabelled. Schema:
 # https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
 changelog:

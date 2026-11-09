@@ -357,21 +357,37 @@ export function createDeploymentRecord({
 }
 
 /**
- * The newest `release-*` tag pointing AT `sha` in the local clone, or null —
- * never the repository's newest tag, which may sit on another SHA (#3656).
+ * The newest `release-*` tag pointing AT `sha` on GitHub, or null — never the
+ * repository's newest tag, which may sit on another SHA (#3656). The cut creates
+ * its tag server-side through the Releases API, so the tags are fetched from
+ * origin right before the lookup: the local clone alone would miss it. A failed
+ * fetch or lookup records untagged; it never throws.
  */
-function releaseTagAtShaViaGit(sha, cwd, log) {
-  const r = spawnSync(
-    "git",
-    ["tag", "--points-at", sha, "--list", "release-*", "--sort=-v:refname"],
-    { encoding: "utf8", cwd },
-  );
-  if (r.status !== 0) {
+export function releaseTagAtSha(
+  sha,
+  {
+    cwd = process.cwd(),
+    log = (line) => console.log(line),
+    exec = (cmd, args) => spawnSync(cmd, args, { encoding: "utf8", cwd }),
+  } = {},
+) {
+  const untagged = (step, r) => {
     log(
-      `  ⚠ could not resolve the release tag at ${String(sha).slice(0, SHORT)} (recording untagged): ${(r.stderr || "").trim()}`,
+      `  ⚠ could not ${step} for the release tag at ${String(sha).slice(0, SHORT)} (recording untagged): ${(r?.stderr || r?.error?.message || "").trim()}`,
     );
     return null;
-  }
+  };
+  const fetched = exec("git", ["fetch", "--tags", "--force", "origin"]);
+  if (fetched?.status !== 0) return untagged("fetch the tags", fetched);
+  const r = exec("git", [
+    "tag",
+    "--points-at",
+    sha,
+    "--list",
+    "release-*",
+    "--sort=-v:refname",
+  ]);
+  if (r?.status !== 0) return untagged("list the tags", r);
   return (r.stdout || "").split(/\r?\n/).find(Boolean) ?? null;
 }
 
@@ -382,7 +398,7 @@ function releaseTagAtShaViaGit(sha, cwd, log) {
  * release workflow's runner (#3158: success and failure, with the owner quote).
  * A failed release attributes no release tag: none was cut for it. A success
  * records `releaseTag` — the cut's own result (null when the cut failed, #3656);
- * left undefined, the tag pointing AT `sha` in the local clone.
+ * left undefined, the tag pointing AT `sha` on GitHub (fetched, then looked up).
  *
  * NON-FATAL by contract: every failure only logs, the result says what happened.
  *
@@ -401,7 +417,7 @@ export async function recordDeployment({
   deps = {},
 }) {
   const releaseTagAt =
-    deps.releaseTagAt ?? ((s) => releaseTagAtShaViaGit(s, cwd, log));
+    deps.releaseTagAt ?? ((s) => releaseTagAtSha(s, { cwd, log }));
   const compose = deps.composeDigest ?? composeDigest;
   const create = deps.createDeploymentRecord ?? createDeploymentRecord;
   try {

@@ -192,8 +192,10 @@ function fakeRun(
   routes: Array<{ match: RegExp; result: RunResult }>,
   calls: string[],
 ) {
-  return (cmd: string, args: string[]): RunResult => {
-    const line = `${cmd} ${args.join(" ")}`;
+  return (cmd: string, args: string[], opts?: { input?: string }): RunResult => {
+    // A stdin request body (`gh api --input -`) is recorded after `<<<`.
+    const line =
+      `${cmd} ${args.join(" ")}` + (opts?.input === undefined ? "" : ` <<< ${opts.input}`);
     calls.push(line);
     for (const r of routes) if (r.match.test(line)) return r.result;
     return { status: 0, stdout: "" };
@@ -235,10 +237,10 @@ describe("cut-release — cutDeployRelease (I/O seam)", () => {
     // target-SHA plumbing: the Release targets the DEPLOYED sha, not HEAD, with
     // notes generated since the base tag.
     expect(calls).toContain(
-      `gh api -i --method POST repos/{owner}/{repo}/releases/generate-notes -f tag_name=release-2026.07.16-1 -f target_commitish=${DEPLOYED_SHA} -f previous_tag_name=release-2026.07.15-1`,
+      `gh api -i --method POST repos/{owner}/{repo}/releases/generate-notes --input - <<< ${JSON.stringify({ tag_name: "release-2026.07.16-1", target_commitish: DEPLOYED_SHA, previous_tag_name: "release-2026.07.15-1" })}`,
     );
     expect(calls).toContain(
-      `gh api -i --method POST repos/{owner}/{repo}/releases -f tag_name=release-2026.07.16-1 -f target_commitish=${DEPLOYED_SHA} -f name=release-2026.07.16-1 -f body=`,
+      `gh api -i --method POST repos/{owner}/{repo}/releases --input - <<< ${JSON.stringify({ tag_name: "release-2026.07.16-1", target_commitish: DEPLOYED_SHA, name: "release-2026.07.16-1", body: "" })}`,
     );
   });
 

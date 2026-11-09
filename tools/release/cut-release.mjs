@@ -275,14 +275,14 @@ function defaultReport(env = process.env) {
  * One `gh api -i --method POST` call, so a refused request leaves its status and
  * the headers GitHub Support needs (`X-GitHub-Request-Id`,
  * `X-Accepted-GitHub-Permissions`) — `gh release create` prints only the message
- * (#3656). Only those named headers are kept; the token is never echoed.
+ * (#3656). Only those named headers are kept; the token is never echoed. The
+ * request body goes as JSON on stdin (`--input -`), never on the argv: a large
+ * wave's notes would overrun the Windows command-line limit of the break-glass
+ * path.
  */
-function ghApiPost(exec, endpoint, fields) {
-  const args = ["api", "-i", "--method", "POST", endpoint];
-  for (const [name, value, typed] of fields) {
-    args.push(typed ? "-F" : "-f", `${name}=${value}`);
-  }
-  const res = exec("gh", args);
+function ghApiPost(exec, endpoint, body) {
+  const args = ["api", "-i", "--method", "POST", endpoint, "--input", "-"];
+  const res = exec("gh", args, { input: JSON.stringify(body) });
   const parsed = parseGhApiResponse(res.stdout);
   if (res.status === 0) return { ok: true, body: parsed.body };
   return {
@@ -389,7 +389,9 @@ export function cutDeployRelease({
   report = defaultReport(),
 } = {}) {
   const exec =
-    run || ((cmd, args) => spawnSync(cmd, args, { cwd, encoding: "utf8" }));
+    run ||
+    ((cmd, args, opts = {}) =>
+      spawnSync(cmd, args, { cwd, encoding: "utf8", input: opts.input }));
   let tag;
 
   try {
@@ -521,27 +523,23 @@ export function cutDeployRelease({
       });
     };
 
-    const fields = [
-      ["tag_name", tag],
-      ["target_commitish", targetSha],
-      ["name", title],
-    ];
+    const release = { tag_name: tag, target_commitish: targetSha, name: title };
     if (baseTag) {
-      const notes = ghApiPost(exec, "repos/{owner}/{repo}/releases/generate-notes", [
-        ["tag_name", tag],
-        ["target_commitish", targetSha],
-        ["previous_tag_name", baseTag],
-      ]);
+      const notes = ghApiPost(exec, "repos/{owner}/{repo}/releases/generate-notes", {
+        tag_name: tag,
+        target_commitish: targetSha,
+        previous_tag_name: baseTag,
+      });
       if (!notes.ok) return refused(notes.diagnostics);
       const generated =
         notes.body && typeof notes.body.body === "string" ? notes.body.body : "";
-      fields.push(["body", [leadNotes, generated].filter(Boolean).join("\n\n")]);
+      release.body = [leadNotes, generated].filter(Boolean).join("\n\n");
     } else {
-      if (leadNotes) fields.push(["body", leadNotes]);
-      fields.push(["generate_release_notes", "true", true]);
+      if (leadNotes) release.body = leadNotes;
+      release.generate_release_notes = true;
     }
 
-    const rel = ghApiPost(exec, "repos/{owner}/{repo}/releases", fields);
+    const rel = ghApiPost(exec, "repos/{owner}/{repo}/releases", release);
     if (!rel.ok) return refused(rel.diagnostics);
     log(
       `cut ${hotfix ? "HOTFIX release" : "release"} ${tag} at ${targetSha.slice(0, 12)}` +

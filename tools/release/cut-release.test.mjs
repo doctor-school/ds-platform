@@ -117,13 +117,18 @@ function apiCall(calls, endpoint) {
   return calls.find((c) => c[0] === "gh" && c.includes(endpoint));
 }
 
-/** The value of a `-f`/`-F` `name=value` field of a recorded `gh api` call. */
+/**
+ * The value of a request field of a recorded `gh api` call — read from the JSON
+ * request body the call sends on stdin (`--input -`), never from the argv.
+ */
 function field(call, name) {
-  for (let i = 0; i < call.length - 1; i += 1) {
-    if ((call[i] === "-f" || call[i] === "-F") && call[i + 1].startsWith(`${name}=`))
-      return call[i + 1].slice(name.length + 1);
-  }
-  return undefined;
+  assert.ok(call.includes("--input") && call.includes("-"), "request body goes on stdin");
+  assert.equal(
+    call.some((a) => a === "-f" || a === "-F"),
+    false,
+    "no request field on the argv",
+  );
+  return JSON.parse(call.input)[name];
 }
 
 /**
@@ -132,8 +137,8 @@ function field(call, name) {
  * `create` (the release create) or a generated-notes body.
  */
 function makeRun({ tags, ancestors, logSubjects = [], calls, create, tagList }) {
-  return (cmd, args) => {
-    calls.push([cmd, ...args]);
+  return (cmd, args, opts) => {
+    calls.push(Object.assign([cmd, ...args], { input: opts?.input }));
     if (cmd === "git" && args[0] === "fetch") return { status: 0, stdout: "" };
     if (cmd === "git" && args[0] === "tag")
       return tagList ?? { status: 0, stdout: tags.join("\n") };
@@ -249,8 +254,35 @@ test("EARS-7.4: a first release (no base tag) lets GitHub generate the notes in 
   assert.equal(res.cut, true, res.reason);
   assert.equal(apiCall(calls, NOTES_ENDPOINT), undefined);
   const gh = apiCall(calls, CREATE_ENDPOINT);
-  assert.equal(field(gh, "generate_release_notes"), "true");
+  assert.equal(field(gh, "generate_release_notes"), true);
   assert.equal(field(gh, "previous_tag_name"), undefined);
+});
+
+test("EARS-7.5: a large wave's notes travel on stdin, so the argv stays under the Windows command-line limit", () => {
+  const calls = [];
+  const bigNotes = `## What's Changed\n${"* feat: a long line of release notes (#1)\n".repeat(1500)}`;
+  assert.ok(bigNotes.length > 32768, "the fixture exceeds the 32K command line");
+  const base = makeRun({
+    tags: ALL_TAGS,
+    ancestors: [SHA["release-2026.08.25-2"]],
+    calls,
+  });
+  const res = cutDeployRelease({
+    targetSha: "abcdef0123abcdef0123abcdef0123abcdef0123",
+    now: new Date(Date.UTC(2026, 8, 5)),
+    run: (cmd, args, opts) =>
+      cmd === "gh" && args.includes(NOTES_ENDPOINT)
+        ? (base(cmd, args, opts),
+          {
+            status: 0,
+            stdout: httpResponse("200", "OK", {}, { name: "n", body: bigNotes }),
+          })
+        : base(cmd, args, opts),
+  });
+  assert.equal(res.cut, true, res.reason);
+  const gh = apiCall(calls, CREATE_ENDPOINT);
+  assert.ok(gh.join(" ").length < 1024, "the argv carries no notes");
+  assert.equal(field(gh, "body"), bigNotes);
 });
 
 // ── a failed cut is visible and explainable (#3656) ─────────────────────────

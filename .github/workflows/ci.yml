@@ -2214,9 +2214,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir "$RUNNER_TEMP/recording-attachment"
-          pnpm --filter @ds/portal start > "$RUNNER_TEMP/recording-attachment/portal.log" 2>&1 &
+          PORT=3001 pnpm --filter @ds/portal start > "$RUNNER_TEMP/recording-attachment/portal.log" 2>&1 &
           portal_pid=$!
-          pnpm --filter @ds/login start > "$RUNNER_TEMP/recording-attachment/login.log" 2>&1 &
+          PORT=3005 pnpm --filter @ds/login start > "$RUNNER_TEMP/recording-attachment/login.log" 2>&1 &
           login_pid=$!
           trap 'kill "$portal_pid" "$login_pid"' EXIT
           for i in $(seq 1 60); do

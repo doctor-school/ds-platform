@@ -264,16 +264,20 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(body.items.map((i) => i.postingId)).toEqual(
         await expectedOrder(a.personId),
       );
+      expect(body.items).toHaveLength(5);
       expect(
-        body.items.map((i) => [i.denomination, i.amount, i.action]),
+        body.items
+          .slice(0, 2)
+          .map((i) => [i.denomination, i.amount, i.action]),
       ).toEqual([
         ["pul", 5, "e2e.history"],
         ["pul", -10, "e2e.history"],
-        // The three legs share occurred_at; their order is by id.
-        ...body.items
-          .slice(2)
-          .map((i) => [i.denomination, i.amount, "e2e.history"]),
       ]);
+      // The three legs share occurred_at; their order is by id (asserted via
+      // expectedOrder above), so only their action and multiset are pinned here.
+      expect(body.items.map((i) => i.action)).toEqual(
+        Array(5).fill("e2e.history"),
+      );
       expect(
         body.items
           .slice(2)

@@ -4,6 +4,7 @@ import { createBdd, test as base } from "playwright-bdd";
 import {
   assertSeedDefaults,
   postings,
+  pointsOperation,
   prepareDoctor,
   recordLesson,
   startPointsWorld,
@@ -27,12 +28,32 @@ Given(
   "the rule book holds the seeded engine rules and settings with the PRD defaults",
   async ({ points }) => {
     await assertSeedDefaults(points);
+    pointsOperation(
+      "BACKGROUND " +
+        JSON.stringify({
+          title: test.info().title,
+          clause: "seed-defaults",
+          personId: points.personId,
+          applicationName: points.applicationName,
+          verified: true,
+        }),
+    );
   },
 );
 Given(
   'a doctor "A" of specialty "Кардиология" with a verified phone',
   async ({ points }) => {
     await prepareDoctor(points);
+    pointsOperation(
+      "BACKGROUND " +
+        JSON.stringify({
+          title: test.info().title,
+          clause: "doctor-specialty-phone",
+          personId: points.personId,
+          applicationName: points.applicationName,
+          verified: true,
+        }),
+    );
   },
 );
 When(

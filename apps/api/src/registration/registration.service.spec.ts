@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EventParticipationFormat } from "@ds/schemas";
 import type { RecordingsProjectionService } from "../recordings/index.js";
-import type {
-  EventForRegistration,
-  RegistrationRepository,
+import {
+  type EventForRegistration,
+  OfflineSeatsExhaustedError,
+  type RegistrationRepository,
 } from "./registration.repository.js";
 import {
   EventNotRegistrableError,
@@ -67,8 +68,18 @@ describe("020 EARS-9 RegisterForEvent applies the participation seat policy", ()
     });
     expect(repo.upsertRegistration).toHaveBeenCalledWith(
       USER_ID,
-      EVENT_ID,
+      expect.objectContaining({ id: EVENT_ID, format: "hybrid" }),
       "sub",
+    );
+  });
+
+  it("020 EARS-9: a lost race for the last offline seat inside the registration transaction is the same sold-out refusal", async () => {
+    const { svc, repo } = service(event("offline", 1));
+    repo.upsertRegistration.mockRejectedValueOnce(
+      new OfflineSeatsExhaustedError(EVENT_ID),
+    );
+    await expect(svc.register("last-seat", "sub")).rejects.toBeInstanceOf(
+      EventSoldOutError,
     );
   });
 

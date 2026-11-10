@@ -38,15 +38,20 @@ import {
   eq,
   gte,
   inArray,
+  isNotNull,
   isNull,
   lt,
+  ne,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { isParticipant } from "../auth/staff-role.js";
-import { withRequestAuditContext } from "../audit/audit-context.tx.js";
+import {
+  type AuditedTransaction,
+  withRequestAuditContext,
+} from "../audit/audit-context.tx.js";
 import { PointsEngine } from "../points/engine/points-engine.service.js";
 import { registrationCreatedFact } from "../points/registration-facts.js";
 
@@ -192,10 +197,7 @@ function escapeLike(value: string): string {
  * `8 → 7` rewrite, applied where a fragment can carry it: at the front.
  * No digit → `undefined` (nothing to match).
  */
-function phoneFragmentPredicate(
-  digitsKey: SQL,
-  term: string,
-): SQL | undefined {
+function phoneFragmentPredicate(digitsKey: SQL, term: string): SQL | undefined {
   const digits = normaliseContactPhone(term).replace(/^\+/, "");
   if (!digits) return undefined;
   const anywhere = sql`${digitsKey} like ${`%${digits}%`}`;
@@ -222,7 +224,9 @@ function normalisedPhoneDigits(
   phoneNormalised: SQL<string | null>,
   phone: SQL<string | null>,
 ): SQL<string | null> {
-  return sql<string | null>`nullif(left(regexp_replace(regexp_replace(coalesce(${phoneNormalised}, ${phone}, ''), '[^0-9]', '', 'g'), '^8([0-9]{10})$', '7\\1'), 15), '')`;
+  return sql<
+    string | null
+  >`nullif(left(regexp_replace(regexp_replace(coalesce(${phoneNormalised}, ${phone}, ''), '[^0-9]', '', 'g'), '^8([0-9]{10})$', '7\\1'), 15), '')`;
 }
 
 /** The `specialties_minzdrav` join by the id the answers carry (EARS-25). */
@@ -261,11 +265,64 @@ export interface EventForRegistration {
 const ACTIVE_EVENT = eq(events.recordStatus, "active");
 
 /**
+ * 020 EARS-9 / LD-5 — thrown inside the registration transaction when the
+ * event's only half is offline and its last seat is already taken, so the
+ * registration insert rolls back. The service answers it with the sold-out
+ * refusal the pre-check gives.
+ */
+export class OfflineSeatsExhaustedError extends Error {
+  constructor(readonly eventId: string) {
+    super("the event's last offline seat is already taken");
+    this.name = "OfflineSeatsExhaustedError";
+  }
+}
+
+/**
+ * 020 EARS-9 / LD-5 — the seat a first registration takes, inside its own
+ * transaction. Only an event that can hold a seat (not `online`, `seats_left`
+ * set) is locked, `FOR NO KEY UPDATE` — the lock the seat update itself takes,
+ * which does not conflict with the `KEY SHARE` lock every concurrent
+ * registration insert already holds through its foreign key (a `FOR UPDATE`
+ * here deadlocks those inserts) — so registrations on a seat-limited event
+ * serialize on it and the last seat goes to exactly one; every other
+ * registration takes no lock on the event row.
+ */
+async function takeOfflineSeat(
+  tx: AuditedTransaction,
+  eventId: string,
+): Promise<void> {
+  // Only a row that can hold a seat is selected, so only it is locked; the
+  // predicate is re-checked on the locked row (READ COMMITTED), never taken
+  // from the caller's unlocked pre-read.
+  const [row] = await tx
+    .select({ format: events.participationFormat, seatsLeft: events.seatsLeft })
+    .from(events)
+    .where(
+      and(
+        eq(events.id, eventId),
+        ne(events.participationFormat, "online"),
+        isNotNull(events.seatsLeft),
+      ),
+    )
+    .for("no key update");
+  if (!row || row.seatsLeft === null) return;
+  if (row.seatsLeft > 0) {
+    await tx
+      .update(events)
+      .set({ seatsLeft: sql`${events.seatsLeft} - 1` })
+      .where(eq(events.id, eventId));
+    return;
+  }
+  if (row.format === "offline") throw new OfflineSeatsExhaustedError(eventId);
+}
+
+/**
  * Drizzle data access for the 005 registration record (design §2). 005 owns the
  * `registrations` write; it **reads** the `events` lifecycle state (owned by 007)
- * read-only to gate the register affordance, and the `users` mirror (owned by
- * 003) read-only to resolve the authenticated Zitadel `sub` to its domain
- * `user_id`. It never writes those tables.
+ * to gate the register affordance, and the `users` mirror (owned by 003)
+ * read-only to resolve the authenticated Zitadel `sub` to its domain `user_id`.
+ * Its one `events` write is the offline seat a first registration takes
+ * ({@link takeOfflineSeat}, 020 EARS-9 / LD-5); it never writes `users`.
  */
 @Injectable()
 export class RegistrationRepository {
@@ -340,9 +397,10 @@ export class RegistrationRepository {
    */
   async upsertRegistration(
     userId: string,
-    eventId: string,
+    event: Pick<EventForRegistration, "id">,
     sub: string,
   ): Promise<RegistrationUpsert> {
+    const eventId = event.id;
     // 010 EARS-3/5 — attribute the registrations write to the acting caller
     // (source portal-api) via the audit-context wrapper.
     let publish: () => Promise<void> = async () => {};
@@ -359,6 +417,10 @@ export class RegistrationRepository {
         });
 
       if (inserted) {
+        // 020 EARS-9 / LD-5 — the first insert takes its offline seat in this
+        // transaction; a refusal rolls the insert back (only the first insert:
+        // an idempotent repeat takes no second seat).
+        await takeOfflineSeat(tx, eventId);
         // First insert → exactly one terminal audit_ledger row, atomically.
         await tx.insert(auditLedger).values({
           eventId: randomUUID(),
@@ -463,10 +525,7 @@ export class RegistrationRepository {
    * request is in flight. `FILTER` keeps it one index-backed pass over the
    * doctor's registrations.
    */
-  async countMyEvents(
-    userId: string,
-    cutoff: Date,
-  ): Promise<MyEventsCounts> {
+  async countMyEvents(userId: string, cutoff: Date): Promise<MyEventsCounts> {
     const [row] = await this.db
       .select({
         upcoming: sql<number>`count(*) FILTER (WHERE ${tabMembership("upcoming", cutoff)})::int`,
@@ -684,12 +743,10 @@ export class RegistrationRepository {
         registeredAt: r.registeredAt.toISOString(),
         confirmationMailStatus: r.confirmationMailStatus ?? null,
         possibleDuplicate: r.possibleDuplicate,
-        attendance: congressDays.map(
-          (day): CongressDayAttendance => ({
-            day,
-            present: marks.get(r.registrationId)?.has(day) ?? false,
-          }),
-        ),
+        attendance: congressDays.map((day): CongressDayAttendance => ({
+          day,
+          present: marks.get(r.registrationId)?.has(day) ?? false,
+        })),
       })),
       total: counted?.total ?? 0,
     };
@@ -752,15 +809,17 @@ export class RegistrationRepository {
     },
   ): SQL[] {
     const sort = query.sort ?? CONGRESS_ROSTER_SORT_DEFAULT.sort;
-    const dir =
-      query.dir === "desc" ? sql.raw("desc") : sql.raw("asc");
+    const dir = query.dir === "desc" ? sql.raw("desc") : sql.raw("asc");
     const russian = (cell: SQL | AnyPgColumn): SQL =>
       sql`${cell} collate "ru-x-icu"`;
     const tieBreak = [asc(registrations.registeredAt), asc(registrations.id)];
     let key: SQL;
     switch (sort) {
       case "registeredAt":
-        return [sql`${registrations.registeredAt} ${dir}`, asc(registrations.id)];
+        return [
+          sql`${registrations.registeredAt} ${dir}`,
+          asc(registrations.id),
+        ];
       case "fullName":
         key = russian(sql`nullif(${cells.fullName}, '')`);
         break;
@@ -805,7 +864,9 @@ export class RegistrationRepository {
          and ${registrationAttendance.day} = ${query.attendanceDay}
          and ${registrationAttendance.present} = true
     )`;
-    return query.present === "marked" ? markedPresent : sql`not ${markedPresent}`;
+    return query.present === "marked"
+      ? markedPresent
+      : sql`not ${markedPresent}`;
   }
 
   /**
@@ -1047,13 +1108,11 @@ export class RegistrationRepository {
         at: row.confirmationMailAt?.toISOString() ?? null,
       },
       possibleDuplicate: row.possibleDuplicate,
-      attendance: congressDays.map(
-        (day): CongressParticipantDay => ({
-          day,
-          present: currentByDay.get(day) ?? null,
-          history: history.get(day) ?? [],
-        }),
-      ),
+      attendance: congressDays.map((day): CongressParticipantDay => ({
+        day,
+        present: currentByDay.get(day) ?? null,
+        history: history.get(day) ?? [],
+      })),
     };
   }
 

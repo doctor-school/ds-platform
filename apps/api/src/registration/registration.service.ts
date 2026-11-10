@@ -20,6 +20,7 @@ import { RecordingsProjectionService } from "../recordings/index.js";
 import {
   type EventForRegistration,
   type MyEventRow,
+  OfflineSeatsExhaustedError,
   RegistrationRepository,
 } from "./registration.repository.js";
 
@@ -157,12 +158,22 @@ export class RegistrationService {
       }
       throw new EventSoldOutError(event.state);
     }
-    const { registeredAt } = await this.repo.upsertRegistration(
-      userId,
-      event.id,
-      sub,
-    );
-    return { registered: true, registeredAt: registeredAt.toISOString() };
+    // The read above is unlocked; the seat itself is taken in the
+    // registration's transaction (020 EARS-9 / LD-5), and a lost race for the
+    // last offline seat is the same sold-out refusal.
+    try {
+      const { registeredAt } = await this.repo.upsertRegistration(
+        userId,
+        event,
+        sub,
+      );
+      return { registered: true, registeredAt: registeredAt.toISOString() };
+    } catch (error) {
+      if (error instanceof OfflineSeatsExhaustedError) {
+        throw new EventSoldOutError(event.state);
+      }
+      throw error;
+    }
   }
 
   /**

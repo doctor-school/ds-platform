@@ -180,7 +180,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
           const eventId = await seedEvent();
           const reg = await registrationRepo.upsertRegistration(
             userId,
-            eventId,
+            { id: eventId },
             actorSub,
           );
           expect(reg.created).toBe(true);

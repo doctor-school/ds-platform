@@ -2,7 +2,7 @@ import { copyFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { DESIGN_SOURCE, openRuntimeCanvas } from "@ds/e2e/canvas-runtime";
 import { expectSlotSectionMatchesCanvas } from "@ds/e2e/canvas-slots";
 
@@ -46,6 +46,78 @@ for (const width of [390, 1440]) {
           card: "[data-webinar-card]",
         },
       });
+    });
+  });
+}
+
+/**
+ * 018 EARS-7 (#1502) — «Зачем это мне» against the canvas section
+ * «d-feed · зачем это мне». The section has no controls, so the slot check
+ * holds the chrome (none on either side); its built structure — eyebrow,
+ * heading, the four items in order, the closing strip — is read as text on
+ * both sides. The closing strip differs ON PURPOSE: the canvas strip names who
+ * pays and adds the «вниманием» sentence, LD-9 keeps only the statement.
+ */
+const VALUE_SECTION = '[data-screen-label="d-feed · зачем это мне"]';
+
+/** Eyebrow, heading, then each grid cell's title/body, then the strip, as visible text. */
+async function readValueStructure(page: Page) {
+  return page.evaluate((root) => {
+    const section = document.querySelector(root);
+    if (!section) throw new Error(`no section ${root}`);
+    const box = section.firstElementChild as HTMLElement;
+    const [eyebrow, heading, grid, strip] = [...box.children] as HTMLElement[];
+    const text = (el: Element) => (el as HTMLElement).innerText.trim();
+    return {
+      eyebrow: eyebrow!.textContent!.trim(),
+      heading: text(heading!),
+      items: [...grid!.children].map((cell) =>
+        [...cell.children].map((part) => text(part)),
+      ),
+      strip: [...strip!.children].length
+        ? [...strip!.children].map((part) => text(part))
+        : [text(strip!)],
+    };
+  }, VALUE_SECTION);
+}
+
+for (const width of [390, 1440]) {
+  test.describe(`#1502 feed value block ≡ doctor-feed canvas · guest · ${width}`, () => {
+    test.use({ viewport: { width, height: 900 } });
+    test("018 EARS-7: the value block has the canvas structure; the closing strip is the statement alone (LD-9)", async ({
+      page,
+      context,
+    }) => {
+      await context.clearCookies();
+      await page.goto(FEED);
+      await page.getByTestId("specialty-feed-value").waitFor();
+      await expectSlotSectionMatchesCanvas(page, {
+        canvas: "doctor-feed.dc.html",
+        props: { loggedIn: false },
+        section: { section: ["data-screen-label", "d-feed · зачем это мне"] },
+        rendered: { root: '[data-testid="specialty-feed-value"]' },
+      });
+
+      const runtime = await openRuntimeCanvas(context, "doctor-feed.dc.html", {
+        props: { loggedIn: false },
+      });
+      let canvas: Awaited<ReturnType<typeof readValueStructure>>;
+      try {
+        canvas = await readValueStructure(runtime.page);
+      } finally {
+        await runtime.close();
+      }
+      const built = await readValueStructure(page);
+
+      expect(built.eyebrow).toBe(canvas.eyebrow);
+      expect(built.heading).toBe(canvas.heading);
+      expect(built.items).toEqual(canvas.items);
+      expect(built.items).toHaveLength(4);
+      // The disclosed mismatch: the canvas strip carries the payer sentence
+      // and the «вниманием» line; the built strip is the statement alone.
+      expect(canvas.strip).toHaveLength(2);
+      expect(canvas.strip[0]).toContain("партнёры платформы");
+      expect(built.strip).toEqual(["Всё бесплатно для врача"]);
     });
   });
 }

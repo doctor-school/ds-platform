@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
  * 018 EARS-1 (#1496) — the specialty feed route `doctor.school/feed/<code>`
  * inside 017's shell. The upstream is the events tier's stand-in
  * `e2e/support/doctor-events-api.mjs`, which answers the `SpecialtyFeed`
- * envelope with the release-1 connected types (events) for one specialty and
+ * envelope with the release-1 connected types (events, value) for one specialty and
  * a 404 Problem for any other code; the envelope's composition rule itself is
  * proven against the real service in
  * `apps/api/test/storefront/specialty-feed.e2e-spec.ts`.
@@ -60,8 +60,9 @@ test("EARS-1: only the connected blocks are in the DOM, events first — no head
 }) => {
   await page.goto(FEED);
   const slots = page.locator("[data-feed-block-slot]");
-  await expect(slots).toHaveCount(1);
-  await expect(slots.first()).toHaveAttribute("data-feed-block-slot", "events");
+  await expect(slots).toHaveCount(2);
+  await expect(slots.nth(0)).toHaveAttribute("data-feed-block-slot", "events");
+  await expect(slots.nth(1)).toHaveAttribute("data-feed-block-slot", "value");
 
   const text = await page.getByTestId("specialty-feed").innerText();
   for (const absent of [

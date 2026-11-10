@@ -157,6 +157,32 @@ export class SpecialtyChoiceService {
   }
 
   /**
+   * The specialty a doctor events read targets (019 EARS-3) — read-only, for
+   * the PUBLIC reads that serve guests and signed-in doctors alike.
+   *
+   * A signed-in doctor whose profile holds a primary specialty is targeted on
+   * it, whatever the anonymous-session cookie says: the profile is the
+   * doctor's specialty and the cookie only the guest carrier (017 LD-2,
+   * «profile wins»). Every other reader — a guest, or a session whose profile
+   * holds none yet — keeps the cookie's reference, `null` when there is none.
+   *
+   * Unlike {@link resolveForDoctor} nothing is adopted or written: a public
+   * read is not «the first authenticated navigation» of 017 EARS-6, and an
+   * unmirrored subject is not an error here — it simply reads as a guest.
+   */
+  async targetingReference(
+    sub: string | undefined,
+    sessionReference: string | null,
+  ): Promise<string | null> {
+    if (!sub) return sessionReference;
+    const doctorId = await this.choices.findDoctorIdBySub(sub);
+    const onProfile = doctorId
+      ? await this.choices.findPrimary(doctorId)
+      : null;
+    return onProfile?.id ?? sessionReference;
+  }
+
+  /**
    * Resolve a reference held in the anonymous session, or `null` when it names
    * no member. Shared by the guest read and the adoption branch so that a
    * cookie the closed book no longer recognises is forgotten by ONE rule — and

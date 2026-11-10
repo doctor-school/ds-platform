@@ -117,9 +117,16 @@ const PAGE: EventsFeedPage = {
   nextBatch: 0,
 };
 
-const REQUEST = { cookie: "", forwardedFor: "10.0.0.1" };
+const REQUEST = {
+  cookie: "",
+  userAgent: "",
+  acceptLanguage: "",
+  forwardedFor: "10.0.0.1",
+};
 const ACTION_REQUEST = {
   cookie: "__Host-ds_session=s; __Host-ds_specialty=neurology",
+  userAgent: "",
+  acceptLanguage: "",
   forwardedFor: "10.0.0.1",
 };
 const NO_SPECIALTIES = Promise.resolve([]);

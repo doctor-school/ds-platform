@@ -39,10 +39,21 @@ under `mode: general`, never an empty `targeted` answer.
 `GET /v1/storefront/doctor/events` (EARS-3, #1518) and
 `GET /v1/storefront/doctor/events/month` (EARS-4, #1519) are ONE host projection
 with two shapes, not two features. Both are `access: public` and
-session-optional, both read the remembered specialty from
-`__Host-ds_specialty`, and both are served `private, max-age=30` with
+session-optional, and both are served `private, max-age=30` with
 `Vary: Cookie` — a shared cache must never hand one doctor's targeted read to
 another visitor.
+
+- **One specialty resolution for the four targeted reads** (feed, month, month
+  counts, live; #2885). `SpecialtyChoiceService.targetingReference` names the
+  specialty: a signed-in doctor whose profile holds one is targeted on it, and
+  the profile wins over any `__Host-ds_specialty` cookie still on the device
+  (017 LD-2); every other reader — a guest, or a profile with none yet — keeps
+  the cookie, and no cookie is the untargeted read. It is read-only: the 017
+  adoption cascade stays on `GET /v1/me/specialty`. The session rides in the
+  `Cookie` header too, so `Vary: Cookie` already keys the browser cache on it.
+  The doctor storefront's server renders of the feed, month and month counts
+  forward that session with its fingerprint surface (`@ds/events-storefront`
+  `feedReadHeaders`), exactly as its live strip does, and read uncached.
 
 - **The month grid is navigation over the same read.** `DoctorEventsService.month()`
   resolves targeting with the same `resolveTargeting`, selects with the same

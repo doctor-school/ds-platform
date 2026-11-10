@@ -99,7 +99,12 @@ const PAGE: EventsFeedPage = {
   nextBatch: 2,
 };
 
-const REQUEST = { cookie: "", forwardedFor: "10.0.0.1" };
+const REQUEST = {
+  cookie: "",
+  userAgent: "",
+  acceptLanguage: "",
+  forwardedFor: "10.0.0.1",
+};
 const NONE = Promise.resolve([]);
 
 function hostAction(): EventsBlockRetryAction & ReturnType<typeof vi.fn> {
@@ -216,6 +221,8 @@ describe("EventsFeed — the capped feed block a home mounts (017 EARS-9)", () =
     })) as ReactElement<{ fallback: ReactElement; children: ReactElement }>;
     expect(mocks.fetchEventsFeed).toHaveBeenCalledWith(DOCTOR, {}, {
       cookie: "__Host-ds_session=s; __Host-ds_specialty=neurology",
+      userAgent: "",
+      acceptLanguage: "",
       forwardedFor: "10.0.0.1",
     });
     render(mount.props.fallback);

@@ -11483,14 +11483,6 @@
         "operationId": "DoctorEventsPublicController_read",
         "parameters": [
           {
-            "in": "header",
-            "name": "cookie",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "in": "query",
             "name": "q",
             "required": false,
@@ -11660,14 +11652,6 @@
         "operationId": "DoctorEventsPublicController_live",
         "parameters": [
           {
-            "in": "header",
-            "name": "cookie",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "in": "query",
             "name": "q",
             "required": false,
@@ -11756,14 +11740,6 @@
       "get": {
         "operationId": "DoctorEventsPublicController_month",
         "parameters": [
-          {
-            "in": "header",
-            "name": "cookie",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
           {
             "in": "query",
             "name": "q",
@@ -11857,14 +11833,6 @@
       "get": {
         "operationId": "DoctorEventsPublicController_monthCounts",
         "parameters": [
-          {
-            "in": "header",
-            "name": "cookie",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
           {
             "in": "query",
             "name": "q",

@@ -152,7 +152,12 @@ const strip = (n: number) => ({
 });
 
 const SESSION = { cookie: "", forwardedFor: "" } as never;
-const REQUEST = { cookie: "", forwardedFor: "10.0.0.1" };
+const REQUEST = {
+  cookie: "",
+  userAgent: "",
+  acceptLanguage: "",
+  forwardedFor: "10.0.0.1",
+};
 const NO_SPECIALTIES = Promise.resolve([]);
 /** The host's block retry; #2832 pins what it re-reads in `events-block-retry.test.tsx`. */
 const RETRY = vi.fn(async (): Promise<ReactNode> => null);

@@ -4,8 +4,15 @@ import {
   fetchEventKindTitles,
   fetchEventsFeed,
   fetchEventsLive,
+  fetchMonthCounts,
+  fetchMonthEntries,
   fetchSpecialtyFeedEvents,
+  readRequestFrom,
 } from "./events-feed";
+
+import type { EventsStorefrontHostConfig } from "../host-config";
+
+type ContentSet = EventsStorefrontHostConfig["contentSet"];
 
 const page = {
   today: "2026-10-08",
@@ -15,6 +22,12 @@ const page = {
   nextBatch: 0,
   facetOptions: {},
   matching: 0,
+};
+const GUEST_REQUEST = {
+  cookie: "",
+  userAgent: "",
+  acceptLanguage: "",
+  forwardedFor: "",
 };
 const contentSet = {
   feedPath: "/v1/storefront/doctor/events",
@@ -28,13 +41,15 @@ const contentSet = {
 };
 
 describe("fetchEventsFeed", () => {
-  it("reads the host's feed path with the tense under its read param and forwards only the relay cookie", async () => {
+  it("reads the host's feed path with the tense under its read param and a guest forwards only the relay cookie", async () => {
     const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));
     const result = await fetchEventsFeed(
       { contentSet, filterSet: "doctor" },
       { tense: "past", from: "2026-09-01" },
       {
-        cookie: "__Host-ds_session=s; ds_specialty=cardio",
+        cookie: "other=1; ds_specialty=cardio",
+        userAgent: "ua",
+        acceptLanguage: "ru",
         forwardedFor: "1.2.3.4",
       },
       fetchImpl as unknown as typeof fetch,
@@ -47,12 +62,13 @@ describe("fetchEventsFeed", () => {
     expect(url).toMatch(
       /\/v1\/storefront\/doctor\/events\?from=2026-09-01&tense=past$/,
     );
-    expect((init.headers as Record<string, string>).cookie).toBe(
-      "ds_specialty=cardio",
-    );
-    expect((init.headers as Record<string, string>)["x-forwarded-for"]).toBe(
-      "1.2.3.4",
-    );
+    // The guest path is byte-identical to before #2885: no fingerprint headers.
+    expect(init.headers).toEqual({
+      accept: "application/json",
+      cookie: "ds_specialty=cardio",
+      "x-forwarded-for": "1.2.3.4",
+    });
+    expect(init.cache).toBe("no-store");
     expect(contentSet.adapt).toHaveBeenCalledWith({}, { tense: "past" });
   });
 
@@ -70,7 +86,7 @@ describe("fetchEventsFeed", () => {
       await fetchEventsFeed(
         { contentSet: academy, filterSet: "academy" },
         raw,
-        { cookie: "", forwardedFor: "" },
+        GUEST_REQUEST,
         fetchImpl as unknown as typeof fetch,
       );
       const [url] = fetchImpl.mock.calls[0] as unknown as [string];
@@ -85,7 +101,7 @@ describe("fetchEventsFeed", () => {
       await fetchEventsFeed(
         { contentSet, filterSet: "doctor" },
         {},
-        { cookie: "", forwardedFor: "" },
+        GUEST_REQUEST,
         fetchImpl as unknown as typeof fetch,
       ),
     ).toEqual({ ok: false });
@@ -106,7 +122,7 @@ describe("fetchEventsLive", () => {
         "/v1/public/events/live",
         { contentSet },
         GUEST,
-        { cookie: "", forwardedFor: "" },
+        GUEST_REQUEST,
         ok as unknown as typeof fetch,
       ),
     ).toEqual({ ok: true, value: [] });
@@ -118,7 +134,7 @@ describe("fetchEventsLive", () => {
         "/v1/public/events/live",
         { contentSet },
         GUEST,
-        { cookie: "", forwardedFor: "" },
+        GUEST_REQUEST,
         bad as unknown as typeof fetch,
       ),
     ).toEqual({ ok: false });
@@ -130,7 +146,11 @@ describe("fetchEventsLive", () => {
       "/v1/storefront/doctor/events/live?specialty=all",
       { contentSet },
       GUEST,
-      { cookie: "other=1; ds_specialty=cardio", forwardedFor: "1.2.3.4" },
+      {
+        ...GUEST_REQUEST,
+        cookie: "other=1; ds_specialty=cardio",
+        forwardedFor: "1.2.3.4",
+      },
       fetchImpl as unknown as typeof fetch,
     );
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [
@@ -157,7 +177,7 @@ describe("fetchEventsLive", () => {
       "/v1/storefront/doctor/events/live",
       { contentSet },
       session,
-      { cookie: session.cookie, forwardedFor: "" },
+      { ...session },
       fetchImpl as unknown as typeof fetch,
     );
     const [, init] = fetchImpl.mock.calls[0] as unknown as [
@@ -169,6 +189,129 @@ describe("fetchEventsLive", () => {
       "user-agent": "ua",
       "accept-language": "ru",
     });
+  });
+});
+
+describe("019 EARS-3 (#2885): the feed, month and month-counts reads forward the viewer's session", () => {
+  const SIGNED_IN = {
+    cookie: "__Host-ds_session=s; ds_specialty=cardio",
+    userAgent: "Mozilla/5.0 (probe)",
+    acceptLanguage: "ru-RU",
+    forwardedFor: "1.2.3.4",
+  };
+  // The doctor host's shape: a relay cookie AND session forwarding.
+  const doctorSet: ContentSet = { ...contentSet, forwardSession: true };
+  const ok = (body: string) =>
+    vi.fn(async () => new Response(body, { status: 200 }));
+  const reads = {
+    feed: (
+      request: typeof SIGNED_IN,
+      set: ContentSet = doctorSet,
+      f = ok("{}"),
+    ) =>
+      fetchEventsFeed(
+        { contentSet: set, filterSet: "doctor" },
+        {},
+        request,
+        f as unknown as typeof fetch,
+      ).then(() => f),
+    month: (
+      request: typeof SIGNED_IN,
+      set: ContentSet = doctorSet,
+      f = ok("[]"),
+    ) =>
+      fetchMonthEntries(
+        { contentSet: set, filterSet: "doctor" },
+        {},
+        "2026-11",
+        request,
+        f as unknown as typeof fetch,
+      ).then(() => f),
+    counts: (
+      request: typeof SIGNED_IN,
+      set: ContentSet = doctorSet,
+      f = ok("[]"),
+    ) =>
+      fetchMonthCounts(
+        { contentSet: set, filterSet: "doctor" },
+        {},
+        "2026",
+        request,
+        f as unknown as typeof fetch,
+      ).then(() => f),
+  };
+  const sent = (f: ReturnType<typeof ok>) =>
+    (f.mock.calls[0] as unknown as [string, RequestInit])[1];
+
+  for (const [name, read] of Object.entries(reads)) {
+    it(`EARS-3: ${name}: a signed-in viewer's read carries the whole session surface, uncached`, async () => {
+      const init = sent(await read(SIGNED_IN));
+      expect(init.headers).toEqual({
+        accept: "application/json",
+        cookie: SIGNED_IN.cookie,
+        "user-agent": SIGNED_IN.userAgent,
+        "accept-language": SIGNED_IN.acceptLanguage,
+        "x-forwarded-for": SIGNED_IN.forwardedFor,
+      });
+      // A session-dependent read never enters the Next data cache.
+      expect(init.cache).toBe("no-store");
+      expect(init).not.toHaveProperty("next");
+    });
+
+    it(`EARS-3: ${name}: a guest's read stays the relay cookie and client address only`, async () => {
+      const init = sent(
+        await read({
+          ...GUEST_REQUEST,
+          userAgent: "ua",
+          acceptLanguage: "ru",
+          cookie: "x=1; ds_specialty=cardio",
+          forwardedFor: "1.2.3.4",
+        }),
+      );
+      expect(init.headers).toEqual({
+        accept: "application/json",
+        cookie: "ds_specialty=cardio",
+        "x-forwarded-for": "1.2.3.4",
+      });
+      expect(init.cache).toBe("no-store");
+    });
+
+    it(`EARS-3: ${name}: a host that names a relay cookie but does not forward the session sends a signed-in viewer's relay cookie only`, async () => {
+      const init = sent(await read(SIGNED_IN, contentSet));
+      expect(init.headers).toEqual({
+        accept: "application/json",
+        cookie: "ds_specialty=cardio",
+        "x-forwarded-for": SIGNED_IN.forwardedFor,
+      });
+      expect(init.cache).toBe("no-store");
+    });
+
+    it(`EARS-3: ${name}: the Academy host (no relay cookie, no session forwarding) sends nothing new for a signed-in viewer`, async () => {
+      const {
+        relayCookie: _relay,
+        forwardSession: _forward,
+        ...academy
+      } = doctorSet;
+      const init = sent(await read(SIGNED_IN, academy));
+      expect(init.headers).toEqual({
+        accept: "application/json",
+        "x-forwarded-for": SIGNED_IN.forwardedFor,
+      });
+      expect(init.cache).toBe("no-store");
+    });
+  }
+
+  it("EARS-3: readRequestFrom takes the fingerprint surface the session needs from the incoming request", () => {
+    expect(
+      readRequestFrom(
+        new Headers({
+          cookie: SIGNED_IN.cookie,
+          "user-agent": SIGNED_IN.userAgent,
+          "accept-language": SIGNED_IN.acceptLanguage,
+          "x-forwarded-for": SIGNED_IN.forwardedFor,
+        }),
+      ),
+    ).toEqual(SIGNED_IN);
   });
 });
 
@@ -224,6 +367,8 @@ describe("fetchSpecialtyFeedEvents", () => {
       "cardiology",
       {
         cookie: "__Host-ds_session=s; ds_specialty=neuro",
+        userAgent: "",
+        acceptLanguage: "",
         forwardedFor: "1.2.3.4",
       },
       fetchImpl as unknown as typeof fetch,
@@ -251,7 +396,7 @@ describe("fetchSpecialtyFeedEvents", () => {
       expect(
         await fetchSpecialtyFeedEvents(
           "cardiology",
-          { cookie: "", forwardedFor: "" },
+          GUEST_REQUEST,
           fetchImpl as unknown as typeof fetch,
         ),
       ).toEqual({ ok: false });

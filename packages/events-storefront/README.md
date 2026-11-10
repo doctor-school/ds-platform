@@ -35,6 +35,19 @@ projection; the one feed URL codec with the legacy Academy redirect (D1) and the
 horizon «Показать ещё» (D2); and the closed adapter list (`./adapters`) mapping
 each host's feed read onto the one page model. Hosts add host-config data only.
 
+**What the feed-page reads forward** (`feedReadHeaders`, 019 EARS-3, 017 LD-2;
+#2885). Session forwarding is its own host-config switch,
+`contentSet.forwardSession: true` (ADR-0013 A1), set by the doctor host only.
+On such a host a signed-in viewer's feed, month and month-counts reads carry the
+whole session surface — the `Cookie` header, `user-agent`, `accept-language`
+and the client address, the same `forwardedHeaders` hop the «Идёт сейчас» read
+uses; a guest's read, and every read on a host without the switch, carries only
+`contentSet.relayCookie` (when named) and the client address. The Academy host
+names neither field. Every such read is fetched `cache: "no-store"` and every
+route that mounts them is `force-dynamic` (the home is dynamic through
+`headers()`): no Next data cache or prerender holds one viewer's answer for
+another.
+
 ## Layering
 
 One direction of dependency, `ui → client → model`; nothing points back.
@@ -78,7 +91,7 @@ it projects rather than the whole unit.
 | `./feed`        | `EventsFeed` — the events page's day feed block mounted elsewhere with a cap (017 EARS-9, #1485): a home renders `<EventsFeed config={<its config>} limit={N} retry={<its events page retry action>} />` — the same upcoming read with the relayed cookie, marks, empty state, «Повторить» and skeleton, the first `N` cards and one «Все события» link to `routes.listing`; a retried capped block stays capped                                                                                                                                                                                                                                                               |
 | `./adapters`    | `adaptPublicEventListing`, `adaptDoctorEventsFeed` — the closed adapter list of gate §4.5, one pure DTO → feed-page mapping per host read; a host config names one as `contentSet.adapt`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `./my-events`   | `MyEventsRoute` — the «Мои события» route mount: reads the host's `contentSet.myEventsPath` with the forwarded session, sends a guest to `withReturnTarget(routes.login, routes.accountEvents)` (`@ds/schemas`), renders the tabs with viewer-zone times (004 EARS-12); a host route file renders it with its host config and `searchParams` and nothing else (#1972)                                                                                                                                                                                                                                                                                                          |
-| `./host-config` | `EventsStorefrontHostConfig` (`contentSet.{feedPath,tenseParam,relayCookie,livePath,myEventsPath,adapt}`, `headerCopy` (title + a fixed subline, or the counted subline «N эфиров · M школ» from the nouns), `copy.eventNoun`, `routes.listing`, `routes.eventPage`, `routes.login`, `routes.accountEvents` — data only), `MyEventsHostConfig` (the `contentSet` + `routes` a «Мои события»-only host states) and `eventPageHref`                                                                                                                                                                                                                                              |
+| `./host-config` | `EventsStorefrontHostConfig` (`contentSet.{feedPath,monthPath,countsPath,tenseParam,relayCookie,forwardSession,livePath,myEventsPath,adapt}`, `headerCopy` (title + a fixed subline, or the counted subline «N эфиров · M школ» from the nouns), `copy.eventNoun`, `routes.listing`, `routes.eventPage`, `routes.login`, `routes.accountEvents` — data only), `MyEventsHostConfig` (the `contentSet` + `routes` a «Мои события»-only host states) and `eventPageHref`                                                                                                                                                                                                          |
 | `./server`      | `ForwardedSession`, `forwardedSessionFrom`, `forwardedHeaders`, `hasSessionCookie`, `SESSION_COOKIE_NAME`, `fetchEventRegistrationState`, `registerForEventAction` — the canonical BFF hop (session + `x-forwarded-for` relay, #2054; `@ds/auth-flow/server` re-exports the session half so auth consumers read one address) and the registration reads; the public reads (`fetchEventListing*`, `fetchMonthBroadcasts`, `fetchMonthlyCounts`, `fetchPublicEventPage`, `fetchUpcomingBroadcasts`, `fetchParticipationCta` — the last two at an optional `pagePath`, the `@ds/event-page` host value, default `/v1/public/events`) and the «Мои события» read (`fetchMyEvents`) |
 
 ## Hosts

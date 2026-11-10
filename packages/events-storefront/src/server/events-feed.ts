@@ -3,6 +3,7 @@ import {
   type ForwardedSession,
   forwardedHeaders,
   EventsLiveReadSchema,
+  hasSessionCookie,
   EventsMonthEntriesReadSchema,
   type MonthBroadcastEntry,
   type MonthlyEventCount,
@@ -36,28 +37,44 @@ export function relayOnly(cookie: string, name: string | undefined): string {
 }
 
 /**
- * The feed read (019 EARS-3, gate rows 12, 32). The read is viewer-independent
- * (019 EARS-12), so it forwards only the host's one relay cookie — the
- * remembered specialty on the doctor host — and the client address chain.
+ * The headers of a feed-page read — the feed, one month, the month counts
+ * (019 EARS-3, 017 LD-2; #2885). Session forwarding is its own host-config
+ * switch (`contentSet.forwardSession`, ADR-0013 A1) so a host that only relays
+ * a cookie never starts forwarding sessions by accident. A read built here may
+ * depend on the viewer, so it is always fetched `no-store`.
  */
+export function feedReadHeaders(
+  contentSet: Pick<
+    EventsStorefrontHostConfig["contentSet"],
+    "relayCookie" | "forwardSession"
+  >,
+  request: ReadRequest,
+): Record<string, string> {
+  if (contentSet.forwardSession === true && hasSessionCookie(request.cookie)) {
+    return forwardedHeaders(request);
+  }
+  const cookie = relayOnly(request.cookie, contentSet.relayCookie);
+  return {
+    accept: "application/json",
+    ...(cookie ? { cookie } : {}),
+    ...(request.forwardedFor
+      ? { "x-forwarded-for": request.forwardedFor }
+      : {}),
+  };
+}
+
+/** The feed read (019 EARS-3, gate rows 12, 32); headers per {@link feedReadHeaders}. */
 export async function fetchEventsFeed(
   config: Pick<EventsStorefrontHostConfig, "contentSet" | "filterSet">,
   raw: RawQueryRecord,
-  request: { readonly cookie: string; readonly forwardedFor: string },
+  request: ReadRequest,
   fetchImpl: typeof fetch = fetch,
 ): Promise<BlockRead<EventsFeedPage>> {
   const { contentSet } = config;
   const query = feedReadQuery(raw, contentSet.tenseParam, config.filterSet);
-  const cookie = relayOnly(request.cookie, contentSet.relayCookie);
   try {
     const res = await fetchImpl(`${API_BASE}${contentSet.feedPath}?${query}`, {
-      headers: {
-        accept: "application/json",
-        ...(cookie ? { cookie } : {}),
-        ...(request.forwardedFor
-          ? { "x-forwarded-for": request.forwardedFor }
-          : {}),
-      },
+      headers: feedReadHeaders(contentSet, request),
       cache: "no-store",
     });
     if (!res.ok) return { ok: false };
@@ -102,18 +119,24 @@ export async function fetchEventsLive(
   }
 }
 
+/** The incoming request's raw cookie header and session fingerprint surface. */
 export type ReadRequest = {
   readonly cookie: string;
+  readonly userAgent: string;
+  readonly acceptLanguage: string;
   readonly forwardedFor: string;
 };
 
 /**
- * What every feed-page read forwards from the incoming request — the page
- * render's or a block retry's (#2832): its cookie and the client address.
+ * What every feed-page read may forward from the incoming request — the page
+ * render's or a block retry's (#2832): its cookie, the session's fingerprint
+ * surface (`forwardedSessionFrom`) and the client address.
  */
 export function readRequestFrom(headers: Headers): ReadRequest {
   return {
     cookie: headers.get("cookie") ?? "",
+    userAgent: headers.get("user-agent") ?? "",
+    acceptLanguage: headers.get("accept-language") ?? "",
     forwardedFor: headers.get("x-forwarded-for") ?? "",
   };
 }
@@ -127,16 +150,9 @@ async function readJson<T>(
   schema: { parse(value: unknown): T },
   fetchImpl: typeof fetch,
 ): Promise<BlockRead<T>> {
-  const cookie = relayOnly(request.cookie, config.contentSet.relayCookie);
   try {
     const res = await fetchImpl(`${API_BASE}${path}?${query}`, {
-      headers: {
-        accept: "application/json",
-        ...(cookie ? { cookie } : {}),
-        ...(request.forwardedFor
-          ? { "x-forwarded-for": request.forwardedFor }
-          : {}),
-      },
+      headers: feedReadHeaders(config.contentSet, request),
       cache: "no-store",
     });
     if (!res.ok) return { ok: false };

@@ -6,9 +6,10 @@ import type { RoomPageHostConfig } from "@ds/room-page/host-config";
 /**
  * What the doctor storefront states about itself so the shared events pages can
  * serve it (#1972, #2028, epic #2020 wave 2; gate §4.4). DATA only: its reads
- * (the specialty-targeted feed, the doctors' live read, «Мои события»), the one
- * cookie the feed read relays (017's remembered specialty, gate row 13 — the
- * name `apps/doctor/lib/specialty-choice.ts` writes), the one adapter of §4.5
+ * (the specialty-targeted feed, the doctors' live read, «Мои события»), the
+ * relay cookie a guest's reads carry (017 LD-2, gate row 13 — the name
+ * `apps/doctor/lib/specialty-choice.ts` writes), session forwarding on the
+ * feed, month and counts reads (019 EARS-3, #2885), the one adapter of §4.5
  * that maps the feed read, the routes `doctor.school` serves and its page head.
  * Every rule and every sentence lives in `@ds/events-storefront`.
  */
@@ -17,6 +18,7 @@ export const DOCTOR_EVENTS_STOREFRONT = {
     feedPath: "/v1/storefront/doctor/events",
     tenseParam: "tense",
     relayCookie: "__Host-ds_specialty",
+    forwardSession: true,
     livePath: "/v1/storefront/doctor/events/live",
     myEventsPath: "/v1/storefront/doctor/me/events",
     monthPath: "/v1/storefront/doctor/events/month",

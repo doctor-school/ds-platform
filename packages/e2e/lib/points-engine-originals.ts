@@ -53,6 +53,7 @@ export interface PointsWorld {
   ledger: Ledger;
   prices: Prices;
   applicationName: string;
+  ownedEventIds: string[];
   registrationFact: (input: {
     registrationId: string;
     personId: string;
@@ -151,6 +152,7 @@ export async function startPointsWorld(): Promise<PointsWorld> {
       ledger,
       prices: new PointsPricesService(handle.db, engine),
       applicationName,
+      ownedEventIds: [],
       registrationFact: registrationCreatedFact,
       personId: randomUUID(),
       lessonId: randomUUID(),
@@ -161,6 +163,28 @@ export async function startPointsWorld(): Promise<PointsWorld> {
   } catch (error) {
     await handle.pool.end();
     throw error;
+  }
+}
+
+export async function retirePointsEvents(world: PointsWorld): Promise<void> {
+  if (world.ownedEventIds.length === 0) return;
+  // ADR-0003 design section 3.6: retain event rows and their ledger references.
+  const { rows } = await world.handle.pool.query<{
+    id: string;
+    record_status: string;
+    deleted_at: Date;
+  }>(
+    `UPDATE events SET record_status = 'retired', deleted_at = now()
+     WHERE id = ANY($1::uuid[]) AND slug = 'points-reserve-' || id::text
+     RETURNING id, record_status, deleted_at`,
+    [world.ownedEventIds],
+  );
+  expect(rows.map((row) => row.id).sort()).toEqual(
+    [...world.ownedEventIds].sort(),
+  );
+  for (const row of rows) {
+    expect(row.record_status).toBe("retired");
+    expect(row.deleted_at).toBeInstanceOf(Date);
   }
 }
 

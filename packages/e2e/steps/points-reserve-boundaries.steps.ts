@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { createDrizzle } from "@ds/db";
 import { SEED_EVENT_KINDS } from "@ds/db/seed/golden";
@@ -6,12 +6,13 @@ import { expect } from "@playwright/test";
 import { createBdd } from "playwright-bdd";
 import {
   pointsOperation,
+  retirePointsEvents,
   type EngineFact,
   type PointsWorld,
 } from "../lib/points-engine-originals.js";
 import { test } from "./points-engine-originals.steps.js";
 
-const { Given, When, Then } = createBdd(test);
+const { Given, When, Then, After } = createBdd(test);
 interface ReserveCase {
   items: string[];
   facts: EngineFact[];
@@ -24,7 +25,7 @@ const cases = new WeakMap<PointsWorld, ReserveCase>();
 function state(points: PointsWorld): ReserveCase {
   let value = cases.get(points);
   if (!value) {
-    value = { items: [], facts: [] };
+    value = { items: points.ownedEventIds, facts: [] };
     cases.set(points, value);
   }
   return value;
@@ -69,6 +70,7 @@ async function pricedEvent(
       SEED_EVENT_KINDS.vstrechaKluba.id,
     ],
   );
+  state(points).items.push(id);
   await points.prices.put(
     id,
     { itemKind: "event", mode: "threshold", pulCost, limitedSeats },
@@ -89,7 +91,6 @@ async function pricedEvent(
       limited_seats: limitedSeats,
     },
   ]);
-  state(points).items.push(id);
   return id;
 }
 function signUp(points: PointsWorld, itemRef: string) {
@@ -118,6 +119,34 @@ async function snapshot(points: PointsWorld) {
     )
   ).rows[0];
 }
+After("@points-reserve-boundaries", async ({ points }) => {
+  if (points.ownedEventIds.length === 0) return;
+  const before = await snapshot(points);
+  await retirePointsEvents(points);
+  const after = await snapshot(points);
+  expect(after).toEqual(before);
+  const receipt =
+    process.env.E2E_POINTS_CLEANUP_REPORT ?? process.env.E2E_POINTS_OPS_LOG;
+  appendFileSync(
+    receipt!,
+    JSON.stringify({
+      phase: "owned-event-cleanup",
+      database: process.env.E2E_POINTS_DATABASE,
+      personId: points.personId,
+      eventIds: points.ownedEventIds,
+      retired: points.ownedEventIds.length,
+      active: 0,
+      ledgerUnchanged: true,
+      beforeSha256: createHash("sha256")
+        .update(JSON.stringify(before))
+        .digest("hex"),
+      afterSha256: createHash("sha256")
+        .update(JSON.stringify(after))
+        .digest("hex"),
+    }) + "\n",
+  );
+});
+
 async function noFact(points: PointsWorld, fact: EngineFact) {
   expect(
     (

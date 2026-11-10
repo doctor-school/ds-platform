@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   Header,
-  Headers,
   Inject,
   NotFoundException,
   Param,
@@ -46,6 +45,7 @@ import {
 import { DoctorEventsService } from "./doctor-events.service.js";
 import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
 import { readSpecialtyChoiceCookie } from "./specialty-choice.cookie.js";
+import { SpecialtyChoiceService } from "./specialty-choice.service.js";
 
 /**
  * 019 EARS-3 (#1518) — `GET /v1/storefront/doctor/events`, the day-grouped,
@@ -60,8 +60,10 @@ import { readSpecialtyChoiceCookie } from "./specialty-choice.cookie.js";
  *
  * The controller does three things and no more: it decodes the URL with the ONE
  * shared query codec (`parseDoctorEventsFeedQuery` in `@ds/schemas`), it names
- * the viewer's remembered specialty from 017's anonymous-session cookie, and it
- * hands both to {@link DoctorEventsService}. Selection, lifecycle and publish
+ * the viewer's specialty — a signed-in doctor's profile specialty, else 017's
+ * anonymous-session cookie (019 EARS-3,
+ * `SpecialtyChoiceService.targetingReference`) — and it hands both to
+ * {@link DoctorEventsService}. Selection, lifecycle and publish
  * visibility stay with 007's aggregate; targeting stays with 017/018's managed
  * rows. Academy's `/v1/public/events` remains its own host projection over the
  * same owners (019-design §1.1, EARS-15).
@@ -70,7 +72,8 @@ import { readSpecialtyChoiceCookie } from "./specialty-choice.cookie.js";
  *
  * `@Public()` + `@Authz({ access: "public" })`: EARS-12 requires the feed to be
  * FULLY readable with no account, and only the action on a card to need one. The
- * cookie is read when present and its absence simply yields the untargeted read
+ * session and the cookie are read when present and their absence simply yields
+ * the untargeted read
  * — it never gates the response and no gated payload is delivered to be hidden
  * client-side. A remembered reference that has since left the managed book is
  * therefore DEGRADED to the untargeted read in {@link DoctorEventsService},
@@ -78,8 +81,9 @@ import { readSpecialtyChoiceCookie } from "./specialty-choice.cookie.js";
  * storefront controllers, so anything this family does still throw leaves as
  * RFC 7807 `application/problem+json`.
  *
- * The response varies with that cookie, so the cache is `private` — a shared
- * cache must never hand one doctor's targeted feed to another visitor.
+ * The response varies with the session and that cookie — both ride in the
+ * `Cookie` header — so the cache is `private` with `Vary: Cookie`: a shared cache
+ * must never hand one doctor's targeted feed to another visitor.
  */
 /**
  * 020 EARS-2 (#1765) — the DOCTOR host's «вокруг события» table, the twin of
@@ -114,7 +118,17 @@ export class DoctorEventsPublicController {
     private readonly events: EventsService,
     @Inject(ParticipationService)
     private readonly participation: ParticipationService,
+    @Inject(SpecialtyChoiceService)
+    private readonly choices: SpecialtyChoiceService,
   ) {}
+
+  /** The ONE specialty resolution of the four targeted reads (019 EARS-3; 017 LD-2). */
+  private specialtyOf(req: FastifyRequest): Promise<string | null> {
+    return this.choices.targetingReference(
+      subOf(req),
+      readSpecialtyChoiceCookie(req.headers.cookie),
+    );
+  }
 
   /** `GET /v1/storefront/doctor/events` — the bounded-horizon `DayGroup[]` feed. */
   @Get()
@@ -132,9 +146,9 @@ export class DoctorEventsPublicController {
   @ApiOkResponse({ type: DoctorEventsFeedDto })
   @Public()
   @Header("Cache-Control", "private, max-age=30")
-  // The read varies with the specialty cookie, so the browser cache must key on
-  // it too — without this a specialty change re-serves the previous targeting
-  // from the same URL for up to 30s.
+  // The read varies with the session and the specialty cookie, so the browser
+  // cache must key on the Cookie header too — without this a specialty change
+  // re-serves the previous targeting from the same URL for up to 30s.
   @Header("Vary", "Cookie")
   @Authz({
     access: "public",
@@ -142,9 +156,9 @@ export class DoctorEventsPublicController {
     audit: "none",
     tests: ["EARS-3"],
   })
-  read(
+  async read(
+    @Req() req: FastifyRequest,
     @Query() query: Record<string, RawQueryValue>,
-    @Headers("cookie") cookie?: string,
   ): Promise<DoctorEventsFeed> {
     const parsed = parseDoctorEventsFeedQuery(query ?? {});
     if (!parsed.success) {
@@ -153,7 +167,7 @@ export class DoctorEventsPublicController {
 
     return this.feed.feed({
       query: parsed.data,
-      specialtyReference: readSpecialtyChoiceCookie(cookie),
+      specialtyReference: await this.specialtyOf(req),
     });
   }
 
@@ -191,9 +205,9 @@ export class DoctorEventsPublicController {
     audit: "none",
     tests: ["EARS-4"],
   })
-  month(
+  async month(
+    @Req() req: FastifyRequest,
     @Query() query: Record<string, RawQueryValue>,
-    @Headers("cookie") cookie?: string,
   ): Promise<DoctorEventsMonthGrid> {
     const parsed = parseDoctorEventsMonthQuery(query ?? {});
     if (!parsed.success) {
@@ -202,7 +216,7 @@ export class DoctorEventsPublicController {
 
     return this.feed.month({
       query: parsed.data,
-      specialtyReference: readSpecialtyChoiceCookie(cookie),
+      specialtyReference: await this.specialtyOf(req),
     });
   }
 
@@ -233,9 +247,9 @@ export class DoctorEventsPublicController {
     audit: "none",
     tests: ["EARS-4"],
   })
-  monthCounts(
+  async monthCounts(
+    @Req() req: FastifyRequest,
     @Query() query: Record<string, RawQueryValue>,
-    @Headers("cookie") cookie?: string,
   ): Promise<MonthlyEventCount[]> {
     const parsed = parseDoctorEventsMonthCountsQuery(query ?? {});
     if (!parsed.success) {
@@ -244,7 +258,7 @@ export class DoctorEventsPublicController {
 
     return this.feed.monthCounts({
       query: parsed.data,
-      specialtyReference: readSpecialtyChoiceCookie(cookie),
+      specialtyReference: await this.specialtyOf(req),
     });
   }
 
@@ -293,21 +307,19 @@ export class DoctorEventsPublicController {
     audit: "none",
     tests: ["EARS-6"],
   })
-  live(
+  async live(
     @Req() req: FastifyRequest,
     @Query() query: Record<string, RawQueryValue>,
-    @Headers("cookie") cookie?: string,
   ): Promise<EventsLiveRead> {
     const parsed = parseDoctorEventsLiveQuery(query ?? {});
     if (!parsed.success) {
       throw new BadRequestException("invalid doctor events live query");
     }
-    const sub = (req as { user?: { sub?: string } }).user?.sub;
     return this.feed.live({
       query: parsed.data,
-      specialtyReference: readSpecialtyChoiceCookie(cookie),
+      specialtyReference: await this.specialtyOf(req),
       routes: DOCTOR_ROUTES,
-      sub,
+      sub: subOf(req),
       staff: callerIsStaff(req),
     });
   }
@@ -374,14 +386,18 @@ export class DoctorEventsPublicController {
     @Param("idOrSlug") idOrSlug: string,
     @Req() req: FastifyRequest,
   ): Promise<ParticipationCta> {
-    const sub = (req as { user?: { sub?: string } }).user?.sub;
     const cta = await this.participation.cta(
       idOrSlug,
       DOCTOR_ROUTES,
-      sub,
+      subOf(req),
       callerIsStaff(req),
     );
     if (!cta) throw new NotFoundException("event not found");
     return cta;
   }
+}
+
+/** The OPTIONAL session subject — `undefined` for a guest; these routes are public. */
+function subOf(req: FastifyRequest): string | undefined {
+  return (req as { user?: { sub?: string } }).user?.sub;
 }

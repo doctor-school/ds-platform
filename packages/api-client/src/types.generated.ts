@@ -8478,9 +8478,7 @@ export interface operations {
                 tense?: "upcoming" | "past";
                 to?: unknown;
             };
-            header: {
-                cookie: string;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -8549,9 +8547,7 @@ export interface operations {
                 q?: unknown;
                 specialty?: string[];
             };
-            header: {
-                cookie: string;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -8580,9 +8576,7 @@ export interface operations {
                 q?: unknown;
                 specialty?: string[];
             };
-            header: {
-                cookie: string;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -8611,9 +8605,7 @@ export interface operations {
                 /** @description ISO YYYY */
                 year: unknown;
             };
-            header: {
-                cookie: string;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };

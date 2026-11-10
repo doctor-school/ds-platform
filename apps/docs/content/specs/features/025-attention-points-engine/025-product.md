@@ -1,6 +1,6 @@
 ---
 title: "Feature 025 — The attention points engine: accrual, spend and gating (PRD)"
-description: "Product requirements for the one points account a doctor holds across the doctor storefront, the Academy and the mobile app: three units (Pul — the only spendable one; Bre — reputation; Con — awareness), the earn rules and their defaults, spending Pul on live events through a reserve that is debited only on confirmed attendance, one advance rule per event for every doctor, gating modes per content item, the consented monthly leaderboard, the copy model that keeps «бесплатно для врача» a money statement, anti-farming and the compliance guardrails. Every number is a configurable parameter and every posting records its rule version. Backend-only: the consumers 018, 020, 021, 022, 024 and 036 own the surfaces. Wave 2; source of the 025 EARS triplet (ADR-0014)."
+description: "Product requirements for the one points account a doctor holds across the doctor storefront, the Academy and the mobile app: three units (Pul — the only spendable one; Bre — reputation; Con — awareness), the earn rules and their defaults, spending Pul on live events through a reserve that is debited only on confirmed attendance, one advance rule per event for every doctor, gating modes per content item, the consented monthly leaderboard, the copy model under which the interface makes no statement about money, anti-farming and the compliance guardrails. Every number is a configurable parameter and every posting records its rule version. Backend-only: the consumers 018, 020, 021, 022, 024 and 036 own the surfaces. Wave 2; source of the 025 EARS triplet (ADR-0014)."
 slug: two-site-ia-025-attention-points-engine-product
 epic: ../../product/two-site-ia/brief.md
 status: In dev
@@ -93,14 +93,14 @@ At launch a lesson can be set to **Open** only [lead-proposed]; podcasts may ent
 
 ## Copy model
 
-[owner, 2026-11-05]
+[owner, 2026-11-05; owner, 2026-11-10, #2534]
 
-- **«Бесплатно для врача»** is a statement about **money**: the doctor never pays money. It is always true and allowed at platform level and on any event.
-- **«Бесплатно» never describes a Pul price** or a zero-Pul state. A Pul cost line is shown **only when the cost is > 0**; a zero-Pul event shows no price line.
+- **The interface makes no statement about money, price or who pays.** No «бесплатно» in any form — neither as a money statement at platform level nor on an event — and no payer or financing statement. The owner, 2026-11-10: «"Бесплатно для врача" звучит так, что для не-врача будет платно. Надо всё убрать».
+- A Pul cost line is shown **only when the cost is > 0** and reads «N Pul»; a zero-Pul event shows no price line and nothing in its place.
 - Platform points are **never called «баллы»** in the НМО sense, never summed with НМО credits and never converted to them; an НМО badge, when present, is a separate statement.
 - The advance is never called «кредит», «долг» or «минус»; a reserve is described as «will be counted after participation», not «will be debited» [lead-proposed].
 
-**Consumer requirement (020).** Today the event page's «Бесплатно для врача» line is wired to `pulCost === 0`, and `eventEconomyFacts()` returns `pulCost: 0` for every event (`DEBT.md`). When events get real Pul prices from this engine, that line must become an **independent money statement** shown on every event, next to a separate «N Pul» line when the cost is > 0. Tracked in #3801.
+**Consumer requirement (020).** The event page shows the «Участие — N Pul» line only when the cost is > 0 and no line at a zero cost (020 «Amendment — 2026-11-10»); `eventEconomyFacts()` returns `pulCost: 0` for every event until this engine supplies real Pul prices (`DEBT.md`).
 
 ## Anti-farming
 
@@ -125,14 +125,14 @@ Product constraints, **to be confirmed by a lawyer** before launch:
 
 ## Consumer contract
 
-| Consumer                     | What it takes from 025                                                                                                                                                    |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **021** registration         | registration and profile accruals; the `PointsCredited` fact; arrival source recorded as attribution only, never an advance                                               |
-| **020** event page           | the event's Pul price and gating mode, the doctor's balance and open advance, reserve on sign-up, release on cancel; the money line decoupled from `pulCost` (copy model) |
-| **024** learning module      | consumes 024's learning facts and computed statuses (element, lesson, module done, test passed) as accrual events; lessons carry no Pul price                             |
-| **022** doctor account       | the three balances, the open advance and its remaining obligation, the posting history in the doctor's words                                                              |
-| **018** feed / specialty     | the consented monthly leaderboard per specialty; a card's Pul cost line only when > 0                                                                                     |
-| **036** attention aggregates | aggregates per project and per sponsor from postings, each posting with its rule version; named data only under a separate consent                                        |
+| Consumer                     | What it takes from 025                                                                                                                          |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **021** registration         | registration and profile accruals; the `PointsCredited` fact; arrival source recorded as attribution only, never an advance                     |
+| **020** event page           | the event's Pul price and gating mode, the doctor's balance and open advance, reserve on sign-up, release on cancel; no money line (copy model) |
+| **024** learning module      | consumes 024's learning facts and computed statuses (element, lesson, module done, test passed) as accrual events; lessons carry no Pul price   |
+| **022** doctor account       | the three balances, the open advance and its remaining obligation, the posting history in the doctor's words                                    |
+| **018** feed / specialty     | the consented monthly leaderboard per specialty; a card's Pul cost line only when > 0                                                           |
+| **036** attention aggregates | aggregates per project and per sponsor from postings, each posting with its rule version; named data only under a separate consent              |
 
 ## User stories
 
@@ -145,7 +145,7 @@ Product constraints, **to be confirmed by a lawyer** before launch:
 - **US-7** — As a **doctor** without enough Pul for a **threshold-mode** event, I see how many Pul I still need and the learning that earns them.
 - **US-8** — As a **doctor who arrived by a medrep or partner link**, I get exactly the same conditions as every other doctor on that event.
 - **US-9** — As a **doctor**, I see the monthly **«active doctors of my specialty»** only if I gave a separate consent, choose how I am named, and can withdraw at once; my own position is always visible to me privately.
-- **US-10** — As a **doctor**, the interface tells me honestly that the platform costs **no money**, never calls a Pul price «бесплатно» and never mixes points with НМО credits.
+- **US-10** — As a **doctor**, the interface never tells me anything about money or who pays, shows a Pul price only when there is one and never mixes points with НМО credits.
 - **US-11** — As a **Product Lead**, I set each content item to **open / advance / threshold** and change any accrual, price, cap or formula **without a release**, as an experiment.
 - **US-12** — As a **Product Lead**, every posting records the **rule version** that produced it, so I can compare experiments and reconcile reports after re-tuning.
 - **US-13** — As an **admin**, I correct a wrong accrual with a **compensating posting** that leaves an audit record; nothing is ever edited or deleted.
@@ -177,7 +177,7 @@ Product constraints, **to be confirmed by a lawyer** before launch:
 - Sign-up reserves, confirmed attendance debits, cancel / no-show / event cancel release; the balance never goes below zero; Pul does not expire [lead-proposed].
 - The advance is a per-event flag, identical for every doctor; an arrival link records attribution only [owner]. Open advances are capped (default 150 Pul per person), settled from future earnings, never shown as a minus, never block access [lead-proposed].
 - The leaderboard ranks 2·Con + Bre earned in the calendar month within a specialty, among doctors with a separate consent; the Pul balance never ranks [lead-proposed].
-- Copy: «бесплатно для врача» is a money statement; a Pul cost line only when > 0; points are never «баллы» and never combined with НМО [owner].
+- Copy: no statement about money or who pays, «бесплатно» included [owner, 2026-11-10]; a Pul cost line only when > 0; points are never «баллы» and never combined with НМО [owner].
 - The compliance guardrails above hold as product constraints pending legal confirmation.
 
 ## Out of scope

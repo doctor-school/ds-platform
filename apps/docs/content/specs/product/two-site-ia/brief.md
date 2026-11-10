@@ -74,7 +74,7 @@ lang: en
 - **One event page serves both storefronts** — online, offline and hybrid share a single page (owner decision D-4), rendered on the doctor storefront and on the Academy, backed by the shipped event engines (004/005/006/014).
 - **Attention points and money are one append-only ledger family** (ADR-0016 §6): points accrue and are spent against content gating; money is accounted from mined attention. Money movement itself stays outside the platform on day one (CON-16, OWD-3), while the platform remains the ledger of record (OWD-13).
 - **Personal data has one lifecycle**: doctor documents are stored permanently in the profile, verification is a right-gated queue, consents are separate per purpose, provable and revocable (ADR-0016 §7, OWD-12, REQ-34). Every legally public page is generated from that accepted policy, never published ahead of it.
-- **Interface copy never names who pays.** The doctor reads «бесплатно для врача»; the funding relationship is an Academy-side concept. The money-carrying role is **инвестор (организация)** / **первоинвестор** — never «партнёр» as the money carrier.
+- **Interface copy makes no statement about money and never names who pays** — no «бесплатно» in any form (owner, 2026-11-10, #2534); the funding relationship is an Academy-side concept. The money-carrying role is **инвестор (организация)** / **первоинвестор** — never «партнёр» as the money carrier.
 
 ## Feature decomposition
 

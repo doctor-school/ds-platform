@@ -81,7 +81,7 @@ On completion, a course leads to a **document**: 023 shows the doctor what the c
 - **Document entry:** the course shows which document it leads to and its prerequisites; document verification can be entered at any time from the course (REQ-17, REQ-22); issuing the document is 038 and the verification record is 037.
 - A **guest** reads schools and programs before registering; gated steps show an honest gate, and no gated content is served to a guest.
 - **A live event recording (014) is neither a lesson nor a course episode** [owner, D8].
-- **No price, purchase or sale** appears anywhere on the doctor's school, course, module or lesson screens: for the doctor all content is free and nothing is bought [owner, D10]. Interface copy never says «бесплатно» next to points.
+- **No price, purchase or sale** appears anywhere on the doctor's school, course, module or lesson screens: for the doctor all content is free and nothing is bought [owner, D10]. Interface copy makes no statement about money or who pays and never says «бесплатно» in any form [owner, 2026-11-10, #2534].
 - The screens work at the **mobile breakpoint**, meet the platform accessibility bar, and show the same progress as the mobile application (REQ-53).
 
 ## Out of scope

@@ -24,7 +24,7 @@ Target: «Doctor.School Design System», `https://claude.ai/design/p/1366789c-9a
 ## Previews
 
 - Authored for every component in `.design-sync/previews/` from `apps/showcase/app/{primitives,blocks}/*-view.tsx` compositions. Overlays (`Dialog*`, `AlertDialog*`, `Sheet*`) render open with `cardMode: single` + viewport; wide blocks use `cardMode: column`.
-- Product copy rule baked into previews and `conventions.md`: cost is «N Pul», never «бесплатно»/roubles.
+- Product copy rule baked into previews and `conventions.md`: cost is «N Pul» only when it is greater than zero, a zero cost shows nothing; never «бесплатно» in any form, never roubles, no statement about who pays.
 
 ## Authoring gotchas (folded from the 2026-10-01 wave)
 
@@ -35,7 +35,6 @@ Target: «Doctor.School Design System», `https://claude.ai/design/p/1366789c-9a
 - Not on the public module: `FormError`, `useForm` (OtpFocusScreen is shown through LoginCard's code stage; AuthCard's error-banner cell dropped).
 - `.d.ts` loses `| null`: EventSignupCard `cta.href`/`reason`/`presenceCount` are `string | null` and the card checks `!== null`; previews pass explicit `null`. Same trap for designs — `conventions.md` does not cover it yet.
 - Combobox has no `open` prop: closed states only. MonthPicker open cell reserves room with padding (absolute popover).
-- Product copy: the showcase and `packages/auth-flow` copy still contain «Бесплатно…» strings; previews replace them («N Pul»).
 - Skipped (floor card): SmartCaptcha, BotProtectionField — invisible Yandex captcha, nothing renders at rest without the remote script. Interaction-only states (hover/focus/drag, Combobox panel, focused OTP slot) are not shown.
 
 ## Known render warns

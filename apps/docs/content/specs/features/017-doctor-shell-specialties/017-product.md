@@ -30,7 +30,7 @@ Around those two, the home page carries what makes the site credible and alive: 
 
 ## User stories
 
-- **US-1** — As a **doctor arriving for the first time**, I understand within seconds that this site teaches doctors and that learning here is **free for me**, without having to read about how it is financed.
+- **US-1** — As a **doctor arriving for the first time**, I understand within seconds that this site teaches doctors and that learning here is **free for me**, without having to read about how it is financed. **[Superseded by 017 «Amendment — 2026-11-10»: the interface makes no statement about money at all, «бесплатно» included.]**
 - **US-2** — As a **doctor**, my first action is choosing my specialty from the official Минздрав list (the current nomenclature plus «Другое»), and I can do it without leaving the first screen.
 - **US-3** — As a **doctor**, I find my specialty by typing part of its name instead of scrolling the whole list.
 - **US-4** — As a **doctor who has chosen**, the site remembers my specialty — in my profile when I am signed in, in my session when I am not — so my next visit opens already targeted at me.
@@ -92,7 +92,7 @@ Around those two, the home page carries what makes the site credible and alive: 
 - The home page shows the **nearest events** — the events feed of `/events`, the same block cut to its first few cards — and a link «Все события» to the full feed; before a specialty is chosen these are general, after it they are targeted.
 - The **leaderboard** renders only doctors who gave **separate consent to public display**; the default is not to publish, and the voluntary nature is visible next to the block. The leaderboard requirement is **REQ-117**, which is cross-cutting by its own text: 017 owns the **platform-wide** board on the storefront, and the specialty-filtered board is 018's — one requirement split across two features by authoring decision, not two requirements (REQ-34, REQ-117).
 - The storefront carries **no Academy content** — no project cards, no Academy podcasts, no partner news — and **exactly one** Academy link **on this surface**, in the footer — the single REQ-24 exit has a second placement, «Стать экспертом» in the doctor's cabinet, which is not part of 017.
-- The interface **never states who finances the doctor's learning**; it says only that learning is free for the doctor.
+- The interface **never states who finances the doctor's learning**; it says only that learning is free for the doctor. **[Superseded by 017 «Amendment — 2026-11-10»: the interface makes no statement about money at all, «бесплатно» included.]**
 - The site shows **no prices in roubles, no cart, no subscription** — there are no payments on the platform and doctors are never charged.
 - The **public marketing routes previously served by `apps/promo`** answer from `doctor.school` under this shell's information architecture.
 - Everything above works at the **mobile breakpoint** as well as at desktop, and meets the platform accessibility bar for a public surface (`playwright-axe`): the search field labelled, the catalog entries real controls, the leaderboard readable by a screen reader.

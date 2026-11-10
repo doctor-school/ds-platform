@@ -424,3 +424,11 @@ Each param may appear at most once. Any other key, any other value (`mode=ONLINE
 | 31   | Playwright (admin) + Vitest e2e | `apps/admin/e2e/recording-chapters.spec.ts`                                                                            | `it('EARS-31: ...')` the operator adds, removes and reorders chapters per kind, a stale ETag is refused with 412, each validation reason shows on its row, and the published page shows the saved list with no page edit.                                                                                             |
 
 **What does not change.** The recording lifecycle, the at-most-one-per-kind rule, the resolver and the login split (EARS-1…EARS-8, EARS-17), and every other clause of 014.
+
+## Amendment — 2026-11-10 — the guest gate makes no statement about money (source: [#2534](https://github.com/doctor-school/ds-platform/issues/2534), owner decision 2026-11-10)
+
+> **Status:** the guest gate is live in production, so this is recorded as an amendment rather than an inline rewrite of the epic #3 decision bullet and EARS-5 (AGENTS.md §6). Those clauses remain the decision as originally taken and are read under this amendment. The RU twin is [`014-requirements-ru.md`](./014-requirements-ru.md) → «Amendment — 2026-11-10».
+
+**The rule now.** The gate is authentication, never a paywall, and its copy makes no statement about money: wherever 014 reads «framed as free» or «a free account», read «an account» — the gate invites the guest to sign in with no «бесплатно» in any form (the owner, 2026-11-10: «"Бесплатно для врача" звучит так, что для не-врача будет платно. Надо всё убрать»). The live sub-line «Вход — по почте, две минуты.» (020 EARS-10) already complies.
+
+**What does not change.** The poster, the boxed invitation, the real labelled sign-in action, the land-only return and the source-free projection of EARS-5.

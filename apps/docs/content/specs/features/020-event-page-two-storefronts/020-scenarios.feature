@@ -210,6 +210,7 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
       And no price in roubles, cart, subscription or payment affordance appears
       And «партнёр» is never used as the money-carrier and «проект» appears in no doctor-facing string
       And НМО appears only as a badge and as a conditions-line value, never as a heading
+      # Amended 2026-11-10 (#2534): a zero cost renders no participation-cost row and no wording in its place; a positive cost reads «N Pul». Read under 020 «Amendment — 2026-11-10».
       And a zero cost reads «бесплатно для врача»
       # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02» and 020 «Amendment — 2026-10-02».
       And every date and time renders in Europe/Moscow labelled «МСК»

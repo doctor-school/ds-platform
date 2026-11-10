@@ -423,3 +423,13 @@ These stay open; each is designed around above rather than resolved here, and ea
 - **Whether a doctor ever types a promo code by hand** — LD-7 ships the field the canvas draws; if the field proves unused, removing it is deleting a field, not unwinding attribution.
 - **What refusing the mandatory consent shows in the funnel** — EARS-4 and EARS-5 guarantee only that registration cannot complete without it and that the reason is stated beside the disabled control; whether a declining doctor is shown anything further (an explanation page, a manager contact) is unresolved, and no placeholder for it ships.
 - **Whether a secondary identifier is ever offered at registration** — LD-9 fixes email-only here, matching 003 EARS-2; a later phone-as-secondary surface is a 003 increment, not a 021 change.
+
+## Amendment — 2026-11-10: registration copy makes no statement about money (source: [#2534](https://github.com/doctor-school/ds-platform/issues/2534), owner decision 2026-11-10)
+
+> **Status:** doctor registration is live in production with «Бесплатно, за две минуты…» and the «условие бесплатного для врача обучения» consent help, so this is recorded as an amendment rather than an inline rewrite of the consent outcome, the «No financing statement» invariant, the ADR-0016 §6 bullet and the card-subtitle wording of [`021-design.md`](./021-design.md) (AGENTS.md §6). Those clauses remain the decision as originally taken and are read under this amendment. The RU twin is [`021-requirements-ru.md`](./021-requirements-ru.md) → «Amendment — 2026-11-10»; the design-side counterpart is [`021-design.md`](./021-design.md) → «Amendment — 2026-11-10».
+
+**Provenance.** The owner, in chat on 2026-11-10: «вообще убираем эти фразы, которые сужают аудиторию и указывают на то или иное отношение к деньгам. "Бесплатно для врача" звучит так, что для не-врача будет платно. Надо всё убрать… Просто убрать и всё.»
+
+**The rule now.** No string on this surface makes a statement about money, price or who pays — «бесплатно» in any form included; there is no «only permitted statement» about cost. The card subtitle reads «За две минуты — нужны только e-mail и пароль.». The mandatory partner-data consent keeps its label «Согласие на передачу данных партнёрам платформы», and its help line reads «Без этого согласия часть материалов недоступна.»: it states what the consent gates, never a condition of free education. A Pul cost in the return context reads «N Pul» only when it is greater than zero and shows nothing at zero.
+
+**What does not change.** The consents stay purpose-separated and recorded with version and date; the partner-data consent stays mandatory, and the composition of the shared data stays in the policy text and the manager path (REQ-34).

@@ -106,7 +106,7 @@ Around the path, 024 carries the lesson screen's registry scope (functional map 
 - **Mobile parity (REQ-53, OWD-10):** the same lessons, facts and statuses, and one points account, on the site and in the mobile application; the screens work at the mobile breakpoint and meet the platform accessibility bar.
 - **Points** are not decided here: 024 exposes learning facts and computed statuses; accrual and spending are feature 025 (#1794).
 - **A recording of a live event (014) is not a lesson and not a course episode** [owner, D8].
-- Interface copy never says «бесплатно» next to points; the word «проект» never appears in the doctor's interface.
+- Interface copy makes no statement about money or who pays and never says «бесплатно» in any form [owner, 2026-11-10, #2534]; the word «проект» never appears in the doctor's interface.
 
 ## Out of scope
 

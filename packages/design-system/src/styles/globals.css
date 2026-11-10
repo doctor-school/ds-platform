@@ -142,3 +142,17 @@
     }
   }
 }
+
+/*
+ * iOS Safari magnifies the page when a focused text field renders below 16px
+ * and keeps it magnified after blur (#3909). Touch devices therefore get 16px
+ * fields. Unlayered on purpose: a layered rule loses to the `text-*` utility
+ * every field carries.
+ */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1rem);
+  }
+}

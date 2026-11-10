@@ -30,8 +30,8 @@ connected blocks in the F-018-1 order (`specialtyFeedBlocks`), the
 
 - `events` — `{ kind, read }`; its read is
   `GET /v1/storefront/feed/{specialty}/events` (EARS-4).
-- `value` — «Зачем это мне» (EARS-7): `{ kind, items: { title, body }[4],
-freeStatement }`, carried inside the envelope with no read of its own. The
+- `value` — «Зачем это мне» (EARS-7): `{ kind, items: { title, body }[4] }`,
+  carried inside the envelope with no read of its own. The
   copy is one constant for every specialty,
   `specialty-feed.value-copy.ts`; the strict schema leaves no room for a
   payer or marking field (LD-9).

@@ -85,15 +85,15 @@ export const FeedValueItemSchema = z
 export type FeedValueItem = z.infer<typeof FeedValueItemSchema>;
 
 /**
- * 018 EARS-7 — «Зачем это мне» (018-design `ValueBlock`). Strict on purpose:
- * LD-9 allows no payer, marking or attribution beside `freeStatement`, so a
- * key carrying one is refused here rather than filtered by the page.
+ * 018 EARS-7 — «Зачем это мне» (018-design `ValueBlock`): the four items and
+ * nothing else. Strict on purpose: LD-9 allows no payer, marking or
+ * attribution beside the items, so a key carrying one is refused here rather
+ * than filtered by the page.
  */
 export const FeedValueBlockSchema = z
   .object({
     kind: z.literal("value"),
     items: z.array(FeedValueItemSchema).length(FEED_VALUE_ITEM_COUNT),
-    freeStatement: z.string().min(1),
   })
   .strict();
 export type FeedValueBlock = z.infer<typeof FeedValueBlockSchema>;
@@ -172,11 +172,7 @@ export function specialtyFeedBlocks(
   ).map((kind): FeedBlock => {
     switch (kind) {
       case "value":
-        return {
-          kind,
-          items: content.value.items,
-          freeStatement: content.value.freeStatement,
-        };
+        return { kind, items: content.value.items };
       case "events":
         return { kind, read: specialtyFeedBlockRead(specialtyCode, kind) };
     }

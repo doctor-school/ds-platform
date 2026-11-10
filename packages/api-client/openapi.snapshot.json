@@ -6081,10 +6081,6 @@
                 {
                   "additionalProperties": false,
                   "properties": {
-                    "freeStatement": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
                     "items": {
                       "items": {
                         "additionalProperties": false,
@@ -6110,7 +6106,7 @@
                       "type": "string"
                     }
                   },
-                  "required": ["kind", "items", "freeStatement"],
+                  "required": ["kind", "items"],
                   "type": "object"
                 }
               ]

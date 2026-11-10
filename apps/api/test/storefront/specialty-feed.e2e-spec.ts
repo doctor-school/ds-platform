@@ -119,7 +119,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(feed.specialty.code).toBe(otherCode);
     });
 
-    it("018 EARS-7: the envelope carries «Зачем это мне» after the events block — four items closing on «Всё бесплатно для врача», with no read of its own", async () => {
+    it("018 EARS-7: the envelope carries «Зачем это мне» after the events block — its four items and nothing else, with no read of its own", async () => {
       const response = await read(code);
       const feed = SpecialtyFeedSchema.parse(response.json());
       const value = feed.blocks.find((block) => block.kind === "value");
@@ -143,7 +143,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
             body: "Сертификат — за полное прохождение курса.",
           },
         ],
-        freeStatement: "Всё бесплатно для врача",
       });
       expect(response.body).not.toContain(
         `/v1/storefront/feed/${encodeURIComponent(code)}/value`,

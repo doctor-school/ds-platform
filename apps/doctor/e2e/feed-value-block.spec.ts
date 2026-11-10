@@ -24,7 +24,6 @@ const ITEMS = [
   ["Наставничество у эксперта", "Разбор ваших случаев с автором школы."],
   ["Документ по итогам курса", "Сертификат — за полное прохождение курса."],
 ] as const;
-const FREE = "Всё бесплатно для врача";
 
 /** LD-9 / R:113 — wording that names or implies a financier of the learning. */
 const PARTNER_WORDING = /партн[её]р/i;
@@ -48,7 +47,7 @@ async function openFeed(page: Page, theme: "light" | "dark") {
   );
 }
 
-test("EARS-7: the value block renders its four items and closes on «Всё бесплатно для врача»", async ({
+test("EARS-7: the value block renders its four items and ends on them", async ({
   page,
 }) => {
   await openFeed(page, "light");
@@ -67,12 +66,9 @@ test("EARS-7: the value block renders its four items and closes on «Всё бе
     await expect(items.nth(index)).toContainText(body);
   }
 
-  // The block closes on the statement: it is the last text of the block, and
-  // the whole closing strip is that one statement.
-  const free = block.getByTestId("specialty-feed-value-free");
-  await expect(free).toHaveText(FREE);
+  // The block ends on the item list: no closing strip is built (LD-9).
   const text = (await block.innerText()).trim();
-  expect(text.endsWith(FREE)).toBe(true);
+  expect(text.endsWith(ITEMS[3]![1])).toBe(true);
 });
 
 test("EARS-7: the value block sits right after the events block", async ({
@@ -98,7 +94,6 @@ for (const width of [1440, 390]) {
       );
       // The feature's own text (poster band + every block): no payer wording.
       const feed = await page.getByTestId("specialty-feed").innerText();
-      expect(feed).toContain(FREE);
       for (const banned of PAYER_WORDING) {
         expect(feed, String(banned)).not.toMatch(banned);
       }

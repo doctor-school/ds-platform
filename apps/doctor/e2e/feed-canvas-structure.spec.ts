@@ -54,19 +54,21 @@ for (const width of [390, 1440]) {
  * 018 EARS-7 (#1502) — «Зачем это мне» against the canvas section
  * «d-feed · зачем это мне». The section has no controls, so the slot check
  * holds the chrome (none on either side); its built structure — eyebrow,
- * heading, the four items in order, the closing strip — is read as text on
- * both sides. The closing strip differs ON PURPOSE: the canvas strip names who
- * pays and adds the «вниманием» sentence, LD-9 keeps only the statement.
+ * heading, the four items in order — is read as text on both sides. The
+ * closing strip differs ON PURPOSE: the canvas carries one below the items,
+ * LD-9 builds none, so the built section ends on the item grid.
  */
 const VALUE_SECTION = '[data-screen-label="d-feed · зачем это мне"]';
 
-/** Eyebrow, heading, then each grid cell's title/body, then the strip, as visible text. */
+/** Eyebrow, heading, then each grid cell's title/body, then what follows the grid, as visible text. */
 async function readValueStructure(page: Page) {
   return page.evaluate((root) => {
     const section = document.querySelector(root);
     if (!section) throw new Error(`no section ${root}`);
     const box = section.firstElementChild as HTMLElement;
-    const [eyebrow, heading, grid, strip] = [...box.children] as HTMLElement[];
+    const [eyebrow, heading, grid, ...after] = [
+      ...box.children,
+    ] as HTMLElement[];
     const text = (el: Element) => (el as HTMLElement).innerText.trim();
     return {
       eyebrow: eyebrow!.textContent!.trim(),
@@ -74,9 +76,11 @@ async function readValueStructure(page: Page) {
       items: [...grid!.children].map((cell) =>
         [...cell.children].map((part) => text(part)),
       ),
-      strip: [...strip!.children].length
-        ? [...strip!.children].map((part) => text(part))
-        : [text(strip!)],
+      strip: after.flatMap((strip) =>
+        [...strip.children].length
+          ? [...strip.children].map((part) => text(part))
+          : [text(strip)],
+      ),
     };
   }, VALUE_SECTION);
 }
@@ -84,7 +88,7 @@ async function readValueStructure(page: Page) {
 for (const width of [390, 1440]) {
   test.describe(`#1502 feed value block ≡ doctor-feed canvas · guest · ${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
-    test("018 EARS-7: the value block has the canvas structure; the closing strip is the statement alone (LD-9)", async ({
+    test("018 EARS-7: the value block has the canvas structure; no closing strip is built (LD-9)", async ({
       page,
       context,
     }) => {
@@ -113,11 +117,10 @@ for (const width of [390, 1440]) {
       expect(built.heading).toBe(canvas.heading);
       expect(built.items).toEqual(canvas.items);
       expect(built.items).toHaveLength(4);
-      // The disclosed mismatch: the canvas strip carries the payer sentence
-      // and the «вниманием» line; the built strip is the statement alone.
+      // The disclosed mismatch: the canvas closes the section on a two-sentence
+      // strip; the built section has nothing after the item grid.
       expect(canvas.strip).toHaveLength(2);
-      expect(canvas.strip[0]).toContain("партнёры платформы");
-      expect(built.strip).toEqual(["Всё бесплатно для врача"]);
+      expect(built.strip).toEqual([]);
     });
   });
 }

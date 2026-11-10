@@ -4193,7 +4193,6 @@ export interface components {
                 kind: "events";
                 read: string;
             } | {
-                freeStatement: string;
                 items: {
                     body: string;
                     title: string;

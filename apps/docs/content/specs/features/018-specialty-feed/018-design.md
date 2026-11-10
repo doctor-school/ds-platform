@@ -109,7 +109,7 @@ The «Зачем это мне» block is editorial copy carried by the feed env
 | Ближайшие события | event cards + counter                | skeleton | «Общие события платформы →»                        | fewer cards, block stays      | «Не удалось загрузить события» + Повторить |
 | Школы и курсы     | cards, course as «N серий»           | skeleton | «По вашей специальности пока нет школ» + Смежные ↓ | «Готовится» card, block stays | reason + retry                             |
 | Уроки             | lesson of the day + «Все N уроков →» | skeleton | honest empty statement                             | block stays                   | reason + retry                             |
-| Зачем это мне     | four value items + free statement    | n/a      | unchanged (editorial)                              | unchanged                     | n/a                                        |
+| Зачем это мне     | four value items                     | n/a      | unchanged (editorial)                              | unchanged                     | n/a                                        |
 | Смежные области   | adjacent directions                  | skeleton | «нет смежных областей» statement                   | fewer entries                 | reason + retry                             |
 | Топ специальности | consented rows                       | skeleton | no consented doctors yet — stated                  | fewer rows                    | reason + retry                             |
 | Сообщества        | communities + link out               | skeleton | honest empty statement                             | fewer entries                 | reason + retry                             |

@@ -17,11 +17,10 @@ const BLOCK: FeedValueBlock = {
     { title: "Третий пункт", body: "Тело третьего." },
     { title: "Четвёртый пункт", body: "Тело четвёртого." },
   ],
-  freeStatement: "Утверждение из конверта",
 };
 
 describe("018 EARS-7: the value block renders the envelope's copy", () => {
-  it("EARS-7: eyebrow and heading, then the four items in envelope order, closing on the free statement", () => {
+  it("EARS-7: eyebrow and heading, then the four items in envelope order — and nothing after them", () => {
     const html = renderToStaticMarkup(
       <SpecialtyFeedValueBlock block={BLOCK} />,
     );
@@ -33,16 +32,15 @@ describe("018 EARS-7: the value block renders the envelope's copy", () => {
       "Ценность",
       "Зачем это мне",
       ...BLOCK.items.flatMap((item) => [item.title, item.body]),
-      BLOCK.freeStatement,
     ].map((text) => html.indexOf(text));
     expect(at.every((index) => index >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
-    expect(html.trimEnd().lastIndexOf(BLOCK.freeStatement)).toBeGreaterThan(
-      html.lastIndexOf(BLOCK.items[3]!.body),
-    );
+    // The block ends on the item list: no closing strip, no empty container.
+    expect(html).not.toContain("specialty-feed-value-free");
+    expect(html).toMatch(/<\/ul><\/div><\/section>$/);
   });
 
-  it("EARS-7: the block adds no wording of its own beside the statement — no payer, no marking", () => {
+  it("EARS-7: the block adds no wording of its own beside the items — no payer, no marking", () => {
     const html = renderToStaticMarkup(
       <SpecialtyFeedValueBlock block={BLOCK} />,
     );

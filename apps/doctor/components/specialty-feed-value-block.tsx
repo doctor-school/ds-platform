@@ -7,12 +7,12 @@ const COPY = {
 } as const;
 
 /**
- * 018 EARS-7 (#1502) — «Зачем это мне». The items and the closing statement
- * are the envelope's editorial copy (018-design §1: no read, no error state),
- * so the block renders exactly what it is given.
+ * 018 EARS-7 (#1502) — «Зачем это мне». The four items are the envelope's
+ * editorial copy (018-design §1: no read, no error state), so the block
+ * renders exactly what it is given and ends on them.
  *
- * The canvas closing strip carries two more sentences; LD-9 keeps only the
- * statement — the strip is that one line, with nothing beside it.
+ * The canvas closing strip is not built (LD-9): the block makes no statement
+ * about money or who pays.
  */
 export function SpecialtyFeedValueBlock({ block }: { block: FeedValueBlock }) {
   return (
@@ -52,12 +52,6 @@ export function SpecialtyFeedValueBlock({ block }: { block: FeedValueBlock }) {
             </li>
           ))}
         </ul>
-        <p
-          className="mt-0.5 bg-tint px-5 py-4 text-sm font-extrabold text-tint-foreground"
-          data-testid="specialty-feed-value-free"
-        >
-          {block.freeStatement}
-        </p>
       </div>
     </section>
   );

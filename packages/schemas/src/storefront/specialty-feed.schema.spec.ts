@@ -16,11 +16,10 @@ const value: FeedValueBlock = {
     { title: "Третья", body: "Тело третьей." },
     { title: "Четвёртая", body: "Тело четвёртой." },
   ],
-  freeStatement: "Всё бесплатно для врача",
 };
 
 describe("018 EARS-7: the «Зачем это мне» value block of the feed envelope", () => {
-  it("EARS-7: the value block is editorial copy carried by the envelope — four items and the free statement, no read", () => {
+  it("EARS-7: the value block is editorial copy carried by the envelope — four items, no read", () => {
     expect(FEED_VALUE_ITEM_COUNT).toBe(4);
     const parsed = FeedBlockSchema.parse(value);
     expect(parsed).toEqual(value);
@@ -44,7 +43,7 @@ describe("018 EARS-7: the «Зачем это мне» value block of the feed e
     ).toBe(false);
   });
 
-  it("EARS-7: no payer, marking or attribution can travel beside the statement — the block and its items are strict", () => {
+  it("EARS-7: no payer, marking or attribution can travel beside the items — the block and its items are strict", () => {
     for (const extra of ["payer", "partner", "marking", "sponsor"]) {
       expect(
         FeedValueBlockSchema.safeParse({ ...value, [extra]: "x" }).success,
@@ -64,7 +63,7 @@ describe("018 EARS-7: the «Зачем это мне» value block of the feed e
       FeedBlockSchema.safeParse({
         kind: "events",
         read: "/v1/storefront/feed/x/events",
-        freeStatement: "x",
+        items: value.items,
       }).success,
     ).toBe(false);
   });

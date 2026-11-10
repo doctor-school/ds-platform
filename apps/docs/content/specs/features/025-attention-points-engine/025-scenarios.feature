@@ -48,6 +48,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then the answer is "duplicate" and nothing is posted
 
   @EARS-15 @EARS-20
+  @points-advance-boundaries
   Scenario: Advance covers the shortfall and later earnings settle it
     Given "A" has 20 Pul available
     And an advance-mode event "E2" priced 50 Pul
@@ -58,6 +59,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then 10 Pul settle the obligation first and 20 Pul remain to be earned back
 
   @EARS-15
+  @points-advance-boundaries
   Scenario: A doctor who arrived on a medical representative's link gets the same conditions
     Given doctor "B" arrived on a medical representative's personal link and has 20 Pul
     When "B" registers for the advance-mode event "E2" priced 50 Pul
@@ -65,6 +67,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     And the postings carry the attribution of the medical representative only
 
   @EARS-13 @EARS-16 @EARS-17 @failure
+  @points-advance-boundaries
   Scenario: Beyond the advance cap the event behaves as threshold
     Given "A" has 150 Pul of open obligations and 0 Pul available
     When "A" asks to reserve for another advance-mode event priced 50 Pul

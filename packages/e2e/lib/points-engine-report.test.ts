@@ -3,6 +3,7 @@ import {
   assertPointsEngineReport,
   assertPointsRecordBoundariesReport,
   assertPointsReserveBoundariesReport,
+  assertPointsAdvanceBoundariesReport,
 } from "./points-engine-report.js";
 
 const previous = [
@@ -20,6 +21,11 @@ const reserves = [
   "A fourth concurrent limited-seat reserve is refused",
   "A quote equals the enforced decision and writes nothing",
   "Concurrent reserves never overdraw the balance",
+];
+const advances = [
+  "Advance covers the shortfall and later earnings settle it",
+  "A doctor who arrived on a medical representative's link gets the same conditions",
+  "Beyond the advance cap the event behaves as threshold",
 ];
 
 function report(titles: readonly string[]) {
@@ -46,11 +52,12 @@ function report(titles: readonly string[]) {
 for (const [scope, titles, assertReport] of [
   [
     "full contour",
-    [...previous, ...boundaries, ...reserves],
+    [...previous, ...boundaries, ...reserves, ...advances],
     assertPointsEngineReport,
   ],
   ["previous wave", boundaries, assertPointsRecordBoundariesReport],
   ["new wave", reserves, assertPointsReserveBoundariesReport],
+  ["advance wave", advances, assertPointsAdvanceBoundariesReport],
 ] as const) {
   describe("025 " + scope + " execution receipt", () => {
     it("EARS-4/8/31: accepts its exact source originals passing once", () => {
@@ -110,6 +117,14 @@ it("EARS-4/8/31: the new-wave receipt cannot accept the preceding three", () => 
   expect(() => assertPointsRecordBoundariesReport(report(previous))).toThrow(
     /identity/,
   );
+});
+
+it("EARS-15/16/20: advance receipt refuses every preceding wave", () => {
+  for (const titles of [previous, boundaries, reserves]) {
+    expect(() => assertPointsAdvanceBoundariesReport(report(titles))).toThrow(
+      /identity/,
+    );
+  }
 });
 
 it("EARS-13/21/22/41: reserve receipt refuses either preceding wave", () => {

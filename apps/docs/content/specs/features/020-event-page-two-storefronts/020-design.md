@@ -192,6 +192,8 @@ erDiagram
 
 The tab is URL state, not component state: a shared link reproduces the tab, the back button moves between tabs rather than off the page, and a reload keeps it. `switch-to-online` therefore lands the doctor on the «онлайн» tab from the server's resolution, with no client-side redirect and no flash of the offline tab. No waiting list exists in the model, so none can be half-built in the UI.
 
+`seatsLeft` is the one stored seat figure, operator-set and counted down by the registration write itself (LD-5): the first registration on an `offline` event, or on a `hybrid` event while offline seats remain, locks the event row and takes one seat in the same transaction as the registration insert and the points reserve; a pure offline event with no seat left refuses that transaction as `sold-out`, a hybrid one registers the online half and takes nothing. `seatsLeft = null` (no limit) and an `online` event are never counted, and an idempotent repeat takes no second seat. The registration carries no participation mode, so on a hybrid event every registration made while offline seats remain takes one — the order the CTA offers them in (`register`, then `switch-to-online`). No path ends a registration yet, so none returns a seat; the cancel and void producers return it in their own transaction when they land (#3884).
+
 ## 6. Build sequence — core → policy → composition → hosts
 
 1. **Core.** Widen `PublicEventPageSchema` into `EventPageView` and extend `EventLifecycleState` with `cancelled-or-moved` at their canonical owners (`packages/schemas/src/events/`, `apps/api/src/events/`), with the `FormatBlock` union and the `mode` codec. Proved by Vitest e2e on the read; no route publishes.

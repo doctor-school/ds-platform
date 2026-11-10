@@ -28,6 +28,20 @@ non-`published`/`live` state is a 409, a missing or retired event a 404. The
 command also applies the 020 participation policy's `participationSoldOut`
 (020 EARS-9): a pure offline event with no seats left is a 409 with
 `reason: "sold-out"`, unless the caller already holds a registration.
+That read is unlocked; the seat itself is taken in the registration's
+transaction (020 EARS-9 / LD-5, `takeOfflineSeat`): the first insert on an
+`offline` event, or on a `hybrid` event while offline seats remain, locks the
+event row `FOR NO KEY UPDATE` and counts `events.seats_left` down by one, in the
+same transaction as the audit row and the 025 points reserve. A lost race for
+the last seat of a pure offline event rolls the insert back and is the same
+409 `sold-out`; a hybrid event with no seat left registers the online half.
+`seats_left = null` (no limit) and `online` events are never counted, and an
+idempotent repeat takes no second seat. The registration carries no
+participation mode, so every hybrid registration made while offline seats
+remain takes one. No path ends a registration yet, so none returns a seat
+(cancel/void producers: #3884). The 044 congress intake (site and desk,
+`CongressSignUpService`) is a separate write path with no seat limit by spec
+(044 EARS-28) and does not touch `seats_left`.
 
 **EARS-6** adds the `MyEvents` «Мои события» read; **014 EARS-9** splits it across
 the surface's two canvas tabs (014-design §8.3):

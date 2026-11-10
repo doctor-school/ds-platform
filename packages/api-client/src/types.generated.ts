@@ -1332,6 +1332,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/points/starter-bonus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PointsStarterBonusAdminController_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/project-experts": {
         parameters: {
             query?: never;
@@ -3906,6 +3922,16 @@ export interface components {
                 }[];
             }[];
         };
+        PointsStarterBonusRunDto: {
+            applied: number;
+            duplicate: number;
+            noEffect: number;
+            /** Format: date-time */
+            registeredBefore: string;
+            /** Format: uuid */
+            runId: string;
+            skipped: number;
+        };
         PostChatMessageRequestDto: {
             text: string;
         };
@@ -4047,6 +4073,11 @@ export interface components {
         };
         RequestPhoneCodeRequestDto: {
             phone: string;
+        };
+        RunPointsStarterBonusRequestDto: {
+            reason: string;
+            /** Format: date-time */
+            registeredBefore: string;
         };
         SetDisplayNameRequestDto: {
             displayName: string;
@@ -6351,6 +6382,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublishedPointsRuleVersionDto"];
+                };
+            };
+        };
+    };
+    PointsStarterBonusAdminController_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunPointsStarterBonusRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointsStarterBonusRunDto"];
                 };
             };
         };

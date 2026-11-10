@@ -10,6 +10,8 @@ import { PointsPricesService } from "./points-prices.service.js";
 import { PointsReadAdminController } from "./points-read.admin.controller.js";
 import { PointsAdminReadService } from "./points-admin-read.service.js";
 import { PointsRulesAdminController } from "./points-rules.admin.controller.js";
+import { PointsStarterBonusAdminController } from "./points-starter-bonus.admin.controller.js";
+import { PointsStarterBonusService } from "./points-starter-bonus.service.js";
 import { RuleBookService } from "./rule-book.service.js";
 
 /**
@@ -20,7 +22,8 @@ import { RuleBookService } from "./rule-book.service.js";
  * `PointsEngine.record` over the fact-type catalog with rules as data; #3810
  * the spend slice — the price list (`PUT /v1/admin/points/prices/:itemRef`),
  * the hold effects, `quote`, the gating read and the no-show sweep; #3841 the admin read API
- * (`GET /v1/admin/points/{fact-types,rules,facts}`).
+ * (`GET /v1/admin/points/{fact-types,rules,facts}`); #3840 the starter-bonus
+ * run (`POST /v1/admin/points/starter-bonus`).
  * `TaxonomyModule` is imported for the shared 012 admin problem filter (and
  * the `IdempotencyService` it injects); `DatabaseModule` is global, so
  * `DRIZZLE_DB` needs no import here.
@@ -31,6 +34,7 @@ import { RuleBookService } from "./rule-book.service.js";
     PointsRulesAdminController,
     PointsPricesAdminController,
     PointsReadAdminController,
+    PointsStarterBonusAdminController,
     PointsMeController,
   ],
   providers: [
@@ -41,6 +45,7 @@ import { RuleBookService } from "./rule-book.service.js";
     PointsPricesService,
     PointsNoShowSweep,
     PointsAdminReadService,
+    PointsStarterBonusService,
   ],
   exports: [
     PointsLedgerService,

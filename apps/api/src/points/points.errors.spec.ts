@@ -62,6 +62,14 @@ describe("PointsLedgerError — rule book", () => {
     ).toBe(422);
   });
 
+  it("025 EARS-43: a starter-bonus run with no active rule refuses with problem points-starter-bonus-no-rule (422)", () => {
+    const body = new PointsLedgerError(
+      "POINTS_STARTER_BONUS_NO_RULE",
+    ).toProblemDetails("t");
+    expect(body.type.endsWith("/points-starter-bonus-no-rule")).toBe(true);
+    expect(body.status).toBe(422);
+  });
+
   it("025 EARS-30: no points-* problem detail calls a Pul price «бесплатно», points «баллы» or anything free", () => {
     for (const code of POINTS_LEDGER_ERROR_CODES) {
       const body = new PointsLedgerError(code, "detail").toProblemDetails(

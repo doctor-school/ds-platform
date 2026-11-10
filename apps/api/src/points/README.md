@@ -61,6 +61,15 @@ Rules are data: a rule or setting is a version of one body schema, and a produce
 - `GET /v1/admin/points/facts?personId=&cursor=&limit=` (same row) → `FactJournalPage`: the person's `points_facts` rows newest first by (`received_at`, `event_id`) — the `points_facts_person_received_idx` order — each `{ eventId, type, ref?, occurredAt, receivedAt, outcome, trace }`, the trace as stored (EARS-40). Page size as the posting history (`POINTS_FACT_JOURNAL_LIMIT`: default 50, 1…100); the cursor is base64url of the last row's microsecond `received_at` and text `event_id` (`points-history-cursor.ts`). A missing or non-uuid `personId`, an out-of-range `limit` or a foreign cursor → 400 `points-facts-query-invalid`. An unknown person reads an empty page. Attributes and attribution are not part of the read model; no person identifier is added beyond what a trace holds.
 - Authz: an admin-session principal without `platform_admin` → 403; no admin session (a doctor's portal session included) → 401. Reads, so `revalidate: none` and no audit row — the posture of the platform's other admin reads of person data (044 participant card, `audit: low-stakes`).
 
+## Starter-bonus run (EARS-43)
+
+`POST /v1/admin/points/starter-bonus { registeredBefore, reason }` (`PointsStarterBonusAdminController` → `PointsStarterBonusService`, 025-design §J) → `PointsStarterBonusRun { runId, registeredBefore, applied, duplicate, noEffect, skipped }`.
+
+- Refusals before anything is written: 422 `points-starter-bonus-no-rule` unless an active rule version (in its validity window) triggers on `person.starter-bonus-eligible`; 422 `points-rule-parameters-invalid` (field `registeredBefore`) for an instant later than now; 400 for a missing or blank reason.
+- The run: one opening `audit_ledger` record `points.starter-bonus.started` (subject = the admin `sub`; metadata `runId`, `reason`, `registeredBefore`), then a keyset walk of `users` with `role = doctor_guest` (staff are not doctors, `auth/staff-role.ts`) and `created_at < registeredBefore`, 500 by id. A doctor with a closed points account is `skipped`; every other one gets `record(person.starter-bonus-eligible)` in its own transaction with event id `starter-bonus:<personId>` and `attributes: { runId }`, counted by the outcome `record` answers. The closing record `points.starter-bonus.completed` carries the counts.
+- The seeded `accrual.starter-bonus` [+20 Pul] credits it `oncePer(subject)` under the shared key `welcome`, so a doctor who already has the registration grant answers `duplicate`, and a doctor granted here gets no registration grant later. A re-run — or the resume of a run cut short — answers `duplicate` for every granted doctor. Publishing the rule never starts a run.
+- Authz: `platform_admin` only, `revalidate: live`; without it 403, no admin session 401.
+
 ## Invariants the database enforces
 
 - Postings are immutable: a `BEFORE UPDATE OR DELETE` trigger refuses every row, and the same for `points_posting_keys` (EARS-27, EARS-4).
@@ -74,4 +83,4 @@ Rules are data: a rule or setting is a version of one body schema, and a produce
 
 ## Not here yet
 
-Per-action award conditions and the remaining producer wiring (#3809; the EARS-10 engagement producers wait for 020 wave 2, #3879), the cancel / void producers (#3884), advance, the obligation writer and `reserve-with-advance` (#3811), leaderboard (#3812), corrections and aggregates (#3814), referral award and its monthly cap (#3816), admin UI (#3815). No `PointsCredited` subscriber exists; the starter-bonus run (EARS-43) is not built yet. No expiry posting exists anywhere (EARS-22). The doctor-visible price (`eventEconomyFacts()` `pulCost`) still reads 0 until the owner's Stage A (DEBT.md).
+Per-action award conditions and the remaining producer wiring (#3809; the EARS-10 engagement producers wait for 020 wave 2, #3879), the cancel / void producers (#3884), advance, the obligation writer and `reserve-with-advance` (#3811), leaderboard (#3812), corrections and aggregates (#3814), referral award and its monthly cap (#3816), admin UI (#3815). No `PointsCredited` subscriber exists. No expiry posting exists anywhere (EARS-22). The doctor-visible price (`eventEconomyFacts()` `pulCost`) still reads 0 until the owner's Stage A (DEBT.md).

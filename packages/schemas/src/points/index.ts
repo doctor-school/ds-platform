@@ -171,3 +171,9 @@ export {
   type PointsRuleBookEntry,
   type PointsRuleBookVersion,
 } from "./admin-read.js";
+export {
+  PointsStarterBonusRunSchema,
+  RunPointsStarterBonusRequestSchema,
+  type PointsStarterBonusRun,
+  type RunPointsStarterBonusRequest,
+} from "./starter-bonus.js";

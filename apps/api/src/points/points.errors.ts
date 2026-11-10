@@ -40,6 +40,8 @@ export const POINTS_LEDGER_ERROR_STATUS: Readonly<
   POINTS_GATING_INVALID: 422,
   // 400: the gating read's item ref is malformed (EARS-13).
   POINTS_ITEM_REF_INVALID: 400,
+  // 422: a starter-bonus run with no active rule on its trigger (EARS-43).
+  POINTS_STARTER_BONUS_NO_RULE: 422,
 };
 
 const POINTS_LEDGER_ERROR_TITLE: Readonly<
@@ -61,6 +63,8 @@ const POINTS_LEDGER_ERROR_TITLE: Readonly<
     "Too many open reserves on limited-seat items",
   POINTS_GATING_INVALID: "This price-list row is not allowed for the item",
   POINTS_ITEM_REF_INVALID: "The item reference is invalid",
+  POINTS_STARTER_BONUS_NO_RULE:
+    "No active rule grants the starter bonus",
 };
 
 /** Problem `type` slug: `POINTS_ACCOUNT_CLOSED` → `points-account-closed`. */

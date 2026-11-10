@@ -1,3 +1,8 @@
+import {
+  assertLegacyReceipt,
+  legacyTitles,
+  type LegacyReceipt,
+} from "./legacy-transition.js";
 import { assertOperationalReport } from "../api-probes/operational-report.js";
 
 export const recordingAttachmentTitles = [
@@ -30,8 +35,12 @@ export function assertRecordingAttachmentReport(
   assertOperationalReport(
     value,
     scope === "new"
-      ? recordingLifecycleTitles
-      : [...recordingAttachmentTitles, ...recordingLifecycleTitles],
+      ? legacyTitles
+      : [
+          ...recordingAttachmentTitles,
+          ...recordingLifecycleTitles,
+          ...legacyTitles,
+        ],
     "recording-attachment",
   );
   type Suite = {
@@ -83,10 +92,13 @@ export function assertRecordingAttachmentReport(
         Buffer.from(attachments[0]!.body!, "base64").toString("utf8"),
       ) as {
         sourceHost: string;
+        legacy?: LegacyReceipt;
         caseKind?: string;
         caseState?: string;
         backgrounds: { clause: string; evidence: unknown[] }[];
       };
+      if (legacyTitles.includes(spec.title as (typeof legacyTitles)[number]))
+        assertLegacyReceipt(receipt.legacy!, spec.title);
       const clauses = [
         "ended-only",
         "hidden-exclusion",
@@ -130,10 +142,11 @@ export function assertRecordingAttachmentReport(
             `${title.startsWith("Example #") ? attachmentOutline : rule}/${title}`,
         )
       : []),
-    ...recordingLifecycleTitles.map(
+    ...(scope === "full" ? recordingLifecycleTitles : []).map(
       (title) =>
         `${title.startsWith("Example #") ? lifecycleOutline : rule}/${title}`,
     ),
+    ...legacyTitles.map((title) => `${rule}/${title}`),
   ];
   if (JSON.stringify(identities.sort()) !== JSON.stringify(expected.sort()))
     throw new Error("Source outline/case identity mismatch");

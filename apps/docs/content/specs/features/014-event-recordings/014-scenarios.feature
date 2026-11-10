@@ -166,6 +166,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And its direct link renders the feature 004 notice
 
     @EARS-25 @core @happy
+    @recording-legacy-transitions
     Scenario: An archival broadcast with a published recording is archived
       Given a hidden legacy event carrying a published non-retired recording
       When the operator invokes «Архивировать» with If-Match and an Idempotency-Key
@@ -173,6 +174,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And exactly one feature 010 audit row is appended
 
     @EARS-25 @core @failure
+    @recording-legacy-transitions
     Scenario: An archival broadcast with nothing to play cannot be archived
       Given a hidden legacy event whose only recording is still draft
       When the operator invokes «Архивировать»
@@ -180,6 +182,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And the event state is unchanged
 
     @EARS-25 @core @happy
+    @recording-legacy-transitions
     Scenario: An archived broadcast is hidden again
       Given a legacy event in state in_archive
       When the operator invokes «Скрыть» with If-Match and an Idempotency-Key

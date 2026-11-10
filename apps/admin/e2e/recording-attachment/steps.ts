@@ -7,6 +7,14 @@ import { createBdd } from "playwright-bdd";
 import { Pool, type QueryResultRow } from "pg";
 import { adminOrigin, test } from "../support/fixtures";
 
+import {
+  LegacyTransitionProof,
+  legacyTitles,
+  type LegacyAnswer,
+  type PublicLists,
+  type PublicListBody,
+} from "../../../../packages/e2e/lib/legacy-transition";
+
 import { RecordingLifecycleProof } from "../../../../packages/e2e/lib/recording-lifecycle";
 
 const { Given, When, Then, Before, After } = createBdd(test);
@@ -23,11 +31,13 @@ type Answer = {
   body: Recording & { errorCode?: string; [key: string]: unknown };
   etag: string | null;
   location: string | null;
+  request: LegacyAnswer["request"];
 };
 type State = {
   caseKind?: string;
   caseState?: string;
   lifecycle?: RecordingLifecycleProof;
+  legacy?: LegacyTransitionProof;
   backgrounds: { clause: string; evidence: unknown[] }[];
   events: Event[];
   visitor?: APIRequestContext;
@@ -64,6 +74,7 @@ async function sql<T extends QueryResultRow = QueryResultRow>(
     !(
       database === "ds_dev_3851" ||
       database === "ds_dev_3929" ||
+      database === "ds_dev_3932" ||
       (process.env.CI === "true" && database === "ds_admin_e2e")
     ) ||
     new URL(url).pathname !== `/${database}`
@@ -88,6 +99,7 @@ async function api(
   version?: number,
   defect?: "key" | "etag",
 ): Promise<Answer> {
+  op(`${method} ${path}`, { phase: "before" });
   const result = await page.evaluate(
     async ({ path, method, body, version, defect }) => {
       const headers: Record<string, string> = {};
@@ -110,6 +122,13 @@ async function api(
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       return {
+        request: {
+          method,
+          path,
+          ifMatch: headers["if-match"] ?? "",
+          idempotencyKey: headers["idempotency-key"] ?? "",
+          transport: "api",
+        },
         status: response.status,
         body: await response.json(),
         etag: response.headers.get("etag"),
@@ -181,6 +200,7 @@ Before(async ({ page, browser, playwright, $tags, $testInfo }) => {
   const visitor = await playwright.request.newContext({ baseURL: origin });
   state(page).visitor = visitor;
   state(page).portal = await browser.newPage({ baseURL: origin });
+  op("provision exact owned Admin actor", { origin: adminOrigin() });
   const credentials = await bootstrapAdminSession(adminOrigin());
   op("owned account", { email: credentials.email });
   const actors = await sql<{ id: string; zitadel_sub: string }>(
@@ -536,6 +556,13 @@ When("attaches a new raw recording", async ({ page }) => {
     body: await attach(page, state(page).event!, "raw"),
     etag: 'W/"1"',
     location: null,
+    request: {
+      method: "POST",
+      path: path(state(page).event!),
+      ifMatch: "",
+      idempotencyKey: "",
+      transport: "api",
+    },
   };
 });
 Then(
@@ -617,7 +644,8 @@ When("the operator publishes that recording", async ({ page }) => {
   await lifecycle(page).attemptPublish();
 });
 Then("the request fails with 409 EVENT_NOT_FINISHED", async ({ page }) => {
-  await lifecycle(page).rejected();
+  if (state(page).legacy) await legacy(page).verify();
+  else await lifecycle(page).rejected();
 });
 Then("the recording is still draft", async ({ page }) => {
   await lifecycle(page).unchangedDraft();
@@ -640,6 +668,189 @@ Then(
 Then("no 014-specific audit table was introduced", async ({ page }) => {
   await lifecycle(page).noSpecificAuditTable();
 });
+function legacy(page: Page) {
+  const value = state(page);
+  return (value.legacy ??= new LegacyTransitionProof({
+    actor: () => value.operator!.zitadel_sub,
+    snapshot: async (id) =>
+      (
+        await sql("SELECT to_jsonb(e) AS row FROM events e WHERE id=$1", [id])
+      )[0]!.row,
+    audits: (id) =>
+      sql(
+        "SELECT id,event_type,subject_id,metadata FROM audit_ledger WHERE metadata->>'aggregateId'=$1 OR (metadata->>'table'='events' AND metadata->'pk'->>'id'=$1) ORDER BY id",
+        [id],
+      ),
+    create: async (published) => {
+      const lists = await legacyLists(page);
+      const horizonToday = (lists[0]!.body as PublicListBody).horizon.today;
+      expect(horizonToday).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      const day = new Date(
+        Date.parse(`${horizonToday}T12:00:00Z`) - 2 * 86400000,
+      )
+        .toISOString()
+        .slice(0, 10);
+      const heldAtMsk = `${day}T12:00`;
+      const kinds = await sql(
+        "SELECT id FROM event_kinds WHERE status='published' AND 'online'=ANY(allowed_formats) LIMIT 1",
+      );
+      expect(kinds).toHaveLength(1);
+      const created = await api(page, "/v1/admin/legacy-broadcasts", "POST", {
+        title: `Legacy broadcast 3932 ${randomUUID()}`,
+        heldAtMsk,
+        durationMin: 60,
+        kindId: kinds[0]!.id,
+        participationFormat: "online",
+        audience: "experts",
+        recording: payload("edited"),
+      });
+      expect(created.status, JSON.stringify(created.body)).toBe(201);
+      const target = { id: created.body.id, slug: String(created.body.slug) };
+      value.events.push(target);
+      expect(created.body).toMatchObject({
+        origin: "legacy",
+        state: "hidden",
+        audience: "experts",
+      });
+      const rows = await sql(
+        "SELECT id,kind,version,status,deleted_at FROM event_recordings WHERE event_id=$1",
+        [target.id],
+      );
+      expect(rows).toHaveLength(1);
+      let recording = {
+        ...rows[0],
+        deletedAt: rows[0]!.deleted_at,
+      } as Recording;
+      if (published)
+        recording = await command(page, target, recording, "publish");
+      return {
+        ...target,
+        heldAtMsk,
+        horizonToday,
+        audience: "experts",
+        recording,
+      };
+    },
+    transition: async (id, action, version, click) => {
+      const endpoint = `/v1/admin/events/${id}/${action}`;
+      if (!click) return api(page, endpoint, "POST", undefined, version);
+      await page.goto(`/events/${id}`);
+      await expect(page.getByTestId(`action-${action}`)).toBeVisible();
+      const pending = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === endpoint &&
+          response.request().method() === "POST",
+      );
+      op(`Admin click action-${action}`, { id, version });
+      await page.getByTestId(`action-${action}`).click();
+      const response = await pending;
+      const headers = await response.request().allHeaders();
+      const answer = {
+        status: response.status(),
+        body: await response.json(),
+        request: {
+          method: response.request().method(),
+          path: new URL(response.url()).pathname,
+          ifMatch: headers["if-match"] ?? "",
+          idempotencyKey: headers["idempotency-key"] ?? "",
+          transport: "admin-click",
+        },
+      };
+      op(`Admin result ${action}`, answer);
+      expect(answer.status).toBe(200);
+      await expect(
+        page.getByTestId(
+          `state-${action === "archive-legacy" ? "in_archive" : "hidden"}`,
+        ),
+      ).toBeVisible();
+      return answer;
+    },
+    absentAction: async (id) => {
+      const detail = await api(page, `/v1/admin/events/${id}`);
+      expect(detail.body.validTransitions).toEqual([]);
+      await page.goto(`/events/${id}`);
+      await expect(page.getByTestId("state-hidden")).toBeVisible();
+      await expect(page.getByTestId("action-archive-legacy")).toHaveCount(0);
+      return true;
+    },
+    publicLists: () => legacyLists(page),
+    hiddenNotice: async (slug) => {
+      await value.portal!.goto(`/webinars/${slug}`);
+      await expect(
+        value.portal!.getByText("Скрыто", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        value.portal!.getByText(
+          "Мероприятие скрыто — участие в нём больше не предлагается",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(value.portal!.getByTestId("recording-plaque")).toHaveCount(
+        0,
+      );
+      return true;
+    },
+  }));
+}
+async function legacyLists(page: Page): Promise<PublicLists> {
+  const lists: PublicLists = [];
+  for (const query of ["timeframe=upcoming", "timeframe=past", ""]) {
+    op(`anonymous GET /v1/public/events?${query}`);
+    const response = await state(page).visitor!.get(
+      `/v1/public/events${query ? `?${query}` : ""}`,
+    );
+    expect(response.status()).toBe(200);
+    lists.push({ query, body: await response.json() });
+  }
+  return lists;
+}
+Given(
+  "a hidden legacy event carrying a published non-retired recording",
+  async ({ page }) => {
+    await legacy(page).prepare(legacyTitles[0]);
+  },
+);
+Given(
+  "a hidden legacy event whose only recording is still draft",
+  async ({ page }) => {
+    await legacy(page).prepare(legacyTitles[1]);
+  },
+);
+Given("a legacy event in state in_archive", async ({ page }) => {
+  await legacy(page).prepare(legacyTitles[2]);
+});
+When(
+  "the operator invokes «Архивировать» with If-Match and an Idempotency-Key",
+  async ({ page }) => {
+    await legacy(page).invoke();
+  },
+);
+When("the operator invokes «Архивировать»", async ({ page }) => {
+  await legacy(page).invoke();
+});
+When(
+  "the operator invokes «Скрыть» with If-Match and an Idempotency-Key",
+  async ({ page }) => {
+    await legacy(page).invoke(true);
+  },
+);
+Then("the event state becomes in_archive", async ({ page }) => {
+  await legacy(page).assertState("in_archive");
+});
+Then("the event state becomes hidden", async ({ page }) => {
+  await legacy(page).assertState("hidden");
+});
+Then("the event state is unchanged", async ({ page }) => {
+  await legacy(page).verify();
+});
+Then("exactly one feature 010 audit row is appended", async ({ page }) => {
+  if (legacy(page).receipt!.identity === legacyTitles[2])
+    await legacy(page).excluded();
+  else await legacy(page).verify();
+});
+Then("it appears in no listing, tab or count", async ({ page }) => {
+  await legacy(page).excluded();
+});
 After(async ({ page, $testInfo }) => {
   const value = state(page);
   await $testInfo.attach("recording-attachment", {
@@ -649,6 +860,7 @@ After(async ({ page, $testInfo }) => {
       caseKind: value.caseKind,
       caseState: value.caseState,
       lifecycle: value.lifecycle?.evidence,
+      legacy: value.legacy?.receipt,
       backgrounds: value.backgrounds,
     }),
   });

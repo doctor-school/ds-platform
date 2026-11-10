@@ -1,3 +1,8 @@
+import {
+  legacyTitles,
+  type PublicListBody,
+  type LegacyReceipt,
+} from "./legacy-transition.js";
 import { describe, expect, it } from "vitest";
 import {
   assertRecordingAttachmentReport as assertRawReport,
@@ -20,6 +25,9 @@ function report() {
     "Example #3",
     "Example #4",
     "Every committed recording mutation is audited",
+    "An archival broadcast with a published recording is archived",
+    "An archival broadcast with nothing to play cannot be archived",
+    "An archived broadcast is hidden again",
   ];
   const specs = titles.map((title, index) => ({
     title,
@@ -39,6 +47,7 @@ function report() {
                 body: Buffer.from(
                   JSON.stringify({
                     sourceHost: "academy",
+                    legacy: index >= 10 ? legacyReceipt(title) : undefined,
                     caseKind:
                       index === 0 ? "raw" : index === 1 ? "edited" : undefined,
                     caseState:
@@ -129,10 +138,12 @@ function assertRecordingAttachmentReport(
   );
 }
 describe("014 attachment receipts", () => {
-  it("accepts only the six new cases with an explicit narrow scope", () => {
+  it("accepts only the three legacy cases with an explicit narrow scope", () => {
     const value = report();
     value.suites[0]!.specs = [];
-    value.suites[1]!.specs = value.suites[1]!.specs.slice(2);
+    value.suites[1]!.specs = [];
+    value.suites[2]!.specs = [];
+    value.suites[3]!.specs = value.suites[3]!.specs.slice(1);
     expect(() => assertRecordingAttachmentReport(value, "new")).not.toThrow();
     expect(() => assertRecordingAttachmentReport(value)).toThrow();
     expect(() => assertRecordingAttachmentReport(report(), "new")).toThrow();
@@ -147,7 +158,7 @@ describe("014 attachment receipts", () => {
       /identity/,
     );
   });
-  it("accepts exactly ten cases, both outlines and 60 Background groups", () => {
+  it("accepts exactly thirteen cases, both outlines and 78 Background groups", () => {
     expect(() => assertRecordingAttachmentReport(report())).not.toThrow();
   });
   it("rejects green labels without the executed Background receipt", () => {
@@ -244,4 +255,177 @@ it("rejects flaky, failed, duplicate results and the wrong project", () => {
     change(value.suites[2]!.specs[0]!.tests[0]!);
     expect(() => assertRecordingAttachmentReport(value)).toThrow();
   }
+});
+
+function legacyReceipt(title: string): LegacyReceipt {
+  const hide = title === legacyTitles[2],
+    refusal = title === legacyTitles[1];
+  const from = hide ? "in_archive" : "hidden",
+    to = hide ? "hidden" : "in_archive";
+  const before = {
+    id: "owned",
+    origin: "legacy",
+    state: from,
+    audience: "experts",
+    version: 1,
+  };
+  const after = refusal ? { ...before } : { ...before, state: to, version: 2 };
+  const list = (present: boolean): LegacyReceipt["publicBefore"] =>
+    ["timeframe=upcoming", "timeframe=past", ""].map((query) => ({
+      query,
+      body:
+        query === ""
+          ? []
+          : {
+              data:
+                present && query !== "timeframe=upcoming"
+                  ? [{ id: "owned" }]
+                  : [],
+              counts: { past: present ? 1 : 0, upcoming: 0 },
+              horizon: { today: "2026-11-10" },
+            },
+    }));
+  return {
+    identity: title,
+    actor: "actor",
+    fixture: {
+      id: "owned",
+      slug: "owned-slug",
+      heldAtMsk: "2026-11-08T12:00",
+      horizonToday: "2026-11-10",
+      audience: "experts",
+      recording: { status: refusal ? "draft" : "published", deletedAt: null },
+    },
+    before,
+    after,
+    auditBefore: [],
+    auditAfter: refusal
+      ? []
+      : [
+          {
+            id: "named",
+            event_type: `event.${hide ? "hidden" : "archived"}_legacy`,
+            subject_id: "actor",
+            metadata: { aggregateId: "owned", from, to },
+          },
+          {
+            id: "generic",
+            event_type: "data.events.update",
+            subject_id: "actor",
+            metadata: {
+              table: "events",
+              pk: { id: "owned" },
+              source: "admin-ui",
+              txid: "1",
+              diff: {
+                state: { old: from, new: to },
+                version: { old: 1, new: 2 },
+              },
+            },
+          },
+        ],
+    answer: {
+      status: refusal ? 409 : 200,
+      body: refusal ? { errorCode: "EVENT_NOT_FINISHED" } : { state: to },
+      request: {
+        method: "POST",
+        path: `/v1/admin/events/owned/${hide ? "hide-legacy" : "archive-legacy"}`,
+        ifMatch: 'W/"1"',
+        idempotencyKey: "12345678-1234-4123-8123-123456789abc",
+        transport: refusal ? "api" : "admin-click",
+      },
+    },
+    absentAction: refusal,
+    publicBefore: hide ? list(true) : undefined,
+    publicAfter: hide ? list(false) : undefined,
+    hiddenNotice: hide,
+  };
+}
+function corruptLegacy(change: (receipt: LegacyReceipt) => void, index = 1) {
+  const value = report();
+  const attachment =
+    value.suites[3]!.specs[index]!.tests[0]!.results[0]!.attachments[0]!;
+  const receipt = JSON.parse(
+    Buffer.from(attachment.body, "base64").toString("utf8"),
+  );
+  change(receipt.legacy);
+  attachment.body = Buffer.from(JSON.stringify(receipt)).toString("base64");
+  return value;
+}
+it("rejects a legacy receipt with the wrong actor, protocol, named audit or independent diff", () => {
+  for (const change of [
+    (r: LegacyReceipt) => {
+      r.actor = "wrong";
+    },
+    (r: LegacyReceipt) => {
+      r.answer.request.ifMatch = 'W/"99"';
+    },
+    (r: LegacyReceipt) => {
+      r.answer.request.idempotencyKey = "invalid";
+    },
+    (r: LegacyReceipt) => {
+      r.answer.request.transport = "api";
+    },
+    (r: LegacyReceipt) => {
+      r.before.state = "draft";
+    },
+    (r: LegacyReceipt) => {
+      r.fixture.recording.status = "draft";
+    },
+    (r: LegacyReceipt) => {
+      r.auditAfter[0]!.event_type = "event.ended";
+    },
+    (r: LegacyReceipt) => {
+      r.auditAfter[0]!.metadata = {
+        aggregateId: "wrong",
+        from: "hidden",
+        to: "in_archive",
+      };
+    },
+    (r: LegacyReceipt) => {
+      r.auditAfter.push(r.auditAfter[0]!);
+    },
+    (r: LegacyReceipt) => {
+      (r.auditAfter[1]!.metadata as Record<string, unknown>).diff = {};
+    },
+  ])
+    expect(() =>
+      assertRecordingAttachmentReport(corruptLegacy(change)),
+    ).toThrow();
+});
+it("rejects refusal changes or audit writes and missing pre-hide membership/count proof", () => {
+  for (const change of [
+    (r: LegacyReceipt) => {
+      r.after.state = "in_archive";
+    },
+    (r: LegacyReceipt) => {
+      r.auditAfter.push({ id: "unexpected" });
+    },
+    (r: LegacyReceipt) => {
+      r.absentAction = false;
+    },
+    (r: LegacyReceipt) => {
+      r.answer.status = 200;
+    },
+  ])
+    expect(() =>
+      assertRecordingAttachmentReport(corruptLegacy(change, 2)),
+    ).toThrow();
+  for (const change of [
+    (r: LegacyReceipt) => {
+      (r.publicBefore![1]!.body as PublicListBody).data = [];
+    },
+    (r: LegacyReceipt) => {
+      (r.publicAfter![1]!.body as PublicListBody).counts.past = 1;
+    },
+    (r: LegacyReceipt) => {
+      r.hiddenNotice = false;
+    },
+    (r: LegacyReceipt) => {
+      (r.publicAfter![1]!.body as PublicListBody).data = [{ id: "owned" }];
+    },
+  ])
+    expect(() =>
+      assertRecordingAttachmentReport(corruptLegacy(change, 3)),
+    ).toThrow();
 });

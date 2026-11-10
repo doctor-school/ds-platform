@@ -212,7 +212,7 @@ describe("006 EARS-6 WebinarCard — room-entry CTA slot (no nested anchor)", ()
  * 019 EARS-2 — the shared card widened to the full doctor-feed format
  * vocabulary. This is the spec's Verification row 2: the route-independent
  * shared-card proof (all five formats distinguishable, sign-up count in every
- * state, offline city and seats, zero cost as «бесплатно для врача», no rouble
+ * state, offline city and seats, a zero cost rendering no cost chip, no rouble
  * string). Route mounting and screen-local tree checks belong to #1516.
  */
 const FORMAT_KICKERS = [
@@ -230,7 +230,6 @@ const FEED = {
   nmoLabel: "НМО · 2 ЗЕТ",
   pulCost: 120,
   pulCostLabel: "120 Pul",
-  freeLabel: "бесплатно для врача",
   signUpCount: 128,
   signUpLabel: "Коллег записались",
 };
@@ -274,10 +273,10 @@ describe("019 EARS-2 WebinarCard — the five formats", () => {
 });
 
 describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", () => {
-  it("019 EARS-2.4: a zero Pul cost renders «бесплатно для врача» and no rouble string", () => {
+  it("019 EARS-2.4: a zero Pul cost renders no cost chip and no rouble string", () => {
     const { container } = render(<WebinarCard {...FEED} pulCost={0} />);
-    expect(screen.getByText("бесплатно для врача")).toBeInTheDocument();
     expect(screen.queryByText("120 Pul")).toBeNull();
+    expect(container.querySelector("[data-event-cost]")).toBeNull();
     expect(container.textContent).not.toMatch(/₽|руб/i);
   });
 

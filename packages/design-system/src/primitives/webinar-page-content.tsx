@@ -67,7 +67,10 @@ export interface WebinarPageContentProps
   programDownloadLabel: string;
   /** «Спикеры» section label (copy from the catalog). */
   speakersLabel: string;
-  /** «При поддержке» sponsor-plate eyebrow (copy from the catalog). */
+  /**
+   * The sponsor plate's eyebrow — the legally required partner-material mark
+   * «Партнёрский материал» (copy from the catalog). Never a who-pays phrase.
+   */
   sponsorEyebrow: string;
 }
 

@@ -139,15 +139,14 @@ export interface WebinarCardProps extends Omit<
   /** Venue chip copy — «Онлайн» / «Офлайн» / «Гибрид»; joined with {@link city} when present. */
   venueLabel?: string;
   /**
-   * Cost in Pul attention points. `0` renders `freeLabel` («бесплатно для
-   * врача»); any other value renders `pulCostLabel`. The card renders NO rouble
-   * string in either branch — there is no rouble prop to render one from.
+   * Cost in Pul attention points. `0` renders NO cost chip — the interface
+   * makes no statement about money (#2534); any other value renders
+   * `pulCostLabel`. The card renders NO rouble string — there is no rouble
+   * prop to render one from.
    */
   pulCost?: number;
   /** Catalog copy for a non-zero Pul cost, e.g. «120 Pul». */
   pulCostLabel?: string;
-  /** Catalog copy for a zero Pul cost — «бесплатно для врача». */
-  freeLabel?: string;
   /** Colleagues signed up — rendered in EVERY card state (EARS-2 invariant). */
   signUpCount?: number;
   /** Catalog label preceding the count after a colon, e.g. «Коллег записались» → «Коллег записались: 128». */
@@ -209,7 +208,6 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
       venueLabel,
       pulCost,
       pulCostLabel,
-      freeLabel,
       signUpCount,
       signUpLabel,
       city,
@@ -227,9 +225,9 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
     // the time plate (WCAG AA) — never a whole-card opacity, which pushes the
     // plate ink below 4.5:1 (#2565; the canvas .82 opacity is a canvas defect).
     const plateInk = past ? "text-muted-foreground" : "text-tint-foreground";
-    // EARS-2: the cost reads in Pul, and a zero cost reads «бесплатно для
-    // врача». There is no rouble branch because there is no rouble input.
-    const costLabel = pulCost === 0 ? freeLabel : pulCostLabel;
+    // EARS-2: the cost reads in Pul, and a zero cost reads nothing (#2534).
+    // There is no rouble branch because there is no rouble input.
+    const costLabel = pulCost === 0 ? undefined : pulCostLabel;
     // «мест не осталось» is the seat count reaching zero — one state, one source.
     const soldOut = seatsLeft === 0;
     // The canvas venue chip carries the city inside it («Офлайн · Казань»); the

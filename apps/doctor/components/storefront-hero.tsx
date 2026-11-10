@@ -44,12 +44,12 @@ export function StorefrontHero() {
           19px past the 358px box at 390px and scrolled the whole page sideways.
         */}
         <h1 className="text-3xl font-extrabold leading-tight tracking-tight text-balance layout:text-6xl">
-          Doctor.School — бесплатное образование для врачей
+          Doctor.School — образование для врачей
         </h1>
 
         <p className="mt-6 max-w-prose text-base font-medium leading-relaxed text-hero-muted layout:text-lg">
           Выберите специальность — получите школы, курсы, уроки и события своей и
-          смежных областей. Обучение бесплатно.
+          смежных областей.
         </p>
 
         <ScaleCounters />
@@ -58,7 +58,7 @@ export function StorefrontHero() {
           data-testid="hero-goal"
           className="mt-9 inline-block border-2 border-header-hairline px-5 py-3.5 text-sm font-extrabold"
         >
-          Создаём бесплатное децентрализованное медицинское образование
+          Создаём децентрализованное медицинское образование
         </p>
       </div>
     </section>

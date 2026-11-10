@@ -28,7 +28,7 @@ describe("<EventSignupCard>", () => {
       <EventSignupCard
         {...base}
         conditions={[
-          { label: "Участие", value: "Бесплатно для врача" },
+          { label: "Участие", value: "250 Pul" },
           { label: "Длительность", value: "90 минут" },
         ]}
         cta={cta()}
@@ -43,7 +43,7 @@ describe("<EventSignupCard>", () => {
       "data-cta-action",
       "register",
     );
-    expect(screen.getByText("Бесплатно для врача")).toBeInTheDocument();
+    expect(screen.getByText("250 Pul")).toBeInTheDocument();
     expect(
       screen.getByText("Нужна регистрация — вернём вас на эту страницу."),
     ).toBeInTheDocument();
@@ -359,7 +359,7 @@ describe("<EventSignupCard>", () => {
       render(
         <EventSignupCard
           {...base}
-          conditions={[{ label: "Участие", value: "Бесплатно для врача" }]}
+          conditions={[{ label: "Участие", value: "250 Pul" }]}
           cta={cta({
             action,
             label: "Действие",

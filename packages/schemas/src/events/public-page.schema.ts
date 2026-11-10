@@ -120,14 +120,15 @@ export const EventPageViewBaseSchema = z.object({
    */
   nmo: z.boolean(),
   /**
-   * 020 EARS-4 / EARS-12 (#1766) — cost in Pul attention points; `0` is the
-   * free-for-the-doctor reading, rendered as «Бесплатно для врача». NEVER
+   * 020 EARS-4 / EARS-12 (#1766) — cost in Pul attention points; `0` renders
+   * nothing — no participation-cost row (#2534); a positive value renders
+   * «N Pul». NEVER
    * roubles: the page carries no financing statement and no commerce
    * (020-requirements §invariants), and Pul is an attention unit, not a price.
    *
    * Required rather than optional: #1780 records the cost as the per-event
    * parameter it is, and an absent field would leave a consumer unable to tell
-   * «free» from «this read does not know».
+   * «zero» from «this read does not know».
    */
   pulCost: z.number().int().nonnegative(),
   description: z.string(),

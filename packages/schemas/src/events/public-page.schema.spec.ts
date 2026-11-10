@@ -64,7 +64,7 @@ describe("AroundEvent", () => {
  * время · длительность · НМО · стоимость в Pul», so the two economy facts must
  * be part of the read model rather than a rendering assumption. The rules under
  * test are the ones that keep the page honest: both facts are REQUIRED (a
- * consumer can never confuse «бесплатно» with «this read does not know»), and
+ * consumer can never confuse a zero cost with «this read does not know»), and
  * the cost is a whole non-negative count of Pul attention points — never a
  * fraction, never a negative, never roubles.
  */

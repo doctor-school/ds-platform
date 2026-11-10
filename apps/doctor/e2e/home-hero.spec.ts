@@ -57,14 +57,18 @@ test.describe("017 EARS-2: home hero and the four scale counters", () => {
     await expect(
       page.getByRole("heading", {
         level: 1,
-        name: "Doctor.School — бесплатное образование для врачей",
+        name: "Doctor.School — образование для врачей",
       }),
     ).toBeVisible();
-    await expect(hero.getByText("Обучение бесплатно.")).toBeVisible();
+    await expect(
+      hero.getByText(
+        "Выберите специальность — получите школы, курсы, уроки и события своей и смежных областей.",
+      ),
+    ).toBeVisible();
 
     const goal = page.getByTestId("hero-goal");
     await expect(goal).toHaveText(
-      "Создаём бесплатное децентрализованное медицинское образование",
+      "Создаём децентрализованное медицинское образование",
     );
     // No gloss and no «готовится» marker anywhere beside it.
     await expect(page.locator("body")).not.toContainText(/готовится|скоро/i);
@@ -176,7 +180,7 @@ test.describe("017 EARS-2: home hero and the four scale counters", () => {
     await expect(
       page.getByRole("heading", {
         level: 1,
-        name: "Doctor.School — бесплатное образование для врачей",
+        name: "Doctor.School — образование для врачей",
       }),
     ).toBeVisible();
     await expect(page.getByTestId("hero-goal")).toBeVisible();
@@ -278,7 +282,7 @@ test.describe("017 EARS-14.1: the hero heading wraps inside the mobile viewport 
 
       const heading = page.getByRole("heading", {
         level: 1,
-        name: "Doctor.School — бесплатное образование для врачей",
+        name: "Doctor.School — образование для врачей",
       });
       await expect(heading).toBeVisible();
       expect(

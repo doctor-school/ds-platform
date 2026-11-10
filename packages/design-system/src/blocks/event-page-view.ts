@@ -58,8 +58,6 @@ export interface EventPageCopy {
   conditionFormat: string;
   conditionDuration: string;
   conditionPrice: string;
-  /** The zero-cost participation reading — 020 EARS-12, never roubles. */
-  priceFree: string;
   /**
    * The unit a NON-zero participation cost is counted in — «250 Pul». Pul are
    * attention points, so the unit is deliberately not a currency symbol: 020
@@ -151,7 +149,6 @@ export const EVENT_PAGE_COPY: EventPageCopy = {
   conditionFormat: "Формат",
   conditionDuration: "Длительность",
   conditionPrice: "Участие",
-  priceFree: "Бесплатно для врача",
   pulUnit: "Pul",
   conditionNmo: "НМО",
   nmoCredited: "Баллы начисляются",
@@ -456,31 +453,24 @@ export function eventSignupCardProps(
 ): EventSignupCardProps {
   const { time, date, weekday, zoneLabel } = eventPageTimeParts(view);
   // Canvas:181-198 order — Участие · Формат · Длительность · НМО. «Участие»
-  // leads: the cost is the fact that decides whether a doctor reads any of the
-  // rest, and the canvas sets the FREE reading in the success tone for exactly
-  // that reason — a non-zero Pul cost is a neutral fact, not good news, so it
-  // keeps the default tone. The fourth row now comes from the read model
+  // leads when it is present: a NON-zero Pul cost reads «N Pul» in the default
+  // tone — a neutral fact, not good news. A zero cost states nothing (020
+  // EARS-12, #2534): the interface makes no statement about money or who pays,
+  // so there is no «Участие» row at all. The НМО row comes from the read model
   // (`view.nmo`, #1766) and is ABSENT when the event credits nothing: «нет» or
   // a greyed placeholder would be a claim the page has no business making.
   //
   // An ENDED event offers no participation, so it states no participation
-  // cost: canvas `phase: прошло` carries no «Участие» row, and «Бесплатно для
-  // врача» under «Событие завершилось» would price a thing nobody can take
-  // (020 EARS-19, #2072 comment 6217460822).
+  // cost at all: canvas `phase: прошло` carries no «Участие» row (020 EARS-19,
+  // #2072 comment 6217460822).
   const conditions: EventSignupCondition[] = [
-    ...(view.state === "ended"
+    ...(view.state === "ended" || view.pulCost === 0
       ? []
       : [
-          view.pulCost === 0
-            ? ({
-                label: copy.conditionPrice,
-                value: copy.priceFree,
-                tone: "success",
-              } satisfies EventSignupCondition)
-            : {
-                label: copy.conditionPrice,
-                value: `${view.pulCost} ${copy.pulUnit}`,
-              },
+          {
+            label: copy.conditionPrice,
+            value: `${view.pulCost} ${copy.pulUnit}`,
+          },
         ]),
     { label: copy.conditionFormat, value: copy.formatDetail[view.format] },
     {
@@ -511,9 +501,8 @@ export function eventSignupCardProps(
  *   and back to this page.
  * - **signed in, not registered** (`ctaJoin`) — no detour is coming, so the
  *   return promise would be untrue; the doctor reads what the press costs, in
- *   the event's own Pul. A zero-cost event debits nothing and says nothing —
- *   never «бесплатно» under the control (the conditions row already states
- *   the free reading).
+ *   the event's own Pul. A zero-cost event debits nothing and says nothing
+ *   about money (020 EARS-12, #2534).
  */
 function signupNote(
   view: EventPageView,

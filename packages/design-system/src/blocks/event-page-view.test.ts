@@ -135,11 +135,7 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     const rows =
       eventSignupCardProps(VIEW, REGISTER_CTA, GUEST).conditions ?? [];
     expect(rows.some((row) => row.label === "НМО")).toBe(false);
-    expect(rows[0]).toEqual({
-      label: "Участие",
-      value: "Бесплатно для врача",
-      tone: "success",
-    });
+    expect(rows[0]).toEqual({ label: "Формат", value: "Онлайн · комната эфира" });
   });
 
   it("020 EARS-4.5: an accredited event carries the НМО chip LAST, after the specialties", () => {
@@ -270,25 +266,23 @@ describe("020 EARS-1 — shared event-page view projection", () => {
   });
 
   it("020 EARS-1: the sign-up conditions follow the canvas order, wording and accent (#1779)", () => {
-    // Canvas:206-228 — «Участие» leads in the success tone, and the format row
-    // says WHERE the doctor goes («Онлайн · комната эфира»), not just the
-    // one-word format the hero kicker carries. The owner's Stage-B round-1
-    // rejection was this exact row set.
+    // Canvas:206-228 — the format row says WHERE the doctor goes («Онлайн ·
+    // комната эфира»), not just the one-word format the hero kicker carries. A
+    // zero Pul cost states nothing (#2534): the interface makes no statement
+    // about money, so there is no «Участие» row at all.
     expect(eventSignupCardProps(VIEW, REGISTER_CTA, GUEST).conditions).toEqual([
-      { label: "Участие", value: "Бесплатно для врача", tone: "success" },
       { label: "Формат", value: "Онлайн · комната эфира" },
       { label: "Длительность", value: "90 минут" },
     ]);
   });
 
-  it("020 EARS-4.4: a non-zero cost reads as Pul attention points, in the default tone", () => {
+  it("020 EARS-4.4: a non-zero cost reads as Pul attention points", () => {
     // Pul are attention points, never roubles, and a cost is a neutral fact
-    // rather than good news — only the FREE reading earns the success accent.
+    // rather than good news.
     const rows =
       eventSignupCardProps({ ...VIEW, pulCost: 250 }, REGISTER_CTA, GUEST)
         .conditions ?? [];
     expect(rows[0]).toEqual({ label: "Участие", value: "250 Pul" });
-    expect(rows.filter((row) => row.tone === "success")).toHaveLength(0);
     expect(
       rows.some(
         (row) => typeof row.value === "string" && /₽|руб/i.test(row.value),
@@ -296,12 +290,11 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     ).toBe(false);
   });
 
-  it("020 EARS-4.5: the НМО row is the FOURTH condition, right after Длительность", () => {
+  it("020 EARS-4.5: the НМО row is the LAST condition, right after Длительность", () => {
     expect(
       eventSignupCardProps({ ...VIEW, nmo: true }, REGISTER_CTA, GUEST)
         .conditions,
     ).toEqual([
-      { label: "Участие", value: "Бесплатно для врача", tone: "success" },
       { label: "Формат", value: "Онлайн · комната эфира" },
       { label: "Длительность", value: "90 минут" },
       { label: "НМО", value: "Баллы начисляются" },
@@ -315,7 +308,7 @@ describe("020 EARS-1 — shared event-page view projection", () => {
       (eventSignupCardProps(view, REGISTER_CTA, GUEST).conditions ?? []).map(
         (row) => row.label,
       );
-    expect(labels(VIEW)).toEqual(["Участие", "Формат", "Длительность"]);
+    expect(labels(VIEW)).toEqual(["Формат", "Длительность"]);
     expect(labels({ ...VIEW, nmo: true, pulCost: 250 })).toEqual([
       "Участие",
       "Формат",
@@ -324,18 +317,19 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     ]);
   });
 
-  it("020 EARS-1: only the price row carries the success accent (#1779)", () => {
+  it("020 EARS-12: a zero Pul cost renders no participation-cost row (#2534)", () => {
     const rows =
       eventSignupCardProps(VIEW, REGISTER_CTA, GUEST).conditions ?? [];
-    expect(rows.filter((row) => row.tone === "success")).toHaveLength(1);
-    expect(rows[0]?.tone).toBe("success");
+    expect(rows.map((row) => row.label)).not.toContain(
+      EVENT_PAGE_COPY.conditionPrice,
+    );
   });
 
   it("020 EARS-1: an offline event's format row names the format without a room (#1779)", () => {
     const rows =
       eventSignupCardProps({ ...VIEW, format: "offline" }, REGISTER_CTA, GUEST)
         .conditions ?? [];
-    expect(rows[1]).toEqual({ label: "Формат", value: "Очно" });
+    expect(rows[0]).toEqual({ label: "Формат", value: "Очно" });
   });
 
   it("020 EARS-1: the plate countdown is calendar days in МСК, RU-pluralised (#1779)", () => {
@@ -414,13 +408,13 @@ describe("020 EARS-1 — shared event-page view projection", () => {
   });
 
   it("020 EARS-18: a host copy override changes words, never the mapping shape", () => {
-    const doctorCopy = { ...EVENT_PAGE_COPY, priceFree: "бесплатно" };
+    const doctorCopy = { ...EVENT_PAGE_COPY, minutes: "мин" };
     const shared = eventSignupCardProps(VIEW, REGISTER_CTA, GUEST);
     const doctor = eventSignupCardProps(VIEW, REGISTER_CTA, GUEST, doctorCopy);
     expect(doctor.conditions?.map((row) => row.label)).toEqual(
       shared.conditions?.map((row) => row.label),
     );
-    expect(doctor.conditions?.[0]?.value).toBe("бесплатно");
+    expect(doctor.conditions?.[1]?.value).toBe("90 мин");
   });
 });
 

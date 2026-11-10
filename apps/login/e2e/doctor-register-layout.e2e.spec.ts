@@ -18,7 +18,7 @@ const DOOR = doorPath("doctor", "register");
  * bans the *request*: "no upload control, no file input, no document field and no
  * «прикрепите диплом» copy". It does not ban the promise — and the owner's canvas
  * (#2027, `design-source/auth.dc.html`) carries the soft terms in ONE sentence,
- * the card subtitle «Бесплатно, за две минуты — нужны только e-mail и пароль.»,
+ * the card subtitle «За две минуты — нужны только e-mail и пароль.»,
  * instead of the former second line «Документы на входе не нужны.». So 1.3 scans
  * for request-shaped tells and asserts the subtitle that states the soft terms,
  * instead of banning a substring. The scan stays scoped to the registration
@@ -57,7 +57,7 @@ const DOCUMENT_REQUEST_TELLS = [
 
 /** The soft terms as the canvas states them in the card head (#2027). */
 const SOFT_TERMS_SUBTITLE =
-  "Бесплатно, за две минуты — нужны только e-mail и пароль.";
+  "За две минуты — нужны только e-mail и пароль.";
 
 async function assertNoDocumentRequest(page: Page, state: string) {
   // No upload affordance anywhere on the document, in any state.

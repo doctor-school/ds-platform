@@ -1652,9 +1652,8 @@ function CheckboxSection() {
       <SubRow label="Wrapped label — the box stays square (#2027)">
         <div className="max-w-64">
           <Checkbox className="items-start">
-            Согласие на передачу данных партнёрам платформы. Это условие
-            бесплатного для врача обучения: без согласия часть материалов
-            недоступна.
+            Согласие на передачу данных партнёрам платформы. Без этого
+            согласия часть материалов недоступна.
           </Checkbox>
         </div>
       </SubRow>
@@ -2300,8 +2299,7 @@ function WebinarCardSection() {
         approved canvas draws it: the format/kind reads from the time-plate{" "}
         <span className="font-medium text-foreground">kicker</span> («Вебинар»,
         «Разбор», «Doctor Club», «Подкаст», «Конгресс»), and the one chip row
-        carries the venue with the offline city, НМО, the Pul cost («бесплатно
-        для врача» at zero, never roubles), the sign-up count — present in every
+        carries the venue with the offline city, НМО, the Pul cost (no chip at zero, never roubles), the sign-up count — present in every
         card state — and the seats. Zero seats re-words that chip to «мест не
         осталось». A congress date span rides the time-plate sub-label.
       </p>
@@ -2365,7 +2363,6 @@ function WebinarCardSection() {
                   title={variant.title}
                   speakers={[{ name: "Анна Соколова", org: "К.м.н." }]}
                   nmoLabel="НМО · 2 ЗЕТ"
-                  freeLabel="бесплатно для врача"
                   pulCostLabel="120 Pul"
                   signUpLabel="Коллег записались"
                   seatsLeftLabel="мест осталось"
@@ -2545,7 +2542,7 @@ const DOCTOR_FEED_CARDS = [
     },
   },
   {
-    label: "kicker «Разбор» · бесплатно для врача",
+    label: "kicker «Разбор» · zero Pul cost — no cost chip",
     title: "Разбор клинического случая с экспертом",
     props: {
       formatLabel: "Разбор",
@@ -2646,7 +2643,7 @@ function WebinarPageContentSection() {
               programLabel="Программа"
               programDownloadLabel="Скачать программу (PDF)"
               speakersLabel="Спикеры"
-              sponsorEyebrow="При поддержке"
+              sponsorEyebrow="Партнёрский материал"
             />
           </div>
         )}
@@ -2663,7 +2660,7 @@ function WebinarStatusCardSection() {
       time: "19:00",
       timeSub: "16 июля · МСК · 90 мин",
       head: "Регистрация открыта",
-      sub: "Бесплатно. Пришлём ссылку на почту и напомним за час до старта.",
+      sub: "Пришлём ссылку на почту и напомним за час до старта.",
       cta: "Участвовать",
       live: false,
     },
@@ -2673,7 +2670,7 @@ function WebinarStatusCardSection() {
       time: "19:00",
       timeSub: "16 июля · МСК · идёт",
       head: "Эфир уже идёт",
-      sub: "Бесплатно. Нужна регистрация врача — почта и специальность, две минуты.",
+      sub: "Нужна регистрация врача — почта и специальность, две минуты.",
       cta: "Участвовать",
       live: true,
     },

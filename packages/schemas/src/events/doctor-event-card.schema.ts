@@ -39,7 +39,7 @@ export type DoctorEventCardState = z.infer<typeof DoctorEventCardStateSchema>;
 /**
  * The exact `PublicEventSummary` read model of 019's Event Model section — the
  * card payload. `pulCost` is attention points, never roubles, and `pulCost === 0`
- * renders «бесплатно для врача». `city`/`seatsLeft` are present exactly for an
+ * renders no cost chip (#2534). `city`/`seatsLeft` are present exactly for an
  * offline-carrying event (`offline` or `hybrid`).
  */
 export const DoctorEventCardSchema = z

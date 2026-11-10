@@ -14,16 +14,18 @@ import { StorefrontHero } from "@/components/storefront-hero";
 const COMPUTED_AT = "2026-08-26T09:00:00.000Z";
 
 describe("017 EARS-2: hero copy is the canvas copy", () => {
-  it("017 EARS-2.1: the hero renders kicker, headline, free sub-line and the goal VERBATIM", () => {
+  it("017 EARS-2.1: the hero renders kicker, headline, sub-line and the goal VERBATIM", () => {
     const html = renderToStaticMarkup(<StorefrontHero />);
 
     expect(html).toContain("Медицинская образовательная платформа");
     expect(html).toContain(
-      "Doctor.School — бесплатное образование для врачей",
+      "Doctor.School — образование для врачей",
     );
-    expect(html).toContain("Обучение бесплатно.");
     expect(html).toContain(
-      "Создаём бесплатное децентрализованное медицинское образование",
+      "Выберите специальность — получите школы, курсы, уроки и события своей и смежных областей.",
+    );
+    expect(html).toContain(
+      "Создаём децентрализованное медицинское образование",
     );
     // Verbatim means verbatim: no gloss appended to the goal and no readiness
     // marker beside it (EARS-2).

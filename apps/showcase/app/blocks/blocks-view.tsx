@@ -3882,10 +3882,6 @@ const EVENT_PAGE_CTA: Record<ShowcaseCta["action"], ShowcaseCta> = {
 };
 
 const EVENT_PAGE_CONDITIONS = [
-  {
-    label: "Участие",
-    value: <span className="text-success-text">Бесплатно для врача</span>,
-  },
   { label: "Формат", value: "Онлайн · комната эфира" },
   {
     label: "Длительность",

@@ -128,7 +128,7 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
   },
   register: {
     title: "Создание аккаунта",
-    description: "Бесплатно, за две минуты — нужны только e-mail и пароль.",
+    description: "За две минуты — нужны только e-mail и пароль.",
     emailLabel: "Электронная почта",
     emailPlaceholder: "doctor@example.com",
     passwordLabel: "Пароль",
@@ -221,7 +221,7 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
     },
     partnerDataItem: {
       label: "Согласие на передачу данных партнёрам платформы",
-      help: "Это условие бесплатного для врача обучения: без согласия часть материалов недоступна.",
+      help: "Без этого согласия часть материалов недоступна.",
       unmet:
         "Отметьте согласие на передачу данных партнёрам — без него регистрация невозможна.",
     },

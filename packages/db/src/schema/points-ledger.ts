@@ -416,9 +416,10 @@ export const pointsReserves = pgTable(
 );
 
 /**
- * EARS-35 / EARS-20 — the advance obligation projection, per obligation. The
- * advance itself ships with #3811; the table ships here so the
- * `PointsAccount.advance` read (EARS-2) is read from it from the start.
+ * EARS-35 / EARS-15 / EARS-20 — the advance obligation projection, per
+ * obligation: opened by an advance-covered reserve, netted by later Pul
+ * credits, annulled with its released hold; `PointsAccount.advance` (EARS-2)
+ * is read from it.
  */
 export const pointsObligations = pgTable(
   "points_obligations",

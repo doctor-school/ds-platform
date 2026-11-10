@@ -13,7 +13,7 @@ import {
   verifyPhone,
 } from "./spend-harness.js";
 
-// 025 EARS-13 / EARS-41 (#3810) — `GET /v1/me/points/gating/:itemRef` is
+// 025 EARS-13 / EARS-41 (#3810, advance #3811) — `GET /v1/me/points/gating/:itemRef` is
 // `quote` of a draft `registration.created`: every decision branch for an
 // event and a non-event item, never a negative number, equal to what
 // `record` then enforces, and nothing written. An account-state refusal is
@@ -133,6 +133,50 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(decision.earnHint?.lessonsNeeded).toBe(
         credit > 0 ? Math.ceil(80 / credit) : null,
       );
+    });
+
+    it("EARS-13/41: reserve-with-advance on an advance-mode event short of Pul within the cap — the quote writes nothing and the sign-up's record does what it said", async () => {
+      const { cookie, personId } = await doctor(h);
+      await verifyPhone(h, personId);
+      await fund(h, personId, 10);
+      const item = await pricedItem(h, { mode: "advance", pulCost: 50 });
+
+      const before = await writes();
+      const decision = await decisionOf(item, cookie);
+      expect(await writes()).toBe(before);
+      expect(decision).toMatchObject({
+        mode: "advance",
+        pulCost: 50,
+        decision: "reserve-with-advance",
+        reservedFromBalance: 10,
+        coveredByAdvance: 40,
+        shortfall: 0,
+      });
+      expect(decision.earnHint).toBeUndefined();
+      const fact = signUp(personId, item);
+      const recorded = await h.engine.record(fact);
+      expect(
+        recorded.applied
+          .flatMap((a) => a.postings)
+          .map((p) => [p.leg, p.amount])
+          .sort(),
+      ).toEqual([
+        ["reserve:advance", 40],
+        ["reserve:balance", 10],
+      ]);
+    });
+
+    it("EARS-13: pulToEarn of a short decision nets the remaining open obligations (shortfall + remaining)", async () => {
+      const { cookie, personId } = await doctor(h);
+      await verifyPhone(h, personId);
+      const advance = await pricedItem(h, { mode: "advance", pulCost: 40 });
+      await h.engine.record(signUp(personId, advance));
+      const item = await pricedItem(h, { mode: "threshold", pulCost: 30 });
+      expect(await decisionOf(item, cookie)).toMatchObject({
+        decision: "short",
+        shortfall: 30,
+        earnHint: { pulToEarn: 70 },
+      });
     });
 
     it("EARS-13: an unverified phone and the limited-seat reserve limit are blocked decisions carrying the problem slug, not refusals", async () => {

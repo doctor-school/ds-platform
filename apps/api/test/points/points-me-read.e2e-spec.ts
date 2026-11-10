@@ -210,9 +210,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           presenceSharePercent: 100,
         },
       });
-      // The advance projection: its writer ships with the advance slice
-      // (#3811), so the read is driven from a projection row here — an
-      // obligation of 6 on the held reserve, 4 of it netted.
+      // The read takes `advance` from the obligation projection alone, so it
+      // is driven from a projection row here — an obligation of 6 on the
+      // held reserve, 4 of it netted (the writer: points-advance.e2e-spec).
       await pool.query(
         `INSERT INTO points_obligations
            (person_account_id, registration_id, opened, netted, remaining, state, opened_at)

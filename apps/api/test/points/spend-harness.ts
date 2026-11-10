@@ -272,3 +272,30 @@ export async function seedEvent(
   );
   return id;
 }
+
+/** The obligation projection row of a registration (025 EARS-15, EARS-20), or undefined. */
+export async function obligationOf(h: SpendHarness, registrationId: unknown) {
+  const { rows } = await h.pool.query<{
+    id: string;
+    opened: number;
+    netted: number;
+    remaining: number;
+    state: string;
+  }>(
+    "SELECT id, opened, netted, remaining, state FROM points_obligations WHERE registration_id = $1",
+    [registrationId],
+  );
+  return rows[0];
+}
+
+/** An online `lesson.completed` of a fresh lesson (the seeded `accrual.lesson` credits Pul). */
+export function lessonDone(personId: string): PointsRecordFact {
+  return {
+    type: "lesson.completed",
+    eventId: `e2e-lesson:${randomUUID()}`,
+    personId,
+    ref: randomUUID(),
+    occurredAt: new Date(),
+    attributes: { mode: "online" },
+  };
+}

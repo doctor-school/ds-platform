@@ -92,6 +92,7 @@ const GOLDEN_ACCOUNT_SPECS = [
   /[\\/]event-page-registered\.spec\.ts$/,
   /[\\/]my-events\.spec\.ts$/,
   /[\\/]return-to-origin\.spec\.ts$/,
+  /[\\/]room-canvas-structure-live\.spec\.ts$/,
   /[\\/]room-chat\.spec\.ts$/,
   /[\\/]room-presence-count\.spec\.ts$/,
   /[\\/]room-presence-visibility\.spec\.ts$/,

@@ -32,10 +32,15 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  */
 export default defineConfig({
   testDir: "./e2e",
-  // The two files of this tier: the behaviour spec and its a11y twin. Playwright
+  // The files of this tier: the behaviour spec, its a11y twin and the room's
+  // canvas-structure check (#3892). Playwright
   // normalises the tested path to POSIX separators before matching, so `/` here is
   // correct on Windows and Linux alike (no drive letters, no `\` classes).
-  testMatch: [/(^|\/)room\.spec\.ts$/, /a11y\/room-axe\.e2e\.spec\.ts$/],
+  testMatch: [
+    /(^|\/)room\.spec\.ts$/,
+    /a11y\/room-axe\.e2e\.spec\.ts$/,
+    /(^|\/)room-canvas-structure-live\.spec\.ts$/,
+  ],
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

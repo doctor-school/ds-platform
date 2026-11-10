@@ -18,11 +18,11 @@ import {
 // stack (Fastify + the 011 admin session + Postgres). The doctors "registered
 // before the engine" are fresh accounts whose `users.created_at` is moved to
 // BEFORE_ENGINE (a fixture precondition), and the run's `registeredBefore` is
-// CUT_OVER — so a run walks only such backdated doctors, never every account
-// the stand holds, and a doctor registered now is after the instant. A doctor
-// backdated by an earlier run of this file was granted then and answers
-// `duplicate`, so counts are asserted per doctor and as lower bounds, and
-// exactly where a run can add nothing (`applied: 0` on a re-run). Skips
+// CUT_OVER; a doctor registered now is after the instant. A run walks every
+// doctor of the database created before CUT_OVER — this file's backdated
+// doctors, earlier runs' among them, and any other such account the stand
+// holds — so counts are asserted per doctor and as lower bounds, and as exact
+// values only where a run can add nothing (`applied: 0` on a re-run). Skips
 // without DATABASE_URL / IDP_ISSUER.
 const BEFORE_ENGINE = "2026-01-15T00:00:00Z";
 const CUT_OVER = "2026-02-01T00:00:00Z";
@@ -240,6 +240,27 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "points.starter-bonus.started",
         "points.starter-bonus.completed",
       ]);
+    }, 120_000);
+
+    it("EARS-43: a run never walks a doctor whose identity is deactivated — no fact, no posting — while an active pre-cut-over doctor in the same run is credited", async () => {
+      const active = await legacyDoctor();
+      const removed = await legacyDoctor();
+      await h.pool.query(
+        `UPDATE users SET deactivated_at = now() WHERE id = $1`,
+        [removed],
+      );
+
+      const res = await asAdmin({
+        registeredBefore: CUT_OVER,
+        reason: `cut-over ${randomUUID()}`,
+      });
+      expect(res.statusCode, res.payload).toBe(200);
+
+      expect(await pulPostingsOf(active)).toEqual([
+        { rule_id: "accrual.starter-bonus", amount: 20 },
+      ]);
+      expect(await factOf(removed)).toEqual([]);
+      expect(await pulPostingsOf(removed)).toEqual([]);
     }, 120_000);
 
     it("EARS-43: a registeredBefore later than now (points-rule-parameters-invalid) and a missing or empty reason are refused; nothing is audited", async () => {

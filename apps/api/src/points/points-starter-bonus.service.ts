@@ -6,7 +6,7 @@ import {
   RunPointsStarterBonusRequestSchema,
   type RunPointsStarterBonusRequest,
 } from "@ds/schemas";
-import { and, asc, eq, gt, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { PARTICIPANT_ROLE } from "../auth/staff-role.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
@@ -93,6 +93,7 @@ export class PointsStarterBonusService {
           and(
             lt(users.createdAt, registeredBefore),
             eq(users.role, PARTICIPANT_ROLE),
+            isNull(users.deactivatedAt),
             after === null ? undefined : gt(users.id, after),
           ),
         )

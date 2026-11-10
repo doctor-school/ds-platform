@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
@@ -55,11 +55,38 @@ interface Prices {
   }>;
 }
 type Constructor<T> = new (...args: unknown[]) => T;
+export interface RulePublication {
+  row: {
+    ruleId: string;
+    version: number;
+    kind: string;
+    triggerFactTypes: string[];
+    parameters: Record<string, unknown>;
+    effectiveFrom: Date;
+    publishedBy: string | null;
+  };
+  warnings: { code: string; factType: string; otherRuleId: string }[];
+}
+interface RuleBook {
+  publish(input: {
+    ruleId: string;
+    parameters: unknown;
+    actorSub: string | null;
+  }): Promise<RulePublication>;
+}
 export interface PointsWorld {
   handle: DrizzleHandle;
   engine: Engine;
   ledger: Ledger;
   prices: Prices;
+  rules: RuleBook;
+  ownedRules: {
+    ruleId: string;
+    parameters: Record<string, unknown>;
+    actorSub: string;
+  }[];
+  ruleBookTouched?: boolean;
+  seedSnapshot?: unknown[];
   applicationName: string;
   ownedEventIds: string[];
   registrationFact: (input: {
@@ -96,17 +123,17 @@ export async function startPointsWorld(): Promise<PointsWorld> {
     !connection ||
     !database ||
     !(
-      database === "ds_dev_3921" ||
+      database === "ds_dev_3925" ||
       (process.env.CI === "true" && database === "ds_test")
     ) ||
     decodeURIComponent(new URL(connection).pathname.slice(1)) !== database
   ) {
     throw new Error(
-      "025 originals require the explicitly owned #3921 database (or CI ds_test)",
+      "025 originals require the explicitly owned #3925 database (or CI ds_test)",
     );
   }
   pointsOperation(`CONNECT ${database}`);
-  const applicationName = `points-3921-${randomUUID()}`;
+  const applicationName = `points-3925-${randomUUID()}`;
   const scopedConnection = new URL(connection);
   scopedConnection.searchParams.set("application_name", applicationName);
   const handle = createDrizzle(scopedConnection.href, { max: 3 });
@@ -134,7 +161,7 @@ export async function startPointsWorld(): Promise<PointsWorld> {
     )) as { PointsLedgerService: Constructor<Ledger> };
     const { RuleBookService } = (await load(
       "apps/api/dist/points/rule-book.service.js",
-    )) as { RuleBookService: Constructor<unknown> };
+    )) as { RuleBookService: Constructor<RuleBook> };
     const { PointsEventsPublisher } = (await load(
       "apps/api/dist/points/points-events.js",
     )) as { PointsEventsPublisher: Constructor<unknown> };
@@ -148,9 +175,10 @@ export async function startPointsWorld(): Promise<PointsWorld> {
       "apps/api/dist/points/registration-facts.js",
     )) as { registrationCreatedFact: PointsWorld["registrationFact"] };
     const ledger = new PointsLedgerService(handle.db);
+    const rules = new RuleBookService(handle.db);
     const engine = new PointsEngine(
       handle.db,
-      new RuleBookService(handle.db),
+      rules,
       ledger,
       new PointsEventsPublisher(),
     );
@@ -158,6 +186,8 @@ export async function startPointsWorld(): Promise<PointsWorld> {
       handle,
       engine,
       ledger,
+      rules,
+      ownedRules: [],
       prices: new PointsPricesService(handle.db, engine),
       applicationName,
       ownedEventIds: [],
@@ -221,6 +251,78 @@ export async function assertSeedDefaults(world: PointsWorld): Promise<void> {
       published_by: null,
     });
   }
+  world.seedSnapshot = (
+    await world.handle.pool.query(
+      "SELECT * FROM points_rule_versions WHERE rule_id = ANY($1::text[]) ORDER BY rule_id, version",
+      [POINTS_ENGINE_SEED.map((seed) => seed.ruleId)],
+    )
+  ).rows;
+}
+
+export async function retirePointsRules(world: PointsWorld): Promise<void> {
+  if (!world.ruleBookTouched) return;
+  const failures: unknown[] = [];
+  for (const own of world.ownedRules) {
+    try {
+      const parameters = { ...own.parameters, active: false };
+      const retired = await world.rules.publish({ ...own, parameters });
+      const stored = (
+        await world.handle.pool.query(
+          "SELECT version, parameters, published_by FROM points_rule_versions WHERE rule_id=$1 ORDER BY version DESC LIMIT 1",
+          [own.ruleId],
+        )
+      ).rows;
+      expect(stored).toEqual([
+        {
+          version: retired.row.version,
+          parameters,
+          published_by: retired.row.publishedBy,
+        },
+      ]);
+      expect(retired.row.parameters.active).toBe(false);
+      pointsOperation(
+        "RULEBOOK " +
+          JSON.stringify({
+            kind: "owned-rule-retirement",
+            ruleId: own.ruleId,
+            version: retired.row.version,
+            latestInactive: true,
+            publishedBy: retired.row.publishedBy,
+          }),
+      );
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  try {
+    const before = world.seedSnapshot!;
+    const ids = [
+      ...new Set(before.map((row) => (row as { rule_id: string }).rule_id)),
+    ];
+    const after = (
+      await world.handle.pool.query(
+        "SELECT * FROM points_rule_versions WHERE rule_id = ANY($1::text[]) ORDER BY rule_id, version",
+        [ids],
+      )
+    ).rows;
+    expect(after).toEqual(before);
+    const hash = (value: unknown) =>
+      createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    pointsOperation(
+      "RULEBOOK " +
+        JSON.stringify({
+          kind: "seed-invariant",
+          beforeSha256: hash(before),
+          afterSha256: hash(after),
+          unchanged: true,
+          rows: after.length,
+        }),
+    );
+  } catch (error) {
+    failures.push(error);
+  }
+  if (failures.length)
+    throw new AggregateError(failures, "Rulebook cleanup failed");
 }
 
 export function parseGatingDecision(value: unknown): Record<string, unknown> {

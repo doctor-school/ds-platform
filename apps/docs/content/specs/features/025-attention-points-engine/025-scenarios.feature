@@ -121,12 +121,14 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     And the earlier posting still carries version 2 and 10 Pul and its fact is not re-evaluated
 
   @EARS-25 @EARS-32 @happy
+  @points-rulebook-boundaries
   Scenario: An admin attaches a new reward to an existing fact type without a release
     When an admin publishes the new rule "accrual.webinar-feedback" crediting 2 Bre on "event.rated" once per subject and ref
     And "event.rated" for "A" on event "E5" is recorded
     Then postings of rule "accrual.webinar-feedback" version 1 and of rule "accrual.rating" are both written
 
   @EARS-25 @EARS-34 @failure
+  @points-rulebook-boundaries
   Scenario: A rule reading an undeclared or ill-typed operand is refused at publish
     When an admin publishes a rule on "lesson.completed" whose condition reads the attribute "sponsorId"
     Then the request is refused with problem "points-rule-parameters-invalid" naming the field path
@@ -164,6 +166,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then "campaign.lesson.double" is traced "not-valid" and "campaign.lesson.bonus" applies
 
   @EARS-38
+  @points-rulebook-boundaries
   Scenario: Publishing a second stacking credit rule warns the admin
     When an admin publishes an active credit rule on "lesson.completed" with no exclusive group
     Then the version is stored and the answer carries a stacking warning naming "accrual.lesson"

@@ -75,7 +75,8 @@ export const HEAVY_JOBS = {
     // feed-canvas-structure.spec.ts (#3728) reads the feed page canvas and the
     // card canvas it imports; home- and documents-canvas-structure.spec.ts
     // (#3757) read the home, documents-list and document page canvases;
-    // account-canvas-structure-live.spec.ts (#3758) reads the R1 account canvas.
+    // account-canvas-structure-live.spec.ts (#3758) reads the R1 account canvas
+    // and (#3891) the congress section canvas.
     // The header/footer checks render ds-shell with the vendored DC runtime
     // design-source/support.js (#3793). The #3798 runtime canvas loader check
     // (feed-canvas-structure.spec.ts) renders the six DS-bundle canvases and
@@ -97,6 +98,7 @@ export const HEAVY_JOBS = {
       /^design-source\/doctor-docs\.dc\.html$/,
       /^design-source\/document\.dc\.html$/,
       /^design-source\/account-profile\.dc\.html$/,
+      /^design-source\/doctor-lk-congress\.dc\.html$/,
     ],
   },
   "playwright-axe-login": {

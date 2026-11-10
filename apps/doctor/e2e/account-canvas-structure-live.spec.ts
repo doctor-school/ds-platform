@@ -117,3 +117,105 @@ for (const width of [390, 1440]) {
     });
   });
 }
+
+/**
+ * #3891 — the signed-in «Мои заявки на Конгресс» `/account/congress` against
+ * its canvas `doctor-lk-congress.dc.html` (`@ds/congress-submissions`, whose
+ * markup carries the canvas's own `data-screen-label` names), section by
+ * section, at 390 and 1440, in the same live leg as the cabinet check.
+ *
+ * The canvas `screen` is a STATE switch, read from the api the section itself
+ * reads (`GET /v1/me/congress-submissions`), never from the rendered page: no
+ * registration → «нет регистрации»; registered with no submission → «пусто»
+ * (the kind picker alone); registered with submissions → «список». Repeated
+ * data compares by shape only (#3728): the picker's kind columns (`pk`), the
+ * status filter chips (`f`) and the submission rows (`r`) — their labels,
+ * counts and statuses are the account's data, the canvas's are samples.
+ *
+ * Compared: the poster band (`постер-шапка`, chrome by kind + label) and the
+ * state's body section — `нет регистрации` (chrome), `выбор вида` (head chrome
+ * + kind columns by shape), `список` (head chrome + chips and rows by shape).
+ *
+ * Not compared:
+ * - `загрузка` / `ошибка` — transient read states the signed-in page passes
+ *   through or never reaches on a healthy stand; the spec waits them out.
+ * - an OPEN submission (`posterApp`, `заявка`, `сводка ошибок`, `панель
+ *   отправки`, `подтверждение отправки`) — reached only by opening a row and
+ *   editing; the shared account owns no submission the check may open or
+ *   change, and the form's states are the axe tier's fixture rows
+ *   (`congress-axe.e2e.spec.ts`, `playwright.congress.config.ts`).
+ * - the `today` switch — the canvas's sample intake calendar; the app's
+ *   intake is the stand's congress settings, so the kind columns compare by
+ *   shape, never by which window is open.
+ */
+
+/** The canvas `screen` that draws the account's state. */
+type CongressScreen = "нет регистрации" | "пусто" | "список";
+
+const POSTER = "d-lk-congress · постер-шапка";
+const BODY: Record<
+  CongressScreen,
+  { label: string; repeats: string[]; card?: string }
+> = {
+  "нет регистрации": { label: "d-lk-congress · нет регистрации", repeats: [] },
+  пусто: {
+    label: "d-lk-congress · выбор вида",
+    repeats: ["pk"],
+    card: '[data-testid^="congress-pick-"]',
+  },
+  список: {
+    label: "d-lk-congress · список",
+    repeats: ["f", "r"],
+    card: '[data-screen-label="d-lk-congress · фильтр по статусу"] > button, [data-testid="congress-row"]',
+  },
+};
+
+for (const width of [390, 1440]) {
+  test.describe(`#3891 /account/congress ≡ doctor-lk-congress canvas · signed-in · ${width}`, () => {
+    test.use({ viewport: { width, height: 900 } });
+    test("the section has the canvas structure (poster band + the state's body)", async ({
+      page,
+    }) => {
+      await loginAsDoctor(page);
+      await page.goto("/account/congress", { waitUntil: "domcontentloaded" });
+
+      const screen = await page.evaluate(async (): Promise<CongressScreen> => {
+        const res = await fetch("/v1/me/congress-submissions", {
+          credentials: "same-origin",
+        });
+        if (!res.ok)
+          throw new Error(`GET /v1/me/congress-submissions → ${res.status}`);
+        const s = (await res.json()) as {
+          registered: boolean;
+          submissions: unknown[];
+        };
+        if (!s.registered) return "нет регистрации";
+        return s.submissions.length === 0 ? "пусто" : "список";
+      });
+      const body = BODY[screen];
+      // The section reads on the client: wait for the state's own section.
+      await page.locator(`[data-screen-label="${body.label}"]`).waitFor();
+
+      const props = { screen, showNotes: false };
+      await expectSlotSectionMatchesCanvas(page, {
+        canvas: "doctor-lk-congress.dc.html",
+        props,
+        section: { section: ["data-screen-label", POSTER], cards: [] },
+        rendered: { root: `[data-screen-label="${POSTER}"]` },
+      });
+      await expectSlotSectionMatchesCanvas(page, {
+        canvas: "doctor-lk-congress.dc.html",
+        props,
+        section: {
+          section: ["data-screen-label", body.label],
+          cards: [],
+          repeats: body.repeats,
+        },
+        rendered: {
+          root: `[data-screen-label="${body.label}"]`,
+          ...(body.card ? { card: body.card } : {}),
+        },
+      });
+    });
+  });
+}

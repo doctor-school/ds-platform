@@ -640,9 +640,10 @@ export type AuthFlowHostConfig = {
     /** Whether the registration form carries the optional promo-code box (row 9). */
     readonly promoField: boolean;
     /**
-     * Row 61 — the «кто платит» line above the form, the sponsored host's
-     * answer to a doctor asked for nothing. Absent = this host states none, and
-     * the slot renders nothing rather than a placeholder.
+     * Row 61 — the partner attribution line above the form on a partner host.
+     * It never states who pays, a price, or that anything is free (owner rule,
+     * 2026-11-10). Absent = this host states none, and the slot renders nothing
+     * rather than a placeholder.
      */
     readonly attribution?: string;
     /** Row 61 — the NMO-points promise above the submit; absent on a host that makes none. */

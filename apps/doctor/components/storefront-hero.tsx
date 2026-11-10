@@ -5,7 +5,8 @@ import { ScaleCounters } from "@/components/scale-counters";
  * the «Герой» block).
  *
  * Every string below is transcribed VERBATIM from that canvas — the kicker, the
- * headline, the free-for-the-doctor sub-line and the evolutionary goal. The goal
+ * headline, the sub-line and the evolutionary goal (017 «Amendment — 2026-11-10»
+ * removed the free-of-charge clause from the sub-line). The goal
  * in particular carries no gloss and no «готовится» marker beside it: EARS-2
  * names it as verbatim copy, and a marker would turn a stated intent into a
  * roadmap promise on a production surface.
@@ -13,7 +14,7 @@ import { ScaleCounters } from "@/components/scale-counters";
  * What is NOT here is as much of the contract as what is: the interface never
  * states who finances a doctor's learning, and no price in roubles, cart,
  * subscription or payment affordance appears on any 017 surface (EARS-2). The
- * sub-line says learning is free and stops there.
+ * sub-line makes no statement about money, price or who pays.
  *
  * The band is the navy `hero` role — the same value as the header band, so the
  * chrome and the hero read as one continuous blue (tokens.css `--color-hero`),

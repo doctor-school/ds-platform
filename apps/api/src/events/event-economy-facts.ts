@@ -19,7 +19,8 @@
 export interface EventEconomyFacts {
   /** НМО is a chip and a facet only — never a heading or the primary filter. */
   nmo: boolean;
-  /** Cost in Pul attention points; `0` is the free-for-the-doctor reading. */
+  /** Cost in Pul attention points; `0` means the event has no Pul cost and the
+   *  surfaces render no cost row at all (020 «Amendment — 2026-11-10»). */
   pulCost: number;
 }
 

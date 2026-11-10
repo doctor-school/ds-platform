@@ -7,10 +7,31 @@ export const recordingAttachmentTitles = [
   "Retiring a recording frees its kind slot without losing history",
 ] as const;
 
-export function assertRecordingAttachmentReport(value: unknown) {
+export const recordingLifecycleTitles = [
+  "Publication is a separate act from attachment",
+  "Example #1",
+  "Example #2",
+  "Example #3",
+  "Example #4",
+  "Every committed recording mutation is audited",
+] as const;
+const attachmentOutline =
+  "An operator attaches a recording of an explicit kind";
+const lifecycleOutline =
+  "A recording is publishable only while the event is ended";
+const rule = "Recording lifecycle, playback and remaining archive contracts";
+const feature =
+  "A finished broadcast keeps its value as a recording, and the archive is browsable";
+
+export function assertRecordingAttachmentReport(
+  value: unknown,
+  scope: "full" | "new" = "full",
+) {
   assertOperationalReport(
     value,
-    recordingAttachmentTitles,
+    scope === "new"
+      ? recordingLifecycleTitles
+      : [...recordingAttachmentTitles, ...recordingLifecycleTitles],
     "recording-attachment",
   );
   type Suite = {
@@ -25,13 +46,30 @@ export function assertRecordingAttachmentReport(value: unknown) {
     }[];
     suites?: Suite[];
   };
-  function visit(suite: Suite) {
+  const identities: string[] = [];
+  function visit(suite: Suite, parents: string[] = []) {
+    const ancestry = [...parents, suite.title ?? ""];
     for (const spec of suite.specs ?? []) {
+      if (!ancestry.includes(feature) || !ancestry.includes(rule))
+        throw new Error("Source feature/rule identity mismatch");
+      const outline = spec.title.startsWith("Example #")
+        ? suite.title
+        : undefined;
       if (
-        spec.title.startsWith("Example #") &&
-        suite.title !== "An operator attaches a recording of an explicit kind"
+        outline &&
+        outline !== attachmentOutline &&
+        outline !== lifecycleOutline
       )
         throw new Error("Outline identity mismatch");
+      if (
+        JSON.stringify(ancestry.slice(outline ? -3 : -2)) !==
+        JSON.stringify(outline ? [feature, rule, outline] : [feature, rule])
+      )
+        throw new Error("Source feature/rule/scenario identity mismatch");
+      const identity = `${outline ?? rule}/${spec.title}`;
+      if (identities.includes(identity))
+        throw new Error("Duplicate original identity");
+      identities.push(identity);
       const attachments = spec.tests[0]!.results[0]!.attachments?.filter(
         (a) => a.name === "recording-attachment",
       );
@@ -46,6 +84,7 @@ export function assertRecordingAttachmentReport(value: unknown) {
       ) as {
         sourceHost: string;
         caseKind?: string;
+        caseState?: string;
         backgrounds: { clause: string; evidence: unknown[] }[];
       };
       const clauses = [
@@ -57,10 +96,18 @@ export function assertRecordingAttachmentReport(value: unknown) {
         "approved-composition",
       ];
       if (
-        spec.title.startsWith("Example #") &&
+        outline === attachmentOutline &&
         receipt.caseKind !== (spec.title === "Example #1" ? "raw" : "edited")
       )
         throw new Error("Outline kind identity mismatch");
+      if (
+        outline === lifecycleOutline &&
+        receipt.caseState !==
+          ["draft", "published", "live", "hidden"][
+            Number(spec.title.slice(-1)) - 1
+          ]
+      )
+        throw new Error("Outline state identity mismatch");
       if (
         receipt.sourceHost !== "academy" ||
         receipt.backgrounds?.length !== 6 ||
@@ -73,7 +120,21 @@ export function assertRecordingAttachmentReport(value: unknown) {
       )
         throw new Error("Incomplete Background groups or source host");
     }
-    suite.suites?.forEach(visit);
+    suite.suites?.forEach((child) => visit(child, ancestry));
   }
-  (value as { suites: Suite[] }).suites.forEach(visit);
+  (value as { suites: Suite[] }).suites.forEach((suite) => visit(suite));
+  const expected = [
+    ...(scope === "full"
+      ? recordingAttachmentTitles.map(
+          (title) =>
+            `${title.startsWith("Example #") ? attachmentOutline : rule}/${title}`,
+        )
+      : []),
+    ...recordingLifecycleTitles.map(
+      (title) =>
+        `${title.startsWith("Example #") ? lifecycleOutline : rule}/${title}`,
+    ),
+  ];
+  if (JSON.stringify(identities.sort()) !== JSON.stringify(expected.sort()))
+    throw new Error("Source outline/case identity mismatch");
 }

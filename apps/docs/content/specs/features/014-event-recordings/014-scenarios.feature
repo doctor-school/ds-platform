@@ -112,6 +112,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And the new raw row is created in draft
 
     @EARS-2 @core @happy
+    @recording-publication-audit
     Scenario: Publication is a separate act from attachment
       Given a finished event with a draft edited recording
       When the operator publishes it
@@ -121,6 +122,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       Then first_published_at still holds its original value
 
     @EARS-2 @core @failure
+    @recording-publication-audit
     Scenario Outline: A recording is publishable only while the event is ended
       Given an event in state <state>
       And a draft edited recording attached to it
@@ -533,6 +535,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
         | carries a session without the role    | 403    | PLATFORM_ADMIN_REQUIRED   |
 
     @EARS-17 @core @happy
+    @recording-publication-audit
     Scenario: Every committed recording mutation is audited
       Given the generic audit capture of feature 010
       When a recording is attached, published, unpublished, retired or restored

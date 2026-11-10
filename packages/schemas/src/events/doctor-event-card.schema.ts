@@ -64,7 +64,8 @@ export const DoctorEventCardSchema = z
     source: z.string(),
     /** НМО is a chip and a facet only — never a heading or the primary filter. */
     nmo: z.boolean(),
-    /** Cost in Pul attention points; `0` is the free-for-the-doctor reading. */
+    /** Cost in Pul attention points; `0` renders no cost label (019 EARS-2.4 as
+     * amended 2026-11-10, #2534); a positive value renders «N Pul». */
     pulCost: z.number().int().nonnegative(),
     /**
      * Colleagues signed up — rendered in EVERY card state, except that it is

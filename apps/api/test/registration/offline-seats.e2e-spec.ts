@@ -277,6 +277,50 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await seatsLeft(online.id)).toBe(1);
     });
 
+    /**
+     * Hold `FOR NO KEY UPDATE` on the event row in a second connection while
+     * the doctor registers; report whether the registration finished within
+     * `ms`. The holder is released either way, so a waiting registration ends.
+     */
+    async function registersWhileRowLocked(
+      event: { id: string; slug: string },
+      cookie: string,
+      ms: number,
+    ): Promise<{ unblocked: boolean; statusCode: number }> {
+      const holder = await pool.connect();
+      try {
+        await holder.query("BEGIN");
+        await holder.query(
+          "SELECT 1 FROM events WHERE id = $1 FOR NO KEY UPDATE",
+          [event.id],
+        );
+        const pending = register(event.slug, cookie);
+        const unblocked = await Promise.race([
+          pending.then(() => true),
+          new Promise<boolean>((r) => setTimeout(() => r(false), ms)),
+        ]);
+        await holder.query("ROLLBACK");
+        return { unblocked, statusCode: (await pending).statusCode };
+      } finally {
+        holder.release();
+      }
+    }
+
+    it("020 EARS-9: a registration that can take no seat (online event, or seats_left null) takes no lock on the event row; a seat-limited one does", async () => {
+      const online = await seedEvent("online", null);
+      const unlimited = await seedEvent("offline", null);
+      const limited = await seedEvent("offline", 2);
+      const [a, b, c] = await doctorSessions(3);
+
+      const onOnline = await registersWhileRowLocked(online, a!, 3000);
+      expect(onOnline).toEqual({ unblocked: true, statusCode: 200 });
+      const onUnlimited = await registersWhileRowLocked(unlimited, b!, 3000);
+      expect(onUnlimited).toEqual({ unblocked: true, statusCode: 200 });
+      const onLimited = await registersWhileRowLocked(limited, c!, 1000);
+      expect(onLimited).toEqual({ unblocked: false, statusCode: 200 });
+      expect(await seatsLeft(limited.id)).toBe(1);
+    });
+
     it("020 EARS-9: an event with no seat limit (seats_left null) is never counted down", async () => {
       const offline = await seedEvent("offline", null);
       const hybrid = await seedEvent("hybrid", null);

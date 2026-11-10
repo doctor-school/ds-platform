@@ -38,8 +38,10 @@ import {
   eq,
   gte,
   inArray,
+  isNotNull,
   isNull,
   lt,
+  ne,
   or,
   type SQL,
   sql,
@@ -277,28 +279,33 @@ export class OfflineSeatsExhaustedError extends Error {
 
 /**
  * 020 EARS-9 / LD-5 — the seat a first registration takes, inside its own
- * transaction. The event row is locked `FOR NO KEY UPDATE` — the lock the
- * seat update itself takes, which does not conflict with the `KEY SHARE` lock
- * every concurrent registration insert already holds through its foreign key
- * (a `FOR UPDATE` here deadlocks those inserts) — so concurrent registrations
- * for the last seat serialize on it and exactly one takes it. `seats_left = null` (no
- * limit) and an `online` event take nothing; a `hybrid` event with no offline
- * seat left registers its online half and takes nothing; a pure offline event
- * with no seat left refuses.
+ * transaction. Only an event that can hold a seat (not `online`, `seats_left`
+ * set) is locked, `FOR NO KEY UPDATE` — the lock the seat update itself takes,
+ * which does not conflict with the `KEY SHARE` lock every concurrent
+ * registration insert already holds through its foreign key (a `FOR UPDATE`
+ * here deadlocks those inserts) — so registrations on a seat-limited event
+ * serialize on it and the last seat goes to exactly one; every other
+ * registration takes no lock on the event row.
  */
 async function takeOfflineSeat(
   tx: AuditedTransaction,
   eventId: string,
 ): Promise<void> {
-  // The format is read under the same lock as the seat figure, never taken
+  // Only a row that can hold a seat is selected, so only it is locked; the
+  // predicate is re-checked on the locked row (READ COMMITTED), never taken
   // from the caller's unlocked pre-read.
   const [row] = await tx
     .select({ format: events.participationFormat, seatsLeft: events.seatsLeft })
     .from(events)
-    .where(eq(events.id, eventId))
+    .where(
+      and(
+        eq(events.id, eventId),
+        ne(events.participationFormat, "online"),
+        isNotNull(events.seatsLeft),
+      ),
+    )
     .for("no key update");
-  if (!row || row.format === "online") return;
-  if (row.seatsLeft === null) return;
+  if (!row || row.seatsLeft === null) return;
   if (row.seatsLeft > 0) {
     await tx
       .update(events)

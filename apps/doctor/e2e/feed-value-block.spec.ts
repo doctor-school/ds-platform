@@ -27,14 +27,14 @@ const ITEMS = [
 const FREE = "Всё бесплатно для врача";
 
 /** LD-9 / R:113 — wording that names or implies a financier of the learning. */
+const PARTNER_WORDING = /партн[её]р/i;
 const PAYER_WORDING = [
-  "оплачива",
-  "партнёр",
-  "Партнёр",
-  "за счёт",
-  "инвестор",
-  "спонсор",
-  "трудоустройств",
+  /оплачива/i,
+  PARTNER_WORDING,
+  /за сч[её]т/i,
+  /инвестор/i,
+  /спонсор/i,
+  /трудоустройств/i,
 ];
 
 async function openFeed(page: Page, theme: "light" | "dark") {
@@ -100,18 +100,16 @@ for (const width of [1440, 390]) {
       const feed = await page.getByTestId("specialty-feed").innerText();
       expect(feed).toContain(FREE);
       for (const banned of PAYER_WORDING) {
-        expect(feed, banned).not.toContain(banned);
+        expect(feed, String(banned)).not.toMatch(banned);
       }
       // The whole page, 017's shell included: its footer names partners as an
       // audience («Экспертам и партнёрам»), which is not a financing statement,
       // so the page-wide pass checks every payer stem except that word.
       const page_ = await page.locator("body").innerText();
-      for (const banned of PAYER_WORDING.filter(
-        (w) => !/^[пП]артнёр$/.test(w),
-      )) {
-        expect(page_, banned).not.toContain(banned);
+      for (const banned of PAYER_WORDING.filter((w) => w !== PARTNER_WORDING)) {
+        expect(page_, String(banned)).not.toMatch(banned);
       }
-      expect(page_).not.toContain("оплачивают партнёры платформы");
+      expect(page_).not.toMatch(/оплачивают партн[её]ры платформы/i);
     });
   }
 }

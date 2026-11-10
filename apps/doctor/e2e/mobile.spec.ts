@@ -334,7 +334,9 @@ test.describe("017 EARS-14.1: the mobile composition is operable (#1489)", () =>
       const entries = page.getByTestId("specialty-entry");
       await expect(entries).toHaveCount(FREQUENT.length);
       const expand = page.getByTestId("specialty-expand");
-      await expect(expand).toHaveText(`Показать весь список — ${BOOK.total}`);
+      await expect(expand).toHaveAccessibleName(
+        `Показать весь список — ${BOOK.total}`,
+      );
 
       // Typing narrows the set — the field is live, not decoration.
       await field.fill("Невро");
@@ -363,7 +365,9 @@ test.describe("017 EARS-14.1: the mobile composition is operable (#1489)", () =>
       await expect(catalog).toHaveAttribute("data-state", "open");
       await expect(field).toBeVisible();
       await expect(entries).toHaveCount(FREQUENT.length);
-      await expect(expand).toHaveText(`Показать весь список — ${BOOK.total}`);
+      await expect(expand).toHaveAccessibleName(
+        `Показать весь список — ${BOOK.total}`,
+      );
       await expectNoHorizontalOverflow(page);
     });
   }

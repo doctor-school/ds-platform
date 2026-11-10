@@ -401,6 +401,14 @@ export function SpecialtyCatalogView({
               className="mt-6"
             >
               {expandLabel}
+              {/* #3770: the canvas's «▾» on the collapsed control — ornament,
+                  kept out of the accessible name like the «сменить» caret. */}
+              {view === "expanded" ? null : (
+                <>
+                  {" "}
+                  <span aria-hidden="true">▾</span>
+                </>
+              )}
             </Button>
           ) : null}
         </div>

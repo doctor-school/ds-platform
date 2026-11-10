@@ -121,26 +121,82 @@ export function maskSlotDigits(slots: SlotStructure): SlotStructure {
 }
 
 /**
- * #3757 — the decided deviations of a section's CHROME removed from both sides
- * (`applyAllowlist`, the header's allowlist and semantics: one item per entry,
- * `regions` scoped by the section's attribute value). Card shapes are never
- * allowlisted — a decided card difference is a canvas or a component change.
+ * #3770 — one decided difference of a section's card SHAPE: the app draws
+ * every card the canvas draws as `canvas` as `app` instead (the home catalog's
+ * chips: the canvas's placeholder `<a href="#">`, the app's command `<button>`,
+ * 017 EARS-6). Scoped and cited as an `AllowlistEntry`; the card's other
+ * controls and the card count stay compared.
+ */
+export interface CardShapeEntry {
+  canvas: string;
+  props: Record<string, unknown>;
+  /** The section attribute values it applies to; absent = every section. */
+  regions?: string[];
+  /** The shape the canvas draws. */
+  canvasShape: ItemKind[];
+  /** The decided shape the app renders in its place. */
+  appShape: ItemKind[];
+  decision: string;
+  source: string;
+}
+
+function applies(
+  entry: { canvas: string; props: Record<string, unknown>; regions?: string[] },
+  where: { canvas: string; props: Record<string, unknown>; region: string },
+): boolean {
+  return (
+    entry.canvas === where.canvas &&
+    Object.entries(entry.props).every(([k, v]) => where.props[k] === v) &&
+    (!entry.regions || entry.regions.includes(where.region))
+  );
+}
+
+/**
+ * #3757 / #3770 — the decided deviations of one section removed before
+ * `diffSlots`: its CHROME items by `applyAllowlist` (the header's allowlist
+ * and semantics: one item per entry, `regions` scoped by the section's
+ * attribute value), and its decided card SHAPES (`CardShapeEntry`): every app
+ * card of the decided shape is read as the canvas shape it replaces — only
+ * where the canvas draws that shape, so a canvas redraw retires the entry. An
+ * applicable entry that matches nothing is returned as `stale`.
  */
 export function applySlotAllowlist(
   entries: AllowlistEntry[],
   where: { canvas: string; props: Record<string, unknown>; region: string },
   canvas: SlotStructure,
   app: SlotStructure,
-): { canvas: SlotStructure; app: SlotStructure; stale: AllowlistEntry[] } {
+  cardShapes: CardShapeEntry[] = [],
+): {
+  canvas: SlotStructure;
+  app: SlotStructure;
+  stale: (AllowlistEntry | CardShapeEntry)[];
+} {
   const decided = applyAllowlist(
     entries,
     where,
     { bar: canvas.chrome, menu: [] },
     { bar: app.chrome, menu: [] },
   );
+  const stale: (AllowlistEntry | CardShapeEntry)[] = [...decided.stale];
+  let cards = app.cards;
+  const drawn = new Set(canvas.cards.map(shapeKey));
+  for (const entry of cardShapes) {
+    if (!applies(entry, where)) continue;
+    const from = shapeKey(entry.appShape);
+    if (
+      !drawn.has(shapeKey(entry.canvasShape)) ||
+      !cards.some((shape) => shapeKey(shape) === from)
+    ) {
+      stale.push(entry);
+      continue;
+    }
+    cards = cards.map((shape) =>
+      shapeKey(shape) === from ? [...entry.canvasShape] : shape,
+    );
+  }
   return {
     canvas: { chrome: decided.canvas.bar, cards: canvas.cards },
-    app: { chrome: decided.app.bar, cards: app.cards },
-    stale: decided.stale,
+    app: { chrome: decided.app.bar, cards },
+    stale,
   };
 }

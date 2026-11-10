@@ -237,7 +237,15 @@ for (const width of [390, 1440]) {
  * The canvas has no props: its tab is component state, so the runtime draws
  * «Предстоящие», the route's default tab, and that is what is compared.
  *
+ * Decided: the tabs read «Предстоящие · N» / «Записи · N» — the shared list
+ * unit's tab pattern (014 EARS-9 + the «Past/upcoming control» decision row) —
+ * where the canvas draws «Предстоящие N»: allowlisted pairs, the extra side
+ * by `labelPattern` (N is the viewer's count).
+ *
  * Not compared:
+ * - the end-of-list callout «Смотреть расписание ↗» under the unfiltered
+ *   «Предстоящие» list (canvas `notFilteredUp`) — not built and not decided:
+ *   allowlisted as an open deviation owned by #3917.
  * - «Записи» (`?tab=recordings`) — the canvas opens it only on a click, which
  *   the runtime read (`readRuntimeCanvasSlots`) cannot drive; the owner also
  *   dropped its 30-day band and «Показать все N записей» link (014-design §8.3).

@@ -222,7 +222,7 @@ Then(
   async ({ page }) => {
     const served = await book(page);
     const control = page.getByTestId("specialty-expand");
-    await expect(control).toHaveText(`Показать весь список — ${served.total}`);
+    await expect(control).toHaveAccessibleName(`Показать весь список — ${served.total}`);
     await expect(control).toHaveAttribute("aria-expanded", "false");
     await expand(page, served);
   },
@@ -590,7 +590,7 @@ Then("the catalog re-opens in its full search-first form", async ({ page }) => {
     "/v1/public/specialties/frequent",
   );
   await entries(page, frequent.entries);
-  await expect(page.getByTestId("specialty-expand")).toHaveText(
+  await expect(page.getByTestId("specialty-expand")).toHaveAccessibleName(
     `Показать весь список — ${served.total}`,
   );
   await expand(page, served);

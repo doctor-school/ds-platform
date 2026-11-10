@@ -7,6 +7,8 @@ import { createBdd } from "playwright-bdd";
 import { Pool, type QueryResultRow } from "pg";
 import { adminOrigin, test } from "../support/fixtures";
 
+import { RecordingLifecycleProof } from "../../../../packages/e2e/lib/recording-lifecycle";
+
 const { Given, When, Then, Before, After } = createBdd(test);
 type Recording = {
   id: string;
@@ -24,6 +26,8 @@ type Answer = {
 };
 type State = {
   caseKind?: string;
+  caseState?: string;
+  lifecycle?: RecordingLifecycleProof;
   backgrounds: { clause: string; evidence: unknown[] }[];
   events: Event[];
   visitor?: APIRequestContext;
@@ -59,6 +63,7 @@ async function sql<T extends QueryResultRow = QueryResultRow>(
     !url ||
     !(
       database === "ds_dev_3851" ||
+      database === "ds_dev_3929" ||
       (process.env.CI === "true" && database === "ds_admin_e2e")
     ) ||
     new URL(url).pathname !== `/${database}`
@@ -147,7 +152,7 @@ async function command(
 }
 async function event(page: Page, lifecycle = "ended"): Promise<Event> {
   const id = randomUUID(),
-    slug = `recording-3851-${id}`;
+    slug = `recording-${process.env.E2E_RECORDING_ATTACHMENT_DATABASE}-${id}`;
   state(page).events.push({ id, slug });
   await sql(
     "INSERT INTO events (id,slug,title,school,starts_at,duration_min,state,kind_id,audience) VALUES ($1,$2,'Проверка записи 3851','Кардиология',now()-interval '2 days',60,$3,(SELECT id FROM event_kinds WHERE status='published' AND 'online'=ANY(allowed_formats) LIMIT 1),'experts')",
@@ -566,6 +571,75 @@ Then("the new raw row is created in draft", async ({ page }) => {
     ),
   ).toHaveLength(2);
 });
+function lifecycle(page: Page) {
+  const value = state(page);
+  return (value.lifecycle ??= new RecordingLifecycleProof({
+    event: (status) => event(page, status),
+    attach: (target, kind) => attach(page, target, kind),
+    command: (target, row, action) => command(page, target, row, action),
+    publish: (target, row) =>
+      api(
+        page,
+        `${path(target)}/${row.id}/publish`,
+        "POST",
+        undefined,
+        row.version,
+      ),
+    sql,
+    actor: () => value.operator!.zitadel_sub,
+  }));
+}
+Given("a finished event with a draft edited recording", async ({ page }) => {
+  await lifecycle(page).draft();
+});
+When("the operator publishes it", async ({ page }) => {
+  await lifecycle(page).publish();
+});
+Then("first_published_at is set once on that row", async ({ page }) => {
+  await lifecycle(page).timestamp();
+});
+Then("the event's own lifecycle state is unchanged", async ({ page }) => {
+  await lifecycle(page).unchangedEvent();
+});
+When("the operator unpublishes it and publishes it again", async ({ page }) => {
+  await lifecycle(page).republish();
+});
+Then("first_published_at still holds its original value", async ({ page }) => {
+  await lifecycle(page).originalTimestamp();
+});
+Given("an event in state {word}", async ({ page }, status: string) => {
+  state(page).caseState = status;
+});
+Given("a draft edited recording attached to it", async ({ page }) => {
+  await lifecycle(page).draft(state(page).caseState);
+});
+When("the operator publishes that recording", async ({ page }) => {
+  await lifecycle(page).attemptPublish();
+});
+Then("the request fails with 409 EVENT_NOT_FINISHED", async ({ page }) => {
+  await lifecycle(page).rejected();
+});
+Then("the recording is still draft", async ({ page }) => {
+  await lifecycle(page).unchangedDraft();
+});
+Given("the generic audit capture of feature 010", async ({ page }) => {
+  await lifecycle(page).genericAudit();
+});
+When(
+  "a recording is attached, published, unpublished, retired or restored",
+  async ({ page }) => {
+    await lifecycle(page).auditedMutations();
+  },
+);
+Then(
+  "one attributed audit row is appended per committed mutation",
+  async ({ page }) => {
+    await lifecycle(page).auditCount();
+  },
+);
+Then("no 014-specific audit table was introduced", async ({ page }) => {
+  await lifecycle(page).noSpecificAuditTable();
+});
 After(async ({ page, $testInfo }) => {
   const value = state(page);
   await $testInfo.attach("recording-attachment", {
@@ -573,6 +647,8 @@ After(async ({ page, $testInfo }) => {
     body: JSON.stringify({
       sourceHost: "academy",
       caseKind: value.caseKind,
+      caseState: value.caseState,
+      lifecycle: value.lifecycle?.evidence,
       backgrounds: value.backgrounds,
     }),
   });

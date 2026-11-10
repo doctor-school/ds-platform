@@ -176,6 +176,36 @@ async function passwordLogin(
     password,
   );
   let attemptFailed = false;
+  const submit = async () => {
+    try {
+      const pending = captureResponse(
+        page,
+        signInHostApiPath("/v1/auth/login"),
+      );
+      await page.getByTestId("password-login-submit").click();
+      const result = await pending;
+      let exactCommand = false;
+      try {
+        const command = result.response.request().postDataJSON();
+        exactCommand =
+          command.identifier === state.email && command.password === password;
+      } catch {
+        /* Secret-bearing diagnostics project only to false. */
+      }
+      expect(
+        exactCommand,
+        "exact owned identifier and password submitted",
+      ).toBe(true);
+      return result;
+    } catch (error) {
+      attemptFailed = true;
+      throw error;
+    }
+  };
+  // The owner's accepted password can only be accepted, so that sign-in takes
+  // no gate (`../lib/login-failure-gate.ts`) and never queues behind the
+  // failure windows other workers are closing.
+  if (password === state.acceptedPassword) return submit();
   return runGatedLoginAttempt(
     {
       close: () =>
@@ -188,32 +218,7 @@ async function passwordLogin(
       // An accepted password (the host's 200) cleared the window itself.
       succeeded: (result) => result.response.status() === 200,
     },
-    async () => {
-      try {
-        const pending = captureResponse(
-          page,
-          signInHostApiPath("/v1/auth/login"),
-        );
-        await page.getByTestId("password-login-submit").click();
-        const result = await pending;
-        let exactCommand = false;
-        try {
-          const command = result.response.request().postDataJSON();
-          exactCommand =
-            command.identifier === state.email && command.password === password;
-        } catch {
-          /* Secret-bearing diagnostics project only to false. */
-        }
-        expect(
-          exactCommand,
-          "exact owned identifier and password submitted",
-        ).toBe(true);
-        return result;
-      } catch (error) {
-        attemptFailed = true;
-        throw error;
-      }
-    },
+    submit,
   );
 }
 
@@ -249,104 +254,109 @@ Given(
       expectedRevoked: new Set(),
     };
     journeys.set(page, state);
-    for (let index = 0; index < 2; index++) {
-      const password = `Original-${randomUUID()}-aA1!`;
-      const account: ResetAccount = {
-        email: `sms-reset-isolation-3139-${index}-${randomUUID()}@example.test`,
-        phone: freshConfirmablePhone(),
-        sink,
-        resetRequests: 0,
-        password,
-        acceptedPassword: password,
-        replacement: `Replacement-${randomUUID()}-aA1!`,
-        ownedContexts: [],
-        expectedRevoked: state.expectedRevoked,
-        contexts: state.contexts,
-        closures: state.closures,
-        httpCredentials,
-      };
-      state.accounts.push(account);
-      const owner = await privatePage(browser, account, world.hostBaseUrl);
-      account.owner = owner;
-      const { code } = await registerOwnedCredentials(
-        owner,
-        world.hostBaseUrl,
-        account,
-        "/account",
-      );
-      const verifying = captureResponse(
-        owner,
-        signInHostApiPath("/v1/auth/verify"),
-      );
-      await inputSecret(
-        owner.locator('input[autocomplete="one-time-code"]'),
-        code,
-      );
-      expect((await verifying).response.status(), "registration verified").toBe(
-        200,
-      );
-      await owner.waitForURL((url) => url.pathname === "/account");
-      await confirmOwnedPhone(owner, { phone: account.phone, sink });
-      await sameOwner(owner, account);
-      account.cookie = (await owner.context().cookies()).find(
-        (cookie) => cookie.name === SESSION,
-      )?.value;
-      expect(Boolean(account.cookie), "owned session cookie present").toBe(
-        true,
-      );
-    }
+    await Promise.all(
+      [0, 1].map(async (index) => {
+        const password = `Original-${randomUUID()}-aA1!`;
+        const account: ResetAccount = {
+          email: `sms-reset-isolation-3139-${index}-${randomUUID()}@example.test`,
+          phone: freshConfirmablePhone(),
+          sink,
+          resetRequests: 0,
+          password,
+          acceptedPassword: password,
+          replacement: `Replacement-${randomUUID()}-aA1!`,
+          ownedContexts: [],
+          expectedRevoked: state.expectedRevoked,
+          contexts: state.contexts,
+          closures: state.closures,
+          httpCredentials,
+        };
+        state.accounts.push(account);
+        const owner = await privatePage(browser, account, world.hostBaseUrl);
+        account.owner = owner;
+        const { code } = await registerOwnedCredentials(
+          owner,
+          world.hostBaseUrl,
+          account,
+          "/account",
+        );
+        const verifying = captureResponse(
+          owner,
+          signInHostApiPath("/v1/auth/verify"),
+        );
+        await inputSecret(
+          owner.locator('input[autocomplete="one-time-code"]'),
+          code,
+        );
+        expect(
+          (await verifying).response.status(),
+          "registration verified",
+        ).toBe(200);
+        await owner.waitForURL((url) => url.pathname === "/account");
+        await confirmOwnedPhone(owner, { phone: account.phone, sink });
+        await sameOwner(owner, account);
+        account.cookie = (await owner.context().cookies()).find(
+          (cookie) => cookie.name === SESSION,
+        )?.value;
+        expect(Boolean(account.cookie), "owned session cookie present").toBe(
+          true,
+        );
+      }),
+    );
     expect(
       state.accounts[0]!.phone !== state.accounts[1]!.phone,
       "two different owned phones",
     ).toBe(true);
     // 003 EARS-12/53: each identifier owns its own provider reset challenge.
-    for (const account of state.accounts) {
-      const reset = await privatePage(browser, account, world.hostBaseUrl);
-      account.reset = reset;
-      await reset.goto(`${world.hostBaseUrl}/reset?returnTo=%2Faccount`, {
-        waitUntil: "load",
-      });
-      await waitForClientReady(reset);
-      await inputSecret(
-        reset.locator('input[autocomplete="username"]'),
-        account.phone,
-      );
-      const before = await captureSmsCheckpoint(sink, account.phone);
-      const pending = captureResponse(
-        reset,
-        signInHostApiPath("/v1/auth/password/reset"),
-      );
-      await reset.getByTestId("reset-request-submit").click();
-      const requested = await pending;
-      expect({
-        status: requested.response.status(),
-        neutral: requested.body === '{"status":"reset_requested"}',
-      }).toEqual({ status: 200, neutral: true });
-      account.code = await waitForSmsCode(
-        sink,
-        account.phone,
-        before,
-        resetSmsCode,
-        RESET_CODE_EVENT,
-      );
-      const delivered = await smsSinkMessages(
-        sink,
-        account.phone,
-        before,
-        RESET_CODE_EVENT,
-      );
-      expect(
-        {
-          one: delivered.length === 1,
-          sameCode:
-            delivered.length === 1 &&
-            resetSmsCode(delivered[0]!) === account.code,
-          sixDigits: /^\d{6}$/.test(account.code),
-        },
-        "real addressed retained SMS",
-      ).toEqual({ one: true, sameCode: true, sixDigits: true });
-      await noPrivateAccess(reset);
-    }
+    await Promise.all(
+      state.accounts.map(async (account) => {
+        const reset = await privatePage(browser, account, world.hostBaseUrl);
+        account.reset = reset;
+        await reset.goto(`${world.hostBaseUrl}/reset?returnTo=%2Faccount`, {
+          waitUntil: "load",
+        });
+        await waitForClientReady(reset);
+        await inputSecret(
+          reset.locator('input[autocomplete="username"]'),
+          account.phone,
+        );
+        const before = await captureSmsCheckpoint(sink, account.phone);
+        const pending = captureResponse(
+          reset,
+          signInHostApiPath("/v1/auth/password/reset"),
+        );
+        await reset.getByTestId("reset-request-submit").click();
+        const requested = await pending;
+        expect({
+          status: requested.response.status(),
+          neutral: requested.body === '{"status":"reset_requested"}',
+        }).toEqual({ status: 200, neutral: true });
+        account.code = await waitForSmsCode(
+          sink,
+          account.phone,
+          before,
+          resetSmsCode,
+          RESET_CODE_EVENT,
+        );
+        const delivered = await smsSinkMessages(
+          sink,
+          account.phone,
+          before,
+          RESET_CODE_EVENT,
+        );
+        expect(
+          {
+            one: delivered.length === 1,
+            sameCode:
+              delivered.length === 1 &&
+              resetSmsCode(delivered[0]!) === account.code,
+            sixDigits: /^\d{6}$/.test(account.code),
+          },
+          "real addressed retained SMS",
+        ).toEqual({ one: true, sameCode: true, sixDigits: true });
+        await noPrivateAccess(reset);
+      }),
+    );
     expect(
       state.accounts[0]!.code !== state.accounts[1]!.code,
       "delivered codes differ without reroll or resend",
@@ -417,17 +427,19 @@ Then(
   "both original SMS reset owners keep their identities and the second doctor's password is unchanged",
   async ({ page, browser, world }) => {
     const state = journey(page);
-    for (const account of state.accounts) {
-      await account.owner!.reload({ waitUntil: "load" });
-      await waitForClientReady(account.owner!);
-      await sameOwner(account.owner!, account);
-      expect(
-        (await account.owner!.context().cookies()).find(
-          (cookie) => cookie.name === SESSION,
-        )?.value === account.cookie,
-        "foreign code preserves the original owner's cookie",
-      ).toBe(true);
-    }
+    await Promise.all(
+      state.accounts.map(async (account) => {
+        await account.owner!.reload({ waitUntil: "load" });
+        await waitForClientReady(account.owner!);
+        await sameOwner(account.owner!, account);
+        expect(
+          (await account.owner!.context().cookies()).find(
+            (cookie) => cookie.name === SESSION,
+          )?.value === account.cookie,
+          "foreign code preserves the original owner's cookie",
+        ).toBe(true);
+      }),
+    );
     const second = state.accounts[1]!;
     const rejected = await privatePage(browser, second, world.hostBaseUrl);
     const failure = await passwordLogin(
@@ -458,73 +470,78 @@ When(
   "each SMS reset owner submits their own same retained code and a new password without requesting another challenge",
   async ({ page, world }) => {
     const state = journey(page);
-    for (const account of state.accounts) {
-      if (!account.reset || !account.code)
-        throw new Error("Retained owner reset missing");
-      const reset = account.reset;
-      await inputSecret(
-        reset.locator('input[autocomplete="one-time-code"]'),
-        account.code,
-      );
-      await inputSecret(
-        reset.locator('input[autocomplete="new-password"]'),
-        account.replacement,
-      );
-      const pending = captureResponse(
-        reset,
-        signInHostApiPath("/v1/auth/password/reset/complete"),
-      );
-      await reset.locator('form button[type="submit"]').click();
-      const completed = await pending;
-      let exactCommand = false;
-      try {
-        const command = completed.response.request().postDataJSON();
-        exactCommand =
-          command.identifier === account.phone &&
-          command.code === account.code &&
-          command.newPassword === account.replacement;
-      } catch {
-        /* Secret-bearing diagnostics project only to false. */
-      }
-      expect(
-        {
-          status: completed.response.status(),
-          exactCommand,
-          tokenFree: storefrontCallbackAcknowledgement(
-            completed.body,
-            world.hostBaseUrl,
-          ),
-        },
-        "same retained code completes only its owner's reset",
-      ).toEqual({ status: 200, exactCommand: true, tokenFree: true });
-      // 003 EARS-12: only contexts predating this successful reset are revoked.
-      for (const context of account.ownedContexts) {
-        if (context !== reset.context()) state.expectedRevoked.add(context);
-      }
-      account.acceptedPassword = account.replacement;
-      await reset.waitForURL((url) => url.pathname === "/account");
-      await assertSecureSession(reset, completed.response, world.hostBaseUrl, [
-        account.cookie!,
-      ]);
-      await sameOwner(reset, account);
-      expect(
-        await account.owner!.evaluate(async () => ({
-          session: (
-            await fetch("/v1/auth/session", {
-              credentials: "include",
-              cache: "no-store",
-            })
-          ).status,
-          profile: (
-            await fetch("/v1/me/profile", {
-              credentials: "include",
-              cache: "no-store",
-            })
-          ).status,
-        })),
-        "successful reset revokes the prior owner session",
-      ).toEqual({ session: 401, profile: 401 });
-    }
+    await Promise.all(
+      state.accounts.map(async (account) => {
+        if (!account.reset || !account.code)
+          throw new Error("Retained owner reset missing");
+        const reset = account.reset;
+        await inputSecret(
+          reset.locator('input[autocomplete="one-time-code"]'),
+          account.code,
+        );
+        await inputSecret(
+          reset.locator('input[autocomplete="new-password"]'),
+          account.replacement,
+        );
+        const pending = captureResponse(
+          reset,
+          signInHostApiPath("/v1/auth/password/reset/complete"),
+        );
+        await reset.locator('form button[type="submit"]').click();
+        const completed = await pending;
+        let exactCommand = false;
+        try {
+          const command = completed.response.request().postDataJSON();
+          exactCommand =
+            command.identifier === account.phone &&
+            command.code === account.code &&
+            command.newPassword === account.replacement;
+        } catch {
+          /* Secret-bearing diagnostics project only to false. */
+        }
+        expect(
+          {
+            status: completed.response.status(),
+            exactCommand,
+            tokenFree: storefrontCallbackAcknowledgement(
+              completed.body,
+              world.hostBaseUrl,
+            ),
+          },
+          "same retained code completes only its owner's reset",
+        ).toEqual({ status: 200, exactCommand: true, tokenFree: true });
+        // 003 EARS-12: only contexts predating this successful reset are revoked.
+        for (const context of account.ownedContexts) {
+          if (context !== reset.context()) state.expectedRevoked.add(context);
+        }
+        account.acceptedPassword = account.replacement;
+        await reset.waitForURL((url) => url.pathname === "/account");
+        await assertSecureSession(
+          reset,
+          completed.response,
+          world.hostBaseUrl,
+          [account.cookie!],
+        );
+        await sameOwner(reset, account);
+        expect(
+          await account.owner!.evaluate(async () => ({
+            session: (
+              await fetch("/v1/auth/session", {
+                credentials: "include",
+                cache: "no-store",
+              })
+            ).status,
+            profile: (
+              await fetch("/v1/me/profile", {
+                credentials: "include",
+                cache: "no-store",
+              })
+            ).status,
+          })),
+          "successful reset revokes the prior owner session",
+        ).toEqual({ session: 401, profile: 401 });
+      }),
+    );
   },
 );
 
@@ -532,18 +549,20 @@ Then(
   "both new passwords sign in only their original phone-confirmed doctors before all owned SMS isolation sessions are logged out",
   async ({ page, browser, world }) => {
     const state = journey(page);
-    for (const account of state.accounts) {
-      const accepted = await privatePage(browser, account, world.hostBaseUrl);
-      await signInAndIdentify(
-        accepted,
-        world.hostBaseUrl,
-        account,
-        account.replacement,
-      );
-      await accepted.reload({ waitUntil: "load" });
-      await waitForClientReady(accepted);
-      await sameOwner(accepted, account);
-    }
+    await Promise.all(
+      state.accounts.map(async (account) => {
+        const accepted = await privatePage(browser, account, world.hostBaseUrl);
+        await signInAndIdentify(
+          accepted,
+          world.hostBaseUrl,
+          account,
+          account.replacement,
+        );
+        await accepted.reload({ waitUntil: "load" });
+        await waitForClientReady(accepted);
+        await sameOwner(accepted, account);
+      }),
+    );
     expect(
       state.accounts.map((account) => account.resetRequests),
       "exactly two challenges and no resend",

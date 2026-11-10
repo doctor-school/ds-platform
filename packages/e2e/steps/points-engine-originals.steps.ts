@@ -7,6 +7,8 @@ import {
   pointsOperation,
   prepareDoctor,
   recordLesson,
+  retirePointsRules,
+  retirePointsEvents,
   startPointsWorld,
   type PointsWorld,
 } from "../lib/points-engine-originals.js";
@@ -18,7 +20,15 @@ export const test = base.extend<{ points: PointsWorld }>({
     try {
       await use(world);
     } finally {
-      await world.handle.pool.end();
+      try {
+        await retirePointsRules(world);
+      } finally {
+        try {
+          if (world.ruleBookTouched) await retirePointsEvents(world);
+        } finally {
+          await world.handle.pool.end();
+        }
+      }
     }
   },
 });

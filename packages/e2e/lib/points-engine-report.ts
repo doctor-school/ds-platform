@@ -24,6 +24,12 @@ export const pointsReferralBoundaries = [
   "The invitee's first completed lesson counts itself for the referral",
 ] as const;
 
+export const pointsRulebookBoundaries = [
+  "An admin attaches a new reward to an existing fact type without a release",
+  "A rule reading an undeclared or ill-typed operand is refused at publish",
+  "Publishing a second stacking credit rule warns the admin",
+] as const;
+
 export const pointsEngineOriginals = [
   "An offline lesson earns Bre only and never a second Bre",
   "A producer fact carrying an amount is refused and writes nothing",
@@ -32,6 +38,7 @@ export const pointsEngineOriginals = [
   ...pointsReserveBoundaries,
   ...pointsAdvanceBoundaries,
   ...pointsReferralBoundaries,
+  ...pointsRulebookBoundaries,
 ] as const;
 
 export function assertPointsEngineReport(value: unknown): void {
@@ -52,4 +59,8 @@ export function assertPointsAdvanceBoundariesReport(value: unknown): void {
 
 export function assertPointsReferralBoundariesReport(value: unknown): void {
   assertOperationalReport(value, pointsReferralBoundaries, "admin");
+}
+
+export function assertPointsRulebookBoundariesReport(value: unknown): void {
+  assertOperationalReport(value, pointsRulebookBoundaries, "admin");
 }

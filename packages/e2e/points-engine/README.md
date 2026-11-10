@@ -1,6 +1,6 @@
 # 025 engine originals
 
-The strict `points-engine.config.ts` contour executes fifteen unchanged source
+The strict `points-engine.config.ts` contour executes eighteen unchanged source
 originals from `025-scenarios.feature`, including both Background clauses.
 The preceding three remain regression coverage:
 
@@ -49,7 +49,7 @@ result for the target fact/person only. It restores the original prototype in
 journal row and the referral posting on that same fact establish the timing.
 No predicate value or rule is supplied by the test. Narrow quote/referral/context
 receipts append to the operation log that CI uploads. Both unchanged Background
-clauses emit post-assertion receipts for every case (6 for the trio, 30 for all 15).
+clauses emit post-assertion receipts for every case (6 for the trio, 36 for all 18).
 
 The advance cases fund both independent doctors through seeded module facts,
 price the same real event, compare normalized posting legs and persisted member
@@ -95,7 +95,7 @@ prior awards and calls the real ledger `close`; refusal preserves every posting
 field and commits no new ledger key or fact. Module reports use distinct event
 IDs for the same module and exercise both seeded award rules' once-per keys.
 
-The fixture accepts only an explicitly bound `ds_dev_3921`, or `ds_test` with
+The fixture accepts only an explicitly bound `ds_dev_3925`, or `ds_test` with
 `CI=true`, and checks `current_database()` before creating data. Each scenario
 verifies current migrated rule/settings bodies against `POINTS_ENGINE_SEED`,
 persists its own doctor with the canonical Кардиология specialty and verified
@@ -105,8 +105,8 @@ All SQL is logged without bound values. Append-only facts and postings are
 retained until the owned database is disposed; every pool closes on failure.
 
 Build `@ds/api` and its workspace dependencies first. Provision an owned branch
-database through `pnpm dev:db:branch 3921` (the wrapper snapshots before migration),
-then export its `DATABASE_URL`, `E2E_POINTS_DATABASE=ds_dev_3921`, an existing
+database through `pnpm dev:db:branch 3925` (the wrapper snapshots before migration),
+then export its `DATABASE_URL`, `E2E_POINTS_DATABASE=ds_dev_3925`, an existing
 scratch directory's `E2E_POINTS_OPS_LOG`, and `E2E_POINTS_REPORT` JSON destination:
 
 ```powershell
@@ -118,16 +118,53 @@ pnpm --filter @ds/e2e exec tsx api-probes/assert-points-engine-report.ts $env:E2
 For the exact new-wave receipt, choose another `E2E_POINTS_REPORT` destination:
 
 ```powershell
-pnpm --filter @ds/e2e exec playwright test --config points-engine.config.ts --grep @points-referral-boundaries
-pnpm --filter @ds/e2e exec tsx api-probes/assert-points-engine-report.ts $env:E2E_POINTS_REPORT --referral-boundaries
+pnpm --filter @ds/e2e exec playwright test --config points-engine.config.ts --grep @points-rulebook-boundaries
+pnpm --filter @ds/e2e exec tsx api-probes/assert-points-engine-report.ts $env:E2E_POINTS_REPORT --rulebook-boundaries
 ```
 
 Generation fails on missing selected steps. The default report gate requires
-all fifteen titles in the Admin project; `--referral-boundaries` requires exactly the new trio; `--advance-boundaries` still checks the advance trio; `--reserve-boundaries` requires exactly the
+all eighteen titles in the Admin project; `--rulebook-boundaries` requires exactly the new trio; `--referral-boundaries` retains the preceding referral trio; `--advance-boundaries` still checks the advance trio; `--reserve-boundaries` requires exactly the
 reserve trio; `--record-boundaries` still checks the preceding trio. All modes
 reject missing, extra, duplicate,
-wrong-host, skipped, failed, flaky or retried results. CI runs all fifteen on disposable
+wrong-host, skipped, failed, flaky or retried results. CI runs all eighteen on disposable
 `ds_test` before native API suites can publish different rule versions, and
 uploads JSON plus operation log. Run local BDD proofs before mutable native
 rule-book tests as well; later BDD proof needs a fresh owned database.
 No visual artifact or owner Stage-B stand is involved.
+
+The `@points-rulebook-boundaries` wave adds exactly three originals:
+
+- An admin attaches a new reward to an existing fact type without a release.
+- A rule reading an undeclared or ill-typed operand is refused at publish.
+- Publishing a second stacking credit rule warns the admin.
+
+The harness exposes the same compiled `RuleBookService` instance the engine uses.
+A real owned admin user supplies `actorSub`, resolving `published_by` to its UUID.
+Calls are direct and preauthorized: there is no HTTP, role/session or permission
+acceptance claim. The actual row-audit trigger honestly records `db-direct` with
+a null audit actor; the publisher and audit actor are distinct evidence.
+The literal `accrual.webinar-feedback` must have zero versions before publication.
+Its version 1 credits 2 Bre on `event.rated`, once per subject/ref; the actual fact
+for A on an owned event also creates the separate seeded `accrual.rating` 1 Bre.
+The two catalog violations report exact paths `condition.eq.0.attr` and
+`condition.eq`; the retired `cap.engagement` is refused without a fake retired row.
+Complete rule-version and matching audit snapshots and hashes prove each refused
+publish wrote nothing. A unique active lesson credit stores version 1 and returns
+a real stacking warning naming `accrual.lesson`.
+
+Successfully published owned rules are registered before assertions and retired
+through real `publish(active:false)` in fixture `finally`, before closing the pool.
+The latest stored version must be inactive. Seed rule/settings histories, including
+bodies, epoch timestamps and publishers, are compared byte-for-byte in serialized
+snapshots with matching SHA-256 receipts. No seeded version is republished or edited.
+Publication bodies, persisted rows, actual audit rows, errors, postings, warnings,
+retirement and seed invariants are appended to the uploaded operation log.
+
+The new trio and full eighteen each require an independently fresh owned database,
+because the literal version 1 cannot be reused after immutable history exists.
+Run both from the same committed source. Preserve each raw report and operation log;
+after acceptance of the trio receipts, sanctioned `dev:db:drop 3925` followed by
+`dev:db:branch 3925` prepares the full run. No automatic reset, alias or skip exists.
+CI runs the full eighteen once on fresh `ds_test`. Run native rule-book/stacking
+complements afterwards; they use unique test slugs. Background receipts total
+6 for the trio and 36 for all eighteen. Owned events are retired before pool close.

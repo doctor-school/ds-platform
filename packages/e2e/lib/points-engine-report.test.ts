@@ -5,6 +5,7 @@ import {
   assertPointsReserveBoundariesReport,
   assertPointsAdvanceBoundariesReport,
   assertPointsReferralBoundariesReport,
+  assertPointsRulebookBoundariesReport,
 } from "./points-engine-report.js";
 
 const previous = [
@@ -33,6 +34,11 @@ const referrals = [
   "Referral awards stop for the inviter above the monthly cap",
   "The invitee's first completed lesson counts itself for the referral",
 ];
+const rulebook = [
+  "An admin attaches a new reward to an existing fact type without a release",
+  "A rule reading an undeclared or ill-typed operand is refused at publish",
+  "Publishing a second stacking credit rule warns the admin",
+];
 
 function report(titles: readonly string[]) {
   return {
@@ -58,13 +64,21 @@ function report(titles: readonly string[]) {
 for (const [scope, titles, assertReport] of [
   [
     "full contour",
-    [...previous, ...boundaries, ...reserves, ...advances, ...referrals],
+    [
+      ...previous,
+      ...boundaries,
+      ...reserves,
+      ...advances,
+      ...referrals,
+      ...rulebook,
+    ],
     assertPointsEngineReport,
   ],
   ["previous wave", boundaries, assertPointsRecordBoundariesReport],
   ["new wave", reserves, assertPointsReserveBoundariesReport],
   ["advance wave", advances, assertPointsAdvanceBoundariesReport],
   ["referral wave", referrals, assertPointsReferralBoundariesReport],
+  ["rulebook wave", rulebook, assertPointsRulebookBoundariesReport],
 ] as const) {
   describe("025 " + scope + " execution receipt", () => {
     it("EARS-4/8/31: accepts its exact source originals passing once", () => {
@@ -120,10 +134,24 @@ for (const [scope, titles, assertReport] of [
   });
 }
 
-it("EARS-8/11/30/34/36: full contour refuses the preceding twelve", () => {
+it("EARS-25/32/34/38: rulebook receipt refuses every preceding wave", () => {
+  for (const titles of [previous, boundaries, reserves, advances, referrals]) {
+    expect(() => assertPointsRulebookBoundariesReport(report(titles))).toThrow(
+      /identity/,
+    );
+  }
+});
+
+it("EARS-25/32/34/38: full contour refuses the preceding fifteen", () => {
   expect(() =>
     assertPointsEngineReport(
-      report([...previous, ...boundaries, ...reserves, ...advances]),
+      report([
+        ...previous,
+        ...boundaries,
+        ...reserves,
+        ...advances,
+        ...referrals,
+      ]),
     ),
   ).toThrow(/identity/);
 });

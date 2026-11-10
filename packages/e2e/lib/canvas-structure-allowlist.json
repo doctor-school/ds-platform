@@ -276,6 +276,33 @@
       "item": { "kind": "link", "label": "Травматология и ортопедия" },
       "decision": "Open deviation, not decided: the canvas's specialty step of the doctor-host poster breadcrumb (sample specialty, links the 018 feed), which the page does not render. Remove with the #3919 resolution.",
       "source": "https://github.com/doctor-school/ds-platform/issues/3919"
+    },
+    {
+      "canvas": "account-my-events.dc.html",
+      "props": {},
+      "regions": [
+        "account-my-events · мобильный",
+        "account-my-events · десктоп"
+      ],
+      "delta": "missing",
+      "item": {
+        "kind": "button",
+        "label": "Сертификаты 4"
+      },
+      "decision": "«Мои события» has exactly two tabs, «Предстоящие» and «Записи»: the canvas's «Сертификаты» tab is a canvas review miss, not a future seam — no placeholder, flag or disabled tab ships.",
+      "source": "Owner decision 2026-08-17: apps/docs/content/specs/features/014-event-recordings/014-requirements-en.md (out of scope, «Сертификаты» tab); 014-design.md §8.3"
+    },
+    {
+      "canvas": "account-my-events.dc.html",
+      "props": {},
+      "regions": ["account-my-events · мобильный"],
+      "delta": "missing",
+      "item": {
+        "kind": "button",
+        "label": "Направление Все направления ▼"
+      },
+      "decision": "The «Мои события» specialty filter has no backing field, so it is omitted rather than drawn over sample values (the canvas's mobile dropdown trigger; its desktop chips are repeated cards, compared by shape).",
+      "source": "apps/docs/content/specs/features/014-event-recordings/014-product.md «Absence rules confirmed» (the «Мои события» specialty filter); packages/events-storefront/src/ui/my-events-route.tsx deviations note"
     }
   ],
   "cardShapes": [

@@ -34,8 +34,14 @@ import {
  */
 
 export interface SlotSectionSpec {
-  /** The canvas section: an element whose attribute has this value. */
-  section: [attr: string, value: string];
+  /**
+   * The canvas section: an element whose attribute has this value (the
+   * canvas's `data-screen-label`), or — #3890, a canvas that labels no screen
+   * (`account-my-events.dc.html`) — a CSS selector that is unique in it,
+   * with the name a screen label would give it (`label`, the allowlist
+   * region: one per screen the spec reads, e.g. the canvas's mobile branch).
+   */
+  section: [attr: string, value: string] | { selector: string; label: string };
   /** `dc-import` names that are one repeated card each (the runtime's `[data-sc-name]` hosts). */
   cards?: string[];
   /**
@@ -52,6 +58,26 @@ export interface SlotSectionSpec {
    * while a label whose WORDS differ still does.
    */
   maskDigits?: boolean;
+}
+
+/**
+ * #3890 — where a section spec points in the runtime-rendered canvas: its
+ * `root` selector, the `region` its allowlist entries are scoped by (the
+ * attribute value, or the selector's `label`), and what the render waits for
+ * (`ready`; undefined = the runtime's default, a screen label under
+ * `#dc-root`, which a canvas that labels no screen never draws).
+ */
+export function slotSectionRoot(spec: Pick<SlotSectionSpec, "section">): {
+  root: string;
+  region: string;
+  ready: string | undefined;
+} {
+  if (Array.isArray(spec.section)) {
+    const [attr, value] = spec.section;
+    return { root: `[${attr}="${value}"]`, region: value, ready: undefined };
+  }
+  const { selector, label } = spec.section;
+  return { root: selector, region: label, ready: `#dc-root ${selector}` };
 }
 
 export interface SlotStructure {

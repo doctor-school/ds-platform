@@ -8,6 +8,7 @@ import {
   diffSlots,
   type CardShapeEntry,
   formatSlots,
+  slotSectionRoot,
   type SlotSectionSpec,
   type SlotStructure,
 } from "./canvas-slots.js";
@@ -131,8 +132,7 @@ async function markCanvasCards(
   page: Page,
   spec: SlotSectionSpec,
 ): Promise<string> {
-  const [attr, value] = spec.section;
-  const root = `[${attr}="${value}"]`;
+  const { root } = slotSectionRoot(spec);
   await page.evaluate(
     ({ root, cards, repeats, mark }) => {
       const section = document.querySelector(root);
@@ -204,7 +204,11 @@ export async function readRuntimeCanvasSlots(
   props: Record<string, unknown>,
   spec: SlotSectionSpec,
 ): Promise<SlotStructure> {
-  const runtime = await openRuntimeCanvas(context, canvas, { props });
+  const { ready } = slotSectionRoot(spec);
+  const runtime = await openRuntimeCanvas(context, canvas, {
+    props,
+    ...(ready ? { ready } : {}),
+  });
   try {
     const root = await markCanvasCards(runtime.page, spec);
     return await readRenderedSlots(runtime.page, {
@@ -247,7 +251,7 @@ export async function expectSlotSectionMatchesCanvas(
     {
       canvas: basename(options.canvas),
       props,
-      region: options.section.section[1],
+      region: slotSectionRoot(options.section).region,
     },
     fromCanvas,
     fromApp,
@@ -265,7 +269,7 @@ export async function expectSlotSectionMatchesCanvas(
   ];
   const report = lines.length
     ? [
-        `${options.canvas} ${JSON.stringify(props)} section ${options.section.section[1]} ≠ rendered ${options.rendered.root}:`,
+        `${options.canvas} ${JSON.stringify(props)} section ${slotSectionRoot(options.section).region} ≠ rendered ${options.rendered.root}:`,
         ...lines.map((l) => `  - ${l}`),
         "canvas:",
         formatSlots(fromCanvas).replace(/^/gm, "  "),

@@ -471,7 +471,7 @@ jobs:
           # module/build caches, binary and data outside the uploaded receipts.
           printf '%s\n' '{"command":"download and checksum official Go1.24.8 linux-amd64 into owned RUNNER_TEMP"}' >> "$dir/stand-ops-3688.log"
           test "$(uname -m)" = x86_64
-          curl -fsSL https://go.dev/dl/go1.24.8.linux-amd64.tar.gz -o "$build/go.tar.gz"
+          curl -fsSL --retry 2 --retry-all-errors --connect-timeout 15 --max-time 120 --retry-max-time 300 https://go.dev/dl/go1.24.8.linux-amd64.tar.gz -o "$build/go.tar.gz"
           printf '%s  %s\n' 6842c516ca66c89d648a7f1dbe28e28c47b61b59f8f06633eb2ceb1188e9251d "$build/go.tar.gz" | sha256sum -c -
           tar -xzf "$build/go.tar.gz" -C "$build"
           export GOROOT="$build/go" GOBIN="$build/bin" GOMODCACHE="$build/mod" GOCACHE="$build/cache" GOPATH="$build/gopath"
@@ -604,7 +604,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Run exactly six 025 engine originals before mutable rule-book tests
+      - name: Run exactly nine 025 engine originals before mutable rule-book tests
         env:
           E2E_POINTS_DATABASE: ds_test
           E2E_POINTS_OPS_LOG: ${{ runner.temp }}/points-originals-3876/stand-ops.jsonl

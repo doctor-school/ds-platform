@@ -180,9 +180,15 @@ test.describe("017 EARS-4/5: the home specialty catalog (variant Б)", () => {
     // which is exactly what a count literal, or a count taken from the frequent
     // set, would produce.
     const expand = page.getByTestId("specialty-expand");
-    await expect(expand).toHaveText(`Показать весь список — ${BOOK.total}`);
+    await expect(expand).toHaveAccessibleName(
+      `Показать весь список — ${BOOK.total}`,
+    );
     expect(BOOK.total).not.toBe(FREQUENT.length);
     await expect(expand).toHaveAttribute("aria-expanded", "false");
+    // #3770: the canvas's «▾» is ornament after the label — drawn, and kept
+    // out of the accessible name, as the «сменить» caret is.
+    await expect(expand).toHaveText(`Показать весь список — ${BOOK.total} ▾`);
+    await expect(expand.locator('[aria-hidden="true"]')).toHaveText("▾");
   });
 
   test("017 EARS-4.2: Expanded — the control reveals the remainder INCLUDING «Другое», and collapses again", async ({
@@ -445,7 +451,7 @@ test.describe("017 EARS-4/5: the home specialty catalog (variant Б)", () => {
 
     // The second route to every entry, «Другое» included, is still on screen and
     // still bound to the served book total.
-    await expect(page.getByTestId("specialty-expand")).toHaveText(
+    await expect(page.getByTestId("specialty-expand")).toHaveAccessibleName(
       `Показать весь список — ${BOOK.total}`,
     );
 

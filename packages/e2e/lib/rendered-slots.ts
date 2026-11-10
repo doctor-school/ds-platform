@@ -6,6 +6,7 @@ import { expect, type BrowserContext, type Page } from "@playwright/test";
 import {
   applySlotAllowlist,
   diffSlots,
+  type CardShapeEntry,
   formatSlots,
   type SlotSectionSpec,
   type SlotStructure,
@@ -47,7 +48,7 @@ const ALLOWLIST = JSON.parse(
     new URL("./canvas-structure-allowlist.json", import.meta.url),
     "utf8",
   ),
-) as { entries: AllowlistEntry[] };
+) as { entries: AllowlistEntry[]; cardShapes?: CardShapeEntry[] };
 
 export async function readRenderedSlots(
   page: Page,
@@ -238,8 +239,9 @@ export async function expectSlotSectionMatchesCanvas(
     options.section,
   );
   const fromApp = await readRenderedSlots(page, options.rendered);
-  // #3757 — the section's decided chrome deviations (`canvas-structure-allowlist.json`,
-  // `regions` = the section's attribute value), stale entries reported.
+  // #3757 / #3770 — the section's decided chrome deviations and card shapes
+  // (`canvas-structure-allowlist.json` `entries` / `cardShapes`, `regions` =
+  // the section's attribute value), stale entries reported.
   const decided = applySlotAllowlist(
     ALLOWLIST.entries,
     {
@@ -249,11 +251,13 @@ export async function expectSlotSectionMatchesCanvas(
     },
     fromCanvas,
     fromApp,
+    ALLOWLIST.cardShapes ?? [],
   );
   const lines = [
-    ...decided.stale.map(
-      (entry) =>
-        `stale allowlist entry (${entry.delta}): ${entry.item.kind} «${entry.item.label ?? "icon"}» — ${entry.source}`,
+    ...decided.stale.map((entry) =>
+      "item" in entry
+        ? `stale allowlist entry (${entry.delta}): ${entry.item.kind} «${entry.item.label ?? "icon"}» — ${entry.source}`
+        : `stale card-shape entry: canvas [${entry.canvasShape.join(" · ")}] → app [${entry.appShape.join(" · ")}] — ${entry.source}`,
     ),
     ...diffSlots(decided.canvas, decided.app, {
       maskDigits: options.section.maskDigits,

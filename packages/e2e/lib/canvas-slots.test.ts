@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   applySlotAllowlist,
   diffSlots,
+  type CardShapeEntry,
   maskSlotDigits,
   type SlotStructure,
 } from "./canvas-slots.js";
@@ -184,6 +185,99 @@ describe("canvas-slots · #3757 applySlotAllowlist", () => {
       app,
     );
     expect(stale.stale).toEqual([entry]);
+  });
+});
+
+describe("canvas-slots · #3770 decided card shapes", () => {
+  const SECTION = "d-home · каталог специальностей";
+  const where = {
+    canvas: "doctor-home.dc.html",
+    props: { loggedIn: false, specialtyChosen: false, catalogVariant: "Б" },
+    region: SECTION,
+  };
+  /** The catalog section as the runtime renders it: field + expand, link chips. */
+  const canvas: SlotStructure = {
+    chrome: [
+      { kind: "input", label: "Начните вводить название" },
+      { kind: "button", label: "Показать весь список — 105 ▾" },
+    ],
+    cards: [["link"], ["link"], ["link"]],
+  };
+  const app: SlotStructure = {
+    chrome: [
+      { kind: "input", label: "Начните вводить название" },
+      { kind: "button", label: "Показать весь список — 3 ▾" },
+    ],
+    cards: [["button"], ["button"]],
+  };
+  const { cardShapes } = JSON.parse(
+    readFileSync(
+      join(REPO, "packages/e2e/lib/canvas-structure-allowlist.json"),
+      "utf8",
+    ),
+  ) as { cardShapes: CardShapeEntry[] };
+
+  it("RED: without the decided shape the app's button chips are a card-shape difference", () => {
+    expect(diffSlots(canvas, app, { maskDigits: true })).toEqual([
+      "card shape: app [button] on 2 card(s) — the canvas draws [link]",
+    ]);
+  });
+
+  it("the recorded chip decision (017 EARS-6) reads the app's button chips as the canvas's link chips, and the section matches", () => {
+    const decided = applySlotAllowlist([], where, canvas, app, cardShapes);
+    expect(decided.stale).toEqual([]);
+    expect(
+      diffSlots(decided.canvas, decided.app, { maskDigits: true }),
+    ).toEqual([]);
+    const entry = cardShapes.find((e) => e.regions?.includes(SECTION));
+    expect(entry?.source).toContain("EARS-6");
+  });
+
+  it("RED: the decision covers neither a dropped expand control nor a section with no chips", () => {
+    const noExpand = applySlotAllowlist(
+      [],
+      where,
+      canvas,
+      {
+        ...app,
+        chrome: app.chrome.slice(0, 1),
+      },
+      cardShapes,
+    );
+    expect(
+      diffSlots(noExpand.canvas, noExpand.app, { maskDigits: true }),
+    ).toEqual(["missing in app (chrome): button «Показать весь список — # ▾»"]);
+    const noChips = applySlotAllowlist(
+      [],
+      where,
+      canvas,
+      { ...app, cards: [] },
+      cardShapes,
+    );
+    expect(noChips.stale).toHaveLength(1);
+    expect(
+      diffSlots(noChips.canvas, noChips.app, { maskDigits: true }),
+    ).toEqual(["cards: the canvas repeats cards here, the app renders none"]);
+  });
+
+  it("applies only to its own section and canvas, and is stale once the canvas draws the app's shape", () => {
+    const other = applySlotAllowlist(
+      [],
+      { ...where, region: "d-home · события" },
+      canvas,
+      app,
+      cardShapes,
+    );
+    expect(other.stale).toEqual([]);
+    expect(diffSlots(other.canvas, other.app)).not.toEqual([]);
+    const redrawn = applySlotAllowlist(
+      [],
+      where,
+      { ...canvas, cards: [["button"]] },
+      app,
+      cardShapes,
+    );
+    expect(redrawn.stale).toHaveLength(1);
   });
 });
 

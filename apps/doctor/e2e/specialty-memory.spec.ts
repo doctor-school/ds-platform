@@ -267,7 +267,7 @@ test.describe("017 EARS-6/7: remembering a chosen specialty (#1482)", () => {
     await expect(page.getByTestId("specialty-entry")).toHaveCount(
       FREQUENT.length,
     );
-    await expect(page.getByTestId("specialty-expand")).toHaveText(
+    await expect(page.getByTestId("specialty-expand")).toHaveAccessibleName(
       `Показать весь список — ${BOOK.total}`,
     );
   });

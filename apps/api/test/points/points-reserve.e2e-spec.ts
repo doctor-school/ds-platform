@@ -104,8 +104,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await pulOf(h, personId)).toBe(20);
     });
 
-    it("EARS-17: until the advance slice (#3811) an advance-mode item short of Pul is refused like a threshold one", async () => {
-      const personId = await payer(h, 10);
+    it("EARS-17: an advance-mode item beyond the advance cap is refused like a threshold one", async () => {
+      const { rows } = await h.pool.query<{ value: number }>(
+        `SELECT (parameters->>'value')::int AS value FROM points_rule_versions
+          WHERE rule_id = 'setting.advance.cap' AND effective_from <= now()
+          ORDER BY version DESC LIMIT 1`,
+      );
+      const personId = await payer(h, 0);
+      const atCap = await pricedItem(h, { mode: "advance", pulCost: rows[0]!.value });
+      await h.engine.record(signUp(personId, atCap));
+      await fund(h, personId, 10);
       const item = await pricedItem(h, { mode: "advance", pulCost: 50 });
       const error = await refusalOf(h.engine.record(signUp(personId, item)));
       expect(error.errorCode).toBe("POINTS_THRESHOLD_SHORT");

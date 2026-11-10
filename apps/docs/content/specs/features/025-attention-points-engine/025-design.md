@@ -212,7 +212,7 @@ erDiagram
 - `points_facts` is not partitioned: its `event_id` must be globally unique (the reason `points_posting_keys` is not partitioned, §2). A `BEFORE UPDATE OR DELETE` trigger raises except an UPDATE that changes only `person_id` under the erasure procedure's session flag — the same carve-out as postings. Index (`person_id`, `received_at DESC`) serves EARS-45.
 - `points_rule_versions` gains `kind` (nullable, so the 0059 rows stay untouched; every new row sets it) and `trigger_fact_types text[] NOT NULL DEFAULT '{}'` with a GIN index. `ALTER TABLE … ADD COLUMN` with a constant default is a catalog change that fires no row trigger, so the immutability trigger of 0059 is not bypassed or edited.
 - `points_postings` gains the index (`rule_id`, `credit_account_id`, `occurred_at`) for `countPer`. `points_posting_keys` keeps its shape; only the content of `dedupe_key` changes.
-- `points_prices`, `points_reserves`, `points_obligations` ship with the spend slice in migration 0061; `points_obligations` has no writer until the advance slice (#3811), so `advance` reads `{ open: 0, remaining: 0 }` until then. They carry `audit_row_change()`; a price-list write also goes through the request audit context (§8).
+- `points_prices`, `points_reserves`, `points_obligations` ship with the spend slice in migration 0061; `points_obligations` is written by the advance branch of `reserve` (opened), by every Pul credit (netted) and by `release` (annulled), E. They carry `audit_row_change()`; a price-list write also goes through the request audit context (§8).
 
 ### G. Clause map
 
@@ -289,7 +289,7 @@ The implementation PR declares `Release-requires: #3850`, a read-only prod pre-c
 
 `points-rule-unknown` (live in 0059's publish route) disappears: any new slug is accepted.
 
-The spend effects read the hold of the fact's `registrationId` on its item and the price list of its ref, so publish refuses (`points-rule-parameters-invalid`) a `reserve`, `settle` or `release` effect whose trigger types do not all carry an item ref and the `registrationId` attribute (field path `effect.kind`), a `debit` of the price-list amount on a trigger type without an item ref (`effect.amounts`), and a `concurrentOpen` limit on any effect but `reserve` (`limits.N.concurrentOpen`), which bounds holds. A `settle` or `release` with no held reserve for the registration is traced `no-open-hold`; a `reserve` on an item with no chargeable row is traced `no-price` (EARS-14, 35). Until the advance slice (#3811) the `reserve` effect never opens an advance: an advance-mode item short of Pul is refused `points-threshold-short` like a threshold one (EARS-17).
+The spend effects read the hold of the fact's `registrationId` on its item and the price list of its ref, so publish refuses (`points-rule-parameters-invalid`) a `reserve`, `settle` or `release` effect whose trigger types do not all carry an item ref and the `registrationId` attribute (field path `effect.kind`), a `debit` of the price-list amount on a trigger type without an item ref (`effect.amounts`), and a `concurrentOpen` limit on any effect but `reserve` (`limits.N.concurrentOpen`), which bounds holds. A `settle` or `release` with no held reserve for the registration is traced `no-open-hold`; a `reserve` on an item with no chargeable row is traced `no-price` (EARS-14, 35). A `reserve` with `allowAdvance` on an advance-mode item short of Pul covers the shortfall from the advance while the person's open obligations stay within `setting.advance.cap` (EARS-15, 16); beyond the cap, or without `allowAdvance`, it is refused `points-threshold-short` like a threshold one (EARS-17).
 
 ### J. Starter-bonus grant
 
@@ -385,7 +385,7 @@ sequenceDiagram
     I-->>P: duplicate
   else new
     opt open obligation and Pul > 0
-      I->>L: leg obligation-settle:pul person→advance (min(pul, remaining))
+      I->>L: leg obligation-settle:<obligationId> person→advance per open obligation, oldest first (min(left, remaining))
     end
     L->>L: insert postings
     I->>L: COMMIT (accept; acceptWithin: the producer commits)
@@ -398,14 +398,15 @@ The rule is read before the ledger core runs, because the legs are built from it
 
 - **Event publication.** apps/api has no event bus; `PointsCredited` is published through the module's one typed in-process provider, `PointsEventsPublisher`, strictly after COMMIT, so a subscriber never sees a credit that rolled back. A duplicate or a zero credit (a rule version crediting 0 in every denomination writes nothing, not even a key row) publishes nothing. `accept(fact)` owns its transaction and publishes after its own COMMIT. `acceptWithin(tx, fact)` posts inside the producer's transaction, whose commit is the producer's: it returns `{ outcome, publishAfterCommit }`, so the obligation sits in the return type — the producer calls `publishAfterCommit()` after its COMMIT, and a producer that rolled back never calls it. Delivery is in-process and at-most-once; the postings, not the event, are the record.
 - **EARS-12 in the ledger core.** Whatever the caller, the ledger core refuses a leg that debits Bre or Con from a person account without reversing a specific earlier posting (`points-bre-con-debit`, 422, nothing written). Every leg carries one denomination, so no fact can express a penalty or a conversion between denominations.
-- **Built by later slices.** The `obligation-settle:pul` leg (#3811), the per-action award conditions — offline/open learning without Pul, the presence share (#3809) — and the referral monthly cap (#3816). The engagement cap of EARS-10 needs no state: the dedupe key per (person, event, action) is the cap.
+- **Obligation netting.** Every Pul credit the engine applies carries, in its own ledger fact, one `obligation-settle:<obligationId>` leg per open obligation of the beneficiary it nets, oldest first (E); `AdvanceSettled { personId, eventId, settled, remaining }` is published through `PointsEventsPublisher` after COMMIT, like `PointsCredited`.
+- **Built by later slices.** The per-action award conditions — offline/open learning without Pul, the presence share (#3809) — and the referral monthly cap (#3816). The engagement cap of EARS-10 needs no state: the dedupe key per (person, event, action) is the cap.
 
 ## 5. Reserve lifecycle (EARS-14–21)
 
 A hold is reserved, settled and released by the effects of the seeded rules `spend.reserve`, `spend.settle` and `spend.release` on the registration facts; its state diagram, the legs of each transition, the projections and the no-show sweep are in the production amendment, E.
 
 - **After settle**, the obligation stays open and is netted by later Pul accruals (EARS-20); it is never a negative balance — the read model reports `advance.remaining`, and `pul.available` is the fold of the person account, which no posting takes below zero.
-- **Gating decision** (EARS-13) is `quote` of a draft `registration.created` on the item (amendment D): the same evaluation the `record` of the sign-up runs, so the advertised decision and the enforced one cannot diverge. `shortfall = price − available`, `pulToEarn = shortfall + Σ remaining obligations` (EARS-20 nets new Pul to obligations first), `lessonsNeeded = ceil(pulToEarn / the Pul credit of the active accrual.lesson version)`. The read answers every valid request 200 with a decision: `open`, `reserve`, `reserve-with-advance` (with #3811), `short` (with `shortfall` and `earnHint`), or `blocked` with `reason` = the problem slug the sign-up's `record` would raise for the account's state — `points-phone-unverified`, `points-reserve-limit`, `points-account-closed`; any other refusal is a defect and surfaces as such. A malformed `:itemRef` is 400 `points-item-ref-invalid`. No rule can read an attribution (EARS-15 invariant, EARS-33).
+- **Gating decision** (EARS-13) is `quote` of a draft `registration.created` on the item (amendment D): the same evaluation the `record` of the sign-up runs, so the advertised decision and the enforced one cannot diverge. `shortfall = price − available`, `pulToEarn = shortfall + Σ remaining obligations` (EARS-20 nets new Pul to obligations first), `lessonsNeeded = ceil(pulToEarn / the Pul credit of the active accrual.lesson version)`. The read answers every valid request 200 with a decision: `open`, `reserve`, `reserve-with-advance` (`reservedFromBalance` + `coveredByAdvance`), `short` (with `shortfall` and `earnHint`), or `blocked` with `reason` = the problem slug the sign-up's `record` would raise for the account's state — `points-phone-unverified`, `points-reserve-limit`, `points-account-closed`; any other refusal is a defect and surfaces as such. A malformed `:itemRef` is 400 `points-item-ref-invalid`. No rule can read an attribution (EARS-15 invariant, EARS-33).
 
 ## 6. Rule book (EARS-25, 26)
 

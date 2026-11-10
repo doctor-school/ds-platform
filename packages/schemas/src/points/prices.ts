@@ -74,7 +74,8 @@ export type PointsPrice = z.infer<typeof PointsPriceSchema>;
  *  - `open`: no price-list row, an `open` row or a zero price;
  *  - `reserve`: the available Pul covers the price, held from the balance;
  *  - `reserve-with-advance`: advance mode, the shortfall fits the advance cap
- *    (lands with the advance slice #3811 — this read does not answer it yet);
+ *    — `reservedFromBalance` from the balance, `coveredByAdvance` the
+ *    shortfall (EARS-15, EARS-16);
  *  - `short`: `shortfall` = price − available, with the `earnHint`;
  *  - `blocked`: the sign-up's `record` would refuse for a state of the
  *    doctor's account other than the price — `reason` is the problem slug

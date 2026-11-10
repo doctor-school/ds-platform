@@ -1,5 +1,6 @@
 import {
   type DrizzleHandle,
+  type PointsObligationRow,
   type PointsPriceRow,
   type PointsReserveRow,
   pointsAccounts,
@@ -9,11 +10,21 @@ import {
   pointsReserves,
 } from "@ds/db";
 import type { PointsAccountRef, PointsRuleLimit } from "@ds/schemas";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, ne, type SQL, sql } from "drizzle-orm";
 
 type Db = DrizzleHandle["db"];
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Executor = Db | Tx;
+
+/** A posting of a hold or of its obligation's netting, its accounts as refs. */
+export interface HoldPosting {
+  id: string;
+  leg: string;
+  amount: number;
+  occurredAt: Date;
+  debit: PointsAccountRef;
+  credit: PointsAccountRef;
+}
 
 type ConcurrentOpenFilter = Extract<
   PointsRuleLimit,
@@ -155,16 +166,31 @@ export class HoldBook {
   async reservePostings(
     executor: Executor,
     reserveEventId: string,
-  ): Promise<
-    Array<{
-      id: string;
-      leg: string;
-      amount: number;
-      occurredAt: Date;
-      debit: PointsAccountRef;
-      credit: PointsAccountRef;
-    }>
-  > {
+  ): Promise<HoldPosting[]> {
+    return this.postingsWhere(executor, eq(pointsPostings.eventId, reserveEventId));
+  }
+
+  /**
+   * EARS-18 / EARS-35 — the `obligation-settle:<obligationId>` legs that
+   * netted one obligation (person → advance), with their accounts as refs.
+   */
+  async nettingPostings(
+    executor: Executor,
+    obligation: { id: string; personAccountId: string },
+  ): Promise<HoldPosting[]> {
+    return this.postingsWhere(
+      executor,
+      and(
+        eq(pointsPostings.debitAccountId, obligation.personAccountId),
+        eq(pointsPostings.leg, `obligation-settle:${obligation.id}`),
+      )!,
+    );
+  }
+
+  private async postingsWhere(
+    executor: Executor,
+    where: SQL,
+  ): Promise<HoldPosting[]> {
     const rows = await executor
       .select({
         id: pointsPostings.id,
@@ -175,8 +201,8 @@ export class HoldBook {
         creditAccountId: pointsPostings.creditAccountId,
       })
       .from(pointsPostings)
-      .where(eq(pointsPostings.eventId, reserveEventId))
-      .orderBy(asc(pointsPostings.leg));
+      .where(where)
+      .orderBy(asc(pointsPostings.leg), asc(pointsPostings.id));
     const ids = [...new Set(rows.flatMap((r) => [r.debitAccountId, r.creditAccountId]))];
     const accounts = new Map<string, PointsAccountRef>();
     const rowsById =
@@ -206,6 +232,70 @@ export class HoldBook {
     }));
   }
 
+  /** EARS-20 — the person's open obligations, oldest `opened_at` first. */
+  async openObligations(
+    executor: Executor,
+    personAccountId: string,
+  ): Promise<Array<{ id: string; remaining: number }>> {
+    return executor
+      .select({ id: pointsObligations.id, remaining: pointsObligations.remaining })
+      .from(pointsObligations)
+      .where(
+        and(
+          eq(pointsObligations.personAccountId, personAccountId),
+          eq(pointsObligations.state, "open"),
+        ),
+      )
+      .orderBy(asc(pointsObligations.openedAt), asc(pointsObligations.id));
+  }
+
+  /** EARS-18 — the obligation of a registration's hold that is not annulled yet. */
+  async obligationOf(
+    executor: Executor,
+    registrationId: string,
+  ): Promise<PointsObligationRow | undefined> {
+    const [row] = await executor
+      .select()
+      .from(pointsObligations)
+      .where(
+        and(
+          eq(pointsObligations.registrationId, registrationId),
+          ne(pointsObligations.state, "annulled"),
+        ),
+      );
+    return row;
+  }
+
+  /** EARS-20 — `amount` of an open obligation netted; `netted` once nothing remains. */
+  async netObligation(tx: Tx, obligationId: string, amount: number): Promise<void> {
+    const netted = await tx
+      .update(pointsObligations)
+      .set({
+        netted: sql`${pointsObligations.netted} + ${amount}`,
+        remaining: sql`${pointsObligations.remaining} - ${amount}`,
+        state: sql`CASE WHEN ${pointsObligations.remaining} - ${amount} = 0 THEN 'netted' ELSE 'open' END`,
+      })
+      .where(
+        and(
+          eq(pointsObligations.id, obligationId),
+          eq(pointsObligations.state, "open"),
+          gte(pointsObligations.remaining, amount),
+        ),
+      )
+      .returning({ id: pointsObligations.id });
+    if (netted.length !== 1) {
+      throw new Error(`points: obligation ${obligationId} could not net ${amount}`);
+    }
+  }
+
+  /** EARS-18 — the released hold's obligation: `annulled`, nothing remaining. */
+  async annulObligation(tx: Tx, obligationId: string): Promise<void> {
+    await tx
+      .update(pointsObligations)
+      .set({ state: "annulled", remaining: 0 })
+      .where(eq(pointsObligations.id, obligationId));
+  }
+
   async insertReserve(
     tx: Tx,
     row: {
@@ -213,16 +303,24 @@ export class HoldBook {
       personAccountId: string;
       itemRef: string;
       price: number;
+      balancePart: number;
+      advancePart: number;
       reserveEventId: string;
       heldAt: Date;
     },
   ): Promise<void> {
-    await tx.insert(pointsReserves).values({
-      ...row,
-      balancePart: row.price,
-      advancePart: 0,
-      state: "held",
-    });
+    await tx.insert(pointsReserves).values({ ...row, state: "held" });
+    if (row.advancePart > 0) {
+      // EARS-15 — the advance part opens the registration's obligation.
+      await tx.insert(pointsObligations).values({
+        personAccountId: row.personAccountId,
+        registrationId: row.registrationId,
+        opened: row.advancePart,
+        remaining: row.advancePart,
+        state: "open",
+        openedAt: row.heldAt,
+      });
+    }
   }
 
   async closeReserve(

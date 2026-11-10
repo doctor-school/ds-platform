@@ -122,9 +122,8 @@ export class PointsPricesService {
    * read answers every valid request with a decision: a refusal for the
    * account's state (`points-phone-unverified`, `points-reserve-limit`,
    * `points-account-closed`) is the `blocked` decision with that slug as its
-   * `reason`; only a malformed `itemRef` is refused (400). The
-   * `reserve-with-advance` branch and the advance part of `pulToEarn` land
-   * with the advance slice (#3811).
+   * `reason`; only a malformed `itemRef` is refused (400). A reserve with an
+   * advance part (EARS-15) is `reserve-with-advance`.
    */
   async gating(
     personId: string,
@@ -165,10 +164,17 @@ export class PointsPricesService {
     }
     const reserve = quoted.applied.find((a) => a.effect === "reserve");
     if (reserve) {
-      const held = reserve.legs
-        .filter((l) => l.leg === "reserve:balance")
-        .reduce((n, l) => n + l.amount, 0);
-      return { ...base, decision: "reserve", reservedFromBalance: held };
+      const part = (leg: string) =>
+        reserve.legs
+          .filter((l) => l.leg === leg)
+          .reduce((n, l) => n + l.amount, 0);
+      const covered = part("reserve:advance");
+      return {
+        ...base,
+        decision: covered > 0 ? "reserve-with-advance" : "reserve",
+        reservedFromBalance: part("reserve:balance"),
+        coveredByAdvance: covered,
+      };
     }
     return { ...base, decision: "open" };
   }

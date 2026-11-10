@@ -30,7 +30,10 @@ import {
 import { and, asc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { withRequestAuditContext } from "../../audit/audit-context.tx.js";
 import { DRIZZLE_DB } from "../../database/database.tokens.js";
-import { PointsEventsPublisher } from "../points-events.js";
+import {
+  type PointsAdvanceSettledEvent,
+  PointsEventsPublisher,
+} from "../points-events.js";
 import { POINTS_FUTURE_SKEW_MS, PointsLedgerService } from "../points-ledger.service.js";
 import { PointsLedgerError } from "../points.errors.js";
 import { type CandidateRule, RuleBookService } from "../rule-book.service.js";
@@ -100,6 +103,43 @@ interface Applied {
   ledgerEventId: string;
   legs: PointsPostingLeg[];
   postings: PointsPosting[];
+  /** EARS-20 — what this credit netted of open obligations, per person. */
+  netted: Netting[];
+}
+
+/** EARS-20 — what one Pul credit netted of a person's open obligations. */
+interface Netting {
+  personId: string;
+  settled: number;
+  /** Σ remaining of the person's open obligations after the netting. */
+  remaining: number;
+}
+
+/**
+ * EARS-20 — the open obligations of the person accounts one evaluation
+ * nets, read once (after the person locks of `record`) and kept current as
+ * each credit nets them, so two credits of one fact never net the same Pul
+ * twice — under `quote` too, which writes nothing.
+ */
+class OpenObligations {
+  private readonly byAccount = new Map<
+    string,
+    Array<{ id: string; remaining: number }>
+  >();
+
+  constructor(
+    private readonly holds: HoldBook,
+    private readonly executor: Tx,
+  ) {}
+
+  async of(personAccountId: string) {
+    let open = this.byAccount.get(personAccountId);
+    if (!open) {
+      open = await this.holds.openObligations(this.executor, personAccountId);
+      this.byAccount.set(personAccountId, open);
+    }
+    return open;
+  }
 }
 
 /** EARS-33 — what `record` answers. */
@@ -155,10 +195,12 @@ class JournalRaceLost extends Error {}
  *
  * The spend effects (EARS-35; 025-design E) read the price list and write
  * the hold projections in the same transaction as their postings: `reserve`
- * holds the item's price from the balance (`points-threshold-short` when it
- * does not cover it — the advance of EARS-15/16 ships with #3811), `settle`
- * moves a held price to the sink, `release` reverses the hold's postings, and
- * a `settle` / `release` with no open hold is traced `no-open-hold`.
+ * holds the item's price from the balance and, on an advance-mode item within
+ * the advance cap, the shortfall from the advance, opening an obligation
+ * (EARS-14…17); `settle` moves a held price to the sink; `release` reverses
+ * the hold's postings and its obligation's netting (EARS-18); a `settle` /
+ * `release` with no open hold is traced `no-open-hold`. Every Pul credit
+ * first nets the beneficiary's open obligations (EARS-20).
  *
  * `quote` (EARS-41) runs the very same evaluation in a READ ONLY transaction
  * with no locks and no inserts — one code path, so an advertised decision and
@@ -200,7 +242,9 @@ export class PointsEngine {
           const evaluated = await this.evaluate(tx, fact, entry, "quote", trace);
           return {
             outcome: evaluated.outcome,
-            applied: evaluated.applied.map(({ postings: _p, ...a }) => a),
+            applied: evaluated.applied.map(
+              ({ postings: _p, netted: _n, ...a }) => a,
+            ),
             trace,
           };
         } catch (error) {
@@ -268,13 +312,18 @@ export class PointsEngine {
           .returning({ eventId: pointsFacts.eventId });
         if (inserted.length === 0) throw new JournalRaceLost();
         const applications: PointsApplication[] = applied.map(
-          ({ legs: _l, ...a }) => a,
+          ({ legs: _l, netted: _n, ...a }) => a,
         );
         return {
           outcome,
           applied: applications,
           trace,
-          publishAfterCommit: this.publisher(fact.eventId, applications, accounts),
+          publishAfterCommit: this.publisher(
+            fact.eventId,
+            applications,
+            accounts,
+            applied.flatMap((a) => a.netted),
+          ),
         };
       });
     } catch (error) {
@@ -415,6 +464,7 @@ export class PointsEngine {
       ...winners.filter((e) => e.candidate.rule.effect.kind === "credit"),
     ];
     const applied: Applied[] = [];
+    const obligations = new OpenObligations(this.holds, sp);
     for (const e of ordered) {
       const effect = e.candidate.rule.effect;
       const ledgerEventId = `${fact.eventId}#${e.candidate.ruleId}`;
@@ -424,7 +474,10 @@ export class PointsEngine {
         effect,
         price,
         predicates,
+        settings,
+        obligations,
         subjectAccountId: accounts.get(fact.personId),
+        beneficiaryAccountId: accounts.get(e.beneficiaryId),
         ledgerEventId,
       });
       if ("verdict" in planned) {
@@ -458,6 +511,7 @@ export class PointsEngine {
         ledgerEventId,
         legs: planned.legs,
         postings: posted.postings,
+        netted: planned.netted ?? [],
       });
     }
 
@@ -477,30 +531,77 @@ export class PointsEngine {
       effect: PointsRule["effect"];
       price: PointsPriceRow | undefined;
       predicates: JournalPredicateResolver;
+      settings: Record<PointsSettingId, number>;
+      obligations: OpenObligations;
       subjectAccountId: string | undefined;
+      beneficiaryAccountId: string | undefined;
       ledgerEventId: string;
     },
   ): Promise<
-    | { legs: PointsPostingLeg[]; project?: (tx: Tx) => Promise<void> }
+    | {
+        legs: PointsPostingLeg[];
+        project?: (tx: Tx) => Promise<void>;
+        netted?: Netting[];
+      }
     | { verdict: "no-price" | "no-open-hold" | "limit-reached" }
   > {
     const { fact, e, effect, price, subjectAccountId } = ctx;
     const common = commonOf(fact, e);
     const person = { kind: "person", personId: fact.personId } as const;
     switch (effect.kind) {
-      case "credit":
+      case "credit": {
+        const beneficiary = { kind: "person", personId: e.beneficiaryId } as const;
+        const legs = DENOMINATIONS.filter((d) => effect.amounts[d] > 0).map(
+          (d): PointsPostingLeg => ({
+            leg: `accrual:${d}`,
+            debit: { kind: "system", code: "issuance" },
+            credit: beneficiary,
+            denomination: d,
+            amount: effect.amounts[d],
+            ...common,
+          }),
+        );
+        // EARS-20 — the Pul credit nets the beneficiary's open obligations
+        // first, oldest first, inside this very ledger fact.
+        const open =
+          effect.amounts.pul > 0 && ctx.beneficiaryAccountId
+            ? await ctx.obligations.of(ctx.beneficiaryAccountId)
+            : [];
+        const nets: Array<{ id: string; amount: number }> = [];
+        let left = effect.amounts.pul;
+        for (const o of open) {
+          if (left === 0) break;
+          const amount = Math.min(left, o.remaining);
+          if (amount === 0) continue;
+          o.remaining -= amount;
+          left -= amount;
+          nets.push({ id: o.id, amount });
+          legs.push({
+            leg: `obligation-settle:${o.id}`,
+            debit: beneficiary,
+            credit: { kind: "system", code: "advance" },
+            denomination: "pul",
+            amount,
+            ...common,
+          });
+        }
+        if (nets.length === 0) return { legs };
         return {
-          legs: DENOMINATIONS.filter((d) => effect.amounts[d] > 0).map(
-            (d): PointsPostingLeg => ({
-              leg: `accrual:${d}`,
-              debit: { kind: "system", code: "issuance" },
-              credit: { kind: "person", personId: e.beneficiaryId },
-              denomination: d,
-              amount: effect.amounts[d],
-              ...common,
-            }),
-          ),
+          legs,
+          project: async (tx) => {
+            for (const n of nets) {
+              await this.holds.netObligation(tx, n.id, n.amount);
+            }
+          },
+          netted: [
+            {
+              personId: e.beneficiaryId,
+              settled: nets.reduce((sum, n) => sum + n.amount, 0),
+              remaining: open.reduce((sum, o) => sum + o.remaining, 0),
+            },
+          ],
         };
+      }
       case "debit": {
         const amount =
           effect.amounts === "price"
@@ -535,33 +636,61 @@ export class PointsEngine {
         const available = subjectAccountId
           ? await this.ledger.availablePul(subjectAccountId, sp)
           : 0;
-        if (available < price.pulCost) {
-          // EARS-17 — the advance of EARS-15/16 ships with #3811; until then
-          // an advance-mode item is refused like a threshold one.
-          throw await this.thresholdShort(
-            sp,
-            fact.occurredAt,
-            subjectAccountId,
-            price.pulCost - available,
-          );
+        const balancePart = Math.min(available, price.pulCost);
+        const advancePart = price.pulCost - balancePart;
+        if (advancePart > 0) {
+          // EARS-15 / EARS-16 / EARS-17 — an advance-mode item covers the
+          // shortfall from the advance while the person's open obligations
+          // stay within the cap; otherwise it refuses like a threshold one.
+          const owed = subjectAccountId
+            ? (await this.holds.projection(sp, subjectAccountId)).advance
+                .remaining
+            : 0;
+          const advance =
+            price.mode === "advance" &&
+            effect.allowAdvance &&
+            owed + advancePart <= ctx.settings["setting.advance.cap"];
+          if (!advance) {
+            throw await this.thresholdShort(
+              sp,
+              fact.occurredAt,
+              subjectAccountId,
+              advancePart,
+            );
+          }
+        }
+        const reserve = { kind: "system", code: "reserve" } as const;
+        const legs: PointsPostingLeg[] = [];
+        if (balancePart > 0) {
+          legs.push({
+            leg: "reserve:balance",
+            debit: person,
+            credit: reserve,
+            denomination: "pul",
+            amount: balancePart,
+            ...common,
+          });
+        }
+        if (advancePart > 0) {
+          legs.push({
+            leg: "reserve:advance",
+            debit: { kind: "system", code: "advance" },
+            credit: reserve,
+            denomination: "pul",
+            amount: advancePart,
+            ...common,
+          });
         }
         return {
-          legs: [
-            {
-              leg: "reserve:balance",
-              debit: person,
-              credit: { kind: "system", code: "reserve" },
-              denomination: "pul",
-              amount: price.pulCost,
-              ...common,
-            },
-          ],
+          legs,
           project: (tx) =>
             this.holds.insertReserve(tx, {
               registrationId,
               personAccountId: subjectAccountId!,
               itemRef: price.itemRef,
               price: price.pulCost,
+              balancePart,
+              advancePart,
               reserveEventId: ctx.ledgerEventId,
               heldAt: fact.occurredAt,
             }),
@@ -605,12 +734,23 @@ export class PointsEngine {
           };
         }
         // EARS-18 — one compensating `reverse:<postingId>` leg per
-        // reserve-side posting; the person ends as if never registered.
-        const reserved = await this.holds.reservePostings(
+        // reserve-side posting and per netting leg of this hold's own
+        // obligation; the person ends as if never registered.
+        const obligation = await this.holds.obligationOf(
           sp,
-          hold.reserveEventId,
+          hold.registrationId,
         );
+        const reserved = [
+          ...(await this.holds.reservePostings(sp, hold.reserveEventId)),
+          ...(obligation
+            ? await this.holds.nettingPostings(sp, obligation)
+            : []),
+        ];
         return {
+          project: async (tx) => {
+            await close(tx);
+            if (obligation) await this.holds.annulObligation(tx, obligation.id);
+          },
           legs: reserved.map(
             (p): PointsPostingLeg => ({
               leg: `reverse:${p.id}`,
@@ -622,7 +762,6 @@ export class PointsEngine {
               ...common,
             }),
           ),
-          project: close,
         };
       }
     }
@@ -937,12 +1076,26 @@ export class PointsEngine {
     };
   }
 
-  /** One `PointsCredited` per credited person, carrying that person's credit postings. */
+  /**
+   * One `PointsCredited` per credited person, carrying that person's credit
+   * postings, then one `AdvanceSettled` per person whose open obligations
+   * the fact netted (EARS-20) — `remaining` as after its last credit.
+   */
   private publisher(
     eventId: string,
     applied: PointsApplication[],
     accounts: Map<string, string>,
+    netted: Netting[],
   ): () => Promise<void> {
+    const settled = new Map<string, PointsAdvanceSettledEvent>();
+    for (const n of netted) {
+      settled.set(n.personId, {
+        personId: n.personId,
+        eventId,
+        settled: (settled.get(n.personId)?.settled ?? 0) + n.settled,
+        remaining: n.remaining,
+      });
+    }
     const byAccount = new Map<string, string>(
       [...accounts.entries()].map(([personId, accountId]) => [accountId, personId]),
     );
@@ -967,6 +1120,9 @@ export class PointsEngine {
       published = true;
       for (const event of events.values()) {
         await this.events.publishCredited(event);
+      }
+      for (const event of settled.values()) {
+        await this.events.publishAdvanceSettled(event);
       }
     };
   }

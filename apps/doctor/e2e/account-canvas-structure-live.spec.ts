@@ -135,6 +135,8 @@ for (const width of [390, 1440]) {
  * Compared: the poster band (`постер-шапка`, chrome by kind + label) and the
  * state's body section — `нет регистрации` (chrome), `выбор вида` (head chrome
  * + kind columns by shape), `список` (head chrome + chips and rows by shape).
+ * The poster band's «Как заполнить заявку ↗» (046 EARS-36, newer than the
+ * canvas) is a decided extra in `canvas-structure-allowlist.json`.
  *
  * Not compared:
  * - `загрузка` / `ошибка` — transient read states the signed-in page passes

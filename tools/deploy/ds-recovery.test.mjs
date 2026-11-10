@@ -137,6 +137,8 @@ describe("3662: the key custody, box side", { skip: SKIP }, () => {
         "  -K) cfg=$2; shift 2 ;; -w|-H|--aws-sigv4|--connect-timeout|--max-time) shift 2 ;;",
         "  https://*) url=$1; shift ;; *) shift ;; esac; done",
         'cat -- "$cfg" >> "$STUB_DIR/curl-config.seen"',
+        // curl's own failure: -w still writes 000, the exit status names the cause.
+        '[[ -n ${STUB_CURL_EXIT:-} ]] && { printf 000; exit "$STUB_CURL_EXIT"; }',
         '[[ -n ${STUB_CURL_CODE:-} ]] && { printf %s "$STUB_CURL_CODE"; exit 0; }',
         'obj="$STUB_DIR/bucket/${url#https://*/}"',
         "case $method in",
@@ -452,6 +454,29 @@ describe("3662: the key custody, box side", { skip: SKIP }, () => {
       r.stderr,
       /data-prod: ds-recovery: the upload to the bucket failed \(HTTP 403\)/,
     );
+    assert.equal(r.stdout, "");
+  });
+
+  it("a curl failure on the upload names curl's exit code, nothing else", () => {
+    const r = read("recovery-bundle", { STUB_CURL_EXIT: "6" });
+    assert.equal(r.status, 1);
+    assert.match(
+      r.stderr,
+      /data-prod: ds-recovery: the upload to the bucket failed \(curl exit 6\)/,
+    );
+    assert.doesNotMatch(r.stderr, /HTTP 000/);
+    assert.equal(r.stdout, "");
+  });
+
+  it("a curl failure on a read names curl's exit code, nothing else", () => {
+    assert.equal(read("recovery-bundle").status, 0);
+    const r = read("recovery-check", { STUB_CURL_EXIT: "28" });
+    assert.equal(r.status, 1);
+    assert.match(
+      r.stderr,
+      /data-prod: ds-recovery: the bucket read failed \(curl exit 28\)/,
+    );
+    assert.doesNotMatch(r.stderr, /HTTP 000/);
     assert.equal(r.stdout, "");
   });
 

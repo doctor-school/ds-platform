@@ -234,8 +234,9 @@ py() { python3 -I -c "$PY" "$@"; }
 
 # --- S3 (ds-data-prod: the pgBackRest bucket, its credentials from data.env) ---------
 s3_value() { sed -n "s/^$1=//p" "$DATA_ENV" | tail -n 1 | tr -d '\r'; }
-# s3 PUT|GET|HEAD <object key> <file>; prints the HTTP status. The credentials go to
-# curl in a root-only config file, never on a command line.
+# s3 PUT|GET|HEAD <object key> <file>; prints the HTTP status, or `curl exit <n>` when
+# curl itself fails (its stderr may name the endpoint, so only the number is kept).
+# The credentials go to curl in a root-only config file, never on a command line.
 s3() {
   local method=$1 key=$2 file=$3 bucket endpoint region access secret cfg payload code
   [[ $key == "$PREFIX/"* && $key != *..* ]] || fail "an object key outside $PREFIX/"
@@ -254,20 +255,24 @@ s3() {
   case $method in
     PUT)
       payload=$(sha256sum -- "$file" | cut -d' ' -f1)
-      code=$(curl "${args[@]}" -H "x-amz-content-sha256: $payload" -T "$file" -o /dev/null 2>/dev/null) || code=000 ;;
+      code=$(curl "${args[@]}" -H "x-amz-content-sha256: $payload" -T "$file" -o /dev/null 2>/dev/null) || code="curl exit $?" ;;
     GET)
-      code=$(curl "${args[@]}" -H "x-amz-content-sha256: $(sha256sum </dev/null | cut -d' ' -f1)" -o "$file" 2>/dev/null) || code=000 ;;
+      code=$(curl "${args[@]}" -H "x-amz-content-sha256: $(sha256sum </dev/null | cut -d' ' -f1)" -o "$file" 2>/dev/null) || code="curl exit $?" ;;
     HEAD)
-      code=$(curl "${args[@]}" -H "x-amz-content-sha256: $(sha256sum </dev/null | cut -d' ' -f1)" -I -o "$file" 2>/dev/null) || code=000 ;;
+      code=$(curl "${args[@]}" -H "x-amz-content-sha256: $(sha256sum </dev/null | cut -d' ' -f1)" -I -o "$file" 2>/dev/null) || code="curl exit $?" ;;
   esac
   rm -f -- "$cfg"
   printf '%s' "$code"
 }
 
+# The failure wording of an s3 result: `HTTP <code>` (the bucket's answer) or
+# `curl exit <n>` (curl's own exit status).
+s3_why() { [[ $1 == "curl exit "* ]] && printf '%s' "$1" || printf 'HTTP %s' "$1"; }
+
 s3_put() { # <key> <file>
   local code
   code=$(s3 PUT "$1" "$2")
-  [[ $code == 200 ]] || fail "the upload to the bucket failed (HTTP $code)"
+  [[ $code == 200 ]] || fail "the upload to the bucket failed ($(s3_why "$code"))"
 }
 
 # The stored size of an object, or nothing when it is absent.
@@ -277,7 +282,7 @@ s3_size() { # <key> <work-dir>
   case $code in
     200) tr -d '\r' <"$2/head" | sed -n 's/^[Cc]ontent-[Ll]ength: *\([0-9][0-9]*\)$/\1/p' | tail -n 1 ;;
     404) ;;
-    *) fail "the bucket read failed (HTTP $code)" ;;
+    *) fail "the bucket read failed ($(s3_why "$code"))" ;;
   esac
 }
 
@@ -385,7 +390,7 @@ case $cmd in
     case $code in
       200) ;;
       404) echo MISSING; exit 0 ;;
-      *) fail "the bucket read failed (HTTP $code)" ;;
+      *) fail "the bucket read failed ($(s3_why "$code"))" ;;
     esac
     object=$(py field "$work/latest.json" "$box" object)
     [[ $object =~ ^recovery-bundle/$box/[0-9]{8}T[0-9]{6}Z\.tar\.age$ ]] || fail "the manifest names an unexpected object"

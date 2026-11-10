@@ -164,6 +164,15 @@ identity. The log carries status lines only; the repository is public and no art
 is uploaded. Nothing on the boxes deletes old bundles; a provider lifecycle rule on
 the prefix is tracked in `DEBT.md`.
 
+**A bucket failure.** A failed bucket call fails the verb with one fixed reason,
+`ds-recovery: the upload to the bucket failed (<why>)` or
+`ds-recovery: the bucket read failed (<why>)`, where `<why>` is either `HTTP <code>`,
+the bucket's own answer, or `curl exit <n>`,
+curl's own exit status when no answer came back (for example 6 = host name not
+resolved, 7 = no connection, 28 = time-out, 35 or 60 = TLS; the full list:
+<https://curl.se/docs/manpage.html#EXIT>). The reason carries only that number:
+curl's own message may name the endpoint, so it is discarded.
+
 **No recipient line.** While `custodians.txt` holds no recipient line at all (only
 comments and blank lines), a scheduled run ends green without contacting the boxes and
 leaves the notice «custodian ceremony pending (#3662)» in the log and the job summary;

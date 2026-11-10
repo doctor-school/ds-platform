@@ -258,6 +258,24 @@
       "item": { "kind": "button", "label": "Материалы эфира" },
       "decision": "Open deviation, not decided: the canvas’s «О эфире» tab ends with a «Материалы эфира» button no 006 handler specifies and the app does not build. Remove with the #3907 resolution.",
       "source": "https://github.com/doctor-school/ds-platform/issues/3907"
+    },
+    {
+      "canvas": "event-page.dc.html",
+      "props": { "header": "витрина врача" },
+      "regions": ["d-event · постер-шапка"],
+      "delta": "missing",
+      "item": { "kind": "link", "label": "Doctor.School" },
+      "decision": "Open deviation, not decided: the doctor-host poster breadcrumb on the canvas is «Doctor.School / <specialty> / События»; the page renders the single «События» link (wave-3 gate row 7). Remove with the #3919 resolution.",
+      "source": "https://github.com/doctor-school/ds-platform/issues/3919"
+    },
+    {
+      "canvas": "event-page.dc.html",
+      "props": { "header": "витрина врача" },
+      "regions": ["d-event · постер-шапка"],
+      "delta": "missing",
+      "item": { "kind": "link", "label": "Травматология и ортопедия" },
+      "decision": "Open deviation, not decided: the canvas's specialty step of the doctor-host poster breadcrumb (sample specialty, links the 018 feed), which the page does not render. Remove with the #3919 resolution.",
+      "source": "https://github.com/doctor-school/ds-platform/issues/3919"
     }
   ],
   "cardShapes": [

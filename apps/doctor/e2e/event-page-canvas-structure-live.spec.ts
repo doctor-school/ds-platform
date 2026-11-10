@@ -22,6 +22,9 @@ import { expectSlotSectionMatchesCanvas } from "@ds/e2e/canvas-slots";
  * slug is absent, so a stray CI invocation is inert.
  *
  * Not compared (every other section the canvas labels):
+ * - the «Doctor.School» and specialty steps of the «постер-шапка» breadcrumb —
+ *   the doctor-host canvas draws «Doctor.School / <specialty> / События», the
+ *   page renders «События» alone; an open deviation allowlisted against #3919.
  * - «d-event · блок записи» in «прошло» — the canvas turns it into a «К записи ↓»
  *   jump link the app does not build (no such control in `@ds/event-page`);
  *   the fix is tracked in #3869.

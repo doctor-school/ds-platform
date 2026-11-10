@@ -118,8 +118,8 @@ interface Netting {
 /**
  * EARS-20 — the open obligations of the person accounts one evaluation
  * nets, read once (after the person locks of `record`) and kept current as
- * each credit nets them, so two credits of one fact never net the same Pul
- * twice — under `quote` too, which writes nothing.
+ * each credit the ledger applies nets them, so two credits of one fact never
+ * net the same Pul twice — under `quote` too, which writes nothing.
  */
 class OpenObligations {
   private readonly byAccount = new Map<
@@ -501,6 +501,7 @@ export class PointsEngine {
         if (once) once.verdict = "limit-reached";
         continue;
       }
+      planned.commit?.();
       if (write && planned.project) await planned.project(sp);
       e.trace.verdict = "applied";
       e.trace.ledgerEventId = ledgerEventId;
@@ -542,6 +543,8 @@ export class PointsEngine {
         legs: PointsPostingLeg[];
         project?: (tx: Tx) => Promise<void>;
         netted?: Netting[];
+        /** Applies the plan to the in-memory view once the ledger posted it. */
+        commit?: () => void;
       }
     | { verdict: "no-price" | "no-open-hold" | "limit-reached" }
   > {
@@ -573,7 +576,6 @@ export class PointsEngine {
           if (left === 0) break;
           const amount = Math.min(left, o.remaining);
           if (amount === 0) continue;
-          o.remaining -= amount;
           left -= amount;
           nets.push({ id: o.id, amount });
           legs.push({
@@ -586,8 +588,16 @@ export class PointsEngine {
           });
         }
         if (nets.length === 0) return { legs };
+        const settled = nets.reduce((sum, n) => sum + n.amount, 0);
         return {
           legs,
+          // EARS-20 — a credit the ledger answers `duplicate` nets nothing.
+          commit: () => {
+            for (const n of nets) {
+              const o = open.find((x) => x.id === n.id);
+              if (o) o.remaining -= n.amount;
+            }
+          },
           project: async (tx) => {
             for (const n of nets) {
               await this.holds.netObligation(tx, n.id, n.amount);
@@ -596,8 +606,8 @@ export class PointsEngine {
           netted: [
             {
               personId: e.beneficiaryId,
-              settled: nets.reduce((sum, n) => sum + n.amount, 0),
-              remaining: open.reduce((sum, o) => sum + o.remaining, 0),
+              settled,
+              remaining: open.reduce((sum, o) => sum + o.remaining, 0) - settled,
             },
           ],
         };

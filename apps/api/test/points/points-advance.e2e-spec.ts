@@ -6,9 +6,17 @@ import {
   PointsEventsPublisher,
 } from "../../src/points/points-events.js";
 import { PointsLedgerError } from "../../src/points/points.errors.js";
+import { RuleBookService } from "../../src/points/rule-book.service.js";
+import {
+  publishRule,
+  testFact,
+  testRule,
+  testRuleId,
+} from "./engine-harness.js";
 import {
   bootSpend,
   doctor,
+  fund,
   lessonDone,
   obligationOf,
   payer,
@@ -267,6 +275,166 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const legs = result.applied.flatMap((a) => a.postings.map((p) => p.leg));
       expect(legs.some((l) => l.startsWith("obligation-settle:"))).toBe(false);
       expect(settled.filter((e) => e.eventId === lesson.eventId)).toEqual([]);
+    });
+
+    it("EARS-20: a credit that lost a shared limit key to another rule of the same fact nets nothing — a later Pul credit of that fact nets the true remaining and AdvanceSettled reads it", async () => {
+      const rules = h.app.get(RuleBookService);
+      const runId = randomUUID();
+      const key = `e2e.adv-key.${runId.slice(0, 8)}`;
+      const credit = (
+        pul: number,
+        limits: Parameters<typeof testRule>[1]["limits"],
+      ) =>
+        testRule(runId, {
+          effect: {
+            kind: "credit",
+            beneficiary: "subject",
+            amounts: { pul, bre: 0, con: 0 },
+          },
+          limits,
+        });
+      // Candidates run in rule-id order: a, then b (loses the key), then c.
+      const a = testRuleId("e2e.adv-a");
+      const b = testRuleId("e2e.adv-b");
+      const c = testRuleId("e2e.adv-c");
+      await publishRule(rules, a, credit(10, [{ oncePer: ["subject"], key }]));
+      await publishRule(rules, b, credit(10, [{ oncePer: ["subject"], key }]));
+      await publishRule(rules, c, credit(30, [{ unlimited: true }]));
+
+      const personId = await payer(h, 0);
+      const signUpFact = signUp(
+        personId,
+        await pricedItem(h, { mode: "advance", pulCost: 60 }),
+      );
+      await h.engine.record(signUpFact);
+      const fact = testFact(runId, personId);
+      const result = await h.engine.record(fact);
+      expect(result.trace.find((t) => t.ruleId === a)?.verdict).toBe("applied");
+      expect(result.trace.find((t) => t.ruleId === b)?.verdict).toBe(
+        "limit-reached",
+      );
+      expect(result.trace.find((t) => t.ruleId === c)?.verdict).toBe("applied");
+
+      const credited = result.applied
+        .flatMap((x) => x.postings)
+        .filter((p) => p.leg === "accrual:pul")
+        .reduce((sum, p) => sum + p.amount, 0);
+      const netted = Math.min(credited, 60);
+      expect(
+        await obligationOf(h, signUpFact.attributes.registrationId),
+      ).toMatchObject({
+        opened: 60,
+        netted,
+        remaining: 60 - netted,
+      });
+      expect(await pulOf(h, personId)).toBe(credited - netted);
+      expect(settled.filter((e) => e.eventId === fact.eventId)).toEqual([
+        {
+          personId,
+          eventId: fact.eventId,
+          settled: netted,
+          remaining: 60 - netted,
+        },
+      ]);
+    });
+
+    /** Postings, holds, obligations and the read of a person, plus the postings of `eventId`. */
+    async function stateOf(personId: string, cookie: string, eventId: string) {
+      const rowsOf = async (table: string) =>
+        (
+          await h.pool.query(
+            `SELECT t.* FROM ${table} t
+               JOIN points_accounts a ON a.id = t.person_account_id
+              WHERE a.subject_kind = 'person' AND a.subject_id = $1
+              ORDER BY t.registration_id`,
+            [personId],
+          )
+        ).rows;
+      const res = await h.app.inject({
+        method: "GET",
+        url: "/v1/me/points",
+        headers: sessionHeaders(cookie),
+      });
+      expect(res.statusCode, res.payload).toBe(200);
+      const { rows } = await h.pool.query(
+        "SELECT * FROM points_postings WHERE event_id LIKE $1 ORDER BY event_id, leg",
+        [`${eventId}#%`],
+      );
+      return {
+        person: await postingsOfPerson(h, personId),
+        fact: rows,
+        reserves: await rowsOf("points_reserves"),
+        obligations: await rowsOf("points_obligations"),
+        read: res.json(),
+      };
+    }
+
+    async function replayChangesNothing(
+      fact: Parameters<SpendHarness["engine"]["record"]>[0],
+      personId: string,
+      cookie: string,
+    ) {
+      const before = await stateOf(personId, cookie, fact.eventId);
+      expect(before.fact.length).toBeGreaterThan(0);
+      expect((await h.engine.record(fact)).outcome).toBe("duplicate");
+      expect(await stateOf(personId, cookie, fact.eventId)).toEqual(before);
+    }
+
+    it("EARS-15/4: a replayed advance sign-up answers duplicate and writes no second hold, advance or obligation", async () => {
+      const { cookie, personId } = await doctor(h);
+      await verifyPhone(h, personId);
+      await fund(h, personId, 10);
+      const fact = signUp(
+        personId,
+        await pricedItem(h, { mode: "advance", pulCost: 50 }),
+      );
+      expect((await h.engine.record(fact)).outcome).toBe("applied");
+      expect(
+        (await obligationOf(h, fact.attributes.registrationId))?.opened,
+      ).toBe(40);
+      await replayChangesNothing(fact, personId, cookie);
+    });
+
+    it("EARS-20/4: a replayed accrual that netted an obligation answers duplicate and nets nothing a second time", async () => {
+      const { cookie, personId } = await doctor(h);
+      await verifyPhone(h, personId);
+      const signUpFact = signUp(
+        personId,
+        await pricedItem(h, { mode: "advance", pulCost: 30 }),
+      );
+      await h.engine.record(signUpFact);
+      const lesson = lessonDone(personId);
+      expect((await h.engine.record(lesson)).outcome).toBe("applied");
+      expect(
+        (await obligationOf(h, signUpFact.attributes.registrationId))?.netted,
+      ).toBeGreaterThan(0);
+      await replayChangesNothing(lesson, personId, cookie);
+    });
+
+    it("EARS-18/4: a replayed release that annulled an advance answers duplicate and reverses nothing a second time", async () => {
+      const { cookie, personId } = await doctor(h);
+      await verifyPhone(h, personId);
+      const signUpFact = signUp(
+        personId,
+        await pricedItem(h, { mode: "advance", pulCost: 30 }),
+      );
+      await h.engine.record(signUpFact);
+      await h.engine.record(lessonDone(personId));
+      const registrationId = String(signUpFact.attributes.registrationId);
+      const release = {
+        type: "registration.no-show" as const,
+        eventId: `no-show:${registrationId}`,
+        personId,
+        ref: signUpFact.ref,
+        occurredAt: new Date(),
+        attributes: { registrationId },
+      };
+      expect((await h.engine.record(release)).outcome).toBe("applied");
+      expect(await obligationOf(h, registrationId)).toMatchObject({
+        remaining: 0,
+        state: "annulled",
+      });
+      await replayChangesNothing(release, personId, cookie);
     });
   },
 );

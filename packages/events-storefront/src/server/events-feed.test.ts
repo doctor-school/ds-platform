@@ -199,12 +199,14 @@ describe("019 EARS-3 (#2885): the feed, month and month-counts reads forward the
     acceptLanguage: "ru-RU",
     forwardedFor: "1.2.3.4",
   };
+  // The doctor host's shape: a relay cookie AND session forwarding.
+  const doctorSet: ContentSet = { ...contentSet, forwardSession: true };
   const ok = (body: string) =>
     vi.fn(async () => new Response(body, { status: 200 }));
   const reads = {
     feed: (
       request: typeof SIGNED_IN,
-      set: ContentSet = contentSet,
+      set: ContentSet = doctorSet,
       f = ok("{}"),
     ) =>
       fetchEventsFeed(
@@ -215,7 +217,7 @@ describe("019 EARS-3 (#2885): the feed, month and month-counts reads forward the
       ).then(() => f),
     month: (
       request: typeof SIGNED_IN,
-      set: ContentSet = contentSet,
+      set: ContentSet = doctorSet,
       f = ok("[]"),
     ) =>
       fetchMonthEntries(
@@ -227,7 +229,7 @@ describe("019 EARS-3 (#2885): the feed, month and month-counts reads forward the
       ).then(() => f),
     counts: (
       request: typeof SIGNED_IN,
-      set: ContentSet = contentSet,
+      set: ContentSet = doctorSet,
       f = ok("[]"),
     ) =>
       fetchMonthCounts(
@@ -242,7 +244,7 @@ describe("019 EARS-3 (#2885): the feed, month and month-counts reads forward the
     (f.mock.calls[0] as unknown as [string, RequestInit])[1];
 
   for (const [name, read] of Object.entries(reads)) {
-    it(`${name}: a signed-in viewer's read carries the whole session surface, uncached`, async () => {
+    it(`EARS-3: ${name}: a signed-in viewer's read carries the whole session surface, uncached`, async () => {
       const init = sent(await read(SIGNED_IN));
       expect(init.headers).toEqual({
         accept: "application/json",
@@ -256,7 +258,7 @@ describe("019 EARS-3 (#2885): the feed, month and month-counts reads forward the
       expect(init).not.toHaveProperty("next");
     });
 
-    it(`${name}: a guest's read stays the relay cookie and client address only`, async () => {
+    it(`EARS-3: ${name}: a guest's read stays the relay cookie and client address only`, async () => {
       const init = sent(
         await read({
           ...GUEST_REQUEST,
@@ -274,8 +276,22 @@ describe("019 EARS-3 (#2885): the feed, month and month-counts reads forward the
       expect(init.cache).toBe("no-store");
     });
 
-    it(`${name}: the Academy host (no relay cookie) sends nothing new for a signed-in viewer`, async () => {
-      const { relayCookie: _relay, ...academy } = contentSet;
+    it(`EARS-3: ${name}: a host that names a relay cookie but does not forward the session sends a signed-in viewer's relay cookie only`, async () => {
+      const init = sent(await read(SIGNED_IN, contentSet));
+      expect(init.headers).toEqual({
+        accept: "application/json",
+        cookie: "ds_specialty=cardio",
+        "x-forwarded-for": SIGNED_IN.forwardedFor,
+      });
+      expect(init.cache).toBe("no-store");
+    });
+
+    it(`EARS-3: ${name}: the Academy host (no relay cookie, no session forwarding) sends nothing new for a signed-in viewer`, async () => {
+      const {
+        relayCookie: _relay,
+        forwardSession: _forward,
+        ...academy
+      } = doctorSet;
       const init = sent(await read(SIGNED_IN, academy));
       expect(init.headers).toEqual({
         accept: "application/json",
@@ -285,7 +301,7 @@ describe("019 EARS-3 (#2885): the feed, month and month-counts reads forward the
     });
   }
 
-  it("readRequestFrom takes the fingerprint surface the session needs from the incoming request", () => {
+  it("EARS-3: readRequestFrom takes the fingerprint surface the session needs from the incoming request", () => {
     expect(
       readRequestFrom(
         new Headers({

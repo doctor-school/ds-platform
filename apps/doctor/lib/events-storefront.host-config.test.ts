@@ -49,3 +49,12 @@ describe("006 EARS-6 DOCTOR_ROOM_PAGE — the doctor storefront's live-room host
     expect(values).not.toContain("<fn>");
   });
 });
+
+describe("019 EARS-3 DOCTOR_EVENTS_STOREFRONT — the doctor host forwards the session on its feed reads (#2885)", () => {
+  it("EARS-3: relays the remembered-specialty cookie and switches session forwarding on", () => {
+    expect(DOCTOR_EVENTS_STOREFRONT.contentSet).toMatchObject({
+      relayCookie: "__Host-ds_specialty",
+      forwardSession: true,
+    });
+  });
+});

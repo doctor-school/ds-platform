@@ -67,3 +67,14 @@ describe("006 EARS-6 ACADEMY_ROOM_PAGE — the Academy's live-room host values",
     expect(values).not.toContain("<fn>");
   });
 });
+
+describe("019 EARS-3 ACADEMY_EVENTS_STOREFRONT — the Academy's feed reads forward no session (#2885)", () => {
+  it("EARS-3: names neither a relay cookie nor session forwarding", () => {
+    expect(ACADEMY_EVENTS_STOREFRONT.contentSet).not.toHaveProperty(
+      "relayCookie",
+    );
+    expect(ACADEMY_EVENTS_STOREFRONT.contentSet).not.toHaveProperty(
+      "forwardSession",
+    );
+  });
+});

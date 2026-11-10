@@ -28,8 +28,19 @@ export type EventsStorefrontHostConfig = {
      * doctor read, `timeframe` on the Academy listing read (gate row 32, D2).
      */
     tenseParam: "tense" | "timeframe";
-    /** The one cookie the feed read forwards (row 13); unset = no cookie header. */
+    /**
+     * The one cookie the feed, month, counts and live reads relay whenever they
+     * do not forward a session (row 13, 017 LD-2); unset = no relay cookie.
+     */
     relayCookie?: string;
+    /**
+     * `true` = a signed-in viewer's feed, month and counts reads forward the
+     * whole session surface (`forwardedHeaders`: the `Cookie` header,
+     * `user-agent`, `accept-language`, client address) so the api can resolve
+     * the profile specialty (019 EARS-3, 017 LD-2; #2885). Unset = those reads
+     * relay only `relayCookie` and the client address, signed in or not.
+     */
+    forwardSession?: true;
     /** The «Идёт сейчас» read, same-origin path the browser re-reads too (row 43, D5). */
     livePath: string;
     /** The viewer's «Мои события» read (gate row 15, §4.3 D8). */

@@ -38,21 +38,19 @@ export function relayOnly(cookie: string, name: string | undefined): string {
 
 /**
  * The headers of a feed-page read — the feed, one month, the month counts
- * (019 EARS-3, 017; #2885). On a host whose reads target a specialty (it names a
- * relay cookie) a signed-in viewer's read carries the whole session surface the
- * way the live strip does, so the api can name the profile specialty; every
- * other read carries only the relay cookie and the client address chain. The
- * Academy host names no relay cookie, so its reads are unchanged. A read built
- * here depends on the viewer and is always fetched `no-store`.
+ * (019 EARS-3, 017 LD-2; #2885). Session forwarding is its own host-config
+ * switch (`contentSet.forwardSession`, ADR-0013 A1) so a host that only relays
+ * a cookie never starts forwarding sessions by accident. A read built here may
+ * depend on the viewer, so it is always fetched `no-store`.
  */
 export function feedReadHeaders(
-  contentSet: Pick<EventsStorefrontHostConfig["contentSet"], "relayCookie">,
+  contentSet: Pick<
+    EventsStorefrontHostConfig["contentSet"],
+    "relayCookie" | "forwardSession"
+  >,
   request: ReadRequest,
 ): Record<string, string> {
-  if (
-    contentSet.relayCookie !== undefined &&
-    hasSessionCookie(request.cookie)
-  ) {
+  if (contentSet.forwardSession === true && hasSessionCookie(request.cookie)) {
     return forwardedHeaders(request);
   }
   const cookie = relayOnly(request.cookie, contentSet.relayCookie);

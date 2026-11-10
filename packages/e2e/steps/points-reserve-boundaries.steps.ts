@@ -31,7 +31,7 @@ function state(points: PointsWorld): ReserveCase {
   return value;
 }
 
-async function fund(points: PointsWorld, amount: number) {
+export async function fund(points: PointsWorld, amount: number) {
   for (let earned = 0; earned < amount;) {
     const module = amount - earned >= 20;
     const answer = await points.engine.record({
@@ -50,10 +50,11 @@ async function fund(points: PointsWorld, amount: number) {
   ).toBe(amount);
 }
 
-async function pricedEvent(
+export async function pricedEvent(
   points: PointsWorld,
   pulCost: number,
   limitedSeats = false,
+  mode: "threshold" | "advance" | "open" = "threshold",
 ) {
   const id = randomUUID();
   await points.handle.pool.query(
@@ -73,7 +74,7 @@ async function pricedEvent(
   state(points).items.push(id);
   await points.prices.put(
     id,
-    { itemKind: "event", mode: "threshold", pulCost, limitedSeats },
+    { itemKind: "event", mode, pulCost, limitedSeats },
     null,
   );
   expect(
@@ -86,7 +87,7 @@ async function pricedEvent(
   ).toEqual([
     {
       item_kind: "event",
-      mode: "threshold",
+      mode,
       pul_cost: pulCost,
       limited_seats: limitedSeats,
     },
@@ -103,7 +104,7 @@ function signUp(points: PointsWorld, itemRef: string) {
   state(points).facts.push(fact);
   return fact;
 }
-async function snapshot(points: PointsWorld) {
+export async function snapshot(points: PointsWorld) {
   return (
     await points.handle.pool.query(
       `
@@ -114,6 +115,7 @@ async function snapshot(points: PointsWorld) {
       (SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY event_id, leg), '[]') FROM points_postings p WHERE debit_account_id IN (SELECT id FROM own) OR credit_account_id IN (SELECT id FROM own)) AS postings,
       (SELECT coalesce(jsonb_agg(to_jsonb(k) ORDER BY event_id), '[]') FROM points_posting_keys k WHERE event_id IN (SELECT p.event_id FROM points_postings p WHERE debit_account_id IN (SELECT id FROM own) OR credit_account_id IN (SELECT id FROM own))) AS keys,
       (SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY registration_id), '[]') FROM points_reserves r WHERE person_account_id IN (SELECT id FROM own)) AS holds,
+      (SELECT coalesce(jsonb_agg(to_jsonb(o) ORDER BY registration_id), '[]') FROM points_obligations o WHERE person_account_id IN (SELECT id FROM own)) AS obligations,
       (SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY item_ref), '[]') FROM points_prices p WHERE item_ref=ANY($2::text[])) AS prices`,
       [points.personId, state(points).items],
     )

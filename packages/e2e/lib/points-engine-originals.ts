@@ -15,6 +15,7 @@ export interface EngineFact {
   occurredAt: Date;
   ref?: string;
   attributes: Record<string, unknown>;
+  attribution?: { organisationId?: string; memberId?: string };
 }
 export interface EngineResult {
   outcome: string;
@@ -25,9 +26,10 @@ interface Engine {
   record(fact: EngineFact): Promise<EngineResult>;
 }
 interface Ledger {
-  readPersonAccount(
-    personId: string,
-  ): Promise<{ pul: { unit: string; available: number; reserved: number } }>;
+  readPersonAccount(personId: string): Promise<{
+    pul: { unit: string; available: number; reserved: number };
+    advance: { open: number; remaining: number };
+  }>;
   close(personId: string, at: Date): Promise<{ closedAt: Date | null }>;
 }
 interface Prices {
@@ -35,7 +37,7 @@ interface Prices {
     ref: string,
     input: {
       itemKind: "event";
-      mode: "threshold";
+      mode: "threshold" | "advance" | "open";
       pulCost: number;
       limitedSeats: boolean;
     },
@@ -44,7 +46,11 @@ interface Prices {
   gating(
     personId: string,
     ref: string,
-  ): Promise<{ decision: string; shortfall: number }>;
+  ): Promise<{
+    decision: string;
+    shortfall: number;
+    earnHint?: { pulToEarn: number; lessonsNeeded: number };
+  }>;
 }
 type Constructor<T> = new (...args: unknown[]) => T;
 export interface PointsWorld {
@@ -88,17 +94,17 @@ export async function startPointsWorld(): Promise<PointsWorld> {
     !connection ||
     !database ||
     !(
-      database === "ds_dev_3888" ||
+      database === "ds_dev_3913" ||
       (process.env.CI === "true" && database === "ds_test")
     ) ||
     decodeURIComponent(new URL(connection).pathname.slice(1)) !== database
   ) {
     throw new Error(
-      "025 originals require the explicitly owned #3888 database (or CI ds_test)",
+      "025 originals require the explicitly owned #3913 database (or CI ds_test)",
     );
   }
   pointsOperation(`CONNECT ${database}`);
-  const applicationName = `points-3888-${randomUUID()}`;
+  const applicationName = `points-3913-${randomUUID()}`;
   const scopedConnection = new URL(connection);
   scopedConnection.searchParams.set("application_name", applicationName);
   const handle = createDrizzle(scopedConnection.href, { max: 3 });
@@ -215,7 +221,10 @@ export async function assertSeedDefaults(world: PointsWorld): Promise<void> {
   }
 }
 
-export async function prepareDoctor(world: PointsWorld): Promise<void> {
+export async function prepareDoctor(
+  world: PointsWorld,
+  personId = world.personId,
+): Promise<void> {
   let specialty = (
     await world.handle.pool.query(
       "SELECT id FROM specialties_minzdrav WHERE name = $1",
@@ -245,29 +254,29 @@ export async function prepareDoctor(world: PointsWorld): Promise<void> {
     `INSERT INTO users (id, zitadel_sub, email, phone, phone_verified, role)
      VALUES ($1, $2, $3, $4, true, 'doctor_verified')`,
     [
-      world.personId,
-      `points-original:${world.personId}`,
-      `${world.personId}@points-original.invalid`,
-      `+7999${world.personId.replace(/\D/g, "").padEnd(7, "0").slice(0, 7)}`,
+      personId,
+      `points-original:${personId}`,
+      `${personId}@points-original.invalid`,
+      `+7999${personId.replace(/\D/g, "").padEnd(7, "0").slice(0, 7)}`,
     ],
   );
   await world.handle.pool.query(
     "INSERT INTO doctor_specialties (doctor_id, specialty_id) VALUES ($1, $2)",
-    [world.personId, specialty!.id],
+    [personId, specialty!.id],
   );
   expect(
     (
       await world.handle.pool.query(
         `SELECT u.phone_verified, u.phone IS NOT NULL AS has_phone, s.name FROM users u
      JOIN doctor_specialties d ON d.doctor_id=u.id JOIN specialties_minzdrav s ON s.id=d.specialty_id WHERE u.id=$1`,
-        [world.personId],
+        [personId],
       )
     ).rows,
   ).toEqual([{ phone_verified: true, has_phone: true, name: "Кардиология" }]);
   const fact = {
     type: "phone.verified",
     eventId: `points-original-phone:${randomUUID()}`,
-    personId: world.personId,
+    personId: personId,
     occurredAt: new Date(),
     attributes: {},
   };
@@ -279,7 +288,7 @@ export async function prepareDoctor(world: PointsWorld): Promise<void> {
         [fact.eventId],
       )
     ).rows,
-  ).toEqual([{ type: "phone.verified", person_id: world.personId }]);
+  ).toEqual([{ type: "phone.verified", person_id: personId }]);
 }
 
 export async function postings(world: PointsWorld, eventId?: string) {

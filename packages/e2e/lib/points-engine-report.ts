@@ -18,6 +18,12 @@ export const pointsAdvanceBoundaries = [
   "Beyond the advance cap the event behaves as threshold",
 ] as const;
 
+export const pointsReferralBoundaries = [
+  "Pul amounts never read as money",
+  "Referral awards stop for the inviter above the monthly cap",
+  "The invitee's first completed lesson counts itself for the referral",
+] as const;
+
 export const pointsEngineOriginals = [
   "An offline lesson earns Bre only and never a second Bre",
   "A producer fact carrying an amount is refused and writes nothing",
@@ -25,6 +31,7 @@ export const pointsEngineOriginals = [
   ...pointsRecordBoundaries,
   ...pointsReserveBoundaries,
   ...pointsAdvanceBoundaries,
+  ...pointsReferralBoundaries,
 ] as const;
 
 export function assertPointsEngineReport(value: unknown): void {
@@ -41,4 +48,8 @@ export function assertPointsReserveBoundariesReport(value: unknown): void {
 
 export function assertPointsAdvanceBoundariesReport(value: unknown): void {
   assertOperationalReport(value, pointsAdvanceBoundaries, "admin");
+}
+
+export function assertPointsReferralBoundariesReport(value: unknown): void {
+  assertOperationalReport(value, pointsReferralBoundaries, "admin");
 }

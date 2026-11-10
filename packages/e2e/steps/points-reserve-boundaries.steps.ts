@@ -50,12 +50,7 @@ export async function fund(points: PointsWorld, amount: number) {
   ).toBe(amount);
 }
 
-export async function pricedEvent(
-  points: PointsWorld,
-  pulCost: number,
-  limitedSeats = false,
-  mode: "threshold" | "advance" | "open" = "threshold",
-) {
+export async function unpricedEvent(points: PointsWorld) {
   const id = randomUUID();
   await points.handle.pool.query(
     `INSERT INTO events (id, slug, title, school, starts_at, duration_min, description,
@@ -72,6 +67,16 @@ export async function pricedEvent(
     ],
   );
   state(points).items.push(id);
+  return id;
+}
+
+export async function pricedEvent(
+  points: PointsWorld,
+  pulCost: number,
+  limitedSeats = false,
+  mode: "threshold" | "advance" | "open" = "threshold",
+) {
+  const id = await unpricedEvent(points);
   await points.prices.put(
     id,
     { itemKind: "event", mode, pulCost, limitedSeats },

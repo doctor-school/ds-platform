@@ -4,6 +4,7 @@ import {
   assertPointsRecordBoundariesReport,
   assertPointsReserveBoundariesReport,
   assertPointsAdvanceBoundariesReport,
+  assertPointsReferralBoundariesReport,
 } from "./points-engine-report.js";
 
 const previous = [
@@ -26,6 +27,11 @@ const advances = [
   "Advance covers the shortfall and later earnings settle it",
   "A doctor who arrived on a medical representative's link gets the same conditions",
   "Beyond the advance cap the event behaves as threshold",
+];
+const referrals = [
+  "Pul amounts never read as money",
+  "Referral awards stop for the inviter above the monthly cap",
+  "The invitee's first completed lesson counts itself for the referral",
 ];
 
 function report(titles: readonly string[]) {
@@ -52,12 +58,13 @@ function report(titles: readonly string[]) {
 for (const [scope, titles, assertReport] of [
   [
     "full contour",
-    [...previous, ...boundaries, ...reserves, ...advances],
+    [...previous, ...boundaries, ...reserves, ...advances, ...referrals],
     assertPointsEngineReport,
   ],
   ["previous wave", boundaries, assertPointsRecordBoundariesReport],
   ["new wave", reserves, assertPointsReserveBoundariesReport],
   ["advance wave", advances, assertPointsAdvanceBoundariesReport],
+  ["referral wave", referrals, assertPointsReferralBoundariesReport],
 ] as const) {
   describe("025 " + scope + " execution receipt", () => {
     it("EARS-4/8/31: accepts its exact source originals passing once", () => {
@@ -112,6 +119,22 @@ for (const [scope, titles, assertReport] of [
     });
   });
 }
+
+it("EARS-8/11/30/34/36: full contour refuses the preceding twelve", () => {
+  expect(() =>
+    assertPointsEngineReport(
+      report([...previous, ...boundaries, ...reserves, ...advances]),
+    ),
+  ).toThrow(/identity/);
+});
+
+it("EARS-8/11/30/34/36: referral receipt refuses all preceding waves", () => {
+  for (const titles of [previous, boundaries, reserves, advances]) {
+    expect(() => assertPointsReferralBoundariesReport(report(titles))).toThrow(
+      /identity/,
+    );
+  }
+});
 
 it("EARS-4/8/31: the new-wave receipt cannot accept the preceding three", () => {
   expect(() => assertPointsRecordBoundariesReport(report(previous))).toThrow(

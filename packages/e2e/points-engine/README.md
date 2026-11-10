@@ -1,6 +1,6 @@
 # 025 engine originals
 
-The strict `points-engine.config.ts` contour executes twelve unchanged source
+The strict `points-engine.config.ts` contour executes fifteen unchanged source
 originals from `025-scenarios.feature`, including both Background clauses.
 The preceding three remain regression coverage:
 
@@ -25,6 +25,31 @@ The `@points-advance-boundaries` wave adds exactly three:
 - Advance covers the shortfall and later earnings settle it.
 - A doctor who arrived on a medical representative's link gets the same conditions.
 - Beyond the advance cap the event behaves as threshold.
+
+The `@points-referral-boundaries` wave adds exactly three:
+
+- Pul amounts never read as money.
+- Referral awards stop for the inviter above the monthly cap.
+- The invitee's first completed lesson counts itself for the referral.
+
+The unit case quotes a real event without a price row and validates the strict
+approved response: zero Pul, with no free/money field and no financial write.
+Referral cases prepare real verified doctors, journal `referral.attributed`
+pointing to the inviter's person UUID and record actual first online lessons.
+Five seeded inviter awards credit 30 Pul/2 Bre each in the same Moscow month;
+the sixth invitee still receives its separate 30-Pul referral posting while the
+inviter rule is `limit-reached` and the inviter's financial snapshot is unchanged.
+The ordinary lesson's additional 10 Pul is checked separately, never confused
+with the referral amount. This proves seeded engine intake, not link acquisition.
+
+For the first-lesson evaluation, a narrowly scoped pass-through observer calls
+the compiled `JournalPredicateResolver.resolve` unchanged and retains its real
+result for the target fact/person only. It restores the original prototype in
+`finally`. Zero prior distinct lesson refs, actual observed value 1, the target
+journal row and the referral posting on that same fact establish the timing.
+No predicate value or rule is supplied by the test. Narrow quote/referral/context
+receipts append to the operation log that CI uploads. Both unchanged Background
+clauses emit post-assertion receipts for every case (6 for the trio, 30 for all 15).
 
 The advance cases fund both independent doctors through seeded module facts,
 price the same real event, compare normalized posting legs and persisted member
@@ -70,7 +95,7 @@ prior awards and calls the real ledger `close`; refusal preserves every posting
 field and commits no new ledger key or fact. Module reports use distinct event
 IDs for the same module and exercise both seeded award rules' once-per keys.
 
-The fixture accepts only an explicitly bound `ds_dev_3913`, or `ds_test` with
+The fixture accepts only an explicitly bound `ds_dev_3921`, or `ds_test` with
 `CI=true`, and checks `current_database()` before creating data. Each scenario
 verifies current migrated rule/settings bodies against `POINTS_ENGINE_SEED`,
 persists its own doctor with the canonical Кардиология specialty and verified
@@ -80,8 +105,8 @@ All SQL is logged without bound values. Append-only facts and postings are
 retained until the owned database is disposed; every pool closes on failure.
 
 Build `@ds/api` and its workspace dependencies first. Provision an owned branch
-database through `pnpm dev:db:branch 3913` (the wrapper snapshots before migration),
-then export its `DATABASE_URL`, `E2E_POINTS_DATABASE=ds_dev_3913`, an existing
+database through `pnpm dev:db:branch 3921` (the wrapper snapshots before migration),
+then export its `DATABASE_URL`, `E2E_POINTS_DATABASE=ds_dev_3921`, an existing
 scratch directory's `E2E_POINTS_OPS_LOG`, and `E2E_POINTS_REPORT` JSON destination:
 
 ```powershell
@@ -93,15 +118,15 @@ pnpm --filter @ds/e2e exec tsx api-probes/assert-points-engine-report.ts $env:E2
 For the exact new-wave receipt, choose another `E2E_POINTS_REPORT` destination:
 
 ```powershell
-pnpm --filter @ds/e2e exec playwright test --config points-engine.config.ts --grep @points-advance-boundaries
-pnpm --filter @ds/e2e exec tsx api-probes/assert-points-engine-report.ts $env:E2E_POINTS_REPORT --advance-boundaries
+pnpm --filter @ds/e2e exec playwright test --config points-engine.config.ts --grep @points-referral-boundaries
+pnpm --filter @ds/e2e exec tsx api-probes/assert-points-engine-report.ts $env:E2E_POINTS_REPORT --referral-boundaries
 ```
 
 Generation fails on missing selected steps. The default report gate requires
-all twelve titles in the Admin project; `--advance-boundaries` requires exactly the new advance trio; `--reserve-boundaries` requires exactly the
+all fifteen titles in the Admin project; `--referral-boundaries` requires exactly the new trio; `--advance-boundaries` still checks the advance trio; `--reserve-boundaries` requires exactly the
 reserve trio; `--record-boundaries` still checks the preceding trio. All modes
 reject missing, extra, duplicate,
-wrong-host, skipped, failed, flaky or retried results. CI runs all twelve on disposable
+wrong-host, skipped, failed, flaky or retried results. CI runs all fifteen on disposable
 `ds_test` before native API suites can publish different rule versions, and
 uploads JSON plus operation log. Run local BDD proofs before mutable native
 rule-book tests as well; later BDD proof needs a fresh owned database.

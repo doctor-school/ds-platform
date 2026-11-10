@@ -47,6 +47,8 @@ interface Prices {
     personId: string,
     ref: string,
   ): Promise<{
+    pulCost: number;
+    unit: "Pul";
     decision: string;
     shortfall: number;
     earnHint?: { pulToEarn: number; lessonsNeeded: number };
@@ -94,17 +96,17 @@ export async function startPointsWorld(): Promise<PointsWorld> {
     !connection ||
     !database ||
     !(
-      database === "ds_dev_3913" ||
+      database === "ds_dev_3921" ||
       (process.env.CI === "true" && database === "ds_test")
     ) ||
     decodeURIComponent(new URL(connection).pathname.slice(1)) !== database
   ) {
     throw new Error(
-      "025 originals require the explicitly owned #3913 database (or CI ds_test)",
+      "025 originals require the explicitly owned #3921 database (or CI ds_test)",
     );
   }
   pointsOperation(`CONNECT ${database}`);
-  const applicationName = `points-3913-${randomUUID()}`;
+  const applicationName = `points-3921-${randomUUID()}`;
   const scopedConnection = new URL(connection);
   scopedConnection.searchParams.set("application_name", applicationName);
   const handle = createDrizzle(scopedConnection.href, { max: 3 });
@@ -219,6 +221,15 @@ export async function assertSeedDefaults(world: PointsWorld): Promise<void> {
       published_by: null,
     });
   }
+}
+
+export function parseGatingDecision(value: unknown): Record<string, unknown> {
+  const { PointsGatingDecisionSchema } = apiRequire("@ds/schemas") as {
+    PointsGatingDecisionSchema: {
+      parse(input: unknown): Record<string, unknown>;
+    };
+  };
+  return PointsGatingDecisionSchema.parse(value);
 }
 
 export async function prepareDoctor(

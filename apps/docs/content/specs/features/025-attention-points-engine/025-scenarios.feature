@@ -281,6 +281,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     And "A" never has less than 0 Pul available
 
   @EARS-30
+  @points-referral-boundaries
   Scenario: Pul amounts never read as money
     When the gating decision of an open event is requested for "A"
     Then the response carries a pulCost of 0 in Pul and no field stating that the event is free
@@ -292,6 +293,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then exactly one module award of 20 Pul, 3 Bre and 1 Con is posted for "A" on "M1"
 
   @EARS-11 @EARS-36
+  @points-referral-boundaries
   Scenario: Referral awards stop for the inviter above the monthly cap
     Given "A" has received 5 referral awards this calendar month
     When a sixth invitee of "A" verifies the phone and completes a first lesson
@@ -299,6 +301,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     And no referral award is posted to "A" for that invitee and the inviter rule is traced "limit-reached"
 
   @EARS-11 @EARS-34
+  @points-referral-boundaries
   Scenario: The invitee's first completed lesson counts itself for the referral
     Given invitee "F" of "A" has a verified phone and no completed lesson
     When "lesson.completed" for "F" on lesson "L8" is recorded

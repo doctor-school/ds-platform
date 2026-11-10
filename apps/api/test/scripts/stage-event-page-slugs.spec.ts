@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 interface LiveTiersModule {
   readonly GOLDEN_SLUGS: Readonly<Record<string, string>>;
   readonly GOLDEN_MATERIAL_SLUG: string;
+  readonly GOLDEN_EVENT_SLUGS: { readonly live: string };
   readonly LIVE_TIERS: readonly {
     readonly name: string;
     readonly seededEnv?: Readonly<Record<string, string>>;
@@ -13,9 +14,10 @@ interface LiveTiersModule {
 // The staging runner's mirror of the golden slugs (#2996) — untyped plain ESM
 // tooling, loaded by URL like `packages/e2e/lib/password-policy.ts` loads its
 // `tools/staging` modules. This spec is what keeps that mirror honest.
-const { GOLDEN_SLUGS, GOLDEN_MATERIAL_SLUG, LIVE_TIERS } = (await import(
-  new URL("../../../../tools/staging/live-tiers.mjs", import.meta.url).href
-)) as LiveTiersModule;
+const { GOLDEN_SLUGS, GOLDEN_MATERIAL_SLUG, GOLDEN_EVENT_SLUGS, LIVE_TIERS } =
+  (await import(
+    new URL("../../../../tools/staging/live-tiers.mjs", import.meta.url).href
+  )) as LiveTiersModule;
 
 // #2996 — a staging slot runs ONLY `seed:golden`, so the event-page live tiers
 // read golden slugs (`tools/staging/live-tiers.mjs` → `seededEnv`). This builds
@@ -143,6 +145,14 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
         future: true,
       });
       expect(doctor.speakers).toBeGreaterThan(0);
+
+      const room = read(GOLDEN_EVENT_SLUGS.live);
+      expect(room).toMatchObject({
+        state: "live",
+        audience: "doctors",
+        format: "online",
+      });
+      expect(room.speakers).toBeGreaterThan(0);
     });
   }
 
@@ -151,12 +161,16 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
   const MATERIAL_ENV = new Set(["E2E_MATERIAL_SLUG"]);
 
   it("020 EARS-1: every event-page tier slug is one of the verified golden slugs", () => {
-    const verified = new Set(Object.values(slugs));
+    const verified = new Set([
+      ...Object.values(slugs),
+      GOLDEN_EVENT_SLUGS.live,
+    ]);
     const tiers = LIVE_TIERS.filter((tier) => tier.seededEnv);
     expect(tiers.map((t) => t.name).sort()).toEqual([
       "live/academy/default",
       "live/academy/event-page",
       "live/doctor/event-page",
+      "live/doctor/room",
     ]);
     for (const tier of tiers) {
       for (const [name, value] of Object.entries(tier.seededEnv!)) {

@@ -114,6 +114,44 @@ describe("canvas-structure · applyAllowlist", () => {
     expect(out.stale).toEqual([]);
   });
 
+  it("a `labelPattern` entry removes the one item whose label is the account's data (#3892: the room's initials chip)", () => {
+    const chip: AllowlistEntry = {
+      canvas: "room.dc.html",
+      props: {},
+      delta: "extra",
+      item: { kind: "link", label: null },
+      labelPattern: "\\p{Lu}{1,2}",
+      decision: "the signed-in doctor's initials chip (006 EARS-15)",
+      source: "test",
+    };
+    const app: RegionStructure = {
+      bar: [
+        { kind: "link", label: "Выйти из комнаты" },
+        { kind: "link", label: "КП" },
+      ],
+      menu: [],
+    };
+    const where = { canvas: "room.dc.html", props: {} };
+    const out = applyAllowlist([chip], where, { bar: [], menu: [] }, app);
+    expect(out.app.bar).toEqual([{ kind: "link", label: "Выйти из комнаты" }]);
+    expect(out.stale).toEqual([]);
+    // A full match: a word label is never taken for initials, and an icon is not one.
+    const none = applyAllowlist(
+      [chip],
+      where,
+      { bar: [], menu: [] },
+      {
+        bar: [
+          { kind: "link", label: "КПК" },
+          { kind: "link", label: null },
+        ],
+        menu: [],
+      },
+    );
+    expect(none.app.bar).toHaveLength(2);
+    expect(none.stale).toEqual([chip]);
+  });
+
   it("an applicable entry that matches nothing is stale", () => {
     const where = { canvas: "ds-shell.dc.html", props: { host: "academy" } };
     const out = applyAllowlist(

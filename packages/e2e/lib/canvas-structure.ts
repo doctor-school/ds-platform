@@ -118,6 +118,12 @@ export interface AllowlistEntry {
   /** `missing`: the canvas draws it, the app decidedly does not. `extra`: the reverse. */
   delta: "missing" | "extra";
   item: StructureItem;
+  /**
+   * #3892 — the item's label is the signed-in account's DATA (an initials
+   * chip), so the entry names its shape instead: a Unicode regex the whole
+   * label must match, in place of `item.label`. Still one item per entry.
+   */
+  labelPattern?: string;
   /** The recorded decision, in one line. */
   decision: string;
   /** Where the decision is recorded (spec path, PR). */
@@ -126,6 +132,15 @@ export interface AllowlistEntry {
 
 function sameItem(a: StructureItem, b: StructureItem): boolean {
   return a.kind === b.kind && a.label === b.label;
+}
+
+function entryMatches(item: StructureItem, entry: AllowlistEntry): boolean {
+  if (entry.labelPattern === undefined) return sameItem(item, entry.item);
+  return (
+    item.kind === entry.item.kind &&
+    item.label !== null &&
+    new RegExp(`^(?:${entry.labelPattern})$`, "u").test(item.label)
+  );
 }
 
 /**
@@ -166,7 +181,7 @@ export function applyAllowlist(
     for (const container of ["bar", "menu"] as const) {
       const items = side[container];
       let at = items.length - 1;
-      while (at >= 0 && !sameItem(items[at]!, entry.item)) at -= 1;
+      while (at >= 0 && !entryMatches(items[at]!, entry)) at -= 1;
       if (at === -1) continue;
       side[container] = items.filter((_, i) => i !== at);
       hit = true;

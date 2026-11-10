@@ -231,6 +231,12 @@ export const LIVE_TIERS = Object.freeze([
         file: "e2e/account-canvas-structure-live.spec.ts",
         requires: [URL_ACADEMY, ...ACCOUNT],
       },
+      {
+        // #3892: the live room against its room canvas, in the golden Academy
+        // live room the golden doctor is registered for.
+        file: "e2e/room-canvas-structure-live.spec.ts",
+        requires: [URL_ACADEMY, ...ACCOUNT, "E2E_ROOM_SLUG_LIVE"],
+      },
     ],
   },
   {
@@ -405,6 +411,10 @@ export const LIVE_TIERS = Object.freeze([
     pkg: "@ds/doctor",
     config: "playwright.room.config.ts",
     rootDir: "e2e",
+    // #3892: the room canvas check's room — `golden-event-live`, the doctor
+    // storefront's live эфир the golden doctor is registered for. Its own name,
+    // so it switches on no other spec of this tier.
+    seededEnv: { E2E_ROOM_CANVAS_SLUG: "golden-event-live" },
     // The room a11y twin is the `axe/doctor` leg's (gated on #1692), never run twice.
     exclude: ["e2e/a11y/room-axe.e2e.spec.ts"],
     gated: [
@@ -422,6 +432,10 @@ export const LIVE_TIERS = Object.freeze([
           "E2E_ROOM_HEARTBEAT_SECONDS",
           ...IDP_MAIL,
         ],
+      },
+      {
+        file: "e2e/room-canvas-structure-live.spec.ts",
+        requires: [URL_DOCTOR, ...ACCOUNT, "E2E_ROOM_CANVAS_SLUG"],
       },
     ],
   },

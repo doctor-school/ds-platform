@@ -29,14 +29,10 @@ export function starterBonusFactEventId(personId: string): string {
 }
 
 /**
- * 025 EARS-43 — the starter-bonus run (025-design §J). Records, through
- * `record`, `person.starter-bonus-eligible` for every doctor registered
- * before the instant whose points account is not closed; the seeded
- * `accrual.starter-bonus` credits it under the shared limit key `welcome`.
- * Each doctor is its own transaction, and the derived event id makes a re-run
- * (or the resume of a run cut short) answer `duplicate`. Two explicit
- * `audit_ledger` records frame the run: the opening one before the first
- * grant, the closing one with the counts.
+ * The starter-bonus run; the walked set, the counts and the audit records are
+ * 025 EARS-43 (025-design §J). Each doctor is its own transaction so a run cut
+ * short keeps every grant made so far, and the derived event id makes the
+ * re-run that resumes it answer `duplicate`.
  */
 @Injectable()
 export class PointsStarterBonusService {

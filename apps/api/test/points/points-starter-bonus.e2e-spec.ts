@@ -19,11 +19,11 @@ import {
 // before the engine" are fresh accounts whose `users.created_at` is moved to
 // BEFORE_ENGINE (a fixture precondition), and the run's `registeredBefore` is
 // CUT_OVER; a doctor registered now is after the instant. A run walks every
-// doctor of the database created before CUT_OVER — this file's backdated
-// doctors, earlier runs' among them, and any other such account the stand
-// holds — so counts are asserted per doctor and as lower bounds, and as exact
-// values only where a run can add nothing (`applied: 0` on a re-run). Skips
-// without DATABASE_URL / IDP_ISSUER.
+// non-deactivated doctor of the database created before CUT_OVER — this
+// file's backdated doctors, earlier runs' among them, and any other such
+// account the stand holds — so counts are asserted per doctor and as lower
+// bounds, and as exact values only where a run can add nothing (`applied: 0`
+// on a re-run). Skips without DATABASE_URL / IDP_ISSUER.
 const BEFORE_ENGINE = "2026-01-15T00:00:00Z";
 const CUT_OVER = "2026-02-01T00:00:00Z";
 const STARTER = "person.starter-bonus-eligible";

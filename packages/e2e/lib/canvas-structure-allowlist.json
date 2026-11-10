@@ -276,6 +276,95 @@
       "item": { "kind": "link", "label": "Травматология и ортопедия" },
       "decision": "Open deviation, not decided: the canvas's specialty step of the doctor-host poster breadcrumb (sample specialty, links the 018 feed), which the page does not render. Remove with the #3919 resolution.",
       "source": "https://github.com/doctor-school/ds-platform/issues/3919"
+    },
+    {
+      "canvas": "account-my-events.dc.html",
+      "props": {},
+      "regions": [
+        "account-my-events · мобильный",
+        "account-my-events · десктоп"
+      ],
+      "delta": "missing",
+      "item": {
+        "kind": "button",
+        "label": "Сертификаты 4"
+      },
+      "decision": "«Мои события» has exactly two tabs, «Предстоящие» and «Записи»: the canvas's «Сертификаты» tab is a canvas review miss, not a future seam — no placeholder, flag or disabled tab ships.",
+      "source": "Owner decision 2026-08-17: apps/docs/content/specs/features/014-event-recordings/014-requirements-en.md (out of scope, «Сертификаты» tab); 014-design.md §8.3"
+    },
+    {
+      "canvas": "account-my-events.dc.html",
+      "props": {},
+      "regions": ["account-my-events · мобильный"],
+      "delta": "missing",
+      "item": {
+        "kind": "button",
+        "label": "Направление Все направления ▼"
+      },
+      "decision": "The «Мои события» specialty filter has no backing field, so it is omitted rather than drawn over sample values (the canvas's mobile dropdown trigger; its desktop chips are repeated cards, compared by shape).",
+      "source": "apps/docs/content/specs/features/014-event-recordings/014-product.md «Absence rules confirmed» (the «Мои события» specialty filter); packages/events-storefront/src/ui/my-events-route.tsx deviations note"
+    },
+    {
+      "canvas": "account-my-events.dc.html",
+      "props": {},
+      "regions": [
+        "account-my-events · мобильный",
+        "account-my-events · десктоп"
+      ],
+      "delta": "missing",
+      "item": { "kind": "button", "label": "Предстоящие 3" },
+      "decision": "«Мои события» renders its tabs through the shared list unit, whose past/upcoming control is the «Предстоящие · N» tab pattern (label, « · », count); the canvas's bare «Предстоящие N» is the same tab, not a separate design (paired with the extra «Предстоящие · N» entry).",
+      "source": "apps/docs/content/specs/features/014-event-recordings/014-requirements-en.md EARS-9 (the shared list unit, not a section-local copy) and decision table row «Past/upcoming control» («Tabs, mirroring the «Предстоящие · N | Прошедшие · N» tabs … No new design fork»); packages/design-system/src/blocks/event-list.tsx TabsTrigger"
+    },
+    {
+      "canvas": "account-my-events.dc.html",
+      "props": {},
+      "regions": [
+        "account-my-events · мобильный",
+        "account-my-events · десктоп"
+      ],
+      "delta": "extra",
+      "item": { "kind": "button", "label": "Предстоящие · N" },
+      "labelPattern": "Предстоящие · \\p{Nd}+",
+      "decision": "The shared list unit's upcoming tab «Предстоящие · N» (N = the viewer's count, data) in place of the canvas's «Предстоящие N» (paired with the missing entry).",
+      "source": "apps/docs/content/specs/features/014-event-recordings/014-requirements-en.md EARS-9 and decision table row «Past/upcoming control»; packages/design-system/src/blocks/event-list.tsx TabsTrigger"
+    },
+    {
+      "canvas": "account-my-events.dc.html",
+      "props": {},
+      "regions": [
+        "account-my-events · мобильный",
+        "account-my-events · десктоп"
+      ],
+      "delta": "missing",
+      "item": { "kind": "button", "label": "Записи 12" },
+      "decision": "The «Записи» tab rendered by the shared list unit's tab pattern «Записи · N» in place of the canvas's bare «Записи N» (paired with the extra «Записи · N» entry).",
+      "source": "apps/docs/content/specs/features/014-event-recordings/014-requirements-en.md EARS-9 and decision table row «Past/upcoming control»; packages/design-system/src/blocks/event-list.tsx TabsTrigger"
+    },
+    {
+      "canvas": "account-my-events.dc.html",
+      "props": {},
+      "regions": [
+        "account-my-events · мобильный",
+        "account-my-events · десктоп"
+      ],
+      "delta": "extra",
+      "item": { "kind": "button", "label": "Записи · N" },
+      "labelPattern": "Записи · \\p{Nd}+",
+      "decision": "The shared list unit's recordings tab «Записи · N» (N = the viewer's count, data) in place of the canvas's «Записи N» (paired with the missing entry).",
+      "source": "apps/docs/content/specs/features/014-event-recordings/014-requirements-en.md EARS-9 and decision table row «Past/upcoming control»; packages/design-system/src/blocks/event-list.tsx TabsTrigger"
+    },
+    {
+      "canvas": "account-my-events.dc.html",
+      "props": {},
+      "regions": [
+        "account-my-events · мобильный",
+        "account-my-events · десктоп"
+      ],
+      "delta": "missing",
+      "item": { "kind": "link", "label": "Смотреть расписание ↗" },
+      "decision": "Open deviation, not decided: the canvas's end-of-list callout under the unfiltered «Предстоящие» list (next-week sentence + «Смотреть расписание ↗» to the feed) is not built and no 014/005 decision covers it. Remove with the #3917 resolution.",
+      "source": "https://github.com/doctor-school/ds-platform/issues/3917"
     }
   ],
   "cardShapes": [

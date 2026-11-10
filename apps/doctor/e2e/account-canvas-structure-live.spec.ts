@@ -221,3 +221,68 @@ for (const width of [390, 1440]) {
     });
   });
 }
+
+/**
+ * #3890 — «Мои события» `/account/events`, signed-in, against its vendored
+ * canvas `account-my-events.dc.html` on the real runtime, in this same live
+ * leg: the page body (`<main>` on both sides — the canvas labels no screen,
+ * so its section is named by selector) by the slot rule (#3728): chrome by
+ * kind + visible label with digits masked (the tab counts are the viewer's
+ * data), every event card by shape only. Each width is its own screen of the
+ * canvas (its `(max-width: 900px)` branch), so each is its own allowlist
+ * region. The canvas's «Направление» chips
+ * (`qc`, desktop) and rows (`sp`, the mobile dropdown) are one card each —
+ * their labels are the canvas's sample specialties, data, not layout.
+ *
+ * The canvas has no props: its tab is component state, so the runtime draws
+ * «Предстоящие», the route's default tab, and that is what is compared.
+ *
+ * Decided: the tabs read «Предстоящие · N» / «Записи · N» — the shared list
+ * unit's tab pattern (014 EARS-9 + the «Past/upcoming control» decision row) —
+ * where the canvas draws «Предстоящие N»: allowlisted pairs, the extra side
+ * by `labelPattern` (N is the viewer's count).
+ *
+ * Not compared:
+ * - the end-of-list callout «Смотреть расписание ↗» under the unfiltered
+ *   «Предстоящие» list (canvas `notFilteredUp`) — not built and not decided:
+ *   allowlisted as an open deviation owned by #3917.
+ * - «Записи» (`?tab=recordings`) — the canvas opens it only on a click, which
+ *   the runtime read (`readRuntimeCanvasSlots`) cannot drive; the owner also
+ *   dropped its 30-day band and «Показать все N записей» link (014-design §8.3).
+ * - «Сертификаты» — dropped by the owner (2026-08-17, 014 requirements); and
+ *   the «Направление» filter — no backing field (014 product, absence rules):
+ *   allowlisted `missing` chrome items (`canvas-structure-allowlist.json`).
+ * - The poster (h1, subtitle, the canvas's time-zone line) — no control; the
+ *   time-zone line is dropped (owner 2026-10-07, gate §2.3 row 26).
+ */
+test.describe("#3890 /account/events ≡ account-my-events canvas · signed-in", () => {
+  for (const [width, screen] of [
+    [390, "мобильный"],
+    [1440, "десктоп"],
+  ] as const) {
+    test.describe(`${width}`, () => {
+      test.use({ viewport: { width, height: 900 } });
+      test("«Предстоящие» has the canvas structure (chrome by kind + label, cards by shape)", async ({
+        page,
+      }) => {
+        await loginAsDoctor(page);
+        await page.goto("/account/events", { waitUntil: "domcontentloaded" });
+        await page.getByTestId("event-list-tabs").waitFor();
+
+        await expectSlotSectionMatchesCanvas(page, {
+          canvas: "account-my-events.dc.html",
+          section: {
+            section: {
+              selector: "main",
+              label: `account-my-events · ${screen}`,
+            },
+            cards: ["unit-event-card"],
+            repeats: ["qc", "sp"],
+            maskDigits: true,
+          },
+          rendered: { root: "main", card: "[data-webinar-card]" },
+        });
+      });
+    });
+  }
+});

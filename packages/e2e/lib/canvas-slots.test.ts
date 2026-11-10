@@ -9,6 +9,7 @@ import {
   diffSlots,
   type CardShapeEntry,
   maskSlotDigits,
+  slotSectionRoot,
   type SlotStructure,
 } from "./canvas-slots.js";
 import type { AllowlistEntry } from "./canvas-structure.js";
@@ -345,5 +346,29 @@ describe("canvas-slots · a section with no repeated cards (#3758, /account)", (
     const decided = applySlotAllowlist(entries, where, canvas, app);
     expect(decided.stale).toEqual([]);
     expect(diffSlots(decided.canvas, decided.app)).toEqual([]);
+  });
+});
+
+describe("canvas-slots · #3890 a section named by selector (a canvas with no screen label)", () => {
+  it("an attribute section is the element carrying that value, its value the allowlist region, and the runtime's default readiness", () => {
+    expect(
+      slotSectionRoot({ section: ["data-screen-label", "Профиль · Разделы"] }),
+    ).toEqual({
+      root: '[data-screen-label="Профиль · Разделы"]',
+      region: "Профиль · Разделы",
+      ready: undefined,
+    });
+  });
+
+  it("a selector section is that selector and what the render waits for, its label the allowlist region", () => {
+    expect(
+      slotSectionRoot({
+        section: { selector: "main", label: "Мои события · мобильный" },
+      }),
+    ).toEqual({
+      root: "main",
+      region: "Мои события · мобильный",
+      ready: "#dc-root main",
+    });
   });
 });

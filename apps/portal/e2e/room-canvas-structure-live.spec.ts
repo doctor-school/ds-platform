@@ -23,6 +23,13 @@ import { waitForRoomChatLive } from "./support/room";
  * - 390, tab «Чат» ↔ «Мобильный светлая, чат»;
  * - 390, tab «О эфире» ↔ «Мобильный светлая, о эфире».
  *
+ * Deviations, in `packages/e2e/lib/canvas-structure-allowlist.json` (canvas
+ * `room.dc.html`): decided — the theme toggle (006 EARS-12) and the desktop
+ * initials chip (006 EARS-15, matched by shape: its label is the doctor's
+ * initials); open, owned by #3907 — the «Doctor.School» wordmark link, the
+ * text «Отправить» send button where the canvas draws an icon, and the
+ * missing «Материалы эфира» button of the mobile «О эфире» tab.
+ *
  * Chat messages are a data slot: the canvas's sample messages draw no control,
  * so each rendered message must draw none either — a message control would
  * appear as chrome the canvas lacks. Their count and text are never compared

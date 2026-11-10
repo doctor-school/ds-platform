@@ -202,6 +202,62 @@
       "item": { "kind": "link", "label": "Как заполнить заявку ↗" },
       "decision": "046 EARS-36: a registered participant's section list carries «Как заполнить заявку ↗» — the congress site's filling guide in a new tab — in the poster band beside «Страница Конгресса ↗»; the canvas predates the requirement and does not draw it. Absent on the no-registration line, so the entry is scoped to the registered list states.",
       "source": "apps/docs/content/specs/features/046-congress-submissions/046-requirements-en.md EARS-36; https://github.com/doctor-school/ds-platform/pull/2676; packages/congress-submissions/src/ui/poster-band.tsx GuideLink"
+    },
+    {
+      "canvas": "room.dc.html",
+      "props": {},
+      "delta": "extra",
+      "item": { "kind": "button", "label": null },
+      "decision": "The room chrome carries the portal theme toggle (its only visible control, owner directive 2026-07-23: the shell HeaderUserCluster, toggle left); room.dc.html draws none.",
+      "source": "apps/docs/content/specs/features/006-webinar-room/006-requirements-en.md EARS-12; packages/room-page/src/ui/room-client.tsx userCluster"
+    },
+    {
+      "canvas": "room.dc.html",
+      "props": {},
+      "regions": [
+        "Десктоп светлая, чат развёрнут",
+        "Десктоп светлая, чат свёрнут"
+      ],
+      "delta": "extra",
+      "item": { "kind": "link", "label": null },
+      "labelPattern": "\\p{Lu}{1,2}",
+      "decision": "The desktop room header shows the signed-in doctor’s initials chip linking to /account (initials of the real saved name, one or two letters, hidden on mobile); room.dc.html draws none.",
+      "source": "apps/docs/content/specs/features/006-webinar-room/006-requirements-en.md EARS-15; packages/room-page/src/ui/room-client.tsx userCluster"
+    },
+    {
+      "canvas": "room.dc.html",
+      "props": {},
+      "delta": "extra",
+      "item": { "kind": "link", "label": "Doctor.School" },
+      "decision": "Open deviation, not decided: the room header bar keeps the archived canvas’s Doctor.School wordmark link; the current unit-room-frame draws none. Remove this entry with the #3907 resolution.",
+      "source": "https://github.com/doctor-school/ds-platform/issues/3907"
+    },
+    {
+      "canvas": "room.dc.html",
+      "props": {},
+      "regions": ["Десктоп светлая, чат развёрнут", "Мобильный светлая, чат"],
+      "delta": "extra",
+      "item": { "kind": "button", "label": "Отправить" },
+      "decision": "Open deviation, not decided: the composer’s send button shows the text «Отправить» where the canvas draws an icon button (paired with the missing icon entry). Remove with the #3907 resolution.",
+      "source": "https://github.com/doctor-school/ds-platform/issues/3907"
+    },
+    {
+      "canvas": "room.dc.html",
+      "props": {},
+      "regions": ["Десктоп светлая, чат развёрнут", "Мобильный светлая, чат"],
+      "delta": "missing",
+      "item": { "kind": "button", "label": null },
+      "decision": "Open deviation, not decided: the canvas’s icon send button (title «Отправить»), which the app renders as a text button (paired with the extra «Отправить» entry). Remove with the #3907 resolution.",
+      "source": "https://github.com/doctor-school/ds-platform/issues/3907"
+    },
+    {
+      "canvas": "room.dc.html",
+      "props": {},
+      "regions": ["Мобильный светлая, о эфире"],
+      "delta": "missing",
+      "item": { "kind": "button", "label": "Материалы эфира" },
+      "decision": "Open deviation, not decided: the canvas’s «О эфире» tab ends with a «Материалы эфира» button no 006 handler specifies and the app does not build. Remove with the #3907 resolution.",
+      "source": "https://github.com/doctor-school/ds-platform/issues/3907"
     }
   ],
   "cardShapes": [

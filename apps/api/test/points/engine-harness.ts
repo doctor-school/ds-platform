@@ -13,9 +13,14 @@ import { RuleBookService } from "../../src/points/rule-book.service.js";
 // Shared harness of the 025 engine e2e specs (#3838) against a real Postgres
 // migrated through 0060.
 //
-// Isolation. Rule versions are global and immutable, so a spec never re-tunes
-// a seeded rule. It publishes rules of its own under a unique slug that
-// trigger on `person.starter-bonus-eligible` and carry the condition
+// Isolation. Rule versions are global and immutable, so a spec re-tunes a
+// seeded rule in one place only: the 422 case of
+// points-starter-bonus.e2e-spec.ts publishes every active rule triggering on
+// `person.starter-bonus-eligible` as inactive and republishes the seeded
+// `accrual.starter-bonus` in `finally`. A run killed before that restore
+// leaves `accrual.starter-bonus` off — republish its seeded version before
+// the next run. Otherwise a spec publishes rules of its own under a unique
+// slug that trigger on `person.starter-bonus-eligible` and carry the condition
 // `runId = <a uuid of the test>`: a rule matches only the facts of the test
 // that published it, and its validity window closes ten minutes later, so a
 // stand keeps no live test rule. The seeded `accrual.starter-bonus`

@@ -1002,7 +1002,7 @@ function validate(input: PointsRecordFact): {
 }
 
 /** EARS-37 — [validFrom, validUntil) on the fact's occurredAt. */
-function withinWindow(rule: PointsRule, at: Date): boolean {
+export function withinWindow(rule: PointsRule, at: Date): boolean {
   const t = at.getTime();
   if (rule.validFrom !== null && t < Date.parse(rule.validFrom)) return false;
   if (rule.validUntil !== null && t >= Date.parse(rule.validUntil)) return false;

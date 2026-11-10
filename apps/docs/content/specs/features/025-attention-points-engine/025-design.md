@@ -297,8 +297,8 @@ The spend effects read the hold of the fact's `registrationId` on its item and t
 
 1. Refuse with `points-starter-bonus-no-rule` unless an active version triggers on `person.starter-bonus-eligible`; refuse `registeredBefore` after now (`points-rule-parameters-invalid`).
 2. Allocate a run id; write the opening `audit_ledger` record (run id, admin `sub`, reason, `registeredBefore`).
-3. Walk doctors with `created_at < registeredBefore` in keyset batches of 500 by user id; skip a closed points account (counted `skipped`); for each doctor call `record(fact)` in its own transaction with `type: person.starter-bonus-eligible`, `eventId: starter-bonus:<personId>`, `attributes: { runId }`.
-4. Write the closing `audit_ledger` record with the counts; answer them.
+3. Walk doctors with `created_at < registeredBefore` and `deactivated_at is null` (a deactivated identity is not walked, not counted) in keyset batches of 500 by user id; skip a closed points account (counted `skipped`); for each doctor call `record(fact)` in its own transaction with `type: person.starter-bonus-eligible`, `eventId: starter-bonus:<personId>`, `attributes: { runId }`.
+4. Write the closing `audit_ledger` record with the counts — `applied`, `duplicate`, `noEffect` by the outcome `record` answered, `skipped` for closed accounts; answer them with the run id.
 
 A run cut short by a timeout or a deploy is resumed by running it again: every already-granted doctor answers `duplicate` on the journal. The shared limit key `welcome` makes the bonus and the registration grant mutually exclusive whichever comes first, and publishing `accrual.starter-bonus` never starts a run (EARS-42).
 

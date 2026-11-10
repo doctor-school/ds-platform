@@ -1084,6 +1084,14 @@ const FLOOR_ROUTES: {
     method: "GET",
     url: `/v1/admin/points/facts?personId=${ABSENT_ID}`,
   },
+  // 025 EARS-43 (#3840) — the starter-bonus run. The body is empty, so an
+  // admitted principal gets a 400 and no run ever starts from this suite.
+  {
+    endpoint: "POST /v1/admin/points/starter-bonus",
+    method: "POST",
+    url: "/v1/admin/points/starter-bonus",
+    payload: {},
+  },
 ];
 
 /** An authz refusal — never a 2xx, never a partially-served admin answer. */

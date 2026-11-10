@@ -157,6 +157,7 @@ export const POINTS_LEDGER_ERROR_CODES = [
   "POINTS_RESERVE_LIMIT",
   "POINTS_GATING_INVALID",
   "POINTS_ITEM_REF_INVALID",
+  "POINTS_STARTER_BONUS_NO_RULE",
 ] as const;
 export const PointsLedgerErrorCodeSchema = z.enum(POINTS_LEDGER_ERROR_CODES);
 export type PointsLedgerErrorCode = z.infer<typeof PointsLedgerErrorCodeSchema>;

@@ -76,7 +76,9 @@ export const HEAVY_JOBS = {
     // card canvas it imports; home- and documents-canvas-structure.spec.ts
     // (#3757) read the home, documents-list and document page canvases;
     // account-canvas-structure-live.spec.ts (#3758) reads the R1 account canvas
-    // and (#3891) the congress section canvas.
+    // and (#3891) the congress section canvas; events- and
+    // refusal-canvas-structure.spec.ts (#3889) read the events-feed and
+    // sign-in-refusal canvases below (the event-page check is live-only).
     // The header/footer checks render ds-shell with the vendored DC runtime
     // design-source/support.js (#3793). The #3798 runtime canvas loader check
     // (feed-canvas-structure.spec.ts) renders the six DS-bundle canvases and

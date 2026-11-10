@@ -8,9 +8,10 @@ const testDir = defineBddConfig({
   steps: [
     "steps/points-engine-originals.steps.ts",
     "steps/points-record-boundaries.steps.ts",
+    "steps/points-reserve-boundaries.steps.ts",
   ],
   outputDir: ".features-gen/points-engine",
-  tags: "@points-engine-originals or @points-record-boundaries",
+  tags: "@points-engine-originals or @points-record-boundaries or @points-reserve-boundaries",
   missingSteps: "fail-on-gen",
 });
 

@@ -25,13 +25,40 @@ interface Engine {
   record(fact: EngineFact): Promise<EngineResult>;
 }
 interface Ledger {
+  readPersonAccount(
+    personId: string,
+  ): Promise<{ pul: { unit: string; available: number; reserved: number } }>;
   close(personId: string, at: Date): Promise<{ closedAt: Date | null }>;
+}
+interface Prices {
+  put(
+    ref: string,
+    input: {
+      itemKind: "event";
+      mode: "threshold";
+      pulCost: number;
+      limitedSeats: boolean;
+    },
+    actor: null,
+  ): Promise<unknown>;
+  gating(
+    personId: string,
+    ref: string,
+  ): Promise<{ decision: string; shortfall: number }>;
 }
 type Constructor<T> = new (...args: unknown[]) => T;
 export interface PointsWorld {
   handle: DrizzleHandle;
   engine: Engine;
   ledger: Ledger;
+  prices: Prices;
+  applicationName: string;
+  registrationFact: (input: {
+    registrationId: string;
+    personId: string;
+    itemRef: string;
+    occurredAt: Date;
+  }) => EngineFact;
   personId: string;
   lessonId: string;
   facts: EngineFact[];
@@ -60,17 +87,20 @@ export async function startPointsWorld(): Promise<PointsWorld> {
     !connection ||
     !database ||
     !(
-      database === "ds_dev_3878" ||
+      database === "ds_dev_3888" ||
       (process.env.CI === "true" && database === "ds_test")
     ) ||
     decodeURIComponent(new URL(connection).pathname.slice(1)) !== database
   ) {
     throw new Error(
-      "025 originals require the explicitly owned #3878 database (or CI ds_test)",
+      "025 originals require the explicitly owned #3888 database (or CI ds_test)",
     );
   }
   pointsOperation(`CONNECT ${database}`);
-  const handle = createDrizzle(connection, { max: 3 });
+  const applicationName = `points-3888-${randomUUID()}`;
+  const scopedConnection = new URL(connection);
+  scopedConnection.searchParams.set("application_name", applicationName);
+  const handle = createDrizzle(scopedConnection.href, { max: 3 });
   handle.pool.on("connect", (client) => {
     const execute = client.query.bind(client) as (
       ...args: unknown[]
@@ -102,6 +132,12 @@ export async function startPointsWorld(): Promise<PointsWorld> {
     const { PointsEngine } = (await load(
       "apps/api/dist/points/engine/points-engine.service.js",
     )) as { PointsEngine: Constructor<Engine> };
+    const { PointsPricesService } = (await load(
+      "apps/api/dist/points/points-prices.service.js",
+    )) as { PointsPricesService: Constructor<Prices> };
+    const { registrationCreatedFact } = (await load(
+      "apps/api/dist/points/registration-facts.js",
+    )) as { registrationCreatedFact: PointsWorld["registrationFact"] };
     const ledger = new PointsLedgerService(handle.db);
     const engine = new PointsEngine(
       handle.db,
@@ -113,6 +149,9 @@ export async function startPointsWorld(): Promise<PointsWorld> {
       handle,
       engine,
       ledger,
+      prices: new PointsPricesService(handle.db, engine),
+      applicationName,
+      registrationFact: registrationCreatedFact,
       personId: randomUUID(),
       lessonId: randomUUID(),
       facts: [],

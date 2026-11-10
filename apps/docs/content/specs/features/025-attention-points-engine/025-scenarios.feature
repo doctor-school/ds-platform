@@ -93,6 +93,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     And "A" has the Pul available as if the registration on "E4" had never been made
 
   @EARS-21 @failure
+  @points-reserve-boundaries
   Scenario: A fourth concurrent limited-seat reserve is refused
     Given "A" holds 3 open reserves on limited-seat events
     When "A" asks to reserve a seat on a fourth limited-seat event
@@ -171,6 +172,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then no participation award is posted and the trace reads "condition-false"
 
   @EARS-41 @EARS-13
+  @points-reserve-boundaries
   Scenario: A quote equals the enforced decision and writes nothing
     Given "A" has 20 Pul available and a threshold-mode event "E7" priced 50 Pul
     When the gating decision of "E7" is requested for "A"
@@ -268,6 +270,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then no posting debits Pul, Bre or Con from "A"
 
   @EARS-22 @failure
+  @points-reserve-boundaries
   Scenario: Concurrent reserves never overdraw the balance
     Given "A" has 50 Pul available
     When "A" registers for two threshold-mode events priced 50 Pul at the same instant

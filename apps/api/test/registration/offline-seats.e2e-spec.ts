@@ -24,13 +24,14 @@ import {
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
 import { eventClassificationSql } from "../setup/event-classification.js";
+import { RegistrationRepository } from "../../src/registration/registration.repository.js";
 
 // 020 EARS-9 / LD-5 (#3424) — `events.seats_left` is the ONE stored figure the
 // event read, the participation CTA and the `RegisterForEvent` refusal share,
 // and a registration that takes an offline seat counts it down atomically in
-// its own transaction. Without that the column moved only when an operator
-// edited it: an offline event never became «мест нет» by itself, and two
-// doctors racing for the last seat both registered.
+// its own transaction. Without that no registration moved the column: an
+// offline event never became «мест нет» by itself, and two doctors racing for
+// the last seat both registered.
 //
 // Runs against the dev-stand Postgres + the fake IdP for the session; skips when
 // DATABASE_URL or IDP_ISSUER is absent so the shared CI unit job stays green.
@@ -238,6 +239,42 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       expect(await seatsLeft(id)).toBe(1);
       expect(await registrationCount(id)).toBe(1);
+    });
+
+    it("020 EARS-9: the same doctor's concurrent repeated registrations take exactly one seat and never answer 5xx", async () => {
+      const { id, slug } = await seedEvent("offline", 2);
+      const [cookie] = await doctorSessions(1);
+
+      const results = await Promise.all(
+        Array.from({ length: 4 }, () => register(slug, cookie!)),
+      );
+      for (const r of results) expect(r.statusCode, r.body).toBe(200);
+
+      expect(await seatsLeft(id)).toBe(1);
+      expect(await registrationCount(id)).toBe(1);
+    });
+
+    it("020 EARS-9: the seat decision reads the event's format under the row lock, not from the caller's earlier unlocked read", async () => {
+      const repo = app.get(RegistrationRepository);
+      const offline = await seedEvent("offline", 1);
+      const online = await seedEvent("online", 1);
+      const email = uniqueEmail("seatfmt");
+      await doctorSession(email);
+      const { rows } = await pool.query<{ id: string; zitadel_sub: string }>(
+        "SELECT id, zitadel_sub FROM users WHERE email = $1",
+        [email],
+      );
+      const user = rows[0]!;
+
+      // A caller still holding a stale pre-read: the format changed between that
+      // read and the lock, and the repository decides from the locked row.
+      const staleOnline = { id: offline.id, format: "online" as const };
+      const staleOffline = { id: online.id, format: "offline" as const };
+      await repo.upsertRegistration(user.id, staleOnline, user.zitadel_sub);
+      await repo.upsertRegistration(user.id, staleOffline, user.zitadel_sub);
+
+      expect(await seatsLeft(offline.id)).toBe(0);
+      expect(await seatsLeft(online.id)).toBe(1);
     });
 
     it("020 EARS-9: an event with no seat limit (seats_left null) is never counted down", async () => {

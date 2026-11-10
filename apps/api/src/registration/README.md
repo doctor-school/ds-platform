@@ -36,10 +36,13 @@ same transaction as the audit row and the 025 points reserve. A lost race for
 the last seat of a pure offline event rolls the insert back and is the same
 409 `sold-out`; a hybrid event with no seat left registers the online half.
 `seats_left = null` (no limit) and `online` events are never counted, and an
-idempotent repeat takes no second seat. The registration carries no
-participation mode, so every hybrid registration made while offline seats
-remain takes one. No path ends a registration yet, so none returns a seat
-(cancel/void producers: #3884). The 044 congress intake (site and desk,
+idempotent repeat takes no second seat. The figure is stored on the event and
+is `null` (no limit) unless set; no product surface sets or corrects it yet
+(admin field: #3918). Interim rule: the registration carries no participation
+mode, so every hybrid registration made while offline seats remain takes one;
+the per-registration mode replaces it (#1771). No path ends a registration
+today, so none returns a seat; the cancel command returns it when it lands
+(#2040, and #1773 for a cancelled-or-moved event). The 044 congress intake (site and desk,
 `CongressSignUpService`) is a separate write path with no seat limit by spec
 (044 EARS-28) and does not touch `seats_left`.
 

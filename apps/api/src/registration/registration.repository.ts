@@ -288,25 +288,25 @@ export class OfflineSeatsExhaustedError extends Error {
  */
 async function takeOfflineSeat(
   tx: AuditedTransaction,
-  event: Pick<EventForRegistration, "id" | "format">,
+  eventId: string,
 ): Promise<void> {
-  if (event.format === "online") return;
+  // The format is read under the same lock as the seat figure, never taken
+  // from the caller's unlocked pre-read.
   const [row] = await tx
-    .select({ seatsLeft: events.seatsLeft })
+    .select({ format: events.participationFormat, seatsLeft: events.seatsLeft })
     .from(events)
-    .where(eq(events.id, event.id))
+    .where(eq(events.id, eventId))
     .for("no key update");
-  const seatsLeft = row?.seatsLeft ?? null;
-  if (seatsLeft === null) return;
-  if (seatsLeft > 0) {
+  if (!row || row.format === "online") return;
+  if (row.seatsLeft === null) return;
+  if (row.seatsLeft > 0) {
     await tx
       .update(events)
       .set({ seatsLeft: sql`${events.seatsLeft} - 1` })
-      .where(eq(events.id, event.id));
+      .where(eq(events.id, eventId));
     return;
   }
-  if (event.format === "offline")
-    throw new OfflineSeatsExhaustedError(event.id);
+  if (row.format === "offline") throw new OfflineSeatsExhaustedError(eventId);
 }
 
 /**
@@ -390,7 +390,7 @@ export class RegistrationRepository {
    */
   async upsertRegistration(
     userId: string,
-    event: Pick<EventForRegistration, "id" | "format">,
+    event: Pick<EventForRegistration, "id">,
     sub: string,
   ): Promise<RegistrationUpsert> {
     const eventId = event.id;
@@ -413,7 +413,7 @@ export class RegistrationRepository {
         // 020 EARS-9 / LD-5 — the first insert takes its offline seat in this
         // transaction; a refusal rolls the insert back (only the first insert:
         // an idempotent repeat takes no second seat).
-        await takeOfflineSeat(tx, event);
+        await takeOfflineSeat(tx, eventId);
         // First insert → exactly one terminal audit_ledger row, atomically.
         await tx.insert(auditLedger).values({
           eventId: randomUUID(),

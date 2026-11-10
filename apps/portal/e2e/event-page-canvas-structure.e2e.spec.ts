@@ -22,19 +22,20 @@ import { expectSlotSectionMatchesCanvas } from "@ds/e2e/canvas-slots";
  * Not compared (every other section the canvas labels):
  * - «d-event · блок записи» in «прошло» — the canvas turns it into a «К записи ↓»
  *   jump link the app does not build (no such control in `@ds/event-page`);
- *   the fix is tracked in #3846.
+ *   the fix is tracked in #3869.
  * - «d-event · прошло · нижний CTA» («Войти ↗») — the app renders no closing
  *   CTA band on a past event (`@ds/event-page` builds none); the fix is
- *   tracked in #3846.
+ *   tracked in #3868.
  * - «d-event · после события» (rating, «Отправить отзыв», «Зашла / Не зашла»)
  *   — the canvas draws the post-event feedback form for a guest on «прошло»;
  *   the app builds no such form, a deliberate wave-2 deferral (#1784,
  *   020 EARS-16).
- * - «d-event · открытая часть», «d-event · связи», «d-event · прошло ·
- *   таймкоды» — program, speaker cards, partner rows, school / expert links
- *   and chapter buttons are drawn from the canvas's sample event (the
- *   `speakers` / `format` props, its sample chapters), so their controls are
- *   the event's data, not the page's structure.
+ * - «d-event · прошло · таймкоды» — the app builds no chapter list on a past
+ *   event; the fix is tracked in #3867.
+ * - «d-event · открытая часть», «d-event · связи» — program, speaker cards,
+ *   partner rows and school / expert links are drawn from the canvas's sample
+ *   event (the `speakers` / `format` props), so their controls are the event's
+ *   data, not the page's structure.
  * - «d-event · блок формата · эфир», «d-event · прошло · материалы» — drawn
  *   with no control for a guest (the reader has nothing to compare).
  * - «d-event · билет / QR», «· блок формата · офлайн», «· гибрид · выбор

@@ -68,6 +68,8 @@ export const GOLDEN_SLUGS = Object.freeze({
   academyHybridSoldOut: "golden-volume-event-540",
   /** Published online `doctors` event with speakers (the doctor storefront reads only `doctors`). */
   doctorUpcoming: "golden-volume-event-418",
+  /** Ended online `doctors` event with a published montage (the doctor event page's «прошло»). */
+  doctorEndedRecorded: "golden-volume-event-145",
   /** `golden.events.hidden` — an `experts` event in the `hidden` state. */
   academyHidden: "golden-event-hidden",
   /** Published online `experts` event with speakers — the 005 one-tap journey's second event. */
@@ -326,7 +328,11 @@ export const LIVE_TIERS = Object.freeze([
     // Both specs `test.skip` with a reason when their slug / api URL is absent.
     gated: [],
     // #2996: a `published` online doctors-audience event with speakers.
-    seededEnv: { E2E_WEBINAR_SLUG: GOLDEN_SLUGS.doctorUpcoming },
+    // #3889: an ended online doctors-audience event with a published montage.
+    seededEnv: {
+      E2E_WEBINAR_SLUG: GOLDEN_SLUGS.doctorUpcoming,
+      E2E_WEBINAR_SLUG_ENDED: GOLDEN_SLUGS.doctorEndedRecorded,
+    },
   },
   {
     // #2996: the Academy event-page specs (020 EARS-1/8/9/19, 014 EARS-4/7/21),

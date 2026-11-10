@@ -1004,6 +1004,10 @@ describe("runE2eStage — the live legs", () => {
     // The operator exported their own: the leg does not override it.
     assert.equal(academy.env.E2E_HYBRID_SLUG, undefined);
     assert.equal(doctor.env.E2E_WEBINAR_SLUG, GOLDEN_SLUGS.doctorUpcoming);
+    assert.equal(
+      doctor.env.E2E_WEBINAR_SLUG_ENDED,
+      GOLDEN_SLUGS.doctorEndedRecorded,
+    );
     assert.equal(doctor.env.E2E_HYBRID_SLUG, undefined);
     // The default Academy leg and the suite never see a seeded slug.
     const academyDefault = calls.find(

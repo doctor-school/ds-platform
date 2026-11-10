@@ -117,6 +117,9 @@ export default defineConfig({
     "shell-live.spec.ts",
     // #3758: the signed-in `/account` canvas-structure check — same live tier.
     "account-canvas-structure-live.spec.ts",
+    // #3889: the event-page canvas-structure check reads golden slugs on the
+    // live event-page tier (`playwright.event-page.config.ts`).
+    "event-page-canvas-structure-live.spec.ts",
     // #2027 wave 1 (rows 73 + 77): the duplicate-registration notice is a REAL
     // email through Mailpit, so the spec rides the live
     // `playwright.register-live.config.ts`.

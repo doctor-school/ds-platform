@@ -22,8 +22,9 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  */
 export default defineConfig({
   testDir: "./e2e",
-  // 020 EARS-1 (`event-page.spec.ts`) + 020 EARS-2 (`event-page-open-part.spec.ts`).
-  testMatch: /event-page(-open-part)?\.spec\.ts$/,
+  // 020 EARS-1 (`event-page.spec.ts`) + 020 EARS-2 (`event-page-open-part.spec.ts`)
+  // + #3889 the canvas-structure check (`event-page-canvas-structure-live.spec.ts`).
+  testMatch: /event-page(-open-part|-canvas-structure-live)?\.spec\.ts$/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,

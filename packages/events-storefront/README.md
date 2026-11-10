@@ -35,6 +35,18 @@ projection; the one feed URL codec with the legacy Academy redirect (D1) and the
 horizon «Показать ещё» (D2); and the closed adapter list (`./adapters`) mapping
 each host's feed read onto the one page model. Hosts add host-config data only.
 
+**What the feed-page reads forward** (`feedReadHeaders`, 019 EARS-3, 017;
+#2885). The feed, month and month-counts reads of a host that names a
+`contentSet.relayCookie` (the doctor host) carry a signed-in viewer's whole
+session surface — the `Cookie` header, `user-agent`, `accept-language` and the
+client address, the same `forwardedHeaders` hop the «Идёт сейчас» read uses —
+so the api targets the profile specialty; a guest's read carries only the relay
+cookie and the client address. The Academy host names no relay cookie, so its
+reads forward no session. Every such read is fetched `cache: "no-store"` and
+every route that mounts them is `force-dynamic` (the home is dynamic through
+`headers()`): no Next data cache or prerender holds one viewer's answer for
+another.
+
 ## Layering
 
 One direction of dependency, `ui → client → model`; nothing points back.

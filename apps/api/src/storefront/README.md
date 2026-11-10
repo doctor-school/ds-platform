@@ -51,6 +51,9 @@ another visitor.
   the cookie, and no cookie is the untargeted read. It is read-only: the 017
   adoption cascade stays on `GET /v1/me/specialty`. The session rides in the
   `Cookie` header too, so `Vary: Cookie` already keys the browser cache on it.
+  The doctor storefront's server renders of the feed, month and month counts
+  forward that session with its fingerprint surface (`@ds/events-storefront`
+  `feedReadHeaders`), exactly as its live strip does, and read uncached.
 
 - **The month grid is navigation over the same read.** `DoctorEventsService.month()`
   resolves targeting with the same `resolveTargeting`, selects with the same

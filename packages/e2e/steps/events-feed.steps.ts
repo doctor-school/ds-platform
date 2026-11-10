@@ -3218,3 +3218,28 @@ Then(
     expect(Number(params(page).get("count"))).toBe(items.length);
   },
 );
+
+// ── EARS-3 (#2885): a signed-in doctor is targeted on the profile specialty ──
+
+/** The doctor host's remembered-specialty cookie (017 EARS-6). */
+const SPECIALTY_COOKIE = "__Host-ds_specialty";
+/** The BFF session cookie the sign-in left (003). */
+const SESSION_COOKIE_NAME = "__Host-ds_session";
+
+Given("the device remembers no specialty", async ({ context }) => {
+  // Only the remembered specialty goes; the session stays, so the feed can
+  // target nothing but the profile specialty.
+  await context.clearCookies({ name: SPECIALTY_COOKIE });
+  const names = (await context.cookies()).map((cookie) => cookie.name);
+  expect(names).not.toContain(SPECIALTY_COOKIE);
+  expect(names).toContain(SESSION_COOKIE_NAME);
+});
+
+Then(
+  "the head subline reads «События по вашей специальности и смежным»",
+  async ({ page }) => {
+    await expect(page.getByTestId("events-feed-subline-scope")).toHaveText(
+      "События по вашей специальности и смежным",
+    );
+  },
+);

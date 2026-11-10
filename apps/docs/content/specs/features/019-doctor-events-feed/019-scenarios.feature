@@ -160,6 +160,15 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       When the doctor follows «Все мои события →»
       Then the doctor lands on "/account/events" showing "Мои события"
 
+    @EARS-3 @happy
+    Scenario: A signed-in doctor whose device remembers no specialty reads the feed targeted on the profile specialty
+      Given the golden doctor "verified-cardiologist" is signed in
+      And the device remembers no specialty
+      And the viewport is 1440 wide
+      When the doctor opens «События»
+      Then the facet panel shows the specialty scope «Моя и смежные» selected as the default and states no applied count
+      And the head subline reads «События по вашей специальности и смежным»
+
     @EARS-13 @happy
     Scenario: At 390 the facet panel sits behind a counted «Фильтры» control
       Given a visitor with no account

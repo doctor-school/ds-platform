@@ -71,6 +71,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     let month = "";
     /** A doctor whose profile holds `own`. */
     let profileSession = "";
+    /** A signed-in doctor whose profile holds no specialty. */
+    let emptySession = "";
 
     const makeDirection = async (title: string): Promise<string> => {
       const id = randomUUID();
@@ -277,6 +279,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: { specialty: ownId },
       });
       expect(chosen.statusCode).toBe(200);
+      emptySession = await doctorSession("signed-in-empty");
     }, 120_000);
 
     afterAll(async () => {
@@ -333,6 +336,24 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(anonymous.targeting.mode).toBe("all");
       expect(anonymous.targeting.specialtyReference).toBeNull();
       expect(anonymous.ids).toEqual(
+        expect.arrayContaining([ownUpcoming, otherUpcoming]),
+      );
+    });
+
+    it("019 EARS-3: a signed-in doctor with no profile specialty reads the device cookie, and without it is untargeted", async () => {
+      const remembered = await feedIds({
+        session: emptySession,
+        specialty: otherId,
+      });
+      expect(remembered.targeting.mode).toBe("targeted");
+      expect(remembered.targeting.specialtyReference).toBe(otherId);
+      expect(remembered.ids).toContain(otherUpcoming);
+      expect(remembered.ids).not.toContain(ownUpcoming);
+
+      const untargeted = await feedIds({ session: emptySession });
+      expect(untargeted.targeting.mode).toBe("all");
+      expect(untargeted.targeting.specialtyReference).toBeNull();
+      expect(untargeted.ids).toEqual(
         expect.arrayContaining([ownUpcoming, otherUpcoming]),
       );
     });

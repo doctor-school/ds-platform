@@ -3243,3 +3243,45 @@ Then(
     );
   },
 );
+
+/** The event pages the day feed links, in order — the viewer-independent identity of a feed. */
+async function feedHrefs(page: Page): Promise<(string | null)[]> {
+  await expect(feedCards(page).first()).toBeVisible();
+  return feedCards(page).evaluateAll((cards) =>
+    cards.map(
+      (card) =>
+        (card.matches("a") ? card : card.querySelector("a"))?.getAttribute(
+          "href",
+        ) ?? null,
+    ),
+  );
+}
+
+Then(
+  "the feed lists the events a guest who chose the doctor's profile specialty reads, not the untargeted feed",
+  async ({ page, browser, baseURL, httpCredentials, locale, host }) => {
+    const signedIn = await feedHrefs(page);
+    const guestFeed = async (specialty?: string) => {
+      const context = await browser.newContext({
+        ...(baseURL ? { baseURL } : {}),
+        ...(httpCredentials ? { httpCredentials } : {}),
+        ...(locale ? { locale } : {}),
+        viewport: page.viewportSize(),
+      });
+      try {
+        const guest = await context.newPage();
+        if (specialty)
+          await chooseGuestSpecialty(guest, host.eventsPath, specialty);
+        await openFeed(guest, host.eventsPath);
+        return await feedHrefs(guest);
+      } finally {
+        await context.close();
+      }
+    };
+    // Every pooled golden doctor's profile holds the catalogue account's specialty.
+    expect(signedIn).toEqual(
+      await guestFeed(golden.doctors.verifiedCardiologist.specialtyName),
+    );
+    expect(signedIn).not.toEqual(await guestFeed());
+  },
+);

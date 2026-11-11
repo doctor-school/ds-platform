@@ -1188,27 +1188,3 @@ pipe's exit code (`tee`'s 0) and masks a non-zero deploy failure. Redirect with
 `> log 2>&1` and check `$?` if a transcript is needed. A watchdog `STALLED` exit
 is non-zero like any other failure — but it means "channel went quiet", not
 "remote work failed": run `pnpm deploy:probe` before deciding re-run vs rollback.
-
-## Recovery bundle and restore proof (`pnpm recovery`, #3662)
-
-`tools/deploy/recovery.mjs` is the owner-run automation of
-[`infra/deploy/RECOVERY.md`](../../infra/deploy/RECOVERY.md) §2.4 (the interim `age` recovery
-bundle of `/etc/ds-platform/*.env`, its member gate, the one-time custody B test decrypt and the
-fingerprint check of the four irreplaceable keys) and §3 (the restore proof on
-ds-data-prod). It runs on the owner's workstation with the `breakglass` key
-(`breakglass@ds-api-prod`, data-prod through it as `breakglass@192.168.0.10`; the
-`DS_API_PROD_SSH` / `DS_DATA_PROD_SSH` overrides must name `breakglass@`), installs nothing
-on the hosts, and writes only command lines to `<out>/logs/` and the sanitised report to
-`<out>/reports/`. Subcommands: `doctor`, `init-keys`, `bundle [--test-b]` (`--test-b` once,
-on the first bundle after `init-keys`, before paper B is sealed), `restore-proof --bundle
-<data-prod bundle>`, `all`, and `teardown` (removes the `ds-recovery-*` leftovers of a
-crashed run on ds-data-prod); `--out` (default `~/ds-recovery`, refused inside a git
-repository) and `--identity <ssh key>`. The remote scripts are parsed whole before they
-run, with stdin from `/dev/null`, and a signal on the workstation runs the teardown
-before Node exits. The agent has no prod shell: only the owner runs
-it. It is the interim path until the first CI-built bundle (`recovery-custody.yml`) has been
-test-decrypted by a custodian and a restore has passed with the
-`PGBACKREST_REPO1_CIPHER_PASS` taken from a CI-built bundle (a restore from an
-owner-run bundle does not count); only then is it retired. The manual commands in
-RECOVERY.md stay the reference and the fallback; the safety
-invariants are unit-tested in `recovery.test.mjs`.

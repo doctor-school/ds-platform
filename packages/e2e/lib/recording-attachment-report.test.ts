@@ -1,3 +1,4 @@
+import { backfillTitles, type BackfillReceipt } from "./recording-backfill.js";
 import {
   legacyTitles,
   type PublicListBody,
@@ -105,7 +106,8 @@ function amend(
 }
 function assertRecordingAttachmentReport(
   value: ReturnType<typeof report>,
-  scope: "full" | "new" = "full",
+  scope: "full" | "new" | "boundaries" = "full",
+  includeBackfill = true,
 ) {
   return assertRawReport(
     {
@@ -125,6 +127,11 @@ function assertRecordingAttachmentReport(
                     "Recording lifecycle, playback and remaining archive contracts",
                 )
                 .flatMap((s) => s.specs)
+                .concat(
+                  scope === "full" && includeBackfill
+                    ? backfillReport().suites[0]!.suites[0]!.specs
+                    : [],
+                )
                 .concat(
                   scope === "full"
                     ? boundaryReport().suites[0]!.suites[0]!.specs
@@ -151,8 +158,13 @@ function assertRecordingAttachmentReport(
   );
 }
 describe("014 attachment receipts", () => {
+  it("requires all three recording-backfill originals in the full contour", () => {
+    expect(() =>
+      assertRecordingAttachmentReport(report(), "full", false),
+    ).toThrow();
+  });
   it("requires the new nine boundary cases when narrow scope is explicit", () => {
-    expect(() => assertRawReport(boundaryReport(), "new")).not.toThrow();
+    expect(() => assertRawReport(boundaryReport(), "boundaries")).not.toThrow();
     expect(() => assertRawReport(boundaryReport())).toThrow();
     expect(() => assertRecordingAttachmentReport(report(), "new")).toThrow();
   });
@@ -166,7 +178,7 @@ describe("014 attachment receipts", () => {
       /identity/,
     );
   });
-  it("accepts exactly twenty-two cases, four outlines and 132 Background groups", () => {
+  it("accepts exactly twenty-five cases, four outlines and 150 Background groups", () => {
     expect(() => assertRecordingAttachmentReport(report())).not.toThrow();
   });
   it("rejects green labels without the executed Background receipt", () => {
@@ -598,7 +610,7 @@ function boundaryReport() {
   return value;
 }
 it("accepts the exact nine boundary cases as the new portion", () => {
-  expect(() => assertRawReport(boundaryReport(), "new")).not.toThrow();
+  expect(() => assertRawReport(boundaryReport(), "boundaries")).not.toThrow();
 });
 it("rejects mismatched boundary examples, successful wrong-machine commands and new side effects", () => {
   for (const change of [
@@ -639,7 +651,7 @@ it("rejects mismatched boundary examples, successful wrong-machine commands and 
     );
     change(receipt.boundary);
     attachment.body = Buffer.from(JSON.stringify(receipt)).toString("base64");
-    expect(() => assertRawReport(value, "new")).toThrow();
+    expect(() => assertRawReport(value, "boundaries")).toThrow();
   }
 });
 it("rejects a draft no-Delete substitute, uninspected controls and destructive deletion", () => {
@@ -669,6 +681,280 @@ it("rejects a draft no-Delete substitute, uninspected controls and destructive d
       Buffer.from(attachment.body, "base64").toString("utf8"),
     );
     change(receipt.boundary);
+    attachment.body = Buffer.from(JSON.stringify(receipt)).toString("base64");
+    expect(() => assertRawReport(value, "boundaries")).toThrow();
+  }
+});
+
+function backfillReceipt(title: string): BackfillReceipt {
+  const dryRun = title === backfillTitles[2],
+    legacy = title === backfillTitles[1],
+    actor = "operator";
+  const target = {
+    id: "target",
+    origin: legacy ? "legacy" : "platform",
+    state: legacy ? "hidden" : dryRun ? "ended" : "published",
+    starts_at: "2020-01-01T00:00:00Z",
+    live_at: null,
+  };
+  const eligible = {
+    id: "eligible",
+    origin: "platform",
+    state: "ended",
+    live_at: "2020-01-01T00:00:00Z",
+  };
+  const stale = {
+    id: "stale",
+    origin: "platform",
+    state: "published",
+    live_at: null,
+  };
+  const recording = {
+    id: "recording",
+    event_id: "eligible",
+    kind: "edited",
+    status: "published",
+    deleted_at: null,
+  };
+  const manifest = (
+    legacy ? [target] : dryRun ? [target, eligible, stale] : [target, eligible]
+  ).map((event) => ({
+    event: event.id,
+    edited: {
+      provider: "rutube",
+      embed_ref: "0123456789abcdef0123456789abcdef",
+    },
+  }));
+  const entries = legacy
+    ? [
+        {
+          event: "target",
+          kind: "edited",
+          outcome: "refused",
+          code: "INVALID_TRANSITION",
+        },
+      ]
+    : dryRun
+      ? [
+          { event: "target", kind: "edited", outcome: "would-attach" },
+          {
+            event: "eligible",
+            kind: "edited",
+            outcome: "skipped",
+            recordingId: "recording",
+          },
+          {
+            event: "stale",
+            kind: "edited",
+            outcome: "refused",
+            code: "EVENT_NOT_FINISHED",
+          },
+        ]
+      : [
+          {
+            event: "target",
+            kind: "edited",
+            outcome: "refused",
+            code: "EVENT_NOT_FINISHED",
+          },
+          {
+            event: "eligible",
+            kind: "edited",
+            outcome: "attached+published",
+            recordingId: "recording",
+          },
+        ];
+  const before = {
+    events: legacy
+      ? [target]
+      : dryRun
+        ? [target, eligible, stale]
+        : [target, eligible],
+    recordings: dryRun ? [recording] : [],
+    audit: [] as Record<string, unknown>[],
+  };
+  const after = structuredClone(before);
+  if (!legacy && !dryRun) {
+    after.recordings.push(recording);
+    after.audit = ["insert", "update"].map((action) => ({
+      id: action,
+      event_type: `data.event_recordings.${action}`,
+      subject_id: actor,
+      metadata: {
+        source: "system:recordings-backfill",
+        table: "event_recordings",
+        pk: { id: "recording" },
+      },
+    }));
+  }
+  const summary = Object.fromEntries(
+    [
+      "attached+published",
+      "published",
+      "skipped",
+      "would-attach",
+      "refused",
+    ].map((outcome) => [
+      outcome,
+      entries.filter((e) => e.outcome === outcome).length,
+    ]),
+  );
+  return {
+    title,
+    actor,
+    database: "ds_dev_3939",
+    manifest,
+    command: {
+      entrypoint: "apps/api/scripts/recordings-backfill.ts",
+      args: [
+        "--manifest",
+        "manifest.json",
+        "--actor",
+        actor,
+        ...(dryRun ? ["--dry-run"] : []),
+      ],
+      exitCode: 0,
+      stdout: [...entries, { dryRun, summary }]
+        .map((e) => JSON.stringify(e))
+        .join("\n"),
+      stderr: "",
+    },
+    dryRun,
+    statusMap: { INVALID_TRANSITION: 409, EVENT_NOT_FINISHED: 409 },
+    before,
+    after,
+  };
+}
+function backfillReport() {
+  return {
+    errors: [],
+    suites: [
+      {
+        title:
+          "A finished broadcast keeps its value as a recording, and the archive is browsable",
+        suites: [
+          {
+            title:
+              "Recording lifecycle, playback and remaining archive contracts",
+            specs: backfillTitles.map((title) => ({
+              title,
+              tests: [
+                {
+                  projectId: "recording-attachment",
+                  projectName: "recording-attachment",
+                  status: "expected",
+                  results: [
+                    {
+                      status: "passed",
+                      retry: 0,
+                      attachments: [
+                        {
+                          name: "recording-attachment",
+                          contentType: "application/json",
+                          body: Buffer.from(
+                            JSON.stringify({
+                              sourceHost: "academy",
+                              backgrounds: clauses.map((clause) => ({
+                                clause,
+                                evidence: [1],
+                              })),
+                              backfill: backfillReceipt(title),
+                            }),
+                          ).toString("base64"),
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            })),
+          },
+        ],
+      },
+    ],
+  };
+}
+it("accepts only the exact three backfill originals as the new portion", () => {
+  expect(() => assertRawReport(backfillReport(), "new")).not.toThrow();
+  expect(() => assertRawReport(boundaryReport(), "new")).toThrow();
+});
+it("rejects missing CLI provenance, wrong refused code, missing continuation and mutation in dry-run", () => {
+  for (const [index, change] of [
+    [
+      0,
+      (r: BackfillReceipt) => {
+        r.command.exitCode = 1;
+      },
+    ],
+    [
+      0,
+      (r: BackfillReceipt) => {
+        r.command.entrypoint = "fake";
+      },
+    ],
+    [
+      0,
+      (r: BackfillReceipt) => {
+        r.command.stdout = r.command.stdout.replace(
+          "EVENT_NOT_FINISHED",
+          "INVALID_TRANSITION",
+        );
+      },
+    ],
+    [
+      0,
+      (r: BackfillReceipt) => {
+        r.command.stdout = r.command.stdout
+          .split("\n")
+          .filter((_, i) => i !== 1)
+          .join("\n");
+      },
+    ],
+    [
+      0,
+      (r: BackfillReceipt) => {
+        r.before.events[0]!.live_at = "2020-01-01";
+      },
+    ],
+    [
+      0,
+      (r: BackfillReceipt) => {
+        r.statusMap.EVENT_NOT_FINISHED = 200;
+      },
+    ],
+    [
+      1,
+      (r: BackfillReceipt) => {
+        r.after.recordings.push({ id: "leaked" });
+      },
+    ],
+    [
+      2,
+      (r: BackfillReceipt) => {
+        r.after.events[0]!.state = "hidden";
+      },
+    ],
+    [
+      2,
+      (r: BackfillReceipt) => {
+        r.after.audit.push({ id: "leaked" });
+      },
+    ],
+    [
+      2,
+      (r: BackfillReceipt) => {
+        r.command.args = r.command.args.filter((a) => a !== "--dry-run");
+      },
+    ],
+  ] as [number, (r: BackfillReceipt) => void][]) {
+    const value = backfillReport(),
+      attachment =
+        value.suites[0]!.suites[0]!.specs[index]!.tests[0]!.results[0]!
+          .attachments[0]!;
+    const receipt = JSON.parse(
+      Buffer.from(attachment.body, "base64").toString("utf8"),
+    );
+    change(receipt.backfill);
     attachment.body = Buffer.from(JSON.stringify(receipt)).toString("base64");
     expect(() => assertRawReport(value, "new")).toThrow();
   }

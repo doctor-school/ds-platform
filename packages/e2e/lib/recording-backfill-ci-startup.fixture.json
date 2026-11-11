@@ -1,0 +1,5 @@
+{
+  "source": "CI 42962160865 artifact 13830759874 backfill-4np1DB/stdout.jsonl, first three lines unchanged",
+  "sourceSha256": "d14cdb6d84b6bdc7443cfa84e314270115fda875c588e7bbee90e1120b67acea",
+  "stdout": "\u001b[33m[Nest] 13249  - \u001b[39m11/11/2026, 5:33:23 AM \u001b[33m   WARN\u001b[39m \u001b[38;5;3m[SessionAuthHook] \u001b[39m\u001b[33mno Fastify instance \u2014 session auth hook not registered\u001b[39m\n[delivery-reconcile] {\"event\":\"delivery_mail_readiness\",\"channels\":[{\"role\":\"primary\",\"provider\":\"postbox\",\"state\":\"disabled\"},{\"role\":\"reserve\",\"provider\":\"mail.ru\",\"state\":\"absent\"},{\"role\":\"resend\",\"provider\":\"resend\",\"state\":\"absent\"}],\"operational_reserve\":[]}\n\u001b[33m[Nest] 13249  - \u001b[39m11/11/2026, 5:33:23 AM \u001b[33m   WARN\u001b[39m \u001b[38;5;3m[AdminSessionAuthHook] \u001b[39m\u001b[33mno Fastify instance \u2014 admin auth hook not registered\u001b[39m"
+}

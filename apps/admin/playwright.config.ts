@@ -92,7 +92,7 @@ const recordingAttachmentTestDir = defineBddConfig({
   featuresRoot: "../docs/content/specs/features",
   steps: ["e2e/recording-attachment/steps.ts", "e2e/support/fixtures.ts"],
   outputDir: ".features-gen/recording-attachment",
-  tags: "(@EARS-1 and @core) or @recording-publication-audit or @recording-legacy-transitions or @recording-command-boundaries",
+  tags: "(@EARS-1 and @core) or @recording-publication-audit or @recording-legacy-transitions or @recording-command-boundaries or @recording-backfill-originals",
 });
 
 export default defineConfig({

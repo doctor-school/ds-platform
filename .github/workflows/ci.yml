@@ -1858,6 +1858,10 @@ jobs:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_admin_e2e
       IDP_ISSUER: http://localhost:9080
       E2E_ADMIN_URL: http://localhost:3200
+      # 014 EARS-29: both the API and the operator CLI boot the same Nest graph.
+      # Runner-only fixtures, shared across steps; never deployment defaults.
+      AUDIT_IDENTIFIER_PEPPER: ci-admin-e2e-audit-pepper
+      LIFECYCLE_IMPACT_TOKEN_SECRET: ci-admin-e2e-lifecycle-secret
       # 012 refusal journeys observe actual object inventory and metadata.
       # The external S3-compatible provider is runner-local and disposable,
       # following runtime-images.yml's pinned S3Mock image.
@@ -2083,11 +2087,6 @@ jobs:
           PORT: "3000"
           BOT_PROTECTION_ENABLED: "false"
           IDP_REDIRECT_URI: http://localhost:3000/auth/callback
-          # Both fail CLOSED outside a test runtime, so CI must supply them.
-          # Throwaway literals for a throwaway database — they protect nothing
-          # here and are never reused off this runner.
-          AUDIT_IDENTIFIER_PEPPER: ci-admin-e2e-audit-pepper
-          LIFECYCLE_IMPACT_TOKEN_SECRET: ci-admin-e2e-lifecycle-secret
           # 030 EARS-2 — a project result's storefront link must sit on the
           # configured doctor-storefront origin (HTTPS); the admin flows tier
           # saves one (`e2e/projects-catalog.spec.ts`, whose default matches).

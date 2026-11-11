@@ -234,6 +234,18 @@ py() { python3 -I -c "$PY" "$@"; }
 
 # --- S3 (ds-data-prod: the pgBackRest bucket, its credentials from data.env) ---------
 s3_value() { sed -n "s/^$1=//p" "$DATA_ENV" | tail -n 1 | tr -d '\r'; }
+# s3_origin <repo1-s3-endpoint> prints `host[:port]`. pgBackRest parses the endpoint as
+# a URL with an optional scheme (src/common/io/http/url.c), so `host`, `host:port` and
+# `https://host[:port]`, with one optional trailing `/`, all name the same bucket here.
+# `http://` is refused: the bundle and the signed request never travel in clear text.
+s3_origin() {
+  local v=$1
+  v=${v#https://}
+  v=${v%/}
+  [[ $v =~ ^[A-Za-z0-9.-]+(:[1-9][0-9]{0,4})?$ ]] ||
+    fail "data.env holds an S3 endpoint this tool cannot use"
+  printf '%s' "$v"
+}
 # s3 PUT|GET|HEAD <object key> <file>; prints the HTTP status, or `curl exit <n>` when
 # curl itself fails (its stderr may name the endpoint, so only the number is kept).
 # The credentials go to curl in a root-only config file, never on a command line.
@@ -248,6 +260,7 @@ s3() {
   secret=$(s3_value PGBACKREST_REPO1_S3_KEY_SECRET)
   [[ -n $bucket && -n $endpoint && -n $region && -n $access && -n $secret ]] ||
     fail "data.env lacks the PGBACKREST_REPO1_S3_* settings"
+  endpoint=$(s3_origin "$endpoint") || exit 1
   cfg=$(mktemp)
   printf 'user = "%s:%s"\n' "$access" "$secret" >"$cfg"
   local args=(-sS -K "$cfg" --aws-sigv4 "aws:amz:$region:s3" --connect-timeout 20 --max-time 120

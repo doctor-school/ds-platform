@@ -279,7 +279,9 @@ feeding `age` empty input.
 holds the box's S3 keys): read the bucket with the provider account's own S3 keys
 (`terraform output -raw …` from the owner-local tfstate, §1.1, or the provider
 console). The bucket name and endpoint are `PGBACKREST_REPO1_S3_BUCKET` /
-`PGBACKREST_REPO1_S3_ENDPOINT` of `data.env.example` / the Terraform outputs.
+`PGBACKREST_REPO1_S3_ENDPOINT` of `data.env.example` / the Terraform outputs; that value
+is `host`, `host:port` or `https://host[:port]`, and `<endpoint>` below is its
+`host[:port]` alone.
 
 1. **Fetch the latest manifest of the box** (any S3 client; the AWS CLI shown, the keys
    in its environment, never on the command line):

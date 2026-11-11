@@ -124,6 +124,7 @@
     "staging:golden-db": "node tools/staging/golden-db.mjs",
     "deploy:check-live": "node tools/deploy/live-broadcast-check.mjs",
     "deploy:probe": "node tools/deploy/deploy-probe.mjs",
+    "design:artifact": "node tools/design/ds-artifact.mjs",
     "design:vendor": "node tools/design/vendor-canvas.mjs",
     "deploy:prod": "node tools/deploy/prod.mjs",
     "deploy:release-notes": "node tools/deploy/release-notes.mjs",

@@ -1,6 +1,15 @@
-# design-sync notes — @ds/design-system → Claude Design
+# design-sync notes — @ds/design-system → its Claude artifact
 
-Target: «Doctor.School Design System», `https://claude.ai/design/p/1366789c-9a05-4137-952e-61147c7a9550` (pinned in `config.json`). Shape `package` — the repo has no Storybook; `apps/showcase` is the repo's own catalogue, not a Storybook.
+Target: «Doctor.School Design System», the Design System artifact `https://claude.ai/artifact/XN7wqQUcA83AQyyUhqtoFs` (pinned as `projectId` in `config.json`, the converter's free-form identity key), kept in the type's files layout with `"editing": "code"`: the page is read-only and every change comes from this repository. Shape `package` — the repo has no Storybook; `apps/showcase` is the repo's own catalogue, not a Storybook.
+
+## Build and publish (the one sequence)
+
+1. Converter deps staged in the gitignored `.ds-sync/` (below), `pnpm install` done.
+2. `cfg.buildCmd`: `pnpm -F @ds/schemas build && pnpm -F @ds/design-system build && node .design-sync/prepare.mjs`.
+3. `node .ds-sync/package-build.mjs --config .design-sync/config.json --node-modules packages/design-system/node_modules --entry packages/design-system/.ds-sync-pkg/index.mjs --out ./ds-bundle`.
+4. `node .ds-sync/package-validate.mjs ./ds-bundle` — the render check; its measured heights become the cards' `height`.
+5. The lead reads the live `project/design-system.json` (`Artifact read`, `path`) and saves it; then `pnpm design:artifact --from ds-bundle --out <scratch dir> --index <saved index>` (`tools/design/ds-artifact.mjs`) writes `<scratch dir>/project/…` in the type's layout — `components/bundle.js` (format-4 `@ds-bundle` header), `bundle.css`, `index.d.ts`, `lib/react.js` + `lib/react-dom.js` (React 19 for the previews), per component `README.md` + `preview.html` (the converter's preview with its module inlined), `tokens.json` (list shape from `packages/design-system/tokens/*.json`, exact values; what the page cannot read is printed as `not placed`), `tokens.css`, `README.md`, the index — and `<scratch dir>/REMOVALS.txt`, the superseded migrated-layout paths.
+6. The lead publishes with the Artifact tool: `url` = the target, `root` = `<scratch dir>`, `files` maps `project/<path>` → `project/<path>`, at most 255 paths a call, `project/design-system.json` alone in the LAST call (re-read right before). Removals from `REMOVALS.txt` (`"project/<path>": null`) only after reconciling them with a `scope: files` listing. Nothing built is committed.
 
 ## How this repo builds (read before every re-sync)
 
@@ -48,5 +57,6 @@ Target: «Doctor.School Design System», `https://claude.ai/design/p/1366789c-9a
 - Previews copy showcase compositions; prop renames in the DS break them (`preview build failed` in the build log, or a runtime crash on a missing field → floor card). esbuild does not typecheck, so check previews with `tsc` first and without the converter: a throwaway tsconfig extending `packages/design-system/tsconfig.json` with `include` = `.design-sync/previews/*.tsx` and `paths` for `@ds/design-system` (a file re-exporting `src/index.ts` + `src/blocks/index.ts`), `@ds/schemas` (`packages/schemas/src/index.ts`) and `react`/`react/jsx-runtime` (the package's `@types/react`). It runs under the package's `exactOptionalPropertyTypes`: omit a prop rather than pass `undefined`.
 - The bundle CSS only contains utilities used by DS sources + previews; designs that use other Tailwind classes silently get nothing (documented in `conventions.md`).
 - Inter loads from fonts.googleapis.com at runtime (network-fetched asset).
-- The `DesignSync` tool lives in the lead's session only; a dispatched subagent cannot load it (`ToolSearch` finds nothing). Split the run: the subagent stages `.ds-sync/`, runs `buildCmd` + `resync.mjs --remote` from the lead-saved anchor, grades, and returns the upload plan (writes globs, `deletePaths`, ≤256-file chunk lists, `report_validate` counts); the lead runs `get_file`/`finalize_plan`/`write_files`/`delete_files`/`report_validate`/`list_files`.
-- A re-sync updates only the DS project. A canvas project's `_ds/<ds-slug>/` copy (its `README.md` component count included) is a separate copy; whether Claude Design refreshes it on recompile was unverified at #2843 — re-check it before claiming the canvases see the new bundle.
+- The `Artifact` tool lives in the lead's session only. Split the run: a dispatched subagent runs steps 1–5 into a scratch folder and returns the file count, total size, the `not placed` token list and the render-check warnings; the lead runs step 6.
+- A re-sync updates only the design-system artifact. The canvases artifact (`https://claude.ai/artifact/LHpSoMqti9kRrhEbR9o2AQ`) keeps its own copy of the system under `project/_ds/<ds-slug>/`; it is refreshed separately, never assumed to follow this publish.
+- Preview libraries: the bundle is React 19 (jsDelivr has no React 19 UMD build), so each preview loads `components/lib/react.js` and the bundle itself and the index keeps `libraries: []`; how the type's `libraries` entry names files under `components/lib/` is defined in its `format.md` / `demo.json` — align the index with them on the next publish that reads them.

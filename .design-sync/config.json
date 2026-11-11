@@ -1,5 +1,5 @@
 {
-  "projectId": "1366789c-9a05-4137-952e-61147c7a9550",
+  "projectId": "https://claude.ai/artifact/XN7wqQUcA83AQyyUhqtoFs",
   "shape": "package",
   "pkg": "@ds/design-system",
   "buildCmd": "pnpm -F @ds/schemas build && pnpm -F @ds/design-system build && node .design-sync/prepare.mjs",

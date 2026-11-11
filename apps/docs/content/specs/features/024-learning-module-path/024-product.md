@@ -1,18 +1,18 @@
 ---
-title: "Feature 024 — The learning module and the series path (PRD)"
+title: "Feature 024 — The lesson and the learner's path through the course (PRD)"
 description: "Product requirements for how a doctor learns on `doctor.school`: a lesson is a set of elements (series episode, microlearning, downloadable material, podcast, test, clinical case…) worth about one academic hour, never a single video; the path is one continuous path through the whole course — modules are its sections, nodes are lessons — and the website and the mobile application read the same path data and differ only in presentation; and every rule of completion, unlocking, order, visibility and testing is a setting of a rules constructor with inheritance and named presets, not code. Progress is kept as facts and statuses are computed from the current rules. Also the gating, podcast companion, partner downloads, corrective material, star ratings, feedback and mobile parity of the lesson screen. Wave 2, `blocked_by` 017 and 025; source of the 024 EARS triplet (ADR-0014)."
 slug: two-site-ia-024-learning-module-path-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
 surface: user-facing
 storefronts: doctor-only
-storefronts_reason: "The learning module and the series path are doctor-storefront screens (#d-lesson, apps/doctor, functional map §B 024). The Academy serves the expert audience and specifies no lesson or path surface; the learning model it produces (ADR-0016 §4: school, course and module are project results) is shown to doctors only on the doctor storefront."
+storefronts_reason: "The lesson and the learner's path through the whole course are doctor-storefront screens (#d-lesson, apps/doctor, functional map §B 024). The Academy serves the expert audience and specifies no lesson or path surface; the learning model it produces (ADR-0016 §4: school, course and module are project results) is shown to doctors only on the doctor storefront."
 lang: en
 ---
 
 > **EN (this)** · **RU:** [`024-product-ru.md`](./024-product-ru.md)
 
-> Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · **Wave 2** (022, 023, 024, 025, 044). 024 is `blocked_by` **017** (the storefront shell and the chosen specialty) and **025** (accrual and spending of attention points is part of a module's behaviour). Feature **023** (school and course) is `blocked_by` 024: the school and course are containers over the modules and lessons defined here. Domain canon: [ADR-0016](../../../adr/0016-core-domain-model-en.md) §4, §6. Discovery record: Issue #1792 (owner decisions P0, D1–D9) and #1793.
+> Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · **Wave 2** (022, 023, 024, 025, 044). 024 is `blocked_by` **017** (the storefront shell and the chosen specialty) and **025** (accrual and spending of attention points is part of a module's behaviour). Feature **023** (school and course) is `blocked_by` 024: the school and course are containers over the modules and lessons defined here. Domain canon: [ADR-0016](../../../adr/0016-core-domain-model-en.md) §4, §6. Discovery record: Issue #1792 (owner decisions P0, D1–D10) and #1793 (owner decision D11 — the course path).
 
 **Provenance legend.** **[owner]** — owner-approved: the principle P0 («a constructor, not code»), decisions D1–D11 (D10, 2026-11-04: doctors buy nothing; D11, 2026-11-11: a course is one continuous learner's path, [decision in #1793](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6797305382)) and the five-point constructor direction the owner confirmed on 2026-11-04 («Да, это уже верное направление»). **[proposed]** — `agent-proposed — UNCONFIRMED`: everything else, including every concrete setting, preset content, default value and interface element below. Where D4, D6 and D9 appear, they are **defaults of settings or presets, never hard rules** [owner, P0].
 

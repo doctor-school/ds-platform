@@ -1,18 +1,18 @@
 ---
-title: "Фича 024 — Учебный модуль и путь серии (PRD)"
+title: "Фича 024 — Урок и путь ученика через курс (PRD)"
 description: "Продуктовые требования к тому, как врач учится на `doctor.school`: урок — это набор элементов (серия сериала, микролёрнинг, материал для скачивания, подкаст, тест, клинический случай…) примерно на академический час, а не одно видео; путь — один сквозной путь через весь курс: модули — его разделы, узлы — уроки, а сайт и мобильное приложение читают одни данные пути и различаются только подачей; все правила зачёта, открытия, порядка, видимости и тестов — настройки конструктора правил с наследованием и именованными пресетами, а не код. Прогресс хранится как факты, статусы вычисляются по действующим правилам. Сюда же — гейтинг, подкаст-спутник, материалы партнёра, исправительный материал, оценки звёздами, обратная связь и паритет с мобильным приложением. Волна 2, `blocked_by` 017 и 025; источник EARS-триплета 024 (ADR-0014)."
 slug: two-site-ia-024-learning-module-path-product-ru
 epic: ../../product/two-site-ia/brief-ru.md
 status: Draft
 surface: user-facing
 storefronts: doctor-only
-storefronts_reason: "The learning module and the series path are doctor-storefront screens (#d-lesson, apps/doctor, functional map §B 024). The Academy serves the expert audience and specifies no lesson or path surface; the learning model it produces (ADR-0016 §4: school, course and module are project results) is shown to doctors only on the doctor storefront."
+storefronts_reason: "The lesson and the learner's path through the whole course are doctor-storefront screens (#d-lesson, apps/doctor, functional map §B 024). The Academy serves the expert audience and specifies no lesson or path surface; the learning model it produces (ADR-0016 §4: school, course and module are project results) is shown to doctors only on the doctor storefront."
 lang: ru
 ---
 
 > **EN:** [`024-product.md`](./024-product.md) · **RU (этот файл)**
 
-> Эпик: [Two-site IA — продуктовый бриф](../../product/two-site-ia/brief-ru.md) · **Волна 2** (022, 023, 024, 025, 044). 024 `blocked_by` **017** (оболочка витрины и выбранная специальность) и **025** (начисление и списание очков внимания — часть поведения модуля). Фича **023** (школа и курс) `blocked_by` 024: школа и курс — контейнеры над модулями и уроками, которые задаёт эта фича. Канон домена: [ADR-0016](../../../adr/0016-core-domain-model-ru.md) §4, §6. Запись discovery: Issue #1792 (решения владельца P0, D1–D9) и #1793.
+> Эпик: [Two-site IA — продуктовый бриф](../../product/two-site-ia/brief-ru.md) · **Волна 2** (022, 023, 024, 025, 044). 024 `blocked_by` **017** (оболочка витрины и выбранная специальность) и **025** (начисление и списание очков внимания — часть поведения модуля). Фича **023** (школа и курс) `blocked_by` 024: школа и курс — контейнеры над модулями и уроками, которые задаёт эта фича. Канон домена: [ADR-0016](../../../adr/0016-core-domain-model-ru.md) §4, §6. Запись discovery: Issue #1792 (решения владельца P0, D1–D10) и #1793 (решение владельца D11 — путь курса).
 
 **Легенда происхождения.** **[владелец]** — owner-approved: принцип P0 («конструктор, а не код»), решения D1–D11 (D10, 2026-11-04: врачи ничего не покупают; D11, 2026-11-11: курс — один сквозной путь ученика, [решение в #1793](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6797305382)) и пять пунктов направления «конструктора», подтверждённые владельцем 2026-11-04 («Да, это уже верное направление»). **[предложение]** — `agent-proposed — UNCONFIRMED`: всё остальное, в том числе каждая конкретная настройка, состав пресетов, значения по умолчанию и элементы интерфейса ниже. Там, где встречаются D4, D6 и D9, это **значения по умолчанию настроек или пресетов, а не жёсткие правила** [владелец, P0].
 

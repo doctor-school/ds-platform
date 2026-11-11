@@ -480,6 +480,66 @@ describe("3662: the key custody, box side", { skip: SKIP }, () => {
     assert.equal(r.stdout, "");
   });
 
+  // pgBackRest parses repo1-s3-endpoint as a URL with an optional scheme, port and path
+  // (src/common/io/http/url.c); prod's data.env holds the `https://<host>` form.
+  const setEndpoint = (value) =>
+    writeFileSync(
+      join(data, "etc/ds-platform/data.env"),
+      SECRETS["data.env"].replace(
+        "PGBACKREST_REPO1_S3_ENDPOINT=s3.example.test",
+        `PGBACKREST_REPO1_S3_ENDPOINT=${value}`,
+      ),
+    );
+  const curlUrls = () =>
+    log("curl")
+      .trimEnd()
+      .split("\n")
+      .map((l) => l.split(" ").find((a) => a.startsWith("https://")));
+
+  for (const [value, origin] of [
+    ["https://s3.example.test", "https://s3.example.test/"],
+    ["https://s3.example.test/", "https://s3.example.test/"],
+    ["https://s3.example.test:9000", "https://s3.example.test:9000/"],
+    ["s3.example.test:9000/", "https://s3.example.test:9000/"],
+  ]) {
+    it(`the endpoint form ${value} reaches the bucket at ${origin}, one scheme in the URL`, () => {
+      setEndpoint(value);
+      assert.equal(read("recovery-bundle").status, 0);
+      const r = read("recovery-check");
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, "api-prod MATCH\ndata-prod MATCH\n");
+      const urls = curlUrls();
+      assert.ok(urls.length > 0);
+      for (const u of urls) {
+        assert.ok(u.startsWith(`${origin}ds-backups/recovery-bundle/`), u);
+        assert.equal(u.split("://").length, 2, u);
+      }
+    });
+  }
+
+  for (const value of [
+    "http://s3.example.test",
+    "https://https://s3.example.test",
+    "s3.example.test/ds-backups",
+    "https://user@s3.example.test",
+    "s3.example.test:0",
+    "s3.example.test:99999x",
+    "s3 example test",
+  ]) {
+    it(`refuses the endpoint form ${JSON.stringify(value)} with a fixed reason, curl never called`, () => {
+      setEndpoint(value);
+      const r = read("recovery-bundle");
+      assert.equal(r.status, 1);
+      assert.match(
+        r.stderr,
+        /data-prod: ds-recovery: data\.env holds an S3 endpoint this tool cannot use/,
+      );
+      assert.ok(!r.stderr.includes("example"), "the reason names no value");
+      assert.equal(r.stdout, "");
+      assert.equal(log("curl"), "");
+    });
+  }
+
   it("refuses without age (exit 3) and without ds-recovery installed", () => {
     rmSync(join(stubs, "age"));
     // The stubs (found through the sudo stub) and the system dirs, without any age.

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  EPIC_CHILDREN_MAX,
   EPIC_TITLE_MAX,
   renderEpicsSection,
   type EpicChild,
@@ -39,7 +38,7 @@ describe("agent-bootstrap ## Epics (#2957)", () => {
     ]);
   });
 
-  it("prints the sub-issue bar and marks no child as next (#3560)", () => {
+  it("prints the sub-issue bar and open/blocked counts, no child to pick (#3560, #3942)", () => {
     const lines = renderEpicsSection([
       epic({
         openChildren: [child(2071, [2500, 2501]), child(2072), child(2073)],
@@ -47,29 +46,16 @@ describe("agent-bootstrap ## Epics (#2957)", () => {
     ]);
     expect(lines).toEqual([
       "## Epics",
-      "- #2020 epic: One code for two storefronts — 16/22 sub-issues closed",
-      "  - blocked #2071 child 2071 — by #2500, #2501",
-      "  - ready #2072 child 2072",
-      "  - ready #2073 child 2073",
+      "Progress only — the next task comes from `## Tracks`.",
+      "- #2020 epic: One code for two storefronts — 16/22 sub-issues closed, 3 open (1 blocked)",
     ]);
   });
 
-  it("truncates long titles and caps the open children list", () => {
+  it("truncates long titles", () => {
     const long = "x".repeat(EPIC_TITLE_MAX + 20);
-    const children = Array.from({ length: EPIC_CHILDREN_MAX + 3 }, (_, i) =>
-      child(100 + i),
-    );
-    children[0] = { ...children[0], title: long };
-    const lines = renderEpicsSection([
-      epic({ title: `epic: ${long}`, openChildren: children }),
-    ]);
-    expect(lines[1]).toContain(`${"x".repeat(EPIC_TITLE_MAX - 7)}…`);
-    expect(lines[1]).not.toContain("x".repeat(EPIC_TITLE_MAX));
-    expect(lines[2]).toBe(
-      `  - ready #100 ${"x".repeat(EPIC_TITLE_MAX - 1)}…`,
-    );
-    // head + epic line + EPIC_CHILDREN_MAX children + the "more" row
-    expect(lines).toHaveLength(2 + EPIC_CHILDREN_MAX + 1);
-    expect(lines.at(-1)).toBe("  - … +3 more");
+    const lines = renderEpicsSection([epic({ title: `epic: ${long}` })]);
+    expect(lines[2]).toContain(`${"x".repeat(EPIC_TITLE_MAX - 7)}…`);
+    expect(lines[2]).not.toContain("x".repeat(EPIC_TITLE_MAX));
+    expect(lines).toHaveLength(3);
   });
 });

@@ -84,6 +84,7 @@ import {
   roadmapHygieneWarnings,
 } from "./gh/lib/roadmap-taxonomy.mjs";
 import { unreviewedShowPrs } from "./gh/merge-gate.mjs";
+import { loadTrackQueues, renderTracksSection } from "./track-queues";
 import {
   probeStageSlots,
   renderStageSlotSection,
@@ -757,7 +758,6 @@ export interface EpicRow {
 }
 
 export const EPIC_TITLE_MAX = 90;
-export const EPIC_CHILDREN_MAX = 10;
 
 function clip(title: string): string {
   return title.length > EPIC_TITLE_MAX
@@ -770,22 +770,14 @@ export function renderEpicsSection(epics: EpicRow[] | null): string[] {
   const head = "## Epics";
   if (epics === null) return [head, "(unknown — see Warnings)"];
   if (epics.length === 0) return [head, "(none)"];
-  const out = [head];
+  // Progress only (#3942): the next task per track comes from `## Tracks`; a
+  // list of equal «ready» children here read as a second place to pick from.
+  const out = [head, "Progress only — the next task comes from `## Tracks`."];
   for (const e of epics) {
+    const blocked = e.openChildren.filter((c) => c.blockedBy.length > 0).length;
     out.push(
-      `- #${e.number} ${clip(e.title)} — ${e.completed}/${e.total} sub-issues closed`,
+      `- #${e.number} ${clip(e.title)} — ${e.completed}/${e.total} sub-issues closed, ${e.openChildren.length} open (${blocked} blocked)`,
     );
-    for (const c of e.openChildren.slice(0, EPIC_CHILDREN_MAX)) {
-      if (c.blockedBy.length > 0) {
-        out.push(
-          `  - blocked #${c.number} ${clip(c.title)} — by ${c.blockedBy.map((n) => `#${n}`).join(", ")}`,
-        );
-      } else {
-        out.push(`  - ready #${c.number} ${clip(c.title)}`);
-      }
-    }
-    const more = e.openChildren.length - EPIC_CHILDREN_MAX;
-    if (more > 0) out.push(`  - … +${more} more`);
   }
   return out;
 }
@@ -1211,6 +1203,7 @@ async function main(): Promise<void> {
     mergedShow,
     epics,
     stageSuite,
+    trackQueues,
   ] = await Promise.all([
     gitState(),
     ghIssues(["--assignee", "@me", "--label", "agent-working"]),
@@ -1246,7 +1239,12 @@ async function main(): Promise<void> {
     ghOpenEpics(),
     // main's `stage-suite` verdict + newest green SHA (#3269). Never throws.
     probeStageSuite(),
+    // Owner-ordered track queues resolved live (#3942). Never throws.
+    primaryWorktreePath(REPO_ROOT).then((mainRoot) =>
+      loadTrackQueues(REPO_ROOT, mainRoot),
+    ),
   ]);
+  for (const w of trackQueues.warnings) warnings.push(w);
   // The slot probe collects its own degrade reasons (unreachable box, a failing
   // `gh pr view`) instead of reaching into the module-level list; merge them so
   // they reach `## Warnings` alongside every other partial-source failure.
@@ -1395,6 +1393,9 @@ async function main(): Promise<void> {
   }
   out.push("");
 
+  out.push(...renderTracksSection(trackQueues.tracks, trackQueues.fileDate));
+  out.push("");
+
   out.push(...renderEpicsSection(epics));
   out.push("");
 
@@ -1413,7 +1414,7 @@ async function main(): Promise<void> {
   if (working.length === 0 && awaiting.length === 0 && ready.length === 0) {
     out.push(
       openCount && openCount > 0
-        ? "(no triage buckets populated — see open-issue total above; TRIAGE the board by readiness)"
+        ? "(no triage buckets populated — see open-issue total above; take your track's next item from `## Tracks`)"
         : "(none)",
     );
   } else {

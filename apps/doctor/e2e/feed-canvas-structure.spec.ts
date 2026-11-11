@@ -126,6 +126,80 @@ for (const width of [390, 1440]) {
 }
 
 /**
+ * 018 EARS-8 (#1503) — «Смежные области» against the canvas section
+ * «d-feed · смежные области»: kicker, heading, then a wrapping row of
+ * bordered link chips. The chip names are data (the canvas samples, the
+ * build's managed rows) and are never compared. Two differences are ON
+ * PURPOSE: the canvas lead paragraph (adjacent lessons and events «попадают в
+ * эту же ленту» — untrue in release 1) and the chip counter («N уроков» —
+ * lessons are not connected, LD-1) are not built.
+ */
+const ADJACENT_SECTION = '[data-screen-label="d-feed · смежные области"]';
+
+async function readAdjacentStructure(page: Page) {
+  return page.evaluate((root) => {
+    const section = document.querySelector(root);
+    if (!section) throw new Error(`no section ${root}`);
+    const box = section.firstElementChild as HTMLElement;
+    const [kicker, heading, ...rest] = [...box.children] as HTMLElement[];
+    const row = rest.at(-1)!;
+    const chips = [...row.querySelectorAll("a")];
+    return {
+      kicker: kicker!.textContent!.trim(),
+      heading: heading!.innerText.trim(),
+      paragraphs: rest.filter((el) => el.tagName === "P").length,
+      wraps: getComputedStyle(row).flexWrap,
+      chipBorder: chips.map((chip) => getComputedStyle(chip).borderTopWidth),
+      chipParts: chips.map(
+        (chip) =>
+          chip.innerText
+            .trim()
+            .split(/\n|\s{2,}/)
+            .filter(Boolean).length,
+      ),
+      counters: chips.filter((chip) => /\d/.test(chip.innerText)).length,
+    };
+  }, ADJACENT_SECTION);
+}
+
+for (const width of [390, 1440]) {
+  test.describe(`#1503 feed adjacent block ≡ doctor-feed canvas · guest · ${width}`, () => {
+    test.use({ viewport: { width, height: 900 } });
+    test("018 EARS-8: the adjacent block has the canvas structure; no lead paragraph and no chip counter are built", async ({
+      page,
+      context,
+    }) => {
+      await context.clearCookies();
+      await page.goto(FEED);
+      await page.getByTestId("specialty-feed-adjacent-item").first().waitFor();
+
+      const runtime = await openRuntimeCanvas(context, "doctor-feed.dc.html", {
+        props: { loggedIn: false },
+      });
+      let canvas: Awaited<ReturnType<typeof readAdjacentStructure>>;
+      try {
+        canvas = await readAdjacentStructure(runtime.page);
+      } finally {
+        await runtime.close();
+      }
+      const built = await readAdjacentStructure(page);
+
+      expect(built.kicker).toBe(canvas.kicker);
+      expect(built.heading).toBe(canvas.heading);
+      expect(built.wraps).toBe("wrap");
+      expect(canvas.wraps).toBe("wrap");
+      expect(built.chipBorder.length).toBeGreaterThan(0);
+      expect(new Set(built.chipBorder)).toEqual(new Set(canvas.chipBorder));
+      // The disclosed mismatches: the canvas paragraph and chip counters.
+      expect(canvas.paragraphs).toBe(1);
+      expect(built.paragraphs).toBe(0);
+      expect(canvas.counters).toBe(canvas.chipParts.length);
+      expect(built.counters).toBe(0);
+    });
+  });
+}
+
+/**
  * #3798 — the runtime canvas loader itself, on this tier (no app needed): the
  * six vendored canvases that load the DS bundle render with it — built from
  * this repo, offline — and a `dc-import` the runtime cannot fetch fails the

@@ -1,4 +1,10 @@
-import { SpecialtyFeedSchema, type SpecialtyFeed } from "@ds/schemas";
+import {
+  AdjacentAreasSchema,
+  SpecialtyFeedSchema,
+  specialtyFeedBlockRead,
+  type AdjacentAreas,
+  type SpecialtyFeed,
+} from "@ds/schemas";
 import {
   serverApiBase,
   forwardedHeaders,
@@ -34,4 +40,39 @@ export async function fetchSpecialtyFeed(
   if (res.status === 404) return { kind: "not-found" };
   if (!res.ok) throw new Error(`specialty feed read failed (${res.status})`);
   return { kind: "ok", feed: SpecialtyFeedSchema.parse(await res.json()) };
+}
+
+/**
+ * 018 EARS-8 (#1503) — the adjacent-areas block read
+ * (`GET /v1/storefront/feed/{specialty}/adjacent`). A public read: no viewer
+ * field rides it, so only the client address is forwarded, as the nearest-
+ * events block does. Any failure is the block's own (LD-7): it answers
+ * `{ ok: false }` and the block shows its error and «Повторить» while every
+ * other block stays as it is.
+ */
+export type AdjacentAreasRead =
+  | { readonly ok: true; readonly value: AdjacentAreas }
+  | { readonly ok: false };
+
+export async function fetchSpecialtyFeedAdjacent(
+  specialtyCode: string,
+  forwardedFor: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<AdjacentAreasRead> {
+  try {
+    const res = await fetchImpl(
+      `${serverApiBase()}${specialtyFeedBlockRead(specialtyCode, "adjacent")}`,
+      {
+        headers: {
+          accept: "application/json",
+          ...(forwardedFor ? { "x-forwarded-for": forwardedFor } : {}),
+        },
+        cache: "no-store",
+      },
+    );
+    if (!res.ok) return { ok: false };
+    return { ok: true, value: AdjacentAreasSchema.parse(await res.json()) };
+  } catch {
+    return { ok: false };
+  }
 }

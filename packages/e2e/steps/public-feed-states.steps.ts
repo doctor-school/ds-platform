@@ -136,6 +136,7 @@ Then(
     expect(state(page).envelope!.blocks.map((block) => block.kind)).toEqual([
       "events",
       "value",
+      "adjacent",
     ]);
   },
 );
@@ -144,12 +145,16 @@ Then(
   async ({ page }) => {
     const feed = page.getByTestId("specialty-feed");
     const slots = feed.locator("[data-feed-block-slot]");
-    await expect(slots).toHaveCount(2);
+    await expect(slots).toHaveCount(3);
     await expect(slots.nth(0)).toHaveAttribute(
       "data-feed-block-slot",
       "events",
     );
     await expect(slots.nth(1)).toHaveAttribute("data-feed-block-slot", "value");
+    await expect(slots.nth(2)).toHaveAttribute(
+      "data-feed-block-slot",
+      "adjacent",
+    );
     for (const kind of ["schools", "lessons", "leaderboard", "communities"])
       await expect(
         feed.locator(

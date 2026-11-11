@@ -434,6 +434,7 @@ const FEED_EVENTS = [
   }),
 ];
 let specialtyEventsFailing = false;
+let specialtyAdjacentFailing = false;
 
 /**
  * 018 EARS-7 — the envelope-carried «Зачем это мне» block, the same copy the
@@ -467,6 +468,26 @@ const FEED_VALUE_BLOCK = {
  * catalog lands on a real feed envelope rather than the not-found state.
  */
 const FEED_BOOK = [FEED_SPECIALTY, ...SPECIALTIES];
+
+/**
+ * 018 EARS-8 — the adjacent-areas read, as the api answers it: the fixture
+ * specialty reaches the two catalog entries through managed adjacency rows
+ * (each linking into that entry's own feed here), and every other specialty
+ * has no adjacency row, so it reads an empty list. The managed-row resolution
+ * itself is proven against Postgres in
+ * `apps/api/test/storefront/feed-adjacency.e2e-spec.ts`.
+ */
+const FEED_ADJACENT = {
+  [FEED_SPECIALTY.code]: SPECIALTIES.map((specialty, index) => ({
+    specialty,
+    direction: {
+      id: `00000000-0000-4000-8000-0000000000a${index + 1}`,
+      slug: `smezhnoe-${specialty.code}`,
+      title: `${specialty.name} (смежное направление)`,
+    },
+    feedHref: `/feed/${encodeURIComponent(specialty.code)}`,
+  })),
+};
 
 /** The guest store of 017 LD-2, as the real api keeps it: `__Host-ds_specialty` = the entry id. */
 const SPECIALTY_COOKIE = "__Host-ds_specialty";
@@ -738,17 +759,24 @@ const server = createServer((request, response) => {
     request.on("data", (chunk) => (body += chunk));
     request.on("end", () => {
       try {
-        specialtyEventsFailing = JSON.parse(body || "{}").failing === true;
+        const control = JSON.parse(body || "{}");
+        specialtyEventsFailing = control.failing === true;
+        specialtyAdjacentFailing = control.adjacentFailing === true;
       } catch {
         specialtyEventsFailing = false;
+        specialtyAdjacentFailing = false;
       }
-      json(response, 200, { failing: specialtyEventsFailing });
+      json(response, 200, {
+        failing: specialtyEventsFailing,
+        adjacentFailing: specialtyAdjacentFailing,
+      });
     });
     return undefined;
   }
-  const feedPath = /^\/v1\/storefront\/feed\/([^/]+)(\/events)?$/.exec(
-    url.pathname,
-  );
+  const feedPath =
+    /^\/v1\/storefront\/feed\/([^/]+)(\/events|\/adjacent)?$/.exec(
+      url.pathname,
+    );
   if (feedPath) {
     const code = decodeURIComponent(feedPath[1]);
     const feedSpecialty = FEED_BOOK.find((entry) => entry.code === code);
@@ -760,6 +788,11 @@ const server = createServer((request, response) => {
         errorCode: "SPECIALTY_FEED_NOT_FOUND",
         traceId: "e2e",
       });
+    }
+    if (feedPath[2] === "/adjacent") {
+      if (specialtyAdjacentFailing)
+        return json(response, 503, { status: 503 });
+      return json(response, 200, { items: FEED_ADJACENT[code] ?? [] });
     }
     if (feedPath[2]) {
       if (specialtyEventsFailing) return json(response, 503, { status: 503 });
@@ -773,6 +806,7 @@ const server = createServer((request, response) => {
       blocks: [
         { kind: "events", read: `/v1/storefront/feed/${code}/events` },
         FEED_VALUE_BLOCK,
+        { kind: "adjacent", read: `/v1/storefront/feed/${code}/adjacent` },
       ],
       order: "events-first",
       viewer: {

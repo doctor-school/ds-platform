@@ -33,7 +33,7 @@ flowchart TD
   B2 -. card .-> S023["023 school screen"]
   B3 -. card .-> L025["025 lesson screen"]
   B1 -. card .-> P020["020 event page"]
-  B5 -. "adjacent direction" .-> FA["the adjacent direction's own feed"]
+  B5 -. "adjacent specialty" .-> FA["the adjacent specialty's own feed"]
 ```
 
 The statistics line sits between the heading and block 1. Blocks 1–7 are the full order; the page renders only the blocks whose content type is connected (LD-1, requirements «Feed composition by content type») — release 1 renders the statistics line with colleagues only and blocks 1, 4 and 5 — and a newly connected type takes its numbered position with no other block moving. The order above is the F-018-1 constant of **LD-1**: it is a server-side value, identical for every viewer holding the same specialty, and there is no ranking input, no weighting and no per-viewer ordering anywhere in the read path.
@@ -110,7 +110,7 @@ The «Зачем это мне» block is editorial copy carried by the feed env
 | Школы и курсы     | cards, course as «N серий»           | skeleton | «По вашей специальности пока нет школ» + Смежные ↓ | «Готовится» card, block stays | reason + retry                             |
 | Уроки             | lesson of the day + «Все N уроков →» | skeleton | honest empty statement                             | block stays                   | reason + retry                             |
 | Зачем это мне     | four value items                     | n/a      | unchanged (editorial)                              | unchanged                     | n/a                                        |
-| Смежные области   | adjacent directions                  | skeleton | «нет смежных областей» statement                   | fewer entries                 | reason + retry                             |
+| Смежные области   | adjacent specialties                 | skeleton | «нет смежных областей» statement                   | fewer entries                 | reason + retry                             |
 | Топ специальности | consented rows                       | skeleton | no consented doctors yet — stated                  | fewer rows                    | reason + retry                             |
 | Сообщества        | communities + link out               | skeleton | honest empty statement                             | fewer entries                 | reason + retry                             |
 
@@ -156,7 +156,7 @@ erDiagram
   DOCTORS ||--o{ LEADERBOARD_CONSENT : "separate public-display consent"
 ```
 
-Every targeted block filters on `TargetingSet.directions`; the adjacent-areas block reads `TargetingSet.adjacentDirections` and renders it as its own labelled block (F-018-3). No block derives adjacency from names, prefixes or embeddings, and no item from `adjacentDirections` is rendered inside a main block as the doctor's own specialty.
+Every targeted block filters on `TargetingSet.directions`; the adjacent-areas block reads `TargetingSet.adjacentDirections`, takes one more active `direction_specialties` hop to the member specialties linked to those directions, and renders each such specialty (the highest-weight edge wins, the chosen specialty and «Другое» excluded) as an entry of its own labelled block linking into that specialty's feed (F-018-3). No block derives adjacency from names, prefixes or embeddings, and no item from `adjacentDirections` is rendered inside a main block as the doctor's own specialty.
 
 ## 6. Statistics and leaderboard reads
 

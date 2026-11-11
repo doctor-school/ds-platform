@@ -35,6 +35,19 @@ connected blocks in the F-018-1 order (`specialtyFeedBlocks`), the
   copy is one constant for every specialty,
   `specialty-feed.value-copy.ts`; the strict schema leaves no room for a
   payer or marking field (LD-9).
+- `adjacent` — «Смежные области» (EARS-8, F-018-3): `{ kind, read }`, the
+  last block; its read is `GET /v1/storefront/feed/{specialty}/adjacent`
+  (`SpecialtyFeedService.adjacent`, public, `AdjacentAreas`). It takes
+  `TargetingSet.adjacentDirections` from the resolver below and makes one
+  more hop, `TargetingRepository.findLinkedSpecialties` (active
+  `direction_specialties` rows only, «Другое» excluded), to the member
+  specialties linked to those directions. Each entry is
+  `{ specialty, direction, feedHref }`: the specialty whose feed it opens,
+  the adjacent direction it was reached through, and `specialtyFeedPath`.
+  A specialty reached through several edges appears once, through the
+  highest adjacency weight; order is weight desc, then title. The chosen
+  specialty never appears; «Другое» and a specialty without adjacency rows
+  answer `items: []`. Nothing is computed from names or embeddings.
 
 ## EARS-8 targeting resolver
 

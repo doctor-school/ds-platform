@@ -30,6 +30,12 @@ export const pointsRulebookBoundaries = [
   "Publishing a second stacking credit rule warns the admin",
 ] as const;
 
+export const pointsLifecycleBoundaries = [
+  "A no-show releases the reserve and annuls the advance",
+  "Exclusive campaign rules apply only the highest priority one inside their window",
+  "Doctors registered before the engine receive the starter bonus once",
+] as const;
+
 export const pointsEngineOriginals = [
   "An offline lesson earns Bre only and never a second Bre",
   "A producer fact carrying an amount is refused and writes nothing",
@@ -39,6 +45,7 @@ export const pointsEngineOriginals = [
   ...pointsAdvanceBoundaries,
   ...pointsReferralBoundaries,
   ...pointsRulebookBoundaries,
+  ...pointsLifecycleBoundaries,
 ] as const;
 
 export function assertPointsEngineReport(value: unknown): void {
@@ -63,4 +70,56 @@ export function assertPointsReferralBoundariesReport(value: unknown): void {
 
 export function assertPointsRulebookBoundariesReport(value: unknown): void {
   assertOperationalReport(value, pointsRulebookBoundaries, "admin");
+}
+
+export function assertPointsLifecycleBoundariesReport(value: unknown): void {
+  assertOperationalReport(value, pointsLifecycleBoundaries, "admin");
+}
+
+export function assertPointsBackgrounds(
+  log: string,
+  titles: readonly string[],
+): void {
+  const groups = new Map<
+    string,
+    { clause: string; personId: string; applicationName: string }[]
+  >();
+  for (const line of log.split(/\r?\n/).filter(Boolean)) {
+    const entry = JSON.parse(line.replace(/^\uFEFF/, "")) as {
+      command?: string;
+    };
+    if (!entry.command?.startsWith("BACKGROUND ")) continue;
+    const row = JSON.parse(entry.command.slice(11)) as {
+      title: string;
+      clause: string;
+      personId: string;
+      applicationName: string;
+      verified: boolean;
+    };
+    const title = row.title.replace(/ @host:admin$/, "");
+    if (
+      !titles.includes(title) ||
+      row.verified !== true ||
+      !row.personId ||
+      !row.applicationName
+    )
+      throw new Error("Invalid Background receipt");
+    const group = groups.get(title) ?? [];
+    group.push(row);
+    groups.set(title, group);
+  }
+  for (const title of titles) {
+    const pair = groups.get(title);
+    if (
+      !pair ||
+      pair.length !== 2 ||
+      pair[0]!.clause !== "seed-defaults" ||
+      pair[1]!.clause !== "doctor-specialty-phone" ||
+      pair[0]!.personId !== pair[1]!.personId ||
+      pair[0]!.applicationName !== pair[1]!.applicationName
+    )
+      throw new Error(
+        "Missing, repeated or unordered Background receipt: " + title,
+      );
+  }
 }

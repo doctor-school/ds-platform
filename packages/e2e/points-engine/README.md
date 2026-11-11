@@ -1,6 +1,6 @@
 # 025 engine originals
 
-The strict `points-engine.config.ts` contour executes eighteen unchanged source
+The strict `points-engine.config.ts` contour executes twenty-one unchanged source
 originals from `025-scenarios.feature`, including both Background clauses.
 The preceding three remain regression coverage:
 
@@ -49,7 +49,7 @@ result for the target fact/person only. It restores the original prototype in
 journal row and the referral posting on that same fact establish the timing.
 No predicate value or rule is supplied by the test. Narrow quote/referral/context
 receipts append to the operation log that CI uploads. Both unchanged Background
-clauses emit post-assertion receipts for every case (6 for the trio, 36 for all 18).
+clauses emit post-assertion receipts for every case (6 for the trio, 42 for all 21).
 
 The advance cases fund both independent doctors through seeded module facts,
 price the same real event, compare normalized posting legs and persisted member
@@ -84,7 +84,9 @@ CI), with no parameters or credentials. The native reserve/gating/ledger suites
 remain complementary and retained.
 
 This is a Node-only Playwright-BDD projection of the backend contract. It creates
-no browser, page, HTTP server or authentication session. The compiled, shipping
+no browser or page. The starter-bonus case boots the compiled Fastify application
+and makes real injected HTTP requests with the native admin-session fixture;
+other cases call compiled owning services directly. The compiled, shipping
 `PointsEngine`, rule book, ledger and publisher run against real Postgres.
 Native Vitest dedupe, ledger, rule-book, engine and journal suites remain
 complementary and are not deleted. Calls named for the two storefronts and the
@@ -95,7 +97,7 @@ prior awards and calls the real ledger `close`; refusal preserves every posting
 field and commits no new ledger key or fact. Module reports use distinct event
 IDs for the same module and exercise both seeded award rules' once-per keys.
 
-The fixture accepts only an explicitly bound `ds_dev_3925`, or `ds_test` with
+The fixture accepts only an explicitly bound `ds_dev_3968`, or `ds_test` with
 `CI=true`, and checks `current_database()` before creating data. Each scenario
 verifies current migrated rule/settings bodies against `POINTS_ENGINE_SEED`,
 persists its own doctor with the canonical Кардиология specialty and verified
@@ -105,8 +107,8 @@ All SQL is logged without bound values. Append-only facts and postings are
 retained until the owned database is disposed; every pool closes on failure.
 
 Build `@ds/api` and its workspace dependencies first. Provision an owned branch
-database through `pnpm dev:db:branch 3925` (the wrapper snapshots before migration),
-then export its `DATABASE_URL`, `E2E_POINTS_DATABASE=ds_dev_3925`, an existing
+database through `pnpm dev:db:branch 3968` (the wrapper snapshots before migration),
+then export its `DATABASE_URL`, `E2E_POINTS_DATABASE=ds_dev_3968`, an existing
 scratch directory's `E2E_POINTS_OPS_LOG`, and `E2E_POINTS_REPORT` JSON destination:
 
 ```powershell
@@ -118,15 +120,15 @@ pnpm --filter @ds/e2e exec tsx api-probes/assert-points-engine-report.ts $env:E2
 For the exact new-wave receipt, choose another `E2E_POINTS_REPORT` destination:
 
 ```powershell
-pnpm --filter @ds/e2e exec playwright test --config points-engine.config.ts --grep @points-rulebook-boundaries
-pnpm --filter @ds/e2e exec tsx api-probes/assert-points-engine-report.ts $env:E2E_POINTS_REPORT --rulebook-boundaries
+pnpm --filter @ds/e2e exec playwright test --config points-engine.config.ts --grep @points-lifecycle-boundaries
+pnpm --filter @ds/e2e exec tsx api-probes/assert-points-engine-report.ts $env:E2E_POINTS_REPORT --lifecycle-boundaries
 ```
 
 Generation fails on missing selected steps. The default report gate requires
-all eighteen titles in the Admin project; `--rulebook-boundaries` requires exactly the new trio; `--referral-boundaries` retains the preceding referral trio; `--advance-boundaries` still checks the advance trio; `--reserve-boundaries` requires exactly the
+all twenty-one titles in the Admin project; `--lifecycle-boundaries` requires the new trio; `--rulebook-boundaries` retains its preceding trio; `--referral-boundaries` retains the preceding referral trio; `--advance-boundaries` still checks the advance trio; `--reserve-boundaries` requires exactly the
 reserve trio; `--record-boundaries` still checks the preceding trio. All modes
 reject missing, extra, duplicate,
-wrong-host, skipped, failed, flaky or retried results. CI runs all eighteen on disposable
+wrong-host, skipped, failed, flaky or retried results. CI runs all twenty-one on disposable
 `ds_test` before native API suites can publish different rule versions, and
 uploads JSON plus operation log. Run local BDD proofs before mutable native
 rule-book tests as well; later BDD proof needs a fresh owned database.
@@ -160,11 +162,64 @@ snapshots with matching SHA-256 receipts. No seeded version is republished or ed
 Publication bodies, persisted rows, actual audit rows, errors, postings, warnings,
 retirement and seed invariants are appended to the uploaded operation log.
 
-The new trio and full eighteen each require an independently fresh owned database,
+The new trio and full twenty-one each require an independently fresh owned database,
 because the literal version 1 cannot be reused after immutable history exists.
 Run both from the same committed source. Preserve each raw report and operation log;
-after acceptance of the trio receipts, sanctioned `dev:db:drop 3925` followed by
-`dev:db:branch 3925` prepares the full run. No automatic reset, alias or skip exists.
-CI runs the full eighteen once on fresh `ds_test`. Run native rule-book/stacking
+after acceptance of the trio receipts, sanctioned `dev:db:drop 3968` followed by
+`dev:db:branch 3968` prepares the full run. No automatic reset, alias or skip exists.
+CI runs the full twenty-one once on fresh `ds_test`. Run native rule-book/stacking
 complements afterwards; they use unique test slugs. Background receipts total
-6 for the trio and 36 for all eighteen. Owned events are retired before pool close.
+6 for the trio and 42 for all twenty-one. Owned events are retired before pool close.
+
+The `@points-lifecycle-boundaries` wave adds exactly three source originals:
+
+- A no-show releases an advance-backed reserve and a late attendance awards participation without settlement.
+- Exclusive campaign rules choose the highest priority in November, with the other rule winning in December.
+- The admin grants the starter bonus once to pre-engine doctors, with the registration grant sharing its welcome key.
+
+The no-show fixture creates a real 20/30 balance/advance reserve, puts its owned
+scheduled event end more than 24 hours in the past and invokes the actual compiled
+`PointsNoShowSweep.runOnce(explicitNow)`. It checks the stored no-show fact,
+compensation targets and amounts, released hold, annulled obligation, unchanged
+20 Pul balance and no participation posting. A real later attendance records
+`no-open-hold`, leaves the hold released and posts the separate 2 Bre/1 Con award.
+This proves the sweep and engine boundary, not the deferred cancellation producer.
+
+Campaign publication and facts use a scoped historical Date-only application
+clock: November and December of the preceding year. Real service publication uses
+its normal default `effectiveFrom` equal to the observed application clock. This
+keeps both the application's future/past validation and Postgres's future-posting
+constraint active. No wall-clock wait, database clock change, seed rewrite or
+explicit backdated `effectiveFrom` is used. Every clock scope resets in `finally`
+before real-time retirement. Literal campaign IDs, priorities 10/5, shared group,
+November window, persisted publication, traces and exact winning postings are
+retained as receipts. Owned rules retire normally; seed histories remain identical.
+
+The starter case uses actual compiled `AppModule`, Fastify, controller, admin guard,
+`AdminSessionService`, engine and Postgres. Its only provider substitutions are the
+existing external `FakeIdpClient` credential/role fixture and bot-verification setup.
+The native admin-session setup calls real login then `upgradePending`, the same
+production seam used by factor handlers. No guard, controller, session store,
+posting or grant is faked. This is grant HTTP acceptance, with no external IdP,
+factor, auth or authorization acceptance claim. F and G are owned verified-phone
+Cardiology doctors with the canonical participant mirror role, backdated fixture
+registration times and only G's real registration grant. The actual POST grants
+F 20 Pul, adds nothing to G, writes the exact admin/reason/cutoff/count audits and
+answers duplicate for both on a rerun without new postings. No listener is bound;
+the owned application and its pool/intervals close in the case cleanup.
+
+The CLI report gate additionally requires `E2E_POINTS_OPS_LOG` and validates exactly
+two ordered, nonempty, verified Background receipts per expected original, with
+consistent person/application identity. Missing, repeated, reordered or unknown
+receipts are refused as well as failed, skipped, flaky or retried test results.
+The new trio requires 6 receipts; the full 21 requires 42. Native release, stacking,
+limits and starter-bonus tests stay as complementary coverage. Nothing visual is
+delivered, and production is not changed.
+
+The Node-only starter fixture supplies random per-application `AUDIT_IDENTIFIER_PEPPER`
+and `LIFECYCLE_IMPACT_TOKEN_SECRET` only when absent, before loading `AppModule`,
+and restores the prior environment after closing the application. Native Vitest
+has explicit fallbacks for these two dependencies; this Node runner does not set
+`VITEST` or weaken their production fail-closed checks. A configured value always
+wins. Missing-key local proof deletes both keys and `VITEST` before the actual
+compiled HTTP case, exercising the same startup branch CI needs.

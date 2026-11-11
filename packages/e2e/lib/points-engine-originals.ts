@@ -123,17 +123,17 @@ export async function startPointsWorld(): Promise<PointsWorld> {
     !connection ||
     !database ||
     !(
-      database === "ds_dev_3925" ||
+      database === "ds_dev_3968" ||
       (process.env.CI === "true" && database === "ds_test")
     ) ||
     decodeURIComponent(new URL(connection).pathname.slice(1)) !== database
   ) {
     throw new Error(
-      "025 originals require the explicitly owned #3925 database (or CI ds_test)",
+      "025 originals require the explicitly owned #3968 database (or CI ds_test)",
     );
   }
   pointsOperation(`CONNECT ${database}`);
-  const applicationName = `points-3925-${randomUUID()}`;
+  const applicationName = `points-3968-${randomUUID()}`;
   const scopedConnection = new URL(connection);
   scopedConnection.searchParams.set("application_name", applicationName);
   const handle = createDrizzle(scopedConnection.href, { max: 3 });

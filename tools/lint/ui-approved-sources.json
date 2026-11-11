@@ -563,6 +563,21 @@
       "approvalProvenance": [
         "https://github.com/doctor-school/ds-platform/issues/1607#issuecomment-5550659864"
       ]
+    },
+    "auth-flow-event-gone-landing-notice-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "packages/auth-flow/src/landing-notice/event-gone-notice.tsx",
+        "packages/auth-flow/src/landing-notice/clear-notice-marker.tsx",
+        "packages/events-storefront/src/ui/events-listing-page.tsx",
+        "apps/doctor/app/(storefront)/page.tsx",
+        "apps/doctor/app/(storefront)/feed/[specialty]/page.tsx",
+        "apps/portal/app/webinars/page.tsx"
+      ],
+      "states": ["event-gone-notice"],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/2272#issuecomment-6785531996"
+      ]
     }
   }
 }

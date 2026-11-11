@@ -1,11 +1,27 @@
 # Recording mutation originals
 
-This strict Admin contour executes fifteen source originals from feature 014 with
+This strict Admin contour executes eighteen source originals from feature 014 with
 the inherited Academy host and all six ordered lifecycle Background clauses:
-twenty-five cases and 150 Background groups. Existing attachment, publication,
+twenty-nine cases and 174 Background groups. Existing attachment, publication,
 audit, legacy lifecycle and wrong-machine boundary coverage is retained.
 `@recording-backfill-originals` selects exactly three new cases: published-never-live
 refusal, legacy-target refusal and the mutation-free dry-run.
+`@recording-origin-invariants` selects exactly three further originals (four
+cases): the two immutable-origin Examples, the legacy lifecycle bar and the
+same-manifest rerun. Original prose, Examples, host and Background order stay
+unchanged.
+
+The origin proof reads every own-machine state and independently checks its
+literal next-state set, including shared `hidden`, then submits every foreign
+lifecycle command with real HTTP protocol. Both origins use the supported
+`PATCH /v1/admin/events/:id`: the attempted origin change must return 400 without
+changing the complete event row; an otherwise identical authored-field control
+must succeed. Internal service calls are not represented as origin-edit routes.
+The legacy bar is read in the real Admin browser in both `hidden` and
+`in_archive`, with a published recording and exact API transitions, button IDs
+and Russian labels. The rerun first invokes the real operator CLI over two fresh
+ended targets, then invokes the exact same manifest file and requires all rows
+skipped, unchanged complete snapshots, no duplicate kind and no added audit.
 
 The backfill selection executes the existing operator CLI
 `apps/api/scripts/recordings-backfill.ts` against the explicitly owned database.
@@ -39,9 +55,12 @@ The operator CLI also requires explicit `AUDIT_IDENTIFIER_PEPPER` and
 between the API and the command through the Admin job environment. Failed CLI
 starts retain stdout, stderr and process status beside the manifest and remain
 test failures.
-The SQL adapter accepts explicitly named owned DBs (including `ds_dev_3939`) or
+The SQL adapter accepts explicitly named owned DBs (including `ds_dev_3951`) or
 the CI DB under `CI=true`. Every SQL/session/CLI fixture command is logged.
 Manifests and raw CLI stdout/stderr are preserved beside the operation log.
+Forced-colour proof runs set `FORCE_COLOR=1`, remove `NO_COLOR` and require actual
+ANSI bytes in the captured owning CLI stdout before the unchanged strict reader
+parses it.
 
 ```sh
 pnpm --filter @ds/admin test:e2e --project recording-attachment --reporter=list,json
@@ -50,7 +69,9 @@ pnpm --filter @ds/e2e exec tsx api-probes/assert-recording-attachment-report.ts 
 
 For only the new three cases append `--grep @recording-backfill-originals` to the
 test command and `--new` to the report assertion. The default guard requires all
-twenty-five cases, exact source feature/rule/outline/example/project identities,
+twenty-nine cases, exact source feature/rule/outline/example/project identities,
 substantive receipts and six ordered nonempty Background groups per case, with
 zero failures/skips/flakes/retries/errors. Synthetic reports belong only to guard
 tests, never runtime acceptance. No visual artifact is produced by this test-only work.
+For only the current four invariant cases append
+`--grep @recording-origin-invariants` and use `--invariants` for the report guard.

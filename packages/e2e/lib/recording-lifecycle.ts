@@ -1,6 +1,157 @@
 import { expect } from "@playwright/test";
+import type { LegacyAnswer } from "./legacy-transition.js";
 
 type Row = Record<string, unknown>;
+export const originOutline =
+  "Each event is routed to exactly one lifecycle by its immutable origin";
+export const legacyBarTitle =
+  "The lifecycle bar renders only the event's own machine";
+export const originMachines = {
+  platform: ["draft", "published", "live", "ended", "hidden"],
+  legacy: ["hidden", "in_archive"],
+} as const;
+export const foreignCommands = {
+  platform: ["archive-legacy", "hide-legacy"],
+  legacy: ["publish", "open", "close", "hide"],
+} as const;
+export function foreignLifecycleAttempts(
+  origin: "platform" | "legacy",
+): string[] {
+  const own: readonly string[] = originMachines[origin];
+  return [
+    ...foreignCommands[origin],
+    ...originMachines[origin === "platform" ? "legacy" : "platform"]
+      .filter((state) => !own.includes(state))
+      .map((state) => `transition:${state}`),
+  ];
+}
+export type OriginReceipt = {
+  origin: "platform" | "legacy";
+  machine: string;
+  states: {
+    before: Row;
+    after: Row;
+    validTransitions: string[];
+    refusals: { command: string; answer: LegacyAnswer }[];
+  }[];
+  update: {
+    before: Row;
+    after: Row;
+    suppliedOrigin: string;
+    answer: LegacyAnswer;
+    control: LegacyAnswer;
+    controlAfter: Row;
+  };
+};
+export type LegacyBarReceipt = {
+  states: {
+    id: string;
+    origin: string;
+    state: string;
+    recording: Row;
+    validTransitions: string[];
+    labels: string[];
+    controls: string[];
+    transport: string;
+  }[];
+};
+function assertProtocol(
+  answer: LegacyAnswer,
+  id: unknown,
+  version: unknown,
+  route = "",
+) {
+  expect(answer.request).toMatchObject({
+    method: route ? "POST" : "PATCH",
+    path: `/v1/admin/events/${id}${route ? `/${route}` : ""}`,
+    ifMatch: `W/"${version}"`,
+    transport: "api",
+  });
+  expect(answer.request.idempotencyKey).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
+}
+// 014 EARS-23: literal source-machine expectations, independent of server maps.
+export function assertOriginReceipt(
+  r: OriginReceipt,
+  origin: "platform" | "legacy",
+) {
+  expect(r.origin).toBe(origin);
+  const machine = originMachines[origin];
+  expect(r.machine.split(",").map((s) => s.trim())).toEqual(machine);
+  expect(r.states.map((s) => s.before.state)).toEqual(machine);
+  for (const [index, state] of r.states.entries()) {
+    expect(state.before).toMatchObject({ origin, state: machine[index] });
+    expect(typeof state.before.id).toBe("string");
+    expect(state.after).toEqual(state.before);
+    const next =
+      origin === "legacy"
+        ? [machine[index === 0 ? 1 : 0]]
+        : machine[index + 1]
+          ? [machine[index + 1]]
+          : [];
+    expect(state.validTransitions).toEqual(next);
+    expect(state.refusals.map((x) => x.command)).toEqual(
+      foreignLifecycleAttempts(origin),
+    );
+    for (const refusal of state.refusals) {
+      assertProtocol(
+        refusal.answer,
+        state.before.id,
+        state.before.version,
+        refusal.command.split(":")[0],
+      );
+      expect(refusal.answer.status).toBe(409);
+      expect(refusal.answer.body.errorCode ?? refusal.answer.body.code).toBe(
+        "INVALID_TRANSITION",
+      );
+      if (refusal.command.startsWith("transition:"))
+        expect(refusal.answer.body.to).toBe(refusal.command.split(":")[1]);
+    }
+  }
+  const u = r.update;
+  expect(u.before.origin).toBe(origin);
+  expect(u.suppliedOrigin).toBe(origin === "platform" ? "legacy" : "platform");
+  assertProtocol(u.answer, u.before.id, u.before.version);
+  expect(u.answer.status).toBe(400);
+  expect(u.answer.body).toMatchObject({
+    message: "invalid event payload",
+    issues: expect.arrayContaining([
+      expect.objectContaining({ path: ["origin"], expected: "never" }),
+    ]),
+  });
+  expect(u.after).toEqual(u.before);
+  assertProtocol(u.control, u.before.id, u.before.version);
+  expect(u.control.status).toBe(200);
+  expect(u.controlAfter).toMatchObject({
+    id: u.before.id,
+    origin,
+    state: u.before.state,
+    version: Number(u.before.version) + 1,
+    title: "Control",
+  });
+  expect(u.control.body).toMatchObject({ origin, title: "Control" });
+}
+// 014 EARS-27: browser controls must agree with both source labels and API detail.
+export function assertLegacyBarReceipt(r: LegacyBarReceipt) {
+  expect(r.states.map((s) => s.state)).toEqual(["hidden", "in_archive"]);
+  for (const [index, state] of r.states.entries()) {
+    expect(state.origin).toBe("legacy");
+    expect(state.id).toBeTruthy();
+    expect(state.transport).toBe("browser");
+    expect(state.recording).toMatchObject({
+      status: "published",
+      deleted_at: null,
+    });
+    expect(state.validTransitions).toEqual([
+      index === 0 ? "in_archive" : "hidden",
+    ]);
+    expect(state.labels).toEqual([index === 0 ? "Архивировать" : "Скрыть"]);
+    expect(state.controls).toEqual([
+      index === 0 ? "action-archive-legacy" : "action-hide-legacy",
+    ]);
+  }
+}
 export type LifecycleRecording = {
   id: string;
   kind: string;

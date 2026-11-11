@@ -146,6 +146,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And no HTTP Delete route exists for a recording
 
     @EARS-23 @core @happy
+    @recording-origin-invariants
     Scenario Outline: Each event is routed to exactly one lifecycle by its immutable origin
       Given an event created with origin <origin>
       Then its lifecycle states are drawn only from <machine>
@@ -233,6 +234,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
         | hidden    | HideLegacyBroadcast     |
 
     @EARS-27 @core @happy
+    @recording-origin-invariants
     Scenario: The lifecycle bar renders only the event's own machine
       Given a legacy event on the admin event detail
       When the operator reads the lifecycle bar
@@ -578,6 +580,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And the report lists both rows as attached and published
 
     @EARS-29 @core @happy
+    @recording-origin-invariants
     Scenario: Re-running the same manifest changes nothing
       Given the recording backfill has already run over a manifest
       When the platform_admin runs the very same manifest again

@@ -304,6 +304,59 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     await expect(page.getByTestId("event-gone-notice")).toHaveCount(0);
   });
 
+  test("021 EARS-10.5: the line opens the content column below the hero band, never between the header and the band", async ({
+    page,
+  }) => {
+    // Owner Stage-B finding (#2272): mounted above the hero, the line split
+    // the one blue top (site header + hero band) with a white strip.
+    const isBetween = (before: string, after: string) =>
+      page.evaluate(
+        ([beforeSelector, afterSelector]) => {
+          const line = document.querySelector(
+            '[data-testid="event-gone-notice"]',
+          );
+          const head = document.querySelector(beforeSelector!);
+          const next = document.querySelector(afterSelector!);
+          if (!line || !head || !next) return false;
+          return (
+            (head.compareDocumentPosition(line) &
+              Node.DOCUMENT_POSITION_FOLLOWING) !==
+              0 &&
+            (line.compareDocumentPosition(next) &
+              Node.DOCUMENT_POSITION_FOLLOWING) !==
+              0
+          );
+        },
+        [before, after],
+      );
+    const code = await chooseGuestSpecialty(
+      page,
+      `${doctorBase()}${EVENTS_FEED}`,
+      CARDIOLOGY,
+    );
+    await page.goto(`${doctorBase()}${specialtyFeed(code)}?notice=event-gone`, {
+      waitUntil: "load",
+    });
+    await expect(page.getByTestId("event-gone-notice")).toBeVisible();
+    // After the feed header, before the first feed block.
+    expect(
+      await isBetween(
+        '[data-testid="specialty-feed-header"]',
+        "[data-feed-block-slot]",
+      ),
+    ).toBe(true);
+    await page.goto(`${doctorBase()}/?notice=event-gone`, {
+      waitUntil: "load",
+    });
+    await expect(page.getByTestId("event-gone-notice")).toBeVisible();
+    expect(
+      await isBetween(
+        '[data-testid="storefront-hero"]',
+        '[data-testid="specialty-catalog"]',
+      ),
+    ).toBe(true);
+  });
+
   test("021 EARS-10.5: a live landing and an arbitrary notice value render no event-gone line", async ({
     page,
   }) => {

@@ -80,17 +80,24 @@ export default async function SpecialtyFeedPage({
       data-surface="specialty-feed"
       data-testid="specialty-feed"
     >
-      {/* 021 EARS-10 (amendment 2026-11-11) — the LD-4 landing of a remembered
-          specialty: the one-time event-gone notice comes first. */}
-      <EventGoneNotice
-        config={DOCTOR_AUTH_FLOW}
-        landing="specialtyFeed"
-        searchParams={query}
-      />
       <SpecialtyFeedHeader
         actor={remembered.actor}
         initialChoice={remembered.choice}
         specialty={feed.specialty}
+      />
+      {/* 021 EARS-10 (amendment 2026-11-11) — the LD-4 landing of a remembered
+          specialty: the one-time event-gone notice is the first element of the
+          content column, below the hero band, framed by the blocks' own
+          container and rhythm (`SpecialtyEventsBlock`, the value block). */}
+      <EventGoneNotice
+        config={DOCTOR_AUTH_FLOW}
+        landing="specialtyFeed"
+        searchParams={query}
+        frame={(notice) => (
+          <div className="mt-12 px-4 layout:mt-20 layout:px-12">
+            <div className="mx-auto w-full max-w-content">{notice}</div>
+          </div>
+        )}
       />
       {feed.blocks.map((block) => (
         <div data-feed-block-slot={block.kind} key={block.kind}>

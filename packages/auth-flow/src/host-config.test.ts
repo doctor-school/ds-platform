@@ -33,9 +33,10 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
     expectTypeOf<
       AuthFlowHostConfig["landing"]
     >().toEqualTypeOf<AuthFlowLandingConfig>();
-    expect(ACADEMY_FIXTURE.landing).toMatchObject({
+    expect(ACADEMY_FIXTURE.landing).toEqual({
       afterLogin: "/webinars",
       specialtyAware: false,
+      eventGoneNotice: { afterLogin: "Посмотрите другие эфиры." },
     });
     expect(DOCTOR_FIXTURE.landing.afterLogin).toBe("/");
   });

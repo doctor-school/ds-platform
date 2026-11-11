@@ -93,7 +93,7 @@ export const DOCTOR_AUTH_FLOW = {
     // 021 EARS-10 (amendment 2026-11-11) — what each landing offers instead.
     eventGoneNotice: {
       afterLogin: "Посмотрите ближайшие события.",
-      specialtyFeed: "Вот ближайшие события по вашей специальности.",
+      specialtyFeed: "Посмотрите, что есть по вашей специальности.",
     },
     specialtyEndpoints: {
       signedIn: "/v1/me/specialty",

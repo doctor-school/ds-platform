@@ -1,6 +1,7 @@
 ---
 "@ds/auth-flow": patch
 "@ds/doctor": patch
+"@ds/events-storefront": patch
 "@ds/portal": patch
 ---
 

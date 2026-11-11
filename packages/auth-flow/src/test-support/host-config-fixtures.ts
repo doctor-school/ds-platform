@@ -92,7 +92,7 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     specialtyFeed: "/feed/:code",
     eventGoneNotice: {
       afterLogin: "Посмотрите ближайшие события.",
-      specialtyFeed: "Вот ближайшие события по вашей специальности.",
+      specialtyFeed: "Посмотрите, что есть по вашей специальности.",
     },
     specialtyEndpoints: {
       signedIn: "/v1/me/specialty",

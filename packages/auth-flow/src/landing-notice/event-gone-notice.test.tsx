@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { ReactNode } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -54,6 +55,32 @@ describe("021 EARS-10 event-gone landing notice", () => {
       expect(line.textContent).toContain("больше недоступен");
       cleanup();
     }
+  });
+
+  it("021 EARS-10: the landing's column frame wraps the line, and only when the line renders", () => {
+    const frame = (notice: ReactNode) => (
+      <div data-testid="landing-column">{notice}</div>
+    );
+    render(
+      <EventGoneNotice
+        config={DOCTOR_AUTH_FLOW}
+        landing="specialtyFeed"
+        searchParams={{ notice: "event-gone" }}
+        frame={frame}
+      />,
+    );
+    const column = screen.getByTestId("landing-column");
+    expect(column.contains(screen.getByTestId("event-gone-notice"))).toBe(true);
+    cleanup();
+    const { container } = render(
+      <EventGoneNotice
+        config={DOCTOR_AUTH_FLOW}
+        landing="specialtyFeed"
+        searchParams={{}}
+        frame={frame}
+      />,
+    );
+    expect(container.innerHTML).toBe("");
   });
 
   it("021 EARS-10: no marker, or any other value, renders nothing", () => {

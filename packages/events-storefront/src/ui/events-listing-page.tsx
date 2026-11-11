@@ -217,7 +217,8 @@ export async function EventsListingPage({
    */
   retry: EventsBlockRetryAction;
   /**
-   * An element another capability renders first on this page, from the same
+   * An element another capability renders first in this page's content
+   * column (below the brand band, in the column's width), from the same
    * query — the Academy listing is its default landing, so it mounts the
    * auth-flow event-gone notice here (021 EARS-10, amendment 2026-11-11). A
    * component, not an element: a mounted route passes bare identifiers only.
@@ -266,7 +267,7 @@ export async function EventsListingPage({
 
   // A failed feed read recovered by the day feed's «Повторить» fills what the
   // page derives from it — facets, «Показать N», the subline (EARS-9, #2832).
-  const page = (
+  return (
     <FeedReadScope>
       <FeedFrame
         title={config.headerCopy.title}
@@ -326,7 +327,13 @@ export async function EventsListingPage({
               <FacetColumn {...panel} />
             </Suspense>
           </aside>
-          <div className="flex min-w-0 flex-1 flex-col gap-10">
+          <div
+            className="flex min-w-0 flex-1 flex-col gap-10"
+            data-testid="events-main-column"
+          >
+            {/* The leading slot opens the content column, below the brand
+                band and in the column's own width and rhythm. */}
+            {Leading ? <Leading searchParams={requested} /> : null}
             <div className="flex items-center justify-between gap-3 lg:hidden">
               <Suspense fallback={<SkeletonSlot className="h-11 w-36" />}>
                 <FacetSheetSection {...panel} />
@@ -389,14 +396,5 @@ export async function EventsListingPage({
         </div>
       </FeedFrame>
     </FeedReadScope>
-  );
-  // The leading slot sits before the page, outside its read scope.
-  return Leading ? (
-    <>
-      <Leading searchParams={requested} />
-      {page}
-    </>
-  ) : (
-    page
   );
 }

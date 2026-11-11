@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Alert } from "@ds/design-system/alert";
 
 import { EVENT_GONE_NOTICE_COPY } from "../copy/event-gone-notice";
@@ -15,9 +16,14 @@ export type EventGoneNoticeLanding = "afterLogin" | "specialtyFeed";
 /**
  * 021 EARS-10 (amendment 2026-11-11, #2272; owner pick «А») — the ONE
  * one-time notice both storefronts' default landings mount as the first element
- * of their page body: a doctor whose carried эфир no longer exists reads why
- * they landed here instead. The `@ds/design-system` `Alert` (info, a status
- * region), unrestyled; no dismiss, no storage.
+ * of their content column, below the hero band: a doctor whose carried эфир no
+ * longer exists reads why they landed here instead. The `@ds/design-system`
+ * `Alert` (info, a status region), unrestyled; no dismiss, no storage.
+ *
+ * It has no container, width or spacing of its own: the landing frames it with
+ * the column container its first block uses (`frame`), so its edges are that
+ * column's edges; it never stands between the site header and a full-bleed
+ * coloured band (a white strip there splits the one blue top the canvas draws).
  *
  * Rendered on the server from the route's own `searchParams`, so the first
  * byte of HTML already holds the line (no client flash-in); only the exact
@@ -30,25 +36,33 @@ export function EventGoneNotice({
   config,
   landing,
   searchParams,
+  frame,
 }: {
   config: Pick<AuthFlowHostConfig, "landing">;
   landing: EventGoneNoticeLanding;
   searchParams: RouteSearchParams;
+  /**
+   * The landing's column container around the notice, rendered only with it —
+   * so a landing without the marker gains no empty row, margin or padding.
+   * Omitted where the slot already sits inside the column (the Academy listing).
+   */
+  frame?: (notice: ReactNode) => ReactNode;
 }) {
   if (!hasEventGoneNotice(searchParams)) return null;
   const sentences: Readonly<Record<string, string>> =
     config.landing.eventGoneNotice;
   const detail = sentences[landing] ?? sentences.afterLogin;
+  const notice = (
+    <Alert variant="info" data-testid="event-gone-notice">
+      {EVENT_GONE_NOTICE_COPY.lead}
+      {detail ? ` ${detail}` : null}
+    </Alert>
+  );
   return (
-    <div className="px-4 pt-6 layout:px-12">
-      <div className="mx-auto w-full max-w-content">
-        <Alert variant="info" data-testid="event-gone-notice">
-          {EVENT_GONE_NOTICE_COPY.lead}
-          {detail ? ` ${detail}` : null}
-        </Alert>
-      </div>
+    <>
+      {frame ? frame(notice) : notice}
       <ClearNoticeMarker />
-    </div>
+    </>
   );
 }
 

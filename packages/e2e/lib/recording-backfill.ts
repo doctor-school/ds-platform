@@ -86,7 +86,7 @@ export function assertBackfillReceipt(r: BackfillReceipt, title: string) {
   expect(r).toBeDefined();
   expect(r.title).toBe(title);
   expect(r.actor.length).toBeGreaterThan(2);
-  expect(r.database).toMatch(/^ds_(dev_3939|dev_3951|admin_e2e)$/);
+  expect(r.database).toMatch(/^ds_(dev_3939|dev_3951|dev_3961|admin_e2e)$/);
   expect(r.command.entrypoint).toBe("apps/api/scripts/recordings-backfill.ts");
   expect(r.command.exitCode).toBe(0);
   expect(r.command.args).toContain("--manifest");

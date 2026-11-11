@@ -24,6 +24,13 @@ import {
   type LegacyReceipt,
 } from "./legacy-transition.js";
 import { assertOperationalReport } from "../api-probes/operational-report.js";
+import {
+  displayOutline,
+  singleCutTitle,
+  hiddenRecordingTitle,
+  assertDisplayReceipt,
+  type DisplayReceipt,
+} from "./recording-display.js";
 
 export const recordingAttachmentTitles = [
   "Example #1",
@@ -56,24 +63,39 @@ const invariantTitles = [
 
 export function assertRecordingAttachmentReport(
   value: unknown,
-  scope: "full" | "new" | "boundaries" | "invariants" = "full",
+  scope: "full" | "new" | "boundaries" | "invariants" | "display" = "full",
 ) {
   assertOperationalReport(
     value,
-    scope === "invariants"
-      ? invariantTitles
-      : scope === "new"
-        ? [...backfillTitles]
-        : scope === "boundaries"
-          ? boundaryCases.map((c) => c.title)
-          : [
-              ...backfillTitles,
-              ...recordingAttachmentTitles,
-              ...recordingLifecycleTitles,
-              ...legacyTitles,
-              ...boundaryCases.map((c) => c.title),
-              ...invariantTitles,
-            ],
+    scope === "display"
+      ? [
+          "Example #1",
+          "Example #2",
+          "Example #3",
+          "Example #4",
+          singleCutTitle,
+          hiddenRecordingTitle,
+        ]
+      : scope === "invariants"
+        ? invariantTitles
+        : scope === "new"
+          ? [...backfillTitles]
+          : scope === "boundaries"
+            ? boundaryCases.map((c) => c.title)
+            : [
+                ...backfillTitles,
+                ...recordingAttachmentTitles,
+                ...recordingLifecycleTitles,
+                ...legacyTitles,
+                ...boundaryCases.map((c) => c.title),
+                ...invariantTitles,
+                "Example #1",
+                "Example #2",
+                "Example #3",
+                "Example #4",
+                singleCutTitle,
+                hiddenRecordingTitle,
+              ],
     "recording-attachment",
   );
   type Suite = {
@@ -102,6 +124,7 @@ export function assertRecordingAttachmentReport(
         outline !== attachmentOutline &&
         outline !== lifecycleOutline &&
         outline !== originOutline &&
+        outline !== displayOutline &&
         !boundaryOutlines.includes(outline as (typeof boundaryOutlines)[number])
       )
         throw new Error("Outline identity mismatch");
@@ -129,6 +152,7 @@ export function assertRecordingAttachmentReport(
         backfill?: BackfillReceipt;
         origin?: OriginReceipt;
         bar?: LegacyBarReceipt;
+        display?: DisplayReceipt;
         boundary?: BoundaryReceipt;
         sourceHost: string;
         legacy?: LegacyReceipt;
@@ -140,6 +164,16 @@ export function assertRecordingAttachmentReport(
         assertOriginReceipt(
           receipt.origin!,
           spec.title === "Example #1" ? "platform" : "legacy",
+        );
+      if (
+        outline === displayOutline ||
+        spec.title === singleCutTitle ||
+        spec.title === hiddenRecordingTitle
+      )
+        assertDisplayReceipt(
+          receipt.display!,
+          outline ?? spec.title,
+          outline ? Number(spec.title.slice(-1)) : null,
         );
       if (spec.title === legacyBarTitle) assertLegacyBarReceipt(receipt.bar!);
       if (spec.title === rerunTitle) assertRerunReceipt(receipt.backfill!);
@@ -204,10 +238,10 @@ export function assertRecordingAttachmentReport(
     ...(scope === "full"
       ? legacyTitles.map((title) => `${rule}/${title}`)
       : []),
-    ...(scope !== "new" && scope !== "invariants"
+    ...(scope === "full" || scope === "boundaries"
       ? boundaryCases.map((c) => `${c.outline || rule}/${c.title}`)
       : []),
-    ...(scope !== "boundaries" && scope !== "invariants"
+    ...(scope === "full" || scope === "new"
       ? backfillTitles.map((title) => `${rule}/${title}`)
       : []),
     ...(scope === "full" || scope === "invariants"
@@ -215,6 +249,14 @@ export function assertRecordingAttachmentReport(
           (title) =>
             `${title.startsWith("Example #") ? originOutline : rule}/${title}`,
         )
+      : []),
+    ...(scope === "full" || scope === "display"
+      ? [1, 2, 3, 4]
+          .map((n) => `${displayOutline}/Example #${n}`)
+          .concat([
+            `${rule}/${singleCutTitle}`,
+            `${rule}/${hiddenRecordingTitle}`,
+          ])
       : []),
   ];
   if (JSON.stringify(identities.sort()) !== JSON.stringify(expected.sort()))

@@ -77,13 +77,13 @@
  *     dense with roadmap/board/dependency refs, and matching them flagged 55%
  *     of the open backlog. `epic:` / `gate:` Issues are excluded (they outlive
  *     every PR that names them). Verify against the diff, then close.
- *   - `## Tracks`             — per product track, the active (claimed) Issues
- *     and the takeable count; `MORE-THAN-ONE-ACTIVE` when a track runs more
- *     than one (owner 2026-10-28: one active task per track, never by release).
+ *   - `## Tracks`             — per product track, the in-work items and the
+ *     next item of the owner's queue (`tools/track-queues.ts`, the same reader
+ *     `pnpm bootstrap` uses — #3942).
  *
  * The pure resolution/classification seams (`parseProseBlockers`, `classify`,
  * `detectClaim`, `findWaitForReuse`, `findOrphans`, `findStalled`,
- * `findLikelyDone`, `trackActivity`)
+ * `findLikelyDone`)
  * are exported and unit-tested (tools/lint/guard-tests/backlog-triage.spec.ts)
  * WITHOUT firing the `gh` subprocesses — the `main()` entry point is guarded.
  *
@@ -135,6 +135,7 @@ import {
   probeMainSync,
   shouldRefuseTriage,
 } from "./main-sync";
+import { loadTrackQueues, renderTracksSection } from "./track-queues";
 
 // ── pure model ──────────────────────────────────────────────────────────────
 
@@ -1507,59 +1508,6 @@ export function formatLikelyDone(rows: LikelyDone[]): string {
   );
 }
 
-// ── tracks ──────────────────────────────────────────────────────────────────
-
-/** One product track's work-in-progress view. */
-export interface TrackActivity {
-  track: string;
-  /** Claimed (in-flight) takeable Issues on the track. */
-  active: Array<{ number: number; title: string; claim: ClaimSignal }>;
-  /** Unclaimed takeable Issues on the track. */
-  takeable: number;
-}
-
-/**
- * Per product track, what is active and how much is takeable (owner
- * 2026-10-28: two tracks, granular tasks, one active task per track — never
- * ordered by release milestones). Platform work is not a track of its own here.
- */
-export function trackActivity(
-  rows: Array<{
-    number: number;
-    title: string;
-    track: string | null;
-    readiness: Readiness;
-    claim?: ClaimSignal;
-  }>,
-): TrackActivity[] {
-  return ["track:academy", "track:doctor"].map((track) => {
-    const mine = rows.filter((r) => r.track === track && r.readiness === "takeable");
-    return {
-      track,
-      active: mine
-        .filter((r) => r.claim)
-        .map((r) => ({ number: r.number, title: r.title, claim: r.claim! }))
-        .sort((a, b) => a.number - b.number),
-      takeable: mine.filter((r) => !r.claim).length,
-    };
-  });
-}
-
-/** Render the `## Tracks` section. */
-export function formatTrackActivity(tracks: TrackActivity[]): string {
-  const out = [
-    "## Tracks",
-    "One active task per product track; the next one is the most valuable takeable Issue of that track. `MORE-THAN-ONE-ACTIVE` = finish or release one before taking another.",
-  ];
-  for (const t of tracks) {
-    const flag = t.active.length > 1 ? " [MORE-THAN-ONE-ACTIVE]" : "";
-    out.push(`### ${t.track}${flag} — ${t.active.length} active, ${t.takeable} takeable`);
-    for (const a of t.active)
-      out.push(`- #${a.number} ${claimLabel(a.claim)} — ${truncateTitle(a.title, 70)}`);
-  }
-  return out.join("\n");
-}
-
 // ── gh I/O (only reached from main()) ───────────────────────────────────────
 
 const REPO_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -2262,8 +2210,6 @@ async function main(): Promise<void> {
     if (claim) t.claim = claim;
   }
 
-  const rawByNumber = new Map(issues.map((raw) => [raw.number, raw]));
-
   // ── grooming inputs (#1873) ───────────────────────────────────────────────
   // Every fetch below is best-effort: a failure degrades ITS section to a
   // `## Warnings` row, never kills the run (the #497 posture).
@@ -2360,17 +2306,10 @@ async function main(): Promise<void> {
     "",
   );
   out.push(formatLikelyDone(findLikelyDone(groomIssues, mergedPrs)), "");
-  out.push(
-    formatTrackActivity(
-      trackActivity(
-        triaged.map((t) => ({
-          ...t,
-          track: trackOf((rawByNumber.get(t.number)?.labels ?? []).map((l) => l.name)),
-        })),
-      ),
-    ),
-    "",
-  );
+  // Same reader and render as `pnpm bootstrap` `## Tracks` (#3942).
+  const trackQueues = await loadTrackQueues(REPO_ROOT, mainRoot, nowMs);
+  for (const w of trackQueues.warnings) warnings.push(w);
+  out.push(...renderTracksSection(trackQueues.tracks, trackQueues.fileDate), "");
 
   // Field hygiene (#1137): open Issues missing a required field. Silent when
   // every open Issue is compliant.

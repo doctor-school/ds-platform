@@ -54,7 +54,7 @@ Grooming is a **conversation**, not a delivered document. Rules, all binding:
 - **Estimates are the owner's.** Propose a duration only as a question; write down only numbers the owner said. Never author an estimate.
 - **No implementation mid-groom.** Nothing is built until the owner signs off on the order.
 - **«Позже» is a queue, not an archive.** Every grooming ends with the explicit question «что поднимаем из Позже».
-- **Next concrete task per track, one active per track** (owner 2026-10-28) — never ordered by release milestones. `## Tracks` shows each track's active task; `MORE-THAN-ONE-ACTIVE` is a finish-or-release question.
+- **Next task per track = the owner's queue** (`apps/docs/content/product/track-queues.md`) — never ordered by release milestones. `## Tracks` shows each track's in-work items and next item; reordering is the owner's word, one Ship PR.
 - A handoff's «Next» is a **proposal**, not a priority — it is re-asked here, never assumed.
 
 ## Step 5 — Propose the parallel wave

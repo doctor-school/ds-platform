@@ -12,7 +12,7 @@ For repository changes, open in RU with task kind, active artifact and skill. Di
 
 > **План сессии**
 > **Тип:** продуктовая | техническая | процессная
-> **Трек:** академия | витрина | платформа — active `track:*`
+> **Трек:** академия | витрина | платформа — `track:*` + queue item
 > **Что делаем:** 1–3 numbered deliverables
 > **Зачем:** what they enable
 

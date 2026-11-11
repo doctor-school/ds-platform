@@ -51,7 +51,7 @@ Answers, analysis, exports and authorized standard operations → direct executi
 
 ### 3.2 Open with the session plan
 
-For repository-changing work, first reply opens with the «План сессии» block (format: agent-discipline → Session plan), then: kind, track (`track:*`), active artifact (Issue #N / spec path / ADR section), skill dispatched.
+For repository-changing work, first reply opens with the «План сессии» block (format: agent-discipline → Session plan), then: kind, track, active artifact (Issue #N / spec path / ADR section), skill dispatched.
 
 ### 3.3 Load the skill
 
@@ -63,7 +63,7 @@ Project execution uses only `apps/docs/content/skills/`. The vendored `brainstor
 
 ### 3.5 Bootstrap
 
-`pnpm bootstrap` gives git/Issue/PR/spec state (Claude Code: automatic on SessionStart); portable discipline governs how far to trust its rollup. Board triage belongs to requested backlog/continuing-wave work; a named task starts from its own linked state. In an authorized continuing wave, drain matured debt/ops before the next product feature; otherwise finish the requested scope and stop.
+`pnpm bootstrap` gives git/Issue/PR/spec state; portable discipline governs how far to trust its rollup. A named task starts from its own linked state; given only a track, take its `## Tracks` next item (`product/track-queues.md`) unasked. Platform/debt first only if it blocks a queue head or is a prod incident; file the rest, leave it. Ask what is next only on an empty queue or a product fork.
 
 ### 3.6 Permission-mode disclosure
 

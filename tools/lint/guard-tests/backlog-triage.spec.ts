@@ -15,13 +15,11 @@ import {
   findWaitForReuse,
   formatLikelyDone,
   formatOrphans,
-  formatTrackActivity,
   formatStalled,
   formatWaitForReuse,
   parseCapabilityRegistry,
   parseReuseField,
   parseStalledDays,
-  trackActivity,
   trackOf,
   type OrphanInput,
   type StalledIssue,
@@ -1500,40 +1498,7 @@ describe("grooming sections (#1873)", () => {
     });
   });
 
-  describe("trackActivity", () => {
-    const claim = { source: "start-comment" as const, ageMs: 7_200_000, session: "ds-platform-d5" };
-    const row = (number: number, track: string | null, claimed: boolean) => ({
-      number,
-      title: `Issue ${number}`,
-      track,
-      readiness: "takeable" as const,
-      ...(claimed ? { claim } : {}),
-    });
-
-    it("per product track: active (claimed) Issues and the takeable count", () => {
-      const tracks = trackActivity([
-        row(1, "track:doctor", true),
-        row(2, "track:doctor", false),
-        row(3, "track:academy", false),
-        row(4, "track:platform", true),
-      ]);
-      expect(tracks.map((t) => [t.track, t.active.length, t.takeable])).toEqual([
-        ["track:academy", 0, 1],
-        ["track:doctor", 1, 1],
-      ]);
-      const out = formatTrackActivity(tracks);
-      expect(out).toContain("### track:doctor — 1 active, 1 takeable");
-      expect(out).toContain("- #1 IN-FLIGHT-ELSEWHERE (start-comment ds-platform-d5, age 2h)");
-      expect(out).not.toContain("[MORE-THAN-ONE-ACTIVE]");
-    });
-
-    it("flags a track running more than one active task", () => {
-      const out = formatTrackActivity(
-        trackActivity([row(1, "track:academy", true), row(2, "track:academy", true)]),
-      );
-      expect(out).toContain("### track:academy [MORE-THAN-ONE-ACTIVE] — 2 active, 0 takeable");
-    });
-
+  describe("trackOf", () => {
     it("trackOf picks the track label independent of label order", () => {
       expect(trackOf(["kind:tooling", "track:doctor"])).toBe("track:doctor");
       expect(trackOf(["track:doctor", "track:academy"])).toBe(trackOf(["track:academy", "track:doctor"]));

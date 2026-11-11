@@ -15,7 +15,7 @@ The split is deliberate: `pnpm backlog:triage` (`tools/backlog-triage.ts`) owns 
 
 ## Trigger
 
-Owner phrases: «сделай груминг», «триаж бэклога», «что брать дальше», «что можно параллельно». Also the `run-task-lifecycle` §7 item 4 groom step when the next pick is presented to the owner rather than silently taken.
+Owner phrases: «сделай груминг», «триаж бэклога», «что можно параллельно». Also a track whose `## Tracks` queue is empty. The next task of a track with a non-empty queue is its `## Tracks` next item, never a groom; a groom that changes the order ends in a Ship PR to `apps/docs/content/product/track-queues.md`.
 
 ## Step 1 — Run the triage
 

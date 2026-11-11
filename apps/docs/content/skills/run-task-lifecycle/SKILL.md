@@ -33,7 +33,7 @@ Per AGENTS.md §4 + §6, the agent is **autonomous through merge**: it dispatche
 
 ### 1. Pick or create the Issue — with all fields complete (closes Theme B)
 
-Use the owner’s named task; create or reuse its Issue without a backlog sweep. Only when the owner requested backlog selection or a continuing wave, inspect the relevant queue and apply prerequisite/claim ordering. Resolve routine implementation choices within scope; ask only for genuinely missing product decisions or authorization.
+Use the owner’s named task; create or reuse its Issue without a backlog sweep. Given a track and no task, take the track's next item from `pnpm bootstrap` `## Tracks` (owner order: `apps/docs/content/product/track-queues.md`) without asking; platform/debt goes ahead of it only when it blocks a queue head or is a production incident, and anything else surfaced is filed and left in the backlog. Resolve routine implementation choices within scope; ask only for genuinely missing product decisions or authorization.
 
 **Issue-claim protocol (parallel sessions).** Sessions run concurrently in this repo (AGENTS.md §6 — worktree-per-session), so the board is a **shared resource**: two sessions can race for the same ready item. The board Status **is** the claim, and first-claim wins:
 
@@ -94,7 +94,7 @@ Run all four, in order, as part of the **same** merge step — not a separate hu
 1. **Confirm the Issue closed** — `Closes #N` auto-closes it; verify with `gh issue view <N> --json state`. If it did not close (the keyword was missing), close it explicitly. The iteration summary / result comment on the Issue must carry the `surface-decision-debt` verdict (`[]` or the list) — a merge without it is incomplete, and on a multi-task batch this is per-task, not per-session.
 2. **Set board Status = Done** — `node tools/gh/set-board-status.mjs <N> "Done"`. `Closes #N` does **not** move the Projects v2 column (no closed→Done workflow is wired); this is the deterministic helper for the repo-conventions rule «On merge, set the board Status to Done by hand». This step is part of merge, not optional.
 3. **Re-sweep branches/PRs** — `gh pr list` + `git ls-remote --heads origin`; bot branches (`changeset-release/main`, `dependabot/*`, `codeql/*`) can appear post-merge (repo-conventions → _Post-merge inventory re-sweep_).
-4. **Report and stop.** Complete the requested outcome; adjacent work and WARNs do not extend it. Groom/select another task only within explicitly authorized backlog or continuing-wave scope, using `groom-backlog`; evaluate ops/debt priorities there.
+4. **Report and stop.** Complete the requested outcome; adjacent work and WARNs do not extend it. Within an authorized continuing wave the next task is the track's next `## Tracks` item, with platform/debt ahead only when it blocks a queue head or is a production incident; `groom-backlog` runs only on an owner-requested triage or an empty queue.
 
 **Groom/triage deliverable — output contract.** When the groom is a **backlog-triage deliverable presented to the owner** (not just silently picking the next item), it opens with a **product-language synthesis** — current stage · what is burning to release and why · what defers · remaining tech-debt · open forks/contradictions — **then** a grouped full panorama of the backlog, **then** wave-chunking (≤3 PR-cycles per wave). Never lead with a thin wave plan (owner: «где сам триаж?»), and never dump a raw issue registry (owner: «список я вижу сам в GitHub») — the synthesis is the value the tracker cannot show itself.
 

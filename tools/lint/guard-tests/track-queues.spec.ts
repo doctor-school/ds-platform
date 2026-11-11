@@ -139,6 +139,20 @@ describe("track-queues reader (#3942)", () => {
     expect(out.join("\n")).toContain("2026-11-11");
   });
 
+  it("a failed blocked_by fetch renders the next item with blockers unknown, never as unblocked", () => {
+    const { tracks } = resolveTrackQueues(
+      parsed(),
+      data({ blockers: new Map([[10, null]]) }),
+    );
+    expect(tracks[0]!.next?.number).toBe(10);
+    expect(tracks[0]!.next?.blockers).toBeNull();
+    const out = renderTracksSection(tracks, "2026-11-11");
+    expect(out).toContain(
+      "- next #10 Issue 10 — blockers unknown — see Warnings",
+    );
+    expect(out).not.toContain("- next #10 Issue 10");
+  });
+
   it("warns (a) when a queue has fewer than two open items", () => {
     const d = data();
     d.issues.set(10, issue(10, "track:academy", "closed"));

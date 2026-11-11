@@ -13,7 +13,13 @@ import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 
-import { claimLabel, probeClaim, type ClaimSignal } from "./backlog-triage";
+import {
+  claimLabel,
+  detectClaim,
+  fetchClaimComments,
+  worktreeClaimMtime,
+  type ClaimSignal,
+} from "./backlog-triage";
 
 export const TRACK_QUEUES_PATH = "apps/docs/content/product/track-queues.md";
 
@@ -97,8 +103,8 @@ export interface TrackQueueData {
   /** Absent = unreadable; `null` = no such Issue. */
   issues: Map<number, QueueIssue | null>;
   claims: Map<number, ClaimSignal>;
-  /** Open native `blocked_by` blockers of open queue items. */
-  blockers: Map<number, Blocker[]>;
+  /** Open native `blocked_by` blockers of open queue items; `null` = unreadable. */
+  blockers: Map<number, Blocker[] | null>;
   /** Claimed / in-progress open Issues per product track label. */
   claimedOnTrack: Map<string, Array<{ number: number; title: string }>>;
 }
@@ -109,7 +115,9 @@ export interface ResolvedTrack {
   inWork: Array<{ number: number; title: string; claim: ClaimSignal }>;
   /** `null` = queue empty; `undefined` = an earlier item is unreadable. */
   next:
-    { number: number; title: string; blockers: Blocker[] } | null | undefined;
+    | { number: number; title: string; blockers: Blocker[] | null }
+    | null
+    | undefined;
 }
 
 export function resolveTrackQueues(
@@ -119,7 +127,7 @@ export function resolveTrackQueues(
   const warnings: Warn[] = [];
   const queued = new Set(tracks.flatMap((t) => t.items));
   const blocking = new Set(
-    [...data.blockers.values()].flat().map((b) => b.number),
+    [...data.blockers.values()].flatMap((bs) => bs ?? []).map((b) => b.number),
   );
   const resolved = tracks.map((t): ResolvedTrack => {
     const source = `track queue ${t.label}`;
@@ -160,7 +168,11 @@ export function resolveTrackQueues(
       else if (r.next === null)
         r.next = unknownSeen
           ? undefined
-          : { number: n, title: i.title, blockers: data.blockers.get(n) ?? [] };
+          : {
+              number: n,
+              title: i.title,
+              blockers: data.blockers.has(n) ? data.blockers.get(n)! : [],
+            };
     }
     if (r.next === null && unknownSeen) r.next = undefined;
     if (open < 2 && !unknownSeen)
@@ -206,8 +218,10 @@ export function renderTracksSection(
     else if (t.next === null)
       out.push("- next (queue empty — ask the owner for the next order)");
     else {
-      out.push(`- next #${t.next.number} ${clip(t.next.title)}`);
-      for (const b of t.next.blockers)
+      const unknown =
+        t.next.blockers === null ? " — blockers unknown — see Warnings" : "";
+      out.push(`- next #${t.next.number} ${clip(t.next.title)}${unknown}`);
+      for (const b of t.next.blockers ?? [])
         out.push(
           `  - blocked by #${b.number} ${clip(b.title)} (${b.track ?? "no track"})`,
         );
@@ -237,7 +251,8 @@ const firstLine = (e: unknown) =>
 /**
  * Read the queue file and resolve it against live GitHub. Never throws: every
  * failed source becomes a Warnings row, a failed file read renders as unknown.
- * Claims reuse `probeClaim` (worktree + start-comment, #811); work outside the
+ * Claims reuse `detectClaim` (worktree + start-comment, #811) — a failed
+ * comment fetch is a Warnings row, not a silent worktree-only check; work outside the
  * queue is an open track Issue with a worktree or the `agent-working` label.
  */
 export async function loadTrackQueues(
@@ -305,7 +320,7 @@ export async function loadTrackQueues(
         tracks: trackLabels(i),
       });
       if (state !== "open") return;
-      const [blockers, claim] = await Promise.all([
+      const [blockers, worktreeMtimeMs, comments] = await Promise.all([
         api<GhIssueJson[][]>(
           `repos/{owner}/{repo}/issues/${n}/dependencies/blocked_by`,
           true,
@@ -314,10 +329,26 @@ export async function loadTrackQueues(
             source: `track queue #${n} blocked_by`,
             message: firstLine(e),
           });
-          return [] as GhIssueJson[][];
+          return null;
         }),
-        probeClaim(n, mainRoot, repoRoot, nowMs),
+        worktreeClaimMtime(mainRoot, n),
+        fetchClaimComments(n, repoRoot),
       ]);
+      if (comments === undefined)
+        warnings.push({
+          source: `track queue #${n} claim comments`,
+          message: "unreadable — claim checked by worktree only",
+        });
+      const claim = detectClaim({
+        nowMs,
+        ...(worktreeMtimeMs === undefined ? {} : { worktreeMtimeMs }),
+        ...(comments === undefined ? {} : { comments }),
+      });
+      if (claim) data.claims.set(n, claim);
+      if (blockers === null) {
+        data.blockers.set(n, null);
+        return;
+      }
       const open = blockers
         .flat()
         .filter((b) => b.state === "open")
@@ -327,7 +358,6 @@ export async function loadTrackQueues(
           track: trackLabels(b)[0] ?? null,
         }));
       if (open.length > 0) data.blockers.set(n, open);
-      if (claim) data.claims.set(n, claim);
     }),
   );
 

@@ -166,7 +166,7 @@ export function FeedCard({ card, now, logo, className }: FeedCardProps) {
 
           <div
             className={cn(
-              "text-lg leading-snug font-bold tracking-tight text-pretty text-foreground",
+              "text-lg leading-snug font-bold tracking-tight wrap-break-word text-pretty text-foreground",
               clamp,
             )}
           >

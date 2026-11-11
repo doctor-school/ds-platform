@@ -111,6 +111,20 @@ describe("FeedCard", () => {
     );
   });
 
+  it("048 EARS-13: a title word longer than the card width shall wrap inside the card, not be cut at its edge", () => {
+    // Driven on the Academy home @1440 (#3516): «Антибиотикорезистентность:»
+    // in an 18px bold title is wider than the 260px text box and was clipped
+    // by the clamp's `overflow: hidden`.
+    render(
+      <FeedCard
+        card={card({ title: "Антибиотикорезистентность: что изменилось" })}
+        now={NOW}
+      />,
+    );
+    const title = screen.getByText("Антибиотикорезистентность: что изменилось");
+    expect(title.className).toContain("wrap-break-word");
+  });
+
   it("048 EARS-19: when the card has a partner, system shall show «Партнёрский материал · <name>»", () => {
     render(
       <FeedCard card={card({ partner: { name: "Партнёр А" } })} now={NOW} />,

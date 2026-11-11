@@ -97,7 +97,7 @@ const linkVariants = cva(
         // filter chip's resting look (2px `chip-border` frame, `tint-foreground`
         // ink) on a link, the `tint` fill on hover instead of an underline. It
         // carries its own ink, so it wins over the tone.
-        chip: "inline-flex items-center gap-2.5 border-2 border-chip-border px-4 py-3 text-tint-foreground hover:bg-tint hover:no-underline active:border-primary-action",
+        chip: "inline-flex items-center gap-2.5 border-2 border-chip-border px-4 py-3 text-tint-foreground hover:bg-tint hover:no-underline active:border-primary-action active:text-tint-foreground",
       },
       size: {
         default: "",

@@ -14,6 +14,7 @@
     "test:e2e:ci": "node e2e/run-ci-tiers.mjs",
     "test:e2e:shell": "playwright test --config=playwright.shell.config.ts",
     "test:e2e:register-live": "playwright test --config=playwright.register-live.config.ts",
+    "test:e2e:feed-live": "playwright test --config=playwright.feed-live.config.ts",
     "test:e2e:congress": "playwright test --config=playwright.congress.config.ts"
   },
   "dependencies": {

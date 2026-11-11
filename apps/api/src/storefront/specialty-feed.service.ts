@@ -107,10 +107,12 @@ export class SpecialtyFeedService {
    * ordered by that weight, then by the specialty name in the book's order.
    */
   async adjacent(input: { specialty: string }): Promise<AdjacentAreas> {
-    const chosen = await this.resolve(input.specialty);
+    // One book read: the targeting resolver checks membership itself.
+    const { primary: chosen, adjacentDirections } = await this.inBook(() =>
+      this.targeting.resolve(input.specialty),
+    );
     if (chosen.isOther) return { items: [] };
 
-    const { adjacentDirections } = await this.targeting.resolve(chosen.id);
     const rank = new Map(
       adjacentDirections.map((direction, index) => [
         direction.id,
@@ -158,9 +160,14 @@ export class SpecialtyFeedService {
     return { items };
   }
 
-  private async resolve(reference: string): Promise<SpecialtyRef> {
+  private resolve(reference: string): Promise<SpecialtyRef> {
+    return this.inBook(() => this.specialties.resolveMember(reference));
+  }
+
+  /** A path outside the book is the feed's 404, never 017's 422. */
+  private async inBook<T>(read: () => Promise<T>): Promise<T> {
     try {
-      return await this.specialties.resolveMember(reference);
+      return await read();
     } catch (error) {
       if (
         error instanceof SpecialtyError &&

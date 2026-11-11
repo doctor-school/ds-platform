@@ -80,6 +80,8 @@ describe("Link storefront-chrome axes (#2180, canvas ds-shell.dc.html)", () => {
     expect(cls).toMatch(/(?:^|\s)border-chip-border(?:\s|$)/);
     expect(cls).toMatch(/(?:^|\s)text-tint-foreground(?:\s|$)/);
     expect(cls).not.toMatch(/(?:^|\s)text-primary-action(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)active:text-tint-foreground(?:\s|$)/);
+    expect(cls).not.toMatch(/active:text-primary-action/);
     expect(cls).toMatch(/(?:^|\s)hover:bg-tint(?:\s|$)/);
     expect(cls).toMatch(/hover:no-underline/);
     expect(cls).toMatch(/focus-visible:shadow-focus/);

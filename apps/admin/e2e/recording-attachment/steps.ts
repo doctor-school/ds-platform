@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import {
+  readBackfillOutput,
   backfillTitles,
   assertBackfillReceipt,
   type BackfillReceipt,
@@ -1182,7 +1183,7 @@ Given(
       stale = await backfillEvent(page, "published");
     value.backfillTargets = [done];
     const setup = await backfillRun(page, false, true);
-    expect(JSON.parse(setup.command.stdout.split(/\r?\n/)[0]!).outcome).toBe(
+    expect(readBackfillOutput(setup.command.stdout).entries[0]!.outcome).toBe(
       "attached+published",
     );
     value.backfillTargets = [fresh, done, stale];
@@ -1201,7 +1202,7 @@ Then(
   /^that row is refused with 409 (EVENT_NOT_FINISHED|INVALID_TRANSITION)$/,
   async ({ page }, code: string) => {
     const r = state(page).backfill as BackfillReceipt;
-    expect(JSON.parse(r.command.stdout.split(/\r?\n/)[0]!)).toMatchObject({
+    expect(readBackfillOutput(r.command.stdout).entries[0]).toMatchObject({
       outcome: "refused",
       code,
     });

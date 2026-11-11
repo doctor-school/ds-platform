@@ -1,4 +1,4 @@
-﻿import { expect } from "@playwright/test";
+import { expect } from "@playwright/test";
 
 type Row = Record<string, unknown>;
 export const backfillTitles = [
@@ -39,14 +39,41 @@ export type BackfillReceipt = {
   after: BackfillSnapshot;
 };
 export function readBackfillOutput(stdout: string) {
+  const diagnostics: string[] = [];
   const lines = stdout
     .trim()
     .split(/\r?\n/)
+    .filter((line) => {
+      if (
+        /^\[Nest\] \d+\s+- .+ WARN \[(SessionAuthHook|AdminSessionAuthHook)\] no Fastify instance — (session|admin) auth hook not registered$/.test(
+          line,
+        )
+      ) {
+        diagnostics.push(line);
+        return false;
+      }
+      if (line.startsWith("[delivery-reconcile] ")) {
+        const diagnostic = JSON.parse(
+          line.slice("[delivery-reconcile] ".length),
+        );
+        expect(diagnostic.event).toBe("delivery_mail_readiness");
+        expect(Array.isArray(diagnostic.channels)).toBe(true);
+        expect(Array.isArray(diagnostic.operational_reserve)).toBe(true);
+        expect(Object.keys(diagnostic).sort()).toEqual([
+          "channels",
+          "event",
+          "operational_reserve",
+        ]);
+        diagnostics.push(line);
+        return false;
+      }
+      return true;
+    })
     .map((line) => JSON.parse(line) as Record<string, unknown>);
   const final = lines.pop()!;
   expect(typeof final.dryRun).toBe("boolean");
   expect(final.summary).toBeDefined();
-  return { entries: lines as unknown as BackfillEntry[], final };
+  return { entries: lines as unknown as BackfillEntry[], final, diagnostics };
 }
 // 014 EARS-29: the CLI reports domain codes; no HTTP response is invented.
 export function assertBackfillReceipt(r: BackfillReceipt, title: string) {

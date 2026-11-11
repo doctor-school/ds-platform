@@ -56,8 +56,7 @@ infra/deploy/
   stage.env.example   /etc/ds-platform/stage.env template (STAGE box; sinks and the
                       stand's own captcha keys only, never a production credential)
   RECOVERY.md         recovery after host loss: key manifest, CI-built recovery
-                      bundle (age, custodians) + the interim owner-run bundle
-                      (`pnpm recovery`), restore proof, full host-loss path (#3662)
+                      bundle (age, custodians), restore proof, full host-loss path (#3662)
 ```
 
 ## Staging box (`stage-1`)
@@ -687,10 +686,9 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
 
    **Bundle the irreplaceable keys** before you leave this step, and again after any
    later change to these files: dispatch `recovery-custody.yml` with `recovery-bundle`,
-   then `recovery-check`; while the interim path is in force, also run
-   `pnpm recovery bundle` (owner). `PGBACKREST_REPO1_CIPHER_PASS`, `ZITADEL_MASTERKEY`,
+   then `recovery-check`. `PGBACKREST_REPO1_CIPHER_PASS`, `ZITADEL_MASTERKEY`,
    `SIGN_IN_RECORD_KEY` and `AUDIT_IDENTIFIER_PEPPER` cannot be regenerated without
-   losing the data they bind → [`RECOVERY.md`](./RECOVERY.md) §2 and §2.4.
+   losing the data they bind → [`RECOVERY.md`](./RECOVERY.md) §2.
 
 7. **Bring up data-prod FIRST** (DB/Redis/backup). `VPC_IP` = data-prod's private
    address (`var.data_prod_private_ip`, default `192.168.0.10`) — the published
@@ -1263,8 +1261,8 @@ conflate them:
   A PITR `--type=time` target rewinds to just before the bad migration using the
   continuously-archived WAL. Confirm with `pgbackrest --stanza=ds info`.
 
-Host loss (a box or its `/etc/ds-platform` gone), the CI key custody, the interim
-owner-run bundle (`pnpm recovery`) and the restore proof: [`RECOVERY.md`](./RECOVERY.md).
+Host loss (a box or its `/etc/ds-platform` gone), the CI key custody and the restore
+proof: [`RECOVERY.md`](./RECOVERY.md).
 
 ## Prod migration rule — expand/contract
 

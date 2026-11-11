@@ -16,6 +16,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { expect } from "@playwright/test";
 import type { DrizzleHandle } from "@ds/db";
 import { congressBackgrounds } from "./congress-originals-report.js";
+import { closeCongressResources } from "./congress-fixture-cleanup.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const apiRequire = createRequire(resolve(root, "apps/api/package.json"));
@@ -150,7 +151,7 @@ export async function bootCongress(title: string) {
       { logger: false },
     );
   } catch (error) {
-    restore();
+    await closeCongressResources([restore], [error]);
     throw error;
   }
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
@@ -234,7 +235,7 @@ export async function bootCongress(title: string) {
     manifest.nginxPort = port;
     mkdirSync(resolve(dir, "privacy"));
     copyFileSync(
-      resolve(assets, "privacy.html"),
+      resolve(assets, "privacy.html.capture"),
       resolve(dir, "privacy/index.html"),
     );
     const source = readFileSync(resolve(assets, "owning-nginx.conf"), "utf8");
@@ -495,7 +496,7 @@ export async function bootCongress(title: string) {
           const r = await http("/privacy/");
           expect(r.status).toBe(200);
           const html = String(r.body.html);
-          expect(sha(html)).toBe(provenance.hashes["privacy.html"]);
+          expect(sha(html)).toBe(provenance.hashes["privacy.html.capture"]);
           const text = html
             .replace(/<[^>]*>/g, " ")
             .replace(/&#39;/g, "'")
@@ -576,35 +577,44 @@ export async function bootCongress(title: string) {
         return rows[0]!;
       },
       async close() {
-        save();
-        congressOperation(
-          "CAPTURE exact actors/cookies/forms/nonces/native rate and handoff keys BEFORE app close; then quit owned nginx and actual AppModule",
-        );
-        execFileSync(
-          nginxBinary,
-          ["-s", "quit", "-p", posix + "/", "-c", configPath],
-          { windowsHide: true, stdio: "pipe" },
-        );
-        await app.close();
-        restore();
+        await closeCongressResources([
+          save,
+          () =>
+            congressOperation(
+              "CAPTURE exact actors/cookies/forms/nonces/native rate and handoff keys BEFORE app close; then quit owned nginx and actual AppModule",
+            ),
+          () =>
+            execFileSync(
+              nginxBinary,
+              ["-s", "quit", "-p", posix + "/", "-c", configPath],
+              { windowsHide: true, stdio: "pipe" },
+            ),
+          () => app.close(),
+          restore,
+        ]);
       },
     };
   } catch (error) {
-    save();
-    if (nginx) {
-      congressOperation("quit failed owned nginx fixture");
-      try {
-        execFileSync(
-          nginxBinary,
-          ["-s", "quit", "-p", dir + "/", "-c", resolve(dir, "nginx.conf")],
-          { stdio: "pipe", windowsHide: true },
-        );
-      } catch {
-        /* Preserve startup failure. */
-      }
-    }
-    await app.close();
-    restore();
+    await closeCongressResources(
+      [
+        save,
+        () =>
+          congressOperation(
+            "close failed owned Congress fixture; independent nginx/API/env cleanup",
+          ),
+        () => {
+          if (nginx)
+            execFileSync(
+              nginxBinary,
+              ["-s", "quit", "-p", dir + "/", "-c", resolve(dir, "nginx.conf")],
+              { stdio: "pipe", windowsHide: true },
+            );
+        },
+        () => app.close(),
+        restore,
+      ],
+      [error],
+    );
     throw error;
   }
 }

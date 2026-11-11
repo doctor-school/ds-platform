@@ -27,7 +27,7 @@ window and unchanged complete account/registration/consent snapshots and mail
 counts. This is no Redis, identity-provider, captcha-provider or auth acceptance.
 
 `owning-nginx.conf` and `privacy-policy.txt` retain exact pinned external source
-bytes. `privacy.html` is the live HTTP200 `/privacy/` capture from 2026-11-11;
+bytes. `privacy.html.capture` is the live HTTP200 `/privacy/` capture from 2026-11-11;
 every paragraph matches the canonical policy. `provenance.json` pins their
 hashes, source commit and the accepted launch evidence for publication date
 2026-09-23. The owned nginx publishes these unchanged page bytes locally.

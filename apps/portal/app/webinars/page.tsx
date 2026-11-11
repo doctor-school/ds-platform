@@ -1,11 +1,14 @@
 import { EventsListingPage } from "@ds/events-storefront/listing";
 
+import { ACADEMY_EVENT_GONE_NOTICE } from "../../lib/auth-flow.host-config";
 import { ACADEMY_EVENTS_STOREFRONT } from "../../lib/events-storefront.host-config";
 import { retryAcademyEventsBlock } from "./retry-block-action";
 
 /**
  * 004 EARS-7 / EARS-19 — the public listing at `/webinars`, mounted from
  * `@ds/events-storefront` with the Academy host config (gate §2.2 row 16).
+ * It is also this host's default landing, so its leading slot is the
+ * event-gone notice (021 EARS-10, amendment 2026-11-11).
  *
  * `dynamic` cannot live in the package, so it is declared here: both panes read
  * an uncached lifecycle-sensitive projection, so a static prerender would go
@@ -23,6 +26,7 @@ export default async function WebinarsListingPage({
       config={ACADEMY_EVENTS_STOREFRONT}
       searchParams={searchParams}
       retry={retryAcademyEventsBlock}
+      leading={ACADEMY_EVENT_GONE_NOTICE}
     />
   );
 }

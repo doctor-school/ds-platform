@@ -141,7 +141,12 @@ Four rules live there, each stated once for both storefronts:
   cookie unchanged, completes the carried эфир registration with that session
   (unless the эфир is gone), clears `__Host-ds_oidc_tx` and answers
   `303 <path>#` with `Cache-Control: no-store` — every refusal too; a `POST`
-  is refused unread. Both reach the API at `INTERNAL_API_URL` with the
+  is refused unread. A landing that replaces a gone эфир (and the signed-in
+  entry redirect in the same case) carries the one `notice=event-gone` marker
+  (021 EARS-10, amendment 2026-11-11), which `EventGoneNotice`
+  (`@ds/auth-flow/landing-notice`) — mounted at the top of the content column by each storefront's
+  default-landing routes — renders once as an info `Alert` and then drops from
+  the address bar. Both reach the API at `INTERNAL_API_URL` with the
   `INTERNAL_API_TOKEN` bearer, server-side only, forwarding the browser's
   fingerprint headers and client chain.
 - **The silent check** (`silent-check.ts`, 003 EARS-63, 020 EARS-18/22,

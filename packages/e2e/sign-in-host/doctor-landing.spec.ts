@@ -283,13 +283,96 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     );
   });
 
-  test("021 EARS-10.5: a target whose эфир no longer exists lands on the default landing", async ({
+  test("021 EARS-10.5: a target whose эфир no longer exists lands on the default landing, which says why — once", async ({
     page,
   }) => {
     // Owner decision Б (2026-09-29) — nothing answers for the эфир, so there is
     // no page to land on: the LD-4 storefront home (no remembered specialty).
     const gone = `gone-3172-${randomUUID().slice(0, 8)}`;
     await registerAndConfirmLandingOn(page, arrival("/register", gone), HOME);
+    // Amendment 2026-11-11 (#2272, owner pick «А») — the landing carries a
+    // one-time notice line; the marker then leaves the address bar, so a
+    // reload does not repeat it.
+    const notice = page.getByTestId("event-gone-notice");
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("больше недоступен");
+    await expect
+      .poll(() => new URL(page.url()).search)
+      .not.toContain("notice=");
+    await page.reload({ waitUntil: "load" });
+    await expect(page.getByTestId("storefront-header")).toBeVisible();
+    await expect(page.getByTestId("event-gone-notice")).toHaveCount(0);
+  });
+
+  test("021 EARS-10.5: the line opens the content column below the hero band, never between the header and the band", async ({
+    page,
+  }) => {
+    // Owner Stage-B finding (#2272): mounted above the hero, the line split
+    // the one blue top (site header + hero band) with a white strip.
+    const isBetween = (before: string, after: string) =>
+      page.evaluate(
+        ([beforeSelector, afterSelector]) => {
+          const line = document.querySelector(
+            '[data-testid="event-gone-notice"]',
+          );
+          const head = document.querySelector(beforeSelector!);
+          const next = document.querySelector(afterSelector!);
+          if (!line || !head || !next) return false;
+          return (
+            (head.compareDocumentPosition(line) &
+              Node.DOCUMENT_POSITION_FOLLOWING) !==
+              0 &&
+            (line.compareDocumentPosition(next) &
+              Node.DOCUMENT_POSITION_FOLLOWING) !==
+              0
+          );
+        },
+        [before, after],
+      );
+    const code = await chooseGuestSpecialty(
+      page,
+      `${doctorBase()}${EVENTS_FEED}`,
+      CARDIOLOGY,
+    );
+    await page.goto(`${doctorBase()}${specialtyFeed(code)}?notice=event-gone`, {
+      waitUntil: "load",
+    });
+    await expect(page.getByTestId("event-gone-notice")).toBeVisible();
+    // After the feed header, before the first feed block.
+    expect(
+      await isBetween(
+        '[data-testid="specialty-feed-header"]',
+        "[data-feed-block-slot]",
+      ),
+    ).toBe(true);
+    await page.goto(`${doctorBase()}/?notice=event-gone`, {
+      waitUntil: "load",
+    });
+    await expect(page.getByTestId("event-gone-notice")).toBeVisible();
+    expect(
+      await isBetween(
+        '[data-testid="storefront-hero"]',
+        '[data-testid="specialty-catalog"]',
+      ),
+    ).toBe(true);
+  });
+
+  test("021 EARS-10.5: a live landing and an arbitrary notice value render no event-gone line", async ({
+    page,
+  }) => {
+    await registerAndConfirmLandingOn(
+      page,
+      arrival("/register", LIVE),
+      `/events/${LIVE}`,
+    );
+    await expect(page.getByTestId("event-gone-notice")).toHaveCount(0);
+    for (const value of ["x", "event-gone-x"]) {
+      await page.goto(`${doctorBase()}/?notice=${value}`, {
+        waitUntil: "load",
+      });
+      await expect(page.getByTestId("storefront-header")).toBeVisible();
+      await expect(page.getByTestId("event-gone-notice")).toHaveCount(0);
+    }
   });
 
   test("021 EARS-10.4: a direct arrival lands where the DOOR decided", async ({

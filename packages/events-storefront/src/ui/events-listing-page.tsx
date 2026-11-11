@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, type ComponentType } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { permanentRedirect } from "next/navigation";
@@ -206,6 +206,7 @@ export async function EventsListingPage({
   config,
   searchParams,
   retry,
+  leading: Leading,
 }: {
   config: EventsStorefrontHostConfig;
   searchParams: Promise<RawQueryRecord>;
@@ -215,6 +216,14 @@ export async function EventsListingPage({
    * A failed block's «Повторить» calls it for that block alone.
    */
   retry: EventsBlockRetryAction;
+  /**
+   * An element another capability renders first in this page's content
+   * column (below the brand band, in the column's width), from the same
+   * query — the Academy listing is its default landing, so it mounts the
+   * auth-flow event-gone notice here (021 EARS-10, amendment 2026-11-11). A
+   * component, not an element: a mounted route passes bare identifiers only.
+   */
+  leading?: ComponentType<{ searchParams: RawQueryRecord }> | undefined;
 }) {
   const requested = await searchParams;
   const listing = config.routes.listing;
@@ -318,7 +327,13 @@ export async function EventsListingPage({
               <FacetColumn {...panel} />
             </Suspense>
           </aside>
-          <div className="flex min-w-0 flex-1 flex-col gap-10">
+          <div
+            className="flex min-w-0 flex-1 flex-col gap-10"
+            data-testid="events-main-column"
+          >
+            {/* The leading slot opens the content column, below the brand
+                band and in the column's own width and rhythm. */}
+            {Leading ? <Leading searchParams={requested} /> : null}
             <div className="flex items-center justify-between gap-3 lg:hidden">
               <Suspense fallback={<SkeletonSlot className="h-11 w-36" />}>
                 <FacetSheetSection {...panel} />

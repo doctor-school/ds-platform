@@ -61,17 +61,23 @@ function elementsOf(node: ReactNode): AnyElement[] {
   if (!isValidElement(node)) return [];
   const element = node as AnyElement;
   const nested = Object.values(element.props).flatMap((value) =>
-    isValidElement(value) || Array.isArray(value) ? elementsOf(value as ReactNode) : [],
+    isValidElement(value) || Array.isArray(value)
+      ? elementsOf(value as ReactNode)
+      : [],
   );
   return [element, ...nested];
 }
 
-async function render(params: Record<string, string>) {
+async function render(
+  params: Record<string, string>,
+  leading?: Parameters<typeof EventsListingPage>[0]["leading"],
+) {
   return elementsOf(
     (await EventsListingPage({
       config: CONFIG,
       searchParams: Promise.resolve(params),
       retry: RETRY,
+      leading,
     })) as ReactNode,
   );
 }
@@ -107,7 +113,9 @@ describe("<EventsListingPage>", () => {
   it("NEW: the switch link «Календарь на месяц →» / «← Лента событий» keeps the tense and the facets (row 51)", async () => {
     const feed = await render({ tense: "past", topic: "t-1" });
     const toMonth = byTestId(feed, "events-view-switch");
-    expect(toMonth?.props.href).toBe("/webinars?view=month&tense=past&topic=t-1");
+    expect(toMonth?.props.href).toBe(
+      "/webinars?view=month&tense=past&topic=t-1",
+    );
     expect(toMonth?.props.children).toBe("Календарь на месяц →");
     expect(byTestId(feed, "events-view-switch-narrow")?.props.href).toBe(
       toMonth?.props.href,
@@ -117,6 +125,20 @@ describe("<EventsListingPage>", () => {
     const toFeed = byTestId(month, "events-view-switch");
     expect(toFeed?.props.href).toBe("/webinars?tense=past&topic=t-1");
     expect(toFeed?.props.children).toBe("← Лента событий");
+  });
+
+  it("021 EARS-10: the leading slot opens the content column, not the page above the brand band", async () => {
+    const Leading = () => null;
+    const tree = await render({ notice: "event-gone" }, Leading);
+    const column = byTestId(tree, "events-main-column");
+    const children = ([] as ReactNode[]).concat(
+      column?.props.children as ReactNode,
+    );
+    const first = children.find(isValidElement) as AnyElement | undefined;
+    expect(first?.type).toBe(Leading);
+    expect(first?.props.searchParams).toEqual({ notice: "event-gone" });
+    // Exactly one mount, and it is that column's first child.
+    expect(tree.filter((element) => element.type === Leading)).toHaveLength(1);
   });
 
   it("NEW: a legacy Academy URL answers a permanent redirect to its canonical form (D1)", async () => {

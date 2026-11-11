@@ -17,6 +17,7 @@ import {
 } from "@ds/schemas";
 
 import type { AuthFlowHostConfig } from "../host-config";
+import { withEventGoneNotice } from "../landing-notice/marker";
 import { resolveHandoffRef } from "../login/login-handoff";
 import { resolveOwnHandoff } from "./handoff-ownership";
 import { parseRetryAfter, type EntryRefusal } from "./entry-refusal";
@@ -121,25 +122,31 @@ function firstOf(raw: string | null): string | undefined {
  * The landing a resolved return target earns, as the doors decided it on the
  * storefront before (021 EARS-10, #1987, 006 EARS-6, #2487): the carried
  * target when its эфир still answers or it is an account, room or land-only
- * return; otherwise the storefront's own landing rules.
+ * return; otherwise the storefront's own landing rules — carrying the
+ * event-gone notice marker when the эфир no longer exists (021 EARS-10,
+ * amendment 2026-11-11, #2272).
  */
 async function arrivalLanding(
   config: AuthFlowHostConfig,
   returnTo: string | undefined,
   headers: Headers,
   fetchImpl: typeof fetch,
-): Promise<string | null> {
+): Promise<string> {
   const landingTarget = resolveReturnLandingPath(config, returnTo);
-  if (!landingTarget) return null;
   if (
-    isAccountReturnTarget(config, returnTo) ||
-    isRoomReturnTarget(config, returnTo) ||
-    isLandOnlyReturnTarget(returnTo)
+    landingTarget &&
+    (isAccountReturnTarget(config, returnTo) ||
+      isRoomReturnTarget(config, returnTo) ||
+      isLandOnlyReturnTarget(returnTo))
   ) {
     return landingTarget;
   }
-  const read = await readReturnEvent(returnTo, fetchImpl);
-  return read && read.status !== "gone" ? landingTarget : null;
+  const read = landingTarget
+    ? await readReturnEvent(returnTo, fetchImpl)
+    : null;
+  if (landingTarget && read && read.status !== "gone") return landingTarget;
+  const landing = await resolveArrivalLanding(config, headers, fetchImpl);
+  return read?.status === "gone" ? withEventGoneNotice(landing) : landing;
 }
 
 /**
@@ -311,10 +318,9 @@ export async function storefrontEntry(
       handoff === null ||
       (await resolveOwnHandoff(handoff, request.headers, fetchImpl));
     if (own) {
-      const landing =
-        (await arrivalLanding(config, returnTo, request.headers, fetchImpl)) ??
-        (await resolveArrivalLanding(config, request.headers, fetchImpl));
-      return seeOther(landing);
+      return seeOther(
+        await arrivalLanding(config, returnTo, request.headers, fetchImpl),
+      );
     }
   }
 
@@ -439,13 +445,17 @@ export async function storefrontCallback(
     // replaces it (an ended or full event, or a failed read, keeps it). A
     // carried эфир registration (005 EARS-2) is judged by the same read when
     // the sign-in succeeds (021 EARS-10, #2477): a gone эфир registers nothing.
+    // 021 EARS-10 (amendment 2026-11-11, #2272) — the landing that replaces a
+    // gone эфир carries the one event-gone notice marker; nothing else does.
     let register = minted;
+    let eventGone = false;
     if (target && (door === "register" || register)) {
       // `null` for a path that is not an event page: nothing to check.
       const read = await readReturnEvent(target, fetchImpl);
       if (read?.status === "gone") {
         target = null;
         register = undefined;
+        eventGone = true;
       }
     }
     if (register) {
@@ -467,7 +477,7 @@ export async function storefrontCallback(
       sid ? withMintedSession(request.headers, sid) : request.headers,
       fetchImpl,
     );
-    return seeOther(`${to}#`, headers);
+    return seeOther(`${eventGone ? withEventGoneNotice(to) : to}#`, headers);
   };
 
   // A `form_post` callback is refused, its body unread (EARS-62).

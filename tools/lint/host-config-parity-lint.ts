@@ -137,6 +137,9 @@ const PAIRS: ConfigPair[] = [
       "landing.afterLogin": "route",
       "landing.specialtyFeed": "route",
       "landing.specialtyEndpoints": "envelope",
+      // 021 EARS-10 (amendment 2026-11-11, #2272): the notice sentence naming
+      // what each host's own landing shows — copy, like `copy`.
+      "landing.eventGoneNotice": "presentation",
       copy: "presentation",
       brand: "brand",
       "botProtection.siteKey": "envelope",

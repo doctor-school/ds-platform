@@ -1,8 +1,16 @@
 "use client";
 
+import Image from "next/image";
 import { FeedRail } from "@ds/design-system/blocks";
 
 import { loadFeedPage } from "./materials-feed-loader";
+
+/**
+ * 048 EARS-13 — the Academy mark in a news card's source avatar: the mark of
+ * `public/brand/logo.svg`, served at `/icon.svg` (`icon.test.ts`). The card
+ * sizes it inside its tinted avatar.
+ */
+const academyMark = <Image src="/icon.svg" alt="" width={32} height={32} />;
 
 /**
  * 048 EARS-14 — the Academy home feed section. The rail reads its first page
@@ -16,7 +24,7 @@ export function MaterialsFeedSection() {
       data-academy-section="feed"
       className="scroll-mt-24 pt-16 layout:pt-24"
     >
-      <FeedRail loadPage={loadFeedPage} />
+      <FeedRail loadPage={loadFeedPage} logo={academyMark} />
     </div>
   );
 }

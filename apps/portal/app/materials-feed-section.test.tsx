@@ -49,4 +49,37 @@ describe("048 Academy home feed section", () => {
       expect.objectContaining({ cache: "no-store" }),
     );
   });
+
+  it("048 EARS-13: when a news card renders on the Academy home, system shall show the Academy mark in its source avatar", async () => {
+    const news = {
+      id: "8f1c2a4e-5b6d-4e7f-9a0b-1c2d3e4f5a6b",
+      kind: "news",
+      title: "Новость академии",
+      publishedAt: "2026-11-01T09:00:00.000Z",
+      image: null,
+      source: { platform: "academy", name: "Doctor.School" },
+      partner: null,
+      href: "/materials/news-1",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ data: [news], nextCursor: null }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+
+    const { container } = render(<MaterialsFeedSection />);
+
+    await screen.findByText("Новость академии");
+    const mark = container.querySelector(
+      '[data-feed-card-avatar="logo"] img',
+    );
+    expect(mark).not.toBeNull();
+    expect(mark?.getAttribute("src")).toBe("/icon.svg");
+    expect(mark?.getAttribute("alt")).toBe("");
+  });
 });

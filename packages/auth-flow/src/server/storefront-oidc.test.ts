@@ -585,6 +585,40 @@ describe("storefront entry", () => {
     expect(failed.headers.get("location")).toBe("/webinars/gone-1");
   });
 
+  it("021 EARS-10.5: a signed-in doctor whose carried эфир is gone and who has no remembered specialty is redirected to the events feed with the marker; a remembered one keeps its feed", async () => {
+    const signedIn = { cookie: "__Host-ds_session=live-sid" };
+    const NONE: SpecialtyChoice = { specialty: null, storedIn: "none" };
+    const CARDIO: SpecialtyChoice = {
+      specialty: {
+        id: "11111111-1111-4111-8111-111111111111",
+        code: "kardiologiya",
+        name: "Кардиология",
+        isOther: false,
+      },
+      storedIn: "session",
+    };
+    const entry = (guest: SpecialtyChoice) =>
+      storefrontEntry(
+        get("/login?returnTo=%2Fevents%2Fgone-1", signedIn),
+        DOCTOR,
+        "login",
+        {
+          fetchImpl: fakeApi({
+            signedIn: true,
+            event: 404,
+            specialty: { signedIn: NONE, guest },
+          }).fetchImpl,
+          env: ENV,
+        },
+      );
+    expect((await entry(NONE)).headers.get("location")).toBe(
+      "/events?notice=event-gone",
+    );
+    expect((await entry(CARDIO)).headers.get("location")).toBe(
+      "/feed/kardiologiya?notice=event-gone",
+    );
+  });
+
   it("003 EARS-72: a 429 transaction is a typed rate-limited refusal carrying the Retry-After seconds, never a thrown error", async () => {
     const api = fakeApi({ transaction: { status: 429, retryAfter: "105" } });
     const outcome = await storefrontEntryOutcome(
@@ -994,7 +1028,11 @@ describe("storefront callback", () => {
   });
 
   const carrying = (
-    opts: { event?: number; registration?: number | "throw" } = {},
+    opts: {
+      event?: number;
+      registration?: number | "throw";
+      specialty?: { signedIn: SpecialtyChoice; guest: SpecialtyChoice };
+    } = {},
   ) =>
     fakeApi({
       ...opts,
@@ -1075,13 +1113,39 @@ describe("storefront callback", () => {
     expect(registrations(api)).toHaveLength(0);
   });
 
-  it("021 EARS-10 (amendment 2026-11-11): a carried эфир gone at sign-in lands on the LD-4 landing with the event-gone notice marker; a failed read is not «gone» and carries none", async () => {
+  it("021 EARS-10.5: a carried эфир gone at sign-in with no remembered specialty lands on the events feed with the event-gone notice marker; a remembered specialty keeps its feed; a failed read is not «gone» and carries none", async () => {
     const gone = await storefrontCallback(
       withTx("/auth/callback?code=c&state=s"),
       DOCTOR,
       { fetchImpl: carrying({ event: 404 }).fetchImpl, env: ENV },
     );
-    expect(gone.headers.get("location")).toBe("/?notice=event-gone#");
+    expect(gone.headers.get("location")).toBe("/events?notice=event-gone#");
+    const NONE: SpecialtyChoice = { specialty: null, storedIn: "none" };
+    const remembered = await storefrontCallback(
+      withTx("/auth/callback?code=c&state=s"),
+      DOCTOR,
+      {
+        fetchImpl: carrying({
+          event: 404,
+          specialty: {
+            signedIn: {
+              specialty: {
+                id: "11111111-1111-4111-8111-111111111111",
+                code: "kardiologiya",
+                name: "Кардиология",
+                isOther: false,
+              },
+              storedIn: "profile",
+            },
+            guest: NONE,
+          },
+        }).fetchImpl,
+        env: ENV,
+      },
+    );
+    expect(remembered.headers.get("location")).toBe(
+      "/feed/kardiologiya?notice=event-gone#",
+    );
     const live = await storefrontCallback(
       withTx("/auth/callback?code=c&state=s"),
       DOCTOR,

@@ -231,6 +231,16 @@ async function registerAndConfirmLandingOn(
   return sent;
 }
 
+/** 021 EARS-10.5 — the event-gone line lies wholly inside the first viewport. */
+async function expectInFirstViewport(page: Page) {
+  const box = await page.getByTestId("event-gone-notice").boundingBox();
+  const viewport = page.viewportSize();
+  expect(box, "the line has a box").not.toBeNull();
+  expect(viewport, "the page has a viewport").not.toBeNull();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height);
+}
+
 /** The landed page's header shows the signed-in cluster, not «Войти». */
 async function expectSignedInHeader(page: Page) {
   const header = page.getByTestId("storefront-header");
@@ -283,19 +293,26 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     );
   });
 
-  test("021 EARS-10.5: a target whose эфир no longer exists lands on the default landing, which says why — once", async ({
+  test("021 EARS-10.5: a target whose эфир no longer exists, with no remembered specialty, lands on the events feed, which says why on the first screen — once", async ({
     page,
   }) => {
     // Owner decision Б (2026-09-29) — nothing answers for the эфир, so there is
-    // no page to land on: the LD-4 storefront home (no remembered specialty).
+    // no page to land on; with no remembered specialty the landing is the
+    // events feed, not the home whose hero fills the first screen (#3956).
     const gone = `gone-3172-${randomUUID().slice(0, 8)}`;
-    await registerAndConfirmLandingOn(page, arrival("/register", gone), HOME);
+    await registerAndConfirmLandingOn(
+      page,
+      arrival("/register", gone),
+      EVENTS_FEED,
+    );
     // Amendment 2026-11-11 (#2272, owner pick «А») — the landing carries a
     // one-time notice line; the marker then leaves the address bar, so a
     // reload does not repeat it.
     const notice = page.getByTestId("event-gone-notice");
     await expect(notice).toBeVisible();
+    await expect(notice).toHaveCount(1);
     await expect(notice).toContainText("больше недоступен");
+    await expectInFirstViewport(page);
     await expect
       .poll(() => new URL(page.url()).search)
       .not.toContain("notice=");
@@ -345,16 +362,31 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
         "[data-feed-block-slot]",
       ),
     ).toBe(true);
-    await page.goto(`${doctorBase()}/?notice=event-gone`, {
-      waitUntil: "load",
-    });
-    await expect(page.getByTestId("event-gone-notice")).toBeVisible();
-    expect(
-      await isBetween(
-        '[data-testid="storefront-hero"]',
-        '[data-testid="specialty-catalog"]',
-      ),
-    ).toBe(true);
+    // The events feed: the leading slot opens its main column, and the line
+    // stands inside the first viewport on desktop and on mobile (#3956).
+    for (const viewport of [
+      { width: 1440, height: 900 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto(`${doctorBase()}${EVENTS_FEED}?notice=event-gone`, {
+        waitUntil: "load",
+      });
+      await expect(page.getByTestId("event-gone-notice")).toHaveCount(1);
+      expect(
+        await page.evaluate(() => {
+          const line = document.querySelector(
+            '[data-testid="event-gone-notice"]',
+          );
+          const column = document.querySelector(
+            '[data-testid="events-main-column"]',
+          );
+          return Boolean(line && column?.firstElementChild?.contains(line));
+        }),
+        `${viewport.width}: the line opens the main column`,
+      ).toBe(true);
+      await expectInFirstViewport(page);
+    }
   });
 
   test("021 EARS-10.5: a live landing and an arbitrary notice value render no event-gone line", async ({
@@ -367,12 +399,18 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     );
     await expect(page.getByTestId("event-gone-notice")).toHaveCount(0);
     for (const value of ["x", "event-gone-x"]) {
-      await page.goto(`${doctorBase()}/?notice=${value}`, {
+      await page.goto(`${doctorBase()}${EVENTS_FEED}?notice=${value}`, {
         waitUntil: "load",
       });
       await expect(page.getByTestId("storefront-header")).toBeVisible();
       await expect(page.getByTestId("event-gone-notice")).toHaveCount(0);
     }
+    // The home is no landing of a gone эфир any more (#3956): it mounts no line.
+    await page.goto(`${doctorBase()}${HOME}?notice=event-gone`, {
+      waitUntil: "load",
+    });
+    await expect(page.getByTestId("storefront-hero")).toBeVisible();
+    await expect(page.getByTestId("event-gone-notice")).toHaveCount(0);
   });
 
   test("021 EARS-10.4: a direct arrival lands where the DOOR decided", async ({

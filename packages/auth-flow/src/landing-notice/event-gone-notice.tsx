@@ -11,7 +11,8 @@ type RouteSearchParams = Readonly<
 >;
 
 /** The default landing a route serves — the key of its `landing.eventGoneNotice` sentence. */
-export type EventGoneNoticeLanding = "afterLogin" | "specialtyFeed";
+export type EventGoneNoticeLanding =
+  "afterLogin" | "specialtyFeed" | "eventsFeed";
 
 /**
  * 021 EARS-10 (amendment 2026-11-11, #2272; owner pick «А») — the ONE

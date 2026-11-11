@@ -114,6 +114,12 @@ export function assertOriginReceipt(
   expect(u.suppliedOrigin).toBe(origin === "platform" ? "legacy" : "platform");
   assertProtocol(u.answer, u.before.id, u.before.version);
   expect(u.answer.status).toBe(400);
+  expect(u.answer.body).toMatchObject({
+    message: "invalid event payload",
+    issues: expect.arrayContaining([
+      expect.objectContaining({ path: ["origin"], expected: "never" }),
+    ]),
+  });
   expect(u.after).toEqual(u.before);
   assertProtocol(u.control, u.before.id, u.before.version);
   expect(u.control.status).toBe(200);

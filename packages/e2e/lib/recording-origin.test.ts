@@ -31,6 +31,9 @@ it("requires the complete own machine, shared hidden, real foreign-command refus
         r.update.answer.status = 200;
       },
       (r: OriginReceipt) => {
+        r.update.answer.body = { message: "multipart/form-data is required" };
+      },
+      (r: OriginReceipt) => {
         r.update.answer.request.path += "/internal";
       },
       (r: OriginReceipt) => {

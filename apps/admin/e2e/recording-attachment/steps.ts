@@ -142,8 +142,11 @@ async function api(
   const result = await page.evaluate(
     async ({ path, method, body, version, defect }) => {
       const headers: Record<string, string> = {};
+      const multipart =
+        method === "PATCH" && /^\/v1\/admin\/events\/[^/]+$/.test(path);
       if (method !== "GET") {
-        if (body !== undefined) headers["content-type"] = "application/json";
+        if (body !== undefined && !multipart)
+          headers["content-type"] = "application/json";
         if (defect !== "key") headers["idempotency-key"] = crypto.randomUUID();
         const cookie = document.cookie
           .split("; ")
@@ -155,10 +158,14 @@ async function api(
         if (version !== undefined && defect !== "etag")
           headers["if-match"] = `W/"${version}"`;
       }
+      const form = new FormData();
+      if (multipart) form.append("payload", JSON.stringify(body));
       const response = await fetch(path, {
         method,
         headers,
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(body === undefined
+          ? {}
+          : { body: multipart ? form : JSON.stringify(body) }),
       });
       return {
         request: {

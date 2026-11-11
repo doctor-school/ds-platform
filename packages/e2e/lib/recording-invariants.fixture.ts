@@ -24,10 +24,20 @@ export function originFixture(origin: "platform" | "legacy"): OriginReceipt {
         ];
   const answer = (id: string, action: string, status: number) => ({
     status,
-    body: {
-      errorCode: "INVALID_TRANSITION",
-      ...(action.startsWith("transition:") ? { to: action.split(":")[1] } : {}),
-    },
+    body:
+      status === 400
+        ? {
+            message: "invalid event payload",
+            issues: [
+              { path: ["origin"], expected: "never", code: "invalid_type" },
+            ],
+          }
+        : {
+            errorCode: "INVALID_TRANSITION",
+            ...(action.startsWith("transition:")
+              ? { to: action.split(":")[1] }
+              : {}),
+          },
     request: {
       method: action ? "POST" : "PATCH",
       path: `/v1/admin/events/${id}${action ? `/${action.split(":")[0]}` : ""}`,

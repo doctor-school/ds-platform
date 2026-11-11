@@ -1,4 +1,4 @@
-﻿# Recording mutation originals
+# Recording mutation originals
 
 This strict Admin contour executes fifteen source originals from feature 014 with
 the inherited Academy host and all six ordered lifecycle Background clauses:
@@ -34,6 +34,11 @@ Run against compiled API, Admin, Academy and Login apps with a fresh owned branc
 DB and dev IdP credentials loaded privately. Required env:
 `E2E_RECORDING_ATTACHMENT_DATABASE`, `E2E_RECORDING_ATTACHMENT_PORTAL_URL`,
 `E2E_RECORDING_ATTACHMENT_LOG`, `DATABASE_URL`, `E2E_ADMIN_URL`, and `IDP_*`.
+The operator CLI also requires explicit `AUDIT_IDENTIFIER_PEPPER` and
+`LIFECYCLE_IMPACT_TOKEN_SECRET`; CI shares its existing runner-only fixtures
+between the API and the command through the Admin job environment. Failed CLI
+starts retain stdout, stderr and process status beside the manifest and remain
+test failures.
 The SQL adapter accepts explicitly named owned DBs (including `ds_dev_3939`) or
 the CI DB under `CI=true`. Every SQL/session/CLI fixture command is logged.
 Manifests and raw CLI stdout/stderr are preserved beside the operation log.

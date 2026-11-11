@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import {
+  captureBackfillCommand,
   readBackfillOutput,
   backfillTitles,
   assertBackfillReceipt,
@@ -1107,23 +1108,23 @@ async function backfillRun(page: Page, dryRun: boolean, setup = false) {
     setup,
   });
   const before = await backfillSnapshot();
-  const result = await promisify(execFile)(
-    process.execPath,
-    [
-      resolve(root, "node_modules/tsx/dist/cli.mjs"),
-      resolve(root, entrypoint),
-      ...args,
-    ],
-    {
-      cwd: resolve(root, "apps/api"),
-      env: process.env,
-      timeout: 90_000,
-      maxBuffer: 8 * 1024 * 1024,
-    },
+  const result = await captureBackfillCommand(directory, () =>
+    promisify(execFile)(
+      process.execPath,
+      [
+        resolve(root, "node_modules/tsx/dist/cli.mjs"),
+        resolve(root, entrypoint),
+        ...args,
+      ],
+      {
+        cwd: resolve(root, "apps/api"),
+        env: process.env,
+        timeout: 90_000,
+        maxBuffer: 8 * 1024 * 1024,
+      },
+    ),
   );
   const after = await backfillSnapshot();
-  await writeFile(resolve(directory, "stdout.jsonl"), result.stdout);
-  await writeFile(resolve(directory, "stderr.log"), result.stderr);
   const mapping = await promisify(execFile)(
     process.execPath,
     [

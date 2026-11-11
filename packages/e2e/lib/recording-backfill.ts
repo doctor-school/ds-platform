@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { expect } from "@playwright/test";
 
 type Row = Record<string, unknown>;
@@ -197,5 +199,43 @@ export function assertBackfillReceipt(r: BackfillReceipt, title: string) {
       } else expect(rows).toEqual([]);
     }
     expect(r.after).toEqual(r.before);
+  }
+}
+
+export async function captureBackfillCommand(
+  directory: string,
+  run: () => Promise<{ stdout: string; stderr: string }>,
+) {
+  try {
+    const result = await run();
+    await Promise.all([
+      writeFile(resolve(directory, "stdout.jsonl"), result.stdout),
+      writeFile(resolve(directory, "stderr.log"), result.stderr),
+      writeFile(
+        resolve(directory, "process.json"),
+        JSON.stringify({ status: "completed", exitCode: 0 }),
+      ),
+    ]);
+    return result;
+  } catch (error) {
+    const result = error as {
+      stdout?: string;
+      stderr?: string;
+      code?: number | string;
+      signal?: string;
+    };
+    await Promise.all([
+      writeFile(resolve(directory, "stdout.jsonl"), result.stdout ?? ""),
+      writeFile(resolve(directory, "stderr.log"), result.stderr ?? ""),
+      writeFile(
+        resolve(directory, "process.json"),
+        JSON.stringify({
+          status: "failed",
+          exitCode: result.code ?? null,
+          signal: result.signal ?? null,
+        }),
+      ),
+    ]);
+    throw error;
   }
 }

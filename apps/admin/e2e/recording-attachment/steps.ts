@@ -9,6 +9,10 @@ import { adminOrigin, test } from "../support/fixtures";
 
 import {
   LegacyTransitionProof,
+  assertBoundaryReceipt,
+  boundaryCases,
+  noDeleteTitle,
+  type BoundaryReceipt,
   legacyTitles,
   type LegacyAnswer,
   type PublicLists,
@@ -34,6 +38,9 @@ type Answer = {
   request: LegacyAnswer["request"];
 };
 type State = {
+  boundary?: BoundaryReceipt;
+  boundarySelected?: boolean;
+  boundaryOrigin?: string;
   caseKind?: string;
   caseState?: string;
   lifecycle?: RecordingLifecycleProof;
@@ -75,6 +82,7 @@ async function sql<T extends QueryResultRow = QueryResultRow>(
       database === "ds_dev_3851" ||
       database === "ds_dev_3929" ||
       database === "ds_dev_3932" ||
+      database === "ds_dev_3934" ||
       (process.env.CI === "true" && database === "ds_admin_e2e")
     ) ||
     new URL(url).pathname !== `/${database}`
@@ -196,7 +204,11 @@ Before(async ({ page, browser, playwright, $tags, $testInfo }) => {
   expect($tags).toContain("@host:academy");
   const origin = process.env.E2E_RECORDING_ATTACHMENT_PORTAL_URL;
   if (!origin) throw new Error("Dedicated Academy portal URL required");
-  states.set(page, { backgrounds: [], events: [] });
+  states.set(page, {
+    backgrounds: [],
+    events: [],
+    boundarySelected: $tags.includes("@recording-command-boundaries"),
+  });
   const visitor = await playwright.request.newContext({ baseURL: origin });
   state(page).visitor = visitor;
   state(page).portal = await browser.newPage({ baseURL: origin });
@@ -816,8 +828,17 @@ Given(
     await legacy(page).prepare(legacyTitles[1]);
   },
 );
-Given("a legacy event in state in_archive", async ({ page }) => {
-  await legacy(page).prepare(legacyTitles[2]);
+Given("a legacy event in state {word}", async ({ page }, status: string) => {
+  if (!state(page).boundarySelected) {
+    await legacy(page).prepare(legacyTitles[2]);
+    return;
+  }
+  state(page).boundaryOrigin = "legacy";
+  state(page).caseState = status;
+  await legacy(page).prepare(
+    status === "in_archive" ? legacyTitles[2] : legacyTitles[0],
+  );
+  state(page).event = legacy(page).receipt!.fixture;
 });
 When(
   "the operator invokes «Архивировать» with If-Match and an Idempotency-Key",
@@ -841,7 +862,10 @@ Then("the event state becomes hidden", async ({ page }) => {
   await legacy(page).assertState("hidden");
 });
 Then("the event state is unchanged", async ({ page }) => {
-  await legacy(page).verify();
+  const boundary = state(page).boundary;
+  if (boundary)
+    assertBoundaryReceipt(boundary, boundary.outline, boundary.title);
+  else await legacy(page).verify();
 });
 Then("exactly one feature 010 audit row is appended", async ({ page }) => {
   if (legacy(page).receipt!.identity === legacyTitles[2])
@@ -850,6 +874,174 @@ Then("exactly one feature 010 audit row is appended", async ({ page }) => {
 });
 Then("it appears in no listing, tab or count", async ({ page }) => {
   await legacy(page).excluded();
+});
+
+async function eventSnapshot(id: string) {
+  return (
+    await sql("SELECT to_jsonb(e) AS row FROM events e WHERE id=$1", [id])
+  )[0]!.row;
+}
+async function roomSnapshot(id: string) {
+  return {
+    stream: await sql("SELECT * FROM stream_config WHERE event_id=$1", [id]),
+    presence: await sql("SELECT * FROM presence_beats WHERE event_id=$1", [id]),
+    liveAt: (await eventSnapshot(id)).live_at,
+  };
+}
+Given("a platform event in state {word}", async ({ page }, status: string) => {
+  const value = state(page);
+  value.boundaryOrigin = "platform";
+  value.caseState = status;
+  value.event = await event(page, status);
+});
+When(
+  /^the operator invokes (PublishEvent|OpenRoom|CloseRoom|HideEvent|ConfigureStream|ArchiveLegacyBroadcast|HideLegacyBroadcast)$/,
+  async ({ page }, commandName: string) => {
+    const value = state(page),
+      target = value.event!;
+    const definition = boundaryCases.find(
+      (c) =>
+        c.command === commandName &&
+        c.origin === value.boundaryOrigin &&
+        c.state === value.caseState,
+    )!;
+    expect(definition).toBeDefined();
+    const before = await eventSnapshot(target.id),
+      sideEffectsBefore = await roomSnapshot(target.id);
+    const answer = await api(
+      page,
+      `/v1/admin/events/${target.id}/${definition.route}`,
+      definition.method,
+      commandName === "ConfigureStream"
+        ? { provider: "rutube", embedRef: payload("raw").embedRef }
+        : undefined,
+      Number(before.version),
+    );
+    value.boundary = {
+      ...definition,
+      eventId: target.id,
+      before,
+      after: await eventSnapshot(target.id),
+      answer,
+      sideEffectsBefore,
+      sideEffectsAfter: await roomSnapshot(target.id),
+    };
+  },
+);
+Then("the request fails with 409 INVALID_TRANSITION", async ({ page }) => {
+  const r = state(page).boundary!;
+  expect(r.answer.status).toBe(409);
+  expect(r.answer.body.errorCode ?? r.answer.body.code).toBe(
+    "INVALID_TRANSITION",
+  );
+});
+Then(
+  "no room record, presence window or stream config is created",
+  async ({ page }) => {
+    const r = state(page).boundary!;
+    assertBoundaryReceipt(r, r.outline, r.title);
+  },
+);
+Given(
+  "a finished event with a published edited recording",
+  async ({ page }) => {
+    const value = state(page);
+    value.event = await event(page);
+    value.recording = await command(
+      page,
+      value.event,
+      await attach(page, value.event, "edited"),
+      "publish",
+    );
+    const before = await eventSnapshot(value.event.id);
+    value.boundary = {
+      ...boundaryCases[0]!,
+      eventId: value.event.id,
+      before,
+      after: before,
+      answer: undefined as unknown as LegacyAnswer,
+      recordingBefore: (
+        await sql(
+          "SELECT to_jsonb(r) AS row FROM event_recordings r WHERE id=$1",
+          [value.recording.id],
+        )
+      )[0]!.row,
+    };
+  },
+);
+When(
+  "the operator inspects every action in the recordings panel",
+  async ({ page }) => {
+    const value = state(page),
+      r = value.boundary!;
+    await page.goto(`/events/${value.event!.id}`);
+    await page.getByTestId("tab-recordings").click();
+    const panel = page.getByTestId("recordings-panel");
+    await expect(panel).toBeVisible();
+    await expect(page.getByTestId("recording-status-edited")).toContainText(
+      "Опубликована",
+    );
+    r.panelControls = await panel
+      .locator('button:visible,a:visible,[role="menuitem"]:visible')
+      .allTextContents();
+    const triggers = await panel
+      .locator('button[data-testid^="recording-"]:visible')
+      .evaluateAll((nodes) =>
+        nodes
+          .map((n) => n.getAttribute("data-testid")!)
+          .filter((id) =>
+            /recording-(edit|attach)-|recording-(raw|edited)-(unpublish|retire)/.test(
+              id,
+            ),
+          ),
+      );
+    expect(triggers.length).toBeGreaterThanOrEqual(4);
+    r.dialogs = [];
+    for (const id of triggers) {
+      await page.getByTestId(id).click();
+      const dialog = page.locator(
+        '[role="dialog"]:visible,[role="alertdialog"]:visible',
+      );
+      await expect(dialog).toBeVisible();
+      r.dialogs.push(
+        id,
+        ...(await dialog
+          .locator('button:visible,a:visible,[role="menuitem"]:visible')
+          .allTextContents()),
+      );
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+    }
+  },
+);
+Then("no Delete control is present", async ({ page }) => {
+  const r = state(page).boundary!;
+  expect(r.panelControls!.length).toBeGreaterThan(0);
+  for (const label of [...r.panelControls!, ...r.dialogs!])
+    expect(label).not.toMatch(/delete|удалить/i);
+  await expect(
+    page
+      .getByTestId("recordings-panel")
+      .getByRole("button", { name: /delete|удалить/i }),
+  ).toHaveCount(0);
+});
+Then("no HTTP Delete route exists for a recording", async ({ page }) => {
+  const value = state(page),
+    r = value.boundary!;
+  r.answer = await api(
+    page,
+    `${path(value.event!)}/${value.recording!.id}`,
+    "DELETE",
+    undefined,
+    value.recording!.version,
+  );
+  r.after = await eventSnapshot(value.event!.id);
+  r.recordingAfter = (
+    await sql("SELECT to_jsonb(r) AS row FROM event_recordings r WHERE id=$1", [
+      value.recording!.id,
+    ])
+  )[0]!.row;
+  assertBoundaryReceipt(r, "", noDeleteTitle);
 });
 After(async ({ page, $testInfo }) => {
   const value = state(page);
@@ -861,6 +1053,7 @@ After(async ({ page, $testInfo }) => {
       caseState: value.caseState,
       lifecycle: value.lifecycle?.evidence,
       legacy: value.legacy?.receipt,
+      boundary: value.boundary,
       backgrounds: value.backgrounds,
     }),
   });

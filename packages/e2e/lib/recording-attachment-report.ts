@@ -1,5 +1,10 @@
 import {
   assertLegacyReceipt,
+  assertBoundaryReceipt,
+  boundaryCases,
+  boundaryOutlines,
+  noDeleteTitle,
+  type BoundaryReceipt,
   legacyTitles,
   type LegacyReceipt,
 } from "./legacy-transition.js";
@@ -35,11 +40,12 @@ export function assertRecordingAttachmentReport(
   assertOperationalReport(
     value,
     scope === "new"
-      ? legacyTitles
+      ? boundaryCases.map((c) => c.title)
       : [
           ...recordingAttachmentTitles,
           ...recordingLifecycleTitles,
           ...legacyTitles,
+          ...boundaryCases.map((c) => c.title),
         ],
     "recording-attachment",
   );
@@ -67,7 +73,8 @@ export function assertRecordingAttachmentReport(
       if (
         outline &&
         outline !== attachmentOutline &&
-        outline !== lifecycleOutline
+        outline !== lifecycleOutline &&
+        !boundaryOutlines.includes(outline as (typeof boundaryOutlines)[number])
       )
         throw new Error("Outline identity mismatch");
       if (
@@ -91,6 +98,7 @@ export function assertRecordingAttachmentReport(
       const receipt = JSON.parse(
         Buffer.from(attachments[0]!.body!, "base64").toString("utf8"),
       ) as {
+        boundary?: BoundaryReceipt;
         sourceHost: string;
         legacy?: LegacyReceipt;
         caseKind?: string;
@@ -99,6 +107,11 @@ export function assertRecordingAttachmentReport(
       };
       if (legacyTitles.includes(spec.title as (typeof legacyTitles)[number]))
         assertLegacyReceipt(receipt.legacy!, spec.title);
+      if (
+        spec.title === noDeleteTitle ||
+        boundaryOutlines.includes(outline as (typeof boundaryOutlines)[number])
+      )
+        assertBoundaryReceipt(receipt.boundary!, outline ?? "", spec.title);
       const clauses = [
         "ended-only",
         "hidden-exclusion",
@@ -146,7 +159,10 @@ export function assertRecordingAttachmentReport(
       (title) =>
         `${title.startsWith("Example #") ? lifecycleOutline : rule}/${title}`,
     ),
-    ...legacyTitles.map((title) => `${rule}/${title}`),
+    ...(scope === "full"
+      ? legacyTitles.map((title) => `${rule}/${title}`)
+      : []),
+    ...boundaryCases.map((c) => `${c.outline || rule}/${c.title}`),
   ];
   if (JSON.stringify(identities.sort()) !== JSON.stringify(expected.sort()))
     throw new Error("Source outline/case identity mismatch");

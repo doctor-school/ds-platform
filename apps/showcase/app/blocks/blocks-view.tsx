@@ -6,6 +6,8 @@ import type {
   MaterialBody,
   MaterialBodyMark,
   MaterialBodyText,
+  FeedCard as FeedCardData,
+  PublicFeedPage,
 } from "@ds/schemas";
 import { RichTextContent } from "@ds/design-system/rich-text-content";
 
@@ -19,6 +21,9 @@ import {
   DayAgenda,
   EmailConfirmCard,
   EmptyState,
+  FeedCard,
+  FeedCardSkeleton,
+  FeedRail,
   EventFormatBlock,
   EventList,
   EventPageHero,
@@ -4716,6 +4721,247 @@ function RichTextContentSection() {
   );
 }
 
+// 048 (#3516) — feed card + Academy home rail specimens, in-memory data only.
+const FEED_SAMPLE_NOW = new Date("2026-11-11T09:00:00Z");
+/** An inline 16:9 cover so the specimen needs no hosted asset. */
+const FEED_SAMPLE_COVER =
+  "data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 9%27%3E%3Crect width=%2716%27 height=%279%27 fill=%27%23D3E8FD%27/%3E%3Ccircle cx=%2711%27 cy=%274%27 r=%272.5%27 fill=%27%232D84F2%27/%3E%3C/svg%3E";
+
+function feedSample(i: number, over: Partial<FeedCardData> = {}): FeedCardData {
+  const column = i % 3 === 1;
+  return {
+    id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+    kind: column ? "column" : "news",
+    title: column
+      ? "Ортобиология в России: чего не хватает практике"
+      : "Открыт набор центров в исследование эффективности PRP",
+    publishedAt: new Date(Date.UTC(2026, 9, 30 - i, 9)).toISOString(),
+    image: i % 2 === 0 ? { url: FEED_SAMPLE_COVER } : null,
+    source: {
+      platform: "academy",
+      name: column ? "Страхов М. А." : "Академия",
+    },
+    partner: i % 5 === 3 ? { name: "Партнёр А" } : null,
+    href: "#",
+    ...over,
+  } as FeedCardData;
+}
+
+function feedPage(
+  from: number,
+  n: number,
+  nextCursor: string | null,
+): PublicFeedPage {
+  return {
+    data: Array.from({ length: n }, (_, k) => feedSample(from + k)),
+    nextCursor,
+  };
+}
+
+/** In-memory `loadPage`: 12 first, then pages up to 28 cards in all. */
+async function feedLoadPage({
+  cursor,
+  limit,
+}: {
+  cursor: string | null;
+  limit: number;
+}): Promise<PublicFeedPage> {
+  await new Promise((r) => setTimeout(r, 600));
+  const from = cursor ? Number(cursor) : 0;
+  const n = Math.min(limit, 28 - from);
+  return feedPage(from, n, from + n < 28 ? String(from + n) : null);
+}
+
+const feedNeverLoads = () => new Promise<PublicFeedPage>(() => {});
+const feedFails = async (): Promise<PublicFeedPage> => {
+  await new Promise((r) => setTimeout(r, 300));
+  throw new Error("showcase: feed read failed");
+};
+
+const FEED_ACADEMY_LOGO = (
+  <span className="text-2xs font-extrabold text-tint-foreground">DS</span>
+);
+
+const FEED_CARD_PROPS: PropRow[] = [
+  {
+    name: "card",
+    type: "FeedCard (@ds/schemas)",
+    required: true,
+    description:
+      "One feed card; the variant follows card.kind (news | column), the partner mark follows card.partner.",
+  },
+  {
+    name: "now",
+    type: "Date",
+    required: false,
+    description: "«Now» for the year rule of the Moscow-time date.",
+  },
+  {
+    name: "logo",
+    type: "ReactNode",
+    required: false,
+    description: "The Academy logo mark of a news card (host-supplied asset).",
+  },
+];
+
+function FeedCardSection() {
+  const cases: Array<[string, FeedCardData]> = [
+    ["news · image", feedSample(0, { kind: "news", partner: null })],
+    [
+      "news · no image · partner",
+      feedSample(3, {
+        kind: "news",
+        image: null,
+        partner: { name: "Партнёр А" },
+      }),
+    ],
+    [
+      "column · image · partner",
+      feedSample(1, {
+        image: { url: FEED_SAMPLE_COVER },
+        partner: { name: "Партнёр А" },
+      }),
+    ],
+    [
+      "column · no image · previous year",
+      feedSample(4, {
+        kind: "column",
+        image: null,
+        partner: null,
+        source: { platform: "academy", name: "Страхов М. А." },
+        title: "Ортобиология в России: чего не хватает практике",
+        publishedAt: "2025-12-04T09:00:00Z",
+      }),
+    ],
+  ];
+  return (
+    <BlockSection
+      title="Карточка ленты"
+      exportsLine="FeedCard — props: card (FeedCard) · now · logo; FeedCardSkeleton"
+    >
+      <p className="text-sm text-muted-foreground">
+        The ONE shared feed card (048 EARS-13 / EARS-19), canvas
+        unit-feed-card.dc.html slice 1: news and column sources, image and
+        no-image layouts, the partner mark. The whole card is one same-tab link.
+      </p>
+      <SubRow label="State matrix">
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {cases.map(([label, data]) => (
+            <StateCase key={label} label={label}>
+              <div className="w-80 max-w-full">
+                <FeedCard
+                  card={data}
+                  now={FEED_SAMPLE_NOW}
+                  logo={FEED_ACADEMY_LOGO}
+                />
+              </div>
+            </StateCase>
+          ))}
+          <StateCase label="skeleton">
+            <div className="w-80 max-w-full">
+              <FeedCardSkeleton />
+            </div>
+          </StateCase>
+        </div>
+      </SubRow>
+      <SubRow label="Slots / props">
+        <PropsTable rows={FEED_CARD_PROPS} />
+      </SubRow>
+    </BlockSection>
+  );
+}
+
+const FEED_RAIL_PROPS: PropRow[] = [
+  {
+    name: "initialPage",
+    type: "{ data: FeedCard[]; nextCursor: string | null }",
+    required: false,
+    description:
+      "The first page read on the server; absent → the rail reads it and shows the placeholders.",
+  },
+  {
+    name: "loadPage",
+    type: "({ cursor, limit }) => Promise<{ data; nextCursor }>",
+    required: true,
+    description:
+      "Host-bound page read: 12 first, then 8 on a desktop / 6 on a phone.",
+  },
+  {
+    name: "copy",
+    type: "FeedRailCopy (any subset)",
+    required: false,
+    description: "Copy overrides; defaults are the canvas strings.",
+  },
+  {
+    name: "now · logo",
+    type: "Date · ReactNode",
+    required: false,
+    description: "Passed to every FeedCard.",
+  },
+];
+
+function FeedRailSection() {
+  const cases: Array<[string, ReactNode]> = [
+    [
+      "norm — scroll to the end to load more",
+      <FeedRail
+        key="norm"
+        initialPage={feedPage(0, 12, "12")}
+        loadPage={feedLoadPage}
+        now={FEED_SAMPLE_NOW}
+        logo={FEED_ACADEMY_LOGO}
+      />,
+    ],
+    [
+      "load — first page loading",
+      <FeedRail key="load" loadPage={feedNeverLoads} />,
+    ],
+    [
+      "empty",
+      <FeedRail
+        key="empty"
+        initialPage={{ data: [], nextCursor: null }}
+        loadPage={feedLoadPage}
+      />,
+    ],
+    ["err — first page failed", <FeedRail key="err" loadPage={feedFails} />],
+    [
+      "next-page failure — scroll to the end",
+      <FeedRail
+        key="more-failed"
+        initialPage={feedPage(0, 12, "12")}
+        loadPage={feedFails}
+        now={FEED_SAMPLE_NOW}
+        logo={FEED_ACADEMY_LOGO}
+      />,
+    ],
+  ];
+  return (
+    <BlockSection
+      title="Лента новостей Академии"
+      exportsLine="FeedRail — props: initialPage · loadPage · copy · now · logo"
+    >
+      <p className="text-sm text-muted-foreground">
+        The Academy home section «Новости, блог и видео» (048 EARS-14 / 15 /
+        16), canvas academy-home.dc.html: two rows on a desktop, one on a phone,
+        cursor paging near the end, nothing moves by itself.
+      </p>
+      <SubRow label="State matrix">
+        <div className="grid gap-6">
+          {cases.map(([label, node]) => (
+            <StateCase key={label} label={label}>
+              <WideCanvas>{node}</WideCanvas>
+            </StateCase>
+          ))}
+        </div>
+      </SubRow>
+      <SubRow label="Slots / props">
+        <PropsTable rows={FEED_RAIL_PROPS} />
+      </SubRow>
+    </BlockSection>
+  );
+}
+
 export function BlocksView({ legalDocument, legalOthers }: BlocksViewProps) {
   return (
     <div className="flex flex-col gap-2">
@@ -4724,6 +4970,8 @@ export function BlocksView({ legalDocument, legalOthers }: BlocksViewProps) {
         legalOthers={legalOthers}
       />
       <RichTextContentSection />
+      <FeedCardSection />
+      <FeedRailSection />
       <AccountProfileCardSection />
       <AuthCardSection />
       <AuthLayoutSection />

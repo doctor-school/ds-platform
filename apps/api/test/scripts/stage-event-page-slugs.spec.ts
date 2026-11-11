@@ -159,6 +159,13 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
   // The seeded env names whose value addresses a material (048 EARS-11), not an
   // event; every other seeded name addresses an event.
   const MATERIAL_ENV = new Set(["E2E_MATERIAL_SLUG"]);
+  // The seeded env names whose value addresses a specialty (018 EARS-8), proven
+  // against the golden adjacency by `stage-feed-adjacent-env.spec.ts`.
+  const SPECIALTY_ENV = new Set([
+    "E2E_FEED_ADJACENT_CODE",
+    "E2E_FEED_ADJACENT_EXPECT",
+    "E2E_FEED_ADJACENT_EMPTY_CODE",
+  ]);
 
   it("020 EARS-1: every event-page tier slug is one of the verified golden slugs", () => {
     const verified = new Set([
@@ -170,11 +177,12 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
       "live/academy/default",
       "live/academy/event-page",
       "live/doctor/event-page",
+      "live/doctor/feed-live",
       "live/doctor/room",
     ]);
     for (const tier of tiers) {
       for (const [name, value] of Object.entries(tier.seededEnv!)) {
-        if (MATERIAL_ENV.has(name)) continue;
+        if (MATERIAL_ENV.has(name) || SPECIALTY_ENV.has(name)) continue;
         for (const slug of value.split(",")) {
           expect(verified.has(slug), `${tier.name} ${name}=${slug}`).toBe(true);
         }

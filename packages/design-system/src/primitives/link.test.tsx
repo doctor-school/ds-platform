@@ -1,6 +1,7 @@
 import { render, screen, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { cn } from "../lib/utils";
 import { Link, linkVariants } from "./link";
 
 afterEach(cleanup);
@@ -70,6 +71,21 @@ describe("Link storefront-chrome axes (#2180, canvas ds-shell.dc.html)", () => {
     const cls = linkVariants({ variant: "wrapper" });
     expect(cls).toMatch(/hover:no-underline/);
     expect(cls).not.toMatch(/(?:^|\s)underline(?:\s|$)/);
+  });
+
+  it("018 EARS-8: the chip shape is a bordered navigation chip in tint ink, tinted on hover, never underlined", () => {
+    const cls = cn(linkVariants({ variant: "chip", size: "sm" }));
+    expect(cls).toMatch(/(?:^|\s)inline-flex(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)border-2(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)border-chip-border(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)text-tint-foreground(?:\s|$)/);
+    expect(cls).not.toMatch(/(?:^|\s)text-primary-action(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)active:text-tint-foreground(?:\s|$)/);
+    expect(cls).not.toMatch(/active:text-primary-action/);
+    expect(cls).toMatch(/(?:^|\s)hover:bg-tint(?:\s|$)/);
+    expect(cls).toMatch(/hover:no-underline/);
+    expect(cls).toMatch(/focus-visible:shadow-focus/);
+    expect(cls).toMatch(/(?:^|\s)text-sm(?:\s|$)/);
   });
 
   it("008 EARS-11: the mobile nav row is a full-bleed target in page ink with a surface tint on hover", () => {

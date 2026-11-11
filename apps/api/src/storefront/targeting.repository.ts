@@ -1,7 +1,12 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
-import { directions, directionAdjacency, directionSpecialties } from "@ds/db";
+import {
+  directions,
+  directionAdjacency,
+  directionSpecialties,
+  specialtiesMinzdrav,
+} from "@ds/db";
 import type { DirectionAdjacencyKind } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 
@@ -17,6 +22,14 @@ export interface TargetingAdjacencyRow extends TargetingDirectionRow {
   edgeId: string;
   kind: DirectionAdjacencyKind;
   weight: number;
+}
+
+export interface TargetingLinkedSpecialtyRow {
+  directionId: string;
+  id: string;
+  code: string;
+  name: string;
+  isOther: boolean;
 }
 
 /**
@@ -82,5 +95,42 @@ export class TargetingRepository {
         ),
       )
       .orderBy(desc(directionAdjacency.weight), asc(directionAdjacency.id));
+  }
+
+  /**
+   * 018 EARS-8 — the last hop of the adjacent-areas read: the closed-book
+   * specialties an active `direction_specialties` link ties to each of the
+   * given (already resolved, published) adjacent directions. «Другое» is no
+   * nomenclature specialty and never a link target here. Ordered by the
+   * verbatim name as the book read sorts it, so a caller's stable sort by
+   * weight keeps title order within a tie.
+   */
+  async findLinkedSpecialties(
+    directionIds: string[],
+  ): Promise<TargetingLinkedSpecialtyRow[]> {
+    if (directionIds.length === 0) return [];
+
+    return this.db
+      .select({
+        directionId: directionSpecialties.directionId,
+        id: specialtiesMinzdrav.id,
+        code: specialtiesMinzdrav.code,
+        name: specialtiesMinzdrav.name,
+        isOther: specialtiesMinzdrav.isOther,
+      })
+      .from(directionSpecialties)
+      .innerJoin(
+        specialtiesMinzdrav,
+        eq(specialtiesMinzdrav.id, directionSpecialties.specialtyMinzdravId),
+      )
+      .where(
+        and(
+          inArray(directionSpecialties.directionId, directionIds),
+          eq(directionSpecialties.status, "active"),
+          isNull(directionSpecialties.deletedAt),
+          eq(specialtiesMinzdrav.isOther, false),
+        ),
+      )
+      .orderBy(asc(specialtiesMinzdrav.name), asc(directionSpecialties.id));
   }
 }

@@ -1,5 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  type AdjacentArea,
+  type AdjacentAreas,
   FEED_EVENTS_LIMIT,
   type FeedEvents,
   parseDoctorEventsFeedQuery,
@@ -8,11 +10,14 @@ import {
   type SpecialtyRef,
   specialtyEventsHref,
   specialtyFeedBlocks,
+  specialtyFeedPath,
 } from "@ds/schemas";
 import { DoctorEventsService } from "./doctor-events.service.js";
 import { SpecialtyError } from "./specialties.errors.js";
 import { SpecialtiesService } from "./specialties.service.js";
 import { SPECIALTY_FEED_VALUE_COPY } from "./specialty-feed.value-copy.js";
+import { TargetingRepository } from "./targeting.repository.js";
+import { TargetingService } from "./targeting.service.js";
 
 /**
  * 018 EARS-1 / EARS-4 (#1496, #1499) — the specialty feed (018-design §1, §7).
@@ -47,6 +52,10 @@ export class SpecialtyFeedService {
     private readonly specialties: SpecialtiesService,
     @Inject(DoctorEventsService)
     private readonly doctorEvents: DoctorEventsService,
+    @Inject(TargetingService)
+    private readonly targeting: TargetingService,
+    @Inject(TargetingRepository)
+    private readonly targetingRows: TargetingRepository,
   ) {}
 
   async envelope(input: {
@@ -84,9 +93,81 @@ export class SpecialtyFeedService {
     };
   }
 
-  private async resolve(reference: string): Promise<SpecialtyRef> {
+  /**
+   * 018 EARS-8 — the adjacent areas. A feed exists per closed-book specialty
+   * only, so an entry is an adjacent SPECIALTY, reached over managed rows
+   * alone: the chosen specialty's targeting set (017's
+   * {@link TargetingService.resolve} — own directions, then their active
+   * adjacency edges) and one more `direction_specialties` hop to the
+   * specialties linked to each adjacent direction. There is no likeness path.
+   *
+   * The chosen specialty itself and «Другое» are never entries; a specialty
+   * reached through several adjacent directions appears once, through the
+   * heaviest edge (the targeting order breaks a weight tie). Entries are
+   * ordered by that weight, then by the specialty name in the book's order.
+   */
+  async adjacent(input: { specialty: string }): Promise<AdjacentAreas> {
+    // One book read: the targeting resolver checks membership itself.
+    const { primary: chosen, adjacentDirections } = await this.inBook(() =>
+      this.targeting.resolve(input.specialty),
+    );
+    if (chosen.isOther) return { items: [] };
+
+    const rank = new Map(
+      adjacentDirections.map((direction, index) => [
+        direction.id,
+        { direction, index },
+      ]),
+    );
+    const rows = await this.targetingRows.findLinkedSpecialties([
+      ...rank.keys(),
+    ]);
+
+    const best = new Map<
+      string,
+      { area: AdjacentArea; weight: number; index: number }
+    >();
+    for (const row of rows) {
+      if (row.id === chosen.id || row.isOther) continue;
+      const via = rank.get(row.directionId);
+      if (!via) continue;
+      const current = best.get(row.id);
+      if (current && current.index <= via.index) continue;
+      best.set(row.id, {
+        weight: via.direction.weight,
+        index: via.index,
+        area: {
+          specialty: {
+            id: row.id,
+            code: row.code,
+            name: row.name,
+            isOther: row.isOther,
+          },
+          direction: {
+            id: via.direction.id,
+            slug: via.direction.slug,
+            title: via.direction.title,
+          },
+          feedHref: specialtyFeedPath(row.code),
+        },
+      });
+    }
+
+    // `best` keeps the rows' name order; the sort is stable.
+    const items = [...best.values()]
+      .sort((a, b) => b.weight - a.weight)
+      .map((entry) => entry.area);
+    return { items };
+  }
+
+  private resolve(reference: string): Promise<SpecialtyRef> {
+    return this.inBook(() => this.specialties.resolveMember(reference));
+  }
+
+  /** A path outside the book is the feed's 404, never 017's 422. */
+  private async inBook<T>(read: () => Promise<T>): Promise<T> {
     try {
-      return await this.specialties.resolveMember(reference);
+      return await read();
     } catch (error) {
       if (
         error instanceof SpecialtyError &&

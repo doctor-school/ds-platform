@@ -1,5 +1,9 @@
 import { createZodDto } from "nestjs-zod";
-import { FeedEventsSchema, SpecialtyFeedSchema } from "@ds/schemas";
+import {
+  AdjacentAreasSchema,
+  FeedEventsSchema,
+  SpecialtyFeedSchema,
+} from "@ds/schemas";
 
 /**
  * 018 EARS-1 — the feed envelope of `GET /v1/storefront/feed/{specialty}`. The
@@ -11,3 +15,6 @@ export class SpecialtyFeedDto extends createZodDto(SpecialtyFeedSchema) {}
 
 /** 018 EARS-4 — the nearest-events block read of the same feed. */
 export class FeedEventsDto extends createZodDto(FeedEventsSchema) {}
+
+/** 018 EARS-8 — the adjacent-areas block read of the same feed. */
+export class AdjacentAreasDto extends createZodDto(AdjacentAreasSchema) {}

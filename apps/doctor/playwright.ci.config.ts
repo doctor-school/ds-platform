@@ -91,6 +91,9 @@ export default defineConfig({
     // 018 EARS-7 (#1502): the value block arrives in the feed envelope the
     // events stand-in serves, so its spec rides the same tier.
     "feed-value-block.spec.ts",
+    // 018 EARS-8 (#1503): the adjacent-areas block reads its own block read
+    // from the events stand-in, so its spec rides the same tier.
+    "feed-adjacent.spec.ts",
     // #3757: the home canvas-structure check reads the events block and the
     // specialty book the events stand-in serves; the documents check rides
     // the same tier as the other page canvas-structure checks.

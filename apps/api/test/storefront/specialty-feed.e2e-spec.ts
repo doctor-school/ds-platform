@@ -66,6 +66,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(feed.blocks.map((block) => block.kind)).toEqual([
         "events",
         "value",
+        "adjacent",
       ]);
       expect(feed.blocks[0]).toEqual({
         kind: "events",

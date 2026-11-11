@@ -2900,6 +2900,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storefront/feed/{specialty}/adjacent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["SpecialtyFeedPublicController_adjacent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/storefront/feed/{specialty}/events": {
         parameters: {
             query?: never;
@@ -2920,6 +2936,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdjacentAreasDto: {
+            items: {
+                direction: {
+                    id: string;
+                    slug: string;
+                    title: string;
+                };
+                feedHref: string;
+                specialty: {
+                    code: string;
+                    id: string;
+                    isOther: boolean;
+                    name: string;
+                };
+            }[];
+        };
         AdminFactorRemovalRequestDto: {
             code: string;
         };
@@ -4190,7 +4222,7 @@ export interface components {
         SpecialtyFeedDto: {
             blocks: ({
                 /** @enum {string} */
-                kind: "events";
+                kind: "events" | "adjacent";
                 read: string;
             } | {
                 items: {
@@ -8685,6 +8717,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpecialtyFeedDto"];
+                };
+            };
+        };
+    };
+    SpecialtyFeedPublicController_adjacent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                specialty: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdjacentAreasDto"];
                 };
             };
         };

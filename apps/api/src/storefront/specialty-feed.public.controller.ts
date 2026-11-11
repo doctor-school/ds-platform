@@ -9,9 +9,13 @@ import {
 } from "@nestjs/common";
 import { ApiOkResponse } from "@nestjs/swagger";
 import type { FastifyRequest } from "fastify";
-import type { FeedEvents, SpecialtyFeed } from "@ds/schemas";
+import type { AdjacentAreas, FeedEvents, SpecialtyFeed } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
-import { FeedEventsDto, SpecialtyFeedDto } from "./specialty-feed.dto.js";
+import {
+  AdjacentAreasDto,
+  FeedEventsDto,
+  SpecialtyFeedDto,
+} from "./specialty-feed.dto.js";
 import { SpecialtyFeedService } from "./specialty-feed.service.js";
 import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
 
@@ -23,7 +27,7 @@ import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
  * specialty is the PATH, never the remembered cookie — a feed is a page about
  * a specialty, so the body varies with the URL alone and both reads are
  * cacheable. The envelope's `viewer.loggedIn` is the one per-viewer field, so
- * the envelope is `private`; the events block carries no per-viewer field.
+ * the envelope is `private`; the events and adjacent blocks carry no per-viewer field.
  * Errors leave as RFC 7807 through the family's `SpecialtyProblemFilter`.
  */
 @Controller({ path: "storefront/feed", version: "1" })
@@ -66,5 +70,24 @@ export class SpecialtyFeedPublicController {
   })
   events(@Param("specialty") specialty: string): Promise<FeedEvents> {
     return this.feed.events({ specialty });
+  }
+
+  /**
+   * `GET /v1/storefront/feed/{specialty}/adjacent` — the adjacent-areas block
+   * (EARS-8): adjacent specialties reached over the managed link and
+   * adjacency rows, each linking into that specialty's own feed.
+   */
+  @Get(":specialty/adjacent")
+  @ApiOkResponse({ type: AdjacentAreasDto })
+  @Public()
+  @Header("Cache-Control", "public, max-age=30")
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-8"],
+  })
+  adjacent(@Param("specialty") specialty: string): Promise<AdjacentAreas> {
+    return this.feed.adjacent({ specialty });
   }
 }

@@ -41,13 +41,14 @@ export type FeedBlockPosition = (typeof FEED_BLOCK_ORDER)[number];
 
 /**
  * The content types connected on the platform today. Release 1 of 018 connects
- * the nearest events (EARS-4) and «Зачем это мне» (EARS-7); the adjacent areas
- * (#1503) join here when they ship, schools/lessons/leaderboard/communities
- * when 023 / 024 / 022 / 027 connect their content.
+ * the nearest events (EARS-4), «Зачем это мне» (EARS-7) and the adjacent areas
+ * (EARS-8); schools/lessons/leaderboard/communities join when 023 / 024 / 022 /
+ * 027 connect their content.
  */
 export const CONNECTED_FEED_BLOCKS = [
   "events",
   "value",
+  "adjacent",
 ] as const satisfies readonly FeedBlockPosition[];
 export const FeedBlockKindSchema = z.enum(CONNECTED_FEED_BLOCKS);
 export type FeedBlockKind = z.infer<typeof FeedBlockKindSchema>;
@@ -59,6 +60,7 @@ export type FeedBlockKind = z.infer<typeof FeedBlockKindSchema>;
  */
 export const READ_FEED_BLOCKS = [
   "events",
+  "adjacent",
 ] as const satisfies readonly FeedBlockKind[];
 export type FeedReadBlockKind = (typeof READ_FEED_BLOCKS)[number];
 
@@ -150,6 +152,42 @@ export const FeedEventsSchema = z
   .strict();
 export type FeedEvents = z.infer<typeof FeedEventsSchema>;
 
+/**
+ * 018 EARS-8 — one adjacent area: the adjacent SPECIALTY whose feed the entry
+ * opens, labelled with the adjacent direction it was reached through. A feed
+ * exists per closed-book specialty only (`/feed/{code}`), so the entry is a
+ * specialty reached over managed rows — chosen specialty → its own directions
+ * (`direction_specialties`) → their adjacent directions (`direction_adjacency`)
+ * → the specialties linked to those (`direction_specialties`). `direction` is
+ * that managed-row trace; there is no likeness score of any kind, and the
+ * strict objects refuse one added upstream.
+ */
+export const AdjacentAreaSchema = z
+  .object({
+    specialty: SpecialtyRefSchema,
+    direction: z
+      .object({
+        id: z.string().min(1),
+        slug: z.string().min(1),
+        title: z.string().min(1),
+      })
+      .strict(),
+    /** The adjacent specialty's own feed — {@link specialtyFeedPath}. */
+    feedHref: z.string().min(1),
+  })
+  .strict();
+export type AdjacentArea = z.infer<typeof AdjacentAreaSchema>;
+
+/**
+ * 018 EARS-8 — the `AdjacentAreas` read of `GET /v1/storefront/feed/{code}/adjacent`
+ * (018-design §7). Empty for «Другое» and for a specialty with no adjacency
+ * row: the block then says so rather than disappearing.
+ */
+export const AdjacentAreasSchema = z
+  .object({ items: z.array(AdjacentAreaSchema) })
+  .strict();
+export type AdjacentAreas = z.infer<typeof AdjacentAreasSchema>;
+
 /** The block reads of the envelope, by kind — one place mints the path. */
 export function specialtyFeedBlockRead(
   specialtyCode: string,
@@ -174,6 +212,7 @@ export function specialtyFeedBlocks(
       case "value":
         return { kind, items: content.value.items };
       case "events":
+      case "adjacent":
         return { kind, read: specialtyFeedBlockRead(specialtyCode, kind) };
     }
   });

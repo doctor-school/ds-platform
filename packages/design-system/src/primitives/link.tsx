@@ -24,7 +24,7 @@ import { cn } from "../lib/utils";
  * colour to full-strength `primary-surface-foreground` and the active delta to
  * AA-safe `primary-surface-muted`; hover underline and focus ring stay intact.
  *
- * Four `variant` shapes:
+ * Five `variant` shapes:
  *  - `standalone` (default) — a nav/footer link: NO resting underline, relies on
  *    brand colour + hover-underline + focus ring (NN/g + WCAG: a standalone link
  *    may drop the resting underline when colour + hover + focus distinguish it);
@@ -32,7 +32,8 @@ import { cn } from "../lib/utils";
  *    against surrounding text (the WCAG "don't rely on colour alone" default);
  *  - `wrapper` — the link wraps non-text content (the storefront wordmark), so the
  *    hover underline has nothing to decorate and is suppressed;
- *  - `mobile-nav-row` — one full-bleed row of the mobile nav sheet.
+ *  - `mobile-nav-row` — one full-bleed row of the mobile nav sheet;
+ *  - `chip` — one bordered entry of a wrapping row of navigation chips.
  *
  * `tone` carries the ink (`default`, `on-primary`, `header-nav` for the navy
  * band's muted nav tier, `neutral` for page ink, `muted` / `danger` for quiet secondary and
@@ -91,6 +92,12 @@ const linkVariants = cva(
         // One row of the mobile nav sheet (canvas line 46): a full-bleed target
         // with the surface tint on hover instead of an underline.
         "mobile-nav-row": "px-4 py-3 hover:bg-muted hover:no-underline",
+        // A navigation chip — one entry of a wrapping row of links
+        // (`design-source/doctor-feed.dc.html` «d-feed · смежные области»): the
+        // filter chip's resting look (2px `chip-border` frame, `tint-foreground`
+        // ink) on a link, the `tint` fill on hover instead of an underline. It
+        // carries its own ink, so it wins over the tone.
+        chip: "inline-flex items-center gap-2.5 border-2 border-chip-border px-4 py-3 text-tint-foreground hover:bg-tint hover:no-underline active:border-primary-action active:text-tint-foreground",
       },
       size: {
         default: "",

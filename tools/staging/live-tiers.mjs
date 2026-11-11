@@ -411,6 +411,36 @@ export const LIVE_TIERS = Object.freeze([
     gated: [],
   },
   {
+    name: "live/doctor/feed-live",
+    host: "doctor",
+    app: "apps/doctor",
+    pkg: "@ds/doctor",
+    config: "playwright.feed-live.config.ts",
+    rootDir: "e2e",
+    // 018 EARS-8 (#1503): golden specialties read over the golden managed
+    // directions and adjacency — one reaching two adjacent specialties of
+    // distinct weights (so the order never rests on name collation), one whose
+    // own directions lead nowhere. Their own names, so they switch on no other
+    // spec. `apps/api/test/scripts/stage-feed-adjacent-env.spec.ts` builds the
+    // golden dataset and fails when these stop being what the feed answers.
+    seededEnv: {
+      E2E_FEED_ADJACENT_CODE: "pulmonologiya",
+      E2E_FEED_ADJACENT_EXPECT: JSON.stringify([
+        ["infekcionnye-bolezni", "Инфекционные болезни"],
+        ["allergologiya-i-immunologiya", "Аллергология и иммунология"],
+      ]),
+      E2E_FEED_ADJACENT_EMPTY_CODE: "oftalmologiya",
+    },
+    // The config throws at load without these (its `required` list).
+    configRequires: [
+      URL_DOCTOR,
+      "E2E_FEED_ADJACENT_CODE",
+      "E2E_FEED_ADJACENT_EXPECT",
+      "E2E_FEED_ADJACENT_EMPTY_CODE",
+    ],
+    gated: [],
+  },
+  {
     name: "live/doctor/room",
     host: "doctor",
     app: "apps/doctor",

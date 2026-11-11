@@ -186,15 +186,15 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
   Scenario: Adjacent areas are their own labelled block resolved from the managed table
     When a visitor opens the feed
     Then the adjacent areas stand in their own block at the end of the feed
-    And each entry names a direction read from the managed link and adjacency relation
-    And following an entry opens that direction's own feed
+    And each entry names an adjacent specialty reached through the managed link and adjacency relation
+    And following an entry opens that specialty's own feed
 
   @EARS-8 @failure
   Scenario: Adjacency is never derived from name similarity
     Given a specialty whose name resembles another but has no adjacency row
     When the targeting set is resolved
     Then the adjacent-areas block is empty and says so
-    And no item of the resembling direction appears in any block of this feed
+    And no item of the resembling specialty appears in any block of this feed
 
   @EARS-9 @happy @deferred-block:leaderboard
   Scenario: The leaderboard is filtered to the specialty and contains only consented doctors

@@ -1,6 +1,71 @@
 {
   "components": {
     "schemas": {
+      "AdjacentAreasDto": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "direction": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "slug": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "title": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "slug", "title"],
+                  "type": "object"
+                },
+                "feedHref": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "specialty": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                      "type": "string"
+                    },
+                    "id": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "isOther": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "code", "name", "isOther"],
+                  "type": "object"
+                }
+              },
+              "required": ["specialty", "direction", "feedHref"],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["items"],
+        "type": "object"
+      },
       "AdminFactorRemovalRequestDto": {
         "additionalProperties": false,
         "properties": {
@@ -6067,7 +6132,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "kind": {
-                      "enum": ["events"],
+                      "enum": ["events", "adjacent"],
                       "type": "string"
                     },
                     "read": {
@@ -12020,6 +12085,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SpecialtyFeedDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["SpecialtyFeedPublic"]
+      }
+    },
+    "/v1/storefront/feed/{specialty}/adjacent": {
+      "get": {
+        "operationId": "SpecialtyFeedPublicController_adjacent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "specialty",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjacentAreasDto"
                 }
               }
             },

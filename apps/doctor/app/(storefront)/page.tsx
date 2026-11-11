@@ -1,7 +1,9 @@
 import { headers } from "next/headers";
+import { EventGoneNotice } from "@ds/auth-flow/landing-notice";
 import { EventsFeed } from "@ds/events-storefront/feed";
 import { SectionHeading } from "@/components/section-heading";
 import { HomeSpecialtyCatalog } from "@/components/home-specialty-catalog";
+import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { StorefrontHero } from "@/components/storefront-hero";
 import {
   DOCTOR_EVENTS_STOREFRONT,
@@ -59,11 +61,22 @@ import { retryDoctorEventsBlock } from "./events/retry-block-action";
 /** The canvas heading of the home's events section (`doctor-home.dc.html` «d-home · события»). */
 const EVENTS_HEADING = "Ближайшие события";
 
-export default async function DoctorHomePage() {
+export default async function DoctorHomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const remembered = await resolveRememberedSpecialty(await headers());
 
+  // 021 EARS-10 (amendment 2026-11-11) — the home is the LD-4 landing with no
+  // remembered specialty: the one-time event-gone notice comes first.
   return (
     <>
+      <EventGoneNotice
+        config={DOCTOR_AUTH_FLOW}
+        landing="afterLogin"
+        searchParams={await searchParams}
+      />
       <StorefrontHero />
       <HomeSpecialtyCatalog
         actor={remembered.actor}

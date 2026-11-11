@@ -561,6 +561,30 @@ describe("storefront entry", () => {
     expect(own.internal("transaction")).toHaveLength(0);
   });
 
+  it("021 EARS-10 (amendment 2026-11-11): a signed-in browser whose carried эфир is gone is redirected to its landing with the event-gone notice marker", async () => {
+    const signedIn = { cookie: "__Host-ds_session=live-sid" };
+    const gone = await storefrontEntry(
+      get("/login?returnTo=%2Fwebinars%2Fgone-1", signedIn),
+      ACADEMY,
+      "login",
+      {
+        fetchImpl: fakeApi({ signedIn: true, event: 404 }).fetchImpl,
+        env: ENV,
+      },
+    );
+    expect(gone.headers.get("location")).toBe("/webinars?notice=event-gone");
+    const failed = await storefrontEntry(
+      get("/login?returnTo=%2Fwebinars%2Fgone-1", signedIn),
+      ACADEMY,
+      "login",
+      {
+        fetchImpl: fakeApi({ signedIn: true, event: 503 }).fetchImpl,
+        env: ENV,
+      },
+    );
+    expect(failed.headers.get("location")).toBe("/webinars/gone-1");
+  });
+
   it("003 EARS-72: a 429 transaction is a typed rate-limited refusal carrying the Retry-After seconds, never a thrown error", async () => {
     const api = fakeApi({ transaction: { status: 429, retryAfter: "105" } });
     const outcome = await storefrontEntryOutcome(
@@ -844,7 +868,9 @@ describe("storefront callback", () => {
       ACADEMY,
       { fetchImpl: registered(404).fetchImpl, env: ENV },
     );
-    expect(gone.headers.get("location")).toBe("/webinars#");
+    // 021 EARS-10 (amendment 2026-11-11, #2272) — the landing carries the one
+    // fixed notice marker; a failed read is not «gone» and carries none.
+    expect(gone.headers.get("location")).toBe("/webinars?notice=event-gone#");
     const unknown = await storefrontCallback(
       withTx("/auth/callback?code=c&state=s"),
       ACADEMY,
@@ -1047,6 +1073,22 @@ describe("storefront callback", () => {
     );
     expect(res.headers.get("location")).not.toBe("/events/live-1#");
     expect(registrations(api)).toHaveLength(0);
+  });
+
+  it("021 EARS-10 (amendment 2026-11-11): a carried эфир gone at sign-in lands on the LD-4 landing with the event-gone notice marker; a failed read is not «gone» and carries none", async () => {
+    const gone = await storefrontCallback(
+      withTx("/auth/callback?code=c&state=s"),
+      DOCTOR,
+      { fetchImpl: carrying({ event: 404 }).fetchImpl, env: ENV },
+    );
+    expect(gone.headers.get("location")).toBe("/?notice=event-gone#");
+    const live = await storefrontCallback(
+      withTx("/auth/callback?code=c&state=s"),
+      DOCTOR,
+      { fetchImpl: carrying({}).fetchImpl, env: ENV },
+    );
+    expect(live.headers.get("location")).toBe("/events/live-1#");
+    expect(live.headers.get("location")).not.toContain("notice=");
   });
 
   it("005 EARS-2: a refused or aborted sign-in registers nothing", async () => {

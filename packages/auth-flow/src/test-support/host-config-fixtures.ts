@@ -32,7 +32,11 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
     eventPathTemplate: "/webinars/:slug",
     room: "/webinars/:slug/room",
   },
-  landing: { afterLogin: "/webinars", specialtyAware: false },
+  landing: {
+    afterLogin: "/webinars",
+    specialtyAware: false,
+    eventGoneNotice: { afterLogin: "Посмотрите другие эфиры." },
+  },
   brand: {
     wordmark: {
       src: "/brand/logo.svg",
@@ -86,6 +90,10 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     afterLogin: "/",
     specialtyAware: true,
     specialtyFeed: "/feed/:code",
+    eventGoneNotice: {
+      afterLogin: "Посмотрите ближайшие события.",
+      specialtyFeed: "Вот ближайшие события по вашей специальности.",
+    },
     specialtyEndpoints: {
       signedIn: "/v1/me/specialty",
       guest: "/v1/public/specialty-choice",

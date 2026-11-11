@@ -19,6 +19,7 @@
     "./register": "./src/register/index.ts",
     "./verify": "./src/verify/index.ts",
     "./reset": "./src/reset/index.ts",
+    "./landing-notice": "./src/landing-notice/index.ts",
     "./sign-in-host/route": "./src/sign-in-host/sign-in-host-route.tsx",
     "./refusal/route": "./src/refusal/entry-refusal-route.tsx"
   },

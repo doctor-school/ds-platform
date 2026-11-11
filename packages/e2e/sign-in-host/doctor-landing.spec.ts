@@ -283,13 +283,43 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     );
   });
 
-  test("021 EARS-10.5: a target whose эфир no longer exists lands on the default landing", async ({
+  test("021 EARS-10.5: a target whose эфир no longer exists lands on the default landing, which says why — once", async ({
     page,
   }) => {
     // Owner decision Б (2026-09-29) — nothing answers for the эфир, so there is
     // no page to land on: the LD-4 storefront home (no remembered specialty).
     const gone = `gone-3172-${randomUUID().slice(0, 8)}`;
     await registerAndConfirmLandingOn(page, arrival("/register", gone), HOME);
+    // Amendment 2026-11-11 (#2272, owner pick «А») — the landing carries a
+    // one-time notice line; the marker then leaves the address bar, so a
+    // reload does not repeat it.
+    const notice = page.getByTestId("event-gone-notice");
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("больше недоступен");
+    await expect
+      .poll(() => new URL(page.url()).search)
+      .not.toContain("notice=");
+    await page.reload({ waitUntil: "load" });
+    await expect(page.getByTestId("storefront-header")).toBeVisible();
+    await expect(page.getByTestId("event-gone-notice")).toHaveCount(0);
+  });
+
+  test("021 EARS-10.5: a live landing and an arbitrary notice value render no event-gone line", async ({
+    page,
+  }) => {
+    await registerAndConfirmLandingOn(
+      page,
+      arrival("/register", LIVE),
+      `/events/${LIVE}`,
+    );
+    await expect(page.getByTestId("event-gone-notice")).toHaveCount(0);
+    for (const value of ["x", "event-gone-x"]) {
+      await page.goto(`${doctorBase()}/?notice=${value}`, {
+        waitUntil: "load",
+      });
+      await expect(page.getByTestId("storefront-header")).toBeVisible();
+      await expect(page.getByTestId("event-gone-notice")).toHaveCount(0);
+    }
   });
 
   test("021 EARS-10.4: a direct arrival lands where the DOOR decided", async ({

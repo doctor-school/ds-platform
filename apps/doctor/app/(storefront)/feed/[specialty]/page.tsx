@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { EventGoneNotice } from "@ds/auth-flow/landing-notice";
 import type { FeedBlock, FeedBlockKind } from "@ds/schemas";
 import { SpecialtyEventsBlock } from "@ds/events-storefront/feed";
 
 import { SpecialtyFeedAdjacentBlock } from "@/components/specialty-feed-adjacent-block";
 import { SpecialtyFeedHeader } from "@/components/specialty-feed-header";
 import { SpecialtyFeedValueBlock } from "@/components/specialty-feed-value-block";
+import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { DOCTOR_EVENTS_STOREFRONT } from "@/lib/events-storefront.host-config";
 import { fetchSpecialtyFeed } from "@/lib/specialty-feed";
 import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
@@ -57,10 +59,13 @@ const BLOCK_RENDERERS: Record<
 
 export default async function SpecialtyFeedPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ specialty: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { specialty } = await params;
+  const query = await searchParams;
   const requestHeaders = await headers();
   const [read, remembered] = await Promise.all([
     fetchSpecialtyFeed(specialty, requestHeaders),
@@ -75,6 +80,13 @@ export default async function SpecialtyFeedPage({
       data-surface="specialty-feed"
       data-testid="specialty-feed"
     >
+      {/* 021 EARS-10 (amendment 2026-11-11) — the LD-4 landing of a remembered
+          specialty: the one-time event-gone notice comes first. */}
+      <EventGoneNotice
+        config={DOCTOR_AUTH_FLOW}
+        landing="specialtyFeed"
+        searchParams={query}
+      />
       <SpecialtyFeedHeader
         actor={remembered.actor}
         initialChoice={remembered.choice}

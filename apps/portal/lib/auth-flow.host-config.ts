@@ -1,5 +1,6 @@
 import type { AccountHostConfig } from "@ds/account/host-config";
 import { ACADEMY_AUTH_FLOW } from "@ds/auth-flow/hosts";
+import { bindEventGoneNotice } from "@ds/auth-flow/landing-notice";
 
 /**
  * The Academy's auth-flow config lives in `@ds/auth-flow/hosts` (#3170): the
@@ -27,3 +28,13 @@ export const ACADEMY_ACCOUNT = {
   // 046 EARS-4 is a doctor-storefront section: the Academy mounts none (row 14).
   congress: null,
 } satisfies AccountHostConfig;
+
+/**
+ * 021 EARS-10 (amendment 2026-11-11) — the event-gone notice bound to this
+ * host's default landing, the `/webinars` listing (`landing.afterLogin`): the
+ * listing route hands it to `@ds/events-storefront`'s page as its leading slot.
+ */
+export const ACADEMY_EVENT_GONE_NOTICE = bindEventGoneNotice(
+  ACADEMY_AUTH_FLOW,
+  "afterLogin",
+);

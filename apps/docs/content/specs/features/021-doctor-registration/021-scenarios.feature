@@ -156,6 +156,8 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     # Amended 2026-09-29 (see 021-requirements-en.md → Amendment — 2026-09-29): an unpublished эфир
     # no longer exists, so the nearest honest destination is the LD-4 landing on both storefronts —
     # a target parked on the way in never stands in for it; an ended or full эфир lands on its own page
+    # Amended 2026-11-11 (see 021-requirements-en.md → Amendment — 2026-11-11, #2272): that LD-4
+    # landing shows a one-time notice that the эфир is no longer available, on both storefronts
     And no dead link and no silent redirect occurs
 
   @EARS-15 @EARS-16 @happy

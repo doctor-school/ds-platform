@@ -57,7 +57,12 @@ export const ACADEMY_AUTH_FLOW = {
   },
   // 013 EARS-15 — no carried target lands on the discovery listing, never the
   // marketing landing; this host keeps no specialty memory (row 38).
-  landing: { afterLogin: "/webinars", specialtyAware: false },
+  landing: {
+    afterLogin: "/webinars",
+    specialtyAware: false,
+    // 021 EARS-10 (amendment 2026-11-11) — what the listing offers instead.
+    eventGoneNotice: { afterLogin: "Посмотрите другие эфиры Академии." },
+  },
   // Every auth word is the package's own default (#2027 — a field is one thing
   // on both storefronts, and the host varies only the SET of fields) EXCEPT the
   // brand panel, which is the Academy's own (owner 2026-09-24, #2027 Stage-B

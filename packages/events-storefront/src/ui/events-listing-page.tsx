@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, type ComponentType } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { permanentRedirect } from "next/navigation";
@@ -206,6 +206,7 @@ export async function EventsListingPage({
   config,
   searchParams,
   retry,
+  leading: Leading,
 }: {
   config: EventsStorefrontHostConfig;
   searchParams: Promise<RawQueryRecord>;
@@ -215,6 +216,13 @@ export async function EventsListingPage({
    * A failed block's «Повторить» calls it for that block alone.
    */
   retry: EventsBlockRetryAction;
+  /**
+   * An element another capability renders first on this page, from the same
+   * query — the Academy listing is its default landing, so it mounts the
+   * auth-flow event-gone notice here (021 EARS-10, amendment 2026-11-11). A
+   * component, not an element: a mounted route passes bare identifiers only.
+   */
+  leading?: ComponentType<{ searchParams: RawQueryRecord }> | undefined;
 }) {
   const requested = await searchParams;
   const listing = config.routes.listing;
@@ -258,7 +266,7 @@ export async function EventsListingPage({
 
   // A failed feed read recovered by the day feed's «Повторить» fills what the
   // page derives from it — facets, «Показать N», the subline (EARS-9, #2832).
-  return (
+  const page = (
     <FeedReadScope>
       <FeedFrame
         title={config.headerCopy.title}
@@ -381,5 +389,14 @@ export async function EventsListingPage({
         </div>
       </FeedFrame>
     </FeedReadScope>
+  );
+  // The leading slot sits before the page, outside its read scope.
+  return Leading ? (
+    <>
+      <Leading searchParams={requested} />
+      {page}
+    </>
+  ) : (
+    page
   );
 }

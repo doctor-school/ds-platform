@@ -1,6 +1,14 @@
 import { randomUUID, createHash } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import {
+  backfillTitles,
+  assertBackfillReceipt,
+  type BackfillReceipt,
+} from "../../../../packages/e2e/lib/recording-backfill";
 import { bootstrapAdminSession, signInAsAdmin } from "@ds/e2e/admin-events";
 import { expect, type Page, type APIRequestContext } from "@playwright/test";
 import { createBdd } from "playwright-bdd";
@@ -38,6 +46,9 @@ type Answer = {
   request: LegacyAnswer["request"];
 };
 type State = {
+  backfill?: Partial<BackfillReceipt>;
+  backfillTitle?: string;
+  backfillTargets?: Event[];
   boundary?: BoundaryReceipt;
   boundarySelected?: boolean;
   boundaryOrigin?: string;
@@ -83,6 +94,7 @@ async function sql<T extends QueryResultRow = QueryResultRow>(
       database === "ds_dev_3929" ||
       database === "ds_dev_3932" ||
       database === "ds_dev_3934" ||
+      database === "ds_dev_3939" ||
       (process.env.CI === "true" && database === "ds_admin_e2e")
     ) ||
     new URL(url).pathname !== `/${database}`
@@ -1043,6 +1055,193 @@ Then("no HTTP Delete route exists for a recording", async ({ page }) => {
   )[0]!.row;
   assertBoundaryReceipt(r, "", noDeleteTitle);
 });
+
+async function backfillEvent(page: Page, status: string, origin = "platform") {
+  const target = await event(page, status);
+  await sql(
+    "UPDATE events SET origin=$2,live_at=CASE WHEN $3='ended' THEN now()-interval '2 days' ELSE NULL END WHERE id=$1",
+    [target.id, origin, status],
+  );
+  return target;
+}
+async function backfillSnapshot() {
+  return {
+    events: (
+      await sql("SELECT to_jsonb(e) AS row FROM events e ORDER BY id")
+    ).map((r) => r.row),
+    recordings: (
+      await sql("SELECT to_jsonb(r) AS row FROM event_recordings r ORDER BY id")
+    ).map((r) => r.row),
+    audit: (
+      await sql("SELECT to_jsonb(a) AS row FROM audit_ledger a ORDER BY id")
+    ).map((r) => r.row),
+  };
+}
+async function backfillRun(page: Page, dryRun: boolean, setup = false) {
+  const value = state(page),
+    root = resolve(process.cwd(), "../.."),
+    actor = value.operator!.zitadel_sub,
+    targets = value.backfillTargets!,
+    manifest = targets.map((target) => ({
+      event: target.id,
+      edited: { provider: "rutube", embed_ref: payload("edited").embedRef },
+    }));
+  const directory = await mkdtemp(
+    resolve(dirname(process.env.E2E_RECORDING_ATTACHMENT_LOG!), "backfill-"),
+  );
+  const file = resolve(directory, "manifest.json");
+  await writeFile(file, JSON.stringify(manifest));
+  const args = [
+    "--manifest",
+    file,
+    "--actor",
+    actor,
+    ...(dryRun ? ["--dry-run"] : []),
+  ];
+  const entrypoint = "apps/api/scripts/recordings-backfill.ts";
+  op("recordings:backfill CLI", {
+    entrypoint,
+    args,
+    database: process.env.E2E_RECORDING_ATTACHMENT_DATABASE,
+    setup,
+  });
+  const before = await backfillSnapshot();
+  const result = await promisify(execFile)(
+    process.execPath,
+    [
+      resolve(root, "node_modules/tsx/dist/cli.mjs"),
+      resolve(root, entrypoint),
+      ...args,
+    ],
+    {
+      cwd: resolve(root, "apps/api"),
+      env: process.env,
+      timeout: 90_000,
+      maxBuffer: 8 * 1024 * 1024,
+    },
+  );
+  const after = await backfillSnapshot();
+  await writeFile(resolve(directory, "stdout.jsonl"), result.stdout);
+  await writeFile(resolve(directory, "stderr.log"), result.stderr);
+  const mapping = await promisify(execFile)(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      "const {TAXONOMY_ERROR_STATUS:s}=await import('./dist/taxonomy/taxonomy.errors.js');console.log(JSON.stringify({EVENT_NOT_FINISHED:s.EVENT_NOT_FINISHED,INVALID_TRANSITION:s.INVALID_TRANSITION}))",
+    ],
+    { cwd: resolve(root, "apps/api"), env: process.env },
+  );
+  const receipt: BackfillReceipt = {
+    title: value.backfillTitle!,
+    actor,
+    database: process.env.E2E_RECORDING_ATTACHMENT_DATABASE!,
+    manifest,
+    command: {
+      entrypoint,
+      args,
+      exitCode: 0,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    },
+    dryRun,
+    statusMap: JSON.parse(mapping.stdout),
+    before,
+    after,
+  };
+  op("recordings:backfill completed", { exitCode: 0, dryRun, directory });
+  if (!setup) value.backfill = receipt;
+  return receipt;
+}
+Given(
+  "a platform event in published whose start date has passed and which never went live",
+  async ({ page }) => {
+    const value = state(page);
+    value.backfillTitle = backfillTitles[0];
+    value.event = await backfillEvent(page, "published");
+  },
+);
+Given("a legacy event in hidden", async ({ page }) => {
+  const value = state(page);
+  value.backfillTitle = backfillTitles[1];
+  value.event = await backfillEvent(page, "hidden", "legacy");
+});
+Given("a manifest row targeting that event", async ({ page }) => {
+  const value = state(page);
+  value.backfillTargets = [value.event!];
+  if (value.backfillTitle === backfillTitles[0])
+    value.backfillTargets.push(await backfillEvent(page, "ended"));
+});
+Given(
+  "a manifest mixing an eligible ended event an already backfilled event and a published event",
+  async ({ page }) => {
+    const value = state(page);
+    value.backfillTitle = backfillTitles[2];
+    const fresh = await backfillEvent(page, "ended"),
+      done = await backfillEvent(page, "ended"),
+      stale = await backfillEvent(page, "published");
+    value.backfillTargets = [done];
+    const setup = await backfillRun(page, false, true);
+    expect(JSON.parse(setup.command.stdout.split(/\r?\n/)[0]!).outcome).toBe(
+      "attached+published",
+    );
+    value.backfillTargets = [fresh, done, stale];
+  },
+);
+When("the platform_admin runs the recording backfill", async ({ page }) => {
+  await backfillRun(page, false);
+});
+When(
+  "the platform_admin runs the recording backfill in dry-run mode",
+  async ({ page }) => {
+    await backfillRun(page, true);
+  },
+);
+Then(
+  /^that row is refused with 409 (EVENT_NOT_FINISHED|INVALID_TRANSITION)$/,
+  async ({ page }, code: string) => {
+    const r = state(page).backfill as BackfillReceipt;
+    expect(JSON.parse(r.command.stdout.split(/\r?\n/)[0]!)).toMatchObject({
+      outcome: "refused",
+      code,
+    });
+    expect(r.statusMap[code]).toBe(409);
+  },
+);
+Then("the event state is still published", async ({ page }) => {
+  assertBackfillReceipt(
+    state(page).backfill as BackfillReceipt,
+    backfillTitles[0],
+  );
+});
+Then("the run continues and reports the remaining rows", async ({ page }) => {
+  assertBackfillReceipt(
+    state(page).backfill as BackfillReceipt,
+    backfillTitles[0],
+  );
+});
+Then("no recording was attached to the legacy event", async ({ page }) => {
+  assertBackfillReceipt(
+    state(page).backfill as BackfillReceipt,
+    backfillTitles[1],
+  );
+});
+Then(
+  "the report reads would-attach skipped and refused respectively",
+  async ({ page }) => {
+    assertBackfillReceipt(
+      state(page).backfill as BackfillReceipt,
+      backfillTitles[2],
+    );
+  },
+);
+Then("no recording row audit row or event field changed", async ({ page }) => {
+  assertBackfillReceipt(
+    state(page).backfill as BackfillReceipt,
+    backfillTitles[2],
+  );
+});
+
 After(async ({ page, $testInfo }) => {
   const value = state(page);
   await $testInfo.attach("recording-attachment", {
@@ -1054,6 +1253,7 @@ After(async ({ page, $testInfo }) => {
       lifecycle: value.lifecycle?.evidence,
       legacy: value.legacy?.receipt,
       boundary: value.boundary,
+      backfill: value.backfill,
       backgrounds: value.backgrounds,
     }),
   });

@@ -1,4 +1,9 @@
 import {
+  backfillTitles,
+  assertBackfillReceipt,
+  type BackfillReceipt,
+} from "./recording-backfill.js";
+import {
   assertLegacyReceipt,
   assertBoundaryReceipt,
   boundaryCases,
@@ -35,18 +40,21 @@ const feature =
 
 export function assertRecordingAttachmentReport(
   value: unknown,
-  scope: "full" | "new" = "full",
+  scope: "full" | "new" | "boundaries" = "full",
 ) {
   assertOperationalReport(
     value,
     scope === "new"
-      ? boundaryCases.map((c) => c.title)
-      : [
-          ...recordingAttachmentTitles,
-          ...recordingLifecycleTitles,
-          ...legacyTitles,
-          ...boundaryCases.map((c) => c.title),
-        ],
+      ? [...backfillTitles]
+      : scope === "boundaries"
+        ? boundaryCases.map((c) => c.title)
+        : [
+            ...backfillTitles,
+            ...recordingAttachmentTitles,
+            ...recordingLifecycleTitles,
+            ...legacyTitles,
+            ...boundaryCases.map((c) => c.title),
+          ],
     "recording-attachment",
   );
   type Suite = {
@@ -98,6 +106,7 @@ export function assertRecordingAttachmentReport(
       const receipt = JSON.parse(
         Buffer.from(attachments[0]!.body!, "base64").toString("utf8"),
       ) as {
+        backfill?: BackfillReceipt;
         boundary?: BoundaryReceipt;
         sourceHost: string;
         legacy?: LegacyReceipt;
@@ -105,6 +114,10 @@ export function assertRecordingAttachmentReport(
         caseState?: string;
         backgrounds: { clause: string; evidence: unknown[] }[];
       };
+      if (
+        backfillTitles.includes(spec.title as (typeof backfillTitles)[number])
+      )
+        assertBackfillReceipt(receipt.backfill!, spec.title);
       if (legacyTitles.includes(spec.title as (typeof legacyTitles)[number]))
         assertLegacyReceipt(receipt.legacy!, spec.title);
       if (
@@ -162,7 +175,12 @@ export function assertRecordingAttachmentReport(
     ...(scope === "full"
       ? legacyTitles.map((title) => `${rule}/${title}`)
       : []),
-    ...boundaryCases.map((c) => `${c.outline || rule}/${c.title}`),
+    ...(scope !== "new"
+      ? boundaryCases.map((c) => `${c.outline || rule}/${c.title}`)
+      : []),
+    ...(scope !== "boundaries"
+      ? backfillTitles.map((title) => `${rule}/${title}`)
+      : []),
   ];
   if (JSON.stringify(identities.sort()) !== JSON.stringify(expected.sort()))
     throw new Error("Source outline/case identity mismatch");

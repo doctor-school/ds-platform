@@ -586,6 +586,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And no audit row was appended
 
     @EARS-29 @core @unhappy
+    @recording-backfill-originals
     Scenario: A published event that never went live is refused
       Given a platform event in published whose start date has passed and which never went live
       And a manifest row targeting that event
@@ -595,6 +596,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And the run continues and reports the remaining rows
 
     @EARS-29 @core @unhappy
+    @recording-backfill-originals
     Scenario: A legacy event is not a backfill target
       Given a legacy event in hidden
       And a manifest row targeting that event
@@ -603,6 +605,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And no recording was attached to the legacy event
 
     @EARS-29 @core @happy
+    @recording-backfill-originals
     Scenario: The dry-run reports without mutating
       Given a manifest mixing an eligible ended event an already backfilled event and a published event
       When the platform_admin runs the recording backfill in dry-run mode

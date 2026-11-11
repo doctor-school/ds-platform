@@ -18,6 +18,7 @@ const SECTION_ORDER = [
   "what",
   "experts",
   "events",
+  "feed",
   "why",
   "projects",
   "partner-value",
@@ -196,7 +197,16 @@ test.describe("Feature 013 — static public Academy home", () => {
     // traffic on `/` belongs to the mounted 008 shell header (#1877): its
     // one-shot self-profile read (`useHeaderAuth`) and Next's RSC prefetch of
     // its nav targets — everything else must stay absent.
-    expect(dynamicRequests.filter((url) => !isShellRequest(url))).toEqual([]);
+    // 048 EARS-14 / EARS-16 — the feed rail is the page's one own read: its
+    // first page, fetched in the browser on every visit.
+    expect(
+      dynamicRequests
+        .filter((url) => !isShellRequest(url))
+        .map((url) => {
+          const parsed = new URL(url);
+          return parsed.pathname + parsed.search;
+        }),
+    ).toEqual(["/v1/public/feed?limit=12"]);
   });
 
   test("EARS-2: page shall render six supplied portraits and the approved repeated Project and Events rows", async ({
@@ -284,6 +294,13 @@ test.describe("Feature 013 — static public Academy home", () => {
 
         await expect(page.getByRole("main")).toBeVisible();
         await expect(page.getByRole("contentinfo")).toBeVisible();
+        // 048 EARS-14 — axe reads the feed section once its first read settled.
+        await expect(
+          page.getByRole("heading", { name: "Новости, блог и видео" }),
+        ).toBeVisible();
+        await expect(
+          page.locator('[data-academy-section="feed"] [aria-busy="true"]'),
+        ).toHaveCount(0);
         expect(
           await page.evaluate(
             () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -315,6 +332,67 @@ test.describe("Feature 013 — static public Academy home", () => {
         ).toEqual([]);
       });
     }
+  });
+
+  test("048 EARS-14: on a 390 px phone the feed rail shows one row with the next card partly visible, no page scroll and no axe violation", async ({
+    page,
+  }) => {
+    // A layout check, so the page of cards is fixed here; the real API read
+    // is proven by the 048 material-pages contour.
+    const data = Array.from({ length: 12 }, (_, i) => ({
+      kind: "news",
+      id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`,
+      title: `Материал ленты ${String(i + 1).padStart(2, "0")}`,
+      publishedAt: new Date(Date.UTC(2026, 9, 27 - i, 9)).toISOString(),
+      image: null,
+      source: { platform: "academy", name: "Академия" },
+      partner: null,
+      href: `/materials/feed-${i + 1}`,
+    }));
+    await page.route(
+      (url) => url.pathname === "/v1/public/feed",
+      (route) =>
+        route.fulfill({ json: { data, nextCursor: "next-page" } }),
+    );
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    const rail = page.getByRole("region", {
+      name: "Новости, блог и видео: листайте влево и вправо, стрелки клавиатуры — по одной карточке",
+    });
+    await expect(rail.locator("[data-slot] > a")).toHaveCount(12);
+    await expect(rail).toHaveAttribute("data-rows", "1");
+    await expect(
+      page.getByRole("button", { name: "Дальше, к более ранним материалам" }),
+    ).toHaveCount(0);
+    const layout = await rail.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      const slots = [...el.querySelectorAll("[data-slot]")].map((slot) =>
+        slot.getBoundingClientRect(),
+      );
+      return {
+        rows: new Set(slots.map((slot) => Math.round(slot.top))).size,
+        nextPartlyVisible:
+          slots[1]!.left < box.right && slots[1]!.right > box.right + 1,
+      };
+    });
+    expect(layout).toEqual({ rows: 1, nextPartlyVisible: true });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+
+    const results = await new AxeBuilder({ page })
+      .include('[data-academy-section="feed"]')
+      .withTags(WCAG_TAGS)
+      .analyze();
+    expect(
+      results.violations.map((violation) => ({
+        id: violation.id,
+        nodes: violation.nodes.flatMap((node) => node.target),
+      })),
+    ).toEqual([]);
   });
 
   test("EARS-5: enabled partnership form shall expose the exact controls and reject invalid contact accessibly", async ({

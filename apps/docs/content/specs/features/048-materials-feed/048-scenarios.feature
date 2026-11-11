@@ -143,7 +143,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the registrar's navigation has no «Материалы»
     And every admin material endpoint refuses the registrar
 
-  @EARS-9 @EARS-10 @EARS-14 @EARS-15
+  @EARS-9 @EARS-10 @EARS-14 @EARS-15 @material-reading-pages
   Scenario: A visitor moves the rail and older materials load near its end
     Given 30 published materials exist
     When a visitor on a desktop opens the Academy home
@@ -155,7 +155,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then «Это все материалы.» is announced
     And the button «Дальше, к более ранним материалам» is disabled
 
-  @EARS-14
+  @EARS-14 @material-reading-pages
   Scenario: The keyboard moves the rail one card at a time
     Given 30 published materials exist
     When a visitor focuses the rail on the Academy home and presses ArrowRight
@@ -163,13 +163,13 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the visitor presses End
     Then the rail shows its last loaded cards
 
-  @EARS-14
+  @EARS-14 @material-reading-pages
   Scenario: Nothing in the rail moves by itself
     Given 30 published materials exist
     When a visitor opens the Academy home and waits ten seconds without input
     Then the rail is still at its start
 
-  @EARS-15
+  @EARS-15 @material-reading-pages
   Scenario: A failed next page keeps the loaded cards
     Given 30 published materials exist
     And the second feed page fails once
@@ -178,7 +178,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the visitor chooses «Повторить»
     Then the next 8 cards are shown
 
-  @EARS-16
+  @EARS-16 @material-reading-pages
   Scenario: The first feed page shows placeholders while it loads
     Given 30 published materials exist
     And the first feed page is slow to answer
@@ -190,14 +190,14 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When a visitor on a phone opens the Academy home while the first feed page loads
     Then the feed section shows 3 placeholder cards
 
-  @EARS-16
+  @EARS-16 @material-reading-pages
   Scenario: The empty feed says so honestly
     Given no material is published
     When a visitor opens the Academy home
     Then the feed section shows «Записей пока нет.» and «Здесь появятся новости Академии и публикации из наших соцсетей.»
     And the feed section has no rail and no arrow buttons
 
-  @EARS-16
+  @EARS-16 @material-reading-pages
   Scenario: The feed read fails and retries
     Given 3 published materials exist
     And the first feed page fails once

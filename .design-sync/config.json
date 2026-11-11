@@ -38,10 +38,14 @@
     "DialogTitle": "../src/primitives/dialog.tsx",
     "DialogTrigger": "../src/primitives/dialog.tsx",
     "EventAboutSection": "../src/blocks/event-left-flow.tsx",
+    "EventFormatRoomPanel": "../src/blocks/event-format-block.tsx",
+    "EventFormatSeatsPanel": "../src/blocks/event-format-block.tsx",
     "EventPageHero": "../src/blocks/event-page-shell.tsx",
     "EventPageKicker": "../src/blocks/event-left-flow.tsx",
+    "EventPageStateFrame": "../src/blocks/event-page-shell.tsx",
     "EventProgrammeSection": "../src/blocks/event-left-flow.tsx",
     "EventSectionHeading": "../src/blocks/event-page-shell.tsx",
+    "FilterBarTextField": "../src/blocks/filter-bar.tsx",
     "FormActions": "../src/blocks/field-group.tsx",
     "FormControl": "../src/primitives/form.tsx",
     "FormDerivedNote": "../src/blocks/field-group.tsx",
@@ -236,6 +240,30 @@
     "LegalDocument": {
       "cardMode": "column",
       "viewport": "1280x1600"
+    },
+    "EventPageSkeleton": {
+      "cardMode": "column",
+      "viewport": "1280x900"
+    },
+    "EventPageStateFrame": {
+      "cardMode": "column",
+      "viewport": "1280x700"
+    },
+    "MaterialArticle": {
+      "cardMode": "column",
+      "viewport": "1100x1200"
+    },
+    "EventFormatRoomPanel": {
+      "cardMode": "column"
+    },
+    "EventFormatSeatsPanel": {
+      "cardMode": "column"
+    },
+    "StatusPage": {
+      "cardMode": "column"
+    },
+    "RichTextEditor": {
+      "cardMode": "column"
     },
     "EventsFilter": {
       "cardMode": "column"

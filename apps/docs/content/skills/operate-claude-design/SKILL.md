@@ -9,7 +9,7 @@ mode: inline
 
 **Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
 
-**Kind:** procedural · **Mode:** inline (the lead writes the prompt, hands it to the owner and posts it on the drawing Issue; the owner draws in Claude Design).
+**Kind:** procedural · **Mode:** inline (the lead writes the prompt, hands it to the owner and posts it on the drawing Issue; the owner draws in Claude Design in Claude, the Design section of the Claude app, on the canvases artifact).
 
 **What the lead does itself.** Canvas text, hiding or showing existing blocks, and a page built only from existing units are the lead's own edit, published to the canvases artifact with the Artifact tool and re-vendored; a prompt is only for new geometry or composition, and the lead never draws options itself (#2843, #3432, #3379).
 

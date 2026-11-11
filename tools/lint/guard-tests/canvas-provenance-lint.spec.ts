@@ -127,10 +127,11 @@ describe("canvas provenance check (#2389)", () => {
     );
   });
 
-  it("the canvas source is the canvases artifact", () => {
-    expect(CANVAS_SOURCE_ARTIFACT).toBe(
-      "https://claude.ai/artifact/LHpSoMqti9kRrhEbR9o2AQ",
+  it("the committed manifest names the source the guard accepts (#3955)", () => {
+    const committed = JSON.parse(
+      readFileSync(join(REPO_ROOT, "design-source", "manifest.json"), "utf8"),
     );
+    expect(committed.sourceArtifact).toBe(CANVAS_SOURCE_ARTIFACT);
   });
 
   it("red: a manifest still naming the standalone Claude Design project fails (#3955)", () => {

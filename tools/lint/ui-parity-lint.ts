@@ -498,7 +498,7 @@ export async function runUiParityGuard(): Promise<void> {
       coEditCanvases
         .map(
           (file) =>
-            `canvas co-edit: ${file} is a vendored canvas; canvas changes happen in Claude Design → DesignSync pull → a design-source-only vendoring PR (AGENTS.md §6, #2389). Split this PR.`,
+            `canvas co-edit: ${file} is a vendored canvas; canvas changes happen in the canvases artifact → an Artifact read → a design-source-only vendoring PR (AGENTS.md §6, #2389). Split this PR.`,
         )
         .join("\n"),
     );

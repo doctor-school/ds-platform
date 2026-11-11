@@ -28,9 +28,10 @@
 # Claude Design canvas, which unauthenticated lychee cannot reach. (2) The
 # imported ds-foundation.dc.html references the canvas-side runtime + logo assets
 # (support.js, assets/ds-logo-*.svg) that we intentionally do NOT vendor (see the
-# folder README). Both are verified manually / re-pullable via DesignSync — same
+# folder README). Both are verified manually / re-readable with the Artifact tool — same
 # false-positive class as the private Projects v2 boards above.
 ^https://claude\.ai/design/.*$
+^https://claude\.ai/artifact/.*$
 design-source/assets/
 design-source/support\.js
 

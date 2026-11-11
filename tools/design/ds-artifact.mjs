@@ -19,7 +19,6 @@
 
 import { execFileSync } from "node:child_process";
 import {
-  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -36,12 +35,76 @@ export const NAMESPACE = "DsDesignSystem";
 export const TOKENS_DIR_REL = "packages/design-system/tokens";
 export const TOKENS_CSS_HEADER = (title) =>
   `/* ${title} — generated from tokens.json */`;
-/** The type's bundle cap (SKILL.md: `components/bundle.js` ≤ 6 MB). */
-const BUNDLE_MAX = 6 * 1024 * 1024;
+const KB = 1024;
+const MB = 1024 * KB;
+/** The Design System type's per-file caps (`format.md` file table). */
+const FILE_CAPS = [
+  [/^components\/bundle\.js$/, 6 * MB],
+  [/^components\/bundle\.css$/, 2 * MB],
+  [/^components\/lib\/[^/]+\.js$/, 2 * MB],
+  [/^components\/[^/]+\/preview\.html$/, 256 * KB],
+  [/^components\/[^/]+\/README\.md$/, 64 * KB],
+  [/^tokens\.json$/, 512 * KB],
+  [/^README\.md$/, 200 * KB],
+];
 const MARKER = ".ds-artifact";
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const LENGTH_RE = /^-?\d*\.?\d+(?:px|rem|em|%)?$/;
 const REF_RE = /^\{([^}]+)\}$/;
+/**
+ * The runtime libraries the frame loads, in order, before `bundle.js`. The
+ * converter merges react-dom into `react.js` (both globals); `react-dom.js` is
+ * its marker file and stays listed so the pair the bundle reads is explicit.
+ */
+const LIBRARIES = [
+  { name: "react", global: "React", file: "components/lib/react.js" },
+  {
+    name: "react-dom",
+    global: "ReactDOM",
+    file: "components/lib/react-dom.js",
+  },
+];
+/** Further token families (`format.md`: any other `{tokens:[…]}` key), in section order. */
+const OTHER_FAMILIES = [
+  "fluid",
+  "size",
+  "breakpoint",
+  "borderWidth",
+  "opacity",
+  "zIndex",
+  "fontScale",
+];
+const FAMILY_BY_HEAD = {
+  opacity: "opacity",
+  "z-index": "zIndex",
+  container: "size",
+  breakpoint: "breakpoint",
+  "border-width": "borderWidth",
+};
+const MOTION_HEADS = new Set(["duration", "easing", "motion"]);
+const TEXT_STYLE_FIELDS = {
+  "font-size": "fontSize",
+  "line-height": "lineHeight",
+  "font-weight": "fontWeight",
+  "letter-spacing": "letterSpacing",
+};
+const TEXT_STYLE_VALID = {
+  lineHeight: (v) =>
+    LENGTH_RE.test(String(v)) && (typeof v !== "number" || v < 10),
+  fontWeight: (v) => Number.isFinite(Number(v)) && v >= 1 && v <= 1000,
+  letterSpacing: (v) => LENGTH_RE.test(String(v)),
+};
+/** A further family's value: a single plain CSS value (`format.md` grammar). */
+function isPlainCssValue(text) {
+  if (!/^[A-Za-z0-9 #%(),./+_-]{1,200}$/.test(text)) return false;
+  if (/\b(?:url|var)\(/i.test(text)) return false;
+  let depth = 0;
+  for (const ch of text) {
+    depth += ch === "(" ? 1 : ch === ")" ? -1 : 0;
+    if (depth < 0) return false;
+  }
+  return depth === 0;
+}
 
 const toPosix = (path) => path.split(sep).join("/");
 
@@ -150,15 +213,37 @@ export function tokensFromDtcg({ primitive, semantic, dark, component }) {
       .filter(([, value]) => value !== null),
   );
 
+  // The dark theme repoints only colour roles; a role it omits keeps its light value.
+  const darkColor = new Map(lightColor);
+  for (const [name, leaf] of darkByName) {
+    const value = colorLiteral(literal(leaf.value));
+    if (value !== null) darkColor.set(name, value);
+  }
+  const withColors = (value, colors) =>
+    String(value).replace(
+      /var\(--([A-Za-z0-9-]+)\)/g,
+      (whole, ref) => colors.get(ref) ?? whole,
+    );
+
   const color = [];
   const spacing = [];
   const radius = [];
   const shadow = [];
+  const other = Object.fromEntries(OTHER_FAMILIES.map((key) => [key, []]));
   const families = {};
   const textStyles = new Map();
   const scale = [];
   const usage = (leaf) =>
     leaf.description ?? `${leaf.file} ${leaf.path.join(".")}.`;
+  /** A single plain CSS value into one of the further families, else unplaced. */
+  const placeOther = (family, name, leaf, value) => {
+    const text = String(value);
+    if (!isPlainCssValue(text)) {
+      skip(name, value, "not a plain single CSS value the page can show");
+      return;
+    }
+    other[family].push({ name, value: text, usage: usage(leaf) });
+  };
 
   for (const leaf of light) {
     const name = cssName(leaf.path);
@@ -196,47 +281,48 @@ export function tokensFromDtcg({ primitive, semantic, dark, component }) {
       const size = literal(leaf.value);
       if (LENGTH_RE.test(String(size)))
         scale.push({ name: leaf.path.slice(2).join("-"), fontSize: size });
-      else skip(name, size, "font size is not a plain length (calc/clamp)");
+      else placeOther("fluid", name, leaf, size);
       continue;
     }
     if (head === "font") {
-      skip(
-        name,
-        literal(leaf.value),
-        "standalone scale step; the page takes these only inside a text style",
-      );
+      // A standalone weight / line height / letter spacing step: the
+      // Typography view reads these only inside a style, so the scale itself
+      // is a further family.
+      placeOther("fontScale", name, leaf, literal(leaf.value));
       continue;
     }
     if (head === "text") {
       const style = leaf.path.slice(1, -1).join("-");
       const prop = leaf.path.at(-1);
-      const entry = textStyles.get(style) ?? { name: style };
-      const value = literal(leaf.value);
-      if (prop === "font-size") entry.fontSize = value;
-      else if (prop === "line-height") entry.lineHeight = value;
-      else if (prop === "font-weight") entry.fontWeight = value;
-      else
-        skip(
-          name,
-          value,
-          "text-style property outside fontSize/lineHeight/fontWeight",
-        );
+      const entry = textStyles.get(style) ?? { style: { name: style } };
       textStyles.set(style, entry);
+      const value = literal(leaf.value);
+      const field = TEXT_STYLE_FIELDS[prop];
+      if (!field) {
+        skip(name, value, "text-style property the page has no field for");
+        continue;
+      }
+      if (field === "fontSize") entry.fontSizeLeaf = { name, value };
+      else if (!TEXT_STYLE_VALID[field](value))
+        skip(name, value, `${field} outside the page's grammar`);
+      else entry.style[field] = value;
       continue;
     }
     if (leaf.type === "shadow") {
-      const value = String(literal(leaf.value)).replace(
-        /var\(--([A-Za-z0-9-]+)\)/g,
-        (whole, ref) => lightColor.get(ref) ?? whole,
-      );
-      if (value.includes("var("))
+      const source = String(literal(leaf.value));
+      const lightValue = withColors(source, lightColor);
+      const darkValue = withColors(source, darkColor);
+      if (lightValue.includes("var(") || darkValue.includes("var("))
         skip(name, leaf.value, "shadow references an unknown variable");
       else
         shadow.push({
           name,
-          value,
-          usage: /var\(/.test(String(leaf.value))
-            ? `${usage(leaf)} Source: ${leaf.value} (light-theme literal).`
+          value:
+            lightValue === darkValue
+              ? lightValue
+              : { light: lightValue, dark: darkValue },
+          usage: /var\(/.test(source)
+            ? `${usage(leaf)} Source: ${source} (per-theme literals).`
             : usage(leaf),
         });
       continue;
@@ -246,23 +332,40 @@ export function tokensFromDtcg({ primitive, semantic, dark, component }) {
     if (leaf.type === "dimension" && (isRadius || isSpace)) {
       const value = literal(leaf.value);
       if (!LENGTH_RE.test(String(value))) {
-        skip(
-          name,
-          value,
-          "length is not a plain px/rem/em/% value (calc/clamp)",
-        );
+        // Spacing and radius take lengths only; a fluid clamp()/calc() is a
+        // plain CSS value of the further family.
+        placeOther("fluid", name, leaf, value);
         continue;
       }
       (isRadius ? radius : spacing).push({ name, value, usage: usage(leaf) });
       continue;
     }
-    skip(
-      name,
-      literal(leaf.value),
-      head === "duration" || head === "easing" || head === "motion"
-        ? "motion tokens have no family on the page"
-        : `no family for ${head} in the saved format reference`,
-    );
+    if (MOTION_HEADS.has(head)) {
+      skip(
+        name,
+        literal(leaf.value),
+        "motion tokens have no family on the page",
+      );
+      continue;
+    }
+    const family =
+      FAMILY_BY_HEAD[head] ?? (leaf.type === "dimension" ? "size" : null);
+    if (family) placeOther(family, name, leaf, literal(leaf.value));
+    else skip(name, literal(leaf.value), `no page family for ${head} tokens`);
+  }
+  const styles = [];
+  for (const { style, fontSizeLeaf } of textStyles.values()) {
+    if (!fontSizeLeaf || !LENGTH_RE.test(String(fontSizeLeaf.value))) {
+      // The page drops a style whose fontSize it cannot read.
+      skip(
+        `text-${style.name}`,
+        JSON.stringify({ ...style, fontSize: fontSizeLeaf?.value }),
+        "text style without a plain-length fontSize (calc/clamp)",
+      );
+      continue;
+    }
+    const { name: styleName, ...rest } = style;
+    styles.push({ name: styleName, fontSize: fontSizeLeaf.value, ...rest });
   }
   for (const [name, leaf] of darkByName)
     if (!byPath.has(leaf.path.join(".")))
@@ -272,11 +375,15 @@ export function tokensFromDtcg({ primitive, semantic, dark, component }) {
         "dark override of a role the light layer does not define",
       );
 
-  const groups = [
-    { name: "Text", family: "sans", styles: [...textStyles.values()] },
-  ];
+  const groups = [{ name: "Text", family: "sans", styles }];
   if (scale.length)
     groups.push({ name: "Scale", family: "sans", styles: scale });
+  const further = Object.fromEntries(
+    OTHER_FAMILIES.filter((key) => other[key].length).map((key) => [
+      key,
+      { tokens: other[key] },
+    ]),
+  );
   return {
     tokens: {
       color: {
@@ -290,40 +397,119 @@ export function tokensFromDtcg({ primitive, semantic, dark, component }) {
       spacing: { tokens: spacing },
       radius: { tokens: radius },
       shadow: { tokens: shadow },
+      ...further,
     },
     unplaced,
   };
 }
 
-/** `tokens.css` from `tokens.json`: `:root` = the first theme, `.dark` = the dark one (the DS's own theme class). */
+/**
+ * `tokens.css` from `tokens.json`, compiled the way the page compiles it
+ * (`format.md` → tokens.css as compiled): the first theme's colours and
+ * shadows on `:root, [data-theme="<first>"]`, a `[data-theme="<id>"]` block
+ * per further theme (overrides + aliases re-declared), then one `:root` with
+ * every other family and `--font-<key>`.
+ */
 export function tokensCss(tokens, title) {
-  const css = (v) =>
-    typeof v === "string" ? v.replace(/^\{(.+)\}$/, "var(--$1)") : String(v);
+  const css = (v) => String(v).replace(/^\{(.+)\}$/, "var(--$1)");
+  const [first, ...rest] = tokens.color.themes.map((t) => t.id);
+  const themed = [...tokens.color.tokens, ...tokens.shadow.tokens];
+  const valueIn = (t, theme) =>
+    typeof t.value === "object" ? t.value[theme] : undefined;
+  const firstLines = themed.map(
+    (t) =>
+      `  --${t.name}: ${css(typeof t.value === "object" ? t.value[first] : t.value)};`,
+  );
+  const themeBlocks = rest.flatMap((theme) => [
+    "",
+    `[data-theme="${theme}"] {`,
+    ...themed
+      .filter(
+        (t) =>
+          valueIn(t, theme) !== undefined ||
+          (typeof t.value === "string" && REF_RE.test(t.value)),
+      )
+      .map((t) => `  --${t.name}: ${css(valueIn(t, theme) ?? t.value)};`),
+    "}",
+  ]);
   const rootLines = [];
-  const darkLines = [];
-  for (const t of tokens.color.tokens) {
-    const value = typeof t.value === "object" ? t.value : { light: t.value };
-    rootLines.push(`  --${t.name}: ${css(value.light)};`);
-    if (value.dark !== undefined)
-      darkLines.push(`  --${t.name}: ${css(value.dark)};`);
-  }
+  for (const [family, value] of Object.entries(tokens))
+    if (!["color", "type", "shadow"].includes(family))
+      for (const t of value.tokens)
+        rootLines.push(`  --${t.name}: ${css(t.value)};`);
   for (const [key, stack] of Object.entries(tokens.type.families))
-    rootLines.push(`  --font-family-${key}: ${stack};`);
-  for (const family of ["spacing", "radius", "shadow"])
-    for (const t of tokens[family].tokens)
-      rootLines.push(`  --${t.name}: ${css(t.value)};`);
+    rootLines.push(`  --font-${key}: ${stack};`);
   return [
     TOKENS_CSS_HEADER(title),
+    "",
+    `:root, [data-theme="${first}"] {`,
+    ...firstLines,
+    "}",
+    ...themeBlocks,
     "",
     ":root {",
     ...rootLines,
     "}",
     "",
-    ".dark {",
-    ...darkLines,
-    "}",
-    "",
   ].join("\n");
+}
+
+/**
+ * The system's own dark switch is the `.dark` class; the artifact frame sets
+ * `<html data-theme="…">`. Every theme selector of the compiled stylesheet is
+ * paired with its `[data-theme]` twin so a dark preview renders dark. A `.dark`
+ * selector of any other shape is refused: it would stay light in the frame.
+ */
+export function themedBundleCss(css) {
+  const standalone = css.match(/(?<![\w\\-])\.dark(?![\w\\-])/g)?.length ?? 0;
+  let paired = 0;
+  const out = css
+    .replace(/(^|\n)([ \t]*)\.(dark|light) \{/g, (_m, start, indent, theme) => {
+      if (theme === "dark") paired += 1;
+      return `${start}${indent}.${theme}, [data-theme="${theme}"] {`;
+    })
+    .replaceAll(":where(.dark, .dark *)", () => {
+      paired += 2;
+      return ':where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *)';
+    });
+  if (paired !== standalone)
+    throw new Error(
+      `components/bundle.css has ${standalone - paired} .dark selector(s) with no [data-theme="dark"] twin`,
+    );
+  return out;
+}
+
+/**
+ * The Design System type's caps (`format.md`): file sizes by path (stored
+ * bytes) and the token grammar's counts. A build over any cap is refused, not
+ * trimmed.
+ */
+export function assertCaps(sizes, tokens) {
+  const fail = (what) => {
+    throw new Error(`over the Design System cap: ${what}`);
+  };
+  for (const [rel, bytes] of Object.entries(sizes)) {
+    const cap = FILE_CAPS.find(([re]) => re.test(rel))?.[1];
+    if (cap !== undefined && bytes > cap)
+      fail(`${rel} is ${bytes} bytes, cap ${cap}`);
+  }
+  const dts = Object.entries(sizes)
+    .filter(([rel]) => rel.endsWith(".d.ts"))
+    .reduce((sum, [, bytes]) => sum + bytes, 0);
+  if (dts > 1.5 * MB) fail(`types are ${dts} bytes, cap 1.5 MB`);
+  const families = Object.keys(tokens);
+  if (families.length > 12) fail(`${families.length} token families, cap 12`);
+  if (tokens.color.themes.length > 8)
+    fail(`${tokens.color.themes.length} themes, cap 8`);
+  if (tokens.color.tokens.length > 600)
+    fail(`${tokens.color.tokens.length} colours, cap 600`);
+  const styles = tokens.type.groups.reduce((n, g) => n + g.styles.length, 0);
+  if (tokens.type.groups.length > 12)
+    fail(`${tokens.type.groups.length} type groups, cap 12`);
+  if (styles > 80) fail(`${styles} type styles, cap 80`);
+  for (const family of families.filter((f) => f !== "color" && f !== "type"))
+    if (tokens[family].tokens.length > 60)
+      fail(`${tokens[family].tokens.length} ${family} tokens, cap 60`);
 }
 
 // ------------------------------------------------------- bundle / preview ---
@@ -340,21 +526,21 @@ export function bundleWithHeader(js, namespace, names) {
   return `${header}\n${body}`;
 }
 
-/** Converter path → artifact path, for the carried preview documents. */
+/**
+ * The converter's preview document → the type's preview contract: the frame
+ * preloads tokens.css, bundle.css, the libraries and bundle.js, so the
+ * document's own stylesheet links and library/bundle script tags go (a preview
+ * that links bundle.js or a library breaks the preload).
+ */
 function rewritePreviewPaths(html) {
   return html
     .replace(
-      /\s*<link rel="stylesheet" href="\.\.\/\.\.\/\.\.\/styles\.css">/g,
+      /\n?[ \t]*<link rel="stylesheet" href="\.\.\/\.\.\/\.\.\/(?:styles\.css|_ds_bundle\.css)">/g,
       "",
     )
-    .replaceAll(
-      'href="../../../_ds_bundle.css"',
-      'href="../../components/bundle.css"',
-    )
-    .replaceAll('src="../../../_vendor/', 'src="../../components/lib/')
-    .replaceAll(
-      'src="../../../_ds_bundle.js"',
-      'src="../../components/bundle.js"',
+    .replace(
+      /\n?[ \t]*<script src="\.\.\/\.\.\/\.\.\/(?:_vendor\/[^"]+|_ds_bundle\.js)"><\/script>/g,
+      "",
     )
     .replace(
       /<code>(\w+)\.d\.ts<\/code>/g,
@@ -368,8 +554,9 @@ function rewritePreviewPaths(html) {
 
 /**
  * The converter's preview document at its artifact path: line 1 the `@dsCard`
- * marker with the measured height, the per-component preview module inlined
- * (one document, no file the format reference does not place).
+ * marker with the measured height (`floor` when no preview is authored), and
+ * ONE inline script — the per-component preview module followed by the mount
+ * code, reading the preloaded `window.React` / `ReactDOM` / the namespace.
  */
 export function previewHtml(converterHtml, { name, height, previewJs }) {
   const [first, ...rest] = converterHtml.split("\n");
@@ -377,16 +564,27 @@ export function previewHtml(converterHtml, { name, height, previewJs }) {
   if (!group)
     throw new Error(`${name}: converter preview has no @dsCard group`);
   let body = rewritePreviewPaths(rest.join("\n"));
-  const tag = `<script src="../../../_preview/${name}.js"></script>`;
+  const tag = new RegExp(
+    `\\n?[ \\t]*<script src="\\.\\./\\.\\./\\.\\./_preview/${name}\\.js"></script>`,
+  );
+  if (previewJs !== null && !tag.test(body))
+    throw new Error(`${name}: preview module tag not found`);
+  body = body.replace(tag, "");
+  if (/<script[^>]*\ssrc=|<link[^>]*rel="stylesheet"/.test(body))
+    throw new Error(`${name}: preview loads a file the frame preloads`);
+  const scripts = body.match(/<script\b/g)?.length ?? 0;
+  if (scripts !== 1)
+    throw new Error(
+      `${name}: preview has ${scripts} scripts, the frame takes one`,
+    );
   if (previewJs !== null) {
     forbidHtmlBreakers(previewJs, `_preview/${name}.js`);
-    if (!body.includes(tag))
-      throw new Error(`${name}: preview module tag not found`);
-    body = body.replace(tag, () => `<script>\n${previewJs}\n</script>`);
+    body = body.replace("<script>", () => `<script>\n${previewJs}`);
   }
   if (body.includes("../../../"))
     throw new Error(`${name}: preview keeps a converter-layout path`);
-  return `<!-- @dsCard group="${group}" height=${height} -->\n${body}`;
+  const floor = previewJs === null ? " floor" : "";
+  return `<!-- @dsCard group="${group}" height=${height}${floor} -->\n${body}`;
 }
 
 /** Converter guide → component README (the bundle path only). */
@@ -442,8 +640,8 @@ function readme({ conventions, components, unplaced, repo, sha }) {
     "## Files",
     "",
     "- `components/bundle.js` — every component on `window.DsDesignSystem` (React 19, read from `window.React` / `window.ReactDOM`).",
-    "- `components/bundle.css` — the compiled stylesheet: tokens, the Inter import and every utility the system and its previews use.",
-    "- `components/lib/react.js`, `components/lib/react-dom.js` — React 19 for the previews (`react-dom` is merged into `react.js`).",
+    '- `components/bundle.css` — the compiled stylesheet: tokens, the Inter import and every utility the system and its previews use. The system switches theme with the `.dark` class; every theme selector also answers `[data-theme="dark"]` / `[data-theme="light"]`, the attribute this page sets.',
+    "- `components/lib/react.js`, `components/lib/react-dom.js` — React 19, listed in the index `libraries` and loaded before the bundle (`react-dom` is merged into `react.js`, which defines both `window.React` and `window.ReactDOM`).",
     "- `components/index.d.ts` — the props of every component; `components/<Name>/README.md` — its guide and examples.",
     "- `tokens.json` / `tokens.css` — the token source `packages/design-system/tokens/*.json`, exact values.",
     "",
@@ -451,6 +649,7 @@ function readme({ conventions, components, unplaced, repo, sha }) {
     "",
     "- Fonts: Inter is hosted (Google Fonts), no file. Tactic Sans Extended, Century Gothic and Montserrat are reserved brand faces no product surface loads; they appear only in the font stacks.",
     "- Components: built from the package's own build (the Built route). SmartCaptcha and BotProtectionField show a floor card — the invisible captcha renders nothing without its remote script.",
+    "- Motion: durations and easings have no family on this page; they stay in the token source.",
     `- Tokens not placed (${unplaced.length}): ${unplaced.map((u) => `\`${u.name}\``).join(", ")}.`,
     "",
   ].join("\n");
@@ -484,7 +683,7 @@ function removals(from) {
   ].join("\n");
 }
 
-function indexFor(live, { now, repo, sha, present }) {
+function indexFor(live, { now, repo, sha, present, libraries }) {
   const base = live ?? {
     v: 3,
     layout: "files",
@@ -502,7 +701,7 @@ function indexFor(live, { now, repo, sha, present }) {
     ...kept,
     title: TITLE,
     namespace: NAMESPACE,
-    libraries: kept.libraries ?? [],
+    libraries,
     editing: "code",
     docs: {
       ...docs,
@@ -530,6 +729,7 @@ export function buildArtifact({
   now = new Date(),
   index = null,
   conventions = null,
+  libraryVersions,
 }) {
   const project = join(out, "project");
   if (existsSync(project) && !existsSync(join(out, MARKER)))
@@ -551,20 +751,19 @@ export function buildArtifact({
     NAMESPACE,
     names,
   );
-  if (Buffer.byteLength(bundle) > BUNDLE_MAX)
-    throw new Error(
-      `components/bundle.js is ${Buffer.byteLength(bundle)} bytes, over the 6 MB cap`,
-    );
   write("components/bundle.js", bundle);
-  copyFileSync(
-    join(from, "_ds_bundle.css"),
-    join(project, "components", "bundle.css"),
+  write(
+    "components/bundle.css",
+    themedBundleCss(readFileSync(join(from, "_ds_bundle.css"), "utf8")),
   );
-  for (const lib of ["react.js", "react-dom.js"])
-    copyFileSync(
-      join(from, "_vendor", lib),
-      join(project, "components", "lib", lib),
-    );
+  const libraries = LIBRARIES.map(({ name, global, file }) => {
+    const version = libraryVersions?.[name];
+    if (!version) throw new Error(`no version given for the ${name} library`);
+    const js = readFileSync(join(from, "_vendor", `${name}.js`), "utf8");
+    forbidHtmlBreakers(js, file);
+    write(file, js);
+    return { name, version, global, file };
+  });
 
   const heights = measuredHeights(from);
   const imports = new Set();
@@ -632,16 +831,20 @@ export function buildArtifact({
   const present = new Set(walkFiles(project).map((rel) => `project/${rel}`));
   write(
     "design-system.json",
-    `${JSON.stringify(indexFor(index, { now, repo, sha, present }), null, 2)}\n`,
+    `${JSON.stringify(indexFor(index, { now, repo, sha, present, libraries }), null, 2)}\n`,
   );
   writeFileSync(join(out, "REMOVALS.txt"), removals(from), "utf8");
 
   const files = walkFiles(project);
-  const bytes = files.reduce(
-    (sum, rel) => sum + statSync(join(project, rel)).size,
-    0,
+  const sizes = Object.fromEntries(
+    files.map((rel) => [rel, statSync(join(project, rel)).size]),
   );
-  return { components: names, unplaced, files: files.length, bytes };
+  assertCaps(sizes, tokens);
+  const bytes = Object.values(sizes).reduce((sum, n) => sum + n, 0);
+  const floors = components
+    .filter(({ name }) => !existsSync(join(from, "_preview", `${name}.js`)))
+    .map(({ name }) => name);
+  return { components: names, unplaced, files: files.length, bytes, floors };
 }
 
 // ------------------------------------------------------------------- CLI ---
@@ -669,7 +872,18 @@ function main(argv) {
   const readJson = (rel) =>
     JSON.parse(readFileSync(join(root, TOKENS_DIR_REL, rel), "utf8"));
   const indexPath = opt("--index");
+  const pkgVersion = (name) =>
+    JSON.parse(
+      readFileSync(
+        join(root, "packages/design-system/node_modules", name, "package.json"),
+        "utf8",
+      ),
+    ).version;
   const result = buildArtifact({
+    libraryVersions: {
+      react: pkgVersion("react"),
+      "react-dom": pkgVersion("react-dom"),
+    },
     from: resolve(from),
     out: resolve(out),
     repo: remote,
@@ -688,6 +902,9 @@ function main(argv) {
   });
   process.stdout.write(
     `[design:artifact] ${result.files} files, ${result.bytes} bytes, ${result.components.length} components → ${join(resolve(out), "project")}\n`,
+  );
+  process.stdout.write(
+    `[design:artifact] floor cards (${result.floors.length}): ${result.floors.join(", ") || "none"}\n`,
   );
   for (const u of result.unplaced)
     process.stdout.write(

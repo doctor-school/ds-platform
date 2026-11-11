@@ -717,7 +717,7 @@ Response schema is authored in `packages/schemas` (zod SSOT → generated SDK). 
 - **«Мои события»** link (`/account/events`) and **sign-out** (EARS-10).
 - **No raw claims anywhere:** `sub`, the roles array, and the raw `mfa` boolean never reach the DOM (requirements Invariants).
 
-Copy is catalog-sourced (§8.1, EARS-21); fields follow the §8.2 validation/mask rule (EARS-22). The **look is canvas-driven**: the Stage-A pick happens in claude.ai/design and the chosen canvas is vendored into `design-source/` before implementation (AGENTS.md §6) — this section pins behavior and composition, not pixels.
+Copy is catalog-sourced (§8.1, EARS-21); fields follow the §8.2 validation/mask rule (EARS-22). The **look is canvas-driven**: the Stage-A pick happens in Claude Design in Claude and the chosen canvas is vendored into `design-source/` before implementation (AGENTS.md §6) — this section pins behavior and composition, not pixels.
 
 **Out of scope, tracked (F-22).** PD-lifecycle actions (152-ФЗ export / deletion / consent withdrawal — no backend exists; ADR-0009 vertical, separate follow-up Issue), MFA management, phone editing. None of these is silently implied by the surface.
 

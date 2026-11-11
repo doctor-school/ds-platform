@@ -963,7 +963,7 @@ jobs:
       # (`design-source/**/*.dc.html`, archive included) carries a
       # `design-source/manifest.json` entry whose sha256 equals its bytes, and
       # every entry names an existing file (Issue #2389). The one writer is
-      # `pnpm design:vendor` on a DesignSync pull. POSTURE: BLOCK, a plain step —
+      # `pnpm design:vendor` on an Artifact read of the canvases artifact. POSTURE: BLOCK, a plain step —
       # a deterministic hash comparison with no false-positive class. Honest
       # limit: it proves manifest and bytes agree and that the vendoring was a
       # recorded act, not that the bytes came from Claude Design; the structural

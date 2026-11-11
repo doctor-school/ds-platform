@@ -377,6 +377,20 @@ export async function bootCongress(title: string) {
         "/api/v1/congress/sign-up",
         payload(email, extra),
       );
+      if (response.body.status === "accepted") {
+        // Await the real setup dispatch before a refusal's complete baseline.
+        await expect
+          .poll(
+            async () =>
+              (
+                await pool.query(
+                  "SELECT confirmation_mail_status FROM registrations r JOIN users u ON u.id=r.user_id WHERE r.event_id=$1 AND u.email=$2",
+                  [eventId, email],
+                )
+              ).rows,
+          )
+          .toEqual([{ confirmation_mail_status: "sent" }]);
+      }
       manifest.handoffKeys = handoffs.storedKeys();
       manifest.actors = (
         await pool.query(

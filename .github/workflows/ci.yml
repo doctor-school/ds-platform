@@ -625,6 +625,39 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Run exactly three 044 window and name originals through owning nginx
+        env:
+          E2E_CONGRESS_DATABASE: ds_test
+          E2E_CONGRESS_DIR: ${{ runner.temp }}/congress-originals-3974
+          E2E_CONGRESS_REPORT: ${{ runner.temp }}/congress-originals-3974/results.json
+          E2E_CONGRESS_NGINX: ${{ runner.temp }}/congress-nginx-3974/bin/nginx
+        run: |
+          set -euo pipefail
+          mkdir -p "$E2E_CONGRESS_DIR" "$RUNNER_TEMP/congress-nginx-3974"
+          printf '%s\n' '{"command":"download checksum-pinned official nginx1.28.0 source and compile into owned RUNNER_TEMP prefix"}' >> "$E2E_CONGRESS_DIR/stand-ops.jsonl"
+          curl -fsSL --connect-timeout 15 --max-time 120 https://nginx.org/download/nginx-1.28.0.tar.gz -o "$RUNNER_TEMP/congress-nginx-3974/source.tar.gz"
+          printf '%s  %s\n' c6b5c6b086c0df9d3ca3ff5e084c1d0ef909e6038279c71c1c3e985f576ff76a "$RUNNER_TEMP/congress-nginx-3974/source.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/congress-nginx-3974/source.tar.gz" -C "$RUNNER_TEMP/congress-nginx-3974"
+          (
+            cd "$RUNNER_TEMP/congress-nginx-3974/nginx-1.28.0"
+            ./configure --prefix="$RUNNER_TEMP/congress-nginx-3974" --sbin-path=bin/nginx --without-http_gzip_module > "$RUNNER_TEMP/congress-nginx-3974/configure.log"
+            make -j2 > "$RUNNER_TEMP/congress-nginx-3974/build.log"
+            make install >> "$RUNNER_TEMP/congress-nginx-3974/build.log"
+          )
+          "$E2E_CONGRESS_NGINX" -V 2> "$E2E_CONGRESS_DIR/nginx-version.txt"
+          sha256sum "$E2E_CONGRESS_NGINX" > "$E2E_CONGRESS_DIR/nginx-binary.sha256"
+          pnpm --filter @ds/e2e exec bddgen --config congress-originals.config.ts
+          pnpm --filter @ds/e2e exec playwright test --config congress-originals.config.ts
+          pnpm --filter @ds/e2e exec tsx api-probes/assert-congress-report.ts "$E2E_CONGRESS_REPORT" "$E2E_CONGRESS_DIR/backgrounds.jsonl"
+      - name: Upload exactly three 044 original receipts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: congress-originals-3974
+          path: ${{ runner.temp }}/congress-originals-3974
+          if-no-files-found: ignore
+          retention-days: 7
+
       # ─ Mail + SMS sinks ─ the same two upstream images the dev stand runs
       # (`infra/dev-stand/compose.core.yml`): Zitadel's SMTP provider and its
       # generic HTTP SMS provider are pointed at these by `provision.sh`, and the

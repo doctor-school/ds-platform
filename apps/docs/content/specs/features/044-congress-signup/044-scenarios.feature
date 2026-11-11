@@ -77,6 +77,7 @@ Feature: 044 — Congress sign-up
     And the confirmation email is dispatched again
 
   @EARS-28
+  @congress-window-names
   Scenario: Failure branch — the submission arrives before registration opens
     Given the current time is before the registration opening instant
     When a participant submits the sign-up form
@@ -86,6 +87,7 @@ Feature: 044 — Congress sign-up
     And the refusal is the same for an email that already has an account and one that does not
 
   @EARS-28
+  @congress-window-names
   Scenario: Failure branch — the submission arrives after registration closes
     Given the current time is after the registration closing instant
     When a participant submits the sign-up form
@@ -115,6 +117,7 @@ Feature: 044 — Congress sign-up
     Then the remaining registration is no longer marked "возможный дубль"
 
   @EARS-33
+  @congress-window-names
   Scenario: The name answers are cleaned up before anything stores them
     Given no Doctor.School account exists for "names@example.org"
     When a participant submits the sign-up form for "names@example.org" with the surname "  иванова ", the first name "мАРИЯ", the patronymic "  сергеевна" and the workplace "НМИЦ им. В. А. Алмазова"

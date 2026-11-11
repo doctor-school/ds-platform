@@ -258,6 +258,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     # ---------------------------------------------------------------- display rule
 
     @EARS-3 @core @happy
+    @recording-display-originals
     Scenario Outline: The display rule is derived from the published rows alone
       Given a finished event whose published recordings are <published>
       When any surface reads its recording state
@@ -283,6 +284,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And no operator edited the page itself
 
     @EARS-8 @core @happy
+    @recording-display-originals
     Scenario: The secondary affordance is absent when only one kind is published
       Given a finished event with only a published edited recording
       When a signed-in doctor opens the event page
@@ -291,6 +293,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     # ---------------------------------------------------------------- public read + gate
 
     @EARS-4 @core @happy
+    @recording-display-originals
     Scenario: A hidden event keeps its feature 004 render
       Given a hidden event with a published edited recording attached before it was hidden
       When any visitor opens its page

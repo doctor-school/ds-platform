@@ -1,8 +1,8 @@
 # Recording mutation originals
 
-This strict Admin contour executes eighteen source originals from feature 014 with
+This strict Admin contour executes twenty-one source originals from feature 014 with
 the inherited Academy host and all six ordered lifecycle Background clauses:
-twenty-nine cases and 174 Background groups. Existing attachment, publication,
+thirty-five cases and 210 Background groups. Existing attachment, publication,
 audit, legacy lifecycle and wrong-machine boundary coverage is retained.
 `@recording-backfill-originals` selects exactly three new cases: published-never-live
 refusal, legacy-target refusal and the mutation-free dry-run.
@@ -10,6 +10,26 @@ refusal, legacy-target refusal and the mutation-free dry-run.
 cases): the two immutable-origin Examples, the legacy lifecycle bar and the
 same-manifest rerun. Original prose, Examples, host and Background order stay
 unchanged.
+
+`@recording-display-originals` selects three originals and six cases: the four
+published-row projection Examples, single-cut secondary absence, and a hidden
+event with an already published recording. `packages/e2e/lib/recording-display.ts`
+owns the literal expected projections, browser walk and substantive report
+assertions. The adapter provisions a real confirmed viewer and drives the normal
+Academy sign-in, then compares the source-free projection, authenticated playback
+read and actual main/secondary frames. The both-cuts disclosure starts collapsed
+with no second frame, then opens the raw source; `none` has only the preparing
+plaque. Provider playback is not claimed.
+
+The hidden fixture publishes before the real Admin hide command, retains the
+recording rows and the caller's registration, and proves the 004 notice with no
+participation control or player. Public default/upcoming/past reads and both
+authenticated account tabs carry positive membership/count controls before hide.
+The registration row is explicit historical fixture setup, not registration-flow
+acceptance. On a Windows dual-stack localhost, bind the task Next listeners with
+the supported `next start --hostname 127.0.0.1` option so the browser and the
+IPv4 API use one loopback fingerprint; public localhost URLs and auth checks stay
+unchanged. This is a local launcher requirement, not an auth-source change.
 
 The origin proof reads every own-machine state and independently checks its
 literal next-state set, including shared `hidden`, then submits every foreign
@@ -55,7 +75,7 @@ The operator CLI also requires explicit `AUDIT_IDENTIFIER_PEPPER` and
 between the API and the command through the Admin job environment. Failed CLI
 starts retain stdout, stderr and process status beside the manifest and remain
 test failures.
-The SQL adapter accepts explicitly named owned DBs (including `ds_dev_3951`) or
+The SQL adapter accepts explicitly named owned DBs (including `ds_dev_3961`) or
 the CI DB under `CI=true`. Every SQL/session/CLI fixture command is logged.
 Manifests and raw CLI stdout/stderr are preserved beside the operation log.
 Forced-colour proof runs set `FORCE_COLOR=1`, remove `NO_COLOR` and require actual
@@ -67,11 +87,14 @@ pnpm --filter @ds/admin test:e2e --project recording-attachment --reporter=list,
 pnpm --filter @ds/e2e exec tsx api-probes/assert-recording-attachment-report.ts /path/results.json
 ```
 
-For only the new three cases append `--grep @recording-backfill-originals` to the
+For the three backfill cases append `--grep @recording-backfill-originals` to the
 test command and `--new` to the report assertion. The default guard requires all
-twenty-nine cases, exact source feature/rule/outline/example/project identities,
+thirty-five cases, exact source feature/rule/outline/example/project identities,
 substantive receipts and six ordered nonempty Background groups per case, with
 zero failures/skips/flakes/retries/errors. Synthetic reports belong only to guard
 tests, never runtime acceptance. No visual artifact is produced by this test-only work.
-For only the current four invariant cases append
+For the four invariant cases append
 `--grep @recording-origin-invariants` and use `--invariants` for the report guard.
+For the current six display cases append `--grep @recording-display-originals`
+and use `--display` for the report guard. Run accepted full and narrow proofs
+serially; each case retains all six ordered Background groups.

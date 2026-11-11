@@ -13,7 +13,22 @@ import {
   rerunTitle,
   assertRerunReceipt,
 } from "../../../../packages/e2e/lib/recording-backfill";
-import { bootstrapAdminSession, signInAsAdmin } from "@ds/e2e/admin-events";
+import {
+  bootstrapAdminSession,
+  bootstrapDoctorSession,
+  signInAsAdmin,
+} from "@ds/e2e/admin-events";
+import { signInWithPassword } from "@ds/e2e/sign-in";
+import { verifyEmailAtIdp } from "../support/staff-access";
+import {
+  RecordingDisplayProof,
+  collectDisplayBrowser,
+  singleCutTitle,
+  hiddenRecordingTitle,
+  type DisplayRow,
+  type DisplayList,
+  type DisplayReceipt,
+} from "../../../../packages/e2e/lib/recording-display";
 import { expect, type Page, type APIRequestContext } from "@playwright/test";
 import { createBdd } from "playwright-bdd";
 import { Pool, type QueryResultRow } from "pg";
@@ -58,6 +73,9 @@ type Answer = {
   request: LegacyAnswer["request"];
 };
 type State = {
+  display?: RecordingDisplayProof;
+  viewer?: { id: string; zitadel_sub: string };
+  viewerPage?: Page;
   origin?: OriginReceipt;
   bar?: LegacyBarReceipt;
   originSelected?: "platform" | "legacy";
@@ -114,6 +132,7 @@ async function sql<T extends QueryResultRow = QueryResultRow>(
       database === "ds_dev_3934" ||
       database === "ds_dev_3939" ||
       database === "ds_dev_3951" ||
+      database === "ds_dev_3961" ||
       (process.env.CI === "true" && database === "ds_admin_e2e")
     ) ||
     new URL(url).pathname !== `/${database}`
@@ -192,8 +211,16 @@ const payload = (kind: string) => ({
   embedRef: "0123456789abcdef0123456789abcdef",
 });
 const path = (event: Event) => `/v1/admin/events/${event.id}/recordings`;
-async function attach(page: Page, event: Event, kind: string) {
-  const response = await api(page, path(event), "POST", payload(kind));
+async function attach(
+  page: Page,
+  event: Event,
+  kind: string,
+  embedRef = payload(kind).embedRef,
+) {
+  const response = await api(page, path(event), "POST", {
+    ...payload(kind),
+    embedRef,
+  });
   expect(response.status, JSON.stringify(response.body)).toBe(201);
   expect(response.etag).toBe('W/"1"');
   expect(response.location).toBe(`${path(event)}/${response.body.id}`);
@@ -260,6 +287,29 @@ Before(async ({ page, browser, playwright, $tags, $testInfo }) => {
   expect(actors).toHaveLength(1);
   state(page).operator = actors[0];
   await signInAsAdmin(page, credentials);
+  if ($tags.includes("@recording-display-originals")) {
+    op("provision exact owned recording viewer");
+    const doctor = await bootstrapDoctorSession(
+      adminOrigin(),
+      "recording-viewer",
+    );
+    op("owned account", { email: doctor.email });
+    const actors = await sql<{ id: string; zitadel_sub: string }>(
+      "SELECT id,zitadel_sub FROM users WHERE email=$1",
+      [doctor.email],
+    );
+    expect(actors).toHaveLength(1);
+    state(page).viewer = actors[0];
+    op("verify exact owned viewer mailbox at IdP");
+    await verifyEmailAtIdp(doctor.email);
+    const viewer = await browser.newPage({ baseURL: origin });
+    state(page).viewerPage = viewer;
+    op("real browser viewer sign-in through Academy entry");
+    await signInWithPassword(viewer, { loginPath: "/login" }, doctor, origin);
+    expect(
+      await viewer.evaluate(async () => (await fetch("/v1/me/profile")).status),
+    ).toBe(200);
+  }
   $testInfo.annotations.push({ type: "source-host", description: "academy" });
 });
 Given(
@@ -1082,6 +1132,205 @@ Then("no HTTP Delete route exists for a recording", async ({ page }) => {
   assertBoundaryReceipt(r, "", noDeleteTitle);
 });
 
+function display(page: Page) {
+  const value = state(page);
+  const rows = (id: string) =>
+    sql<DisplayRow>(
+      "SELECT id,event_id,kind,status,deleted_at,provider,embed_ref FROM event_recordings WHERE event_id=$1 ORDER BY kind,id",
+      [id],
+    );
+  const lists = async (): Promise<DisplayList[]> => {
+    const result: DisplayList[] = [];
+    for (const query of ["timeframe=upcoming", "timeframe=past", ""]) {
+      op("anonymous recording visibility list", { query });
+      const answer = await value.visitor!.get(
+        `/v1/public/events${query ? `?${query}` : ""}`,
+      );
+      result.push({
+        query,
+        status: answer.status(),
+        body: await answer.json(),
+      });
+    }
+    for (const tab of ["upcoming", "recordings"]) {
+      op("authenticated recording visibility tab", { tab });
+      const answer = await value.viewerPage!.evaluate(async (tab) => {
+        const response = await fetch(`/v1/me/events?tab=${tab}`);
+        return { status: response.status, body: await response.json() };
+      }, tab);
+      result.push({ query: `me:${tab}`, ...answer });
+    }
+    return result;
+  };
+  return (value.display ??= new RecordingDisplayProof({
+    fixture: async (kinds) => {
+      const target = await event(page);
+      for (const kind of kinds)
+        await command(
+          page,
+          target,
+          await attach(
+            page,
+            target,
+            kind,
+            kind === "edited"
+              ? "22222222222222222222222222222222"
+              : "11111111111111111111111111111111",
+          ),
+          "publish",
+        );
+      const snapshot = await eventSnapshot(target.id);
+      return {
+        ...target,
+        state: String(snapshot.state),
+        version: Number(snapshot.version),
+      };
+    },
+    rows,
+    projection: async (slug) => {
+      op("anonymous recording display projection", { slug });
+      const answer = await value.visitor!.get(`/v1/public/events/${slug}`);
+      return { status: answer.status(), body: (await answer.json()).recording };
+    },
+    playback: async (slug) => {
+      op("authenticated playback selection", { slug });
+      return value.viewerPage!.evaluate(async (slug) => {
+        const answer = await fetch(`/v1/events/${slug}/recordings`);
+        return { status: answer.status, body: await answer.json() };
+      }, slug);
+    },
+    browser: async (path, primary, secondary) => {
+      op("signed-in browser display walk", { path, primary, secondary });
+      return collectDisplayBrowser(value.viewerPage!, path, primary, secondary);
+    },
+    hide: async (target) => {
+      // 014 EARS-4: retained registration is setup for the caller's real tabs.
+      await sql(
+        "INSERT INTO registrations (user_id,event_id,registered_at) SELECT $1,id,starts_at-interval '1 day' FROM events WHERE id=$2",
+        [value.viewer!.id, target.id],
+      );
+      const beforeLists = await lists(),
+        before = await eventSnapshot(target.id),
+        recordingBefore = await rows(target.id);
+      const answer = await api(
+        page,
+        `/v1/admin/events/${target.id}/hide`,
+        "POST",
+        undefined,
+        Number(before.version),
+      );
+      const after = await eventSnapshot(target.id),
+        recordingAfter = await rows(target.id),
+        afterLists = await lists();
+      op("anonymous hidden recording projection", { slug: target.slug });
+      const publicRead = await value.visitor!.get(
+        `/v1/public/events/${target.slug}`,
+      );
+      return {
+        before,
+        after,
+        answer,
+        recordingBefore,
+        recordingAfter,
+        beforeLists,
+        afterLists,
+        publicRead: {
+          status: publicRead.status(),
+          body: await publicRead.json(),
+        },
+        browser: undefined as unknown as NonNullable<
+          DisplayReceipt["hidden"]
+        >["browser"],
+      };
+    },
+    hiddenBrowser: async (target, recordings) => {
+      const portal = value.portal!,
+        path = `/webinars/${target.slug}`;
+      op("anonymous browser hidden recording notice", { path });
+      await portal.goto(path, { waitUntil: "domcontentloaded" });
+      await expect(
+        portal.getByText(
+          "Мероприятие скрыто — участие в нём больше не предлагается",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      const card = portal.getByTestId("event-signup-card");
+      await expect(card).toHaveAttribute("data-cta-action", "unavailable");
+      await expect(portal.getByTestId("event-signup-cta")).toHaveCount(0);
+      const html = await portal.content();
+      return {
+        path,
+        notice: true,
+        participationControls: await card
+          .locator("a,button,input[type=submit]")
+          .count(),
+        frameCount: await portal.locator("main iframe,main video").count(),
+        playerCount: await portal.getByTestId("recording-player").count(),
+        plaqueCount: await portal.getByTestId("recording-plaque").count(),
+        sourceLeak:
+          recordings.some((row) => html.includes(row.embed_ref)) ||
+          html.includes("rutube.ru/play/embed/"),
+      };
+    },
+  }));
+}
+Given(
+  /^a finished event whose published recordings are (edited \+ raw|edited only|raw only|none)$/,
+  async ({ page }, published: string) => {
+    await display(page).prepare(published);
+  },
+);
+When("any surface reads its recording state", async ({ page }) => {
+  await display(page).read();
+});
+Then("the derived state is {word}", async ({ page }, expected: string) => {
+  expect(display(page).receipt!.projection.body.state).toBe(expected);
+});
+Then("the main player carries {word}", async ({ page }, expected: string) => {
+  expect(display(page).receipt!.playback.body.primary?.kind ?? "nothing").toBe(
+    expected,
+  );
+});
+Then(
+  "the secondary slot carries {word}",
+  async ({ page }, expected: string) => {
+    expect(
+      display(page).receipt!.playback.body.secondary?.kind ?? "nothing",
+    ).toBe(expected);
+    display(page).verify();
+  },
+);
+Given(
+  "a finished event with only a published edited recording",
+  async ({ page }) => {
+    await display(page).prepare("edited only", singleCutTitle);
+  },
+);
+When("a signed-in doctor opens the event page", async ({ page }) => {
+  await display(page).read();
+});
+Then("no secondary recording control is rendered", async ({ page }) => {
+  display(page).verify();
+});
+Given(
+  "a hidden event with a published edited recording attached before it was hidden",
+  async ({ page }) => {
+    await display(page).prepare("edited only", hiddenRecordingTitle);
+  },
+);
+When("any visitor opens its page", async ({ page }) => {
+  await display(page).readHidden();
+});
+Then(
+  "the feature 004 notice renders with no CTA and no player",
+  async ({ page }) => {
+    display(page).verify();
+  },
+);
+Then("the event appears in no listing, tab or count", async ({ page }) => {
+  display(page).verify();
+});
+
 async function backfillEvent(page: Page, status: string, origin = "platform") {
   const target = await event(page, status);
   await sql(
@@ -1502,18 +1751,21 @@ After(async ({ page, $testInfo }) => {
       backfill: value.backfill,
       origin: value.origin,
       bar: value.bar,
+      display: value.display?.receipt,
       backgrounds: value.backgrounds,
     }),
   });
   await value.visitor?.dispose();
   await value.portal?.close();
-  if (value.operator) {
+  await value.viewerPage?.close();
+  for (const actor of [value.operator, value.viewer]) {
+    if (!actor) continue;
     const issuer = process.env.IDP_ISSUER;
     if (!issuer || new URL(issuer).hostname === "id.doctor.school")
       throw new Error("Refuse production IdP cleanup");
-    op("delete exact owned IdP actor", { id: value.operator.zitadel_sub });
+    op("delete exact owned IdP actor", { id: actor.zitadel_sub });
     const answer = await fetch(
-      `${issuer}/v2/users/${encodeURIComponent(value.operator.zitadel_sub)}`,
+      `${issuer}/v2/users/${encodeURIComponent(actor.zitadel_sub)}`,
       {
         method: "DELETE",
         headers: { authorization: `Bearer ${process.env.IDP_SERVICE_TOKEN}` },
@@ -1524,6 +1776,7 @@ After(async ({ page, $testInfo }) => {
   op("retained owned fixture IDs until task database cleanup", {
     events: value.events,
     actor: value.operator?.id,
+    viewer: value.viewer?.id,
   });
   states.delete(page);
 });

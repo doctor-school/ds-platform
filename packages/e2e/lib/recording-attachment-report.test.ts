@@ -6,6 +6,7 @@ import {
 } from "./recording-invariants.fixture.js";
 import { originOutline, legacyBarTitle } from "./recording-lifecycle.js";
 import { rerunTitle } from "./recording-backfill.js";
+import { displayReportFixture } from "./recording-display.fixture.js";
 import {
   legacyTitles,
   type PublicListBody,
@@ -148,6 +149,11 @@ function assertRecordingAttachmentReport(
                   scope === "full"
                     ? invariantReport().suites[0]!.suites[0]!.specs
                     : [],
+                )
+                .concat(
+                  scope === "full"
+                    ? displayReportFixture().suites[0]!.suites[0]!.specs
+                    : [],
                 ),
               suites: [
                 ...value.suites.filter(
@@ -162,6 +168,9 @@ function assertRecordingAttachmentReport(
                   : []),
                 ...(scope === "full"
                   ? invariantReport().suites[0]!.suites[0]!.suites
+                  : []),
+                ...(scope === "full"
+                  ? displayReportFixture().suites[0]!.suites[0]!.suites
                   : []),
               ],
             },
@@ -193,7 +202,7 @@ describe("014 attachment receipts", () => {
       /identity/,
     );
   });
-  it("accepts exactly twenty-nine cases, five outlines and 174 Background groups", () => {
+  it("accepts exactly thirty-five cases and 210 Background groups", () => {
     expect(() => assertRecordingAttachmentReport(report())).not.toThrow();
   });
   it("rejects green labels without the executed Background receipt", () => {
@@ -934,6 +943,25 @@ it("accepts precisely four invariant cases and rejects missing, duplicated or wr
 it("accepts only the exact three backfill originals as the new portion", () => {
   expect(() => assertRawReport(backfillReport(), "new")).not.toThrow();
   expect(() => assertRawReport(boundaryReport(), "new")).toThrow();
+});
+it("accepts the explicitly owned 3961 database and still rejects arbitrary databases", () => {
+  for (const [database, accepted] of [
+    ["ds_dev_3961", true],
+    ["ds_dev_3962", false],
+    ["ds_dev", false],
+  ] as const) {
+    const value = backfillReport();
+    for (const spec of value.suites[0]!.suites[0]!.specs) {
+      const attachment = spec.tests[0]!.results[0]!.attachments[0]!;
+      const receipt = JSON.parse(
+        Buffer.from(attachment.body, "base64").toString("utf8"),
+      );
+      receipt.backfill.database = database;
+      attachment.body = Buffer.from(JSON.stringify(receipt)).toString("base64");
+    }
+    if (accepted) expect(() => assertRawReport(value, "new")).not.toThrow();
+    else expect(() => assertRawReport(value, "new")).toThrow();
+  }
 });
 it("rejects missing CLI provenance, wrong refused code, missing continuation and mutation in dry-run", () => {
   for (const [index, change] of [

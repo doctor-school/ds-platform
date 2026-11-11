@@ -215,3 +215,11 @@ receipts are refused as well as failed, skipped, flaky or retried test results.
 The new trio requires 6 receipts; the full 21 requires 42. Native release, stacking,
 limits and starter-bonus tests stay as complementary coverage. Nothing visual is
 delivered, and production is not changed.
+
+The Node-only starter fixture supplies random per-application `AUDIT_IDENTIFIER_PEPPER`
+and `LIFECYCLE_IMPACT_TOKEN_SECRET` only when absent, before loading `AppModule`,
+and restores the prior environment after closing the application. Native Vitest
+has explicit fallbacks for these two dependencies; this Node runner does not set
+`VITEST` or weaken their production fail-closed checks. A configured value always
+wins. Missing-key local proof deletes both keys and `VITEST` before the actual
+compiled HTTP case, exercising the same startup branch CI needs.

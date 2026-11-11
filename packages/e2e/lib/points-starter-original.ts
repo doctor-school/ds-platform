@@ -1,4 +1,4 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -36,8 +36,48 @@ interface AdminSessions {
   ): Promise<{ sid: string; csrfToken: string } | undefined>;
 }
 
-/** 025 EARS-43: the native admin-session fixture boundary, without factor acceptance. */
+/** 025 EARS-43: isolated Node-runner prerequisites; production still fails closed. */
 export async function bootPointsStarterApi(points: PointsWorld) {
+  const restored = new Map<string, string | undefined>();
+  for (const name of [
+    "AUDIT_IDENTIFIER_PEPPER",
+    "LIFECYCLE_IMPACT_TOKEN_SECRET",
+  ]) {
+    if (!process.env[name]) {
+      restored.set(name, process.env[name]);
+      process.env[name] = randomBytes(32).toString("hex");
+    }
+  }
+  const restoreSecrets = () => {
+    for (const [name, value] of restored) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  };
+  pointsOperation(
+    "AppModule fixture ephemeral secrets when absent: " +
+      [...restored.keys()].join(", "),
+  );
+  try {
+    const app = await bootConfiguredPointsApi(points);
+    return {
+      ...app,
+      async close() {
+        try {
+          await app.close();
+        } finally {
+          restoreSecrets();
+        }
+      },
+    };
+  } catch (error) {
+    restoreSecrets();
+    throw error;
+  }
+}
+
+/** 025 EARS-43: the native admin-session fixture boundary, without factor acceptance. */
+async function bootConfiguredPointsApi(points: PointsWorld) {
   apiRequire("reflect-metadata");
   const { Test } = apiRequire("@nestjs/testing");
   const { FastifyAdapter } = apiRequire("@nestjs/platform-fastify");

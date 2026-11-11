@@ -1,6 +1,6 @@
 ---
 title: "Feature 024 — The learning module and the series path (PRD)"
-description: "Product requirements for how a doctor learns on `doctor.school`: a lesson is a set of elements (series episode, microlearning, downloadable material, podcast, test, clinical case…) worth about one academic hour, never a single video; the path through a module is drawn as a map; and every rule of completion, unlocking, order, visibility and testing is a setting of a rules constructor with inheritance and named presets, not code. Progress is kept as facts and statuses are computed from the current rules. Also the gating, podcast companion, partner downloads, corrective material, star ratings, feedback and mobile parity of the lesson screen. Wave 2, `blocked_by` 017 and 025; source of the 024 EARS triplet (ADR-0014)."
+description: "Product requirements for how a doctor learns on `doctor.school`: a lesson is a set of elements (series episode, microlearning, downloadable material, podcast, test, clinical case…) worth about one academic hour, never a single video; the path is one continuous path through the whole course — modules are its sections, nodes are lessons — and the website and the mobile application read the same path data and differ only in presentation; and every rule of completion, unlocking, order, visibility and testing is a setting of a rules constructor with inheritance and named presets, not code. Progress is kept as facts and statuses are computed from the current rules. Also the gating, podcast companion, partner downloads, corrective material, star ratings, feedback and mobile parity of the lesson screen. Wave 2, `blocked_by` 017 and 025; source of the 024 EARS triplet (ADR-0014)."
 slug: two-site-ia-024-learning-module-path-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
@@ -14,13 +14,22 @@ lang: en
 
 > Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · **Wave 2** (022, 023, 024, 025, 044). 024 is `blocked_by` **017** (the storefront shell and the chosen specialty) and **025** (accrual and spending of attention points is part of a module's behaviour). Feature **023** (school and course) is `blocked_by` 024: the school and course are containers over the modules and lessons defined here. Domain canon: [ADR-0016](../../../adr/0016-core-domain-model-en.md) §4, §6. Discovery record: Issue #1792 (owner decisions P0, D1–D9) and #1793.
 
-**Provenance legend.** **[owner]** — owner-approved: the principle P0 («a constructor, not code»), decisions D1–D10 (D10, 2026-11-04: doctors buy nothing) and the five-point constructor direction the owner confirmed on 2026-11-04 («Да, это уже верное направление»). **[proposed]** — `agent-proposed — UNCONFIRMED`: everything else, including every concrete setting, preset content, default value and interface element below. Where D4, D6 and D9 appear, they are **defaults of settings or presets, never hard rules** [owner, P0].
+**Provenance legend.** **[owner]** — owner-approved: the principle P0 («a constructor, not code»), decisions D1–D11 (D10, 2026-11-04: doctors buy nothing; D11, 2026-11-11: a course is one continuous learner's path, [decision in #1793](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6797305382)) and the five-point constructor direction the owner confirmed on 2026-11-04 («Да, это уже верное направление»). **[proposed]** — `agent-proposed — UNCONFIRMED`: everything else, including every concrete setting, preset content, default value and interface element below. Where D4, D6 and D9 appear, they are **defaults of settings or presets, never hard rules** [owner, P0].
 
 ## Feature summary
 
 A doctor on `doctor.school` learns in **lessons**, and a lesson is **not a video** [owner, D5]: «Урок — это совокупность материалов… на 45 минут или академический час. Одно видео — это не урок.» A lesson is a **set of elements** drawn from an extensible catalog of element types — a series episode, microlearning, a downloadable material, a podcast, a test, a clinical case — composed to about one academic hour (≈ 45 min) [owner, D5, D9]. The methodology research behind the default composition (one series episode, microlearning per decomposition element, a downloadable material, one podcast, mandatory entry and exit tests, a clinical case as the lesson's skeleton) is recorded on Issue #1792; this PRD takes it as the **default lesson template**, not as a fixed shape [proposed].
 
-Lessons always live inside a **module**, and modules inside a **course** [owner, D1, D3; direction]; every course has at least one module [owner, D3; direction]. Module size and the closing club are course-level settings, by default six lessons + a club [owner, D4 as a default] — see «Settings inherit» below. **For the doctor all content is free; nothing is bought** [owner, D10]: no rule of the constructor opens content in exchange for a payment. 024 owns what happens inside that structure: **the path** a doctor walks through a module — drawn as a map, as in the mobile prototype — and **the rules** that decide what is open, what counts as done, in what order and with which tests.
+Lessons always live inside a **module**, and modules inside a **course** [owner, D1, D3; direction]; every course has at least one module [owner, D3; direction]. Module size and the closing club are course-level settings, by default six lessons + a club [owner, D4 as a default] — see «Settings inherit» below. **For the doctor all content is free; nothing is bought** [owner, D10]: no rule of the constructor opens content in exchange for a payment. 024 owns what happens inside that structure: **the learner's path** — one continuous path through the whole course (see «The course path» below) — and **the rules** that decide what is open, what counts as done, in what order and with which tests.
+
+**The course path** [owner, D11, 2026-11-11, [decision in #1793](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6797305382)]:
+
+- **One continuous path through the whole course**, not a separate path per module. Modules are sections of the path. Nodes are lessons. Each module is closed by its club node; the course is closed by its document node.
+- **A node is a lesson, not a video** [owner, D5, D11]. The lesson's materials of different types and its tests are the steps inside the node, in order.
+- **Node states** are shared by both storefronts: done · you are here · open · locked with the reason · can be reached by passing a test on what was skipped.
+- **One data set, two storefronts.** The platform is the backend for both the website and the mobile application: the path, its nodes and their states are the same data. The website and the application read that data and differ only in presentation: the application shows the path in a game form, the website shows the same path without the game layer.
+- **The game layer** (day streaks, hearts, leagues, XP) is the application's layer and is not shown on the website. The shared Pul / Bre / Con points stay on the website.
+- **The form of the path on the website is an open owner choice**, not decided in words: the «snake», as in the application prototype, or the «timeline». It is chosen on the canvas.
 
 The central product decision is that **those rules are settings, not code** [owner, P0]. The owner could not — and should not have to — answer in advance whether the next lesson opens after the test, after the video, or immediately: «Это всё должно быть гибко и настраиваемо… за основу мы можем взять Duolingo». So 024 specifies a **rules constructor** [owner, direction]:
 
@@ -35,7 +44,7 @@ Around the path, 024 carries the lesson screen's registry scope (functional map 
 ## User stories
 
 - **US-1** — As a **doctor**, I open a lesson and see it as **a set of materials worth about an academic hour** — what is in it, how long each part takes, what I have already done — not as one video.
-- **US-2** — As a **doctor**, I see the **path of a module as a map**: which lessons are done, which is next, which are locked and why, so I always know where I am.
+- **US-2** — As a **doctor**, I see the **course path** — one continuous path through all the modules of the course: which lessons are done, where I am now, which are open, which are locked and why, where I can jump by passing a test on what I skip — so I always know where I am.
 - **US-3** — As a **doctor**, I can tell from the lesson itself **what makes it count as done** — in the words of the rules that apply to it — before I start.
 - **US-4** — As a **doctor**, I take the lesson's **tests** under the rules set for them — the threshold, the number of attempts, any pause between attempts, and whether an entry test comes first — and I see my result and what remains.
 - **US-5** — As a **doctor who already knows the material**, I can **test out** of a part of the path where the rules allow it, and what I skipped counts as done, as «Jump here» does in Duolingo.
@@ -57,9 +66,9 @@ Around the path, 024 carries the lesson screen's registry scope (functional map 
 
 ## Flows
 
-**A doctor walks a module (US-1, US-2, US-3, US-4):**
+**A doctor walks the course path (US-1, US-2, US-3, US-4):**
 
-1. From a course (feature 023) or the lesson of the day in the feed (018) the doctor opens a module → the path map shows each lesson's computed status (done, open, locked with the reason, «test out available»).
+1. From the course page (feature 023) or the lesson of the day in the feed (018) the doctor reaches the course path → the path shows each node's computed state (done, you are here, open, locked with the reason, can be reached by passing a test on what was skipped); modules are sections of the path.
 2. The doctor opens an open lesson → the lesson shows its elements with durations, the completion rule in plain words and what is already done.
 3. The doctor goes through the elements in the order the rules allow; each element records its facts (watched to N %, opened, listened, answered).
 4. The doctor takes the exit test → the result is recorded as a fact on the attempt; under the default «ДПО / аккредитация» preset the lesson is done when all elements are done and the exit test is at or above 80 % [owner, D6 as a default; proposed preset].
@@ -96,7 +105,8 @@ Around the path, 024 carries the lesson screen's registry scope (functional map 
   - **«ДПО / аккредитация»** — a lesson is done when all elements are viewed and the exit test is at or above 80 %; the entry test is required; strict order inside a module. This preset carries the D6 default [owner, D6 as a default].
   - The default lesson composition (a free set of elements with mandatory tests) is the default of every preset, not a rule [owner, D9 as a default].
 - **What stays code** is only the element-type catalog, the condition-type catalog and the evaluator; adding a type is a product change through the normal pipeline, adding a combination or a number is not [owner, direction].
-- **The path map** shows every lesson's computed status and, for a locked one, the reason in the doctor's words [proposed].
+- **The course path** is one continuous path through the whole course: sections are modules, nodes are lessons, each module is closed by its club node, the course by its document node [owner, D11]. Every node shows its computed state — done · you are here · open · locked with the reason · can be reached by passing a test on what was skipped [owner, D11]; a locked one shows the reason in the doctor's words [proposed].
+- **One path data set on the website and in the mobile application:** the path, its nodes and their states are the same data, and the storefronts differ only in presentation; the application's game layer (day streaks, hearts, leagues, XP) is not shown on the website, the shared Pul / Bre / Con points stay [owner, D11]. The form of the path on the website («snake» or «timeline») is the owner's pick on the canvas.
 - **Gate (REQ-20):** a guest sees the description, element list and teaser of a lesson; content elements show an honest registration gate; no gated content is served to a guest.
 - **Podcast companion (REQ-35)** is an optional element of a lesson; whether it counts toward completion is the lesson's completion rule [proposed].
 - **Partner downloads (REQ-67)** are an element type and carry the partner/advertising label (REQ-66).
@@ -110,12 +120,12 @@ Around the path, 024 carries the lesson screen's registry scope (functional map 
 
 ## Out of scope
 
-- **School, course and the course/module catalog and program view** — feature **023**; 024 covers what happens inside a module and its lessons.
+- **School, course and the course/module catalog** — feature **023**; the 023 course page shows the course path that 024 defines. 024 covers the path, its nodes and what happens inside the lessons.
 - **Accrual, advance credit and spending of points** — feature **025** (#1794); 024 provides the learning facts. Points are earned, never bought.
 - **Issuing the document on completion** (certificate, НМО) — feature **038**; verification of documents — **037**.
 - **The authoring/administration screens** for schools, courses, lessons, elements and rules — no feature owns them yet (research point 6 on #1792); 024 states the author stories the admin surface must satisfy, not its screens [proposed].
 - **Content production routing** (who submits, methodologist, producer) — feature **040**.
-- **Gamification layers over the path** (XP, hearts, streaks, leagues) — an application layer, not part of the lesson (CP 2026-04-30); the specialty top is 018 / 025 [owner, D7].
+- **Gamification layers over the path** (XP, hearts, streaks, leagues) — an application layer, not part of the lesson (CP 2026-04-30), not shown on the website [owner, D11]; the specialty top is 018 / 025 [owner, D7].
 - **The mobile application itself** — a separate track; 024 fixes parity only.
 - **Live event recordings** — feature **014**; they are not lessons [owner, D8].
 
@@ -140,4 +150,4 @@ No row exists yet in [`capability-ownership.md`](../../product/two-site-ia/capab
 
 ## Approved mockup
 
-**Pending — `author-design-mockup`.** No Stage-A canvas exists for `#d-lesson` yet; the path map, the lesson screen and the author's rule editor need an owner pick before building.
+**Pending — `author-design-mockup`.** No Stage-A canvas exists for `#d-lesson` yet; the course path (its form on the website — «snake» or «timeline» — is the owner's pick on the canvas), the lesson screen and the author's rule editor need an owner pick before building.

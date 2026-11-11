@@ -35,7 +35,7 @@ const ITEMS = {
     id: "home",
     label: "Doctor.School — на главную",
     href: "/",
-    landing: { h1: "Doctor.School — бесплатное образование для врачей" },
+    landing: { h1: "Doctor.School — образование для врачей" },
     audience: "both",
   },
   /**
@@ -67,7 +67,7 @@ const ITEMS = {
         { path: "/feed/:code", landing: { surface: "specialty-feed" } },
         {
           path: "/",
-          landing: { h1: "Doctor.School — бесплатное образование для врачей" },
+          landing: { h1: "Doctor.School — образование для врачей" },
         },
       ],
     },

@@ -71,7 +71,7 @@ const DOCTOR: StorefrontShellConfig = {
       href: "https://academy.doctor.school/",
       note: "Закулисье платформы: проекты, эксперты, партнёры.",
     },
-    note: ["Бесплатное образование для врачей.", "© Doctor.School, 2026"],
+    note: ["Образование для врачей.", "© Doctor.School, 2026"],
     giant: { text: "Doctor.School", fontSize: "min(15.07cqw,240px)" },
   },
 };
@@ -677,7 +677,7 @@ describe("StorefrontFooter", () => {
     );
 
     const note = screen.getByTestId("footer-note");
-    expect(note).toHaveTextContent("Бесплатное образование для врачей.");
+    expect(note).toHaveTextContent("Образование для врачей.");
     expect(note).toHaveTextContent("© Doctor.School, 2026");
   });
 
@@ -783,7 +783,7 @@ describe("host neutrality", () => {
     expect(document.body).toHaveTextContent("Врачам");
     expect(document.body).not.toHaveTextContent("Экспертам и партнёрам");
     expect(document.body).not.toHaveTextContent(
-      "Бесплатное образование для врачей.",
+      "Образование для врачей.",
     );
   });
 });

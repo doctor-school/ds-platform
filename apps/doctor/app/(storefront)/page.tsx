@@ -16,7 +16,7 @@ import { retryDoctorEventsBlock } from "./events/retry-block-action";
  * header and footer are the layout's (EARS-1); a page-local copy is a defect.
  *
  * Three REAL blocks so far, in the canvas's own order: the hero (EARS-2 — kicker,
- * headline, free-for-the-doctor sub-line, the evolutionary goal verbatim, and
+ * headline, sub-line, the evolutionary goal verbatim, and
  * the four scale counters bound to one computed read, LD-3), then the specialty
  * catalog (EARS-4/EARS-5 — Stage-A variant Б: search field, frequent set,
  * «Показать весь список — N») or, once a specialty is remembered, its collapsed

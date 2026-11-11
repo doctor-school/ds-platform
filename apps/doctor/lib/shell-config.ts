@@ -90,9 +90,10 @@ export function doctorShellConfig(
         href: `${academyOrigin}/`,
         note: "Закулисье платформы: проекты, эксперты, партнёры.",
       },
-      /** Education is free FOR THE DOCTOR, and the interface never names who
-       *  finances it (owner hard rule) — no sponsor or funding wording here. */
-      note: ["Бесплатное образование для врачей.", "© Doctor.School, 2026"],
+      /** The note makes no statement about money, price or who pays (017
+       *  «Amendment — 2026-11-10», owner hard rule) — no sponsor, funding or
+       *  free-of-charge wording here. */
+      note: ["Образование для врачей.", "© Doctor.School, 2026"],
       giant: { text: "Doctor.School", fontSize: "min(15.07cqw,240px)" },
     },
   };

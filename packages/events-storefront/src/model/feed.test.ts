@@ -64,7 +64,6 @@ describe("buildFeedItems — the one card projection of both hosts", () => {
     ]);
     expect(free?.pulCost).toBeUndefined();
     expect(free?.pulCostLabel).toBeUndefined();
-    expect(free?.freeLabel).toBeUndefined();
     expect(JSON.stringify(free)).not.toContain("бесплатно");
     expect(paid?.pulCost).toBe(250);
     expect(paid?.pulCostLabel).toBe("250 Pul");

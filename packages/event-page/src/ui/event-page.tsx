@@ -531,10 +531,11 @@ export async function EventPage({
           />
         ) : null}
 
-        {/* The sponsor plate — the event's declared partners, stated plainly.
-            020 EARS-19 (gate row 26, D5): no rendered string states who
-            finances the event, so the plate names the partners and nothing
-            else, on both hosts. */}
+        {/* The sponsor plate — the legally required partner-material mark
+            and the event's declared partners. 020 EARS-19 (gate row 26, D5):
+            no rendered string states who finances the event, so the plate
+            carries the mark and the partner names and nothing else, on both
+            hosts (#2534). */}
         {event.partners.length > 0 ? (
           <div
             data-testid="event-partners"

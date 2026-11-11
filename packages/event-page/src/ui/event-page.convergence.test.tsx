@@ -138,16 +138,16 @@ beforeEach(() => {
 describe.each(Object.entries(HOSTS))(
   "wave-3 PR 3.2 convergences on the %s mount",
   (_host, config) => {
-    it("020 EARS-19: the partners plate names the partners and states no financing on both hosts (gate row 26, D5)", async () => {
+    it("020 EARS-19: the partners plate carries the partner-material mark, names the partners and states no financing on both hosts (gate row 26, D5)", async () => {
       const html = await renderPage(config);
       const plate = html.slice(html.indexOf('data-testid="event-partners"'));
+      expect(plate).toContain("Партнёрский материал");
       expect(plate).toContain("Партнёр А · Партнёр Б");
       expect(html).not.toMatch(/оплачивает|финансир|Спонсор/u);
     });
 
     it("020 EARS-10: the guest gate's sub-line reads «Вход — по почте, две минуты.» on both hosts and carries no «бесплатн» (gate row 44, H3)", async () => {
-      // The gate is asserted as its own subtree: the sign-up card's «Бесплатно
-      // для врача» condition is the Pul-cost fact (020 EARS-12), not the gate.
+      // The gate is asserted as its own subtree.
       document.body.innerHTML = await renderPage(config);
       const gate = screen.getByTestId("recording-gate");
       expect(gate).toHaveTextContent("Вход — по почте, две минуты.");

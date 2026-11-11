@@ -176,7 +176,7 @@ test.describe("017 EARS-1: the doctor storefront mounts the shared chrome", () =
     await page.goto("/");
     await expect(page.getByTestId("footer-giant")).toHaveText("Doctor.School");
     await expect(page.getByTestId("footer-note")).toContainText(
-      "Бесплатное образование для врачей.",
+      "Образование для врачей.",
     );
   });
 

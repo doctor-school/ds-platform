@@ -5,7 +5,8 @@ import { ScaleCounters } from "@/components/scale-counters";
  * the «Герой» block).
  *
  * Every string below is transcribed VERBATIM from that canvas — the kicker, the
- * headline, the free-for-the-doctor sub-line and the evolutionary goal. The goal
+ * headline, the sub-line and the evolutionary goal (017 «Amendment — 2026-11-10»
+ * removed the free-of-charge clause from the sub-line). The goal
  * in particular carries no gloss and no «готовится» marker beside it: EARS-2
  * names it as verbatim copy, and a marker would turn a stated intent into a
  * roadmap promise on a production surface.
@@ -13,7 +14,7 @@ import { ScaleCounters } from "@/components/scale-counters";
  * What is NOT here is as much of the contract as what is: the interface never
  * states who finances a doctor's learning, and no price in roubles, cart,
  * subscription or payment affordance appears on any 017 surface (EARS-2). The
- * sub-line says learning is free and stops there.
+ * sub-line makes no statement about money, price or who pays.
  *
  * The band is the navy `hero` role — the same value as the header band, so the
  * chrome and the hero read as one continuous blue (tokens.css `--color-hero`),
@@ -44,12 +45,12 @@ export function StorefrontHero() {
           19px past the 358px box at 390px and scrolled the whole page sideways.
         */}
         <h1 className="text-3xl font-extrabold leading-tight tracking-tight text-balance layout:text-6xl">
-          Doctor.School — бесплатное образование для врачей
+          Doctor.School — образование для врачей
         </h1>
 
         <p className="mt-6 max-w-prose text-base font-medium leading-relaxed text-hero-muted layout:text-lg">
           Выберите специальность — получите школы, курсы, уроки и события своей и
-          смежных областей. Обучение бесплатно.
+          смежных областей.
         </p>
 
         <ScaleCounters />
@@ -58,7 +59,7 @@ export function StorefrontHero() {
           data-testid="hero-goal"
           className="mt-9 inline-block border-2 border-header-hairline px-5 py-3.5 text-sm font-extrabold"
         >
-          Создаём бесплатное децентрализованное медицинское образование
+          Создаём децентрализованное медицинское образование
         </p>
       </div>
     </section>

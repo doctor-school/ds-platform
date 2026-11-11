@@ -4,8 +4,8 @@
  * `nmo` and `pulCost` are read from what the 007 aggregate actually authors
  * today: 007 authors WEBINAR broadcasts and has no НМО column and no Pul-cost
  * column at all. So this states the truth of the current authoring model rather
- * than inventing values — `nmo: false` and `pulCost: 0` («бесплатно для
- * врача»). Widening 007's authoring to carry these fields is tracked as
+ * than inventing values — `nmo: false` and `pulCost: 0` (rendered as no cost
+ * at all). Widening 007's authoring to carry these fields is tracked as
  * decision-debt in `DEBT.md`; the contracts already carry them, so that
  * widening is a change to THIS function and not a reshape.
  *
@@ -19,7 +19,8 @@
 export interface EventEconomyFacts {
   /** НМО is a chip and a facet only — never a heading or the primary filter. */
   nmo: boolean;
-  /** Cost in Pul attention points; `0` is the free-for-the-doctor reading. */
+  /** Cost in Pul attention points; `0` means the event has no Pul cost and the
+   *  surfaces render no cost row at all (020 «Amendment — 2026-11-10»). */
   pulCost: number;
 }
 

@@ -52,12 +52,6 @@ function presenceLine(count: number): string | null {
 export interface EventSignupCondition {
   label: React.ReactNode;
   value: React.ReactNode;
-  /**
-   * The value's emphasis. `success` is the canvas's green «Бесплатно для врача»
-   * (canvas:209) — a token pair, so it holds its AA contrast in dark as well;
-   * omitted is the default foreground every other row carries.
-   */
-  tone?: "default" | "success";
 }
 
 export interface EventSignupCardProps {
@@ -190,15 +184,7 @@ export function EventSignupCard({
               <span className="text-xs font-bold text-faint">
                 {condition.label}
               </span>
-              <span
-                data-tone={condition.tone ?? "default"}
-                className={cn(
-                  "text-caption font-extrabold",
-                  condition.tone === "success"
-                    ? "text-success-text"
-                    : "text-card-foreground",
-                )}
-              >
+              <span className="text-caption font-extrabold text-card-foreground">
                 {condition.value}
               </span>
             </div>

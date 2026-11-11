@@ -48,7 +48,7 @@ const VIEWPORTS = {
 const THEME_STORAGE_KEY = "ds-theme";
 
 const HERO = '[data-testid="storefront-hero"]';
-const HEADLINE = "Doctor.School — бесплатное образование для врачей";
+const HEADLINE = "Doctor.School — образование для врачей";
 
 /** The canvas tiers (`clamp(34px, 5.6vw, 60px)`) mapped onto the type tokens. */
 const EXPECTED_FONT_SIZE = { desktop: "60px", mobile: "40px" };

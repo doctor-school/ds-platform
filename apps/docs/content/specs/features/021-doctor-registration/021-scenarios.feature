@@ -36,6 +36,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     # release-1 half of EARS-9: points deferred to wave 2 (#1545), no placeholder
     And the form makes no points promise and renders no placeholder in its place
     And the medical-worker declaration and the partner-data consent are framed together above the submit button
+    # Amended 2026-11-10 (#2534): the help line reads «Без этого согласия часть материалов недоступна.» and names no condition of free education. Read under 021 «Amendment — 2026-11-10».
     And the partner-data consent carries the shared wording «Согласие на передачу данных партнёрам платформы» with its help line naming the condition of free-for-the-doctor education
     And it does not enumerate the composition of the shared data
     And the marketing opt-in stands separately below the submit button and is not pre-ticked

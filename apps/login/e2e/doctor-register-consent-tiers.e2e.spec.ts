@@ -35,7 +35,7 @@ const DOOR = doorPath("doctor", "register");
  */
 const PARTNER_DATA_LABEL = "Согласие на передачу данных партнёрам платформы";
 const PARTNER_DATA_HELP =
-  "Это условие бесплатного для врача обучения: без согласия часть материалов недоступна.";
+  "Без этого согласия часть материалов недоступна.";
 
 /**
  * The data composition is disclosed in the policy text and by the platform

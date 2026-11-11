@@ -61,7 +61,7 @@ export const EVENT_PAGE_COPY = {
     about: "О чём событие",
     program: "Программа",
     programDownload: "Скачать программу (PDF)",
-    sponsorEyebrow: "При поддержке",
+    sponsorEyebrow: "Партнёрский материал",
   },
   /**
    * The segment's failed read — canvas `pageState: ошибка` (gate row 28). One

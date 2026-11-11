@@ -19,7 +19,7 @@ Today a broadcast ends and its page becomes a dead end: an announcement for some
 
 Feature 014 gives an event a **life after the broadcast**. A recording becomes a real record attached to the event — in two kinds, the **raw** capture of the stream and the later **edited** cut — with a display rule that never leaves the doctor waiting for the montage: while only raw exists, raw plays; once edited appears, edited takes the main player and raw moves to a secondary «Смотреть оригинал трансляции» slot.
 
-The event page gets a **post-live state** rather than a new page — `/webinars/[slug]` stays the single event page for every context (epic decision #4). That state is **publicly readable**: the announcement, description, speakers, project and topics are visible to anyone, because the archive is how a guest discovers the academy. **Playback is login-gated** (epic decision #3): for a guest the player position carries a poster and an honest invitation to sign in — free registration, an entry driver, deliberately not a paywall. When the broadcast is over and no recording exists yet, the page says so plainly with a timeframe instead of showing a broken player.
+The event page gets a **post-live state** rather than a new page — `/webinars/[slug]` stays the single event page for every context (epic decision #4). That state is **publicly readable**: the announcement, description, speakers, project and topics are visible to anyone, because the archive is how a guest discovers the academy. **Playback is login-gated** (epic decision #3): for a guest the player position carries a poster and an honest invitation to sign in — registration **[«free» superseded by 014 «Amendment — 2026-11-10»]**, an entry driver, deliberately not a paywall. When the broadcast is over and no recording exists yet, the page says so plainly with a timeframe instead of showing a broken player.
 
 And the doctor's own history stops being upcoming-only: **«Мои события» shows the past events the user registered for**, each leading to its recording — the outcome #1188 asks for, delivered here.
 
@@ -31,7 +31,7 @@ An archive nobody can browse is not an archive, so this feature also gives it a 
 - **US-2** — As a **doctor**, when only the raw stream capture exists I can already watch it — I am not made to wait for the edited cut before the content is available at all.
 - **US-3** — As a **doctor**, once the edited version is published it is the one I get by default, with the original broadcast still reachable if I want it — the better version is never buried under the rougher one.
 - **US-4** — As a **guest**, I can read a past event's page fully — what it was about, who spoke, which project it belonged to — without an account, so an archived broadcast is a real entry point to the academy.
-- **US-5** — As a **guest**, when I try to watch I am told clearly that viewing requires signing in and that it is free, and I can sign in or register right there and come back to the same recording.
+- **US-5** — As a **guest**, when I try to watch I am told clearly that viewing requires signing in and that it is free **[superseded by 014 «Amendment — 2026-11-10»: no statement about money]**, and I can sign in or register right there and come back to the same recording.
 - **US-6** — As a **doctor**, when a broadcast has ended but its recording is not ready yet, the page tells me honestly that it is being prepared and when to expect it — instead of an empty player or silence.
 - **US-7** — As a **registered doctor**, «Мои события» shows me the past events I signed up for, not only the upcoming ones, so my own history is where I look first.
 - **US-8** — As a **registered doctor**, each past event in «Мои события» takes me straight to its recording, making the section the shortest path back to content I already chose.
@@ -62,7 +62,7 @@ An archive nobody can browse is not an archive, so this feature also gives it a 
 **Guest hits the gate (US-4, US-5, US-12):**
 
 1. Guest opens the same page → announcement, description, speakers, project and topics all render; nothing is hidden.
-2. In the player's position the guest sees a poster plus a plain invitation to sign in to watch, stating that access is free.
+2. In the player's position the guest sees a poster plus a plain invitation to sign in to watch, stating that access is free. **[Superseded by 014 «Amendment — 2026-11-10»: the invitation makes no statement about money.]**
 3. Guest signs in or registers → returns to the same event page and the player renders. _(decided: the owner approved the gate and its framing as a registration driver, and on 2026-08-17 set the platform-wide return-to-origin rule that makes the return land back on the same recording — EARS-6.)_
 
 **Recording not ready (US-6):**
@@ -109,7 +109,7 @@ An archive nobody can browse is not an archive, so this feature also gives it a 
 - The **display rule holds without operator intervention**: raw alone → raw in the main player; edited present → edited in the main player and raw in a secondary slot behind a «Смотреть оригинал трансляции» affordance. Publishing the edited cut later changes the page by itself.
 - `/webinars/[slug]` remains the **single event page for every context** — the post-live state is a state of that page, not a second route.
 - The post-live page is **publicly readable in full** — announcement, description, speakers, project(s), topics, materials — for a visitor with no account.
-- **Playback renders for authenticated users only.** A guest gets a poster plus an honest, non-paywall invitation to sign in, stating that access is free; the sign-in path is reachable from that spot.
+- **Playback renders for authenticated users only.** A guest gets a poster plus an honest, non-paywall invitation to sign in, stating that access is free **[superseded by 014 «Amendment — 2026-11-10»: no statement about money]**; the sign-in path is reachable from that spot.
 - When a finished event has no recording, the page shows an explicit **«запись готовится»** state with a timeframe, in the player's position; the state clears automatically once a recording is attached.
 - **«Мои события» lists the user's past registered events**, each linking to its event page and its recording — closing the outcome of #1188 / Plane DSP-229. The listing uses the shared event-list unit.
 - `/webinars` carries a **«Прошедшие» tab** that lists finished events, reachable by any visitor without an account, and **filter facets by project, expert and topic** driven by the 012 taxonomy.

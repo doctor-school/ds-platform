@@ -409,7 +409,7 @@ test.describe("017 EARS-4/5: the home specialty catalog (variant Б)", () => {
     await expect(
       page.getByRole("heading", {
         level: 1,
-        name: "Doctor.School — бесплатное образование для врачей",
+        name: "Doctor.School — образование для врачей",
       }),
     ).toBeVisible();
 

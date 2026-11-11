@@ -19,7 +19,7 @@ const BASE = {
   time: "19:00",
   timeSub: "16 июля · МСК · 90 мин",
   head: "Регистрация открыта",
-  sub: "Бесплатно. Пришлём ссылку на почту.",
+  sub: "Пришлём ссылку на почту.",
 };
 
 describe("004 EARS-4 WebinarStatusCard — time plate + signal", () => {

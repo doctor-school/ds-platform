@@ -22,7 +22,7 @@ const COPY = {
   programLabel: "Программа",
   programDownloadLabel: "Скачать программу (PDF)",
   speakersLabel: "Спикеры",
-  sponsorEyebrow: "При поддержке",
+  sponsorEyebrow: "Партнёрский материал",
 };
 
 const BASE = {
@@ -53,7 +53,7 @@ describe("WebinarPageContent — content set (EARS-2)", () => {
     expect(screen.getByText("Хирург, профессор")).toBeInTheDocument();
   });
 
-  it("EARS-2: renders the backing partner label under «При поддержке», with no financing note (wave-3 gate D5)", () => {
+  it("EARS-2: renders the backing partner label under the «Партнёрский материал» mark, with no financing note (wave-3 gate D5)", () => {
     const { container } = render(<WebinarPageContent {...BASE} />);
     expect(screen.getByText(COPY.sponsorEyebrow)).toBeInTheDocument();
     const partner = screen.getByText("Acme Pharma");

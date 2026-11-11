@@ -446,3 +446,13 @@ Every event time the feed and `WebinarCard` render reads under 004 EARS-12 as am
 **Provenance.** The Product Lead, 2026-10-29, verbatim: «Надо скрывать по умолчанию везде, в ленте тоже - можем пофиксить?»
 
 **The rule (EARS-19).** «Скрыть число записавшихся» is on by default for every event, existing events included (007 «Amendment — 2026-10-29»). Every public read — the doctor feed and month read, the 018 nearest-events block, the Academy listing and the 020 event page — therefore serves `signUpCount: null` (and no `SignUpProof`) for an event unless an operator has turned the option off for it; the card then renders no count line, on both storefronts. An event whose option is off shows the count exactly as EARS-2 and «Amendment — 2026-10-08» state. Nothing else in EARS-19 changes.
+
+## Amendment — 2026-11-10 — the interface makes no statement about money (source: [#2534](https://github.com/doctor-school/ds-platform/issues/2534), owner decision 2026-11-10)
+
+> **Status:** the events feed is live in production, so this is recorded as an amendment rather than an inline rewrite of the «No financing statement» invariant, the ADR-0016 §6 bullet, the `PublicEventSummary` note, EARS-2, Verification row 2, the 2026-10-02 «What does not change» list and the footer sentence of the 2026-10-05 amendment (AGENTS.md §6). Those clauses remain the decision as originally taken and are read under this amendment. The RU twin is [`019-requirements-ru.md`](./019-requirements-ru.md) → «Amendment — 2026-11-10».
+
+**Provenance.** The owner, in chat on 2026-11-10: «вообще убираем эти фразы, которые сужают аудиторию и указывают на то или иное отношение к деньгам. "Бесплатно для врача" звучит так, что для не-врача будет платно. Надо всё убрать… Просто убрать и всё.»
+
+**The rule now.** The interface makes no statement about money, price or who pays. A card shows «N Pul» only when the event's Pul cost is greater than zero; a zero cost shows nothing — no cost chip and no wording in its place. Wherever 019 reads «zero cost reads / renders «бесплатно для врача»», read «a zero cost renders no cost chip». The shared `WebinarCard` carries no zero-cost label prop. The 2026-10-05 sentence keeping the footer phrase «Бесплатное образование для врачей.» is superseded by 017 «Amendment — 2026-11-10»: the footer note reads «Образование для врачей.».
+
+**What does not change.** No rouble price, subscription or cart; no rendered string or response field names who funds an event; the Pul cost is still a ledger-backed per-event parameter (ADR-0016 §6).

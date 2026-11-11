@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import ciStartup from "./recording-backfill-ci-startup.fixture.json";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -54,4 +55,63 @@ it("preserves a rejected CLI process's stdout, stderr and exit status without ac
     expect(dirname(directory)).toBe(tmpdir());
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+describe("014 CI colour boundary", () => {
+  it("accepts the actual Linux CI startup bytes and preserves raw diagnostics", () => {
+    const result = readBackfillOutput(ciStartup.stdout + "\n" + json);
+    expect(result.diagnostics).toEqual(ciStartup.stdout.split("\n"));
+    expect(result.entries).toEqual(readBackfillOutput(json).entries);
+    expect(result.final).toEqual(readBackfillOutput(json).final);
+  });
+  it("rejects unknown coloured diagnostics, error levels and coloured JSON", () => {
+    const nest = ciStartup.stdout.split("\n")[0]!;
+    for (const line of [
+      nest.replace("WARN", "ERROR"),
+      nest.replace("SessionAuthHook", "UnknownHook"),
+      nest.replace("no Fastify instance", "unexpected failure"),
+      "\u001b[33munknown diagnostic\u001b[39m",
+      '\u001b[33m[delivery-reconcile] {"event":"failed"}\u001b[39m',
+      "\u001b[32m" + json + "\u001b[39m",
+    ])
+      expect(() => readBackfillOutput(line + "\n" + json)).toThrow();
+  });
+  it("keeps report JSON semantics and rejects invalid literal control bytes", () => {
+    const report = readBackfillOutput(json);
+    const detail = "\u001b[31mreport payload\u001b[39m";
+    const entry = { ...report.entries[0], detail };
+    expect(
+      readBackfillOutput(
+        JSON.stringify(entry) + "\n" + JSON.stringify(report.final),
+      ).entries[0],
+    ).toEqual(entry);
+    expect(() =>
+      readBackfillOutput(json.replace("owned", "owned\u001b[31m")),
+    ).toThrow();
+  });
+  it("captures actual CI diagnostic bytes unchanged before parsing a real child output", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "ds-recording-backfill-ci-"),
+    );
+    try {
+      const stdout = ciStartup.stdout + "\n" + json;
+      const result = await captureBackfillCommand(directory, () =>
+        promisify(execFile)(process.execPath, [
+          "-e",
+          "process.stdout.write(process.argv[1])",
+          stdout,
+        ]),
+      );
+      expect(await readFile(join(directory, "stdout.jsonl"), "utf8")).toBe(
+        stdout,
+      );
+      expect(result.stdout).toBe(stdout);
+      expect(readBackfillOutput(result.stdout).diagnostics).toEqual(
+        ciStartup.stdout.split("\n"),
+      );
+    } finally {
+      expect(dirname(directory)).toBe(tmpdir());
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });

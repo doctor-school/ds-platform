@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import { expect } from "@playwright/test";
 
 type Row = Record<string, unknown>;
@@ -46,17 +47,18 @@ export function readBackfillOutput(stdout: string) {
     .trim()
     .split(/\r?\n/)
     .filter((line) => {
+      const diagnosticLine = stripVTControlCharacters(line);
       if (
         /^\[Nest\] \d+\s+- .+ WARN \[(SessionAuthHook|AdminSessionAuthHook)\] no Fastify instance — (session|admin) auth hook not registered$/.test(
-          line,
+          diagnosticLine,
         )
       ) {
         diagnostics.push(line);
         return false;
       }
-      if (line.startsWith("[delivery-reconcile] ")) {
+      if (diagnosticLine.startsWith("[delivery-reconcile] ")) {
         const diagnostic = JSON.parse(
-          line.slice("[delivery-reconcile] ".length),
+          diagnosticLine.slice("[delivery-reconcile] ".length),
         );
         expect(diagnostic.event).toBe("delivery_mail_readiness");
         expect(Array.isArray(diagnostic.channels)).toBe(true);

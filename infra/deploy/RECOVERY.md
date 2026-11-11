@@ -88,6 +88,9 @@ not secrets; their values are in the templates or derive from the environment.
 - **Bus factor open.** Both custody keys are the owner's; recovery does not yet survive
   the owner's unavailability. It closes when a second custodian (another person,
   another location) is added (§2.1 «Adding a custodian»), tracked in #3953.
+- **No separate physical location.** Both identities are reachable from the owner's
+  home: key 2 lives on the owner's home file server, not in a separate place (§2.1
+  «Current custody»). The second custodian (#3953) closes it.
 - **Fresh-host DR drill not run.** §4 (recreate both boxes and restore) has never
   been exercised end to end; it, backup verification, alerts and a quarterly drill
   are #3671.
@@ -115,7 +118,7 @@ The bundle of a box is the set of its `/etc/ds-platform/*.env` files, encrypted 
 `infra/deploy/recovery/custodians.txt`: at least **two custodians** in different
 locations, each holding one offline identity. Either identity alone opens the bundle,
 so recovery survives the unavailability of any one person (not yet: both current keys
-are the owner's, §2.1 «Current custody»). It is deliberately **not**
+are the owner's and reachable from the owner's home, §2.1 «Current custody»). It is deliberately **not**
 encrypted to the `breakglass` SSH key: losing or rotating the access key must not lose
 recovery, and one compromised key must not open both.
 
@@ -181,10 +184,14 @@ gh workflow run recovery-custody.yml --ref main -f verb=recovery-check
 Runs once, and again only when a custodian changes or an identity is lost or exposed.
 
 **Current custody (interim).** The first ceremony ran with two identities both held by
-the owner, in two independent places: key 1 in the owner's password manager, key 2 as
-a passphrase-encrypted identity file on offline media stored in a separate place.
-`custodians.txt` records them as `# role: owner — key 1 (password manager)` and
-`# role: owner — key 2 (offline media, separate location)`. The box gate counts
+the owner: key 1 in the owner's password manager, key 2 as a passphrase-encrypted
+identity file on the owner's home file server, reachable only on the home network and
+not always powered on. `custodians.txt` records them as
+`# role: owner — key 1 (password manager)` and
+`# role: owner — key 2 (offline media, separate location)`; the key 2 label is
+corrected together with the next `custodians.txt` change (#3953), because any edit
+changes the file's sha256 and so needs a release plus `recovery-bundle` and
+`recovery-check`, which a label alone does not justify. The box gate counts
 distinct recipients only, so this satisfies it; the bus factor stays open until a
 second custodian is added (below, #3953).
 
@@ -238,7 +245,7 @@ set -o pipefail
 # Key 1 (password manager): paste the AGE-SECRET-KEY-1… line as the identity on
 # stdin, then Ctrl-Z, Enter; the identity never touches disk.
 age -d -i - "$BOX.tar.age" | tar -tf -
-# Key 2 (offline media): age asks for the identity file's passphrase.
+# Key 2 (home file server, on the home network): age asks for the identity file's passphrase.
 age -d -i custodian-2.age "$BOX.tar.age" | tar -tf -
 ```
 

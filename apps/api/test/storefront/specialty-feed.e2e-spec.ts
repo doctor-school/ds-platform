@@ -63,10 +63,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const feed = SpecialtyFeedSchema.parse(response.json());
       expect(feed.specialty.code).toBe(code);
       expect(feed.order).toBe("events-first");
-      expect(feed.blocks.map((block) => block.kind)).toEqual(["events"]);
-      expect(feed.blocks[0]!.read).toBe(
-        `/v1/storefront/feed/${encodeURIComponent(code)}/events`,
-      );
+      expect(feed.blocks.map((block) => block.kind)).toEqual([
+        "events",
+        "value",
+      ]);
+      expect(feed.blocks[0]).toEqual({
+        kind: "events",
+        read: `/v1/storefront/feed/${encodeURIComponent(code)}/events`,
+      });
       expect(feed.viewer).toEqual({ loggedIn: false });
     });
 
@@ -113,6 +117,51 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
       const feed = SpecialtyFeedSchema.parse(response.json());
       expect(feed.specialty.code).toBe(otherCode);
+    });
+
+    it("018 EARS-7: the envelope carries «Зачем это мне» after the events block — its four items and nothing else, with no read of its own", async () => {
+      const response = await read(code);
+      const feed = SpecialtyFeedSchema.parse(response.json());
+      const value = feed.blocks.find((block) => block.kind === "value");
+      expect(value).toEqual({
+        kind: "value",
+        items: [
+          {
+            title: "Новая специальность",
+            body: "Школа ведёт в новый трек — например, ортобиологию.",
+          },
+          {
+            title: "Международная стажировка",
+            body: "Лучшие участники школ едут на клинические базы.",
+          },
+          {
+            title: "Наставничество у эксперта",
+            body: "Разбор ваших случаев с автором школы.",
+          },
+          {
+            title: "Документ по итогам курса",
+            body: "Сертификат — за полное прохождение курса.",
+          },
+        ],
+      });
+      expect(response.body).not.toContain(
+        `/v1/storefront/feed/${encodeURIComponent(code)}/value`,
+      );
+    });
+
+    it("018 EARS-7: nothing in the envelope names who finances the learning", async () => {
+      const response = await read(code);
+      expect(response.body).not.toMatch(
+        /оплачива|партн[её]р|за сч[её]т|инвестор|спонсор|трудоустройств/i,
+      );
+    });
+
+    it("018 EARS-7: the value block is the same editorial copy for every specialty", async () => {
+      const a = SpecialtyFeedSchema.parse((await read(code)).json());
+      const b = SpecialtyFeedSchema.parse((await read(otherCode)).json());
+      expect(a.blocks.find((block) => block.kind === "value")).toEqual(
+        b.blocks.find((block) => block.kind === "value"),
+      );
     });
 
     it("EARS-1: a path naming no member of the specialty book is an honest RFC 7807 not-found, never a crash or an empty envelope", async () => {

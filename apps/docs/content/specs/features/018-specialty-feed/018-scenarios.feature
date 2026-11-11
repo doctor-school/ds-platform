@@ -169,11 +169,11 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     And no separate mobile-application section exists on the page
 
   @EARS-7 @happy
-  Scenario: «Зачем это мне» states the exchange and stops at free-for-the-doctor
+  Scenario: «Зачем это мне» states the exchange in four items and nothing else
     When a visitor opens the feed
     Then the value block states a new specialty, an international placement, mentorship with an expert and a document at the end of a course
-    And it closes on «всё бесплатно для врача»
-    And no marking, badge or attribution is rendered beside that statement
+    And the block ends on those four items with no closing line
+    And no marking, badge or attribution is rendered in the block
 
   @EARS-7 @failure
   Scenario: No rendered state ever names who pays

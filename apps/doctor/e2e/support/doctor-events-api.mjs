@@ -436,6 +436,32 @@ const FEED_EVENTS = [
 let specialtyEventsFailing = false;
 
 /**
+ * 018 EARS-7 — the envelope-carried «Зачем это мне» block, the same copy the
+ * api serves (`apps/api/src/storefront/specialty-feed.value-copy.ts`).
+ */
+const FEED_VALUE_BLOCK = {
+  kind: "value",
+  items: [
+    {
+      title: "Новая специальность",
+      body: "Школа ведёт в новый трек — например, ортобиологию.",
+    },
+    {
+      title: "Международная стажировка",
+      body: "Лучшие участники школ едут на клинические базы.",
+    },
+    {
+      title: "Наставничество у эксперта",
+      body: "Разбор ваших случаев с автором школы.",
+    },
+    {
+      title: "Документ по итогам курса",
+      body: "Сертификат — за полное прохождение курса.",
+    },
+  ],
+};
+
+/**
  * 018 entry (#3674) — every specialty this stand-in serves a feed for: the
  * feed fixture's own entry plus the catalog book, so a choice made on the home
  * catalog lands on a real feed envelope rather than the not-found state.
@@ -744,7 +770,10 @@ const server = createServer((request, response) => {
     }
     return json(response, 200, {
       specialty: feedSpecialty,
-      blocks: [{ kind: "events", read: `/v1/storefront/feed/${code}/events` }],
+      blocks: [
+        { kind: "events", read: `/v1/storefront/feed/${code}/events` },
+        FEED_VALUE_BLOCK,
+      ],
       order: "events-first",
       viewer: {
         loggedIn: (request.headers.cookie ?? "").includes("__Host-ds_session="),

@@ -20,6 +20,22 @@ follow and consume what is here.
   four scale counters (#1480, EARS-2 / LD-3): `doctors`, `specialties`,
   `lessons`, `eventsPerYear` plus a required `computedAt`.
 
+## 018 specialty feed envelope
+
+`GET /v1/storefront/feed/{specialty}` (`SpecialtyFeedService.envelope`)
+answers the `SpecialtyFeed` envelope of `@ds/schemas`: the specialty, the
+connected blocks in the F-018-1 order (`specialtyFeedBlocks`), the
+`events-first` order constant and `viewer.loggedIn`. A block is a union on
+`kind`:
+
+- `events` — `{ kind, read }`; its read is
+  `GET /v1/storefront/feed/{specialty}/events` (EARS-4).
+- `value` — «Зачем это мне» (EARS-7): `{ kind, items: { title, body }[4] }`,
+  carried inside the envelope with no read of its own. The
+  copy is one constant for every specialty,
+  `specialty-feed.value-copy.ts`; the strict schema leaves no room for a
+  payer or marking field (LD-9).
+
 ## EARS-8 targeting resolver
 
 `TargetingService.resolve()` is the read-through resolver from one remembered

@@ -12,6 +12,7 @@ import {
 import { DoctorEventsService } from "./doctor-events.service.js";
 import { SpecialtyError } from "./specialties.errors.js";
 import { SpecialtiesService } from "./specialties.service.js";
+import { SPECIALTY_FEED_VALUE_COPY } from "./specialty-feed.value-copy.js";
 
 /**
  * 018 EARS-1 / EARS-4 (#1496, #1499) — the specialty feed (018-design §1, §7).
@@ -55,7 +56,9 @@ export class SpecialtyFeedService {
     const specialty = await this.resolve(input.specialty);
     return {
       specialty,
-      blocks: specialtyFeedBlocks(specialty.code),
+      blocks: specialtyFeedBlocks(specialty.code, {
+        value: SPECIALTY_FEED_VALUE_COPY,
+      }),
       order: SPECIALTY_FEED_ORDER,
       viewer: { loggedIn: input.loggedIn },
     };
@@ -67,7 +70,9 @@ export class SpecialtyFeedService {
     if (!query.success) {
       // The code is a resolved member of the book; a failure here is a broken
       // codec, not a visitor input.
-      throw new Error("doctor events feed codec rejected a book specialty code");
+      throw new Error(
+        "doctor events feed codec rejected a book specialty code",
+      );
     }
     const feed = await this.doctorEvents.feed({
       query: query.data,

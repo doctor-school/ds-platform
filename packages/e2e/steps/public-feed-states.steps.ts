@@ -135,6 +135,7 @@ Then(
   async ({ page }) => {
     expect(state(page).envelope!.blocks.map((block) => block.kind)).toEqual([
       "events",
+      "value",
     ]);
   },
 );
@@ -142,11 +143,13 @@ Then(
   "the page renders no heading, placeholder, «Готовится» or «скоро» stand-in and no empty shell for any of them",
   async ({ page }) => {
     const feed = page.getByTestId("specialty-feed");
-    await expect(feed.locator("[data-feed-block-slot]")).toHaveCount(1);
-    await expect(feed.locator("[data-feed-block-slot]")).toHaveAttribute(
+    const slots = feed.locator("[data-feed-block-slot]");
+    await expect(slots).toHaveCount(2);
+    await expect(slots.nth(0)).toHaveAttribute(
       "data-feed-block-slot",
       "events",
     );
+    await expect(slots.nth(1)).toHaveAttribute("data-feed-block-slot", "value");
     for (const kind of ["schools", "lessons", "leaderboard", "communities"])
       await expect(
         feed.locator(

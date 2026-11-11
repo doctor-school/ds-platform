@@ -5,6 +5,7 @@ import type { FeedBlock, FeedBlockKind } from "@ds/schemas";
 import { SpecialtyEventsBlock } from "@ds/events-storefront/feed";
 
 import { SpecialtyFeedHeader } from "@/components/specialty-feed-header";
+import { SpecialtyFeedValueBlock } from "@/components/specialty-feed-value-block";
 import { DOCTOR_EVENTS_STOREFRONT } from "@/lib/events-storefront.host-config";
 import { fetchSpecialtyFeed } from "@/lib/specialty-feed";
 import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
@@ -19,7 +20,8 @@ import { retryDoctorEventsBlock } from "../../events/retry-block-action";
  * blocks the api's `SpecialtyFeed` envelope lists, in its order (LD-1): a
  * content type that is not connected is not in the envelope, so there is no
  * heading, placeholder or empty shell for it here. Release 1 connects the
- * nearest events (EARS-4); every further block plugs into
+ * nearest events (EARS-4) and «Зачем это мне» (EARS-7, carried by the
+ * envelope itself); every further block plugs into
  * {@link BLOCK_RENDERERS} — the record is exhaustive over the connected kinds,
  * so connecting a kind in `@ds/schemas` without its renderer fails the build.
  *
@@ -40,6 +42,8 @@ const BLOCK_RENDERERS: Record<
       specialtyCode={specialtyCode}
     />
   ),
+  value: (_specialtyCode, block) =>
+    block.kind === "value" ? <SpecialtyFeedValueBlock block={block} /> : null,
 };
 
 export default async function SpecialtyFeedPage({

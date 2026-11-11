@@ -4188,11 +4188,18 @@ export interface components {
             identifier: string;
         };
         SpecialtyFeedDto: {
-            blocks: {
+            blocks: ({
                 /** @enum {string} */
                 kind: "events";
                 read: string;
-            }[];
+            } | {
+                items: {
+                    body: string;
+                    title: string;
+                }[];
+                /** @constant */
+                kind: "value";
+            })[];
             /** @constant */
             order: "events-first";
             specialty: {

@@ -6062,19 +6062,54 @@
         "properties": {
           "blocks": {
             "items": {
-              "additionalProperties": false,
-              "properties": {
-                "kind": {
-                  "enum": ["events"],
-                  "type": "string"
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "enum": ["events"],
+                      "type": "string"
+                    },
+                    "read": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind", "read"],
+                  "type": "object"
                 },
-                "read": {
-                  "minLength": 1,
-                  "type": "string"
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "body": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["title", "body"],
+                        "type": "object"
+                      },
+                      "maxItems": 4,
+                      "minItems": 4,
+                      "type": "array"
+                    },
+                    "kind": {
+                      "const": "value",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind", "items"],
+                  "type": "object"
                 }
-              },
-              "required": ["kind", "read"],
-              "type": "object"
+              ]
             },
             "type": "array"
           },

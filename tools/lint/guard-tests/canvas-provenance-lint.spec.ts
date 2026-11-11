@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  DESIGN_SYNC_PROJECT,
+  CANVAS_SOURCE_ARTIFACT,
   checkProvenance,
   vendorCanvases,
 } from "../../design/vendor-canvas.mjs";
@@ -67,7 +67,7 @@ const entry = (bytes: string) => ({
 });
 const goodManifest = {
   version: 1,
-  designSyncProject: DESIGN_SYNC_PROJECT,
+  sourceArtifact: CANVAS_SOURCE_ARTIFACT,
   files: {
     "auth.dc.html": entry(canvas),
     "archive/archive-auth-v1.dc.html": entry(archived),
@@ -127,17 +127,35 @@ describe("canvas provenance check (#2389)", () => {
     );
   });
 
-  it("red: a malformed entry (no pulledAt date, wrong project) fails", () => {
+  it("the committed manifest names the source the guard accepts (#3955)", () => {
+    const committed = JSON.parse(
+      readFileSync(join(REPO_ROOT, "design-source", "manifest.json"), "utf8"),
+    );
+    expect(committed.sourceArtifact).toBe(CANVAS_SOURCE_ARTIFACT);
+  });
+
+  it("red: a manifest still naming the standalone Claude Design project fails (#3955)", () => {
+    const { sourceArtifact: _dropped, ...rest } = goodManifest;
+    const root = tree(goodFiles, {
+      ...rest,
+      designSyncProject: "8cc2f39a-d58e-4491-b539-4337881ced4f",
+    });
+    expect(checkProvenance(root).problems).toContain(
+      `design-source/manifest.json: sourceArtifact must be ${CANVAS_SOURCE_ARTIFACT}`,
+    );
+  });
+
+  it("red: a malformed entry (no pulledAt date, wrong source) fails", () => {
     const root = tree(goodFiles, {
       ...goodManifest,
-      designSyncProject: "someone-else",
+      sourceArtifact: "https://claude.ai/artifact/someone-else",
       files: {
         ...goodManifest.files,
         "auth.dc.html": { sha256: sha(canvas), pulledAt: "soon" },
       },
     });
     const problems = checkProvenance(root).problems.join("\n");
-    expect(problems).toContain("designSyncProject");
+    expect(problems).toContain("sourceArtifact");
     expect(problems).toContain("design-source/auth.dc.html: pulledAt");
   });
 });
@@ -155,7 +173,7 @@ describe("pnpm design:vendor writer (#2389)", () => {
     const stamped = stampCanvas(fresh, BLOCK);
     expect(
       vendorCanvases(root, [join(pulled, "fresh.dc.html")], {
-        remote: "fresh.dc.html",
+        remote: "project/fresh.dc.html",
         now,
       }),
     ).toEqual([
@@ -170,7 +188,7 @@ describe("pnpm design:vendor writer (#2389)", () => {
       sha256: sha(stamped),
       pulledSha256: sha(fresh),
       pulledAt: "2026-09-28T10:00:00.000Z",
-      remotePath: "fresh.dc.html",
+      remotePath: "project/fresh.dc.html",
     });
     expect(checkProvenance(root).ok).toBe(true);
 
@@ -200,6 +218,40 @@ describe("pnpm design:vendor writer (#2389)", () => {
     );
     expect(manifest.files["auth.dc.html"].note).toBeUndefined();
     expect(manifest.files["auth.dc.html"].pulledAt).toBe(now.toISOString());
+  });
+
+  it("--remote names the canvases artifact's project/<file> path (#3955)", () => {
+    const root = tree(goodFiles, goodManifest);
+    const pulled = join(root, "auth.dc.html");
+    writeFileSync(pulled, canvas, "utf8");
+    expect(() =>
+      vendorCanvases(root, [pulled], { remote: "auth.dc.html", now }),
+    ).toThrow(/project\/<file>/);
+    vendorCanvases(root, [pulled], { remote: "project/auth.dc.html", now });
+    const manifest = JSON.parse(
+      readFileSync(join(root, "design-source/manifest.json"), "utf8"),
+    );
+    expect(manifest.files["auth.dc.html"].remotePath).toBe(
+      "project/auth.dc.html",
+    );
+    expect(manifest.sourceArtifact).toBe(CANVAS_SOURCE_ARTIFACT);
+  });
+
+  it("a pull into a manifest still naming the standalone project rewrites its source field (#3955)", () => {
+    const { sourceArtifact: _dropped, ...rest } = goodManifest;
+    const root = tree(goodFiles, {
+      ...rest,
+      designSyncProject: "8cc2f39a-d58e-4491-b539-4337881ced4f",
+    });
+    const pulled = join(root, "auth.dc.html");
+    writeFileSync(pulled, canvas, "utf8");
+    vendorCanvases(root, [pulled], { now });
+    const manifest = JSON.parse(
+      readFileSync(join(root, "design-source/manifest.json"), "utf8"),
+    );
+    expect(manifest.designSyncProject).toBeUndefined();
+    expect(manifest.sourceArtifact).toBe(CANVAS_SOURCE_ARTIFACT);
+    expect(checkProvenance(root).ok).toBe(true);
   });
 
   it("vendors a *.js canvas module byte-exact and --check covers it (#2076)", () => {

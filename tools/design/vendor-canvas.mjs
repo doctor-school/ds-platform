@@ -1,18 +1,21 @@
 #!/usr/bin/env node
-// DS Platform — the ONE writer of vendored Claude Design canvases (#2389).
+// DS Platform — the ONE writer of vendored canvases (#2389).
 //
 //   pnpm design:vendor <pulled-file>… [--remote <path>] [--note <text>]
 //   pnpm design:vendor --restamp
 //   pnpm design:vendor --check
 //
-// Vendoring = the lead's DesignSync `get_file` pull (lead-only tool) lands the
-// canvas bytes on disk; this script copies each pulled `*.dc.html` canvas — or
+// Vendoring = the lead's `Artifact read` of `project/<file>` on the canvases
+// artifact (CANVAS_SOURCE_ARTIFACT; lead-only tool) lands the canvas bytes on
+// disk; this script copies each pulled `*.dc.html` canvas — or
 // `*.js` canvas module a canvas loads via `<script src>` (#2076) — byte-exact
 // into `design-source/` (a file already under `design-source/` is recorded in
 // place), computes its sha256 and upserts its entry in
 // `design-source/manifest.json` with `pulledAt` = now (UTC), printing
 // `NEW|SAME|CHANGED <file> <bytes>`. A real pull drops any earlier `note`
-// (e.g. the #2389 backfill note) unless `--note` restates one.
+// (e.g. the #2389 backfill note) unless `--note` restates one. `--remote`
+// records the artifact path, always `project/<file>`; entries pulled before
+// #3955 keep the bare path of the standalone project they came from.
 //
 // A non-archive `*.dc.html` is then stamped with the tokens.css control-state
 // block (./canvas-states.mjs, #2221): the manifest's `sha256` is the stamped
@@ -25,7 +28,7 @@
 // every entry has its file; plus the three #2221 state checks.
 // Honest limit: this proves the manifest and the bytes agree and that the
 // vendoring was an explicit recorded act; it cannot prove, without network,
-// that the bytes came from Claude Design. The structural control against a
+// that the bytes came from the canvases artifact. The structural control against a
 // code-side canvas edit is ui-parity's co-edit BLOCK (a canvas never shares a
 // PR with UI) plus its base-ref canvas read.
 
@@ -57,7 +60,9 @@ import {
   stampCanvas,
 } from "./canvas-states.mjs";
 
-export const DESIGN_SYNC_PROJECT = "8cc2f39a-d58e-4491-b539-4337881ced4f";
+/** The Claude artifact holding every canvas under `project/` (#3955). */
+export const CANVAS_SOURCE_ARTIFACT =
+  "https://claude.ai/artifact/LHpSoMqti9kRrhEbR9o2AQ";
 export const MANIFEST_REL = "design-source/manifest.json";
 /** A canvas page or a `*.js` canvas module it loads (#2076). */
 const CANVAS_RE = /\.(?:dc\.html|js)$/;
@@ -140,9 +145,9 @@ export function checkProvenance(root) {
     };
   if (manifest.version !== 1)
     problems.push(`${MANIFEST_REL}: version must be 1`);
-  if (manifest.designSyncProject !== DESIGN_SYNC_PROJECT)
+  if (manifest.sourceArtifact !== CANVAS_SOURCE_ARTIFACT)
     problems.push(
-      `${MANIFEST_REL}: designSyncProject must be ${DESIGN_SYNC_PROJECT}`,
+      `${MANIFEST_REL}: sourceArtifact must be ${CANVAS_SOURCE_ARTIFACT}`,
     );
   const entries =
     manifest.files && typeof manifest.files === "object" ? manifest.files : {};
@@ -162,7 +167,7 @@ export function checkProvenance(root) {
       entry.sha256 !== sha256Hex(readFileSync(join(root, "design-source", rel)))
     )
       problems.push(
-        `${label}: sha256 mismatch — the file changed without a vendoring pass (Claude Design → DesignSync pull → \`pnpm design:vendor\`)`,
+        `${label}: sha256 mismatch — the file changed without a vendoring pass (canvases artifact → \`Artifact read\` of project/<file> → \`pnpm design:vendor\`)`,
       );
     if (
       typeof entry.pulledAt !== "string" ||
@@ -209,13 +214,19 @@ export function vendorCanvases(
   { remote = null, note, now = new Date() } = {},
 ) {
   if (remote !== null && pulledFiles.length !== 1)
-    throw new Error("--remote names ONE pulled file's DesignSync path");
+    throw new Error("--remote names ONE pulled file's artifact path");
+  if (remote !== null && !/^project\/(?!.*\.\.)[^/]/.test(remote))
+    throw new Error(
+      `--remote ${remote}: the canvases artifact path is project/<file>`,
+    );
   const base = join(root, "design-source");
-  const manifest = readManifest(root) ?? {
-    version: 1,
-    designSyncProject: DESIGN_SYNC_PROJECT,
-    files: {},
+  // A manifest written before #3955 names the standalone project; a pull
+  // rewrites that one field to the canvases artifact.
+  const manifest = {
+    ...(readManifest(root) ?? { version: 1, files: {} }),
+    sourceArtifact: CANVAS_SOURCE_ARTIFACT,
   };
+  delete manifest.designSyncProject;
   const lines = [];
   const stated = [];
   for (const pulled of pulledFiles) {
@@ -294,9 +305,11 @@ export function restampCanvases(root) {
       throw new Error(
         `design-source/${rel}: no manifest entry — vendor it first`,
       );
-    if (sha256Hex(readFileSync(join(root, "design-source", rel))) !== entry.sha256)
+    if (
+      sha256Hex(readFileSync(join(root, "design-source", rel))) !== entry.sha256
+    )
       drifted.push(
-        `design-source/${rel}: bytes differ from manifest sha256 — re-vendor it from Claude Design (\`pnpm design:vendor <pulled file>\`)`,
+        `design-source/${rel}: bytes differ from manifest sha256 — re-vendor it from the canvases artifact (\`pnpm design:vendor <pulled file>\`)`,
       );
   }
   if (drifted.length) throw new Error(drifted.join("\n"));

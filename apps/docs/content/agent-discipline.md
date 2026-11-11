@@ -32,10 +32,10 @@ Verify required tools and permissions before dispatch.
 - Owner input — Claude: AskUserQuestion; Codex: Permitted input tool or concise direct question
 - Browse / image — Claude: WebFetch, Read image; Codex: Real browsing/image-view tools; open primary pages, deliver artifacts separately
 - Browser — Claude: Playwright MCP or script; Codex: Available browser tool or committed Playwright; real live journey evidence
-- Design canvas — Claude: Available DesignSync; Codex: Real list/get/incremental-sync connector; missing required access blocks the step
+- Design canvas — Claude: the Artifact tool (`read`/publish on the canvases artifact); Codex: a real list/read connector; missing required access blocks the step
 - Session/usage — Claude: Claude log/hook fields; Codex: Verified Codex rollout/portable record; missing/stale telemetry is unavailable
 
-`frontend-design` is outside the project catalog (use the constitution + `research-ui-element`); `/design-sync` only publishes `@ds/design-system` (lead step).
+`frontend-design` is outside the project catalog (use the constitution + `research-ui-element`); `pnpm design:artifact` only publishes `@ds/design-system` (lead step).
 
 Claude Design remains the design product; missing required live inventory/sync/composition blocks that step. Approved vendored `.dc.html` or exact owner exports provide bytes/provenance where permitted, not unperformed operations or new approval. Save bytes programmatically rather than retyping them.
 

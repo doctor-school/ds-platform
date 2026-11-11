@@ -2,11 +2,12 @@
 /**
  * canvas-provenance — BLOCK guard (Issue #2389, ADR-0007 §2.6, ADR-0013).
  *
- * Every vendored Claude Design canvas `design-source/**\/*.dc.html` (archive
+ * Every vendored canvas `design-source/**\/*.dc.html` (archive
  * included) must carry an entry in `design-source/manifest.json` whose sha256
  * equals the file bytes, and every entry must name a file that exists. The one
  * writer of that manifest is `pnpm design:vendor` (tools/design/vendor-canvas.mjs),
- * run on the bytes of a DesignSync `get_file` pull; this guard is its `--check`.
+ * run on the bytes of an `Artifact read` of the canvases artifact's
+ * `project/<file>`; this guard is its `--check`.
  *
  * The same verdict carries the #2221 control-state checks on every non-archive
  * canvas (tools/design/canvas-states.mjs): no untagged `<a>`/`<button>`, no
@@ -15,8 +16,8 @@
  * to the tokens.css-generated text. Every failure names `file:line` or file.
  *
  * Honest limit: the guard proves «manifest and bytes agree and the vendoring
- * was an explicit recorded act»; it cannot prove the bytes came from Claude
- * Design without network. What makes a code-side canvas edit impossible to
+ * was an explicit recorded act»; it cannot prove the bytes came from the
+ * canvases artifact without network. What makes a code-side canvas edit impossible to
  * merge inside a UI PR is ui-parity's co-edit BLOCK (a canvas and render-capable
  * UI never share a PR) together with its base-ref canvas read.
  *
@@ -38,7 +39,7 @@ if (!verdict.ok) {
   for (const problem of verdict.problems)
     process.stderr.write(`${TAG} ${problem}\n`);
   process.stderr.write(
-    `${TAG} canvas changes happen in Claude Design → DesignSync pull → \`pnpm design:vendor\` in a design-source-only vendoring PR (AGENTS.md §6, #2389).\n`,
+    `${TAG} canvas changes happen in the canvases artifact (https://claude.ai/artifact/LHpSoMqti9kRrhEbR9o2AQ) → \`Artifact read\` of project/<file> → \`pnpm design:vendor\` in a design-source-only vendoring PR (AGENTS.md §6, #2389).\n`,
   );
   process.exit(1);
 }

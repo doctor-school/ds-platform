@@ -925,7 +925,7 @@ describe("ui-parity guard integration", () => {
     const { code, stderr } = runCanvasGuard(2338);
     expect(code).toBe(1);
     expect(stderr).toContain(
-      "canvas co-edit: design-source/auth.dc.html is a vendored canvas; canvas changes happen in Claude Design → DesignSync pull → a design-source-only vendoring PR (AGENTS.md §6, #2389). Split this PR.",
+      "canvas co-edit: design-source/auth.dc.html is a vendored canvas; canvas changes happen in the canvases artifact → an Artifact read → a design-source-only vendoring PR (AGENTS.md §6, #2389). Split this PR.",
     );
   });
 

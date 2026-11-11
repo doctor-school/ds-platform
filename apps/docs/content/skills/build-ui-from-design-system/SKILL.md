@@ -74,7 +74,7 @@ It also includes a **UI-quality-fix round** (spacing / state / hover / reflow de
 - **Copying an Academy/Doctor capability into the other app** instead of extracting and consuming one canonical implementation, or calling shared live/read/state behaviour app-local glue.
 - **Committing proprietary-registry code into a public repo** (pattern-only there).
 - **Skipping Stage A / inverting the gate** — entering UI implementation, or surfacing the design last as a green PR, with no recorded owner sign-off; a handoff "approved" is unverified.
-- **Chat prose / a wireframe instead of triggering the owner's taste-work in claude.ai/design** (Stage A), or **a static screenshot instead of a live URL** (an Ask Stage B with a visible difference) — the owner picks/approves from what they can see and drive.
+- **Chat prose / a wireframe instead of triggering the owner's taste-work in Claude Design in Claude** (Stage A), or **a static screenshot instead of a live URL** (an Ask Stage B with a visible difference) — the owner picks/approves from what they can see and drive.
 - **Skipping the constitution/research visual-direction and interaction-state audit** — clickables with no hover feedback or an arrow cursor.
 - **A PNG/JPG product asset or a white-chip logo when a clean variant exists** (ADR-0013 §8).
 - **Declaring "done" on build/lint/review without a browser live-verify.**

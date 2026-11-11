@@ -21,7 +21,7 @@ import {
   stampCanvas,
 } from "../../design/canvas-states.mjs";
 import {
-  DESIGN_SYNC_PROJECT,
+  CANVAS_SOURCE_ARTIFACT,
   checkProvenance,
   restampCanvases,
   vendorCanvases,
@@ -74,7 +74,7 @@ function tree(
     join(root, "design-source/manifest.json"),
     JSON.stringify({
       version: 1,
-      designSyncProject: DESIGN_SYNC_PROJECT,
+      sourceArtifact: CANVAS_SOURCE_ARTIFACT,
       files,
     }),
     "utf8",
@@ -329,7 +329,7 @@ describe("pnpm design:vendor stamps at vendoring (#2221)", () => {
     const manifestPath = join(root, "design-source/manifest.json");
     const manifestBefore = readFileSync(manifestPath, "utf8");
     expect(() => restampCanvases(root)).toThrow(
-      /design-source\/a\.dc\.html.*re-vendor it from Claude Design/,
+      /design-source\/a\.dc\.html.*re-vendor it from the canvases artifact/,
     );
     const read = (rel: string) => readFileSync(join(root, rel), "utf8");
     expect(read("design-source/a.dc.html")).toBe(edited);

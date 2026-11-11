@@ -138,6 +138,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
         | hidden    |
 
     @EARS-2 @core @failure
+    @recording-command-boundaries
     Scenario: The panel offers no Delete anywhere
       Given a finished event with a published edited recording
       When the operator inspects every action in the recordings panel
@@ -201,6 +202,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And no second route and no degraded composition exists for the legacy one
 
     @EARS-27 @core @failure
+    @recording-command-boundaries
     Scenario Outline: A broadcast command on a legacy event is refused
       Given a legacy event in state <state>
       When the operator invokes <command>
@@ -217,6 +219,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
         | hidden     | ConfigureStream |
 
     @EARS-27 @core @failure
+    @recording-command-boundaries
     Scenario Outline: A legacy command on a platform event is refused
       Given a platform event in state <state>
       When the operator invokes <command>

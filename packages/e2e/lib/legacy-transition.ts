@@ -278,3 +278,140 @@ export class LegacyTransitionProof {
     await this.verify();
   }
 }
+
+export const boundaryOutlines = [
+  "A broadcast command on a legacy event is refused",
+  "A legacy command on a platform event is refused",
+] as const;
+export const noDeleteTitle = "The panel offers no Delete anywhere";
+export const boundaryCases = [
+  {
+    outline: "",
+    title: noDeleteTitle,
+    origin: "platform",
+    state: "ended",
+    command: "DeleteRecording",
+    route: "recordings",
+    method: "DELETE",
+  },
+  ...(
+    [
+      ["hidden", "PublishEvent", "publish"],
+      ["hidden", "OpenRoom", "open"],
+      ["in_archive", "CloseRoom", "close"],
+      ["in_archive", "HideEvent", "hide"],
+      ["hidden", "ConfigureStream", "stream"],
+    ] as const
+  ).map(([state, command, route], index) => ({
+    outline: boundaryOutlines[0],
+    title: `Example #${index + 1}`,
+    origin: "legacy",
+    state,
+    command,
+    route,
+    method: command === "ConfigureStream" ? "PUT" : "POST",
+  })),
+  ...(
+    [
+      ["published", "ArchiveLegacyBroadcast", "archive-legacy"],
+      ["ended", "ArchiveLegacyBroadcast", "archive-legacy"],
+      ["hidden", "HideLegacyBroadcast", "hide-legacy"],
+    ] as const
+  ).map(([state, command, route], index) => ({
+    outline: boundaryOutlines[1],
+    title: `Example #${index + 1}`,
+    origin: "platform",
+    state,
+    command,
+    route,
+    method: "POST",
+  })),
+];
+export type BoundaryReceipt = {
+  outline: string;
+  title: string;
+  origin: string;
+  state: string;
+  command: string;
+  eventId: string;
+  before: Row;
+  after: Row;
+  answer: LegacyAnswer;
+  sideEffectsBefore?: { stream: Row[]; presence: Row[]; liveAt: unknown };
+  sideEffectsAfter?: { stream: Row[]; presence: Row[]; liveAt: unknown };
+  recordingBefore?: Row;
+  recordingAfter?: Row;
+  panelControls?: string[];
+  dialogs?: string[];
+};
+// 014 EARS-2/EARS-27: source-case identity and refusal evidence travel together.
+export function assertBoundaryReceipt(
+  r: BoundaryReceipt,
+  outline: string,
+  title: string,
+) {
+  const definition = boundaryCases.find(
+    (c) => c.outline === outline && c.title === title,
+  );
+  if (
+    !definition ||
+    !r ||
+    r.outline !== outline ||
+    r.title !== title ||
+    r.origin !== definition.origin ||
+    r.state !== definition.state ||
+    r.command !== definition.command ||
+    !r.eventId ||
+    r.before.id !== r.eventId ||
+    r.before.origin !== definition.origin ||
+    r.before.state !== definition.state ||
+    JSON.stringify(r.before) !== JSON.stringify(r.after)
+  )
+    throw new Error("Boundary identity or unchanged event mismatch");
+  const deletion = definition.command === "DeleteRecording";
+  const request = r.answer.request;
+  const route = deletion
+    ? `recordings/${r.recordingBefore?.id}`
+    : definition.route;
+  if (
+    request.method !== definition.method ||
+    request.path !== `/v1/admin/events/${r.eventId}/${route}` ||
+    request.ifMatch !==
+      `W/"${deletion ? r.recordingBefore?.version : r.before.version}"` ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      request.idempotencyKey,
+    ) ||
+    request.transport !== "api" ||
+    r.answer.status !== (deletion ? 404 : 409)
+  )
+    throw new Error("Boundary refusal/protocol mismatch");
+  if (deletion) {
+    if (
+      r.recordingBefore?.kind !== "edited" ||
+      r.recordingBefore.status !== "published" ||
+      r.recordingBefore.deleted_at !== null ||
+      JSON.stringify(r.recordingBefore) !== JSON.stringify(r.recordingAfter) ||
+      !r.panelControls?.length ||
+      !r.dialogs?.length ||
+      [...r.panelControls, ...r.dialogs].some((label) =>
+        /delete|удалить/i.test(label),
+      )
+    )
+      throw new Error("Published recording Delete inspection mismatch");
+  } else {
+    if (
+      (r.answer.body.errorCode ?? r.answer.body.code) !== "INVALID_TRANSITION"
+    )
+      throw new Error("Boundary refusal code mismatch");
+    if (definition.origin === "legacy") {
+      for (const side of [r.sideEffectsBefore, r.sideEffectsAfter])
+        if (
+          !side ||
+          side.stream.length ||
+          side.presence.length ||
+          side.liveAt !== null
+        )
+          throw new Error("Boundary room/presence/stream side effects");
+    }
+  }
+}

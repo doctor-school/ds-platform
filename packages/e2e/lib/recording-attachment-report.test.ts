@@ -2,6 +2,7 @@ import {
   legacyTitles,
   type PublicListBody,
   type LegacyReceipt,
+  type BoundaryReceipt,
 } from "./legacy-transition.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -123,12 +124,24 @@ function assertRecordingAttachmentReport(
                     s.title ===
                     "Recording lifecycle, playback and remaining archive contracts",
                 )
-                .flatMap((s) => s.specs),
-              suites: value.suites.filter(
-                (s) =>
-                  s.title !==
-                  "Recording lifecycle, playback and remaining archive contracts",
-              ),
+                .flatMap((s) => s.specs)
+                .concat(
+                  scope === "full"
+                    ? boundaryReport().suites[0]!.suites[0]!.specs
+                    : [],
+                ),
+              suites: [
+                ...value.suites.filter(
+                  (s) =>
+                    s.title !==
+                    "Recording lifecycle, playback and remaining archive contracts",
+                ),
+                ...(scope === "full"
+                  ? boundaryReport().suites[0]!.suites[0]!.suites.filter(
+                      (s) => s.title,
+                    )
+                  : []),
+              ],
             },
           ],
         },
@@ -138,14 +151,9 @@ function assertRecordingAttachmentReport(
   );
 }
 describe("014 attachment receipts", () => {
-  it("accepts only the three legacy cases with an explicit narrow scope", () => {
-    const value = report();
-    value.suites[0]!.specs = [];
-    value.suites[1]!.specs = [];
-    value.suites[2]!.specs = [];
-    value.suites[3]!.specs = value.suites[3]!.specs.slice(1);
-    expect(() => assertRecordingAttachmentReport(value, "new")).not.toThrow();
-    expect(() => assertRecordingAttachmentReport(value)).toThrow();
+  it("requires the new nine boundary cases when narrow scope is explicit", () => {
+    expect(() => assertRawReport(boundaryReport(), "new")).not.toThrow();
+    expect(() => assertRawReport(boundaryReport())).toThrow();
     expect(() => assertRecordingAttachmentReport(report(), "new")).toThrow();
   });
   it("rejects identical example titles moved into the other source outline", () => {
@@ -158,7 +166,7 @@ describe("014 attachment receipts", () => {
       /identity/,
     );
   });
-  it("accepts exactly thirteen cases, both outlines and 78 Background groups", () => {
+  it("accepts exactly twenty-two cases, four outlines and 132 Background groups", () => {
     expect(() => assertRecordingAttachmentReport(report())).not.toThrow();
   });
   it("rejects green labels without the executed Background receipt", () => {
@@ -428,4 +436,240 @@ it("rejects refusal changes or audit writes and missing pre-hide membership/coun
     expect(() =>
       assertRecordingAttachmentReport(corruptLegacy(change, 3)),
     ).toThrow();
+});
+const boundaryDefinitions = [
+  {
+    outline: "",
+    title: "The panel offers no Delete anywhere",
+    origin: "platform",
+    state: "ended",
+    command: "DeleteRecording",
+  },
+  ...[
+    ["hidden", "PublishEvent"],
+    ["hidden", "OpenRoom"],
+    ["in_archive", "CloseRoom"],
+    ["in_archive", "HideEvent"],
+    ["hidden", "ConfigureStream"],
+  ].map(([state, command], index) => ({
+    outline: "A broadcast command on a legacy event is refused",
+    title: `Example #${index + 1}`,
+    origin: "legacy",
+    state,
+    command,
+  })),
+  ...[
+    ["published", "ArchiveLegacyBroadcast"],
+    ["ended", "ArchiveLegacyBroadcast"],
+    ["hidden", "HideLegacyBroadcast"],
+  ].map(([state, command], index) => ({
+    outline: "A legacy command on a platform event is refused",
+    title: `Example #${index + 1}`,
+    origin: "platform",
+    state,
+    command,
+  })),
+];
+function boundaryReport() {
+  const value = {
+    errors: [],
+    suites: [
+      {
+        title:
+          "A finished broadcast keeps its value as a recording, and the archive is browsable",
+        suites: [
+          {
+            title:
+              "Recording lifecycle, playback and remaining archive contracts",
+            specs: [] as ReturnType<typeof report>["suites"][number]["specs"],
+            suites: boundaryDefinitions.map((definition) => ({
+              title: definition.outline,
+              specs: [
+                {
+                  title: definition.title,
+                  tests: [
+                    {
+                      projectId: "recording-attachment",
+                      projectName: "recording-attachment",
+                      status: "expected",
+                      results: [
+                        {
+                          status: "passed",
+                          retry: 0,
+                          attachments: [
+                            {
+                              name: "recording-attachment",
+                              contentType: "application/json",
+                              body: Buffer.from(
+                                JSON.stringify({
+                                  sourceHost: "academy",
+                                  backgrounds: clauses.map((clause) => ({
+                                    clause,
+                                    evidence: [1],
+                                  })),
+                                  boundary: {
+                                    ...definition,
+                                    eventId: "owned",
+                                    before: {
+                                      id: "owned",
+                                      origin: definition.origin,
+                                      state: definition.state,
+                                      version: 1,
+                                      live_at: null,
+                                    },
+                                    after: {
+                                      id: "owned",
+                                      origin: definition.origin,
+                                      state: definition.state,
+                                      version: 1,
+                                      live_at: null,
+                                    },
+                                    answer: {
+                                      status:
+                                        definition.command === "DeleteRecording"
+                                          ? 404
+                                          : 409,
+                                      body: { errorCode: "INVALID_TRANSITION" },
+                                      request: {
+                                        method:
+                                          definition.command ===
+                                          "DeleteRecording"
+                                            ? "DELETE"
+                                            : definition.command ===
+                                                "ConfigureStream"
+                                              ? "PUT"
+                                              : "POST",
+                                        path: `/v1/admin/events/owned/${definition.command === "DeleteRecording" ? "recordings/recording" : ({ PublishEvent: "publish", OpenRoom: "open", CloseRoom: "close", HideEvent: "hide", ConfigureStream: "stream", ArchiveLegacyBroadcast: "archive-legacy", HideLegacyBroadcast: "hide-legacy" } as Record<string, string>)[definition.command!]}`,
+                                        ifMatch: 'W/"1"',
+                                        idempotencyKey:
+                                          "12345678-1234-4123-8123-123456789abc",
+                                        transport: "api",
+                                      },
+                                    },
+                                    sideEffectsBefore: {
+                                      stream: [],
+                                      presence: [],
+                                      liveAt: null,
+                                    },
+                                    sideEffectsAfter: {
+                                      stream: [],
+                                      presence: [],
+                                      liveAt: null,
+                                    },
+                                    recordingBefore: {
+                                      id: "recording",
+                                      kind: "edited",
+                                      status: "published",
+                                      version: 1,
+                                      deleted_at: null,
+                                    },
+                                    recordingAfter: {
+                                      id: "recording",
+                                      kind: "edited",
+                                      status: "published",
+                                      version: 1,
+                                      deleted_at: null,
+                                    },
+                                    panelControls: [
+                                      "Изменить",
+                                      "Снять с публикации",
+                                      "Убрать",
+                                    ],
+                                    dialogs: ["Изменить"],
+                                  },
+                                }),
+                              ).toString("base64"),
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            })),
+          },
+        ],
+      },
+    ],
+  };
+  const rule = value.suites[0]!.suites[0]!;
+  rule.specs.push(...rule.suites.shift()!.specs);
+  return value;
+}
+it("accepts the exact nine boundary cases as the new portion", () => {
+  expect(() => assertRawReport(boundaryReport(), "new")).not.toThrow();
+});
+it("rejects mismatched boundary examples, successful wrong-machine commands and new side effects", () => {
+  for (const change of [
+    (r: BoundaryReceipt) => {
+      r.command = "OpenRoom";
+    },
+    (r: BoundaryReceipt) => {
+      r.state = "in_archive";
+    },
+    (r: BoundaryReceipt) => {
+      r.answer.status = 200;
+    },
+    (r: BoundaryReceipt) => {
+      r.answer.body.errorCode = "EVENT_NOT_FINISHED";
+    },
+    (r: BoundaryReceipt) => {
+      r.after.version = 2;
+    },
+    (r: BoundaryReceipt) => {
+      r.answer.request.ifMatch = 'W/"9"';
+    },
+    (r: BoundaryReceipt) => {
+      r.sideEffectsAfter!.stream = [{ id: "leaked" }];
+    },
+    (r: BoundaryReceipt) => {
+      r.sideEffectsAfter!.presence = [{ id: "leaked" }];
+    },
+    (r: BoundaryReceipt) => {
+      r.sideEffectsAfter!.liveAt = "2026-01-01";
+    },
+  ]) {
+    const value = boundaryReport(),
+      attachment =
+        value.suites[0]!.suites[0]!.suites[0]!.specs[0]!.tests[0]!.results[0]!
+          .attachments[0]!;
+    const receipt = JSON.parse(
+      Buffer.from(attachment.body, "base64").toString("utf8"),
+    );
+    change(receipt.boundary);
+    attachment.body = Buffer.from(JSON.stringify(receipt)).toString("base64");
+    expect(() => assertRawReport(value, "new")).toThrow();
+  }
+});
+it("rejects a draft no-Delete substitute, uninspected controls and destructive deletion", () => {
+  for (const change of [
+    (r: BoundaryReceipt) => {
+      r.recordingBefore!.status = "draft";
+      r.recordingAfter!.status = "draft";
+    },
+    (r: BoundaryReceipt) => {
+      r.panelControls = [];
+    },
+    (r: BoundaryReceipt) => {
+      r.dialogs = [];
+    },
+    (r: BoundaryReceipt) => {
+      r.panelControls!.push("Удалить");
+    },
+    (r: BoundaryReceipt) => {
+      r.recordingAfter = {};
+    },
+  ]) {
+    const value = boundaryReport(),
+      attachment =
+        value.suites[0]!.suites[0]!.specs[0]!.tests[0]!.results[0]!
+          .attachments[0]!;
+    const receipt = JSON.parse(
+      Buffer.from(attachment.body, "base64").toString("utf8"),
+    );
+    change(receipt.boundary);
+    attachment.body = Buffer.from(JSON.stringify(receipt)).toString("base64");
+    expect(() => assertRawReport(value, "new")).toThrow();
+  }
 });

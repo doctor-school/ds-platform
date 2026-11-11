@@ -34,6 +34,24 @@ export const test = base.extend<{
   documentStatus: async ({}, use) => {
     await use({});
   },
+  // The production portal build bakes its `/v1/*` rewrite target at build
+  // time, before this runtime picks the owned transport's port; the browser's
+  // same-origin API reads are therefore carried to that transport here, and
+  // every byte still comes from the real API.
+  page: async ({ page, materialPages }, use) => {
+    const portal = new URL(materialPages.portal);
+    await page.route(
+      (url) => url.origin === portal.origin && url.pathname.startsWith("/v1/"),
+      async (route) => {
+        const target = new URL(route.request().url());
+        const response = await route.fetch({
+          url: materialPages.transport.url + target.pathname + target.search,
+        });
+        await route.fulfill({ response });
+      },
+    );
+    await use(page);
+  },
   // eslint-disable-next-line no-empty-pattern -- each scenario owns its rail state.
   feed: async ({}, use) => {
     const state: FeedState = { titles: [], held: [] };
@@ -341,10 +359,23 @@ Given(
       );
       feed.titles.push(title);
     }
-    const read = (await (
-      await fetch(`${materialPages.api}/v1/public/feed?limit=50`)
-    ).json()) as { data: { title: string }[] };
-    expect(read.data.map((card) => card.title)).toEqual(newest(feed));
+    const titles: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const query = new URLSearchParams({ limit: "24" });
+      if (cursor) query.set("cursor", cursor);
+      const response = await fetch(
+        `${materialPages.api}/v1/public/feed?${query.toString()}`,
+      );
+      expect(response.status).toBe(200);
+      const read = (await response.json()) as {
+        data: { title: string }[];
+        nextCursor: string | null;
+      };
+      titles.push(...read.data.map((card) => card.title));
+      cursor = read.nextCursor;
+    } while (cursor);
+    expect(titles).toEqual(newest(feed));
   },
 );
 Given("no material is published", async ({ materialPages }) => {

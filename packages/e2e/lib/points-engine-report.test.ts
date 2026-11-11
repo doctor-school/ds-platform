@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   assertPointsEngineReport,
+  assertPointsBackgrounds,
+  assertPointsLifecycleBoundariesReport,
   assertPointsRecordBoundariesReport,
   assertPointsReserveBoundariesReport,
   assertPointsAdvanceBoundariesReport,
@@ -33,6 +35,11 @@ const referrals = [
   "Pul amounts never read as money",
   "Referral awards stop for the inviter above the monthly cap",
   "The invitee's first completed lesson counts itself for the referral",
+];
+const lifecycle = [
+  "A no-show releases the reserve and annuls the advance",
+  "Exclusive campaign rules apply only the highest priority one inside their window",
+  "Doctors registered before the engine receive the starter bonus once",
 ];
 const rulebook = [
   "An admin attaches a new reward to an existing fact type without a release",
@@ -71,6 +78,7 @@ for (const [scope, titles, assertReport] of [
       ...advances,
       ...referrals,
       ...rulebook,
+      ...lifecycle,
     ],
     assertPointsEngineReport,
   ],
@@ -79,6 +87,7 @@ for (const [scope, titles, assertReport] of [
   ["advance wave", advances, assertPointsAdvanceBoundariesReport],
   ["referral wave", referrals, assertPointsReferralBoundariesReport],
   ["rulebook wave", rulebook, assertPointsRulebookBoundariesReport],
+  ["lifecycle wave", lifecycle, assertPointsLifecycleBoundariesReport],
 ] as const) {
   describe("025 " + scope + " execution receipt", () => {
     it("EARS-4/8/31: accepts its exact source originals passing once", () => {
@@ -184,4 +193,57 @@ it("EARS-13/21/22/41: reserve receipt refuses either preceding wave", () => {
       /identity/,
     );
   }
+});
+
+function backgroundLog() {
+  return [
+    {
+      title: lifecycle[0],
+      clause: "seed-defaults",
+      personId: "person-a",
+      applicationName: "case-a",
+      verified: true,
+    },
+    {
+      title: lifecycle[0],
+      clause: "doctor-specialty-phone",
+      personId: "person-a",
+      applicationName: "case-a",
+      verified: true,
+    },
+  ]
+    .map((row) =>
+      JSON.stringify({ command: "BACKGROUND " + JSON.stringify(row) }),
+    )
+    .join("\n");
+}
+it("EARS-18/36/43: requires the ordered actual Background pair for every original", () => {
+  expect(() =>
+    assertPointsBackgrounds(backgroundLog(), [lifecycle[0]!]),
+  ).not.toThrow();
+  for (const log of [
+    "",
+    backgroundLog().split("\n")[0]!,
+    backgroundLog() + "\n" + backgroundLog(),
+    backgroundLog().split("\n").reverse().join("\n"),
+    backgroundLog().replaceAll("doctor-specialty-phone", "unverified"),
+    backgroundLog().replaceAll('\\"verified\\":true', '\\"verified\\":false'),
+  ]) {
+    expect(() => assertPointsBackgrounds(log, [lifecycle[0]!])).toThrow();
+  }
+  expect(() => assertPointsBackgrounds(backgroundLog(), lifecycle)).toThrow();
+});
+it("EARS-18/36/43: full contour rejects the preceding eighteen", () => {
+  expect(() =>
+    assertPointsEngineReport(
+      report([
+        ...previous,
+        ...boundaries,
+        ...reserves,
+        ...advances,
+        ...referrals,
+        ...rulebook,
+      ]),
+    ),
+  ).toThrow(/identity/);
 });

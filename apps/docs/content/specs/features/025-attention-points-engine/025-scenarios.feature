@@ -76,6 +76,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     And an open event and every lesson remain open to "A"
 
   @EARS-18 @failure
+  @points-lifecycle-boundaries
   Scenario: A no-show releases the reserve and annuls the advance
     Given "A" holds a reserve with an advance on event "E2"
     When "E2" ends and the 24-hour no-show window passes without "attendance.confirmed" for "A"
@@ -157,6 +158,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     And the journal row holds the fact and its evaluation trace
 
   @EARS-36 @EARS-37 @EARS-38
+  @points-lifecycle-boundaries
   Scenario: Exclusive campaign rules apply only the highest priority one inside their window
     Given rules "campaign.lesson.double" of priority 10 and "campaign.lesson.bonus" of priority 5 share an exclusive group on "lesson.completed"
     And "campaign.lesson.double" is valid only during November
@@ -187,6 +189,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then the registration is refused with problem "points-threshold-short" and the same shortfall of 30
 
   @EARS-43 @happy
+  @points-lifecycle-boundaries
   Scenario: Doctors registered before the engine receive the starter bonus once
     Given doctors "F" and "G" registered before the engine and "F" never received the registration grant
     And "G" already received the registration grant

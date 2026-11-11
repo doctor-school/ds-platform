@@ -10,6 +10,8 @@ import {
   backfillTitles,
   assertBackfillReceipt,
   type BackfillReceipt,
+  rerunTitle,
+  assertRerunReceipt,
 } from "../../../../packages/e2e/lib/recording-backfill";
 import { bootstrapAdminSession, signInAsAdmin } from "@ds/e2e/admin-events";
 import { expect, type Page, type APIRequestContext } from "@playwright/test";
@@ -29,7 +31,15 @@ import {
   type PublicListBody,
 } from "../../../../packages/e2e/lib/legacy-transition";
 
-import { RecordingLifecycleProof } from "../../../../packages/e2e/lib/recording-lifecycle";
+import {
+  RecordingLifecycleProof,
+  assertOriginReceipt,
+  assertLegacyBarReceipt,
+  originMachines,
+  foreignLifecycleAttempts,
+  type OriginReceipt,
+  type LegacyBarReceipt,
+} from "../../../../packages/e2e/lib/recording-lifecycle";
 
 const { Given, When, Then, Before, After } = createBdd(test);
 type Recording = {
@@ -48,6 +58,12 @@ type Answer = {
   request: LegacyAnswer["request"];
 };
 type State = {
+  origin?: OriginReceipt;
+  bar?: LegacyBarReceipt;
+  originSelected?: "platform" | "legacy";
+  originMachine?: string;
+  rerunFirst?: BackfillReceipt;
+  rerunManifestFile?: string;
   backfill?: Partial<BackfillReceipt>;
   backfillTitle?: string;
   backfillTargets?: Event[];
@@ -97,6 +113,7 @@ async function sql<T extends QueryResultRow = QueryResultRow>(
       database === "ds_dev_3932" ||
       database === "ds_dev_3934" ||
       database === "ds_dev_3939" ||
+      database === "ds_dev_3951" ||
       (process.env.CI === "true" && database === "ds_admin_e2e")
     ) ||
     new URL(url).pathname !== `/${database}`
@@ -1079,7 +1096,12 @@ async function backfillSnapshot() {
     ).map((r) => r.row),
   };
 }
-async function backfillRun(page: Page, dryRun: boolean, setup = false) {
+async function backfillRun(
+  page: Page,
+  dryRun: boolean,
+  setup = false,
+  sameManifest = false,
+) {
   const value = state(page),
     root = resolve(process.cwd(), "../.."),
     actor = value.operator!.zitadel_sub,
@@ -1091,8 +1113,13 @@ async function backfillRun(page: Page, dryRun: boolean, setup = false) {
   const directory = await mkdtemp(
     resolve(dirname(process.env.E2E_RECORDING_ATTACHMENT_LOG!), "backfill-"),
   );
-  const file = resolve(directory, "manifest.json");
-  await writeFile(file, JSON.stringify(manifest));
+  const file = sameManifest
+    ? value.rerunManifestFile!
+    : resolve(directory, "manifest.json");
+  if (!sameManifest) await writeFile(file, JSON.stringify(manifest));
+  else expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(manifest);
+  if (value.backfillTitle === rerunTitle && !sameManifest)
+    value.rerunManifestFile = file;
   const args = [
     "--manifest",
     file,
@@ -1125,6 +1152,8 @@ async function backfillRun(page: Page, dryRun: boolean, setup = false) {
     ),
   );
   const after = await backfillSnapshot();
+  if (process.env.FORCE_COLOR === "1")
+    expect(result.stdout).toContain(String.fromCharCode(27) + "[");
   const mapping = await promisify(execFile)(
     process.execPath,
     [
@@ -1155,6 +1184,214 @@ async function backfillRun(page: Page, dryRun: boolean, setup = false) {
   if (!setup) value.backfill = receipt;
   return receipt;
 }
+Given(
+  "an event created with origin {word}",
+  async ({ page }, origin: "platform" | "legacy") => {
+    expect(["platform", "legacy"]).toContain(origin);
+    state(page).originSelected = origin;
+  },
+);
+Then(
+  /^its lifecycle states are drawn only from (.+)$/,
+  async ({ page }, machine: string) => {
+    const value = state(page),
+      origin = value.originSelected!;
+    value.originMachine = machine;
+    const states: OriginReceipt["states"] = [];
+    for (const status of originMachines[origin]) {
+      let target: Event;
+      if (origin === "legacy") {
+        await legacy(page).prepare(
+          status === "hidden" ? legacyTitles[0] : legacyTitles[2],
+        );
+        target = legacy(page).receipt!.fixture;
+      } else target = await event(page, status);
+      const before = await eventSnapshot(target.id);
+      const detail = await api(page, `/v1/admin/events/${target.id}`);
+      expect(detail.status).toBe(200);
+      const refusals: OriginReceipt["states"][number]["refusals"] = [];
+      for (const command of foreignLifecycleAttempts(origin))
+        refusals.push({
+          command,
+          answer: await api(
+            page,
+            `/v1/admin/events/${target.id}/${command.split(":")[0]}`,
+            "POST",
+            command.startsWith("transition:")
+              ? { to: command.split(":")[1] }
+              : undefined,
+            Number(before.version),
+          ),
+        });
+      states.push({
+        before,
+        after: await eventSnapshot(target.id),
+        validTransitions: detail.body.validTransitions as string[],
+        refusals,
+      });
+      if (!value.event) value.event = target;
+    }
+    value.origin = {
+      origin,
+      machine,
+      states,
+      update: undefined as unknown as OriginReceipt["update"],
+    };
+    expect(states.map((s) => s.before.state)).toEqual(
+      machine.split(",").map((s) => s.trim()),
+    );
+  },
+);
+Then(
+  "no state of the other machine is ever reachable for it",
+  async ({ page }) => {
+    const r = state(page).origin!;
+    for (const state of r.states) {
+      for (const next of state.validTransitions)
+        expect(originMachines[r.origin]).toContain(next);
+      for (const refusal of state.refusals) {
+        expect(refusal.answer.status).toBe(409);
+        expect(refusal.answer.body.errorCode ?? refusal.answer.body.code).toBe(
+          "INVALID_TRANSITION",
+        );
+      }
+      expect(state.after).toEqual(state.before);
+    }
+  },
+);
+Then(
+  "every update path that tries to change origin is rejected",
+  async ({ page }) => {
+    const value = state(page),
+      r = value.origin!,
+      target = value.event!;
+    const before = await eventSnapshot(target.id),
+      suppliedOrigin = r.origin === "platform" ? "legacy" : "platform";
+    const answer = await api(
+      page,
+      `/v1/admin/events/${target.id}`,
+      "PATCH",
+      { title: "Control", origin: suppliedOrigin },
+      Number(before.version),
+    );
+    const after = await eventSnapshot(target.id);
+    const control = await api(
+      page,
+      `/v1/admin/events/${target.id}`,
+      "PATCH",
+      { title: "Control" },
+      Number(before.version),
+    );
+    r.update = {
+      before,
+      after,
+      suppliedOrigin,
+      answer,
+      control,
+      controlAfter: await eventSnapshot(target.id),
+    };
+    assertOriginReceipt(r, r.origin);
+  },
+);
+Given("a legacy event on the admin event detail", async ({ page }) => {
+  await legacy(page).prepare(legacyTitles[0]);
+  state(page).event = legacy(page).receipt!.fixture;
+  state(page).bar = { states: [] };
+});
+When("the operator reads the lifecycle bar", async ({ page }) => {
+  const value = state(page),
+    target = value.event!;
+  for (const status of ["hidden", "in_archive"]) {
+    if (status === "in_archive") {
+      const before = await eventSnapshot(target.id);
+      expect(
+        (
+          await api(
+            page,
+            `/v1/admin/events/${target.id}/archive-legacy`,
+            "POST",
+            undefined,
+            Number(before.version),
+          )
+        ).status,
+      ).toBe(200);
+    }
+    const detail = await api(page, `/v1/admin/events/${target.id}`);
+    expect(detail.status).toBe(200);
+    op("Admin read lifecycle bar", { id: target.id, status });
+    await page.goto(`/events/${target.id}`);
+    await expect(page.getByTestId(`state-${status}`)).toBeVisible();
+    const bar = page.getByTestId("lifecycle-actions");
+    await expect(bar).toBeVisible();
+    const buttons = bar.getByRole("button");
+    value.bar!.states.push({
+      id: target.id,
+      origin: String(detail.body.origin),
+      state: String(detail.body.state),
+      validTransitions: detail.body.validTransitions as string[],
+      labels: (await buttons.allTextContents()).map((s) => s.trim()),
+      controls: await buttons.evaluateAll((nodes) =>
+        nodes.map((n) => n.getAttribute("data-testid")!),
+      ),
+      recording: (
+        await sql(
+          "SELECT status,deleted_at FROM event_recordings WHERE event_id=$1",
+          [target.id],
+        )
+      )[0]!,
+      transport: "browser",
+    });
+    await expect(
+      bar.getByRole("button", { name: "Выйти в эфир", exact: true }),
+    ).toHaveCount(0);
+  }
+});
+Then("«Выйти в эфир» is not offered", async ({ page }) => {
+  for (const s of state(page).bar!.states)
+    expect(s.labels).not.toContain("Выйти в эфир");
+});
+Then(
+  "only «Архивировать» and «Скрыть» are offered, per EventAdminDetail.validTransitions",
+  async ({ page }) => {
+    assertLegacyBarReceipt(state(page).bar!);
+  },
+);
+Given(
+  "the recording backfill has already run over a manifest",
+  async ({ page }) => {
+    const value = state(page);
+    value.backfillTitle = rerunTitle;
+    value.backfillTargets = [
+      await backfillEvent(page, "ended"),
+      await backfillEvent(page, "ended"),
+    ];
+    value.rerunFirst = await backfillRun(page, false, true);
+    expect(
+      readBackfillOutput(value.rerunFirst.command.stdout).entries.map(
+        (e) => e.outcome,
+      ),
+    ).toEqual(["attached+published", "attached+published"]);
+  },
+);
+When(
+  "the platform_admin runs the very same manifest again",
+  async ({ page }) => {
+    const r = await backfillRun(page, false, false, true);
+    r.firstRun = state(page).rerunFirst!;
+  },
+);
+Then("every row is reported skipped", async ({ page }) => {
+  assertRerunReceipt(state(page).backfill as BackfillReceipt);
+});
+Then(
+  "no second recording row exists for any event and kind",
+  async ({ page }) => {
+    assertRerunReceipt(state(page).backfill as BackfillReceipt);
+  },
+);
+Then("no audit row was appended", async ({ page }) => {
+  assertRerunReceipt(state(page).backfill as BackfillReceipt);
+});
 Given(
   "a platform event in published whose start date has passed and which never went live",
   async ({ page }) => {
@@ -1256,6 +1493,8 @@ After(async ({ page, $testInfo }) => {
       legacy: value.legacy?.receipt,
       boundary: value.boundary,
       backfill: value.backfill,
+      origin: value.origin,
+      bar: value.bar,
       backgrounds: value.backgrounds,
     }),
   });

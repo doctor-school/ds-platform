@@ -1,5 +1,12 @@
 import { backfillTitles, type BackfillReceipt } from "./recording-backfill.js";
 import {
+  originFixture,
+  barFixture,
+  rerunFixture,
+} from "./recording-invariants.fixture.js";
+import { originOutline, legacyBarTitle } from "./recording-lifecycle.js";
+import { rerunTitle } from "./recording-backfill.js";
+import {
   legacyTitles,
   type PublicListBody,
   type LegacyReceipt,
@@ -136,6 +143,11 @@ function assertRecordingAttachmentReport(
                   scope === "full"
                     ? boundaryReport().suites[0]!.suites[0]!.specs
                     : [],
+                )
+                .concat(
+                  scope === "full"
+                    ? invariantReport().suites[0]!.suites[0]!.specs
+                    : [],
                 ),
               suites: [
                 ...value.suites.filter(
@@ -147,6 +159,9 @@ function assertRecordingAttachmentReport(
                   ? boundaryReport().suites[0]!.suites[0]!.suites.filter(
                       (s) => s.title,
                     )
+                  : []),
+                ...(scope === "full"
+                  ? invariantReport().suites[0]!.suites[0]!.suites
                   : []),
               ],
             },
@@ -178,7 +193,7 @@ describe("014 attachment receipts", () => {
       /identity/,
     );
   });
-  it("accepts exactly twenty-five cases, four outlines and 150 Background groups", () => {
+  it("accepts exactly twenty-nine cases, five outlines and 174 Background groups", () => {
     expect(() => assertRecordingAttachmentReport(report())).not.toThrow();
   });
   it("rejects green labels without the executed Background receipt", () => {
@@ -874,6 +889,48 @@ function backfillReport() {
     ],
   };
 }
+function invariantReport() {
+  const value = backfillReport();
+  const rule = value.suites[0]!.suites[0]!;
+  function spec(title: string, proof: Record<string, unknown>) {
+    const result = { ...structuredClone(rule.specs[0]!), title };
+    result.tests[0]!.results[0]!.attachments[0]!.body = Buffer.from(
+      JSON.stringify({
+        sourceHost: "academy",
+        backgrounds: clauses.map((clause) => ({ clause, evidence: [1] })),
+        ...proof,
+      }),
+    ).toString("base64");
+    return result;
+  }
+  const specs = [
+    spec(legacyBarTitle, { bar: barFixture() }),
+    spec(rerunTitle, { backfill: rerunFixture() }),
+  ];
+  const outline = {
+    title: originOutline,
+    specs: [
+      spec("Example #1", { origin: originFixture("platform") }),
+      spec("Example #2", { origin: originFixture("legacy") }),
+    ],
+  };
+  return {
+    ...value,
+    suites: [
+      { ...value.suites[0]!, suites: [{ ...rule, specs, suites: [outline] }] },
+    ],
+  };
+}
+it("accepts precisely four invariant cases and rejects missing, duplicated or wrong original identity", () => {
+  expect(() => assertRawReport(invariantReport(), "invariants")).not.toThrow();
+  expect(() => assertRawReport(backfillReport(), "invariants")).toThrow();
+  const missing = invariantReport();
+  missing.suites[0]!.suites[0]!.specs.pop();
+  const wrong = invariantReport();
+  wrong.suites[0]!.suites[0]!.suites[0]!.title = "Other outline";
+  for (const r of [missing, wrong])
+    expect(() => assertRawReport(r, "invariants")).toThrow();
+});
 it("accepts only the exact three backfill originals as the new portion", () => {
   expect(() => assertRawReport(backfillReport(), "new")).not.toThrow();
   expect(() => assertRawReport(boundaryReport(), "new")).toThrow();

@@ -2,7 +2,17 @@ import {
   backfillTitles,
   assertBackfillReceipt,
   type BackfillReceipt,
+  rerunTitle,
+  assertRerunReceipt,
 } from "./recording-backfill.js";
+import {
+  originOutline,
+  legacyBarTitle,
+  assertOriginReceipt,
+  assertLegacyBarReceipt,
+  type OriginReceipt,
+  type LegacyBarReceipt,
+} from "./recording-lifecycle.js";
 import {
   assertLegacyReceipt,
   assertBoundaryReceipt,
@@ -37,24 +47,33 @@ const lifecycleOutline =
 const rule = "Recording lifecycle, playback and remaining archive contracts";
 const feature =
   "A finished broadcast keeps its value as a recording, and the archive is browsable";
+const invariantTitles = [
+  "Example #1",
+  "Example #2",
+  legacyBarTitle,
+  rerunTitle,
+];
 
 export function assertRecordingAttachmentReport(
   value: unknown,
-  scope: "full" | "new" | "boundaries" = "full",
+  scope: "full" | "new" | "boundaries" | "invariants" = "full",
 ) {
   assertOperationalReport(
     value,
-    scope === "new"
-      ? [...backfillTitles]
-      : scope === "boundaries"
-        ? boundaryCases.map((c) => c.title)
-        : [
-            ...backfillTitles,
-            ...recordingAttachmentTitles,
-            ...recordingLifecycleTitles,
-            ...legacyTitles,
-            ...boundaryCases.map((c) => c.title),
-          ],
+    scope === "invariants"
+      ? invariantTitles
+      : scope === "new"
+        ? [...backfillTitles]
+        : scope === "boundaries"
+          ? boundaryCases.map((c) => c.title)
+          : [
+              ...backfillTitles,
+              ...recordingAttachmentTitles,
+              ...recordingLifecycleTitles,
+              ...legacyTitles,
+              ...boundaryCases.map((c) => c.title),
+              ...invariantTitles,
+            ],
     "recording-attachment",
   );
   type Suite = {
@@ -82,6 +101,7 @@ export function assertRecordingAttachmentReport(
         outline &&
         outline !== attachmentOutline &&
         outline !== lifecycleOutline &&
+        outline !== originOutline &&
         !boundaryOutlines.includes(outline as (typeof boundaryOutlines)[number])
       )
         throw new Error("Outline identity mismatch");
@@ -107,6 +127,8 @@ export function assertRecordingAttachmentReport(
         Buffer.from(attachments[0]!.body!, "base64").toString("utf8"),
       ) as {
         backfill?: BackfillReceipt;
+        origin?: OriginReceipt;
+        bar?: LegacyBarReceipt;
         boundary?: BoundaryReceipt;
         sourceHost: string;
         legacy?: LegacyReceipt;
@@ -114,6 +136,13 @@ export function assertRecordingAttachmentReport(
         caseState?: string;
         backgrounds: { clause: string; evidence: unknown[] }[];
       };
+      if (outline === originOutline)
+        assertOriginReceipt(
+          receipt.origin!,
+          spec.title === "Example #1" ? "platform" : "legacy",
+        );
+      if (spec.title === legacyBarTitle) assertLegacyBarReceipt(receipt.bar!);
+      if (spec.title === rerunTitle) assertRerunReceipt(receipt.backfill!);
       if (
         backfillTitles.includes(spec.title as (typeof backfillTitles)[number])
       )
@@ -175,11 +204,17 @@ export function assertRecordingAttachmentReport(
     ...(scope === "full"
       ? legacyTitles.map((title) => `${rule}/${title}`)
       : []),
-    ...(scope !== "new"
+    ...(scope !== "new" && scope !== "invariants"
       ? boundaryCases.map((c) => `${c.outline || rule}/${c.title}`)
       : []),
-    ...(scope !== "boundaries"
+    ...(scope !== "boundaries" && scope !== "invariants"
       ? backfillTitles.map((title) => `${rule}/${title}`)
+      : []),
+    ...(scope === "full" || scope === "invariants"
+      ? invariantTitles.map(
+          (title) =>
+            `${title.startsWith("Example #") ? originOutline : rule}/${title}`,
+        )
       : []),
   ];
   if (JSON.stringify(identities.sort()) !== JSON.stringify(expected.sort()))

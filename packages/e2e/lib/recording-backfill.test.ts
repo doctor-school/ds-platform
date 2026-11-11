@@ -1,3 +1,4 @@
+import { rerunFixture } from "./recording-invariants.fixture.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import ciStartup from "./recording-backfill-ci-startup.fixture.json";
@@ -8,9 +9,76 @@ import { describe, expect, it } from "vitest";
 import {
   readBackfillOutput,
   captureBackfillCommand,
+  assertBackfillReceipt,
+  backfillTitles,
+  assertRerunReceipt,
+  type BackfillReceipt,
 } from "./recording-backfill.js";
+
+it("requires a real successful first CLI run, exact manifest path/content and mutation-free skipped rerun", () => {
+  expect(() => assertRerunReceipt(rerunFixture())).not.toThrow();
+  for (const mutate of [
+    (r: BackfillReceipt) => {
+      delete r.firstRun;
+    },
+    (r: BackfillReceipt) => {
+      r.firstRun!.command.exitCode = 1;
+    },
+    (r: BackfillReceipt) => {
+      r.firstRun!.before.recordings = r.firstRun!.after.recordings;
+    },
+    (r: BackfillReceipt) => {
+      r.command.args[1] = "other.json";
+    },
+    (r: BackfillReceipt) => {
+      r.after.audit.push({ id: "extra" });
+    },
+    (r: BackfillReceipt) => {
+      r.after.recordings.push({ id: "duplicate" });
+    },
+    (r: BackfillReceipt) => {
+      r.command.stdout = r.firstRun!.command.stdout;
+    },
+  ]) {
+    const r = structuredClone(rerunFixture());
+    mutate(r);
+    expect(() => assertRerunReceipt(r)).toThrow();
+  }
+});
 const json =
   '{"event":"owned","kind":"edited","outcome":"refused","code":"EVENT_NOT_FINISHED"}\n{"dryRun":false,"summary":{"refused":1}}';
+it("accepts the explicitly owned 3951 receipt and rejects foreign and production databases", () => {
+  const snapshot = {
+    events: [{ id: "owned", origin: "legacy", state: "hidden" }],
+    recordings: [],
+    audit: [],
+  };
+  const receipt: BackfillReceipt = {
+    title: backfillTitles[1],
+    actor: "operator",
+    database: "ds_dev_3951",
+    manifest: [
+      { event: "owned", edited: { provider: "rutube", embed_ref: "ref" } },
+    ],
+    command: {
+      entrypoint: "apps/api/scripts/recordings-backfill.ts",
+      args: ["--manifest", "manifest.json", "--actor", "operator"],
+      exitCode: 0,
+      stderr: "",
+      stdout:
+        '{"event":"owned","kind":"edited","outcome":"refused","code":"INVALID_TRANSITION"}\n{"dryRun":false,"summary":{"attached+published":0,"published":0,"skipped":0,"would-attach":0,"refused":1}}',
+    },
+    dryRun: false,
+    statusMap: { INVALID_TRANSITION: 409 },
+    before: snapshot,
+    after: structuredClone(snapshot),
+  };
+  expect(() => assertBackfillReceipt(receipt, receipt.title)).not.toThrow();
+  for (const database of ["ds_dev_3941", "ds_dev_1", "ds_prod", "postgres"])
+    expect(() =>
+      assertBackfillReceipt({ ...receipt, database }, receipt.title),
+    ).toThrow();
+});
 describe("014 backfill CLI output", () => {
   it("preserves only the observed HTTP-less startup diagnostics beside strict JSON report lines", () => {
     const startup =

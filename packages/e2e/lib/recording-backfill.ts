@@ -4,6 +4,7 @@ import { stripVTControlCharacters } from "node:util";
 import { expect } from "@playwright/test";
 
 type Row = Record<string, unknown>;
+export const rerunTitle = "Re-running the same manifest changes nothing";
 export const backfillTitles = [
   "A published event that never went live is refused",
   "A legacy event is not a backfill target",
@@ -22,6 +23,7 @@ export type BackfillSnapshot = {
   audit: Row[];
 };
 export type BackfillReceipt = {
+  firstRun?: BackfillReceipt;
   title: string;
   actor: string;
   database: string;
@@ -84,7 +86,7 @@ export function assertBackfillReceipt(r: BackfillReceipt, title: string) {
   expect(r).toBeDefined();
   expect(r.title).toBe(title);
   expect(r.actor.length).toBeGreaterThan(2);
-  expect(r.database).toMatch(/^ds_(dev_3939|admin_e2e)$/);
+  expect(r.database).toMatch(/^ds_(dev_3939|dev_3951|admin_e2e)$/);
   expect(r.command.entrypoint).toBe("apps/api/scripts/recordings-backfill.ts");
   expect(r.command.exitCode).toBe(0);
   expect(r.command.args).toContain("--manifest");
@@ -174,6 +176,22 @@ export function assertBackfillReceipt(r: BackfillReceipt, title: string) {
       [],
     );
     expect(r.after).toEqual(r.before);
+  } else if (title === rerunTitle) {
+    expect(r.dryRun).toBe(false);
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.every((e) => e.outcome === "skipped")).toBe(true);
+    expect(r.after).toEqual(r.before);
+    for (const entry of entries) {
+      const rows = r.after.recordings.filter(
+        (row) => row.event_id === entry.event && row.kind === entry.kind,
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        id: entry.recordingId,
+        status: "published",
+        deleted_at: null,
+      });
+    }
   } else {
     expect(title).toBe(backfillTitles[2]);
     expect(r.dryRun).toBe(true);
@@ -202,6 +220,77 @@ export function assertBackfillReceipt(r: BackfillReceipt, title: string) {
     }
     expect(r.after).toEqual(r.before);
   }
+}
+
+export function assertRerunReceipt(r: BackfillReceipt) {
+  assertBackfillReceipt(r, rerunTitle);
+  const first = r.firstRun!;
+  expect(first).toBeDefined();
+  expect(first.firstRun).toBeUndefined();
+  expect(first.title).toBe(rerunTitle);
+  expect(first.actor).toBe(r.actor);
+  expect(first.database).toBe(r.database);
+  expect(first.manifest).toEqual(r.manifest);
+  expect(first.command.entrypoint).toBe(r.command.entrypoint);
+  expect(first.command.args).toEqual(r.command.args);
+  expect(first.command.exitCode).toBe(0);
+  expect(first.dryRun).toBe(false);
+  const { entries, final } = readBackfillOutput(first.command.stdout);
+  expect(entries.map((e) => e.event)).toEqual(r.manifest.map((m) => m.event));
+  expect(
+    entries.every(
+      (e) => e.kind === "edited" && e.outcome === "attached+published",
+    ),
+  ).toBe(true);
+  expect(final).toEqual({
+    dryRun: false,
+    summary: {
+      "attached+published": entries.length,
+      published: 0,
+      skipped: 0,
+      "would-attach": 0,
+      refused: 0,
+    },
+  });
+  expect(first.before.events).toEqual(first.after.events);
+  expect(first.after).toEqual(r.before);
+  for (const entry of entries) {
+    expect(
+      first.before.recordings.filter(
+        (row) => row.event_id === entry.event && row.kind === entry.kind,
+      ),
+    ).toEqual([]);
+    expect(
+      first.after.recordings.filter(
+        (row) => row.event_id === entry.event && row.kind === entry.kind,
+      ),
+    ).toEqual([
+      expect.objectContaining({ id: entry.recordingId, status: "published" }),
+    ]);
+  }
+  const added = first.after.audit.filter(
+    (row) => !first.before.audit.some((old) => old.id === row.id),
+  );
+  expect(added).toHaveLength(entries.length * 2);
+  for (const entry of entries)
+    for (const action of ["insert", "update"]) {
+      expect(
+        added.filter(
+          (row) =>
+            row.event_type === `data.event_recordings.${action}` &&
+            (row.metadata as Row)?.pk &&
+            ((row.metadata as Row).pk as Row).id === entry.recordingId,
+        ),
+      ).toEqual([
+        expect.objectContaining({
+          subject_id: r.actor,
+          metadata: expect.objectContaining({
+            source: "system:recordings-backfill",
+            table: "event_recordings",
+          }),
+        }),
+      ]);
+    }
 }
 
 export async function captureBackfillCommand(

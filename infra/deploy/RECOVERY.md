@@ -87,7 +87,7 @@ not secrets; their values are in the templates or derive from the environment.
 
 - **Bus factor open.** Both custody keys are the owner's; recovery does not yet survive
   the owner's unavailability. It closes when a second custodian (another person,
-  another location) is added (§2.1 «Adding a custodian»).
+  another location) is added (§2.1 «Adding a custodian»), tracked in #3953.
 - **Fresh-host DR drill not run.** §4 (recreate both boxes and restore) has never
   been exercised end to end; it, backup verification, alerts and a quarterly drill
   are #3671.
@@ -186,7 +186,7 @@ a passphrase-encrypted identity file on offline media stored in a separate place
 `custodians.txt` records them as `# role: owner — key 1 (password manager)` and
 `# role: owner — key 2 (offline media, separate location)`. The box gate counts
 distinct recipients only, so this satisfies it; the bus factor stays open until a
-second custodian is added (below).
+second custodian is added (below, #3953).
 
 1. Each of the two custodians generates an `age` identity on their own offline
    machine. The identity is passphrase-encrypted before it touches disk, and its
@@ -211,20 +211,21 @@ second custodian is added (below).
    deployed tree), dispatch `recovery-bundle` and then `recovery-check` (above). Each
    custodian test-decrypts the first bundle (§2.2) before the paper copy is sealed.
 
-**Adding a custodian** (another person, another location; closes the bus factor). The
+**Adding a custodian** (another person, another location; closes the bus factor;
+tracked in #3953). The
 new custodian runs step 1 on their own offline machine and hands over the recipient
 (step 2). A PR adds it to `custodians.txt` under its own `# role: <role>` line (and,
 if the new custodian replaces an owner key, removes that key's two lines; at least
 two distinct recipients remain). After the merge and the next release, dispatch
 `recovery-bundle` and then `recovery-check`; the new custodian test-decrypts the new
-bundle (§2.2) and posts the status line on #3662. Bundles stored before the change
+bundle (§2.2) and posts the status line on #3953. Bundles stored before the change
 stay encrypted to the old recipients only.
 
 ### 2.2 Quarterly test decrypt (each custodian)
 
 Every quarter, and once after the ceremony, each custodian fetches the latest bundle
 of both boxes (§2.3, steps 1–2) and lists its members (§2.3, step 3) without
-extracting anything. The result is posted on #3662 as status words only:
+extracting anything. The result is posted on #3671 as status words only:
 `custodian <role>: api-prod members <n> OK, data-prod members <n> OK`. A custodian
 whose identity no longer opens the bundle reports `FAIL`, and the ceremony is rerun
 for that custodian.
@@ -343,8 +344,10 @@ steps together are the restore proof with the bundle's passphrase; neither alone
    «Network of the copy»). The harness forces a WAL segment with `check` and asserts
    that this segment was restored from the archive; no migration is applied, and the
    harness tears the copy down. The evidence is the report's `state` (`succeeded`),
-   `backup.label` and `backup.stopAt` (the backup point), `recoveredTo` (the recovery
-   end, after `backup.stopAt`) and `headroom`. The drill reads the passphrase from the
+   `backup.label` and `backup.stopAt` (the backup point), `recoveredTo` (the observed
+   last replayed transaction time, `pg_last_xact_replay_timestamp()`, expected after
+   `backup.stopAt`) and `headroom`; the harness's assertion is the replay of the
+   segment its `check` forced. The drill reads the passphrase from the
    **live** `/etc/ds-platform/data.env`, so on its own it proves the live passphrase,
    not the bundle's.
 
@@ -353,7 +356,9 @@ steps together are the restore proof with the bundle's passphrase; neither alone
    the latest data-prod bundle (§2.3 steps 1–3) and compares two digests, bundle side
    against live side: of the whole `data.env` and of its
    `PGBACKREST_REPO1_CIPHER_PASS` value. Run in Git Bash under the rules of §2.3
-   «Shell»; the digests stay in shell variables and only the verdict is printed:
+   «Shell»; the digests stay in shell variables and only the verdict is printed. The
+   bundle is decrypted twice, so the custodian supplies the identity (or its
+   passphrase) twice:
 
    ```bash
    set -o pipefail
@@ -509,7 +514,7 @@ $BR "$BR_IMAGE" --stanza=ds --log-level-file=off repo-ls --recurse --filter='\.h
 sudo rm -f /run/ds-recovery/restore.env && sudo rmdir /run/ds-recovery
 ```
 
-### 3.5 Report template (sanitised, posted to #3662)
+### 3.5 Report template (sanitised, posted to #3671)
 
 ```text
 Restore proof — <YYYY-MM-DD HH:MM UTC> — ds-data-prod — manual fallback over breakglass
@@ -528,8 +533,7 @@ Limitations: <e.g. recovery to backup end only; fresh-host drill not run>
 Verdict: PASS | PARTIAL (<reason>) | FAIL (<reason>)
 ```
 
-The automated drill's report carries the lines its run reports, with the header and
-the passphrase lines replaced:
+The automated drill uses this template:
 
 ```text
 Restore proof — <YYYY-MM-DD HH:MM UTC> — ds-data-prod — automated isolated restore (prod-observe.yml rehearse-restore)

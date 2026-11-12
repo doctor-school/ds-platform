@@ -136,6 +136,8 @@ const PAIRS: ConfigPair[] = [
       routes: "route",
       "landing.afterLogin": "route",
       "landing.specialtyFeed": "route",
+      // 021 EARS-10.5 (#3956): the events feed a gone эфир lands on.
+      "landing.eventsFeed": "route",
       "landing.specialtyEndpoints": "envelope",
       // 021 EARS-10 (amendment 2026-11-11, #2272): the notice sentence naming
       // what each host's own landing shows — copy, like `copy`.

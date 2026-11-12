@@ -39,7 +39,7 @@ describe("021 EARS-10 event-gone landing notice", () => {
 
   it("021 EARS-10: the marker renders the info line on both storefronts' landings", () => {
     for (const [config, landing] of [
-      [DOCTOR_AUTH_FLOW, "afterLogin"],
+      [DOCTOR_AUTH_FLOW, "eventsFeed"],
       [DOCTOR_AUTH_FLOW, "specialtyFeed"],
       [ACADEMY_AUTH_FLOW, "afterLogin"],
     ] as const) {

@@ -520,9 +520,9 @@ export type AuthFlowEventPathTemplate = "/webinars/:slug" | "/events/:slug";
  * lands on; the package server helper does the reading, because a mounted route
  * file may read nothing itself.
  *
- * `eventGoneNotice` (021 EARS-10, amendment 2026-11-11, #2272) is the second
- * sentence of the one-time notice each landing shows when the carried эфир no
- * longer exists — what THAT landing offers instead, keyed by the landing. The
+ * `eventGoneNotice` (021 EARS-10.5, #2272) is the second sentence of the
+ * one-time notice each landing shows when the carried эфир no longer exists —
+ * what THAT landing offers instead, keyed by the landing that can show it. The
  * first sentence is the package's (`EVENT_GONE_NOTICE_COPY`).
  */
 export type AuthFlowLandingConfig =
@@ -535,9 +535,15 @@ export type AuthFlowLandingConfig =
       readonly afterLogin: string;
       readonly specialtyAware: true;
       readonly eventGoneNotice: {
-        readonly afterLogin: string;
         readonly specialtyFeed: string;
+        readonly eventsFeed: string;
       };
+      /**
+       * 021 EARS-10.5 (#3956) — this host's events feed (`/events`): the landing
+       * a gone эфир lands on in place of `afterLogin`, so the notice stands on
+       * the first screen. A remembered specialty keeps its `specialtyFeed`.
+       */
+      readonly eventsFeed: string;
       /**
        * The feed a remembered specialty lands on (021 EARS-3), as a route
        * TEMPLATE whose `:code` is the remembered specialty's code (`/feed/:code`).

@@ -90,10 +90,13 @@ export const DOCTOR_AUTH_FLOW = {
     afterLogin: "/",
     specialtyAware: true,
     specialtyFeed: "/feed/:code",
-    // 021 EARS-10 (amendment 2026-11-11) — what each landing offers instead.
+    // 021 EARS-10.5 — a gone эфир with no remembered specialty lands here
+    // (the route `app/(storefront)/events` serves), never on the home.
+    eventsFeed: "/events",
+    // 021 EARS-10.5 — what each landing offers instead.
     eventGoneNotice: {
-      afterLogin: "Посмотрите ближайшие события.",
       specialtyFeed: "Посмотрите, что есть по вашей специальности.",
+      eventsFeed: "Выберите другой эфир — здесь все ближайшие события.",
     },
     specialtyEndpoints: {
       signedIn: "/v1/me/specialty",

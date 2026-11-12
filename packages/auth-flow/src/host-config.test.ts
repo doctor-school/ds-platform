@@ -61,6 +61,16 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
     expect(landing.specialtyFeed).toBe("/feed/:code");
   });
 
+  it("021 EARS-10.5 (#3956): the SHIPPED doctor host names its events feed as the landing a gone эфир replaces the home with, and keys the notice sentence by the two landings that can show it", () => {
+    const landing = DOCTOR_AUTH_FLOW.landing;
+    if (!landing.specialtyAware) throw new Error("unreachable");
+    expect(landing.eventsFeed).toBe("/events");
+    expect(Object.keys(landing.eventGoneNotice).sort()).toEqual([
+      "eventsFeed",
+      "specialtyFeed",
+    ]);
+  });
+
   it("rows 39, 42: the event page and the room are route TEMPLATES, not parsers", () => {
     expect(ACADEMY_FIXTURE.routes.eventPathTemplate).toBe("/webinars/:slug");
     expect(ACADEMY_FIXTURE.routes.room).toBe("/webinars/:slug/room");

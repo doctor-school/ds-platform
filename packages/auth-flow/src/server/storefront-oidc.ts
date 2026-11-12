@@ -123,8 +123,8 @@ function firstOf(raw: string | null): string | undefined {
  * storefront before (021 EARS-10, #1987, 006 EARS-6, #2487): the carried
  * target when its эфир still answers or it is an account, room or land-only
  * return; otherwise the storefront's own landing rules — carrying the
- * event-gone notice marker when the эфир no longer exists (021 EARS-10,
- * amendment 2026-11-11, #2272).
+ * event-gone notice marker when the эфир no longer exists (021 EARS-10.5,
+ * #2272).
  */
 async function arrivalLanding(
   config: AuthFlowHostConfig,
@@ -146,7 +146,22 @@ async function arrivalLanding(
     : null;
   if (landingTarget && read && read.status !== "gone") return landingTarget;
   const landing = await resolveArrivalLanding(config, headers, fetchImpl);
-  return read?.status === "gone" ? withEventGoneNotice(landing) : landing;
+  return read?.status === "gone" ? eventGoneLanding(config, landing) : landing;
+}
+
+/**
+ * 021 EARS-10.5 (#2272, #3956) — the landing that replaces a gone эфир, carrying
+ * the one event-gone notice marker: the LD-4 landing, except that a fallback to
+ * the specialty-aware host's home becomes its events feed (`landing.eventsFeed`),
+ * where the notice stands on the first screen.
+ */
+function eventGoneLanding(config: AuthFlowHostConfig, ld4: string): string {
+  const { landing } = config;
+  return withEventGoneNotice(
+    landing.specialtyAware && ld4 === landing.afterLogin
+      ? landing.eventsFeed
+      : ld4,
+  );
 }
 
 /**
@@ -445,8 +460,8 @@ export async function storefrontCallback(
     // replaces it (an ended or full event, or a failed read, keeps it). A
     // carried эфир registration (005 EARS-2) is judged by the same read when
     // the sign-in succeeds (021 EARS-10, #2477): a gone эфир registers nothing.
-    // 021 EARS-10 (amendment 2026-11-11, #2272) — the landing that replaces a
-    // gone эфир carries the one event-gone notice marker; nothing else does.
+    // 021 EARS-10.5 (#2272, #3956) — the landing that replaces a gone эфир
+    // carries the one event-gone notice marker; nothing else does.
     let register = minted;
     let eventGone = false;
     if (target && (door === "register" || register)) {
@@ -477,7 +492,10 @@ export async function storefrontCallback(
       sid ? withMintedSession(request.headers, sid) : request.headers,
       fetchImpl,
     );
-    return seeOther(`${eventGone ? withEventGoneNotice(to) : to}#`, headers);
+    return seeOther(
+      `${eventGone ? eventGoneLanding(config, to) : to}#`,
+      headers,
+    );
   };
 
   // A `form_post` callback is refused, its body unread (EARS-62).

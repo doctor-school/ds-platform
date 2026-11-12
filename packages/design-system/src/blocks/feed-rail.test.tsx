@@ -224,6 +224,34 @@ describe("FeedRail", () => {
     fireEvent.pointerUp(window, { pointerType: "mouse" });
   });
 
+  it("048 EARS-14: when a mouse drag ends outside the rail, system shall let the next card activation through", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <FeedRail initialPage={page(12, null)} loadPage={vi.fn()} now={NOW} />,
+      );
+      const region = rail();
+      fireEvent.pointerDown(region, {
+        pointerType: "mouse",
+        button: 0,
+        clientX: 500,
+      });
+      fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 300 });
+      // Released outside the rail: no click reaches the rail for this drag.
+      fireEvent.pointerUp(window, { pointerType: "mouse" });
+      act(() => {
+        vi.runAllTimers();
+      });
+      // The next activation (keyboard Enter / touch tap) dispatches a click.
+      const link = screen.getAllByRole("link")[0]!;
+      const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+      link.dispatchEvent(click);
+      expect(click.defaultPrevented).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("048 EARS-14: on a phone the rail shall show one row and no buttons", () => {
     phone = true;
     render(

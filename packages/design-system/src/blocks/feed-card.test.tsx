@@ -125,6 +125,20 @@ describe("FeedCard", () => {
     expect(title.className).toContain("wrap-break-word");
   });
 
+  it("048 EARS-13: when the title is clamped, system shall keep every clamped line inside the card body", () => {
+    // Mode (a) on #3973: at `leading-snug` (27.5px lines) a 3-line clamp under
+    // the partner line needs more than the fixed body leaves, and the last
+    // line's descenders were clipped. The canvas line is 23px
+    // (`unit-feed-card.dc.html`), the `leading-title` token (1.15 × 20px).
+    const title = "Клинические рекомендации по ведению артериальной гипертензии";
+    render(
+      <FeedCard card={card({ title, partner: { name: "Партнёр А" } })} now={NOW} />,
+    );
+    const el = screen.getByText(title);
+    expect(el.className).toContain("leading-title");
+    expect(el.className).not.toContain("leading-snug");
+  });
+
   it("048 EARS-19: when the card has a partner, system shall show «Партнёрский материал · <name>»", () => {
     render(
       <FeedCard card={card({ partner: { name: "Партнёр А" } })} now={NOW} />,

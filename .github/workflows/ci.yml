@@ -604,15 +604,26 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Run exactly twenty-four 025 engine originals before mutable rule-book tests
-        env:
-          E2E_POINTS_DATABASE: ds_test
-          E2E_POINTS_OPS_LOG: ${{ runner.temp }}/points-originals-3876/stand-ops.jsonl
-          E2E_POINTS_REPORT: ${{ runner.temp }}/points-originals-3876/results.json
-          E2E_POINTS_RESOURCE_REPORT: ${{ runner.temp }}/points-originals-3876/resources.jsonl
+      - name: Migrate the unchanged native API test database
         run: |
-          mkdir -p "$RUNNER_TEMP/points-originals-3876"
-          printf '%s\n' '{"command":"pnpm --filter @ds/api drizzle:migrate:ci (disposable CI ds_test)"}' >> "$E2E_POINTS_OPS_LOG"
+          node --input-type=module -e "if (new URL(process.env.DATABASE_URL).pathname !== '/ds_test') throw new Error('Expected native API ds_test');"
+          pnpm --filter @ds/api drizzle:migrate:ci
+      - name: Run exactly twenty-seven 025 engine originals in their own database
+        env:
+          DATABASE_URL: postgres://ds:ds@localhost:5432/ds_points_originals_3989
+          E2E_POINTS_DATABASE: ds_points_originals_3989
+          E2E_POINTS_OPS_LOG: ${{ runner.temp }}/points-originals-3989/stand-ops.jsonl
+          E2E_POINTS_REPORT: ${{ runner.temp }}/points-originals-3989/results.json
+          E2E_POINTS_RESOURCE_REPORT: ${{ runner.temp }}/points-originals-3989/resources.jsonl
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/points-originals-3989"
+          node --input-type=module -e "if (process.env.E2E_POINTS_DATABASE !== 'ds_points_originals_3989' || new URL(process.env.DATABASE_URL).pathname !== '/ds_points_originals_3989') throw new Error('Expected isolated originals target');"
+          printf '%s\n' '{"command":"CREATE DATABASE ds_points_originals_3989 OWNER ds in job-owned ds-postgres"}' >> "$E2E_POINTS_OPS_LOG"
+          docker exec ds-postgres psql -U ds -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ds_points_originals_3989 OWNER ds'
+          printf '%s\n' '{"command":"SELECT current_database() in ds_points_originals_3989 before migration"}' >> "$E2E_POINTS_OPS_LOG"
+          test "$(docker exec ds-postgres psql -U ds -d ds_points_originals_3989 -Atc 'SELECT current_database()')" = ds_points_originals_3989
+          printf '%s\n' '{"command":"pnpm --filter @ds/api drizzle:migrate:ci (isolated ds_points_originals_3989)"}' >> "$E2E_POINTS_OPS_LOG"
           pnpm --filter @ds/api drizzle:migrate:ci
           pnpm --filter @ds/e2e exec bddgen --config points-engine.config.ts
           pnpm --filter @ds/e2e exec playwright test --config points-engine.config.ts
@@ -621,8 +632,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: points-engine-originals-3876
-          path: ${{ runner.temp }}/points-originals-3876
+          name: points-engine-originals-3989
+          path: ${{ runner.temp }}/points-originals-3989
           if-no-files-found: ignore
           retention-days: 7
 

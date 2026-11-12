@@ -10,6 +10,8 @@ import {
   assertPointsAdvanceBoundariesReport,
   assertPointsReferralBoundariesReport,
   assertPointsRulebookBoundariesReport,
+  assertPointsRuleChangesReport,
+  assertPointsEngineResources,
 } from "./points-engine-report.js";
 
 const previous = [
@@ -42,6 +44,11 @@ const firstRelease = [
   "Registration to the first event",
   "Releasing a partly netted obligation returns the netted Pul",
   "Pul of a doctor without a verified phone cannot be spent",
+];
+const ruleChanges = [
+  "Re-tuning a rule applies to new postings only",
+  "A setting changes a threshold without a rule version",
+  "The starter-bonus grant needs an active rule",
 ];
 
 function cleanupReceipts() {
@@ -81,6 +88,18 @@ function cleanupReceipts() {
 const receiptLog = (rows: unknown[]) =>
   rows.map((row) => JSON.stringify(row)).join("\n");
 describe("025 owned event cleanup receipt", () => {
+  it("EARS-25/27/39/42/43: the full cleanup gate refuses missing or unknown rule-change receipts", () => {
+    const rows = cleanupReceipts();
+    for (const invalid of [
+      rows,
+      [...rows, { title: "unknown" }],
+      [...rows, ...rows],
+    ]) {
+      expect(() =>
+        assertPointsEngineResources(receiptLog(invalid), []),
+      ).toThrow(/receipt/);
+    }
+  });
   it("EARS-1/18/35: requires all five retired events and unchanged financial tables and prices", () => {
     expect(() =>
       assertPointsFirstReleaseResources(receiptLog(cleanupReceipts())),
@@ -229,6 +248,7 @@ for (const [scope, titles, assertReport] of [
       ...rulebook,
       ...lifecycle,
       ...firstRelease,
+      ...ruleChanges,
     ],
     assertPointsEngineReport,
   ],
@@ -239,6 +259,7 @@ for (const [scope, titles, assertReport] of [
   ["rulebook wave", rulebook, assertPointsRulebookBoundariesReport],
   ["lifecycle wave", lifecycle, assertPointsLifecycleBoundariesReport],
   ["first/release wave", firstRelease, assertPointsFirstReleaseReport],
+  ["rule-change wave", ruleChanges, assertPointsRuleChangesReport],
 ] as const) {
   describe("025 " + scope + " execution receipt", () => {
     it("EARS-4/8/31: accepts its exact source originals passing once", () => {

@@ -36,14 +36,27 @@ Feature: 023 — A doctor chooses a school and reads a course before walking its
     Then the courses section says no course of this school matches «zzz»
 
   @EARS-6 @EARS-7 @EARS-23 @school-guest-journeys
-  Scenario: A school without a published course is «скоро» and a guest asks to see it in the feed
+  Scenario: A school without a published course is «скоро» and a guest joins its interest list
     Given the published school "cardio" has no published course and the «скоро» note "Первые курсы появятся осенью"
     And a visitor who is not signed in
     When the visitor opens "/schools/cardio"
     Then the header shows «Скоро» and the courses section shows «Школа готовится» with "Первые курсы появятся осенью"
     When the visitor uses the interest capture and registers
-    Then the doctor lands on "/schools/cardio" showing «Школа готовится»
-    And the specialty of the direction of "cardio" is among the doctor's specialties
+    Then the doctor lands on "/schools/cardio" showing «Школа готовится» and «Вы в списке»
+    And the doctor's specialties are unchanged
+    When the doctor uses the interest capture again
+    Then the doctor still has one interest in "cardio"
+
+  @EARS-7 @EARS-26
+  Scenario: Interested doctors hear once when the school's first course opens
+    Given two doctors have an active interest in "cardio" and a third withdrew it
+    When a staff member opens "cardio" in the admin school editor
+    Then the editor shows 2 interested doctors and no names
+    When the staff member publishes the first course of "cardio"
+    Then each of the two doctors gets one school-opened notice email
+    And the doctor who withdrew gets none
+    When the staff member publishes a second course of "cardio"
+    Then no further notice email is sent
 
   @EARS-8 @school-guest-journeys
   Scenario: A guest reads the school and the gate says what needs an account
@@ -123,22 +136,38 @@ Feature: 023 — A doctor chooses a school and reads a course before walking its
 
   @EARS-16 @school-doctor-journeys
   Scenario: Mentoring opens after the whole course
-    Given the school "ortho" has a mentoring offer
+    Given the school "ortho" has a mentoring offer and its mentoring eligibility is the platform seed "course-done"
     And a doctor is signed in who has not done any course of "ortho"
     When the doctor opens "/schools/ortho"
     Then the mentoring section says mentoring opens after the whole course
+    And the doctor's client sending a mentoring request is refused with "MENTORING_NOT_ELIGIBLE"
     Given the doctor has done "ortho-basic"
     When the doctor chooses «Хочу к наставнику»
     Then the request is confirmed on the screen
     And the school editor in the admin lists the doctor's mentoring request
+
+  @EARS-16
+  Scenario: A school may open mentoring to every doctor
+    Given the school "ortho" has a mentoring offer and its mentoring eligibility set to "any-doctor"
+    And a doctor is signed in who has not done any course of "ortho"
+    When the doctor chooses «Хочу к наставнику»
+    Then the request is confirmed on the screen
 
   @EARS-15 @EARS-17
   Scenario: The school shows its club events and its community
     Given the first module of "ortho-basic" has its club on a scheduled event
     And the school "ortho" has a community link
     When a doctor opens "/schools/ortho"
-    Then the events section shows the club event card
+    Then the events section is the events feed block showing the club event as the events page's card
+    And it shows at most four events with the block's «Все события» link
     And the community section links to the community
+
+  @EARS-15
+  Scenario: The school's events section keeps the events feed block's states
+    Given the events feed read for the clubs of "ortho" fails
+    When a doctor opens "/schools/ortho"
+    Then the events section shows the events feed block's alert with «Повторить»
+    And the course cards are shown
 
   @EARS-21
   Scenario: The lesson of the day opens inside its course

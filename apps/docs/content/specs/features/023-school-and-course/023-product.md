@@ -75,7 +75,8 @@ On completion, a course leads to a **document**: 023 shows the doctor what the c
 - **A single-module course hides its module level** in the doctor's interface [lead, 2026-11-12].
 - **A finished module gives what its module setting says** — points, a document, or both; by default points and no module document; the course certificate is always for the whole course [owner, D18; default lead].
 - **The club closing a module is not in the module's completion by default**; a course setting switches it on [lead, 2026-11-12].
-- **A school with no published course** shows «скоро» and a specialty interest capture; its expected-date text is school data [lead, 2026-11-12].
+- **A school with no published course** shows «скоро» and an interest capture: the doctor joins the school's interest list («Вы в списке», withdrawable) without any change to their specialties, staff see how many are waiting, and each interested doctor gets one email when the school's first course opens; its expected-date text is school data [lead, 2026-11-12].
+- **Who may ask for mentoring** is a school setting, by default a doctor who has done a course of the school [lead, 2026-11-12].
 - **Graduate reviews** are written only by doctors who finished a course of that school and appear after staff moderation [lead, 2026-11-12].
 - **The doctor never sees a rules preset's name**, only its effects in words [lead, 2026-11-12].
 - The **school screen** presents a school as the doctor's end product: its expert, its courses as a vertical list of cards with what they lead to (a card leads to the course path; more than six — «Вы учитесь» cards and the rest as rows with search and «Показать ещё 10») [owner, Stage A 2026-11-12], graduate reviews (REQ-118), mentoring and internships as school-level functions (REQ-119). The word «проект» never appears in the doctor's interface (REQ-50).

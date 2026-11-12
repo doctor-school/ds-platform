@@ -60,6 +60,7 @@ erDiagram
 | `order`                                                                                        | `strict`                    | course, module                 |
 | `lockedVisibility`                                                                             | `locked`                    | any                            |
 | `test.threshold` / `.attempts` / `.pauseMin` / `.questions`                                    | 80 / unlimited / 0 / all    | any                            |
+| `test.exitRequired` (D9 default, on in every preset; EARS-4, EARS-6)                           | true                        | any                            |
 | `test.entryRequired` / `test.entryCounts`                                                      | false / false               | any                            |
 | `testOut.allowed` / `testOut.pauseMin`                                                         | false / 0                   | any (D17: per-course override) |
 | `repeat.allowed`                                                                               | true                        | any                            |

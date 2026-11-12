@@ -140,6 +140,15 @@ Feature: 024 — A doctor walks one course path of steps whose rules are setting
     When the staff member adds the exit test with two questions and publishes lesson 3
     Then lesson 3 is on the doctor's path of "ortho-basic"
 
+  @EARS-4 @EARS-6 @EARS-8
+  Scenario: With the exit test switched off a lesson publishes and completes without one
+    Given the setting "exit test required" is overridden to off on lesson 3 of "Суставы и хрящ"
+    And lesson 3 has a video step and a download step and no exit test
+    When a staff member publishes lesson 3
+    Then lesson 3 is on the doctor's path of "ortho-basic"
+    When a doctor views both steps of lesson 3
+    Then lesson 3 is done on the path
+
   @EARS-4 @EARS-13
   Scenario: An unpublished lesson leaves the doctor's path and keeps the facts
     Given a doctor has done the video of lesson 2

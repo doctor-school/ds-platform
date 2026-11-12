@@ -177,6 +177,15 @@ async function bootConfiguredPointsApi(points: PointsWorld) {
         )
       ).rows,
     ).toEqual([{ zitadel_sub: actorSub }]);
+    pointsOperation(
+      "GET /v1/admin/points/fact-types (native preauthorized principal fixture preparation before effect snapshots)",
+    );
+    const prepared = await app.inject({
+      method: "GET",
+      url: "/v1/admin/points/fact-types",
+      headers,
+    });
+    expect(prepared.statusCode, prepared.payload).toBe(200);
     async function runRaw(payload: {
       registeredBefore: string;
       reason: string;

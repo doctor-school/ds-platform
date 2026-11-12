@@ -14,6 +14,7 @@ import {
   projects,
 } from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { ACTIVE_EVENT } from "../events/events.repository.js";
 import {
   organisationPubliclyDisplayed,
   publicOrganisationColumns,
@@ -155,9 +156,10 @@ export class PublicProjectsRepository {
   }
 
   /**
-   * EARS-9 / EARS-13 — distinct broadcast events linked by an active
-   * `event_projects` row to a public project (optionally one project), and the
-   * year of the earliest start among them.
+   * EARS-9 / EARS-13 — distinct non-removed broadcast events linked by an
+   * active `event_projects` row to a public project (optionally one project),
+   * and the UTC year of the earliest start among them (the same zone as the
+   * first-publish fallback).
    */
   async broadcastFigures(projectId?: string): Promise<BroadcastFigures> {
     const [row] = await this.db
@@ -165,7 +167,7 @@ export class PublicProjectsRepository {
         broadcasts: sql<number>`count(DISTINCT ${events.id})::int`,
         firstYear: sql<
           number | null
-        >`min(extract(year from ${events.startsAt}))::int`,
+        >`min(extract(year from ${events.startsAt} AT TIME ZONE 'UTC'))::int`,
       })
       .from(eventProjects)
       .innerJoin(events, eq(events.id, eventProjects.eventId))
@@ -173,6 +175,7 @@ export class PublicProjectsRepository {
       .where(
         and(
           eq(eventProjects.status, "active"),
+          ACTIVE_EVENT,
           inArray(events.state, [...BROADCAST_EVENT_STATES]),
           projectPubliclyVisible,
           projectId ? eq(projects.id, projectId) : undefined,

@@ -301,11 +301,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
       ids.e2025 = await event("e2025", "ended", "2025-02-01T10:00:00Z");
       ids.eDraft = await event("edraft", "draft", "2019-01-10T10:00:00Z");
       ids.eHidden = await event("ehidden", "published", "2018-01-10T10:00:00Z");
+      // A removed event (#1278) keeps its public `state` — only `record_status`
+      // says it is gone, so it must count nowhere.
+      ids.eRetired = await event("eretired", "ended", "2017-01-10T10:00:00Z");
+      await pool.query(
+        "UPDATE events SET record_status = 'retired', deleted_at = now() WHERE id = $1",
+        [ids.eRetired],
+      );
       await linkEvent(ids.e2024, ids.ortho);
       await linkEvent(ids.e2025, ids.ortho);
       await linkEvent(ids.e2025, ids.rheuma);
       await linkEvent(ids.eDraft, ids.ortho);
       await linkEvent(ids.eHidden, ids.noResults);
+      await linkEvent(ids.eRetired, ids.ortho);
     }, 60_000);
 
     afterAll(async () => {
@@ -417,6 +425,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(now.partners - baseline.partners).toBe(3);
     });
 
+    it("EARS-9: a removed event of a public project shall not count as a broadcast nor set the first year", async () => {
+      const removed = await pool.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM event_projects ep
+           JOIN events e ON e.id = ep.event_id
+          WHERE ep.project_id = $1 AND e.record_status = 'retired' AND e.state = 'ended'`,
+        [ids.ortho],
+      );
+      expect(removed.rows[0]!.n).toBe(1);
+      const now = await scale();
+      expect(now.broadcasts - baseline.broadcasts).toBe(2);
+      expect(now.firstBroadcastYear).not.toBe(2017);
+    });
+
     it("EARS-9: the scale-line partners figure shall equal the 032 EARS-12 count for the same data", async () => {
       const count = PublicOrganisationCountSchema.parse(
         (await get("/v1/public/organisations/count")).json(),
@@ -464,6 +485,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
           investorPlaceOpen: false,
         });
       }
+    });
+
+    it("EARS-13: a removed event linked to the project shall not set its since-year", async () => {
+      const body = PublicProjectSchema.parse(
+        (await get(`/v1/public/projects/${slug("Ортобиология")}`)).json(),
+      );
+      expect(body.sinceYear).toBe(2024);
     });
 
     it("EARS-13: a name-hidden investor shall close the investor place without being disclosed", async () => {

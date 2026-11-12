@@ -98,7 +98,12 @@ const activeStreamOf = (eventId: string) =>
     eq(streamConfig.recordStatus, "active"),
   );
 
-const ACTIVE_EVENT = eq(events.recordStatus, "active");
+/**
+ * The event is not removed (#1278). Exported so every public read that counts
+ * events — 030's scale line and since-year included — spells the same
+ * index-matching predicate.
+ */
+export const ACTIVE_EVENT = eq(events.recordStatus, "active");
 
 /**
  * 004 «Amendment — 2026-10-01» / 012 LD-12, EARS-29 — the Academy listing, its

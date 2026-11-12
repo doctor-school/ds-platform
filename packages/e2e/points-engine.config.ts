@@ -14,9 +14,10 @@ const testDir = defineBddConfig({
     "steps/points-referral-boundaries.steps.ts",
     "steps/points-rulebook-boundaries.steps.ts",
     "steps/points-lifecycle-boundaries.steps.ts",
+    "steps/points-rule-changes.steps.ts",
   ],
   outputDir: ".features-gen/points-engine",
-  tags: "@points-engine-originals or @points-record-boundaries or @points-reserve-boundaries or @points-advance-boundaries or @points-referral-boundaries or @points-rulebook-boundaries or @points-lifecycle-boundaries or @points-first-release",
+  tags: "@points-engine-originals or @points-record-boundaries or @points-reserve-boundaries or @points-advance-boundaries or @points-referral-boundaries or @points-rulebook-boundaries or @points-lifecycle-boundaries or @points-first-release or @points-rule-changes",
   missingSteps: "fail-on-gen",
 });
 

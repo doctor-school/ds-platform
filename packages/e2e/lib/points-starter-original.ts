@@ -177,18 +177,35 @@ async function bootConfiguredPointsApi(points: PointsWorld) {
         )
       ).rows,
     ).toEqual([{ zitadel_sub: actorSub }]);
+    pointsOperation(
+      "GET /v1/admin/points/fact-types (native preauthorized principal fixture preparation before effect snapshots)",
+    );
+    const prepared = await app.inject({
+      method: "GET",
+      url: "/v1/admin/points/fact-types",
+      headers,
+    });
+    expect(prepared.statusCode, prepared.payload).toBe(200);
+    async function runRaw(payload: {
+      registeredBefore: string;
+      reason: string;
+    }) {
+      pointsOperation(
+        "POST /v1/admin/points/starter-bonus (actual compiled controller/guard/engine/Postgres)",
+      );
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/admin/points/starter-bonus",
+        headers,
+        payload,
+      });
+      return response;
+    }
     return {
       actorSub,
+      runRaw,
       async run(payload: { registeredBefore: string; reason: string }) {
-        pointsOperation(
-          "POST /v1/admin/points/starter-bonus (actual compiled controller/guard/engine/Postgres)",
-        );
-        const response = await app.inject({
-          method: "POST",
-          url: "/v1/admin/points/starter-bonus",
-          headers,
-          payload,
-        });
+        const response = await runRaw(payload);
         expect(response.statusCode, response.payload).toBe(200);
         return response.json();
       },

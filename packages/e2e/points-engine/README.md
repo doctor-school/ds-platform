@@ -1,6 +1,6 @@
 # 025 engine originals
 
-The strict `points-engine.config.ts` contour executes twenty-one unchanged source
+The strict `points-engine.config.ts` contour executes twenty-seven unchanged source
 originals from `025-scenarios.feature`, including both Background clauses.
 The preceding three remain regression coverage:
 
@@ -49,7 +49,7 @@ result for the target fact/person only. It restores the original prototype in
 journal row and the referral posting on that same fact establish the timing.
 No predicate value or rule is supplied by the test. Narrow quote/referral/context
 receipts append to the operation log that CI uploads. Both unchanged Background
-clauses emit post-assertion receipts for every case (6 for the trio, 42 for all 21).
+clauses emit post-assertion receipts for every case (6 for the trio, 54 for all 27).
 
 The advance cases fund both independent doctors through seeded module facts,
 price the same real event, compare normalized posting legs and persisted member
@@ -97,7 +97,8 @@ prior awards and calls the real ledger `close`; refusal preserves every posting
 field and commits no new ledger key or fact. Module reports use distinct event
 IDs for the same module and exercise both seeded award rules' once-per keys.
 
-The fixture accepts only an explicitly bound `ds_dev_3968`, or `ds_test` with
+The fixture accepts only an explicitly bound `ds_dev_3968`, `ds_dev_3983`,
+`ds_dev_3989`, or `ds_points_originals_3989` with
 `CI=true`, and checks `current_database()` before creating data. Each scenario
 verifies current migrated rule/settings bodies against `POINTS_ENGINE_SEED`,
 persists its own doctor with the canonical Кардиология specialty and verified
@@ -125,11 +126,11 @@ pnpm --filter @ds/e2e exec tsx api-probes/assert-points-engine-report.ts $env:E2
 ```
 
 Generation fails on missing selected steps. The default report gate requires
-all twenty-one titles in the Admin project; `--lifecycle-boundaries` requires the new trio; `--rulebook-boundaries` retains its preceding trio; `--referral-boundaries` retains the preceding referral trio; `--advance-boundaries` still checks the advance trio; `--reserve-boundaries` requires exactly the
+all twenty-seven titles in the Admin project; `--lifecycle-boundaries` requires the new trio; `--rulebook-boundaries` retains its preceding trio; `--referral-boundaries` retains the preceding referral trio; `--advance-boundaries` still checks the advance trio; `--reserve-boundaries` requires exactly the
 reserve trio; `--record-boundaries` still checks the preceding trio. All modes
 reject missing, extra, duplicate,
-wrong-host, skipped, failed, flaky or retried results. CI runs all twenty-one on disposable
-`ds_test` before native API suites can publish different rule versions, and
+wrong-host, skipped, failed, flaky or retried results. CI runs all twenty-seven on disposable
+`ds_points_originals_3989` separately from the native API database, and
 uploads JSON plus operation log. Run local BDD proofs before mutable native
 rule-book tests as well; later BDD proof needs a fresh owned database.
 No visual artifact or owner Stage-B stand is involved.
@@ -158,18 +159,18 @@ Successfully published owned rules are registered before assertions and retired
 through real `publish(active:false)` in fixture `finally`, before closing the pool.
 The latest stored version must be inactive. Seed rule/settings histories, including
 bodies, epoch timestamps and publishers, are compared byte-for-byte in serialized
-snapshots with matching SHA-256 receipts. No seeded version is republished or edited.
+snapshots with matching SHA-256 receipts. Seed rows remain untouched in these custom-rule cases; the rule-change cases below restore defaults by native forward publication.
 Publication bodies, persisted rows, actual audit rows, errors, postings, warnings,
 retirement and seed invariants are appended to the uploaded operation log.
 
-The new trio and full twenty-one each require an independently fresh owned database,
+The new trio and full twenty-seven each require an independently fresh owned database,
 because the literal version 1 cannot be reused after immutable history exists.
 Run both from the same committed source. Preserve each raw report and operation log;
 after acceptance of the trio receipts, sanctioned `dev:db:drop 3968` followed by
 `dev:db:branch 3968` prepares the full run. No automatic reset, alias or skip exists.
-CI runs the full twenty-one once on fresh `ds_test`. Run native rule-book/stacking
+CI runs the full twenty-seven once on fresh `ds_points_originals_3989`. Run native rule-book/stacking
 complements afterwards; they use unique test slugs. Background receipts total
-6 for the trio and 42 for all twenty-one. Owned events are retired before pool close.
+6 for the trio and 54 for all twenty-seven. Owned events are retired before pool close.
 
 The `@points-lifecycle-boundaries` wave adds exactly three source originals:
 
@@ -212,7 +213,7 @@ The CLI report gate additionally requires `E2E_POINTS_OPS_LOG` and validates exa
 two ordered, nonempty, verified Background receipts per expected original, with
 consistent person/application identity. Missing, repeated, reordered or unknown
 receipts are refused as well as failed, skipped, flaky or retried test results.
-The new trio requires 6 receipts; the full 21 requires 42. Native release, stacking,
+The new trio requires 6 receipts; the full 27 requires 54. Native release, stacking,
 limits and starter-bonus tests stay as complementary coverage. Nothing visual is
 delivered, and production is not changed.
 
@@ -223,3 +224,39 @@ has explicit fallbacks for these two dependencies; this Node runner does not set
 `VITEST` or weaken their production fail-closed checks. A configured value always
 wins. Missing-key local proof deletes both keys and `VITEST` before the actual
 compiled HTTP case, exercising the same startup branch CI needs.
+
+The `@points-rule-changes` wave adds exactly source originals 025:119/179/205:
+
+- Re-tuning `accrual.lesson` from version 2/10 Pul to version 3/15 Pul affects
+  only a new lesson. The original fact, trace, posting and posting key remain
+  identical, and publication itself creates no financial change.
+- Publishing `setting.presence.share` version 2/value 50 makes real attendance
+  at 45 percent trace `condition-false`, with no participation posting and an
+  unchanged `accrual.participation` history.
+- The fresh active starter-trigger catalog contains only the seeded rule.
+  Its native deactivation makes the real admin HTTP grant refuse 422 and
+  `points-starter-bonus-no-rule`, with no run audit, fact or financial change.
+
+`points-rule-changes.config.ts` selects exactly this trio (one worker, zero
+retries, missing steps fail generation). Its strict CLI scope is
+`--rule-changes`. Both the trio and the full 27 require an independently fresh
+owned history. The full report has 54 ordered Background receipts and exactly
+six resource receipts: the three retained first-release receipts plus the three
+rule changes. The trio has six Background and three resource receipts. Missing,
+extra, duplicate, foreign or unknown receipts fail closed.
+
+Changed seeded defaults restore only through native `RuleBookService.publish`.
+Every case retains the original complete seed-history/audit prefix, the exact
+changed and restored bodies, gap-free versions, actor mirror identity and the
+native call's effectivity bounds. Untouched seed histories remain identical;
+cleanup preserves all six financial tables and the entire price history and
+retires only the case's owned events. Initial seed provenance remains epoch/null;
+subsequent Backgrounds verify both that provenance and the exact accepted
+forward-restored history. Current-version selection uses the application's
+clock, matching the native rule book, rather than the remote database clock.
+
+CI runs all 27 in `ds_points_originals_3989`, explicitly checks that target before
+migration and uploads `points-engine-originals-3989`. Native API suites keep
+their separate fresh `ds_test` and their unchanged seeded-version assertions.
+This is backend recorded-fact/grant acceptance; it proves no producer, browser,
+provider, factor or authorization journey. No visual artifact is produced.

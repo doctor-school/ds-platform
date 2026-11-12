@@ -24,7 +24,8 @@ export const test = base.extend<{ points: PointsWorld }>({
         await retirePointsRules(world);
       } finally {
         try {
-          if (world.ruleBookTouched) await retirePointsEvents(world);
+          if (world.ruleBookTouched && !world.seedCleanupReceipt)
+            await retirePointsEvents(world);
         } finally {
           await world.handle.pool.end();
         }

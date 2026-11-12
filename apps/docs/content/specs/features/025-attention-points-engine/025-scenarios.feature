@@ -116,6 +116,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then the next leaderboard response contains no row for "C"
 
   @EARS-25 @EARS-27 @EARS-42
+  @points-rule-changes
   Scenario: Re-tuning a rule applies to new postings only
     Given "A" received a lesson award under rule "accrual.lesson" version 2
     When an admin publishes "accrual.lesson" version 3 with 15 Pul
@@ -176,6 +177,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then the version is stored and the answer carries a stacking warning naming "accrual.lesson"
 
   @EARS-39 @failure
+  @points-rule-changes
   Scenario: A setting changes a threshold without a rule version
     When an admin publishes "setting.presence.share" version 2 with 50
     And "attendance.confirmed" for "A" on event "E6" is recorded with a presence share of 45 %
@@ -202,6 +204,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then every doctor answers "duplicate" and no posting is written
 
   @EARS-43 @failure
+  @points-rule-changes
   Scenario: The starter-bonus grant needs an active rule
     Given "accrual.starter-bonus" is deactivated
     When an admin runs the starter-bonus grant

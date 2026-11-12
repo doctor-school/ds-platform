@@ -416,3 +416,169 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     And a platform administrator is signed in to the admin with a second factor
     When the administrator opens «Источники» and the «Публикации» of "t.me/bbmacademy"
     Then neither page scrolls horizontally and both pass the accessibility check
+
+  # Slice 3 — VK connector, wall posts and VK Видео (EARS-38…EARS-52)
+
+  @EARS-38 @EARS-44
+  Scenario: An administrator adds the VK community to the source list
+    Given a platform administrator is signed in to the admin with a second factor
+    And the VK connector is configured and the community "bbm.academy" has the VK id 211000111
+    When the administrator adds a source of platform «VK» with the address "https://vk.ru/bbm.academy"
+    Then the source list shows «VK», "vk.com/bbm.academy", «Включён» and a status other than «Сообщество не найдено»
+    And the source "vk.com/bbm.academy" is bound to the VK community id 211000111
+
+  @EARS-38
+  Scenario: A wall post link is not a community address
+    Given a platform administrator is signed in to the admin with a second factor
+    When the administrator adds a source of platform «VK» with the address "https://vk.com/wall-211000111_501"
+    Then the field «Адрес сообщества» shows «Укажите адрес сообщества в виде vk.com/имя»
+    And the source list has no new source
+
+  @EARS-39
+  Scenario: VK confirms the Callback server of the listed community
+    Given the switched-on VK source "vk.com/bbm.academy" bound to the VK community id 211000111
+    When VK posts a confirmation event for the group 211000111 to the VK Callback route
+    Then the route answers 200 with the configured confirmation string
+
+  @EARS-39
+  Scenario: A Callback event with a wrong secret is refused
+    Given the switched-on VK source "vk.com/bbm.academy" bound to the VK community id 211000111
+    When a request posts a wall_post_new of the group 211000111 with the secret "wrong" to the VK Callback route
+    Then the route answers 401
+    And the feed has no new card
+
+  @EARS-40 @EARS-41 @EARS-48 @EARS-49
+  Scenario: A new wall post becomes a VK card that links to the original
+    Given the switched-on VK source "vk.com/bbm.academy" bound to the VK community id 211000111
+    When VK delivers with the right secret a wall_post_new of post 501 of the group 211000111 with a photo and the text "Открыт набор на курс по PRP-терапии"
+    Then the route answers 200 with "ok"
+    When a visitor who is not signed in opens the Academy home
+    Then the rail has a card reading "Открыт набор на курс по PRP-терапии", «BBM Academy · VK» and «VK ↗» with the post's preview
+    And that card is a link to "https://vk.com/wall-211000111_501" with a new-tab target and rel "noopener noreferrer"
+
+  @EARS-40 @EARS-42 @EARS-48 @EARS-49
+  Scenario: A new VK Видео video becomes a video card that plays nothing
+    Given the switched-on VK source "vk.com/bbm.academy" bound to the VK community id 211000111
+    When VK delivers with the right secret a video_new of video 456239017 of the group 211000111 of 754 seconds titled "PRP при гонартрозе — запись эфира"
+    And a visitor opens the Academy home
+    Then the rail has a card "PRP при гонартрозе — запись эфира" with «BBM Academy · VK Видео», a play mark and «12:34»
+    And that card is a link to "https://vk.com/video-211000111_456239017" with a new-tab target and rel "noopener noreferrer"
+    And no video plays on the Academy home
+
+  @EARS-40
+  Scenario: An event of a community that is not in the source list is dropped
+    Given the switched-on VK source "vk.com/bbm.academy" bound to the VK community id 211000111
+    When VK delivers with the right secret a wall_post_new of post 12 of the group 999000999
+    Then the route answers 200 with "ok"
+    And the feed has no new card
+    And the log records the event as dropped for an unlisted community without its text
+
+  @EARS-41
+  Scenario: A repost is not a card
+    Given the switched-on VK source "vk.com/bbm.academy" bound to the VK community id 211000111
+    When VK delivers with the right secret a wall_post_new of post 502 of the group 211000111 that reposts another community's post
+    Then the route answers 200 with "ok"
+    And the feed has no new card
+
+  @EARS-43
+  Scenario: A video that is later attached to a wall post shows once, as the post
+    Given the switched-on VK source "vk.com/bbm.academy" has the video card of video 456239017
+    When VK delivers with the right secret a wall_post_new of post 503 of the group 211000111 with the video 456239017 attached and the text "Запись эфира о PRP — смотрите"
+    Then the feed has exactly one card of that publication, reading "Запись эфира о PRP — смотрите" and linking to "https://vk.com/wall-211000111_503"
+    And the feed has no card linking to "https://vk.com/video-211000111_456239017"
+
+  @EARS-45
+  Scenario: A post edited in VK is updated by the hourly reconcile
+    Given the switched-on VK source "vk.com/bbm.academy" has the card of post 501 dated 12 November
+    And post 501 now reads "Набор на курс по PRP-терапии продлён" on the VK wall
+    When the hourly VK reconcile runs
+    Then the card of post 501 reads "Набор на курс по PRP-терапии продлён"
+    And the card of post 501 is still dated 12 November and keeps its place in the rail
+
+  @EARS-45 @EARS-47 @EARS-48
+  Scenario: A post deleted from the VK wall leaves the rail and returns if restored
+    Given the switched-on VK source "vk.com/bbm.academy" has the cards of posts 500, 501 and 503
+    And post 501 is deleted from the VK wall while posts 500 and 503 remain
+    When the hourly VK reconcile runs
+    Then the rail on the Academy home has no card of post 501
+    And «Публикации» of "vk.com/bbm.academy" lists post 501 as «Удалён в VK»
+    When post 501 is restored on the VK wall and the hourly VK reconcile runs
+    Then the rail again has the card of post 501 at its own date
+
+  @EARS-22 @EARS-40 @EARS-48
+  Scenario: A switched-off VK source leaves the rail and keeps its posts
+    Given the VK source "vk.com/bbm.academy" has the card of post 501 in the rail
+    And a platform administrator is signed in to the admin with a second factor
+    When the administrator switches the source "vk.com/bbm.academy" off and confirms
+    Then the rail on the Academy home has no card of "vk.com/bbm.academy"
+    When VK delivers with the right secret a wall_post_new of post 510 of the group 211000111
+    Then the route answers 200 with "ok"
+    And the feed has no card of post 510
+    When the administrator switches the source "vk.com/bbm.academy" on
+    Then the rail again has the card of post 501 at its own date
+
+  @EARS-32 @EARS-47 @EARS-48
+  Scenario: An administrator hides one VK video
+    Given the VK source "vk.com/bbm.academy" has the card of post 501 and the video card of video 456239017 in the rail
+    And a platform administrator is signed in to the admin with a second factor
+    When the administrator chooses «Скрыть из ленты» on video 456239017 in «Публикации» and confirms
+    Then the rail on the Academy home has the card of post 501 and no card of video 456239017
+    And «Публикации» lists video 456239017 as «Скрыт»
+    When the administrator chooses «Вернуть в ленту» on video 456239017
+    Then the rail again has the card of video 456239017 at its own date
+
+  @EARS-46
+  Scenario: The one-off VK import brings in earlier posts and a re-run duplicates nothing
+    Given the VK source "vk.com/bbm.academy" bound to the VK community id 211000111 has the card of post 501 delivered by the Callback
+    And the VK wall of the group 211000111 holds the posts 300, 301 and 501 and the repost 302
+    When the operator runs the VK history import for "vk.com/bbm.academy"
+    Then the feed has cards of posts 300 and 301 at their VK dates and one card of post 501
+    And the import reports 2 written, 1 skipped as existing and 1 dropped as a repost
+    When the operator runs the VK history import for "vk.com/bbm.academy" again
+    Then the import reports 0 written
+    And the feed has exactly one card each of posts 300, 301 and 501
+
+  @EARS-46
+  Scenario: A VK import for a source with no bound community id is refused with its reason
+    Given the VK source "vk.com/bbm.academy" was added while VK was unreachable, so its VK community id is not bound
+    When the operator runs the VK history import for "vk.com/bbm.academy"
+    Then the import exits with an error stating that the source has no bound VK community id
+    And the feed has no new card
+
+  @EARS-44 @EARS-50
+  Scenario: An unreachable VK marks the source failing and leaves the rail working
+    Given the VK source "vk.com/bbm.academy" has the card of post 501 in the rail
+    And VK is unreachable
+    When the hourly source check runs
+    Then the source list shows "vk.com/bbm.academy" with «Ошибка: VK недоступен»
+    When a visitor opens the Academy home
+    Then the rail shows the card of post 501 and the other cards with no error state
+
+  @EARS-44
+  Scenario: A silent Callback shows as failing
+    Given the switched-on VK source "vk.com/bbm.academy" bound to the VK community id 211000111
+    And the last Callback event of the group 211000111 arrived on 10 November
+    And the hourly VK reconcile wrote post 520 published two hours ago
+    When the hourly source check runs
+    Then the source list shows "vk.com/bbm.academy" with «Ошибка: VK не присылает новые записи»
+
+  @EARS-51
+  Scenario: No VK secret or post author is stored or logged
+    Given the switched-on VK source "vk.com/bbm.academy" bound to the VK community id 211000111
+    When VK delivers with the right secret a wall_post_new of post 521 of the group 211000111 posted by a community administrator
+    Then no stored row and no log line carries the service key, the Callback secret, the confirmation string, the raw event or the posting administrator's id
+
+  @EARS-17 @EARS-48
+  Scenario: The doctor storefront shows no VK card
+    Given the VK source "vk.com/bbm.academy" has the card of post 501 in the rail
+    When a doctor opens the home of doctor.school
+    Then the doctor storefront home has no rail «Новости, блог и видео» and no VK card
+
+  @EARS-52
+  Scenario: The VK source pages and VK cards work on a phone
+    Given the viewport is 390 px wide
+    And the VK source "vk.com/bbm.academy" has the card of post 501 and the video card of video 456239017 in the rail
+    When a platform administrator opens «Источники» and the «Публикации» of "vk.com/bbm.academy"
+    Then neither page scrolls horizontally and both pass the accessibility check
+    When a visitor opens the Academy home
+    Then the home passes the accessibility check with both VK cards in the rail

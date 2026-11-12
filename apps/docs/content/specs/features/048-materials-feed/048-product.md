@@ -49,7 +49,7 @@ The feature ships in five slices; each later slice adds one connector and change
 
 1. **Own materials.** The admin authors news and expert columns (US-1, US-2), the reading page (US-8), and the rail on the Academy home with all its states (US-6, US-9). The source list and US-5 exist from the first network slice on.
 2. **Telegram.** A bot in our channel receives each new `channel_post` (and its edits); the posts published before the bot joined are brought in once by a one-off import, because the Bot API cannot read channel history.
-3. **VK posts and VK Видео.** The VK Callback API pushes new wall posts and videos (`wall_post_new`, `video_new`); the VK business profile is verified, because an unverified profile is capped at 10 000 API calls a month. The route for VK clips is undocumented and stays `UNCONFIRMED` until the slice is designed.
+3. **VK posts and VK Видео.** The VK Callback API pushes new wall posts and videos (`wall_post_new`, `video_new`); an hourly `wall.get` reconcile applies wall edits and removals, which VK sends no event for. Business-profile verification is not needed at this volume: the connector makes about 1 500 VK API calls per source a month against the 10 000 cap of an unverified profile, and verification becomes a named trigger only if a later connector multiplies the calls. VK clips have no documented read route, so slice 3 reads none (Open questions).
 4. **RuTube.** `blocked_by` RuTube's written confirmation that the public channel-list endpoint may be used: it works today, but its only official description dates from 2016 and RuTube's terms grant no API use. Marketing sends the letter (text: [#3403 comment 6490007758](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6490007758)).
 5. **Dzen.** «Дзен точно делаем - мы туда пишем посты» (owner, chat 2026-10-29). Dzen has no read interface, and its terms (§5.1) forbid automated access without the company's permission, so reading Dzen pages is out. Marketing sends Dzen a permission letter (owner of the step: «Маркетинг»; text: [#3403 comment 6490007758](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6490007758)). If Dzen refuses, the direction reverses: the material is written on the Academy and Dzen imports it through its «Сайт в канал» RSS, so the feed shows the Academy's own record.
 
@@ -127,7 +127,7 @@ Per-platform mechanism, fields, limits and terms: [`048-platform-access-research
 - **Instagram** — the BBM Academy account `@bbm.academy` exists, the network is blocked in the RF; whether it joins the feed stays open. The connector model (US-10) means the answer adds a slice, not a feature change. _(owner.)_
 - **RuTube** — written confirmation of the channel-list endpoint (blocks slice 4). _(Маркетинг sends the letter.)_
 - **Dzen** — permission under ToS §5.1, or the reverse RSS path (decides the shape of slice 5). _(Маркетинг sends the letter.)_
-- **VK clips** — no documented read route; settled when slice 3 is designed. _(lead — design.)_
+- **VK clips** — settled by the slice-3 design: VK documents no clips method and no clip video type, so slice 3 reads no clips; a clip posted on the wall as a post is a post. _(lead — design, 2026-11-12.)_
 
 ## Approved-mockup reference
 

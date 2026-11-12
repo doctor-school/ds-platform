@@ -106,6 +106,11 @@
       "remotePath": null,
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
+    "archive/archive-doctor-lesson-v1.dc.html": {
+      "sha256": "c52bde85414d104f7d574393ede3cf445a44f954a53cee919922b7b9e50d80ee",
+      "pulledAt": "2026-11-12T10:50:45.615Z",
+      "remotePath": "project/archive-doctor-lesson-v1.dc.html"
+    },
     "archive/archive-event-page-recording.dc.html": {
       "sha256": "04e1509122edb4defae95d84d99c4af6af6380032b284b25f577bacaaaee8156",
       "pulledAt": "2026-09-28",
@@ -167,6 +172,12 @@
       "remotePath": null,
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
+    "doctor-course.dc.html": {
+      "sha256": "a1048c9e81072bb066004e30eb44003cd63e2fdd5f1aa981422978d37c898e18",
+      "pulledSha256": "c319b503fee0a57f244c1f8c64a9ed3e12fe9ef358e1abfc0a9caee8f47965ee",
+      "pulledAt": "2026-11-12T10:52:24.299Z",
+      "remotePath": "project/doctor-course.dc.html"
+    },
     "doctor-docs.dc.html": {
       "sha256": "60c14ca459e4fbbf39496f74b49e66775b72ca656a1d68fa50ea3f02076f5391",
       "pulledSha256": "157aa3ebacc91b2d9d8d1997b9f07c2201406e1650db8a50dc18b83d50d0ebeb",
@@ -189,11 +200,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "doctor-lesson.dc.html": {
-      "sha256": "298bd15a72ea11a0884e54b012ae85d1aec195f8a411607a5741c2161b0166b7",
-      "pulledSha256": "c52bde85414d104f7d574393ede3cf445a44f954a53cee919922b7b9e50d80ee",
-      "pulledAt": "2026-09-28",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+      "sha256": "802dddc3e7db4f2d52b27f28301b668e5180a64369bed122caeb82f1eb1339df",
+      "pulledSha256": "f5a6b4890d02d64a72c52e2b0e7db36861b97b200fb4559783b9ce41402a006e",
+      "pulledAt": "2026-11-12T10:50:44.452Z",
+      "remotePath": "project/doctor-lesson.dc.html"
     },
     "doctor-lk-congress.dc.html": {
       "sha256": "948210939ce9d9375bc3555013f2e3c5627980652b9c2f4b0b7dea93dadd651e",

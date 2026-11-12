@@ -146,8 +146,8 @@ Further questions raised by this PRD [proposed]:
 
 ## Capability owner
 
-No row exists yet in [`capability-ownership.md`](../../product/two-site-ia/capability-ownership.md) for the learning structure, rules or progress. **[proposed]** One shared package — working name `packages/learning` — owns the structure model, the rule model with inheritance and presets, the progress facts and the evaluator, with the doctor storefront (`apps/doctor`) adding only route files and host-config fields (ADR-0013 §A1), and the mobile application consuming the same API. The registry row is added when the EARS triplet is authored, not in this PRD.
+The [`capability-ownership.md`](../../product/two-site-ia/capability-ownership.md) row «Learning path — course page and lesson» names the owner: one shared package — working name `packages/learning` — owns the structure model, the rule model with inheritance and presets, the progress facts and the evaluator, with the doctor storefront (`apps/doctor`) adding only route files and host-config fields (ADR-0013 §A1), and the mobile application consuming the same API. The EARS triplet fixes the row's final shape.
 
 ## Approved mockup
 
-**Pending — `author-design-mockup`.** No Stage-A canvas exists for `#d-lesson` yet; the course path (its form on the website is the «snake», as in the application prototype [owner, D12]), the lesson screen and the author's rule editor need an owner pick before building.
+The course path (on the website the «snake», as in the application prototype [owner, D12]) is `design-source/doctor-course.dc.html`, Stage-A approved by the owner on v16, 2026-11-11 («теперь лучше»). The lesson screen `#d-lesson` is `design-source/doctor-lesson.dc.html` — one screen per step — Stage-A approved by the owner on v18, 2026-11-12 («Ок»). Record: [#1793 comment 6821468757](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6821468757). The author's rule editor has no canvas yet: **pending — `author-design-mockup`**, an owner pick before building.

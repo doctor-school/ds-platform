@@ -101,4 +101,14 @@ export const operationalOriginals = {
     "A stale edit is refused",
     "The administrator finds materials by kind",
   ],
+  materialJourneys: [
+    "An administrator writes a news item and it becomes the first card of the rail",
+    "A column is written on the expert's behalf",
+    "A material with a partner carries the partner mark",
+    "A material without a partner carries no partner mark",
+    "An edit of a published material shows on the site and keeps its date",
+    "An unpublished material leaves the Academy at once",
+    "A visitor reads a material on its own page",
+    "The rail, the page and the admin work on a phone",
+  ],
 } as const;

@@ -75,6 +75,17 @@ const materialsTestDir = defineBddConfig({
   tags: "@material-admin-authoring",
 });
 
+// 048 V-9/V-10/V-12 originals that cross the Admin writer and the Academy
+// reader in one run: the job's Academy storefront is named by E2E_PORTAL_URL.
+const materialJourneysTestDir = defineBddConfig({
+  features:
+    "../docs/content/specs/features/048-materials-feed/048-scenarios.feature",
+  featuresRoot: "../docs/content/specs/features",
+  steps: ["e2e/material-journeys/steps.ts", "e2e/support/fixtures.ts"],
+  outputDir: ".features-gen/material-journeys",
+  tags: "@material-academy-journeys",
+});
+
 const registryContractsTestDir = defineBddConfig({
   features: [
     "../docs/content/specs/features/030-projects-catalog-and-page/030-scenarios.feature",
@@ -136,6 +147,11 @@ export default defineConfig({
     {
       name: "materials",
       testDir: materialsTestDir,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "material-journeys",
+      testDir: materialJourneysTestDir,
       use: { ...devices["Desktop Chrome"] },
     },
   ],

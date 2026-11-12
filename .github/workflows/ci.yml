@@ -2245,9 +2245,34 @@ jobs:
           path: ${{ runner.temp }}/registry-contracts
           if-no-files-found: error
           retention-days: 7
+      # 048 (#3517): the reading-page storefront group of
+      # `materials-reading-page.spec.ts` reads the Academy, so this tier boots
+      # the Academy storefront and names it; in CI that group has no skip path.
       - name: Admin flows tier
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
-        run: pnpm --filter @ds/admin test:flows
+        env:
+          E2E_PORTAL_URL: http://localhost:3001
+        run: |
+          set -euo pipefail
+          # Own process groups, so the trap reaps the servers and not only pnpm.
+          # The Academy's silent sign-in check redirects through the IdP to the
+          # sign-in app, so the storefront needs it running.
+          DOCTOR_PUBLIC_ORIGIN=http://localhost:3004 PORT=3001 setsid pnpm --filter @ds/portal start --hostname 127.0.0.1 > "$RUNNER_TEMP/flows-portal.log" 2>&1 &
+          portal_pid=$!
+          PORT=3005 setsid pnpm --filter @ds/login start --hostname 127.0.0.1 > "$RUNNER_TEMP/flows-login.log" 2>&1 &
+          login_pid=$!
+          trap 'kill -- "-$portal_pid" "-$login_pid"' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3005/healthz >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then cat "$RUNNER_TEMP/flows-login.log"; exit 1; fi
+            sleep 2
+          done
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3001/ >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then cat "$RUNNER_TEMP/flows-portal.log"; exit 1; fi
+            sleep 2
+          done
+          pnpm --filter @ds/admin test:flows
       - name: Admin spec-owned taxonomy journeys
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
         env:
@@ -2287,6 +2312,45 @@ jobs:
           path: |
             ${{ runner.temp }}/material-authoring-report
             ${{ runner.temp }}/material-authoring-stand-ops.jsonl
+          if-no-files-found: error
+          retention-days: 7
+      # 048 V-9/V-10/V-12 (#3517): the originals where the administrator writes
+      # on the Admin and a visitor reads the Academy home rail and reading page
+      # in the same run; the exact-title receipt refuses a skip, retry or flake.
+      - name: Admin and Academy material journeys
+        if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
+        env:
+          E2E_PORTAL_URL: http://localhost:3001
+          E2E_MATERIAL_ADMIN_DATABASE: ds_admin_e2e
+          E2E_MATERIAL_ADMIN_LOG: ${{ runner.temp }}/material-journeys/stand-ops.jsonl
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/material-journeys/results.json
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/material-journeys"
+          DOCTOR_PUBLIC_ORIGIN=http://localhost:3004 PORT=3001 setsid pnpm --filter @ds/portal start --hostname 127.0.0.1 > "$RUNNER_TEMP/material-journeys/portal.log" 2>&1 &
+          portal_pid=$!
+          # The Academy's silent sign-in check lands on the sign-in app.
+          PORT=3005 setsid pnpm --filter @ds/login start --hostname 127.0.0.1 > "$RUNNER_TEMP/material-journeys/login.log" 2>&1 &
+          login_pid=$!
+          trap 'kill -- "-$portal_pid" "-$login_pid"' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3005/healthz >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then cat "$RUNNER_TEMP/material-journeys/login.log"; exit 1; fi
+            sleep 2
+          done
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3001/ >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then cat "$RUNNER_TEMP/material-journeys/portal.log"; exit 1; fi
+            sleep 2
+          done
+          pnpm --filter @ds/admin test:e2e --project material-journeys --reporter=list,json
+          pnpm --filter @ds/e2e exec tsx api-probes/assert-report.ts "$PLAYWRIGHT_JSON_OUTPUT_NAME" materialJourneys
+      - name: Upload material journey receipts
+        if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: material-journey-originals
+          path: ${{ runner.temp }}/material-journeys
           if-no-files-found: error
           retention-days: 7
       - name: Upload edit-audit original receipts

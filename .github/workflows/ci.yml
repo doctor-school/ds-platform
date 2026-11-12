@@ -658,6 +658,29 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Run exactly three 044 repeat, consent and price originals through owning nginx
+        env:
+          E2E_CONGRESS_DATABASE: ds_test
+          E2E_CONGRESS_DIR: ${{ runner.temp }}/congress-originals-3979
+          E2E_CONGRESS_REPORT: ${{ runner.temp }}/congress-originals-3979/results.json
+          E2E_CONGRESS_NGINX: ${{ runner.temp }}/congress-nginx-3974/bin/nginx
+        run: |
+          set -euo pipefail
+          mkdir -p "$E2E_CONGRESS_DIR"
+          "$E2E_CONGRESS_NGINX" -V 2> "$E2E_CONGRESS_DIR/nginx-version.txt"
+          sha256sum "$E2E_CONGRESS_NGINX" > "$E2E_CONGRESS_DIR/nginx-binary.sha256"
+          pnpm --filter @ds/e2e exec bddgen --config congress-repeat.config.ts
+          pnpm --filter @ds/e2e exec playwright test --config congress-repeat.config.ts
+          pnpm --filter @ds/e2e exec tsx api-probes/assert-congress-repeat-report.ts "$E2E_CONGRESS_REPORT" "$E2E_CONGRESS_DIR/backgrounds.jsonl"
+      - name: Upload exactly three 044 repeat, consent and price original receipts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: congress-originals-3979
+          path: ${{ runner.temp }}/congress-originals-3979
+          if-no-files-found: ignore
+          retention-days: 7
+
       # ─ Mail + SMS sinks ─ the same two upstream images the dev stand runs
       # (`infra/dev-stand/compose.core.yml`): Zitadel's SMTP provider and its
       # generic HTTP SMS provider are pointed at these by `provision.sh`, and the

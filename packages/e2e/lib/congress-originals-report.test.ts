@@ -3,6 +3,10 @@ import {
   assertCongressBackgrounds,
   congressOriginals,
   congressBackgrounds,
+  congressRepeatOriginals,
+  assertCongressRepeatBackgrounds,
+  assertCongressRepeatReport,
+  assertCongressReport,
 } from "./congress-originals-report.js";
 
 describe("044 exact-three Background evidence", () => {
@@ -47,5 +51,72 @@ describe("044 exact-three Background evidence", () => {
     if (kind === "wrong identity")
       entries[1] = entries[1]!.replace("owned-event", "foreign-event");
     expect(() => assertCongressBackgrounds(entries.join("\n"))).toThrow();
+  });
+});
+
+describe("044 repeat, consent and price exact-three identity", () => {
+  const receipts = (titles: readonly string[]) =>
+    titles
+      .flatMap((title) =>
+        congressBackgrounds.map((clause) =>
+          JSON.stringify({
+            title,
+            clause,
+            eventId: "owned-event",
+            verified: true,
+          }),
+        ),
+      )
+      .join("\n");
+  const report = (titles: readonly string[]) => ({
+    errors: [],
+    suites: [
+      {
+        specs: titles.map((title) => ({
+          title,
+          tests: [
+            {
+              projectName: "admin",
+              projectId: "admin",
+              status: "expected",
+              results: [{ status: "passed", retry: 0 }],
+            },
+          ],
+        })),
+      },
+    ],
+  });
+  it("EARS-8: keeps both accepted trios strict and disjoint", () => {
+    expect(() =>
+      assertCongressRepeatBackgrounds(receipts(congressRepeatOriginals)),
+    ).not.toThrow();
+    expect(() =>
+      assertCongressRepeatReport(report(congressRepeatOriginals)),
+    ).not.toThrow();
+    expect(() =>
+      assertCongressRepeatReport(report(congressOriginals)),
+    ).toThrow();
+    expect(() =>
+      assertCongressReport(report(congressRepeatOriginals)),
+    ).toThrow();
+    expect(() =>
+      assertCongressBackgrounds(receipts(congressRepeatOriginals)),
+    ).toThrow();
+    expect(() =>
+      assertCongressRepeatBackgrounds(receipts(congressOriginals)),
+    ).toThrow();
+  });
+  it("EARS-41: refuses a fourth, a missing original and any retry", () => {
+    expect(() =>
+      assertCongressRepeatReport(
+        report([...congressRepeatOriginals, "fourth"]),
+      ),
+    ).toThrow();
+    expect(() =>
+      assertCongressRepeatReport(report(congressRepeatOriginals.slice(1))),
+    ).toThrow();
+    const value = report(congressRepeatOriginals);
+    value.suites[0]!.specs[0]!.tests[0]!.results[0]!.retry = 1;
+    expect(() => assertCongressRepeatReport(value)).toThrow();
   });
 });

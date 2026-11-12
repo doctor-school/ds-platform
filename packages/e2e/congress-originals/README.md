@@ -41,3 +41,31 @@ All PG/HTTP/process operations are prelogged in `stand-ops.jsonl`. The test
 closes its own AppModule and nginx; records remain in the owned DB until the
 lead accepts cleanup. Retain the native congress suites: this contour does not
 replace their broader contracts. No visual artifact or product change.
+
+## Repeat, changed consent and priced refusal
+
+The separate `@congress-repeat-consent-price` group binds only 044:58/99/305.
+Use `congress-repeat.config.ts` for both bddgen and Playwright and
+`api-probes/assert-congress-repeat-report.ts` for its report and Background log.
+It requires exactly three passing cases and eighteen ordered receipts; the old
+window/name checker still accepts only its original trio. CI reuses its one
+checksum-pinned nginx build and uploads a separate `congress-originals-3979` artifact.
+
+Locally use the supported exact `dev:db:drop 3979` then `dev:db:branch 3979`
+with prior evidence/cleanup acceptance; set `E2E_CONGRESS_DATABASE=ds_dev_3979`.
+Preserve manifests before recreating only this owned DB. One unchanged native
+identity/mailer adapter instance spans the selected cases, matching persisted
+user lifetime. Do not point this group at 3974 or reset shared resources.
+
+The repeat case compares complete records, then waits for a later native mail
+dispatch as a happens-after barrier. Success equality means current accepted
+status/shape with a fresh opaque reference; clear handoffs are never saved.
+The consent case serves unchanged pinned legal bytes as an owned local test
+republication, derives its date from observed HTTP Last-Modified and its hash
+from the HTTP text, and proves exactly one added consent. This establishes no
+new legal approval or production policy change. The priced case uses native
+ledger issuance of 500 Pul and a native price of 50 Pul before taking complete
+11-table baselines; both refusals leave all records, mail counts and native
+engine quote/record counts unchanged. Actor witnesses accumulate by person ID,
+including known actors without a registration after the final unknown refusal.
+Native EARS-8.1/8.2, EARS-12.3 and EARS-41 tests remain complementary.

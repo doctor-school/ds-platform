@@ -55,6 +55,7 @@ Feature: 044 — Congress sign-up
     And that response body is exactly the single accepted state the congress site renders its confirmation from
 
   @EARS-8 @EARS-12
+  @congress-repeat-consent-price
   Scenario: A repeat submission is an idempotent no-op behind the same success response
     Given "known@example.org" is already registered for the congress event
     And that registration's confirmation-mail outcome is sent
@@ -96,6 +97,7 @@ Feature: 044 — Congress sign-up
     And no email is dispatched
 
   @EARS-8
+  @congress-repeat-consent-price
   Scenario: The published consent version changed since the recorded acceptance
     Given "known@example.org" is already registered for the congress event
     And the published personal-data consent version differs from the one recorded for that registration
@@ -302,6 +304,7 @@ Feature: 044 — Congress sign-up
   # --- Production amendment 2026-11-09 (#3810): a priced event is out of the intake ---
 
   @EARS-41
+  @congress-repeat-consent-price
   Scenario: A priced event refuses every congress submission alike and spends no Pul
     Given the congress event is priced above zero Pul in the 025 price list
     And an existing doctor holds enough Pul for it

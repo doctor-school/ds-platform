@@ -132,3 +132,73 @@ Then(
     );
   },
 );
+
+Given(
+  '"known@example.org" is already registered for the congress event',
+  async ({ congress }) => {
+    await congress.alreadyRegistered();
+  },
+);
+Given(
+  "that registration's confirmation-mail outcome is sent",
+  async ({ congress }) => {
+    await congress.sentOutcome();
+  },
+);
+Given(
+  "the published personal-data consent version differs from the one recorded for that registration",
+  async ({ congress }) => {
+    await congress.republishConsent();
+  },
+);
+When(
+  "the same form is submitted again with the same email",
+  async ({ congress }) => {
+    await congress.repeat();
+  },
+);
+Then("the same generic success response is returned", async ({ congress }) => {
+  await congress.sameSuccess();
+});
+Then("no second account is created", async ({ congress }) => {
+  await congress.noSecondAccount();
+});
+Then(
+  "no second registration row exists for that account and event",
+  async ({ congress }) => {
+    await congress.noSecondRegistration();
+  },
+);
+Then("no second confirmation email is dispatched", async ({ congress }) => {
+  await congress.noSecondMail();
+});
+Then(
+  "exactly one further consent record is written, carrying the newly published version",
+  async ({ congress }) => {
+    await congress.furtherConsent();
+  },
+);
+Given(
+  "the congress event is priced above zero Pul in the 025 price list",
+  async ({ congress }) => {
+    await congress.priceEvent();
+  },
+);
+Given("an existing doctor holds enough Pul for it", async ({ congress }) => {
+  await congress.fundDoctor();
+});
+When(
+  "that doctor's email and an unknown email are each submitted",
+  async ({ congress }) => {
+    await congress.pricedSubmissions();
+  },
+);
+Then("both submissions get the same generic refusal", async ({ congress }) => {
+  await congress.sameRefusal();
+});
+Then(
+  "no account, registration, posting or hold is written for either",
+  async ({ congress }) => {
+    await congress.noPricedWrites();
+  },
+);

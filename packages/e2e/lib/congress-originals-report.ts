@@ -16,7 +16,10 @@ export const congressBackgrounds = [
 export function assertCongressReport(report: unknown): void {
   assertOperationalReport(report, congressOriginals, "admin");
 }
-export function assertCongressBackgrounds(log: string): void {
+export function assertCongressBackgrounds(
+  log: string,
+  originals: readonly string[] = congressOriginals,
+): void {
   const rows = log
     .split(/\r?\n/)
     .filter(Boolean)
@@ -31,7 +34,7 @@ export function assertCongressBackgrounds(log: string): void {
     );
   if (rows.length !== 18)
     throw new Error("Expected exactly 18 Congress Background receipts");
-  for (const [i, title] of congressOriginals.entries()) {
+  for (const [i, title] of originals.entries()) {
     const group = rows.slice(i * 6, i * 6 + 6);
     if (
       group.some(
@@ -47,4 +50,16 @@ export function assertCongressBackgrounds(log: string): void {
         "Missing, wrong, duplicate or unordered Congress Background receipt",
       );
   }
+}
+
+export const congressRepeatOriginals = [
+  "A repeat submission is an idempotent no-op behind the same success response",
+  "The published consent version changed since the recorded acceptance",
+  "A priced event refuses every congress submission alike and spends no Pul",
+] as const;
+export function assertCongressRepeatReport(report: unknown): void {
+  assertOperationalReport(report, congressRepeatOriginals, "admin");
+}
+export function assertCongressRepeatBackgrounds(log: string): void {
+  assertCongressBackgrounds(log, congressRepeatOriginals);
 }

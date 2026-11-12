@@ -708,7 +708,9 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    ```
 
    `lifecycle.json` carries **all three** rules, because a put replaces the whole
-   set: dropping `abort-incomplete-multipart` fires BBM's `S3BackupLifecycleMissing-ds`.
+   set: dropping `abort-incomplete-multipart` fires BBM's `S3BackupLifecycleMissing-ds`
+   (`sidorovanthon/bbm` `infra/monitoring/grafana/provisioning/alerting/rules.yaml`,
+   group `s3-backups-ds`).
 
    ```json
    {
@@ -784,9 +786,16 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    }
    ```
 
-   This key runs the full pgBackRest cycle (stanza-create, check, archive-push,
-   backup, expire, point-in-time info/restore) and the `recovery-bundle` upload. It is
-   refused (403) deleting a version, writing outside the two prefixes, changing
+   The policy names the bucket itself: it is written per bucket by design, so a new
+   bucket gets its own copy with its own name.
+
+   On ds-data-prod this key is checked to list the repository and read `backup.info`
+   and `recovery-bundle/<box>/latest.json`, and is refused (403) listing
+   `ds-prod-uploads`, suspending versioning and deleting the lifecycle. In production
+   it runs WAL archive-push, `pgbackrest check` and the `recovery-bundle` upload.
+   Proven on the pilot user with the same policy: the full pgBackRest cycle
+   (stanza-create, check, archive-push, backup, expire, point-in-time info/restore),
+   and a 403 on deleting a version, writing outside the two prefixes, changing
    versioning, lifecycle, lock or bucket policy, deleting the bucket, touching any
    other bucket, and every IAM call.
 
@@ -804,6 +813,27 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
 
    Then dispatch `recovery-custody.yml` with `recovery-bundle`, then
    `recovery-check`: the bundle fingerprints `data.env`.
+
+   Once `check` says OK and both jobs are green, revoke the previous key on the
+   operator's workstation with the account main key (never on the box):
+
+   ```bash
+   E='--endpoint-url https://s3.twcstorage.ru'
+   aws iam list-access-keys --user-name ds-data-prod-pgbackrest $E
+   aws iam delete-access-key --user-name ds-data-prod-pgbackrest $E --access-key-id <old>
+   ```
+
+   When the previous key was the account main key (the first move to the restricted
+   user), there is no user key to revoke: removing it from the box ends its exposure
+   there. Rotating the main key itself is a separate account-level action that affects
+   every bucket, and is not part of this procedure.
+
+   The `data.env.bak-<ts>` copy is the rollback path and still holds the old key.
+   Remove it once the next `expire` (the nightly full) has succeeded with the new key:
+
+   ```bash
+   sudo shred -u /etc/ds-platform/data.env.bak-<ts>
+   ```
 
    **Bundle the irreplaceable keys** before you leave this step, and again after any
    later change to these files: dispatch `recovery-custody.yml` with `recovery-bundle`,

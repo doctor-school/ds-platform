@@ -107,7 +107,9 @@ not secrets; their values are in the templates or derive from the environment.
   readable for 8 days (§4.1). 8 days is 7 daily fulls plus one: a wipe empties the
   bucket listing, and BBM monitoring (group `s3-backups-ds`) raises
   `PgBackRestFullBackupStale`, `PgBackRestIncrementalBackupStale` or
-  `S3BackupProbeFailed-ds` within about 1–2 hours. Objects written before the lock
+  `S3BackupProbeFailed-ds` (`sidorovanthon/bbm`
+  `infra/monitoring/grafana/provisioning/alerting/rules.yaml`) within about 1–2 hours,
+  as read from the rules (not yet fired live). Objects written before the lock
   carry none (`VersionId null`); the backup set is fully protected once daily fulls
   have replaced them, about 7 days after the lock. Versions count toward the billed
   bucket size (about 1.3× the current set). Locked buckets need pgBackRest ≥ 2.55.1,
@@ -632,7 +634,25 @@ needs `--repo=1`; without it pgBackRest refuses with
    `restore` writes both options into `restore_command`, so WAL replay reads the
    archive at the same point in time.
 
-4. **Afterwards.** Start postgres, confirm the data, then check that the box's S3 key
+4. **Repair the repository's info files** before postgres serves writes: until then
+   the current `backup.info` / `archive.info` are the damaged ones, so
+   `pgbackrest check` fails and the `archive_command` keeps failing while WAL piles up
+   in `pg_wal`. On the operator's workstation with the account main key, make the
+   last version before the target time current again for each of
+   `pgbackrest/backup/ds/backup.info`, `pgbackrest/backup/ds/backup.info.copy`,
+   `pgbackrest/archive/ds/archive.info` and `pgbackrest/archive/ds/archive.info.copy`:
+
+   ```bash
+   S3='--endpoint-url https://s3.twcstorage.ru --region ru-1'
+   aws s3api list-object-versions --bucket ds-prod-pgbackrest $S3 --prefix <key>
+   aws s3api copy-object --bucket ds-prod-pgbackrest $S3 --key <key> \
+     --copy-source "ds-prod-pgbackrest/<key>?versionId=<id>"
+   ```
+
+   This step was not exercised in the pilot, which read the repository with
+   `--repo-target-time` only.
+
+5. **Afterwards.** Start postgres, confirm the data, then check that the box's S3 key
    is still the restricted one (README → «Rotating the box's pgBackRest S3 key»; swap
    it when it may have leaked) and run `pgbackrest --stanza=ds check`.
 

@@ -111,8 +111,8 @@ Further questions raised by this PRD [proposed]:
 
 ## Capability owner
 
-No row exists yet in [`capability-ownership.md`](../../product/two-site-ia/capability-ownership.md) for schools and courses. **[proposed]** The structure (direction → school → course → module → lesson) belongs to the same shared package as the 024 learning model — working name `packages/learning` — so the school, course, module and lesson are one model with one rules evaluator; the doctor storefront (`apps/doctor`) adds only route files and host-config fields (ADR-0013 §A1), and reuses the 018 doctor content card. The registry row is added when the EARS triplet is authored, not in this PRD.
+The [`capability-ownership.md`](../../product/two-site-ia/capability-ownership.md) row «Learning path — course page and lesson» names the owner: `packages/learning` (planned, working name). The structure (direction → school → course → module → lesson) belongs to the same shared package as the 024 learning model — working name `packages/learning` — so the school, course, module and lesson are one model with one rules evaluator; the doctor storefront (`apps/doctor`) adds only route files and host-config fields (ADR-0013 §A1), and reuses the 018 doctor content card. The EARS triplet fixes the row's final shape.
 
 ## Approved mockup
 
-**Pending — `author-design-mockup`.** No Stage-A canvas exists for `#d-school` yet; the school screen and the course page — the course path (its form on the website is the «snake», as in the application prototype [owner, D12]) — need an owner pick before building.
+The school screen `#d-school` is `design-source/doctor-school.dc.html`. The course page — the course path, on the website the «snake», as in the application prototype [owner, D12] — is `design-source/doctor-course.dc.html`: Stage-A approved by the owner on v16, 2026-11-11 («теперь лучше»), record [#1793 comment 6821468757](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6821468757).

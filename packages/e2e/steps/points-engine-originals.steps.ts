@@ -53,7 +53,11 @@ Given(
 Given(
   'a doctor "A" of specialty "Кардиология" with a verified phone',
   async ({ points }) => {
-    await prepareDoctor(points);
+    await prepareDoctor(
+      points,
+      points.personId,
+      !test.info().tags.includes("@points-first-release"),
+    );
     pointsOperation(
       "BACKGROUND " +
         JSON.stringify({

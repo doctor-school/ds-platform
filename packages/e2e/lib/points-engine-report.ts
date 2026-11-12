@@ -36,6 +36,16 @@ export const pointsLifecycleBoundaries = [
   "Doctors registered before the engine receive the starter bonus once",
 ] as const;
 
+export const pointsFirstRelease = [
+  "Registration to the first event",
+  "Releasing a partly netted obligation returns the netted Pul",
+  "Pul of a doctor without a verified phone cannot be spent",
+] as const;
+
+export function assertPointsFirstReleaseReport(value: unknown): void {
+  assertOperationalReport(value, pointsFirstRelease, "admin");
+}
+
 export const pointsEngineOriginals = [
   "An offline lesson earns Bre only and never a second Bre",
   "A producer fact carrying an amount is refused and writes nothing",
@@ -46,6 +56,7 @@ export const pointsEngineOriginals = [
   ...pointsReferralBoundaries,
   ...pointsRulebookBoundaries,
   ...pointsLifecycleBoundaries,
+  ...pointsFirstRelease,
 ] as const;
 
 export function assertPointsEngineReport(value: unknown): void {

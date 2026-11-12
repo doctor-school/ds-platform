@@ -604,11 +604,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Run exactly nine 025 engine originals before mutable rule-book tests
+      - name: Run exactly twenty-four 025 engine originals before mutable rule-book tests
         env:
           E2E_POINTS_DATABASE: ds_test
           E2E_POINTS_OPS_LOG: ${{ runner.temp }}/points-originals-3876/stand-ops.jsonl
           E2E_POINTS_REPORT: ${{ runner.temp }}/points-originals-3876/results.json
+          E2E_POINTS_RESOURCE_REPORT: ${{ runner.temp }}/points-originals-3876/resources.jsonl
         run: |
           mkdir -p "$RUNNER_TEMP/points-originals-3876"
           printf '%s\n' '{"command":"pnpm --filter @ds/api drizzle:migrate:ci (disposable CI ds_test)"}' >> "$E2E_POINTS_OPS_LOG"

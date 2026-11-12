@@ -29,6 +29,8 @@ interface Ledger {
   readPersonAccount(personId: string): Promise<{
     pul: { unit: string; available: number; reserved: number };
     advance: { open: number; remaining: number };
+    bre: number;
+    con: number;
   }>;
   close(personId: string, at: Date): Promise<{ closedAt: Date | null }>;
 }
@@ -124,16 +126,17 @@ export async function startPointsWorld(): Promise<PointsWorld> {
     !database ||
     !(
       database === "ds_dev_3968" ||
+      database === "ds_dev_3983" ||
       (process.env.CI === "true" && database === "ds_test")
     ) ||
     decodeURIComponent(new URL(connection).pathname.slice(1)) !== database
   ) {
     throw new Error(
-      "025 originals require the explicitly owned #3968 database (or CI ds_test)",
+      "025 originals require an explicitly owned #3968/#3983 database (or CI ds_test)",
     );
   }
   pointsOperation(`CONNECT ${database}`);
-  const applicationName = `points-3968-${randomUUID()}`;
+  const applicationName = `points-${database}-${randomUUID()}`;
   const scopedConnection = new URL(connection);
   scopedConnection.searchParams.set("application_name", applicationName);
   const handle = createDrizzle(scopedConnection.href, { max: 3 });
@@ -337,6 +340,7 @@ export function parseGatingDecision(value: unknown): Record<string, unknown> {
 export async function prepareDoctor(
   world: PointsWorld,
   personId = world.personId,
+  recordPhoneFact = true,
 ): Promise<void> {
   let specialty = (
     await world.handle.pool.query(
@@ -386,6 +390,7 @@ export async function prepareDoctor(
       )
     ).rows,
   ).toEqual([{ phone_verified: true, has_phone: true, name: "Кардиология" }]);
+  if (!recordPhoneFact) return;
   const fact = {
     type: "phone.verified",
     eventId: `points-original-phone:${randomUUID()}`,

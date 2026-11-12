@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertPointsEngineReport,
+  assertPointsFirstReleaseReport,
   assertPointsBackgrounds,
   assertPointsLifecycleBoundariesReport,
   assertPointsRecordBoundariesReport,
@@ -36,6 +37,11 @@ const referrals = [
   "Referral awards stop for the inviter above the monthly cap",
   "The invitee's first completed lesson counts itself for the referral",
 ];
+const firstRelease = [
+  "Registration to the first event",
+  "Releasing a partly netted obligation returns the netted Pul",
+  "Pul of a doctor without a verified phone cannot be spent",
+];
 const lifecycle = [
   "A no-show releases the reserve and annuls the advance",
   "Exclusive campaign rules apply only the highest priority one inside their window",
@@ -46,6 +52,35 @@ const rulebook = [
   "A rule reading an undeclared or ill-typed operand is refused at publish",
   "Publishing a second stacking credit rule warns the admin",
 ];
+
+it("EARS-1/18/35: the first/release receipt rejects every preceding group", () => {
+  for (const titles of [
+    previous,
+    boundaries,
+    reserves,
+    advances,
+    referrals,
+    rulebook,
+    lifecycle,
+  ]) {
+    expect(() => assertPointsFirstReleaseReport(report(titles))).toThrow(
+      /identity/,
+    );
+  }
+  expect(() =>
+    assertPointsEngineReport(
+      report([
+        ...previous,
+        ...boundaries,
+        ...reserves,
+        ...advances,
+        ...referrals,
+        ...rulebook,
+        ...lifecycle,
+      ]),
+    ),
+  ).toThrow(/identity/);
+});
 
 function report(titles: readonly string[]) {
   return {
@@ -79,6 +114,7 @@ for (const [scope, titles, assertReport] of [
       ...referrals,
       ...rulebook,
       ...lifecycle,
+      ...firstRelease,
     ],
     assertPointsEngineReport,
   ],
@@ -88,6 +124,7 @@ for (const [scope, titles, assertReport] of [
   ["referral wave", referrals, assertPointsReferralBoundariesReport],
   ["rulebook wave", rulebook, assertPointsRulebookBoundariesReport],
   ["lifecycle wave", lifecycle, assertPointsLifecycleBoundariesReport],
+  ["first/release wave", firstRelease, assertPointsFirstReleaseReport],
 ] as const) {
   describe("025 " + scope + " execution receipt", () => {
     it("EARS-4/8/31: accepts its exact source originals passing once", () => {

@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import {
   assertPointsEngineReport,
+  assertPointsFirstReleaseReport,
+  pointsFirstRelease,
   assertPointsLifecycleBoundariesReport,
   assertPointsBackgrounds,
   pointsEngineOriginals,
@@ -27,43 +29,48 @@ if (
   scope !== "--advance-boundaries" &&
   scope !== "--referral-boundaries" &&
   scope !== "--rulebook-boundaries" &&
-  scope !== "--lifecycle-boundaries"
+  scope !== "--lifecycle-boundaries" &&
+  scope !== "--first-release"
 ) {
   throw new Error("Unknown 025 report scope");
 }
 const assertReport =
-  scope === "--lifecycle-boundaries"
-    ? assertPointsLifecycleBoundariesReport
-    : scope === "--rulebook-boundaries"
-      ? assertPointsRulebookBoundariesReport
-      : scope === "--referral-boundaries"
-        ? assertPointsReferralBoundariesReport
-        : scope === "--advance-boundaries"
-          ? assertPointsAdvanceBoundariesReport
-          : scope === "--reserve-boundaries"
-            ? assertPointsReserveBoundariesReport
-            : scope === "--record-boundaries"
-              ? assertPointsRecordBoundariesReport
-              : assertPointsEngineReport;
+  scope === "--first-release"
+    ? assertPointsFirstReleaseReport
+    : scope === "--lifecycle-boundaries"
+      ? assertPointsLifecycleBoundariesReport
+      : scope === "--rulebook-boundaries"
+        ? assertPointsRulebookBoundariesReport
+        : scope === "--referral-boundaries"
+          ? assertPointsReferralBoundariesReport
+          : scope === "--advance-boundaries"
+            ? assertPointsAdvanceBoundariesReport
+            : scope === "--reserve-boundaries"
+              ? assertPointsReserveBoundariesReport
+              : scope === "--record-boundaries"
+                ? assertPointsRecordBoundariesReport
+                : assertPointsEngineReport;
 assertReport(JSON.parse(readFileSync(file, "utf8")));
 const titles =
-  scope === "--lifecycle-boundaries"
-    ? pointsLifecycleBoundaries
-    : scope === "--rulebook-boundaries"
-      ? pointsRulebookBoundaries
-      : scope === "--referral-boundaries"
-        ? pointsReferralBoundaries
-        : scope === "--advance-boundaries"
-          ? pointsAdvanceBoundaries
-          : scope === "--reserve-boundaries"
-            ? pointsReserveBoundaries
-            : scope === "--record-boundaries"
-              ? pointsRecordBoundaries
-              : pointsEngineOriginals;
+  scope === "--first-release"
+    ? pointsFirstRelease
+    : scope === "--lifecycle-boundaries"
+      ? pointsLifecycleBoundaries
+      : scope === "--rulebook-boundaries"
+        ? pointsRulebookBoundaries
+        : scope === "--referral-boundaries"
+          ? pointsReferralBoundaries
+          : scope === "--advance-boundaries"
+            ? pointsAdvanceBoundaries
+            : scope === "--reserve-boundaries"
+              ? pointsReserveBoundaries
+              : scope === "--record-boundaries"
+                ? pointsRecordBoundaries
+                : pointsEngineOriginals;
 const log = process.env.E2E_POINTS_OPS_LOG;
 if (!log)
   throw new Error("E2E_POINTS_OPS_LOG is required for Background proof");
 assertPointsBackgrounds(readFileSync(log, "utf8"), titles);
 console.log(
-  `025: exactly ${scope ? 3 : 21} originals passed; failures/skips/flakes/retries=0/0/0/0`,
+  `025: exactly ${scope ? 3 : 24} originals passed; failures/skips/flakes/retries=0/0/0/0`,
 );

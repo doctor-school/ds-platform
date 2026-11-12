@@ -61,7 +61,10 @@ const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 export type FeedRailPage = Pick<PublicFeedPage, "data" | "nextCursor">;
 
 export interface FeedRailProps {
-  /** The first page read on the server; when absent the rail reads it itself. */
+  /**
+   * A first page the host already holds (the showcase and tests pass one);
+   * when absent — as on the Academy home — the rail reads it itself.
+   */
   initialPage?: FeedRailPage | undefined;
   /** Reads one feed page — the host binds it to `GET /v1/public/feed`. */
   loadPage: (args: {
@@ -131,6 +134,7 @@ export function FeedRail({
   const [edges, setEdges] = React.useState({ atStart: true, atEnd: false });
   const [dragging, setDragging] = React.useState(false);
   const dragMoved = React.useRef(false);
+  const dragTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = React.useRef(true);
   const started = React.useRef(false);
 
@@ -138,6 +142,9 @@ export function FeedRail({
     alive.current = true;
     return () => {
       alive.current = false;
+      // The drag-flag timer never outlives the rail.
+      if (dragTimer.current !== null) clearTimeout(dragTimer.current);
+      dragTimer.current = null;
     };
   }, []);
 
@@ -288,8 +295,15 @@ export function FeedRail({
         left: Math.round(rail.scrollLeft / slot) * slot,
         behavior: scrollBehavior(),
       });
-      // `dragMoved` stays set for the click that ends this drag (swallowed in
-      // `onClickCapture`); the next press resets it.
+      // As on the canvas: the flag lives only for the click that ends this
+      // drag (swallowed in `onClickCapture`); a zero-delay timeout clears it
+      // so a drag released outside the rail never swallows the next
+      // activation.
+      if (dragTimer.current !== null) clearTimeout(dragTimer.current);
+      dragTimer.current = setTimeout(() => {
+        dragTimer.current = null;
+        dragMoved.current = false;
+      }, 0);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);

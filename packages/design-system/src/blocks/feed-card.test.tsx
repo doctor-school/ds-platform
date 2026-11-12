@@ -113,7 +113,7 @@ describe("FeedCard", () => {
 
   it("048 EARS-13: a title word longer than the card width shall wrap inside the card, not be cut at its edge", () => {
     // Driven on the Academy home @1440 (#3516): «Антибиотикорезистентность:»
-    // in an 18px bold title is wider than the 260px text box and was clipped
+    // in a 20px bold title is wider than the 260px text box and was clipped
     // by the clamp's `overflow: hidden`.
     render(
       <FeedCard

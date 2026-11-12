@@ -1,11 +1,11 @@
 ---
-title: "048 — Materials feed: own materials, the reading page, the rail on the Academy home and the Telegram connector (Design, slices 1–2)"
-description: "Where the materials feed lives, what exists today, the material and feed-entry model and why the feed is one store of entries that later connectors also write, the read-time expert and partner projection, the rich-text body document and its allowlist, the publish / edit / unpublish cascades, the public feed and material reads with their keyset cursor, the endpoints, the capability owner of the shared feed card and rail, the canvas, Stage-A and approved-non-canvas UI composition, the room left for network connectors, retention, the dependencies, the delivery slices and the lead decisions; slice 2 adds the source list, the Telegram Bot API webhook with its secret-token check, the post and album mapping onto the common card, edits in place, the preview copy, the hourly source check, the one-off history import, hiding one post, the ADR-0011 egress channel and ingress, retention of Telegram card data, its rollout and its lead decisions."
+title: "048 — Materials feed: own materials, the reading page, the rail on the Academy home and the Telegram and VK connectors (Design, slices 1–3)"
+description: "Where the materials feed lives, what exists today, the material and feed-entry model and why the feed is one store of entries that later connectors also write, the read-time expert and partner projection, the rich-text body document and its allowlist, the publish / edit / unpublish cascades, the public feed and material reads with their keyset cursor, the endpoints, the capability owner of the shared feed card and rail, the canvas, Stage-A and approved-non-canvas UI composition, the room left for network connectors, retention, the dependencies, the delivery slices and the lead decisions; slice 2 adds the source list, the Telegram Bot API webhook with its secret-token check, the post and album mapping onto the common card, edits in place, the preview copy, the hourly source check, the one-off history import, hiding one post, the ADR-0011 egress channel and ingress, retention of Telegram card data, its rollout and its lead decisions; slice 3 adds the VK Callback API route with its body-secret check and confirmation, the wall post and VK Видео mapping with one card per publication, the hourly wall reconcile for edits and removals, referenced previews, the VK source check and call budget, the one-off wall import, the ADR-0011 channel #11 and its ingress, retention of VK card data, its rollout and its lead decisions."
 slug: 048-materials-feed
 lang: en
 ---
 
-# 048 — Materials feed: own materials, the reading page, the rail on the Academy home and the Telegram connector (Design, slices 1–2)
+# 048 — Materials feed: own materials, the reading page, the rail on the Academy home and the Telegram and VK connectors (Design, slices 1–3)
 
 Requirements: [`048-requirements-en.md`](./048-requirements-en.md) · PRD: [`048-product.md`](./048-product.md) · Connector research: [`048-platform-access-research.md`](./048-platform-access-research.md) · Domain: ADR-0016 §4 (project container), §8 (storefront ownership) · Experts directory and media: [`012-design.md`](../012-content-taxonomy/012-design.md) · Partner (organisation registry): [`032-design.md`](../032-investors-leaderboard/032-design.md) «Data model» · Access: [`047-design.md`](../047-staff-access/047-design.md) · Admin kit precedent: [`030-design.md`](../030-projects-catalog-and-page/030-design.md).
 
@@ -26,6 +26,8 @@ There is **no running counterpart**: no table, contract, endpoint, admin section
 | `apps/api/src/taxonomy/public-event-cursor.ts` — the exact (microsecond) keyset cursor rule of the public event reads                                                                                         | the feed cursor follows the same rule on `(published_at, id)` (EARS-9)                                                                                                    |
 
 **Slice 2 (Telegram).** The legacy Doctor.School system has no repository-traceable automation that loaded its social posts onto the site: a scout of the sanctioned legacy sources (the legacy BBM repository, the Bubble and Directual exports, the knowledge base) found only a Directual support / chat bot `ds_fk_bot` with no channel-post ingestion, dormant Zapier / WebFlow settings stubs, and RuTube as a per-event video embed. The owner's remark of 2026-11-11 «мы делали разные автоматизации для подгрузки наших постов из соцсетей, но почему-то это у нас потерялось» refers to automations that lived outside these sources. Nothing is migrated: the Telegram connector is new. In this repository no Telegram client, webhook, `feed_sources` table or Bot API configuration exists; `apps/doctor/lib/contacts.ts` only links the Doctor.School channel and is untouched.
+
+**Slice 3 (VK).** The legacy system has no VK ingestion either: the slice-2 scout of the sanctioned legacy sources found no VK automation, and in this repository nothing calls `api.vk.com` — no VK client, Callback route, `vk_group_id` column or VK configuration exists. Nothing is migrated: the VK connector is new and reuses the slice-2 `feed_sources`, «Источники», «Публикации», `hidden_at`, `source_off` and the `post` card.
 
 ## Placement
 
@@ -201,11 +203,11 @@ stateDiagram-v2
 
 ## Room for network connectors (US-10)
 
-Slice 1 builds no connector and no source list, and nothing in it waits for one. Slice 2 builds the shared parts every network slice reuses — the `feed_sources` table and the admin source list (US-3), the `hidden_at` hide action (US-5), the switched-off mark on entries and the external `post` card opening in a new tab (US-7) — together with the first connector, Telegram («Slice 2 — Telegram channel connector» below). Each later network slice adds, without touching slice-1 or slice-2 code paths, one `feed_source_platform` value, a `<platform>.feed-source.ts` writing `feed_entries` rows of its platform from the platform's documented push or read path (research §§2–4: VK Callback API, RuTube channel list after written confirmation, Dzen only with permission or by the reverse RSS path), its card fields, and a copied preview where the platform's links expire or a referenced one where storing is forbidden (VK Rules §1.6). The rail and the card render by `kind`, so a new kind is a new card variant in `FeedCard` and nothing else.
+Slice 1 builds no connector and no source list, and nothing in it waits for one. Slice 2 builds the shared parts every network slice reuses — the `feed_sources` table and the admin source list (US-3), the `hidden_at` hide action (US-5), the switched-off mark on entries and the external `post` card opening in a new tab (US-7) — together with the first connector, Telegram («Slice 2 — Telegram channel connector» below); slice 3 adds VK the same way («Slice 3 — VK connector» below), with a referenced preview and the first new card kind since slice 1 (`video`). Each later network slice adds, extending the shared parts only where its platform needs it (a `Select` option, an address rule, a card source), one `feed_source_platform` value, a `<platform>.feed-source.ts` writing `feed_entries` rows of its platform from the platform's documented push or read path (research §§2–4: VK Callback API, RuTube channel list after written confirmation, Dzen only with permission or by the reverse RSS path), its card fields, and a copied preview where the platform's links expire or a referenced one where storing is forbidden (VK Rules §1.6). The rail and the card render by `kind`, so a new kind is a new card variant in `FeedCard` and nothing else.
 
 ## Retention
 
-Materials and their feed entries are editorial content, not personal data (an expert's name is a published directory field, an author line is a byline): they are retained rows kept for as long as the platform exists, with no time limit — the 012 «nothing is physically deleted» convention; an unpublished material stays a draft in the admin. A replaced cover is removed from storage by the 012 `media_cleanup_jobs` path. No row in the ADR-0009 retention matrix is needed (no PD table). The retention of network card data is set by each network slice together with its storage (PRD); Telegram: «Retention (slice 2)».
+Materials and their feed entries are editorial content, not personal data (an expert's name is a published directory field, an author line is a byline): they are retained rows kept for as long as the platform exists, with no time limit — the 012 «nothing is physically deleted» convention; an unpublished material stays a draft in the admin. A replaced cover is removed from storage by the 012 `media_cleanup_jobs` path. No row in the ADR-0009 retention matrix is needed (no PD table). The retention of network card data is set by each network slice together with its storage (PRD); Telegram: «Retention (slice 2)»; VK: «Retention (slice 3)».
 
 ## Dependencies
 
@@ -240,7 +242,7 @@ flowchart LR
 - **Materials authoring**, **Public reads** and **Feed card and home rail** also wait for the 032 registry (#3492), whose `organisations` table the partner references.
 - **Public reads** depend only on the tables; **Feed card and home rail** and **Reading page** depend on the reads; the reading page is built from its Stage-A-approved canvas; the journeys close the slice.
 
-The PRD's later slices (2 Telegram, 3 VK / VK Видео, 4 RuTube, 5 Dzen) follow this one, each adding its connector per «Room for network connectors»; slice 2: «Delivery slices (slice 2)».
+The PRD's later slices (2 Telegram, 3 VK / VK Видео, 4 RuTube, 5 Dzen) follow this one, each adding its connector per «Room for network connectors»; slice 2: «Delivery slices (slice 2)»; slice 3: «Delivery slices (slice 3)».
 
 ## Lead decisions
 
@@ -482,7 +484,7 @@ Telegram entries are BBM Academy's own public editorial posts, kept as card data
 - **ADR-0011 channel #10** — revised with this spec, so it gates nothing further.
 - **Stage A of the Telegram card variant** (owner) — the variant is drawn on `unit-feed-card.dc.html` but outside the 2026-11-11 approval; it gates **Telegram card on the Academy**.
 - **Production rollout** — owner-side steps (below) gate only the rollout row, never the code packages; CI and the stage use a Telegram double and a test bot.
-- **VK slice (#3944)** — independent; it reuses `feed_sources`, `hidden_at`, `source_off` and the `post` card built here.
+- **VK slice (#3944)** — reuses `feed_sources`, `hidden_at`, `source_off` and the `post` card built here; its edges: «Dependencies (slice 3)».
 
 ### Delivery slices (slice 2)
 
@@ -539,3 +541,280 @@ Its own Issue (repo-conventions «Deferred prod action»), executed after the co
 16. **Storefronts** — `academy-only`: the doctor storefront shows nothing of the feed (EARS-17 holds).
 17. **Text length** — 500 characters cut at a word boundary: enough for every line the card holds at any width, short enough to keep card data minimal (ToS §4.3).
 18. **One bot per environment** — production and stage each run their own bot and channel, so no environment's `setWebhook` displaces another's.
+
+## Slice 3 — VK connector (wall posts and VK Видео)
+
+Requirements: [`048-requirements-en.md`](./048-requirements-en.md) «Slice 3 — VK connector (wall posts and VK Видео)» (EARS-38…EARS-52) · PRD «Delivery slices» item 3, «Open questions» «VK clips», US-3, US-4, US-5, US-7, US-10 · Research [`048-platform-access-research.md`](./048-platform-access-research.md) §2 (with the 2026-11-12 findings) · Egress: ADR-0011 §2.2 channel #11. The slice-3 delta from today is in «Current behaviour → replacement delta» above. VK documentation is cited by its `dev.vk.com/ru/…` paths; the 2026-11-12 quotes were read from the official mirror `dev.vk.ru` under the same paths.
+
+### Placement (slice 3)
+
+- **Schema** `packages/db/src/schema/materials.ts` gains the enum values `feed_source_platform = vk` and `feed_entry_kind = video`, the column `feed_sources.vk_group_id` (nullable `bigint`, unique, bound like `telegram_chat_id`), `feed_sources.vk_last_event_at` (nullable), the column `feed_entries.removed_at` (nullable), the table `feed_entry_vk_objects` and the table `feed_vk_call_months`; one forward migration in `apps/api/drizzle/` with the 010 audit trigger extended to `removed_at`.
+- **API** in `apps/api/src/materials/vk/`: `vk-api.client.ts` — the only code that calls `api.vk.com` (ADR-0011 channel #11); `vk-callback.controller.ts` (EARS-39, EARS-40); `vk.feed-source.ts` — the mapping, the dedup and the writer of VK entries (EARS-41…EARS-43), the only writer of VK rows of `feed_entries` through `feed-entries.repository.ts`; `vk-wall-reconcile.scheduler.ts` (`@Cron` hourly, EARS-45); `vk-source-check.scheduler.ts` (`@Cron` hourly, EARS-44); `vk-history-import.command.ts` — a committed one-off operator command run with the API image (EARS-46). The slice-2 `feed-sources.service.ts` dispatches the add / edit check by platform and gains the VK address rule; the public feed read gains the VK `post` source, the `video` member and `removed_at IS NULL`.
+- **Contract** `packages/schemas/src/materials/feed.ts`: `FeedPostCardSchema.source.platform` becomes `"telegram" | "vk"` with the name fixed per platform; a new `FeedVideoCardSchema` joins the `FeedCardSchema` union (the `news`, `column` and Telegram `post` members untouched); `feed-source.ts` gains the VK platform, the VK address normalization, the VK status reasons, the state «Удалён в VK» and the month's call count.
+- **Admin** no new page: the slice-2 «Источники» gains the `Select` option «VK», the VK address hint, the VK reasons and the call count; «Публикации» gains «Удалён в VK» and the VK note (EARS-38, EARS-44, EARS-47).
+- **Design system** the VK forms of the `post` variant and the new `video` variant of `FeedCard` (`packages/design-system/src/blocks/feed-card.tsx`), including the image-error fallback; `FeedRail` is unchanged.
+- **Storefront ownership** (ADR-0016 §8): `feed_entry_vk_objects` and `feed_vk_call_months` are admin-only like `feed_sources`; VK rows of `feed_entries` are `academy`. `apps/doctor` stays without any of it (EARS-17).
+
+### Data model (slice 3)
+
+```mermaid
+erDiagram
+  FEED_SOURCES ||--o{ FEED_ENTRIES : "brings in"
+  FEED_ENTRIES ||--|{ FEED_ENTRY_VK_OBJECTS : "is made of (VK)"
+  FEED_SOURCES ||--o{ FEED_VK_CALL_MONTHS : "counts calls"
+  FEED_SOURCES {
+    enum platform "telegram|vk"
+    bigint vk_group_id UK "nullable; bound by the source check"
+    timestamptz vk_last_event_at "nullable; last accepted Callback event"
+  }
+  FEED_ENTRIES {
+    enum kind "news|column|post|video"
+    text image_url "VK preview URL, referenced (image_ref null)"
+    timestamptz removed_at "nullable; set by the reconcile"
+  }
+  FEED_ENTRY_VK_OBJECTS {
+    uuid feed_source_id PK
+    enum object_kind PK "post|video"
+    bigint vk_object_id PK
+    uuid feed_entry_id FK "ON DELETE CASCADE"
+  }
+  FEED_VK_CALL_MONTHS {
+    uuid feed_source_id PK "null row = calls not tied to a source"
+    date month PK "first day, Moscow time"
+    int calls
+  }
+```
+
+- **A VK post entry** is a `feed_entries` row with `source_platform = vk`, `kind = post`, `feed_source_id` set, `title` holding the post text of EARS-41, `image_url` the referenced VK preview URL, `image_ref` null, `duration_seconds` when the preview comes from a video, `source_name` «BBM Academy · VK», `partner_organisation_id` null, `href` `https://vk.com/wall-<group_id>_<post_id>`, `published_at` the post's `date`, `source_ref` `<feed_source_id>:post:<post_id>`.
+- **A VK video entry** is a row with `kind = video`, `title` the video title of EARS-42, `image_url` the chosen `image[]` URL, `duration_seconds`, `source_name` «BBM Academy · VK Видео», `href` `https://vk.com/video-<group_id>_<video_id>`, `source_ref` `<feed_source_id>:video:<video_id>`.
+- **`feed_entry_vk_objects` is the dedup key**, mirroring `feed_entry_messages`: the post id of a post entry, every own-community video attached to it and the video id of a video entry are rows keyed `(feed_source_id, object_kind, vk_object_id)`. The Callback, the reconcile and the import write through it (`ON CONFLICT DO NOTHING`), so no publication becomes two entries (EARS-40, EARS-43, EARS-45, EARS-46).
+- **Absorption** (EARS-43): writing a post entry with a video attachment whose `(source, video, id)` key points at a `video` entry re-points that key to the post entry and deletes the video entry in the same transaction, copying its `hidden_at` onto the post entry when the post's is null; a `video_new` whose key is held writes nothing. The only physical deletion of a VK entry is this fold of a duplicate.
+- **Row-local public predicate** gains `removed_at IS NULL` beside the slice-2 `hidden_at IS NULL AND NOT source_off`, so the read still joins nothing beyond EARS-10 (EARS-48).
+- **CHECKs**: `kind = 'video'` only for `source_platform = 'vk'`; `image_ref IS NULL` for a VK row; `removed_at IS NULL` for an `academy` row.
+- **Address** is the lowercase screen name (EARS-38); a community without a short name has the screen name `club<id>` / `public<id>`, so those forms are screen names too. `vk_group_id` is bound by the source check, run at once on add (EARS-44); from then on the id decides and the permalinks are built from it, so a rename keeps every `href` valid and the check reports «Адрес сообщества изменился на vk.com/<имя>» until the administrator edits the address.
+
+### Callback (EARS-39, EARS-40)
+
+```mermaid
+sequenceDiagram
+  participant VK as VK Callback API
+  participant N as nginx (api host, 443)
+  participant C as vk-callback.controller
+  participant S as vk.feed-source
+  participant DB as Postgres
+  VK->>N: POST /v1/integrations/vk/callback (JSON with type, group_id, secret, object)
+  N->>C: proxy (body limit 1 MB)
+  alt connector not configured
+    C-->>VK: 404
+  else body unparsable, secret wrong, or absent on a non-confirmation (constant-time compare)
+    C-->>VK: 401
+  else confirmation
+    C->>DB: group_id bound to a listed source?
+    C-->>VK: 200 VK_CALLBACK_CONFIRMATION (or ok + log when not)
+  else event
+    C->>DB: find source by vk_group_id
+    alt unlisted, unbound, switched off, other type, malformed object
+      C-->>VK: 200 ok (log: event_id, type, group_id, object id, X-Retry-Counter, reason)
+    else wall_post_new / video_new of an enabled source
+      C->>S: map(object)
+      alt dropped (repost, postpone, suggest, live, other type, empty)
+        S-->>C: dropped(reason) → log, 200 ok
+      else card
+        S->>DB: BEGIN; upsert via feed_entry_vk_objects; absorb; vk_last_event_at = now(); COMMIT
+        C-->>VK: 200 ok
+      end
+    end
+  end
+  Note over C,VK: a database failure answers 500 → VK retries at 10 s, 3 min, 10 min, 30 min, 1 h; the writes are idempotent
+```
+
+- The secret is in the body («В поле Секретный ключ вы можете указать произвольную строку, которая будет передаваться» in the `secret` field — [Callback API](https://dev.vk.com/ru/api/callback/getting-started)), so the route parses the body first, bounded by nginx's 1 MB limit, and compares `secret` in constant time before any database read. It is `access: public` in the `endpoint-authz` matrix with the secret as its credential, like the Telegram webhook, with no CSRF or session.
+- **Confirmation**: «Ваш сервер должен вернуть заданную строку» — the string shown in the community's Callback settings, held as `VK_CALLBACK_CONFIRMATION`. Whether VK sends `secret` with the `confirmation` event is **UNCONFIRMED**; the route therefore accepts a confirmation with no `secret` or the right one, and answers the string only for a `group_id` bound to a listed source, so it never confirms a server for another community. VK changes the string «время от времени»; a changed string means editing the config (Rollout).
+- **Answers**: «должен возвращать строку `ok` и статус HTTP 200»; anything else is retried, and repeated errors make VK pause sending, so every accepted or dropped event answers `ok` and only our own failure answers `500`. `event_id` has no documented dedup semantics (**UNCONFIRMED**): it is logged, and dedup is by object key.
+- **API version** is set in the community's Callback settings («Поддерживается версия 5.81 и более поздние») to the same pinned version as `vk-api.client.ts`, so the Callback and `wall.get` objects validate against one schema.
+- **No community key** is held: the Callback server is configured by a community administrator in the settings UI (URL, secret key, the events `wall_post_new` and `video_new`, the API version), and `groups.setCallbackSettings` / `groups.getCallbackConfirmationCode` need a community or user key we do not keep. One secret fewer.
+
+### Post and video mapping (EARS-41…EARS-43)
+
+| VK object                                                                                 | Card                                                                                     | Reason                                                                                                            |
+| ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| wall post, `post_type = post`, empty `copy_history`, text only                            | `post`, text from `text`, no image                                                       | the canvas VK post card                                                                                           |
+| … with a photo attachment                                                                 | `post`, preview = the first photo's largest `sizes[]` entry ≤ 1280 px wide               | canvas `media` = «картинка»                                                                                       |
+| … with a video attachment and no photo                                                    | `post`, preview = the first video's largest `image[]` ≤ 1280 px wide, `duration` from it | canvas `media` = «видео»; the video file is never fetched                                                         |
+| repost (`copy_history` not empty, `post_type = copy`)                                     | dropped                                                                                  | another author's post under «BBM Academy · VK» — the slice-2 forward precedent                                    |
+| `post_type` `postpone`, `suggest`, `reply`                                                | dropped                                                                                  | not published on the wall; a scheduled post, once published, is a `post` (reconcile catches it if no event fires) |
+| `video_new`, own community, `type = video`, not `live`                                    | `video`, title from `title`, preview from `image[]`, `duration`                          | canvas `source` = «vk-видео»                                                                                      |
+| `video_new`, `type` `music_video` / `movie` / `story`, a live stream, another owner       | dropped                                                                                  | not a BBM Academy video publication of the feed                                                                   |
+| a video held as an attachment of a held post, in either order                             | one card, the post                                                                       | one VK publication = one card                                                                                     |
+| `wall_repost`, `wall_schedule_*`, `wall_reply_*`, `video_comment_*` and every other event | not subscribed; dropped if delivered                                                     | only the two events are configured                                                                                |
+| no text and no photo or video                                                             | dropped                                                                                  | nothing to show                                                                                                   |
+
+- **Text**: `text` with VK's inline mention markup `[id…|name]` / `[club…|name]` reduced to its name, whitespace collapsed, cut at the last word boundary within 500 characters plus «…» — the slice-2 rule. **Title** of a video: cut at 160 like a material title.
+- **Date**: `date` (unix seconds) → `published_at`; never moved. **Permalinks** `https://vk.com/wall-<gid>_<pid>` and `https://vk.com/video-<gid>_<vid>`: VK documents the id form `{owner_id}_{video_id}` with negative community ids ([video.get](https://dev.vk.com/ru/method/video.get)) but no URL form — **UNCONFIRMED**; they are VK's own share-link form and the rollout capture verifies both open the publication.
+- **Not stored**: `created_by` (the admin who posted — personal data), `signer_id`, `from_id`, `views`, `likes`, `reposts`, the video `player` URL and the raw object.
+- **Edits and deletions** have no event ([community events](https://dev.vk.com/ru/api/community-events/json-schema)); wall posts are re-read by the reconcile, videos are not (`video.get` gated) — the known limit of the requirements.
+- **Clips**: VK documents no clips method and only the `type` values `video`, `music_video`, `movie`, `story` ([video object](https://dev.vk.com/ru/reference/objects/video)); slice 3 reads no clips. If a clip arrives as a `video_new` of `type = video`, it is a video like any other.
+
+### Preview (slice 3)
+
+- **Referenced, not copied.** VK Rules §1.6 forbids downloads from VK servers «с целью… создания автономных хранилищ», §2.1 allows caching for speed ([Rules](https://dev.vk.com/ru/rules)); «Room for network connectors» above already names VK as the referenced case. The entry stores the VK image URL in `image_url` (the slice-1 column; `image_ref` null), and the read returns it unsigned.
+- **Stability**: VK states nothing about the lifetime of photo `sizes[]` or video `image[]` URLs — **UNCONFIRMED** — so it is never relied on: the hourly reconcile rewrites the preview URL of every returned post. A video preview comes only from `video_new` and is not refreshable; if it fails to load, the card renders its no-image layout (EARS-49).
+- **CSP**: the Academy host `img-src` gains the VK image hosts actually returned; the rollout records them from the first real Callback and reconcile payloads before the card package's CSP change is set (Rollout step 5).
+- **Visitor-side consequence** (lead security trade-off): a visitor's browser loads the preview image from VK's servers, so VK sees the visitor's IP address and the Academy page as referrer for that image request. Accepted, because VK is an RF operator, the image is public content of our own post, and the card sends `referrerpolicy="no-referrer"` on the image; the alternative — copying — is what §1.6 rules out.
+
+### Reconcile (EARS-45)
+
+Hourly (`@Cron`) per switched-on VK source with a bound `vk_group_id`: `wall.get(owner_id = −gid, filter = owner, count = 100)`.
+
+| Observation                                                                                                              | Action                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| a held post whose mapped text or preview URL differs                                                                     | rewrite `title`, `image_url`, `duration_seconds`; keep `published_at`, `hidden_at`, `source_off` |
+| a post with no entry that EARS-41 maps                                                                                   | insert under EARS-41 / EARS-43 (gap recovery after VK stops retrying, scheduled posts)           |
+| a held post entry dated inside the span of the returned non-pinned posts (the whole wall below 100) and absent from them | `removed_at = now()`                                                                             |
+| a held entry with `removed_at` whose post is returned again                                                              | `removed_at = null`                                                                              |
+| a held post dated before the span                                                                                        | untouched                                                                                        |
+| VK error or timeout                                                                                                      | nothing changed; the source check reports                                                        |
+
+- The pinned post (`is_pinned`) is counted as present but does not widen the span, so an old pinned post never marks the posts between it and the newest page as removed.
+- One reconcile is one call per source and needs no community key. It is better than Telegram's known limit at no new egress: the same client, the same service key.
+
+### Source check (EARS-44)
+
+Hourly (`@Cron`) and on add / edit / switch-on, for each switched-on VK source:
+
+| Check                                                                                         | Failing reason                               |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `VK_SERVICE_KEY`, `VK_CALLBACK_SECRET` or `VK_CALLBACK_CONFIRMATION` not configured           | «VK не подключён на сервере»                 |
+| `groups.getById(group_id = bound id, else address)` errors or returns a deactivated community | «Сообщество не найдено»                      |
+| returned `screen_name` ≠ address                                                              | «Адрес сообщества изменился на vk.com/<имя>» |
+| the last reconcile wrote a post newer than `vk_last_event_at` and older than one hour         | «VK не присылает новые записи»               |
+| the month's calls ≥ 8 000                                                                     | «Лимит вызовов VK почти исчерпан»            |
+| timeout / network error                                                                       | «VK недоступен»                              |
+
+The «VK не присылает новые записи» rule detects a Callback server that is down or unconfirmed without any community key: the reconcile sees what the Callback should have delivered. The binding rule and VK's own error text follow slice 2 (EARS-44; the error goes to the log, not to the admin).
+
+### Call budget (slice 3)
+
+Per source per month: about 720 `wall.get` (reconcile) and about 720 `groups.getById` (check), plus the one-off import of ⌈posts / 100⌉ calls — about 1.5 k against the 10 000 unverified cap per VK ID business-cabinet account ([Rules](https://dev.vk.com/ru/rules): «без верификации бизнес-профиля — 10 000», after verification 100 000 000). Incoming Callback deliveries are not «вызовы методов» on the wording; that the cap does not count them is **UNCONFIRMED**. `vk-api.client.ts` increments `feed_vk_call_months` per call; «Источники» shows the month's total; the check warns at 8 000 and the import stops before it. Business-profile verification is therefore not needed; it becomes a named trigger only if a later connector multiplies the calls (PRD «Delivery slices» item 3).
+
+### One-off history import (EARS-46)
+
+```mermaid
+sequenceDiagram
+  participant O as operator
+  participant C as vk-history-import.command
+  participant VK as api.vk.com
+  participant DB as Postgres
+  O->>C: run --source vk.com/bbm.academy
+  C->>DB: source is VK, bound vk_group_id?
+  alt unbound
+    C-->>O: exit 1 «the source has no bound VK community id; run the source check (EARS-44)»
+  else bound
+    loop offset = 0, 100, … until a short page or the call budget
+      C->>VK: wall.get(owner_id = −gid, filter = owner, count = 100, offset)
+      C->>C: map (EARS-41)
+      C->>DB: per post: INSERT feed_entry_vk_objects ON CONFLICT DO NOTHING → skip if held; INSERT feed_entries (source_off from the source); absorb (EARS-43)
+    end
+    C-->>O: read / written / skipped-existing / dropped-by-reason / calls-used
+  end
+```
+
+- Idempotent on the dedup table, one transaction per post, so an interrupted run is completed by running it again; a re-run prints `written: 0`.
+- **Not imported**: standalone videos that were never attached to a post (`video.get` is gated) — the known limit.
+
+### Card contract and UI composition (slice 3)
+
+- `FeedPostCardSchema` (slice 2) widens to `source: { platform: "telegram", name: "BBM Academy · Telegram" } | { platform: "vk", name: "BBM Academy · VK" }`; the image of a VK card is the referenced VK URL.
+- `FeedVideoCardSchema` = `{ id, kind: "video", title, publishedAt, image: { url } | null, duration: number, source: { platform: "vk", name: "BBM Academy · VK Видео" }, partner: null, href: <absolute https://vk.com/video-… URL>, external: true }`, a new member of the `FeedCardSchema` union in `packages/schemas/src/materials/feed.ts`.
+
+| Surface              | Canvas → state / composition                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| VK post card         | `unit-feed-card.dc.html` `source` = «vk», `media` = «картинка» / «видео» / «нет»: source «BBM Academy · VK» with the logo avatar and the chip «VK» (`aria-label` «VK»), no kind badge, the post text clamped, the no-image field mark «VK», play mark and duration for a video, «VK ↗» plus the hidden «, откроется в новой вкладке на площадке VK», `target="_blank" rel="noopener noreferrer"`, the image with `referrerpolicy="no-referrer"` and the no-image fallback on a load error. |
+| VK Видео card        | `unit-feed-card.dc.html` `source` = «vk-видео»: source «BBM Academy · VK Видео» with the chip «VK▶» (`aria-label` «VK Видео»), the video title clamped, the cover with the play mark and duration, the no-image field mark «VK Видео», «VK Видео ↗» plus the hidden «, откроется в новой вкладке на площадке VK Видео», the same link and image rules.                                                                                                                                     |
+| Both                 | **Drawn, not yet approved**: the Stage-A approval of 2026-11-11 (#3516 comment 6796895267) covers `source` = «академия» / «колонка» only, so the two VK variants go to the owner at Stage A before their package is built, as the Telegram variant does (#3997).                                                                                                                                                                                                                           |
+| Rail                 | unchanged slice-1 `FeedRail`                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Admin `sources-list` | slice-2 «Источники»: platform «VK», `vk.com/<имя>`, the VK reasons of EARS-44, and the line «Вызовов VK в этом месяце: N из 10 000» above the list when a VK source exists                                                                                                                                                                                                                                                                                                                 |
+| Admin `source-form`  | `Select` «Площадка» gains «VK»; for VK the field «Адрес сообщества» with the hint «Например, vk.com/bbm.academy» and the errors «Укажите адрес сообщества в виде vk.com/имя», «Это сообщество уже есть в списке»                                                                                                                                                                                                                                                                           |
+| Admin `source-posts` | slice-2 «Публикации»: the state «Удалён в VK», «Открыть в VK ↗», and for a VK source the note «Видео, удалённое в VK, остаётся в ленте, пока его не скрыть.»                                                                                                                                                                                                                                                                                                                               |
+
+The admin screens are approved-non-canvas; their copy is the lead's.
+
+### Endpoints (slice 3)
+
+| Method + path                             | Purpose                                                                                 | EARS             |
+| ----------------------------------------- | --------------------------------------------------------------------------------------- | ---------------- |
+| `POST /v1/integrations/vk/callback`       | VK Callback events (secret in the body), confirmation                                   | EARS-39, EARS-40 |
+| slice-2 `…/feed-sources` routes           | unchanged routes; accept the platform `vk`, return the VK reasons and the month's calls | EARS-38, EARS-44 |
+| `GET /v1/admin/feed-sources/{id}/entries` | unchanged route; gains the state `removed`                                              | EARS-47          |
+| `GET /v1/public/feed`                     | unchanged route; gains the VK `post` source and the `video` member                      | EARS-48          |
+
+### Egress, ingress and configuration (ADR-0011, slice 3)
+
+- **Egress** — ADR-0011 §2.2 channel #11 «VK API» (`api.vk.com`, in RF): only `vk-api.client.ts` calls `https://api.vk.com/method/*`, with `wall.get` and `groups.getById` only and a pinned `v`. What is sent: the service key (`access_token` parameter), the version, the community id or screen name, `count` / `offset` / `filter`. No personal data. Sanitizer: typed methods with Zod-validated parameters from server config and the source list, Zod-validated responses (VK `error` objects included), the key redacted from every URL and body it logs or throws. Audit: one structured log line per call (method, HTTP status, VK error code, duration, outcome) and the monthly counter. Kill switch: unset any of the three VK variables (environment-level — the Callback route answers `404`, nothing is called, the check reports «VK не подключён на сервере») or switch the source off (per community).
+- **Ingress** — the Callback route is a public route on the API host behind the existing nginx TLS termination (ADR-0012), authenticated by the body secret.
+- **Configuration** — `VK_SERVICE_KEY` (the service key of the VK ID business-cabinet app: no expiry, server-side only — [service key](https://dev.vk.com/ru/api/access-token/service-token)), `VK_CALLBACK_SECRET` and `VK_CALLBACK_CONFIRMATION` are server-side runtime secrets of `apps/api`, absent from every client bundle, response and log (EARS-51); all are optional at boot, and their absence turns the connector off.
+- **Reachability**: `api.vk.com` is an RF service; the rollout still checks it from `api-prod` (Rollout step 3).
+
+### Retention (slice 3)
+
+As slice 2: VK entries are BBM Academy's own public posts and videos, kept as card data only (text ≤ 500 characters or a title ≤ 160, date, permalink, the preview URL, duration, the dedup keys, `removed_at`) for as long as their source row exists — switched on or off, hidden, removed or not. Nothing personal is stored (`created_by`, `signer_id`, `from_id` are never written), so no ADR-0009 retention-matrix row is needed. Raw events live only in the request that processes them; no VK image or video file is ever stored. The monthly call counters are operational counts with no personal data.
+
+### Dependencies (slice 3)
+
+- **Slice 2** — **VK connector** waits for Source list (#3993: `feed_sources`, `source_off`, `hidden_at`, «Источники») and Hide one post (#3996: «Публикации», which gains «Удалён в VK»); **VK cards on the Academy** waits for Telegram card on the Academy (#3997: the `post` member and variant it widens). The Telegram connector itself (#3994) is not a prerequisite: the VK connector shares no code path with it.
+- **Slice 1 on `main`** — **VK cards on the Academy** waits for Public reads (#3513) and Feed card and home rail (#3516).
+- **ADR-0011 channel #11** — revised with this spec, so it gates nothing further.
+- **Stage A of the two VK card variants** (owner) — drawn on `unit-feed-card.dc.html` but outside the 2026-11-11 approval; it gates **VK cards on the Academy**.
+- **Production rollout** — owner-side steps gate only the rollout row; CI and the stage use a VK double and a test community.
+- **Serving order**: the feed read serves a platform's rows only once that platform's card member exists, so the connector can land before the cards without the read serving a kind the card cannot render.
+
+### Delivery slices (slice 3)
+
+```mermaid
+flowchart LR
+  SL[slice-2 Source list #3993] --> VC
+  HP[slice-2 Hide one post #3996] --> VC
+  VC[VK connector<br/>EARS-38..45,47,51] --> IM[VK history import<br/>EARS-46]
+  VC --> CA[VK cards on the Academy<br/>EARS-48..50]
+  TC[slice-2 Telegram card #3997] --> CA
+  S1[slice 1 #3513 / #3516] --> CA
+  SA[Stage A VK card variants<br/>owner] -.-> CA
+  VC --> BJ[Browser journeys slice 3<br/>EARS-52, V-33..V-35]
+  CA --> BJ
+  VC --> RO[VK rollout in production<br/>deferred prod action]
+  IM --> RO
+  CA --> RO
+```
+
+- **VK connector** carries the migration, the egress client, the Callback, the mapping with the dedup, the reconcile, the check and the admin deltas together, so no release accepts events it cannot map or reconcile.
+- **VK cards on the Academy** ship the read members and the card variants together.
+- **Rollout in production** last: it turns the built connector on for `vk.ru/bbm.academy`.
+
+### Rollout (slice 3) — deferred production action
+
+Its own Issue (repo-conventions «Deferred prod action»), executed after the code packages are released; the PR that releases the connector links it in prose. Steps and owners:
+
+1. Owner / marketing: create the app in the VK ID business cabinet and hand its service key to the lead through the secret channel.
+2. The lead generates `VK_CALLBACK_SECRET`; a platform administrator adds `vk.ru/bbm.academy` in «Источники»; with the key configured, the check run at the add binds `vk_group_id` — evidence: status «Работает» or «VK не присылает новые записи» (no Callback yet), never «Сообщество не найдено».
+3. The lead checks from `api-prod` that `https://api.vk.com/method/groups.getById` answers with the production key — evidence: the redacted response.
+4. A community administrator of `vk.ru/bbm.academy` opens the community settings → Работа с API → Callback API, enters the URL of the production API host's `/v1/integrations/vk/callback`, the secret key from the lead, the pinned API version and the events `wall_post_new` and `video_new` only, and passes the confirmation string to the lead; the lead puts `VK_SERVICE_KEY`, `VK_CALLBACK_SECRET` and `VK_CALLBACK_CONFIRMATION` into the production runtime config (an env change, redeployed on the owner's word); the community administrator then presses «Подтвердить» — evidence: the server shown as confirmed in the settings and a log line `confirmation answered`.
+5. The lead runs the import once — evidence: the printed counts; a second run printing `written: 0`; the VK image hosts seen in the stored `image_url`s recorded and set in the Academy `img-src`.
+6. Post-release acceptance: a fresh wall post and a fresh VK Видео video appear in the Academy rail and open `vk.com/wall-…` and `vk.com/video-…` in a new tab (this verifies the permalink forms) — evidence: a capture.
+
+### Lead decisions (slice 3)
+
+1. **Delivery — Callback API push**, events `wall_post_new` and `video_new` only, to `POST /v1/integrations/vk/callback` on the existing API host (nginx TLS, ADR-0012). The body `secret` is compared in constant time with `VK_CALLBACK_SECRET` and `group_id` checked against a listed, enabled, bound source before acting; the `confirmation` of a bound group answers `VK_CALLBACK_CONFIRMATION`; every accepted or dropped event answers `ok` 200, a database failure 5xx so VK retries (10 s / 3 min / 10 min / 30 min / 1 h), the writes idempotent; unconfigured → 404, wrong secret → 401 (the Telegram matrix). The Callback server is configured by a community administrator in the settings UI; we hold **no community key** (EARS-39, EARS-40).
+2. **Hourly reconcile by `wall.get`** (service key, `owner_id` = −group_id, `filter=owner`, `count=100`), because VK sends no edit or delete event (CONFIRMED absent): it rewrites edited posts keeping `published_at`, `hidden_at` and `source_off`, inserts posts the Callback missed, and sets `removed_at` on a held post dated inside the span of the returned posts and absent from them, cleared when the post reappears; the public predicate gains `removed_at IS NULL` and «Публикации» shows «Удалён в VK». Better than Telegram's known limit, at the cost of the same egress client (EARS-45, EARS-47).
+3. **Call budget → no business-profile verification**: about 1.5 k calls per source a month against the 10 000 unverified cap; Callback deliveries are incoming, not «вызовы методов» (their exclusion UNCONFIRMED); «Источники» shows the month's count, the check warns at 8 000. Verification becomes a named trigger if a future connector multiplies calls (EARS-44, PRD «Delivery slices» item 3).
+4. **Keys and config**: `VK_SERVICE_KEY` (VK ID business-cabinet app, no expiry, server-only), `VK_CALLBACK_SECRET`, `VK_CALLBACK_CONFIRMATION`; all optional at boot, absence = connector off; never in a client bundle, response or log. `vk/vk-api.client.ts` is the only caller of `https://api.vk.com/method/*`, `wall.get` and `groups.getById` only, a pinned API version, Zod-validated responses, the key redacted (EARS-51).
+5. **One VK publication = one card**: a wall post (`post_type = post`, empty `copy_history`) → `post` with text, the first photo's largest size ≤ 1280 px or else the first video's cover, `duration` for a video medium, «BBM Academy · VK»; a `video_new` (`type = video`, not live) → the new `video` member, title, `image[]`, `duration`, «BBM Academy · VK Видео»; a video held as an attachment of a held post, or arriving later as one, shows once as the post — the post absorbs the video entry through `feed_entry_vk_objects` keyed `(feed_source_id, object_kind, vk_object_id)`. Dropped and logged: reposts (the slice-2 forward precedent), `postpone` / `suggest` / `reply`, `wall_repost`, `wall_schedule_*`, live streams, other video types, empty posts. Video edits and deletions are not observable (`video.get` gated): the administrator hides the video, a known limit (EARS-41…EARS-43).
+6. **VK clips**: no documented read route (no clips method; `type` documents only video / music_video / movie / story); slice 3 reads no clips, and a clip posted on the wall as a post is a post — the answer to the PRD open question.
+7. **Previews are referenced, not copied** (VK Rules §1.6 «автономных хранилищ»; «Room for network connectors»): `image_url` holds the VK URL, `image_ref` null; the reconcile refreshes post preview URLs so their stability (UNCONFIRMED) is never relied on; a video preview is not refreshable and a load failure renders the no-image layout; the Academy `img-src` gains the VK image hosts the rollout records. The visitor's browser loading the image from VK is accepted as a lead security trade-off: VK is an RF operator, the image is public content of our own post, and the image is requested with no referrer (Preview).
+8. **Address and binding**: `vk.com/<screen_name>`, `vk.ru/<screen_name>`, `club<id>`, `public<id>`, normalized to the lowercase screen name; `groups.getById` on add and hourly binds `vk_group_id`, from then on the id decides; a rename shows «Адрес сообщества изменился на vk.com/<имя>»; the reasons mirror slice 2: not configured / not found / address changed / no Callback event while newer posts exist (a Callback-down signal needing no community key) / VK unreachable / call budget near the cap (EARS-38, EARS-44).
+9. **Permalinks** `https://vk.com/wall-<gid>_<pid>` and `https://vk.com/video-<gid>_<vid>`, UNCONFIRMED by an official doc (VK's own share-link form), verified by the rollout capture.
+10. **Backfill**: the one-off `vk/vk-history-import.command.ts` pages `wall.get` by offset over the whole wall, is idempotent on the dedup table and refuses an unbound source; standalone videos uploaded before the Callback existed are not backfilled (`video.get` gated), a known limit (EARS-46).
+11. **Retention** as slice 2: card data only, nothing personal (`created_by`, `signer_id`, `from_id` not stored), kept while the source row exists.
+12. **Rollout** is its own deferred-prod-action Issue with steps and owners (owner / marketing: the VK ID app and its service key; a community administrator: the Callback server and the confirmation string; the lead: production config on the owner's word, the `api-prod` reachability check, the source, the import twice, the capture). CI and stage use a VK double and a test community.
+13. **Admin** — no new page: «Источники» and «Публикации» of slice 2 gain the VK platform, reasons, call count and «Удалён в VK», approved-non-canvas, copy by the lead.
+14. **Academy** — the two VK variants render inside the slice-1 `FeedCard` and rail (ADR-0013 §A1); drawn on `unit-feed-card.dc.html` but outside the 2026-11-11 Stage-A approval, so their package waits for the owner's Stage-A pick of those two variants.
+15. **Storefronts** — `academy-only`: the doctor storefront shows nothing of the feed (EARS-17 holds).

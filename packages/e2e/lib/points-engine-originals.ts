@@ -140,6 +140,11 @@ export function pointsOperation(command: string): void {
   );
 }
 
+export function pointsApplicationName(database: string): string {
+  // Allowed database names are ASCII; retain the full UUID within PostgreSQL's 63-byte identifier limit.
+  return `points-${database.slice(0, 19)}-${randomUUID()}`;
+}
+
 export async function startPointsWorld(): Promise<PointsWorld> {
   const connection = process.env.DATABASE_URL;
   const database = process.env.E2E_POINTS_DATABASE;
@@ -159,7 +164,7 @@ export async function startPointsWorld(): Promise<PointsWorld> {
     );
   }
   pointsOperation(`CONNECT ${database}`);
-  const applicationName = `points-${database}-${randomUUID()}`;
+  const applicationName = pointsApplicationName(database);
   const scopedConnection = new URL(connection);
   scopedConnection.searchParams.set("application_name", applicationName);
   const handle = createDrizzle(scopedConnection.href, { max: 3 });
@@ -179,6 +184,13 @@ export async function startPointsWorld(): Promise<PointsWorld> {
     expect(
       (await handle.pool.query("SELECT current_database() AS name")).rows,
     ).toEqual([{ name: database }]);
+    expect(
+      (
+        await handle.pool.query(
+          "SELECT current_setting('application_name') AS name",
+        )
+      ).rows,
+    ).toEqual([{ name: applicationName }]);
     // Lazy compiled imports keep ordinary storefront BDD generation independent of the API build.
     const load = (path: string) =>
       import(pathToFileURL(resolve(root, path)).href);

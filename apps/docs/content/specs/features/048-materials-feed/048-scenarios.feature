@@ -7,7 +7,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
   Background:
     Given the published expert "Страхов Михаил Андреевич" is in the experts directory
 
-  @EARS-1 @EARS-2 @EARS-4 @EARS-13 @EARS-14
+  @EARS-1 @EARS-2 @EARS-4 @EARS-13 @EARS-14 @material-academy-journeys
   Scenario: An administrator writes a news item and it becomes the first card of the rail
     Given a platform administrator is signed in to the admin with a second factor
     When the administrator creates a material of kind «Новость» titled "Открыт набор центров в исследование PRP"
@@ -17,7 +17,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When a visitor who is not signed in opens the Academy home
     Then the first card of the rail «Новости, блог и видео» reads «Новость», "Открыт набор центров в исследование PRP" and «Академия»
 
-  @EARS-1 @EARS-4 @EARS-13
+  @EARS-1 @EARS-4 @EARS-13 @material-academy-journeys
   Scenario: A column is written on the expert's behalf
     Given a platform administrator is signed in to the admin with a second factor
     When the administrator creates a material of kind «Колонка эксперта» titled "Ортобиология в России: чего не хватает практике"
@@ -25,7 +25,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     And writes a body and publishes the material
     Then the card of "Ортобиология в России: чего не хватает практике" reads «Колонка эксперта» and «Страхов М. А.»
 
-  @EARS-19 @EARS-9 @EARS-13 @EARS-12
+  @EARS-19 @EARS-9 @EARS-13 @EARS-12 @material-academy-journeys
   Scenario: A material with a partner carries the partner mark
     Given the published organisation "Партнёр А" with its name shown publicly is in the organisation registry
     And a platform administrator is signed in to the admin with a second factor
@@ -39,7 +39,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     And the reading page of "Совместная программа обучения PRP" has no partner mark
     And "Совместная программа обучения PRP" stays in the rail
 
-  @EARS-19 @EARS-13 @EARS-12
+  @EARS-19 @EARS-13 @EARS-12 @material-academy-journeys
   Scenario: A material without a partner carries no partner mark
     Given the news item "Открыт набор центров в исследование PRP" is published with no partner
     When a visitor opens the Academy home
@@ -84,7 +84,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the material is shown as its reading page with «Предпросмотр — материал не опубликован»
     And no material is saved and the rail is unchanged
 
-  @EARS-5
+  @EARS-5 @material-academy-journeys
   Scenario: An edit of a published material shows on the site and keeps its date
     Given the news item "Открыт набор центров в исследование PRP" was first published on 27 October
     And a platform administrator is signed in to the admin with a second factor
@@ -110,7 +110,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the second save is refused as stale with the reload notice
     And the material keeps the first change
 
-  @EARS-6 @EARS-11 @EARS-12
+  @EARS-6 @EARS-11 @EARS-12 @material-academy-journeys
   Scenario: An unpublished material leaves the Academy at once
     Given the news item "Открыт набор центров в исследование PRP" is published
     And a platform administrator is signed in to the admin with a second factor
@@ -207,7 +207,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the visitor chooses «Повторить»
     Then the rail shows 3 cards
 
-  @EARS-11 @EARS-12 @EARS-13
+  @EARS-11 @EARS-12 @EARS-13 @material-academy-journeys
   Scenario: A visitor reads a material on its own page
     Given the column "Ортобиология в России: чего не хватает практике" by "Страхов Михаил Андреевич" is published with a body linking to "https://pubmed.ncbi.nlm.nih.gov/"
     When a visitor chooses its card in the rail
@@ -237,7 +237,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the doctor storefront's not-found page is shown
     And the doctor storefront home has no rail «Новости, блог и видео»
 
-  @EARS-18
+  @EARS-18 @material-academy-journeys
   Scenario: The rail, the page and the admin work on a phone
     Given the viewport is 390 px wide
     And 30 published materials exist

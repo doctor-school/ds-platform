@@ -2,6 +2,13 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsAdmin } from "@ds/e2e/admin-events";
 
+import {
+  adminWrite,
+  expectNoPageSideScroll,
+  publishedMaterial,
+  type Written,
+} from "./support/admin-write";
+
 /**
  * 048 «Reading page» (#3514) on the REAL path — the admin authors through the
  * admin API, the Academy storefront reads `GET /v1/public/materials/{slug}`
@@ -21,11 +28,11 @@ import { signInAsAdmin } from "@ds/e2e/admin-events";
  * the original feature in `packages/e2e/material-pages.config.ts` (#3702).
  * The page unit tests remain; this file retains preview and rich articles.
  *
- * Two groups. The EARS-3 preview needs only the admin + api, so it runs
- * wherever the admin flows run — CI `admin-e2e` included. The storefront group
- * (EARS-12 rich pages) also needs `E2E_PORTAL_URL` and skips without it;
- * its remaining CI journeys are tracked by #3517. `E2E_SHOT_DIR` opts into
- * the captures the PR body cites.
+ * Two groups. The EARS-3 preview needs only the admin + api. The storefront
+ * group (EARS-12 rich pages, EARS-18 at 390 px) also needs `E2E_PORTAL_URL`:
+ * CI `admin-e2e` boots the Academy storefront for the flows tier, and only a
+ * local run without it skips. `E2E_SHOT_DIR` opts into the captures the PR
+ * body cites.
  */
 const PORTAL = process.env.E2E_PORTAL_URL;
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
@@ -163,90 +170,6 @@ const SHORT_BODY = {
   ],
 };
 
-interface Written {
-  id: string;
-  slug?: string;
-  version: number;
-}
-
-/**
- * One admin API write from the signed-in admin page: the CSRF double-submit,
- * a fresh `Idempotency-Key` and, for an edit or a lifecycle call, `If-Match`.
- * A `coverBase64` sends the multipart shape (payload + cover parts).
- */
-async function adminWrite(
-  page: Page,
-  input: {
-    path: string;
-    payload?: unknown;
-    version?: number;
-    coverBase64?: string;
-  },
-): Promise<Written> {
-  const result = await page.evaluate(
-    async ({ path, payload, version, coverBase64 }) => {
-      const csrf =
-        document.cookie
-          .split("; ")
-          .find((pair) => pair.startsWith("__Host-ds_admin_csrf="))
-          ?.split("=")[1] ?? "";
-      const headers: Record<string, string> = {
-        accept: "application/json",
-        "x-ds-admin-csrf": decodeURIComponent(csrf),
-        "idempotency-key": crypto.randomUUID(),
-      };
-      if (version !== undefined) headers["if-match"] = `W/"${version}"`;
-      let body: BodyInit | undefined;
-      if (coverBase64) {
-        const form = new FormData();
-        form.append("payload", JSON.stringify(payload));
-        const bytes = Uint8Array.from(atob(coverBase64), (c) =>
-          c.charCodeAt(0),
-        );
-        form.append(
-          "cover",
-          new Blob([bytes], { type: "image/png" }),
-          "cover.png",
-        );
-        body = form;
-      } else if (payload !== undefined) {
-        headers["content-type"] = "application/json";
-        body = JSON.stringify(payload);
-      }
-      const res = await fetch(path, {
-        method: "POST",
-        credentials: "include",
-        headers,
-        body,
-      });
-      return { status: res.status, json: await res.json().catch(() => null) };
-    },
-    input,
-  );
-  expect(
-    result.status,
-    `${input.path} → ${JSON.stringify(result.json)}`,
-  ).toBeLessThan(300);
-  return result.json as Written;
-}
-
-async function publishedMaterial(
-  page: Page,
-  payload: Record<string, unknown>,
-  coverBase64?: string,
-): Promise<Written> {
-  const created = await adminWrite(page, {
-    path: "/v1/admin/materials",
-    payload,
-    coverBase64,
-  });
-  await adminWrite(page, {
-    path: `/v1/admin/materials/${created.id}/publish`,
-    version: created.version,
-  });
-  return created;
-}
-
 async function shot(
   page: Page,
   name: string,
@@ -280,9 +203,13 @@ async function expectNoAxeViolations(
     .withTags(WCAG_TAGS)
     // #2189 — the shared shell's BBM topbar keeps the owner-accepted canvas
     // contrast (2026-09-11); #2180 — the footer's giant wordmark is aria-hidden
-    // decoration. Leaf exclusions, the same as every portal axe scan.
+    // decoration; the Academy home draws its own footer wordmark, excluded
+    // as the same leaf by every full-page home scan (`academy-home.e2e`).
+    // Leaf exclusions, the same as every portal axe scan.
     .exclude('[data-testid="shell-topbar"]')
-    .exclude('[data-testid="footer-giant"]');
+    .exclude('[data-testid="footer-giant"]')
+    // #1692 — open defect: the Academy footer wordmark contrast (same leaf as academy-home.e2e).
+    .exclude('[data-testid="academy-footer-wordmark"]');
   if (include) builder = builder.include(include);
   const results = await builder.analyze();
   const summary = results.violations.map((v) => ({
@@ -306,13 +233,6 @@ async function expectNoAxeViolationsBothSchemes(
     await expectNoAxeViolations(page, `${label} (${dark ? "dark" : "light"})`);
   }
   await page.evaluate(() => document.documentElement.classList.remove("dark"));
-}
-
-async function expectNoPageSideScroll(page: Page): Promise<void> {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - window.innerWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
 }
 
 test.describe("048 reading page — admin preview", () => {
@@ -403,16 +323,23 @@ test.describe("048 reading page — admin preview", () => {
 });
 
 test.describe("048 reading page — storefronts", () => {
+  // CI boots the Academy storefront for this group, so CI has no skip path:
+  // a missing URL there fails every test instead of passing them as skipped.
   test.skip(
-    !PORTAL,
-    "needs E2E_PORTAL_URL (the Academy storefront of this stand); CI journeys: #3517",
+    !PORTAL && process.env.CI !== "true",
+    "needs E2E_PORTAL_URL (the Academy storefront of this stand)",
   );
+  test.beforeAll(() => {
+    expect(PORTAL, "E2E_PORTAL_URL names the Academy storefront").toBeTruthy();
+  });
   test.describe.configure({ mode: "serial" });
 
   let news: Written;
   let column: Written;
-  const newsTitle = `Открыт набор центров в исследование PRP ${RUN}`;
-  const columnTitle = `Ортобиология в России: чего не хватает практике ${RUN}`;
+  // Own titles: the job's later 048 originals find their materials by the
+  // source titles, so this group's rows must not share them.
+  const newsTitle = `Набор центров в многоцентровое исследование ${RUN}`;
+  const columnTitle = `Колонка о практике ортобиологии ${RUN}`;
   const partnerName = `Партнёр А ${RUN}`;
   const expertFamily = `Страхов${RUN}`;
 
@@ -556,4 +483,134 @@ test.describe("048 reading page — storefronts", () => {
     await expectNoPageSideScroll(page);
     await shotBothSchemes(page, "page-column-bare-mobile");
   });
+
+  test("048 EARS-18: at 390 px the home rail, the reading page, the material list and the form with its editor reach every card, button and editor control by keyboard and pass axe", async ({
+    page,
+    browser,
+  }) => {
+    await signInAsAdmin(page);
+    await page.goto("/materials");
+    for (let n = 1; n <= 30; n += 1)
+      await publishedMaterial(page, {
+        kind: "news",
+        title: `Материал ленты ${n} ${RUN}`,
+        authorLine: "Академия",
+        body: SHORT_BODY,
+      });
+
+    const visitor = await browser.newContext({
+      viewport: NARROW,
+      hasTouch: true,
+      locale: "ru-RU",
+    });
+    try {
+      const home = await visitor.newPage();
+      expect((await home.goto(`${PORTAL}/`))?.status()).toBe(200);
+      const feed = home.locator('[data-academy-section="feed"]');
+      const cards = feed.getByRole("region").locator("[data-slot] > a");
+      await expect(cards).toHaveCount(12);
+      await expect(cards.first()).toHaveAttribute(
+        "href",
+        /^\/materials\/[^/]+$/u,
+      );
+      await expectNoPageSideScroll(home);
+      await expectKeyboardReaches(home, '[data-academy-section="feed"]');
+      await expectNoAxeViolationsBothSchemes(home, "home with the rail 390px");
+
+      await cards.first().click();
+      await home.waitForURL(/\/materials\/[^/]+$/u);
+      await expect(home.getByRole("article")).toBeVisible();
+      await expectNoPageSideScroll(home);
+      await expectKeyboardReaches(home, "main");
+      await expectNoAxeViolationsBothSchemes(home, "reading page 390px");
+    } finally {
+      await visitor.close();
+    }
+
+    await page.setViewportSize(NARROW);
+    await page.goto("/materials");
+    await expect(page.getByTestId("materials-table")).toBeVisible();
+    await expectNoPageSideScroll(page);
+    await expectKeyboardReaches(page, "main");
+    await expectNoAdminAxeViolations(page, "material list 390px");
+
+    await page.goto("/materials/create");
+    const editor = page
+      .getByTestId("material-body")
+      .locator('[contenteditable="true"]');
+    await expect(editor).toBeVisible();
+    await expectNoPageSideScroll(page);
+    await expectKeyboardReaches(page, '[data-testid="material-form"]');
+    await expectNoAdminAxeViolations(page, "material form 390px");
+  });
 });
+
+/**
+ * 048 EARS-18 — every visible card, button, field and editor control inside
+ * `scope` takes keyboard focus from Tab. A composite widget (a radio group, a
+ * toolbar, a tab list) is one Tab stop by the ARIA pattern, so reaching any of
+ * its members reaches the widget; its members move with the arrow keys.
+ */
+async function expectKeyboardReaches(page: Page, scope: string): Promise<void> {
+  const total = await page.evaluate((selector) => {
+    const root = document.querySelector(selector);
+    if (!root) throw new Error(`no ${selector}`);
+    const controls = root.querySelectorAll<HTMLElement>(
+      'a[href], button, input, select, textarea, [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
+    );
+    let unit = 0;
+    const groups = new Map<Element | string, number>();
+    for (const control of controls) {
+      const hidden =
+        (control as HTMLButtonElement).disabled ||
+        control.closest("[inert], [aria-hidden='true']") ||
+        !control.checkVisibility({ visibilityProperty: true }) ||
+        control.getClientRects().length === 0 ||
+        (control instanceof HTMLInputElement && control.type === "hidden");
+      if (hidden) continue;
+      const composite =
+        control.closest('[role="toolbar"], [role="radiogroup"], [role="tablist"]') ??
+        (control instanceof HTMLInputElement && control.type === "radio"
+          ? `radio:${control.name}`
+          : null);
+      const key = composite ?? control;
+      if (!groups.has(key)) groups.set(key, unit++);
+      control.dataset.tabUnit = String(groups.get(key));
+    }
+    (document.activeElement as HTMLElement | null)?.blur();
+    return unit;
+  }, scope);
+  expect(total, `${scope} has keyboard controls`).toBeGreaterThan(0);
+  const reached = new Set<string>();
+  for (let press = 0; press < total * 4 + 80 && reached.size < total; press += 1) {
+    await page.keyboard.press("Tab");
+    const unit = await page.evaluate(
+      () =>
+        (document.activeElement as HTMLElement | null)?.closest<HTMLElement>(
+          "[data-tab-unit]",
+        )?.dataset.tabUnit ?? null,
+    );
+    if (unit !== null) reached.add(unit);
+  }
+  const missed = await page.evaluate((seen) => {
+    return [...document.querySelectorAll<HTMLElement>("[data-tab-unit]")]
+      .filter((el) => !seen.includes(el.dataset.tabUnit!))
+      .map((el) => el.outerHTML.slice(0, 160));
+  }, [...reached]);
+  expect(missed, `${scope}: not reachable with Tab`).toEqual([]);
+}
+
+/** The admin scan: light only, no exclusion (the admin axe sweep's shape). */
+async function expectNoAdminAxeViolations(
+  page: Page,
+  label: string,
+): Promise<void> {
+  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+  const summary = results.violations.map((v) => ({
+    id: v.id,
+    impact: v.impact,
+    help: v.help,
+    nodes: v.nodes.map((n) => n.target).flat(),
+  }));
+  expect(summary, `axe violations: ${label}`).toEqual([]);
+}

@@ -40,3 +40,25 @@ unsaved-preview original drives the real reading-page preview and banner, then
 compares the stored material row set and the real public feed before and after.
 These are three new originals; the previous expert refusal, two-administrator
 conflict and kind filter remain in the same six-title receipt.
+
+## Admin and Academy material journeys
+
+`--project material-journeys` executes the eight 048 originals tagged
+`@material-academy-journeys` (V-9, V-10, V-12, EARS-18). The administrator signs
+in behind the second factor and writes through the real Admin; a visitor reads
+the Academy home rail and the reading page on the running Academy storefront in
+the same run. Steps live in `material-journeys/steps.ts`; the shared stand
+helpers in `support/material-stand.ts` and `support/admin-write.ts`.
+
+```sh
+pnpm --filter @ds/admin test:e2e --project material-journeys --reporter=list,json
+pnpm --filter @ds/e2e exec tsx api-probes/assert-report.ts "$PLAYWRIGHT_JSON_OUTPUT_NAME" materialJourneys
+```
+
+Set the same variables as the `materials` project plus `E2E_PORTAL_URL` (the
+Academy storefront, built against the same API). The storefront group of
+`materials-reading-page.spec.ts` in the flows tier also reads `E2E_PORTAL_URL`;
+locally it skips without it, in CI (`CI=true`) it has no skip path. The receipt
+refuses a missing/extra title, skip, retry or flake. The phone original swipes
+the rail with CDP touch events and opens a card with a click, because headless
+Chromium sends no click after a touch drag.

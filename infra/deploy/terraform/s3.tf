@@ -1,8 +1,11 @@
 # pgbackrest backup repository — Timeweb Object Storage (spec §6.3, ADR-0003 §2.4).
 # WAL archive (continuous) + daily basebackup land here. Beget S3 offsite is
 # DEFERRED (OUT list, spec §8) — Timeweb primary only for this slice.
-# ⚠ Timeweb S3 has no Terraform-modelled lifecycle (bbm postmortem 2026-06-12);
-# retention is pgbackrest-side (repo1-retention-full=7), not bucket lifecycle.
+# ⚠ Timeweb S3 has no Terraform-modelled lifecycle (bbm postmortem 2026-06-12):
+# backup retention is pgbackrest-side (repo1-retention-full=7). The bucket's
+# versioning, Object Lock and lifecycle rules are set with the S3 API outside
+# Terraform — infra/deploy/RECOVERY.md §1.4 «One provider». The box's S3 key is a
+# restricted user's key, not this bucket's generated keys (infra/deploy/README.md).
 
 resource "twc_s3_bucket" "pgbackrest" {
   name = "ds-prod-pgbackrest"

@@ -674,14 +674,165 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    #    exactly 32 chars for ZITADEL_MASTERKEY: openssl rand -hex 16).
    ```
 
-   **DD-6 — pgbackrest S3 keys from Terraform** (the one secret class in `tfstate`).
-   On the workstation, in `infra/deploy/terraform/`:
+   **DD-6 — the pgBackRest bucket from Terraform.** On the workstation, in
+   `infra/deploy/terraform/`:
 
    ```bash
    terraform output -raw pgbackrest_bucket_full_name   # → PGBACKREST_REPO1_S3_BUCKET
    terraform output -raw pgbackrest_s3_hostname        # → PGBACKREST_REPO1_S3_ENDPOINT
-   terraform output -raw pgbackrest_s3_access_key      # → PGBACKREST_REPO1_S3_KEY
-   terraform output -raw pgbackrest_s3_secret_key      # → PGBACKREST_REPO1_S3_KEY_SECRET
+   ```
+
+   The outputs `pgbackrest_s3_access_key` / `pgbackrest_s3_secret_key` (the one
+   secret class in `tfstate`) are the **account's main S3 user**: every bucket of the
+   account returns the same key, and it can delete versions, change the lock and
+   delete buckets. It never goes on a box. It is used only to configure the bucket
+   and to create the restricted user (both below), and to read the bucket after host
+   loss ([`RECOVERY.md`](./RECOVERY.md) §2.3). Every call below runs on the
+   workstation with the main key in the AWS CLI's environment
+   (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`), never on the command line.
+
+   **The bucket lock (once, after the bucket exists and before data-prod first comes
+   up).** Irreversible: versioning can never be suspended and the lock can never be
+   removed, so it needs the owner's word. The `twc` Terraform provider has no
+   resource for versioning, Object Lock, lifecycle or IAM, so these are S3 API calls,
+   in this order (the lock before versioning fails with `InvalidBucketState`):
+
+   ```bash
+   B=<bucket-full-name>; S3='--endpoint-url https://s3.twcstorage.ru --region ru-1'
+   aws s3api put-bucket-versioning --bucket "$B" $S3 \
+     --versioning-configuration Status=Enabled
+   aws s3api put-object-lock-configuration --bucket "$B" $S3 \
+     --object-lock-configuration '{"ObjectLockEnabled":"Enabled","Rule":{"DefaultRetention":{"Mode":"COMPLIANCE","Days":8}}}'
+   aws s3api put-bucket-lifecycle-configuration --bucket "$B" $S3 \
+     --lifecycle-configuration file://lifecycle.json
+   ```
+
+   `lifecycle.json` carries **all three** rules, because a put replaces the whole
+   set: dropping `abort-incomplete-multipart` fires BBM's `S3BackupLifecycleMissing-ds`
+   (`sidorovanthon/bbm` `infra/monitoring/grafana/provisioning/alerting/rules.yaml`,
+   group `s3-backups-ds`).
+
+   ```json
+   {
+     "Rules": [
+       {
+         "ID": "abort-incomplete-multipart",
+         "Prefix": "",
+         "Status": "Enabled",
+         "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+       },
+       {
+         "ID": "noncurrent-versions-2d",
+         "Prefix": "",
+         "Status": "Enabled",
+         "NoncurrentVersionExpiration": { "NoncurrentDays": 2 },
+         "Expiration": { "ExpiredObjectDeleteMarker": true }
+       },
+       {
+         "ID": "recovery-bundle-keep-90d",
+         "Prefix": "recovery-bundle/",
+         "Status": "Enabled",
+         "Expiration": { "Days": 90 }
+       }
+     ]
+   }
+   ```
+
+   Why 8 days, the protection of pre-lock objects and the pgBackRest version floor:
+   [`RECOVERY.md`](./RECOVERY.md) §1.4 «One provider».
+
+   **The restricted pgBackRest S3 user.** The box's `PGBACKREST_REPO1_S3_KEY` /
+   `PGBACKREST_REPO1_S3_KEY_SECRET` are the access key of an additional S3 user,
+   `ds-data-prod-pgbackrest`, created with the IAM API on the S3 endpoint:
+
+   ```bash
+   E='--endpoint-url https://s3.twcstorage.ru'
+   aws iam create-user --user-name ds-data-prod-pgbackrest $E
+   aws iam create-access-key --user-name ds-data-prod-pgbackrest $E   # → data.env KEY / KEY_SECRET
+   aws iam put-user-policy --user-name ds-data-prod-pgbackrest $E \
+     --policy-name pgbackrest-repo-no-version-delete --policy-document file://policy.json
+   ```
+
+   `policy.json`:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Sid": "List",
+         "Effect": "Allow",
+         "Action": ["s3:ListBucket", "s3:ListBucketVersions"],
+         "Resource": "arn:aws:s3:::ds-prod-pgbackrest"
+       },
+       {
+         "Sid": "Repo",
+         "Effect": "Allow",
+         "Action": [
+           "s3:GetObject",
+           "s3:GetObjectVersion",
+           "s3:PutObject",
+           "s3:DeleteObject"
+         ],
+         "Resource": "arn:aws:s3:::ds-prod-pgbackrest/pgbackrest/*"
+       },
+       {
+         "Sid": "Bundles",
+         "Effect": "Allow",
+         "Action": ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"],
+         "Resource": "arn:aws:s3:::ds-prod-pgbackrest/recovery-bundle/*"
+       }
+     ]
+   }
+   ```
+
+   The policy names the bucket itself: it is written per bucket by design, so a new
+   bucket gets its own copy with its own name.
+
+   On ds-data-prod this key is checked to list the repository and read `backup.info`
+   and `recovery-bundle/<box>/latest.json`, and is refused (403) listing
+   `ds-prod-uploads`, suspending versioning and deleting the lifecycle. In production
+   it runs WAL archive-push, `pgbackrest check` and the `recovery-bundle` upload.
+   Proven on the pilot user with the same policy: the full pgBackRest cycle
+   (stanza-create, check, archive-push, backup, expire, point-in-time info/restore),
+   and a 403 on deleting a version, writing outside the two prefixes, changing
+   versioning, lifecycle, lock or bucket policy, deleting the bucket, touching any
+   other bucket, and every IAM call.
+
+   **Rotating the box's pgBackRest S3 key** (owner break-glass on data-prod; a new key
+   from `aws iam create-access-key` as above):
+
+   ```bash
+   sudo cp /etc/ds-platform/data.env /etc/ds-platform/data.env.bak-<ts>
+   # edit as root: replace exactly the PGBACKREST_REPO1_S3_KEY= and
+   # PGBACKREST_REPO1_S3_KEY_SECRET= lines, keep root:root 0600
+   cd ~/ds-platform/infra/deploy/compose/data-prod
+   sudo docker compose up -d --no-build postgres pgbackrest   # restarts the DB for seconds
+   sudo docker compose exec -T -u postgres pgbackrest pgbackrest --stanza=ds check
+   ```
+
+   Then dispatch `recovery-custody.yml` with `recovery-bundle`, then
+   `recovery-check`: the bundle fingerprints `data.env`.
+
+   Once `check` says OK and both jobs are green, revoke the previous key on the
+   operator's workstation with the account main key (never on the box):
+
+   ```bash
+   E='--endpoint-url https://s3.twcstorage.ru'
+   aws iam list-access-keys --user-name ds-data-prod-pgbackrest $E
+   aws iam delete-access-key --user-name ds-data-prod-pgbackrest $E --access-key-id <old>
+   ```
+
+   When the previous key was the account main key (the first move to the restricted
+   user), there is no user key to revoke: removing it from the box ends its exposure
+   there. Rotating the main key itself is a separate account-level action that affects
+   every bucket, and is not part of this procedure.
+
+   The `data.env.bak-<ts>` copy is the rollback path and still holds the old key.
+   Remove it once the next `expire` (the nightly full) has succeeded with the new key:
+
+   ```bash
+   sudo shred -u /etc/ds-platform/data.env.bak-<ts>
    ```
 
    **Bundle the irreplaceable keys** before you leave this step, and again after any

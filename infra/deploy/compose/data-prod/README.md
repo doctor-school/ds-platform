@@ -29,8 +29,9 @@ the persistence plane, then GlitchTip (`glitchtip/compose.yml`, project
 ## Secrets
 
 Via `/etc/ds-platform/data.env`, never committed: `POSTGRES_PASSWORD`, the
-pgbackrest S3 credentials (`PGBACKREST_REPO1_S3_KEY` / `_KEY_SECRET` —
-Terraform-generated, copied via `terraform output -raw`, spec §5.4 DD-6),
+pgbackrest S3 credentials (`PGBACKREST_REPO1_S3_KEY` / `_KEY_SECRET` — the access
+key of the restricted S3 user, never the Terraform output, which is the account's
+main key: `infra/deploy/README.md` → «Apply order» step 6),
 bucket/endpoint/region, and the repo cipher passphrase
 (`PGBACKREST_REPO1_CIPHER_PASS`). `postgres` reads it for `POSTGRES_PASSWORD` and
 the `PGBACKREST_*` values its `archive_command` needs for WAL egress; `pgbackrest`

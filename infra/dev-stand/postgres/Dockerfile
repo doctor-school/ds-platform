@@ -13,13 +13,18 @@
 #     are present in every environment (engineering-readiness data-layer plan).
 #
 # Reproducible from git — no manual `docker exec` install step (the #369 AC).
-FROM pgvector/pgvector:pg17
+#
+# Build inputs are pinned (#4026): the base by digest (PostgreSQL 17.11, bookworm)
+# and pg_partman by exact package version. Unpinned, PGDG published
+# 5.5.0-1.pgdg12+2 (Depends: postgresql-17 >> 17.12), which the 17.11 base cannot
+# install. Bump both together: pick a partman build whose `postgresql-17` Depends
+# the new base satisfies (`apt-cache show postgresql-17-partman`).
+FROM pgvector/pgvector:pg17@sha256:7d0a41464797aeb9862dfdc0bbf1526b82cfd324cdd8036df19e3545f4a9ccb8
 
 # pg_partman from PGDG (apt.postgresql.org is already configured in the
-# pgvector/postgres base — `/etc/apt/sources.list.d/pgdg.list`). Unpinned on
-# purpose: PGDG rotates old patch versions out of its index, so an exact `=`
-# pin would break the build the moment a new patch ships. Tested with
-# 5.4.3-1.pgdg12+1 (bookworm, 2026-06).
+# pgvector/postgres base — `/etc/apt/sources.list.d/pgdg.list`). PGDG keeps
+# earlier builds in the bookworm-pgdg index alongside the newest one.
+# 5.5.0-1.pgdg12+1 is the build the last green CI image installed (#4026).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends postgresql-17-partman \
+    && apt-get install -y --no-install-recommends postgresql-17-partman=5.5.0-1.pgdg12+1 \
     && rm -rf /var/lib/apt/lists/*

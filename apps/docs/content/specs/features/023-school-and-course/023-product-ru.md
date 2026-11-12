@@ -115,4 +115,4 @@ Doctor.School — «школа школ». На витрине врача кон
 
 ## Утверждённый макет
 
-Экран школы `#d-school` — `design-source/doctor-school.dc.html`. Страница курса — путь курса, на сайте «змейка», как в прототипе приложения [владелец, D12], — `design-source/doctor-course.dc.html`: Stage A утверждён владельцем на v16, 2026-11-11 («теперь лучше»), запись [#1793 comment 6821468757](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6821468757).
+**Ожидается — `author-design-mockup`** для экрана школы `#d-school`: выбор владельца до сборки. Страница курса — путь курса, на сайте «змейка», как в прототипе приложения [владелец, D12], — `design-source/doctor-course.dc.html`: Stage A утверждён владельцем на v16, 2026-11-11 («теперь лучше»), запись [#1793 comment 6821468757](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6821468757).

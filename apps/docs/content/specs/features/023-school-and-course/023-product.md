@@ -115,4 +115,4 @@ The [`capability-ownership.md`](../../product/two-site-ia/capability-ownership.m
 
 ## Approved mockup
 
-The school screen `#d-school` is `design-source/doctor-school.dc.html`. The course page — the course path, on the website the «snake», as in the application prototype [owner, D12] — is `design-source/doctor-course.dc.html`: Stage-A approved by the owner on v16, 2026-11-11 («теперь лучше»), record [#1793 comment 6821468757](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6821468757).
+**Pending — `author-design-mockup`** for the school screen `#d-school`: an owner pick before building. The course page — the course path, on the website the «snake», as in the application prototype [owner, D12] — is `design-source/doctor-course.dc.html`: Stage-A approved by the owner on v16, 2026-11-11 («теперь лучше»), record [#1793 comment 6821468757](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6821468757).

@@ -453,6 +453,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       "id",
       "primaryPartner",
       "slug",
+      // 030 EARS-8 — the summary carries the stage and no kind.
+      "stage",
       "title",
     ];
     const EVENT_SUMMARY_KEYS = [

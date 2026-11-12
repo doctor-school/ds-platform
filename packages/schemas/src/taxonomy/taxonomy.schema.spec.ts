@@ -771,6 +771,7 @@ const PUBLIC_PROJECT_SUMMARY_KEYS = [
   "title",
   "description",
   "coverUrl",
+  "stage",
   "primaryPartner",
 ] as const;
 
@@ -790,6 +791,7 @@ const publicProjectSummary = {
   title: "Кардиошкола",
   description: null,
   coverUrl: null,
+  stage: "running",
   primaryPartner: null,
 };
 
@@ -819,6 +821,7 @@ describe("012 EARS-6 — event↔project relationship contract (SSOT)", () => {
       { version: 1 },
       { deletedAt: null },
       { relationshipId: "44444444-4444-4444-8444-444444444444" },
+      { kind: "school" },
     ]) {
       expect(
         PublicProjectSummarySchema.safeParse({

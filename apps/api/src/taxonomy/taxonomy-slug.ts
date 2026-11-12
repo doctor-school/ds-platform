@@ -15,6 +15,15 @@ export type TaxonomySlugKind =
   | "organisation-role"
   | "project-output-kind";
 
+/**
+ * 030-design §«Endpoints» — literal route segments beside a kind's
+ * `/:idOrSlug` (`GET /v1/public/projects/scale`, `/v1/admin/projects/order`).
+ * A base equal to one of them takes the kind prefix, so no row can own it.
+ */
+const RESERVED_SLUGS: Partial<Record<TaxonomySlugKind, readonly string[]>> = {
+  project: ["scale", "order"],
+};
+
 /** Derive a valid base while keeping even non-transliterable input authorable. */
 export function taxonomySlugBase(
   authoredIdentity: string,
@@ -22,6 +31,7 @@ export function taxonomySlugBase(
 ): string {
   const generated = slugifyTaxonomyTitle(authoredIdentity);
   if (!generated) return kind;
+  if (RESERVED_SLUGS[kind]?.includes(generated)) return `${kind}-${generated}`;
   if (SlugSchema.safeParse(generated).success) return generated;
 
   // Slugification already guarantees grammar and length, so only the UUID

@@ -23,4 +23,17 @@ describe("taxonomy system-owned slug allocation", () => {
       expect(SlugSchema.safeParse(base).success).toBe(true);
     }
   });
+
+  // 030-design §«Endpoints»: `/v1/public/projects/scale` and
+  // `/v1/admin/projects/order` are literal segments beside `/:idOrSlug`, so
+  // no project may own either address.
+  it("a project titled with a reserved route segment (030 design «Endpoints») receives a kind-prefixed base", () => {
+    for (const title of ["Scale", "ORDER", "scale"]) {
+      const base = taxonomySlugBase(title, "project");
+      expect(base, title).toMatch(/^project-(scale|order)$/);
+      expect(SlugSchema.safeParse(base).success).toBe(true);
+    }
+    expect(taxonomySlugBase("Scale", "direction")).toBe("scale");
+    expect(taxonomySlugBase("Scale up", "project")).toBe("scale-up");
+  });
 });

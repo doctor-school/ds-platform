@@ -912,6 +912,8 @@ export const PublicProjectSummarySchema = z
     title: z.string(),
     description: z.string().nullable(),
     coverUrl: z.string().nullable(),
+    /** 030 EARS-8 — the project's stage; a project carries no kind on any public read. */
+    stage: ProjectStageSchema,
     primaryPartner: PublicPartnerSummarySchema.nullable(),
   })
   .strict();

@@ -53,6 +53,7 @@ export class PublicProjectSummaryService {
         title: row.title,
         description: row.description,
         coverUrl: row.coverRef ? await this.storage.urlFor(row.coverRef) : null,
+        stage: row.stage,
         primaryPartner: primaries.get(row.id) ?? null,
       })),
     );

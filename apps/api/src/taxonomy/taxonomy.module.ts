@@ -64,6 +64,9 @@ import { ProjectsAdminController } from "./projects.admin.controller.js";
 import { ProjectsRepository } from "./projects.repository.js";
 import { ProjectsService } from "./projects.service.js";
 import { PublicProjectSummaryService } from "./public-project-summary.service.js";
+import { PublicProjectsController } from "./public-projects.controller.js";
+import { PublicProjectsRepository } from "./public-projects.repository.js";
+import { PublicProjectsService } from "./public-projects.service.js";
 import { EventSpeakersPublicController } from "./speaker-projection.public.controller.js";
 import { SpeakerProjectionRepository } from "./speaker-projection.repository.js";
 import { SpeakerProjectionService } from "./speaker-projection.service.js";
@@ -134,6 +137,8 @@ import { EventKindsService } from "./event-kinds.service.js";
     ProjectPartnersPublicController,
     OrganisationCountPublicController,
     PartnerProjectsPublicController,
+    // 030 EARS-8 / 9 / 13 (#3505) — `/v1/public/projects`, `/scale`, `/:idOrSlug`, `/:idOrSlug/results`.
+    PublicProjectsController,
     EventDirectionsPublicController,
     DirectionEventsPublicController,
     EventKindsPublicController,
@@ -184,6 +189,9 @@ import { EventKindsService } from "./event-kinds.service.js";
     // copy per vertical is how `primaryPartner` goes back to being null on one
     // route while being populated on another.
     PublicProjectSummaryService,
+    // 030 EARS-8 / 9 / 13 (#3505) — the Academy catalog, scale line and page.
+    PublicProjectsRepository,
+    PublicProjectsService,
     EventDirectionsRepository,
     EventDirectionsService,
     SpeakerProjectionRepository,

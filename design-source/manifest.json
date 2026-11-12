@@ -212,11 +212,10 @@
       "remotePath": "doctor-lk-congress.dc.html"
     },
     "doctor-school.dc.html": {
-      "sha256": "8e3d169cf163ffaa015521a5d51c7bd5b06749b8d8fa192c27b63f04ebb5c7bb",
-      "pulledSha256": "d0485c508da4d87c1a7c9edeec2309f954c1752b2dab0f078f771b6879ed6abf",
-      "pulledAt": "2026-09-28",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+      "sha256": "4ae98fff4c855ca92081f6d069ca8434fa821c57d9bb26c0b43c5a8de17bf63e",
+      "pulledSha256": "9fce91aba1d84c0cb9935df1123a3ed5fa12638533296d9fa5b50918df586567",
+      "pulledAt": "2026-11-12T13:14:58.011Z",
+      "remotePath": "project/doctor-school.dc.html"
     },
     "document.dc.html": {
       "sha256": "42e15de1293e293a6b8d967b641a5f7a09b9d18f7e14d91d9f051a463ee6250b",

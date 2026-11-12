@@ -13,6 +13,7 @@ Feature: 044 — Congress sign-up
     And the personal-data consent page is published, its version being its publication date plus the sha256 of its text
 
   @EARS-1 @EARS-3 @EARS-4 @EARS-5 @EARS-9 @EARS-10 @EARS-11 @EARS-13
+  @congress-intake
   Scenario: Happy path — a new email becomes an account and a registration
     Given no Doctor.School account exists for "new@example.org"
     When a participant submits the sign-up form with surname, first name, contact phone, "new@example.org", a specialty chosen from the taxonomy, workplace, city, region, no patronymic, a ticked personal-data consent and a valid captcha token
@@ -66,6 +67,7 @@ Feature: 044 — Congress sign-up
     And no second confirmation email is dispatched
 
   @EARS-11 @EARS-12
+  @congress-intake
   Scenario: Failure branch — the confirmation email fails to send
     Given the mailer rejects every send attempt after its failover chain
     When a participant submits the sign-up form with a new email
@@ -151,6 +153,7 @@ Feature: 044 — Congress sign-up
     And no email is dispatched
 
   @EARS-2
+  @congress-intake
   Scenario: Failure branch — throttling keys on the participant, not the proxy
     Given several participants submit from different client addresses through the same site proxy
     When one of them exceeds the per-address submission window

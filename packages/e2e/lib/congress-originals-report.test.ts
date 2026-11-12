@@ -7,6 +7,9 @@ import {
   assertCongressRepeatBackgrounds,
   assertCongressRepeatReport,
   assertCongressReport,
+  congressIntakeOriginals,
+  assertCongressIntakeReport,
+  assertCongressIntakeBackgrounds,
 } from "./congress-originals-report.js";
 
 describe("044 exact-three Background evidence", () => {
@@ -52,6 +55,67 @@ describe("044 exact-three Background evidence", () => {
       entries[1] = entries[1]!.replace("owned-event", "foreign-event");
     expect(() => assertCongressBackgrounds(entries.join("\n"))).toThrow();
   });
+});
+
+describe("044 intake exact-three identity", () => {
+  const report = (titles: readonly string[]) => ({
+    errors: [],
+    suites: [
+      {
+        specs: titles.map((title) => ({
+          title,
+          tests: [
+            {
+              projectName: "admin",
+              projectId: "admin",
+              status: "expected",
+              results: [{ status: "passed", retry: 0 }],
+            },
+          ],
+        })),
+      },
+    ],
+  });
+  const receipts = () =>
+    congressIntakeOriginals
+      .flatMap((title) =>
+        congressBackgrounds.map((clause) =>
+          JSON.stringify({ title, clause, eventId: "owned", verified: true }),
+        ),
+      )
+      .join("\n");
+  it("EARS-1: accepts only the new, mail-failure and participant-throttling originals", () => {
+    expect(() =>
+      assertCongressIntakeReport(report(congressIntakeOriginals)),
+    ).not.toThrow();
+    expect(() => assertCongressIntakeBackgrounds(receipts())).not.toThrow();
+    for (const prior of [congressOriginals, congressRepeatOriginals])
+      expect(() => assertCongressIntakeReport(report(prior))).toThrow();
+    expect(() =>
+      assertCongressReport(report(congressIntakeOriginals)),
+    ).toThrow();
+    expect(() =>
+      assertCongressRepeatReport(report(congressIntakeOriginals)),
+    ).toThrow();
+  });
+  it.each(["missing", "fourth", "retry", "unverified"])(
+    "EARS-2: refuses %s evidence",
+    (kind) => {
+      const value = report(congressIntakeOriginals);
+      if (kind === "missing") value.suites[0]!.specs.pop();
+      if (kind === "fourth")
+        value.suites[0]!.specs.push(report(["fourth"]).suites[0]!.specs[0]!);
+      if (kind === "retry")
+        value.suites[0]!.specs[0]!.tests[0]!.results[0]!.retry = 1;
+      if (kind === "unverified")
+        expect(() =>
+          assertCongressIntakeBackgrounds(
+            receipts().replace('"verified":true', '"verified":false'),
+          ),
+        ).toThrow();
+      else expect(() => assertCongressIntakeReport(value)).toThrow();
+    },
+  );
 });
 
 describe("044 repeat, consent and price exact-three identity", () => {

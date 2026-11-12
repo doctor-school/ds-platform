@@ -63,3 +63,15 @@ export function assertCongressRepeatReport(report: unknown): void {
 export function assertCongressRepeatBackgrounds(log: string): void {
   assertCongressBackgrounds(log, congressRepeatOriginals);
 }
+
+export const congressIntakeOriginals = [
+  "Happy path — a new email becomes an account and a registration",
+  "Failure branch — the confirmation email fails to send",
+  "Failure branch — throttling keys on the participant, not the proxy",
+] as const;
+export function assertCongressIntakeReport(report: unknown): void {
+  assertOperationalReport(report, congressIntakeOriginals, "admin");
+}
+export function assertCongressIntakeBackgrounds(log: string): void {
+  assertCongressBackgrounds(log, congressIntakeOriginals);
+}

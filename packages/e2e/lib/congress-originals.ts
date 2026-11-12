@@ -22,6 +22,8 @@ import {
   type CongressActor,
 } from "./congress-actors.js";
 import { ownedCongressDirectory } from "./congress-directory.js";
+import { congressOwner, assertCongressDatabase } from "./congress-owner.js";
+import { createCongressIntake } from "./congress-intake.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const apiRequire = createRequire(resolve(root, "apps/api/package.json"));
@@ -45,10 +47,10 @@ export function congressOperation(command: string): void {
     resolve(congressDirectory(), "stand-ops.jsonl"),
     JSON.stringify({
       at: new Date().toISOString(),
-      ownership:
-        process.env.E2E_CONGRESS_GROUP === "repeat-consent-price"
-          ? "3979"
-          : "3974",
+      ownership: congressOwner(
+        process.env.E2E_CONGRESS_GROUP,
+        process.env.E2E_CONGRESS_OWNER,
+      ),
       command,
     }) + "\n",
   );
@@ -71,20 +73,11 @@ export async function bootCongress(title: string) {
   mkdirSync(resolve(dir, "logs"));
   const db = process.env.DATABASE_URL,
     expected = process.env.E2E_CONGRESS_DATABASE;
-  if (
-    !db ||
-    !(
-      expected ===
-        (process.env.E2E_CONGRESS_GROUP === "repeat-consent-price"
-          ? "ds_dev_3979"
-          : "ds_dev_3974") ||
-      (process.env.CI === "true" && expected === "ds_test")
-    ) ||
-    new URL(db).pathname !== `/${expected}`
-  )
-    throw new Error(
-      "Congress originals require exact owned group database or disposable CI ds_test",
-    );
+  const owner = congressOwner(
+    process.env.E2E_CONGRESS_GROUP,
+    process.env.E2E_CONGRESS_OWNER,
+  );
+  assertCongressDatabase(db, expected, owner, process.env.CI);
   const nginxBinary = process.env.E2E_CONGRESS_NGINX;
   if (!nginxBinary || !isAbsolute(nginxBinary))
     throw new Error("An actual task-scoped nginx binary is required");
@@ -329,7 +322,7 @@ export async function bootCongress(title: string) {
       save();
       return consume(windows, ms);
     };
-    const clientIp = "127.39.74.3";
+    const clientIp = `127.39.${Number(owner) % 100}.3`;
     async function http(
       path: string,
       payload?: Record<string, unknown>,
@@ -396,10 +389,16 @@ export async function bootCongress(title: string) {
       personalDataConsent: true,
       ...extra,
     });
-    async function post(email: string, extra: Record<string, unknown> = {}) {
+    async function post(
+      email: string,
+      extra: Record<string, unknown> = {},
+      expectedOutcome: "sent" | "failed" = "sent",
+      client = clientIp,
+    ) {
       const response = await http(
         "/api/v1/congress/sign-up",
         payload(email, extra),
+        client,
       );
       if (response.body.status === "accepted") {
         // Await the real setup dispatch before a refusal's complete baseline.
@@ -413,7 +412,7 @@ export async function bootCongress(title: string) {
                 )
               ).rows,
           )
-          .toEqual([{ confirmation_mail_status: "sent" }]);
+          .toEqual([{ confirmation_mail_status: expectedOutcome }]);
       }
       manifest.handoffKeys = handoffs.storedKeys();
       manifest.actors = accumulateCongressActors(
@@ -462,8 +461,8 @@ export async function bootCongress(title: string) {
     let before: unknown,
       mailBefore: unknown,
       response: CongressResponse | undefined;
-    const unknown = `unknown-3974-${randomUUID()}@example.org`,
-      known = `known-3974-${randomUUID()}@example.org`;
+    const unknown = `unknown-${owner}-${randomUUID()}@example.org`,
+      known = `known-${owner}-${randomUUID()}@example.org`;
     const receipt = (clause: string) =>
       appendFileSync(
         resolve(congressDirectory(), "backgrounds.jsonl"),
@@ -505,7 +504,29 @@ export async function bootCongress(title: string) {
       (mailer.congressConfirmations as { to: string }[]).filter(
         (m) => m.to === knownEmail,
       );
+    const intake = createCongressIntake({
+      pool,
+      eventId,
+      dir,
+      consentVersion,
+      owner,
+      mailer,
+      fake,
+      http,
+      post,
+      payload,
+      snapshot,
+      mails,
+      seen,
+      load,
+      operation: congressOperation,
+      dispatchSource: readFileSync(
+        resolve(root, "apps/api/src/congress/congress-signup.service.ts"),
+        "utf8",
+      ),
+    });
     return {
+      intake,
       pool,
       eventId,
       dir,
@@ -545,7 +566,11 @@ export async function bootCongress(title: string) {
           const snap = await snapshot(),
             counts = mails();
           for (let n = 0; n < 61; n++) {
-            const r = await http("/api/v1/congress/sign-up", {}, "127.39.74.4");
+            const r = await http(
+              "/api/v1/congress/sign-up",
+              {},
+              `127.39.${Number(owner) % 100}.4`,
+            );
             expect(r.status).toBe(n < 60 ? 400 : 429);
             if (n === 60) {
               expect(Number(r.retryAfter)).toBeGreaterThan(0);
@@ -661,7 +686,7 @@ export async function bootCongress(title: string) {
       async noSecondMail() {
         expect(await snapshot()).toEqual(repeatSnapshot);
         evidence("after-repeat-before-barrier", await snapshot());
-        const barrier = `barrier-3979-${randomUUID()}@example.org`;
+        const barrier = `barrier-${owner}-${randomUUID()}@example.org`;
         congressOperation(
           "POST later native submission as happens-after confirmation-dispatch barrier",
         );
@@ -735,7 +760,7 @@ export async function bootCongress(title: string) {
           );
         const ledger = app.get(PointsLedgerService),
           engine = app.get(PointsEngine);
-        const ruleId = `congress-3979-${randomUUID()}`;
+        const ruleId = `congress-${owner}-${randomUUID()}`;
         congressOperation(
           "INSERT own native funding rule fixture before no-write baseline",
         );
@@ -747,7 +772,7 @@ export async function bootCongress(title: string) {
           "Native PointsLedgerService.post accrual500Pul to own existing doctor before no-write baseline",
         );
         await ledger.post({
-          eventId: `fund-3979-${randomUUID()}`,
+          eventId: `fund-${owner}-${randomUUID()}`,
           occurredAt: new Date(),
           legs: [
             {
@@ -766,7 +791,7 @@ export async function bootCongress(title: string) {
         );
         await engine.record({
           type: "phone.verified",
-          eventId: `phone-3979-${randomUUID()}`,
+          eventId: `phone-${owner}-${randomUUID()}`,
           personId,
           occurredAt: new Date(),
           attributes: {},
@@ -788,7 +813,7 @@ export async function bootCongress(title: string) {
       },
       async pricedSubmissions() {
         const forKnown = await post(knownEmail);
-        const unknownEmail = `unknown-priced-3979-${randomUUID()}@example.org`;
+        const unknownEmail = `unknown-priced-${owner}-${randomUUID()}@example.org`;
         const forUnknown = await post(unknownEmail);
         expect(forKnown.status).toBe(422);
         expect(forKnown.body.code).toBe("sign-up-unavailable");
@@ -880,6 +905,7 @@ export async function bootCongress(title: string) {
       async close() {
         await closeCongressResources([
           save,
+          () => intake.close(),
           () =>
             congressOperation(
               "CAPTURE exact actors/cookies/forms/nonces/native rate and handoff keys BEFORE app close; then quit owned nginx and actual AppModule",

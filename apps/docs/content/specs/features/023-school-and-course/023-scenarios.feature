@@ -15,11 +15,11 @@ Feature: 023 — A doctor chooses a school and reads a course before walking its
     And the school has the published courses "ortho-basic" with three modules and "ortho-short" with one module
     And the course "ortho-basic" leads to the document "certificate-nmo"
 
-  @EARS-3 @EARS-4 @EARS-5 @EARS-23 @school-doctor-journeys
+  @EARS-1 @EARS-3 @EARS-4 @EARS-5 @EARS-23 @school-doctor-journeys
   Scenario: A doctor opens a school and goes from a course card to the course path
     Given a doctor is signed in on the doctor storefront
     When the doctor opens "/schools/ortho"
-    Then the header reads «Школа ортобиологии» with «2 курса» and the count of their lessons
+    Then the header reads «Школа ортобиологии», its description and «О школе» facts, with «2 курса» and the count of their lessons
     And the courses are shown as two cards in school order
     And no text on the page contains «бесплатно», «проект» or «серий»
     When the doctor opens the card "ortho-basic"
@@ -42,7 +42,7 @@ Feature: 023 — A doctor chooses a school and reads a course before walking its
     When the visitor opens "/schools/cardio"
     Then the header shows «Скоро» and the courses section shows «Школа готовится» with "Первые курсы появятся осенью"
     When the visitor uses the interest capture and registers
-    Then the doctor lands on "/schools/cardio"
+    Then the doctor lands on "/schools/cardio" showing «Школа готовится»
     And the specialty of the direction of "cardio" is among the doctor's specialties
 
   @EARS-8 @school-guest-journeys

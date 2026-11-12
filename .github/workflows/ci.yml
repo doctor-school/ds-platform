@@ -2254,10 +2254,19 @@ jobs:
           E2E_PORTAL_URL: http://localhost:3001
         run: |
           set -euo pipefail
-          # Its own process group, so the trap reaps the server and not only pnpm.
+          # Own process groups, so the trap reaps the servers and not only pnpm.
+          # The Academy's silent sign-in check redirects through the IdP to the
+          # sign-in app, so the storefront needs it running.
           DOCTOR_PUBLIC_ORIGIN=http://localhost:3004 PORT=3001 setsid pnpm --filter @ds/portal start --hostname 127.0.0.1 > "$RUNNER_TEMP/flows-portal.log" 2>&1 &
           portal_pid=$!
-          trap 'kill -- "-$portal_pid"' EXIT
+          PORT=3005 setsid pnpm --filter @ds/login start --hostname 127.0.0.1 > "$RUNNER_TEMP/flows-login.log" 2>&1 &
+          login_pid=$!
+          trap 'kill -- "-$portal_pid" "-$login_pid"' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3005/healthz >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then cat "$RUNNER_TEMP/flows-login.log"; exit 1; fi
+            sleep 2
+          done
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:3001/ >/dev/null 2>&1; then break; fi
             if [ "$i" = 60 ]; then cat "$RUNNER_TEMP/flows-portal.log"; exit 1; fi
@@ -2320,7 +2329,15 @@ jobs:
           mkdir "$RUNNER_TEMP/material-journeys"
           DOCTOR_PUBLIC_ORIGIN=http://localhost:3004 PORT=3001 setsid pnpm --filter @ds/portal start --hostname 127.0.0.1 > "$RUNNER_TEMP/material-journeys/portal.log" 2>&1 &
           portal_pid=$!
-          trap 'kill -- "-$portal_pid"' EXIT
+          # The Academy's silent sign-in check lands on the sign-in app.
+          PORT=3005 setsid pnpm --filter @ds/login start --hostname 127.0.0.1 > "$RUNNER_TEMP/material-journeys/login.log" 2>&1 &
+          login_pid=$!
+          trap 'kill -- "-$portal_pid" "-$login_pid"' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3005/healthz >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then cat "$RUNNER_TEMP/material-journeys/login.log"; exit 1; fi
+            sleep 2
+          done
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:3001/ >/dev/null 2>&1; then break; fi
             if [ "$i" = 60 ]; then cat "$RUNNER_TEMP/material-journeys/portal.log"; exit 1; fi

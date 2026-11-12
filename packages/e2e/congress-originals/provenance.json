@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/doctor-school/orthobio-site",
+  "commit": "e55f4425c401fc4ce8daa75d49833dfa2c459f91",
+  "publicationDate": "2026-09-23",
+  "publicationEvidence": "https://github.com/doctor-school/ds-platform/issues/2292",
+  "livePrivacy": "https://orthobio.ru/privacy/",
+  "liveCheckedAt": "2026-11-11T15:20:03Z",
+  "hashes": {
+    "owning-nginx.conf": "a563332d74b17c7124d608562a6dd2c84ff5baf308adf4aec8df27e82d5fe8d1",
+    "privacy-policy.txt": "968645ba2e354b73488da4fd8aed2addf4288b531132f4861b1b9b06ec9cfb5f",
+    "privacy.html.capture": "47bbd63885ba8edd571956d0ec568eb68f5dda4f00f9eb1951f7f5ac3bc417e5"
+  }
+}

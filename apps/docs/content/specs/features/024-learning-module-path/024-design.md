@@ -22,13 +22,14 @@ lang: en
 | `./ui`     | `CoursePath` (the «snake», EARS-14), `StepScreen` with one body per element type (EARS-15, 16, 18–23), the guest gate; built from `@ds/design-system` per the vendored canvases.                                                                          |
 | `./admin`  | `LessonComposition`, `RulesEditor`, `RuleChangeDialog` (EARS-28, 29, 31) — `@ds/design-system` primitives only, `AdminDataList` / form compositions of 012.                                                                                               |
 
-Contracts are Zod in `packages/schemas/src/learning/` (ADR-0002); the mobile app reads the same REST API. `apps/doctor` adds `app/courses/[courseSlug]/page.tsx` and `app/courses/[courseSlug]/steps/[stepId]/page.tsx` plus host-config fields; `apps/admin` adds route files under `app/learning/`. `apps/portal` adds nothing (EARS-27). 023 adds the course header to the same course route over the same package and the school, course and module editor screens (`./admin`).
+Contracts are Zod in `packages/schemas/src/learning/` (ADR-0002); the mobile app reads the same REST API. `apps/doctor` adds `app/courses/[courseSlug]/page.tsx` and `app/courses/[courseSlug]/steps/[stepId]/page.tsx` plus host-config fields; `apps/admin` adds route files under `app/learning/`. `apps/portal` adds nothing (EARS-27). 023 adds the school route, the course header on the same course route and the school, course and module editor screens (`./admin`) over the same package and the same rows.
 
 ## 2. Data model
 
 ```mermaid
 erDiagram
-  directions ||--o{ learning_courses : "ADR-0016 §5"
+  directions ||--o{ learning_schools : "ADR-0016 §5"
+  learning_schools ||--o{ learning_courses : "school_id NOT NULL"
   projects ||--o{ learning_courses : "project_id"
   learning_courses ||--o{ learning_modules : ""
   learning_modules ||--o{ learning_lessons : ""
@@ -42,7 +43,7 @@ erDiagram
   learning_rule_changes ||--o{ learning_facts : "completion-kept"
 ```
 
-- **Structure** (`doctor`, ADR-0016 §8): `learning_courses (id, direction_id, project_id, slug U, title, state, version)`; `learning_modules (id, course_id, position, title, version)`; `learning_lessons (id, module_id NOT NULL, project_id, position, title, description, teaser, state, version)`; `learning_steps (id, lesson_id, position, type, title, duration_min, payload jsonb, partner_organisation_id NULL, companion bool, version)`. `payload` is validated by the type's Zod schema from the catalog; media and files reference the 012 media contract. 023 adds `school_id` to `learning_courses` with its school rows.
+- **Structure** (`doctor`, ADR-0016 §8): `learning_schools (id, direction_id, lead_expert_id, project_id, slug U, title, state, version; U (direction_id, lead_expert_id))`; `learning_courses (id, school_id NOT NULL, project_id, slug U, title, state, version)` — `school_id` NOT NULL from the first migration; `learning_modules (id, course_id, position, title, version)`; `learning_lessons (id, module_id NOT NULL, project_id, position, title, description, teaser, state, version)`; `learning_steps (id, lesson_id, position, type, title, duration_min, payload jsonb, partner_organisation_id NULL, companion bool, version)`. `payload` is validated by the type's Zod schema from the catalog; media and files reference the 012 media contract. 023 adds descriptive columns and its own tables (023 design §2), never the school table or `school_id`.
 - **Tests**: `learning_tests (step_id, kind: entry | exit | test-out, scope_item)`, `learning_questions (id, test_id, text, corrective_step_id NULL, corrective_text NULL)`, `learning_options (id, question_id, text, correct)`. A test-out test is attached to the item it reaches (a lesson or a module).
 - **Rules** (`admin-only`): `learning_rule_layers (scope_kind: platform | school | course | module | lesson | step, scope_id, values jsonb, applied_preset_id NULL, version)` — one row per scope, `values` a partial map of setting keys validated by `packages/schemas/src/learning/settings.ts`; the platform row holds every key. `learning_presets (id, name U, values jsonb, version)`, seeded by migration with the three presets of EARS-9. `learning_rule_changes (id, scope, before jsonb, after jsonb, earned_progress: keep | require-again, actor, at)` — the record a status reason (EARS-24) and a `completion-kept` fact point to; the 010 audit row is written in the same transaction.
 - **Facts** (`doctor`, append-only, ADR-0003 §2.7): `learning_facts (id, event_id U, person_id, kind, step_id NULL, item_ref NULL, data jsonb, source: web | app | system, occurred_at, recorded_at)`; kinds `position`, `opened`, `card-viewed`, `case-ended`, `attempt-submitted { testId, attempt, score, answers }`, `test-out-passed { item }`, `manual-mark { item, by }`, `club-attended { module }` (from the 020 attendance fact), `completion-kept { item, ruleChangeId }`. A `BEFORE UPDATE OR DELETE` trigger raises. Attempts in progress live in `learning_attempts (id, person_id, test_id, question_ids, started_at)` until submitted.
@@ -51,18 +52,18 @@ erDiagram
 
 ## 3. Settings and resolution (EARS-5…9)
 
-| Key                                                                | Platform seed            | Levels                         |
-| ------------------------------------------------------------------ | ------------------------ | ------------------------------ |
-| `completion` (rule tree)                                           | per kind, EARS-6         | lesson, step, module, course   |
-| `viewed.video.percent` / `viewed.podcast.percent`                  | 100 / 90                 | any                            |
-| `unlock`                                                           | `after-previous`         | module, lesson, step           |
-| `order`                                                            | `strict`                 | course, module                 |
-| `lockedVisibility`                                                 | `locked`                 | any                            |
-| `test.threshold` / `.attempts` / `.pauseMin` / `.questions`        | 80 / unlimited / 0 / all | any                            |
-| `test.entryRequired` / `test.entryCounts`                          | false / false            | any                            |
-| `testOut.allowed` / `testOut.pauseMin`                             | false / 0                | any (D17: per-course override) |
-| `repeat.allowed`                                                   | true                     | any                            |
-| `course.deliveryMode` / `course.moduleSize` / `course.closingClub` | `online` / 6 / true      | course                         |
+| Key                                                                                            | Platform seed               | Levels                         |
+| ---------------------------------------------------------------------------------------------- | --------------------------- | ------------------------------ |
+| `completion` (rule tree)                                                                       | per kind, EARS-6            | lesson, step, module, course   |
+| `viewed.video.percent` / `viewed.podcast.percent`                                              | 100 / 90                    | any                            |
+| `unlock`                                                                                       | `after-previous`            | module, lesson, step           |
+| `order`                                                                                        | `strict`                    | course, module                 |
+| `lockedVisibility`                                                                             | `locked`                    | any                            |
+| `test.threshold` / `.attempts` / `.pauseMin` / `.questions`                                    | 80 / unlimited / 0 / all    | any                            |
+| `test.entryRequired` / `test.entryCounts`                                                      | false / false               | any                            |
+| `testOut.allowed` / `testOut.pauseMin`                                                         | false / 0                   | any (D17: per-course override) |
+| `repeat.allowed`                                                                               | true                        | any                            |
+| `course.deliveryMode` / `course.moduleSize` / `course.closingClub` / `course.clubInCompletion` | `online` / 6 / true / false | course                         |
 
 `resolve(key, item)` walks step → lesson → module → course → school → platform and returns `{ value, level, preset }` from the nearest layer holding `key`. Presets are copies: `ApplyPreset` writes `values` of the target layer with the preset's map merged over the keys it names and sets `applied_preset_id`; the keys the preset does not name and every lower layer stay. A preset edit (platform scope, EARS-29) changes later applications only.
 
@@ -141,18 +142,18 @@ stateDiagram-v2
 
 ## 7. API
 
-| Method and path                                                                                                | Who                             | Clause        |
-| -------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------- |
-| `GET /v1/learning/courses/{courseSlug}/path`                                                                   | anyone (states per session)     | EARS-13       |
-| `GET /v1/learning/lessons/{lessonId}`                                                                          | anyone (no payload)             | EARS-15, 22   |
-| `GET /v1/me/learning/steps/{stepId}`                                                                           | doctor, openable step           | EARS-15, 16   |
-| `POST /v1/me/learning/facts`                                                                                   | doctor                          | EARS-10       |
-| `POST /v1/me/learning/tests/{testId}/attempts` · `…/{attemptId}/submit`                                        | doctor                          | EARS-18, 19   |
-| `POST /v1/me/learning/test-outs/{itemRef}`                                                                     | doctor                          | EARS-20       |
-| `PUT /v1/me/learning/lessons/{lessonId}/rating` · `POST /v1/me/learning/steps/{stepId}/feedback`               | doctor                          | EARS-23       |
-| `POST /v1/admin/learning/courses` · `…/modules` · `…/lessons` · `…/steps`, `PATCH`, `…/publish`, `…/unpublish` | staff                           | EARS-1, 4, 28 |
-| `GET` / `PUT /v1/admin/learning/rules/{scopeKind}/{scopeId}` · `POST …/preview` · `POST …/apply-preset`        | staff / `learning_rules_editor` | EARS-29–31    |
-| `GET` / `PUT /v1/admin/learning/presets/{id}`                                                                  | `learning_rules_editor`         | EARS-9, 29    |
+| Method and path                                                                                                                                 | Who                             | Clause        |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------- |
+| `GET /v1/learning/courses/{courseSlug}/path`                                                                                                    | anyone (states per session)     | EARS-13       |
+| `GET /v1/learning/lessons/{lessonId}`                                                                                                           | anyone (no payload)             | EARS-15, 22   |
+| `GET /v1/me/learning/steps/{stepId}`                                                                                                            | doctor, openable step           | EARS-15, 16   |
+| `POST /v1/me/learning/facts`                                                                                                                    | doctor                          | EARS-10       |
+| `POST /v1/me/learning/tests/{testId}/attempts` · `…/{attemptId}/submit`                                                                         | doctor                          | EARS-18, 19   |
+| `POST /v1/me/learning/test-outs/{itemRef}`                                                                                                      | doctor                          | EARS-20       |
+| `PUT /v1/me/learning/lessons/{lessonId}/rating` · `POST /v1/me/learning/steps/{stepId}/feedback`                                                | doctor                          | EARS-23       |
+| `POST /v1/admin/learning/schools` · `…/courses` (takes `schoolId`) · `…/modules` · `…/lessons` · `…/steps`, `PATCH`, `…/publish`, `…/unpublish` | staff                           | EARS-1, 4, 28 |
+| `GET` / `PUT /v1/admin/learning/rules/{scopeKind}/{scopeId}` · `POST …/preview` · `POST …/apply-preset`                                         | staff / `learning_rules_editor` | EARS-29–31    |
+| `GET` / `PUT /v1/admin/learning/presets/{id}`                                                                                                   | `learning_rules_editor`         | EARS-9, 29    |
 
 Problems are RFC 7807: `LEARNING_STEP_LOCKED` (403), `LEARNING_ATTEMPT_UNAVAILABLE` (409, `nextAt`), `PUBLISH_REQUIREMENTS_NOT_MET` (409, field errors), `PRECONDITION_FAILED` (412). The role `learning_rules_editor` is one more staff role of 047 «Доступы» (049's pattern: TOTP, staff, no implicit hierarchy).
 
@@ -168,7 +169,7 @@ Problems are RFC 7807: `LEARNING_STEP_LOCKED` (403), `LEARNING_ATTEMPT_UNAVAILAB
 
 ## 10. Delivery slices
 
-1. **First course path** (thinnest end-to-end): one course with one module created through the admin API (023's editor is a named deferral), lessons of `video`, `download` and an exit `test` composed on the admin screen, «Путь (Duolingo)» applied on the course, the doctor's path page with computed states and the step screen for those types, facts, evaluator, 025 emission. Every table, the catalogs, the resolver and the presets land here.
+1. **First course path** (thinnest end-to-end): one school (the minimal row of EARS-1), one course in it and one module, created through the admin API, lessons of `video`, `download` and an exit `test` composed on the admin screen, «Путь (Duolingo)» applied on the course, the doctor's path page with computed states and the step screen for those types, facts, evaluator, 025 emission. Every table, the catalogs, the resolver and the presets land here.
 2. **Rules editor and live changes** — the full editor, the role, the impact preview, D16, status reasons.
 3. **Every step type** — microlearning, podcast companion, clinical case, partner download with the 032 mark, ratings, feedback.
 4. **Tests in depth** — attempts, pauses, entry test, corrective material, test-out.
@@ -179,5 +180,5 @@ Problems are RFC 7807: `LEARNING_STEP_LOCKED` (403), `LEARNING_ATTEMPT_UNAVAILAB
 
 - **017** — doctor shell and the session on `apps/doctor` (slice 1).
 - **025** — `PointsEngine.acceptWithin` and the two fact types, live since release-2026.11.07-1 (slice 1).
-- **023** — the school rows, the course header and the structure editor build on slice 1's rows; 023 does not block 024.
+- **023** — the school screen, the course header and the structure editor build on slice 1's school, course and module rows; 023 does not block 024.
 - **032** — the organisation registry (slice 3). **021** — the registration return target (slice 5). **047 / 049** — the staff-role grant in «Доступы» (slice 2). **010** — change audit. **012** — media contract, admin list/form compositions, idempotency and `If-Match`.

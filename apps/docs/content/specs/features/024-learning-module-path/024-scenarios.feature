@@ -11,7 +11,8 @@ Feature: 024 — A doctor walks one course path of steps whose rules are setting
   So that I always know where I am and what counts, and nothing I did is lost when rules change
 
   Background:
-    Given the published course "ortho-basic" titled "Ортобиология. Базовый" with one module "Суставы и хрящ"
+    Given the published school "ortho" of the direction "Травматология и ортопедия"
+    And the published course "ortho-basic" titled "Ортобиология. Базовый" of the school "ortho" with one module "Суставы и хрящ"
     And the course has the preset «Путь (Duolingo)» applied
     And lesson 1 of the module has the steps video "Тест Лахмана" of 12 minutes, download "Сроки восстановления" of 3 minutes and the exit test "Тест по уроку 1"
     And lesson 2 of the module has the steps video "Разрыв ПКС у бегуньи" of 10 minutes and the exit test "Тест по уроку 2"
@@ -72,7 +73,8 @@ Feature: 024 — A doctor walks one course path of steps whose rules are setting
     And lesson 2 has a test-out test with the threshold 80 %
     When the doctor answers the test-out test of lesson 2 with a score of 50 %
     Then lesson 1 is not done on the path
-    And the screen says what to do next
+    And the doctor stays at the step "Тест Лахмана"
+    And the screen says when the next test-out attempt is possible and offers to continue from the current step
 
   @EARS-9 @EARS-20
   Scenario: «ДПО / аккредитация» offers no test-out unless the course overrides it
@@ -114,6 +116,7 @@ Feature: 024 — A doctor walks one course path of steps whose rules are setting
     And a doctor is signed in on the doctor storefront
     When the doctor opens the step "Протокол реабилитации"
     Then the step reads «Партнёрский материал · Партнёр А»
+    And the feedback form says it is read by Doctor.School staff and reaches the partner only as an anonymised aggregate
     When the doctor sends feedback "Полезная схема" on the step
     And rates lesson 1 with 4 stars
     Then the lesson composition screen of lesson 1 in the admin lists the feedback "Полезная схема"
@@ -187,7 +190,8 @@ Feature: 024 — A doctor walks one course path of steps whose rules are setting
 
   @EARS-12
   Scenario: A module completion reaches 025 once
-    Given a doctor has done every lesson of "Суставы и хрящ" and attended its club
+    Given the course "ortho-basic" has club in completion switched on
+    And a doctor has done every lesson of "Суставы и хрящ" and attended its club
     Then feature 025 has received one "module.completed" fact for "Суставы и хрящ" with mode "online"
 
   @EARS-25 @learning-phone

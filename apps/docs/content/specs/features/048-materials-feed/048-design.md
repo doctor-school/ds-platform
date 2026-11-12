@@ -565,7 +565,7 @@ erDiagram
   FEED_SOURCES {
     enum platform "telegram|vk"
     bigint vk_group_id UK "nullable; bound by the source check"
-    timestamptz vk_last_event_at "nullable; last accepted Callback event"
+    timestamptz vk_last_event_at "nullable; last accepted Callback event, set to the binding time on bind"
   }
   FEED_ENTRIES {
     enum kind "news|column|post|video"
@@ -579,9 +579,8 @@ erDiagram
     uuid feed_entry_id FK "ON DELETE CASCADE"
   }
   FEED_VK_CALL_MONTHS {
-    uuid feed_source_id PK "null row = calls not tied to a source"
-    date month PK "first day, Moscow time"
-    int calls
+    date month PK "first day, Moscow time; one row per month"
+    int calls "all VK API calls of the VK ID account"
   }
 ```
 
@@ -650,7 +649,7 @@ sequenceDiagram
 | no text and no photo or video                                                             | dropped                                                                                  | nothing to show                                                                                                   |
 
 - **Text**: `text` with VK's inline mention markup `[id…|name]` / `[club…|name]` reduced to its name, whitespace collapsed, cut at the last word boundary within 500 characters plus «…» — the slice-2 rule. **Title** of a video: cut at 160 like a material title.
-- **Date**: `date` (unix seconds) → `published_at`; never moved. **Permalinks** `https://vk.com/wall-<gid>_<pid>` and `https://vk.com/video-<gid>_<vid>`: VK documents the id form `{owner_id}_{video_id}` with negative community ids ([video.get](https://dev.vk.com/ru/method/video.get)) but no URL form — **UNCONFIRMED**; they are VK's own share-link form and the rollout capture verifies both open the publication.
+- **Date**: `date` (unix seconds) → `published_at`; never moved. **Permalinks** `https://vk.com/wall-<gid>_<pid>` and `https://vk.com/video-<gid>_<vid>`: VK documents the id form `{owner_id}_{video_id}` with negative community ids ([video.get](https://dev.vk.com/ru/method/video.get)) but no URL form — **UNCONFIRMED**; the rollout capture verifies both open the publication.
 - **Not stored**: `created_by` (the admin who posted — personal data), `signer_id`, `from_id`, `views`, `likes`, `reposts`, the video `player` URL and the raw object.
 - **Edits and deletions** have no event ([community events](https://dev.vk.com/ru/api/community-events/json-schema)); wall posts are re-read by the reconcile, videos are not (`video.get` gated) — the known limit of the requirements.
 - **Clips**: VK documents no clips method and only the `type` values `video`, `music_video`, `movie`, `story` ([video object](https://dev.vk.com/ru/reference/objects/video)); slice 3 reads no clips. If a clip arrives as a `video_new` of `type = video`, it is a video like any other.
@@ -659,7 +658,7 @@ sequenceDiagram
 
 - **Referenced, not copied.** VK Rules §1.6 forbids downloads from VK servers «с целью… создания автономных хранилищ», §2.1 allows caching for speed ([Rules](https://dev.vk.com/ru/rules)); «Room for network connectors» above already names VK as the referenced case. The entry stores the VK image URL in `image_url` (the slice-1 column; `image_ref` null), and the read returns it unsigned.
 - **Stability**: VK states nothing about the lifetime of photo `sizes[]` or video `image[]` URLs — **UNCONFIRMED** — so it is never relied on: the hourly reconcile rewrites the preview URL of every returned post. A video preview comes only from `video_new` and is not refreshable; if it fails to load, the card renders its no-image layout (EARS-49).
-- **CSP**: the Academy host `img-src` gains the VK image hosts actually returned; the rollout records them from the first real Callback and reconcile payloads before the card package's CSP change is set (Rollout step 5).
+- **No CSP to widen**: the Academy (`apps/portal`) serves no Content-Security-Policy today — its `next.config.ts` `headers()` sets only `Referrer-Policy` on `/login`, and the only `img-src` in the repository is the login host's (`apps/login/lib/host-headers.ts`). There is no `img-src` to widen, so referenced VK previews load under the Academy's current headers. Introducing a CSP for the Academy is out of scope of slice 3: it is a separate decision, not tracked here.
 - **Visitor-side consequence** (lead security trade-off): a visitor's browser loads the preview image from VK's servers, so VK sees the visitor's IP address and the Academy page as referrer for that image request. Accepted, because VK is an RF operator, the image is public content of our own post, and the card sends `referrerpolicy="no-referrer"` on the image; the alternative — copying — is what §1.6 rules out.
 
 ### Reconcile (EARS-45)
@@ -691,11 +690,11 @@ Hourly (`@Cron`) and on add / edit / switch-on, for each switched-on VK source:
 | the month's calls ≥ 8 000                                                                     | «Лимит вызовов VK почти исчерпан»            |
 | timeout / network error                                                                       | «VK недоступен»                              |
 
-The «VK не присылает новые записи» rule detects a Callback server that is down or unconfirmed without any community key: the reconcile sees what the Callback should have delivered. The binding rule and VK's own error text follow slice 2 (EARS-44; the error goes to the log, not to the admin).
+The «VK не присылает новые записи» rule detects a Callback server that is down or unconfirmed without any community key: the reconcile sees what the Callback should have delivered. The write that binds `vk_group_id` also sets `vk_last_event_at` to the binding time, so the posts the first reconcile copies from before the binding never raise the reason, while a post published after the binding and before the Callback server is confirmed does (the expected pre-confirmation reason, Rollout step 5). The rule can also show falsely for up to one hour — until the next reconcile writes no such post — when the reconcile writes a published scheduled post or an accepted suggested post, because whether VK sends `wall_post_new` for those is **UNCONFIRMED** (research); the administrator reads it as a warning, not as proof that the Callback is down. The binding rule and VK's own error text follow slice 2 (EARS-44; the error goes to the log, not to the admin).
 
 ### Call budget (slice 3)
 
-Per source per month: about 720 `wall.get` (reconcile) and about 720 `groups.getById` (check), plus the one-off import of ⌈posts / 100⌉ calls — about 1.5 k against the 10 000 unverified cap per VK ID business-cabinet account ([Rules](https://dev.vk.com/ru/rules): «без верификации бизнес-профиля — 10 000», after verification 100 000 000). Incoming Callback deliveries are not «вызовы методов» on the wording; that the cap does not count them is **UNCONFIRMED**. `vk-api.client.ts` increments `feed_vk_call_months` per call; «Источники» shows the month's total; the check warns at 8 000 and the import stops before it. Business-profile verification is therefore not needed; it becomes a named trigger only if a later connector multiplies the calls (PRD «Delivery slices» item 3).
+Per source per month: about 720 `wall.get` (reconcile) and about 720 `groups.getById` (check), plus the one-off import of ⌈posts / 100⌉ calls — about 1.5 k against the 10 000 unverified cap per VK ID business-cabinet account ([Rules](https://dev.vk.com/ru/rules): «без верификации бизнес-профиля — 10 000», after verification 100 000 000). Incoming Callback deliveries are not «вызовы методов» on the wording; that the cap does not count them is **UNCONFIRMED**. `vk-api.client.ts` increments the current month's single `feed_vk_call_months` row per call (the cap is per account, so the counter is too); «Источники» shows the month's total; the check warns at 8 000 and the import stops before it. Business-profile verification is therefore not needed; it becomes a named trigger only if a later connector multiplies the calls (PRD «Delivery slices» item 3).
 
 ### One-off history import (EARS-46)
 
@@ -794,12 +793,15 @@ flowchart LR
 
 Its own Issue (repo-conventions «Deferred prod action»), executed after the code packages are released; the PR that releases the connector links it in prose. Steps and owners:
 
+The order follows the route's own rules: the route answers `404` until all three VK variables are configured (EARS-39), the source check binds the community id only once they are (EARS-44), and a `confirmation` is answered with the string only for a bound community (EARS-39) — so the variables come first, the binding second, the confirmation third.
+
 1. Owner / marketing: create the app in the VK ID business cabinet and hand its service key to the lead through the secret channel.
-2. The lead generates `VK_CALLBACK_SECRET`; a platform administrator adds `vk.ru/bbm.academy` in «Источники»; with the key configured, the check run at the add binds `vk_group_id` — evidence: status «Работает» or «VK не присылает новые записи» (no Callback yet), never «Сообщество не найдено».
-3. The lead checks from `api-prod` that `https://api.vk.com/method/groups.getById` answers with the production key — evidence: the redacted response.
-4. A community administrator of `vk.ru/bbm.academy` opens the community settings → Работа с API → Callback API, enters the URL of the production API host's `/v1/integrations/vk/callback`, the secret key from the lead, the pinned API version and the events `wall_post_new` and `video_new` only, and passes the confirmation string to the lead; the lead puts `VK_SERVICE_KEY`, `VK_CALLBACK_SECRET` and `VK_CALLBACK_CONFIRMATION` into the production runtime config (an env change, redeployed on the owner's word); the community administrator then presses «Подтвердить» — evidence: the server shown as confirmed in the settings and a log line `confirmation answered`.
-5. The lead runs the import once — evidence: the printed counts; a second run printing `written: 0`; the VK image hosts seen in the stored `image_url`s recorded and set in the Academy `img-src`.
-6. Post-release acceptance: a fresh wall post and a fresh VK Видео video appear in the Academy rail and open `vk.com/wall-…` and `vk.com/video-…` in a new tab (this verifies the permalink forms) — evidence: a capture.
+2. A community administrator of `vk.ru/bbm.academy` opens the community settings → Работа с API → Callback API, reads the confirmation string shown there without saving or confirming a server, and passes it to the lead; the lead generates `VK_CALLBACK_SECRET` and passes it to the community administrator — evidence: both handed over through the secret channel (values not recorded).
+3. The lead puts `VK_SERVICE_KEY`, `VK_CALLBACK_SECRET` and `VK_CALLBACK_CONFIRMATION` into the production runtime config (an env change, redeployed on the owner's word), then checks from `api-prod` that `https://api.vk.com/method/groups.getById` answers with the production key — evidence: the redeploy record and the redacted response.
+4. A platform administrator adds `vk.ru/bbm.academy` in «Источники»; the check run at the add binds `vk_group_id` — evidence: the source listed with its bound community id and status «Работает» (or, if a post was published after the binding and an hourly check ran before step 5, «VK не присылает новые записи», the expected pre-confirmation reason); never «VK не подключён на сервере» or «Сообщество не найдено».
+5. The community administrator enters the URL of the production API host's `/v1/integrations/vk/callback`, the secret key from the lead, the pinned API version and the events `wall_post_new` and `video_new` only, saves, and presses «Подтвердить»; the confirmation succeeds because the community is now bound — evidence: the server shown as confirmed in the settings and a log line `confirmation answered`.
+6. The lead runs the import once — evidence: the printed counts; a second run printing `written: 0`.
+7. Post-release acceptance: a fresh wall post and a fresh VK Видео video appear in the Academy rail and open `vk.com/wall-…` and `vk.com/video-…` in a new tab (this verifies the permalink forms) — evidence: a capture.
 
 ### Lead decisions (slice 3)
 
@@ -809,12 +811,12 @@ Its own Issue (repo-conventions «Deferred prod action»), executed after the co
 4. **Keys and config**: `VK_SERVICE_KEY` (VK ID business-cabinet app, no expiry, server-only), `VK_CALLBACK_SECRET`, `VK_CALLBACK_CONFIRMATION`; all optional at boot, absence = connector off; never in a client bundle, response or log. `vk/vk-api.client.ts` is the only caller of `https://api.vk.com/method/*`, `wall.get` and `groups.getById` only, a pinned API version, Zod-validated responses, the key redacted (EARS-51).
 5. **One VK publication = one card**: a wall post (`post_type = post`, empty `copy_history`) → `post` with text, the first photo's largest size ≤ 1280 px or else the first video's cover, `duration` for a video medium, «BBM Academy · VK»; a `video_new` (`type = video`, not live) → the new `video` member, title, `image[]`, `duration`, «BBM Academy · VK Видео»; a video held as an attachment of a held post, or arriving later as one, shows once as the post — the post absorbs the video entry through `feed_entry_vk_objects` keyed `(feed_source_id, object_kind, vk_object_id)`. Dropped and logged: reposts (the slice-2 forward precedent), `postpone` / `suggest` / `reply`, `wall_repost`, `wall_schedule_*`, live streams, other video types, empty posts. Video edits and deletions are not observable (`video.get` gated): the administrator hides the video, a known limit (EARS-41…EARS-43).
 6. **VK clips**: no documented read route (no clips method; `type` documents only video / music_video / movie / story); slice 3 reads no clips, and a clip posted on the wall as a post is a post — the answer to the PRD open question.
-7. **Previews are referenced, not copied** (VK Rules §1.6 «автономных хранилищ»; «Room for network connectors»): `image_url` holds the VK URL, `image_ref` null; the reconcile refreshes post preview URLs so their stability (UNCONFIRMED) is never relied on; a video preview is not refreshable and a load failure renders the no-image layout; the Academy `img-src` gains the VK image hosts the rollout records. The visitor's browser loading the image from VK is accepted as a lead security trade-off: VK is an RF operator, the image is public content of our own post, and the image is requested with no referrer (Preview).
+7. **Previews are referenced, not copied** (VK Rules §1.6 «автономных хранилищ»; «Room for network connectors»): `image_url` holds the VK URL, `image_ref` null; the reconcile refreshes post preview URLs so their stability (UNCONFIRMED) is never relied on; a video preview is not refreshable and a load failure renders the no-image layout; the Academy serves no Content-Security-Policy today, so there is no `img-src` to widen and the previews load under its current headers — an Academy CSP is a separate decision outside slice 3. The visitor's browser loading the image from VK is accepted as a lead security trade-off: VK is an RF operator, the image is public content of our own post, and the image is requested with no referrer (Preview).
 8. **Address and binding**: `vk.com/<screen_name>`, `vk.ru/<screen_name>`, `club<id>`, `public<id>`, normalized to the lowercase screen name; `groups.getById` on add and hourly binds `vk_group_id`, from then on the id decides; a rename shows «Адрес сообщества изменился на vk.com/<имя>»; the reasons mirror slice 2: not configured / not found / address changed / no Callback event while newer posts exist (a Callback-down signal needing no community key) / VK unreachable / call budget near the cap (EARS-38, EARS-44).
-9. **Permalinks** `https://vk.com/wall-<gid>_<pid>` and `https://vk.com/video-<gid>_<vid>`, UNCONFIRMED by an official doc (VK's own share-link form), verified by the rollout capture.
+9. **Permalinks** `https://vk.com/wall-<gid>_<pid>` and `https://vk.com/video-<gid>_<vid>`, UNCONFIRMED by an official doc, verified by the rollout capture.
 10. **Backfill**: the one-off `vk/vk-history-import.command.ts` pages `wall.get` by offset over the whole wall, is idempotent on the dedup table and refuses an unbound source; standalone videos uploaded before the Callback existed are not backfilled (`video.get` gated), a known limit (EARS-46).
 11. **Retention** as slice 2: card data only, nothing personal (`created_by`, `signer_id`, `from_id` not stored), kept while the source row exists.
-12. **Rollout** is its own deferred-prod-action Issue with steps and owners (owner / marketing: the VK ID app and its service key; a community administrator: the Callback server and the confirmation string; the lead: production config on the owner's word, the `api-prod` reachability check, the source, the import twice, the capture). CI and stage use a VK double and a test community.
+12. **Rollout** is its own deferred-prod-action Issue with steps and owners (owner / marketing: the VK ID app and its service key; a community administrator: the Callback server and the confirmation string; the lead: production config on the owner's word, the `api-prod` reachability check, the import twice, the capture; a platform administrator: the source — in the order config → binding → confirmation). CI and stage use a VK double and a test community.
 13. **Admin** — no new page: «Источники» and «Публикации» of slice 2 gain the VK platform, reasons, call count and «Удалён в VK», approved-non-canvas, copy by the lead.
 14. **Academy** — the two VK variants render inside the slice-1 `FeedCard` and rail (ADR-0013 §A1); drawn on `unit-feed-card.dc.html` but outside the 2026-11-11 Stage-A approval, so their package waits for the owner's Stage-A pick of those two variants.
 15. **Storefronts** — `academy-only`: the doctor storefront shows nothing of the feed (EARS-17 holds).

@@ -14,13 +14,13 @@ lang: en
 
 023 adds no package: everything lands in `packages/learning` (`@ds/learning`, 024 design §1) next to the 024 model.
 
-| Subpath    | 023 adds                                                                                                                                                                                                                       |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `.`        | The `module.reward` setting key and its platform seed (EARS-2); the school-status and course-state derivations over the 024 evaluator (EARS-3); RU copy of the school screen.                                                  |
-| `./server` | The school read, the review and mentoring services, the module/course-done listener that requests 038 documents (EARS-14), the admin school / course / module editor endpoints.                                                |
-| `./client` | `/v1/learning/schools/*`, `/v1/me/learning/reviews`, `/v1/me/learning/mentoring-requests`.                                                                                                                                     |
-| `./ui`     | `SchoolScreen` per `design-source/doctor-school.dc.html` (course cards via the 018 `unit-content-card`, events via `unit-event-card`), `CourseHeader` over 024 `CoursePath`; the single-module mode of `CoursePath` (EARS-12). |
-| `./admin`  | `SchoolEditor`, `CourseStructureEditor`, `ReviewModeration` — `@ds/design-system` primitives and the 012 list/form compositions; module reward and club in completion edit through 024 `RulesEditor` fields.                   |
+| Subpath    | 023 adds                                                                                                                                                                                                                                                                                                                |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.`        | The `module.reward` setting key and its platform seed (EARS-2); the school-status and course-state derivations over the 024 evaluator (EARS-3); RU copy of the school screen.                                                                                                                                           |
+| `./server` | The school read, the review and mentoring services, the module/course-done listener that requests 038 documents (EARS-14), the admin school / course / module editor endpoints.                                                                                                                                         |
+| `./client` | `/v1/learning/schools/*`, `/v1/me/learning/reviews`, `/v1/me/learning/mentoring-requests`.                                                                                                                                                                                                                              |
+| `./ui`     | `SchoolScreen` per `design-source/doctor-school.dc.html` (course cards as the 018 content card `FeedCard` (`packages/design-system/src/blocks/feed-card.tsx`; the canvas's `unit-content-card`), events via `unit-event-card`), `CourseHeader` over 024 `CoursePath`; the single-module mode of `CoursePath` (EARS-12). |
+| `./admin`  | `SchoolEditor`, `CourseStructureEditor`, `ReviewModeration` — `@ds/design-system` primitives and the 012 list/form compositions; module reward and club in completion edit through 024 `RulesEditor` fields.                                                                                                            |
 
 `apps/doctor` adds `app/schools/[schoolSlug]/page.tsx` and host-config fields; the course route is 024's. `apps/admin` adds route files under `app/learning/schools/`. `apps/portal` adds nothing (EARS-24).
 
@@ -85,7 +85,7 @@ sequenceDiagram
   participant O as 038 issuance
   P->>R: resolve module.reward(module)
   alt reward includes points
-    P->>E: acceptWithin(tx, module.completed {mode})
+    P->>E: record(tx, module.completed {mode})
   end
   P-->>L: ModuleCompleted (after commit)
   opt reward includes document
@@ -147,6 +147,6 @@ Problems are RFC 7807: `REVIEW_NOT_GRADUATE` (403), `MENTORING_NOT_ELIGIBLE` (40
 ## 10. Dependencies
 
 - **024** — every row, the resolver, the evaluator, the projector, the path block and the admin envelope (slice 1: 024 «First course path»; slice 2: 024 «Rules editor and live changes»).
-- **018** — `unit-content-card` and the «урок дня» link (slice 1). **017** — the doctor's specialties and the shell (slices 1, 3). **021** — the registration return (slice 3).
+- **018** — the content card `FeedCard` (`packages/design-system/src/blocks/feed-card.tsx`) and the «урок дня» link (slice 1). **017** — the doctor's specialties and the shell (slices 1, 3). **021** — the registration return (slice 3).
 - **037** — the verification status and upload entry; **038** — document issuance (slice 4).
 - **020** — the club events (slices 2, 6). **032** — partner organisations (slice 1). **047** — the content-editing grant; **010** — change audit; **012** — admin compositions, idempotency and `If-Match`.

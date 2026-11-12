@@ -89,7 +89,7 @@ sequenceDiagram
       V-->>P: statuses
       P->>P: diff vs learning_node_status; upsert changed rows (cause = fact)
       opt lesson / module first turns done
-        P->>E: acceptWithin(tx, lesson.completed | module.completed {mode})
+        P->>E: record(tx, lesson.completed | module.completed {mode})
       end
       I->>I: COMMIT
       P->>E: publishAfterCommit(); publish StepCompleted / TestPassed / CourseCompleted
@@ -179,6 +179,6 @@ Problems are RFC 7807: `LEARNING_STEP_LOCKED` (403), `LEARNING_ATTEMPT_UNAVAILAB
 ## 11. Dependencies
 
 - **017** — doctor shell and the session on `apps/doctor` (slice 1).
-- **025** — `PointsEngine.acceptWithin` and the two fact types, live since release-2026.11.07-1 (slice 1).
+- **025** — `PointsEngine.record(tx, fact)` (the overload that records inside the producer's transaction as a savepoint; publication follows that transaction's commit) and the two fact types, on `main` since #3858 and in the release tags from release-2026.11.10-1 (slice 1).
 - **023** — the school screen, the course header and the structure editor build on slice 1's school, course and module rows; 023 does not block 024.
 - **032** — the organisation registry (slice 3). **021** — the registration return target (slice 5). **047 / 049** — the staff-role grant in «Доступы» (slice 2). **010** — change audit. **012** — media contract, admin list/form compositions, idempotency and `If-Match`.

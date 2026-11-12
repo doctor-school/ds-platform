@@ -63,20 +63,21 @@ value must be in custody.
 Every other key in the three templates. Each has a reissue path; the bundle still
 carries the current values so a restore does not have to reissue them.
 
-| Key(s)                                                                                                                                                   | Reissue path                                                                                                                                                                                                                        | Side effect of reissue                                                                                                                |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `ds` DB password: `POSTGRES_PASSWORD` (data.env) = the one in `DATABASE_URL` (api.env) = `ZITADEL_DATABASE_POSTGRES_{USER,ADMIN}_PASSWORD` (zitadel.env) | The restored cluster keeps the old role password, so after a restore either use the bundle value or `ALTER ROLE ds PASSWORD …` inside the cluster and write the same new value into all three files (README → «Apply order» step 6) | api and Zitadel restart                                                                                                               |
-| `PGBACKREST_REPO1_S3_{BUCKET,ENDPOINT,KEY,KEY_SECRET}` (data.env), uploads S3 keys                                                                       | `terraform output -raw …` (README → «Apply order» step 6, DD-6; `infra/deploy/terraform/outputs.tf`); `PGBACKREST_REPO1_S3_REGION` is the fixed `ru-1`                                                                              | none for data; the bucket name must stay the one holding the repo                                                                     |
-| `IDP_SERVICE_TOKEN`                                                                                                                                      | a new PAT of the `ds-bootstrap` machine user (README → Zitadel init step)                                                                                                                                                           | none                                                                                                                                  |
-| `IDP_CLIENT_ID` / `IDP_CLIENT_SECRET` / `IDP_PROJECT_ID`                                                                                                 | `idp/provision.sh` (README → init step)                                                                                                                                                                                             | in-flight OIDC logins restart                                                                                                         |
-| `IDP_ACADEMY_CLIENT_KEY` / `IDP_DOCTOR_CLIENT_KEY` / `INTERNAL_API_TOKEN` (`api-sign-in.env`, `internal.env`)                                            | tool-written: the release's pre-swap IdP converge (`provision.sh` step 3.bis.2) re-mints them                                                                                                                                       | none beyond the release                                                                                                               |
-| `IDP_WEBHOOK_SECRET`                                                                                                                                     | `openssl rand -hex 32` into api.env and the Zitadel Action                                                                                                                                                                          | mirror sync 401s until both match; the periodic sweep backstops it                                                                    |
-| `LIFECYCLE_IMPACT_TOKEN_SECRET`                                                                                                                          | `openssl rand -hex 32`                                                                                                                                                                                                              | in-flight taxonomy preview tokens are invalid; operators re-confirm                                                                   |
-| `CENTRIFUGO_API_KEY` + `CENTRIFUGO_HTTP_API_KEY`; `CENTRIFUGO_TOKEN_HMAC_SECRET` + `CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY`                             | `openssl rand -hex 32` each; each pair byte-equal                                                                                                                                                                                   | rotating the HMAC is a **deliberate session invalidation** of every live realtime connection token; clients reconnect with new tokens |
-| `IDP_SMTP_REAL_PASSWORD`                                                                                                                                 | a new app password in the mail provider's console (`smtp-activation.md`)                                                                                                                                                            | mail stops until both api and Zitadel (`provision.sh`) have it                                                                        |
-| `SMSAERO_EMAIL` / `SMSAERO_API_KEY`                                                                                                                      | the SMS Aero console                                                                                                                                                                                                                | none                                                                                                                                  |
-| `SMARTCAPTCHA_SERVER_KEY`                                                                                                                                | the SmartCaptcha console (server half; the site half goes in the compose `.env`)                                                                                                                                                    | none                                                                                                                                  |
-| `SENTRY_DSN`                                                                                                                                             | the GlitchTip project UI (README → «GlitchTip error monitoring»)                                                                                                                                                                    | none (optional; absent ⇒ no-op)                                                                                                       |
+| Key(s)                                                                                                                                                   | Reissue path                                                                                                                                                                                                                                                                                                                                                  | Side effect of reissue                                                                                                                |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `ds` DB password: `POSTGRES_PASSWORD` (data.env) = the one in `DATABASE_URL` (api.env) = `ZITADEL_DATABASE_POSTGRES_{USER,ADMIN}_PASSWORD` (zitadel.env) | The restored cluster keeps the old role password, so after a restore either use the bundle value or `ALTER ROLE ds PASSWORD …` inside the cluster and write the same new value into all three files (README → «Apply order» step 6)                                                                                                                           | api and Zitadel restart                                                                                                               |
+| `PGBACKREST_REPO1_S3_{BUCKET,ENDPOINT}` (data.env), uploads S3 keys                                                                                      | `terraform output -raw …` (README → «Apply order» step 6, DD-6; `infra/deploy/terraform/outputs.tf`); `PGBACKREST_REPO1_S3_REGION` is the fixed `ru-1`                                                                                                                                                                                                        | none for data; the bucket name must stay the one holding the repo                                                                     |
+| `PGBACKREST_REPO1_S3_{KEY,KEY_SECRET}` (data.env)                                                                                                        | a new access key of the restricted S3 user `ds-data-prod-pgbackrest` (README → «Apply order» step 6, «The restricted pgBackRest S3 user»; swap: README → «Rotating the box's pgBackRest S3 key»). The `pgbackrest_s3_*_key` Terraform outputs are the account's main S3 key: they recreate that user or change the bucket configuration and never go on a box | the DB restarts for seconds; re-bundle (§2)                                                                                           |
+| `IDP_SERVICE_TOKEN`                                                                                                                                      | a new PAT of the `ds-bootstrap` machine user (README → Zitadel init step)                                                                                                                                                                                                                                                                                     | none                                                                                                                                  |
+| `IDP_CLIENT_ID` / `IDP_CLIENT_SECRET` / `IDP_PROJECT_ID`                                                                                                 | `idp/provision.sh` (README → init step)                                                                                                                                                                                                                                                                                                                       | in-flight OIDC logins restart                                                                                                         |
+| `IDP_ACADEMY_CLIENT_KEY` / `IDP_DOCTOR_CLIENT_KEY` / `INTERNAL_API_TOKEN` (`api-sign-in.env`, `internal.env`)                                            | tool-written: the release's pre-swap IdP converge (`provision.sh` step 3.bis.2) re-mints them                                                                                                                                                                                                                                                                 | none beyond the release                                                                                                               |
+| `IDP_WEBHOOK_SECRET`                                                                                                                                     | `openssl rand -hex 32` into api.env and the Zitadel Action                                                                                                                                                                                                                                                                                                    | mirror sync 401s until both match; the periodic sweep backstops it                                                                    |
+| `LIFECYCLE_IMPACT_TOKEN_SECRET`                                                                                                                          | `openssl rand -hex 32`                                                                                                                                                                                                                                                                                                                                        | in-flight taxonomy preview tokens are invalid; operators re-confirm                                                                   |
+| `CENTRIFUGO_API_KEY` + `CENTRIFUGO_HTTP_API_KEY`; `CENTRIFUGO_TOKEN_HMAC_SECRET` + `CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY`                             | `openssl rand -hex 32` each; each pair byte-equal                                                                                                                                                                                                                                                                                                             | rotating the HMAC is a **deliberate session invalidation** of every live realtime connection token; clients reconnect with new tokens |
+| `IDP_SMTP_REAL_PASSWORD`                                                                                                                                 | a new app password in the mail provider's console (`smtp-activation.md`)                                                                                                                                                                                                                                                                                      | mail stops until both api and Zitadel (`provision.sh`) have it                                                                        |
+| `SMSAERO_EMAIL` / `SMSAERO_API_KEY`                                                                                                                      | the SMS Aero console                                                                                                                                                                                                                                                                                                                                          | none                                                                                                                                  |
+| `SMARTCAPTCHA_SERVER_KEY`                                                                                                                                | the SmartCaptcha console (server half; the site half goes in the compose `.env`)                                                                                                                                                                                                                                                                              | none                                                                                                                                  |
+| `SENTRY_DSN`                                                                                                                                             | the GlitchTip project UI (README → «GlitchTip error monitoring»)                                                                                                                                                                                                                                                                                              | none (optional; absent ⇒ no-op)                                                                                                       |
 
 The remaining template entries (`REDIS_URL`, `IDP_ISSUER`, `IDP_REDIRECT_URI`,
 origins, delivery modes, `CONGRESS_SIGNUP_*`, `SMSAERO_SIGN`, `CENTRIFUGO_URL`,
@@ -94,9 +95,24 @@ not secrets; their values are in the templates or derive from the environment.
 - **Fresh-host DR drill not run.** §4 (recreate both boxes and restore) has never
   been exercised end to end; it, backup verification, alerts and a quarterly drill
   are #3671.
-- **One provider, no immutability.** The repository lives in one Timeweb S3 bucket
-  with no Object Lock (#3669), and there is no second repository (`repo2` at a
-  foreign provider, #3670) yet. The spec's backup topology is rewritten in #3672.
+- **One provider.** The repository lives in one Timeweb S3 bucket, and there is no
+  second repository (`repo2` at a foreign provider, #3670) yet. The spec's backup
+  topology is rewritten in #3672. The bucket itself is immutable for 8 days:
+  versioning is `Enabled` and Object Lock is `COMPLIANCE` with a default retention of
+  8 days, both irreversible (versioning can never be suspended, the lock can never be
+  removed). Its lifecycle rules are `abort-incomplete-multipart` (7 days),
+  `noncurrent-versions-2d` (noncurrent versions expire after 2 days, expired delete
+  markers are removed) and `recovery-bundle-keep-90d` (prefix `recovery-bundle/`,
+  expires after 90 days). A wipe or overwrite therefore leaves the previous versions
+  readable for 8 days (§4.1). 8 days is 7 daily fulls plus one: a wipe empties the
+  bucket listing, and BBM monitoring (group `s3-backups-ds`) raises
+  `PgBackRestFullBackupStale`, `PgBackRestIncrementalBackupStale` or
+  `S3BackupProbeFailed-ds` within about 1–2 hours. Objects written before the lock
+  carry none (`VersionId null`); the backup set is fully protected once daily fulls
+  have replaced them, about 7 days after the lock. Versions count toward the billed
+  bucket size (about 1.3× the current set). Locked buckets need pgBackRest ≥ 2.55.1,
+  version paging ≥ 2.59.2; both containers run 2.59.3, and the unpinned images are
+  #3992.
 - **Restore proof runs on the source host.** The automated drill (§3) restores a
   throw-away copy on ds-data-prod itself; a restore onto a different host is the
   fresh-host drill above.
@@ -149,8 +165,9 @@ ds-api-prod, the same key and forced command as `prod-observe.yml`) and runs two
 
 Nothing automated can decrypt a bundle: no box, no CI job and no agent holds an
 identity. The log carries status lines only; the repository is public and no artifact
-is uploaded. Nothing on the boxes deletes old bundles; a provider lifecycle rule on
-the prefix is tracked in `DEBT.md`.
+is uploaded. Nothing on the boxes deletes old bundles, and the box's S3 key cannot
+(README → «The restricted pgBackRest S3 user»): the bucket's lifecycle rule
+`recovery-bundle-keep-90d` expires objects under `recovery-bundle/` after 90 days.
 
 **A bucket failure.** A failed bucket call fails the verb with one fixed reason,
 `ds-recovery: the upload to the bucket failed (<why>)` or
@@ -584,6 +601,43 @@ Each step is an existing section; this list only orders them.
    box has a new fingerprint key, so its first check after the rebuild reports
    `MISMATCH fingerprint-key` until it has bundled once. Record the drill outcome
    on #3671.
+
+### 4.1 Restore after the repository was tampered with
+
+When the repository's current objects were deleted or overwritten, a plain
+`pgbackrest info` fails with `cipher header invalid` or `backup.info cannot be
+opened`. The locked previous versions (§1.4 «One provider») stay readable for 8 days:
+read the repository as it was at a time before the attack. `--repo-target-time`
+needs `--repo=1`; without it pgBackRest refuses with
+`option 'repo-target-time' not valid without option 'repo'`.
+
+1. **Pick the target time** with a margin after the last good operation (the last
+   backup, expire or archive-push before the attack). A backup expired seconds before
+   the target still shows as a `verify` warning.
+2. **Read the repository at that time** (the one-shot `docker run` of README →
+   «Rollback», with these options in place of `restore`):
+
+   ```bash
+   pgbackrest --stanza=ds --repo=1 --repo-target-time="YYYY-MM-DD HH:MM:SS+00" info
+   pgbackrest --stanza=ds --repo=1 --repo-target-time="YYYY-MM-DD HH:MM:SS+00" verify
+   ```
+
+3. **Restore** with the same two options, as README → «Rollback» (postgres stopped,
+   `--delta`), or into an empty volume as in §4 step 3:
+
+   ```bash
+   pgbackrest --stanza=ds --repo=1 --repo-target-time="YYYY-MM-DD HH:MM:SS+00" --delta restore
+   ```
+
+   `restore` writes both options into `restore_command`, so WAL replay reads the
+   archive at the same point in time.
+
+4. **Afterwards.** Start postgres, confirm the data, then check that the box's S3 key
+   is still the restricted one (README → «Rotating the box's pgBackRest S3 key»; swap
+   it when it may have leaked) and run `pgbackrest --stanza=ds check`.
+
+The procedure was proven on a throw-away bucket: every current object deleted and
+`backup.info` overwritten, then a restore brought the cluster up with its data.
 
 Related: `infra/deploy/README.md` («Apply order», «Rollback»),
 `infra/deploy/compose/data-prod/README.md` («Secrets»),

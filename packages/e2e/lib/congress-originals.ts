@@ -9,7 +9,7 @@ import {
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { request } from "node:http";
-import { dirname, resolve, isAbsolute, relative } from "node:path";
+import { dirname, resolve, isAbsolute } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn, execFileSync } from "node:child_process";
@@ -17,6 +17,7 @@ import { expect } from "@playwright/test";
 import type { DrizzleHandle } from "@ds/db";
 import { congressBackgrounds } from "./congress-originals-report.js";
 import { closeCongressResources } from "./congress-fixture-cleanup.js";
+import { ownedCongressDirectory } from "./congress-directory.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const apiRequire = createRequire(resolve(root, "apps/api/package.json"));
@@ -26,11 +27,12 @@ const assets = resolve(root, "packages/e2e/congress-originals");
 const sha = (value: string | Buffer) =>
   createHash("sha256").update(value).digest("hex");
 export function congressDirectory(): string {
-  const dir = process.env.E2E_CONGRESS_DIR;
-  if (!dir || !isAbsolute(dir) || relative(tmpdir(), dir).startsWith(".."))
-    throw new Error(
-      "Congress artifacts require an absolute owned temporary directory",
-    );
+  const dir = ownedCongressDirectory(
+    process.env.E2E_CONGRESS_DIR,
+    tmpdir(),
+    process.env.RUNNER_TEMP,
+    process.env.CI,
+  );
   mkdirSync(dir, { recursive: true });
   return dir;
 }

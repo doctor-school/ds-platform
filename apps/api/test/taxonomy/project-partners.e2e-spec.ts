@@ -875,6 +875,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "isPrimary",
         "primaryPartner",
         "slug",
+        "stage",
         "title",
       ]);
     });

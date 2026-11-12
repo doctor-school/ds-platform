@@ -3,3 +3,4 @@ export * from "./slugify.js";
 export * from "./organisation.js";
 export * from "./organisation-role.js";
 export * from "./project-output-kind.js";
+export * from "./public-project.js";

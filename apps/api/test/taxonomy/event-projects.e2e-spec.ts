@@ -533,6 +533,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
             "id",
             "primaryPartner",
             "slug",
+            "stage",
             "title",
           ].sort(),
         );

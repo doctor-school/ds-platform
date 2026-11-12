@@ -11170,6 +11170,39 @@
         "tags": ["PartnerProjectsPublic"]
       }
     },
+    "/v1/public/projects": {
+      "get": {
+        "operationId": "PublicProjectsController_catalog",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PublicProjects"]
+      }
+    },
+    "/v1/public/projects/{idOrSlug}": {
+      "get": {
+        "operationId": "PublicProjectsController_project",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PublicProjects"]
+      }
+    },
     "/v1/public/projects/{idOrSlug}/events": {
       "get": {
         "operationId": "ProjectEventsPublicController_events",
@@ -11231,6 +11264,39 @@
           }
         },
         "tags": ["ProjectPartnersPublic"]
+      }
+    },
+    "/v1/public/projects/{idOrSlug}/results": {
+      "get": {
+        "operationId": "PublicProjectsController_results",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PublicProjects"]
+      }
+    },
+    "/v1/public/projects/scale": {
+      "get": {
+        "operationId": "PublicProjectsController_scale",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PublicProjects"]
       }
     },
     "/v1/public/specialties": {

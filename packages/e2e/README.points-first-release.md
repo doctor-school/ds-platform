@@ -21,3 +21,9 @@ with no OTP, login or provider journey. Full independent table snapshots include
 orphan keys/postings and system settlement legs. Resources are captured before
 closing each runtime; the lead accepts proof before owned cleanup. Existing
 native suites remain complements; no app-local tests were removed.
+
+Each scenario retires only its owned events through the shared soft-retirement
+helper. The resource receipt retains the events and verifies their retired and
+soft-deleted state, while all six financial tables and owned prices remain
+unchanged. The strict checker requires these receipts for both the narrow and
+full runs so test events cannot pollute later event-feed checks.

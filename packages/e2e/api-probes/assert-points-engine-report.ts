@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import {
   assertPointsEngineReport,
   assertPointsFirstReleaseReport,
+  assertPointsFirstReleaseResources,
   pointsFirstRelease,
   assertPointsLifecycleBoundariesReport,
   assertPointsBackgrounds,
@@ -71,6 +72,12 @@ const log = process.env.E2E_POINTS_OPS_LOG;
 if (!log)
   throw new Error("E2E_POINTS_OPS_LOG is required for Background proof");
 assertPointsBackgrounds(readFileSync(log, "utf8"), titles);
+if (!scope || scope === "--first-release") {
+  const resources = process.env.E2E_POINTS_RESOURCE_REPORT;
+  if (!resources)
+    throw new Error("E2E_POINTS_RESOURCE_REPORT is required for cleanup proof");
+  assertPointsFirstReleaseResources(readFileSync(resources, "utf8"));
+}
 console.log(
   `025: exactly ${scope ? 3 : 24} originals passed; failures/skips/flakes/retries=0/0/0/0`,
 );

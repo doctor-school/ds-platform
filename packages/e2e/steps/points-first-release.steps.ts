@@ -6,6 +6,7 @@ import { completePointsSnapshot } from "../lib/points-first-release.js";
 import {
   pointsOperation,
   prepareDoctor,
+  retirePointsEvents,
   type EngineFact,
   type PointsWorld,
 } from "../lib/points-engine-originals.js";
@@ -126,6 +127,36 @@ async function noAttempt(p: PointsWorld, f: EngineFact) {
     ).toEqual([]);
 }
 After("@points-first-release", async ({ points: p }) => {
+  const snapshot = await completePointsSnapshot(p.handle.pool);
+  const prices = await query(
+    p,
+    "SELECT * FROM points_prices WHERE item_ref=ANY($1::text[]) ORDER BY item_ref",
+    [p.ownedEventIds],
+  );
+  await retirePointsEvents(p);
+  expect(
+    await query(
+      p,
+      "SELECT id FROM events WHERE id=ANY($1::uuid[]) AND (record_status <> 'retired' OR deleted_at IS NULL)",
+      [p.ownedEventIds],
+    ),
+  ).toEqual([]);
+  const snapshotAfter = await completePointsSnapshot(p.handle.pool);
+  const pricesAfter = await query(
+    p,
+    "SELECT * FROM points_prices WHERE item_ref=ANY($1::text[]) ORDER BY item_ref",
+    [p.ownedEventIds],
+  );
+  expect(snapshotAfter).toEqual(snapshot);
+  expect(pricesAfter).toEqual(prices);
+  const events = await query(
+    p,
+    "SELECT id,record_status,deleted_at FROM events WHERE id=ANY($1::uuid[]) ORDER BY id",
+    [p.ownedEventIds],
+  );
+  expect(events.map((row) => row.id).sort()).toEqual(
+    [...p.ownedEventIds].sort(),
+  );
   const file = process.env.E2E_POINTS_RESOURCE_REPORT;
   if (!file)
     throw new Error(
@@ -139,7 +170,8 @@ After("@points-first-release", async ({ points: p }) => {
       applicationName: p.applicationName,
       ...state(p),
       eventIds: p.ownedEventIds,
-      snapshot: await completePointsSnapshot(p.handle.pool),
+      snapshot,
+      cleanup: { events, snapshotAfter, prices, pricesAfter },
     }) + "\n",
   );
 });

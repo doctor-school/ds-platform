@@ -246,3 +246,173 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the visitor swipes the rail and opens a card
     Then neither the home nor the reading page scrolls horizontally
     And a platform administrator's material list and material form do not scroll horizontally
+
+  # Slice 2 — Telegram channel connector (EARS-20…EARS-37)
+
+  @EARS-20 @EARS-21 @EARS-31
+  Scenario: An administrator adds the Telegram channel to the source list
+    Given a platform administrator is signed in to the admin with a second factor
+    And the Telegram connector is configured and the bot is a member of the channel "bbmacademy"
+    When the administrator adds a source of platform «Telegram» with the address "https://t.me/bbmacademy"
+    Then the source list shows «Telegram», "t.me/bbmacademy", «Включён» and the status «Работает»
+
+  @EARS-21
+  Scenario: An address that is not a public channel is refused
+    Given a platform administrator is signed in to the admin with a second factor
+    When the administrator adds a source of platform «Telegram» with the address "https://t.me/+AbCdEfGh123"
+    Then the field «Адрес канала» shows «Укажите адрес публичного канала в виде t.me/имя»
+    And the source list has no new source
+
+  @EARS-24 @EARS-25 @EARS-26 @EARS-29 @EARS-33 @EARS-34
+  Scenario: A new channel post becomes a Telegram card that links to the original
+    Given the switched-on Telegram source "t.me/bbmacademy"
+    When Telegram delivers with the right secret a photo post 1201 of "bbmacademy" captioned "Сегодня в 19:00 МСК — эфир о показаниях к PRP"
+    And a visitor who is not signed in opens the Academy home
+    Then the rail has a card reading "Сегодня в 19:00 МСК — эфир о показаниях к PRP", «BBM Academy · Telegram» and «Telegram ↗» with the post's preview
+    And that card is a link to "https://t.me/bbmacademy/1201" with a new-tab target and rel "noopener noreferrer"
+
+  @EARS-26 @EARS-34
+  Scenario: A video post shows its preview and duration and plays nothing
+    Given the switched-on Telegram source "t.me/bbmacademy"
+    When Telegram delivers with the right secret a video post 1202 of "bbmacademy" of 72 seconds captioned "PRP при гонартрозе — фрагмент эфира"
+    And a visitor opens the Academy home
+    Then the card "PRP при гонартрозе — фрагмент эфира" shows a play mark and «1:12»
+    And no video plays on the Academy home
+
+  @EARS-27
+  Scenario: An album is one card
+    Given the switched-on Telegram source "t.me/bbmacademy"
+    When Telegram delivers with the right secret three photo parts 1203, 1204 and 1205 of one album of "bbmacademy", the part 1204 captioned "Кадры со съёмок подкаста"
+    Then the feed has exactly one card reading "Кадры со съёмок подкаста"
+    And that card is a link to "https://t.me/bbmacademy/1203"
+
+  @EARS-24
+  Scenario: A webhook call with a wrong secret token is refused
+    Given the switched-on Telegram source "t.me/bbmacademy"
+    When a request carrying the header X-Telegram-Bot-Api-Secret-Token "wrong" posts a channel post of "bbmacademy" to the Telegram webhook
+    Then the webhook answers 401
+    And the feed has no new card
+
+  @EARS-25
+  Scenario: A post from a channel that is not in the source list is dropped
+    Given the switched-on Telegram source "t.me/bbmacademy"
+    When Telegram delivers with the right secret a text post 77 of the channel "somebodyelse"
+    Then the webhook answers 200
+    And the feed has no new card
+    And the log records the update as dropped for an unlisted channel without its text
+
+  @EARS-26
+  Scenario: A forwarded post and a poll are not cards
+    Given the switched-on Telegram source "t.me/bbmacademy"
+    When Telegram delivers with the right secret a forwarded post 1206 and a poll 1207 of "bbmacademy"
+    Then the feed has no new card
+
+  @EARS-28
+  Scenario: An edited post updates its card in place
+    Given the switched-on Telegram source "t.me/bbmacademy" has the card of post 1201 dated 12 November
+    When Telegram delivers with the right secret an edit of post 1201 captioned "Эфир переносится на 20:00 МСК"
+    Then the card of post 1201 reads "Эфир переносится на 20:00 МСК"
+    And the card of post 1201 is still dated 12 November and keeps its place in the rail
+
+  @EARS-22 @EARS-25 @EARS-33
+  Scenario: A switched-off source leaves the rail and keeps its posts
+    Given the Telegram source "t.me/bbmacademy" has the card of post 1201 in the rail
+    And a platform administrator is signed in to the admin with a second factor
+    When the administrator switches the source "t.me/bbmacademy" off and confirms
+    Then the rail on the Academy home has no card of "t.me/bbmacademy"
+    And «Публикации» of "t.me/bbmacademy" still lists post 1201 as «Источник выключен»
+    When Telegram delivers with the right secret a text post 1210 of "bbmacademy"
+    Then the feed has no card of post 1210
+    When the administrator switches the source "t.me/bbmacademy" on
+    Then the rail again has the card of post 1201 at its own date
+
+  @EARS-32 @EARS-33
+  Scenario: An administrator hides one post
+    Given the Telegram source "t.me/bbmacademy" has the cards of posts 1201 and 1202 in the rail
+    And a platform administrator is signed in to the admin with a second factor
+    When the administrator chooses «Скрыть из ленты» on post 1202 in «Публикации» and confirms
+    Then the rail on the Academy home has the card of post 1201 and no card of post 1202
+    And «Публикации» lists post 1202 as «Скрыт»
+    When Telegram delivers with the right secret an edit of post 1202
+    Then the rail still has no card of post 1202
+    When the administrator chooses «Вернуть в ленту» on post 1202
+    Then the rail again has the card of post 1202 at its own date
+
+  @EARS-29
+  Scenario: A failed preview download keeps the card without an image
+    Given the switched-on Telegram source "t.me/bbmacademy"
+    And the Telegram file download fails
+    When Telegram delivers with the right secret a photo post 1211 of "bbmacademy" captioned "Новый набор в программу"
+    Then the rail has the card "Новый набор в программу" in its no-image layout with the field mark «Telegram»
+    And the source "t.me/bbmacademy" keeps the status «Работает»
+    When the Telegram file download works again and the preview retry runs
+    Then the card "Новый набор в программу" shows the post's preview
+
+  @EARS-30
+  Scenario: The one-off import brings in earlier posts and a re-run duplicates nothing
+    Given the Telegram source "t.me/bbmacademy" has the card of post 1201 delivered by the webhook
+    And a Telegram Desktop JSON export of "bbmacademy" holds the text posts 900, 901 and 1201 and a service message 902
+    When the operator runs the history import with that export for "t.me/bbmacademy"
+    Then the feed has cards of posts 900 and 901 at their Telegram dates and one card of post 1201
+    And the import reports 2 written, 1 skipped as existing and 1 dropped as a service message
+    When the operator runs the history import with the same export again
+    Then the import reports 0 written
+    And the feed has exactly one card each of posts 900, 901 and 1201
+
+  @EARS-30
+  Scenario: An export of another channel is refused
+    Given the Telegram source "t.me/bbmacademy" bound to its Telegram channel id
+    When the operator runs the history import for "t.me/bbmacademy" with an export of another channel
+    Then the import exits with an error and writes nothing
+
+  @EARS-30
+  Scenario: An import for a source with no bound channel id is refused with its reason
+    Given the Telegram source "t.me/bbmacademy" was added while Telegram was unreachable, so its Telegram channel id is not bound
+    And a Telegram Desktop JSON export of "bbmacademy" holds the text posts 900 and 901
+    When the operator runs the history import with that export for "t.me/bbmacademy"
+    Then the import exits with an error stating that the source has no bound Telegram channel id
+    And the feed has no card of posts 900 and 901
+
+  @EARS-21 @EARS-31
+  Scenario: Adding a source binds its channel id through the source check
+    Given a platform administrator is signed in to the admin with a second factor
+    And the Telegram connector is configured and the bot is a member of the channel "bbmacademy"
+    And the webhook has delivered no post of "bbmacademy"
+    When the administrator adds a source of platform «Telegram» with the address "t.me/bbmacademy"
+    Then the source list shows "t.me/bbmacademy" with the status «Работает»
+    And the source "t.me/bbmacademy" is bound to the channel id Telegram returns for "@bbmacademy"
+
+  @EARS-31 @EARS-35
+  Scenario: An unreachable Telegram marks the source failing and leaves the rail working
+    Given the Telegram source "t.me/bbmacademy" has the card of post 1201 in the rail
+    And Telegram is unreachable
+    When the hourly source check runs
+    Then the source list shows "t.me/bbmacademy" with «Ошибка: Telegram недоступен»
+    When a visitor opens the Academy home
+    Then the rail shows the card of post 1201 and the other cards with no error state
+
+  @EARS-31
+  Scenario: A renamed channel shows as failing until its address is edited
+    Given the Telegram source "t.me/bbmacademy" bound to its Telegram channel id
+    And the channel is renamed to "bbm_academy"
+    When the hourly source check runs
+    Then the source list shows "t.me/bbmacademy" with «Ошибка: Адрес канала изменился на t.me/bbm_academy»
+
+  @EARS-23
+  Scenario: A congress registrar cannot manage sources
+    Given a congress registrar is signed in to the admin
+    Then the admin navigation has no «Источники»
+    And a request to add a feed source is refused
+
+  @EARS-36
+  Scenario: No secret or post author is stored or logged
+    Given the switched-on Telegram source "t.me/bbmacademy"
+    When Telegram delivers with the right secret a text post 1212 of "bbmacademy" signed by its author
+    Then no stored row and no log line carries the bot token, the webhook secret, the raw update or the author signature
+
+  @EARS-37
+  Scenario: The source pages work on a phone
+    Given the viewport is 390 px wide
+    And a platform administrator is signed in to the admin with a second factor
+    When the administrator opens «Источники» and the «Публикации» of "t.me/bbmacademy"
+    Then neither page scrolls horizontally and both pass the accessibility check

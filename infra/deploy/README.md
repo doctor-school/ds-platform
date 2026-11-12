@@ -715,21 +715,21 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
      "Rules": [
        {
          "ID": "abort-incomplete-multipart",
+         "Prefix": "",
          "Status": "Enabled",
-         "Filter": {},
          "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
        },
        {
          "ID": "noncurrent-versions-2d",
+         "Prefix": "",
          "Status": "Enabled",
-         "Filter": {},
          "NoncurrentVersionExpiration": { "NoncurrentDays": 2 },
          "Expiration": { "ExpiredObjectDeleteMarker": true }
        },
        {
          "ID": "recovery-bundle-keep-90d",
+         "Prefix": "recovery-bundle/",
          "Status": "Enabled",
-         "Filter": { "Prefix": "recovery-bundle/" },
          "Expiration": { "Days": 90 }
        }
      ]

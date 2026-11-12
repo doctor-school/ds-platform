@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createDrizzle, type DrizzleHandle } from "@ds/db";
 import { expect } from "@playwright/test";
+import { pointsApplicationName } from "./points-application-name.js";
 import { completePointsSnapshot } from "./points-first-release.js";
 import {
   assertSeedHistoryTransition,
@@ -138,11 +139,6 @@ export function pointsOperation(command: string): void {
     file,
     JSON.stringify({ at: new Date().toISOString(), command }) + "\n",
   );
-}
-
-export function pointsApplicationName(database: string): string {
-  // Allowed database names are ASCII; retain the full UUID within PostgreSQL's 63-byte identifier limit.
-  return `points-${database.slice(0, 19)}-${randomUUID()}`;
 }
 
 export async function startPointsWorld(): Promise<PointsWorld> {

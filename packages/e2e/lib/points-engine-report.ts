@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { isPointsApplicationName } from "./points-application-name.js";
 import { assertOperationalReport } from "../api-probes/operational-report.js";
 import {
   assertSeedHistoryTransition,
@@ -103,7 +104,7 @@ export function assertPointsRuleChangeResources(
       "Outside owned rule-change database",
     );
     assert(
-      row.applicationName.startsWith("points-" + row.database + "-") &&
+      isPointsApplicationName(row.database, row.applicationName) &&
         row.personId,
       "Wrong rule-change runtime identity",
     );

@@ -5,6 +5,7 @@ import {
   type RuleChangeResource,
 } from "./points-engine-report.js";
 import type { SeedChange } from "./points-rule-history.js";
+import { pointsApplicationName } from "./points-application-name.js";
 const seeds: SeedChange[] = [
   {
     ruleId: "accrual.lesson",
@@ -90,7 +91,7 @@ function resources(): RuleChangeResource[] {
     return {
       title: pointsRuleChanges[index]!,
       personId: "person-id",
-      applicationName: "points-ds_dev_3989-case" + index,
+      applicationName: `points-ds_dev_3989-00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
       database: "ds_dev_3989",
       eventIds,
       history: {
@@ -129,6 +130,27 @@ it("EARS-25/27/39/42/43: requires the exact-three restored rule resources", () =
   expect(() =>
     assertPointsRuleChangeResources(log(resources()), seeds),
   ).not.toThrow();
+});
+it("EARS-25/27/39/42/43: accepts the bounded native CI database identities", () => {
+  const rows = resources();
+  for (const [index, row] of rows.entries()) {
+    row.database = "ds_points_originals_3989";
+    row.applicationName = `points-ds_points_originals-00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+  }
+  expect(() => assertPointsRuleChangeResources(log(rows), seeds)).not.toThrow();
+});
+it("EARS-25/27/39/42/43: refuses a wrong database prefix or a missing full UUID", () => {
+  for (const applicationName of [
+    pointsApplicationName("ds_points_originals_3989"),
+    "points-ds_dev_3989-case0",
+    "points-ds_dev_3989-00000000-0000-4000-8000-000000000000-extra",
+  ]) {
+    const rows = resources();
+    rows[0]!.applicationName = applicationName;
+    expect(() => assertPointsRuleChangeResources(log(rows), seeds)).toThrow(
+      /runtime identity/,
+    );
+  }
 });
 it("EARS-25/27/39/42/43: refuses missing, duplicate and unknown receipts", () => {
   const rows = resources();

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { assertOperationalReport } from "../api-probes/operational-report.js";
 
 export const pointsRecordBoundaries = [
@@ -36,6 +37,98 @@ export const pointsLifecycleBoundaries = [
   "Doctors registered before the engine receive the starter bonus once",
 ] as const;
 
+export const pointsFirstRelease = [
+  "Registration to the first event",
+  "Releasing a partly netted obligation returns the netted Pul",
+  "Pul of a doctor without a verified phone cannot be spent",
+] as const;
+
+export function assertPointsFirstReleaseReport(value: unknown): void {
+  assertOperationalReport(value, pointsFirstRelease, "admin");
+}
+
+export function assertPointsFirstReleaseResources(log: string): void {
+  const rows = log
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert.equal(
+    rows.length,
+    pointsFirstRelease.length,
+    "Missing cleanup receipt",
+  );
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const title = String(row.title).replace(/ @host:admin$/, "");
+    const index = pointsFirstRelease.indexOf(
+      title as (typeof pointsFirstRelease)[number],
+    );
+    assert(
+      index >= 0 && !seen.has(title),
+      "Unexpected or repeated cleanup identity",
+    );
+    seen.add(title);
+    assert(
+      row.applicationName && row.database,
+      "Missing cleanup runtime identity",
+    );
+    assert(Array.isArray(row.eventIds), "Missing owned event identities");
+    assert.equal(row.eventIds.length, [1, 3, 1][index], "Missing owned event");
+    assert.equal(
+      new Set(row.eventIds).size,
+      row.eventIds.length,
+      "Repeated owned event",
+    );
+    const cleanup = row.cleanup;
+    assert(cleanup && Array.isArray(cleanup.events), "Missing cleanup receipt");
+    assert.deepEqual(
+      cleanup.events.map((event: { id: string }) => event.id).sort(),
+      [...row.eventIds].sort(),
+      "Cleanup event identities differ",
+    );
+    for (const event of cleanup.events) {
+      assert.equal(
+        event.record_status,
+        "retired",
+        "Owned event is still active",
+      );
+      assert(
+        typeof event.deleted_at === "string" &&
+          Number.isFinite(Date.parse(event.deleted_at)),
+        "Owned event is not soft-deleted",
+      );
+    }
+    for (const key of [
+      "accounts",
+      "journal",
+      "keys",
+      "postings",
+      "holds",
+      "obligations",
+    ]) {
+      assert(Array.isArray(row.snapshot?.[key]), "Missing financial snapshot");
+    }
+    assert.deepEqual(
+      cleanup.snapshotAfter,
+      row.snapshot,
+      "Cleanup changed financial history",
+    );
+    assert(Array.isArray(cleanup.prices), "Missing prices snapshot");
+    assert.deepEqual(
+      cleanup.prices
+        .map((price: { item_ref: string }) => price.item_ref)
+        .sort(),
+      [...row.eventIds].sort(),
+      "Missing owned price",
+    );
+    assert.deepEqual(
+      cleanup.pricesAfter,
+      cleanup.prices,
+      "Cleanup changed prices",
+    );
+  }
+}
+
 export const pointsEngineOriginals = [
   "An offline lesson earns Bre only and never a second Bre",
   "A producer fact carrying an amount is refused and writes nothing",
@@ -46,6 +139,7 @@ export const pointsEngineOriginals = [
   ...pointsReferralBoundaries,
   ...pointsRulebookBoundaries,
   ...pointsLifecycleBoundaries,
+  ...pointsFirstRelease,
 ] as const;
 
 export function assertPointsEngineReport(value: unknown): void {

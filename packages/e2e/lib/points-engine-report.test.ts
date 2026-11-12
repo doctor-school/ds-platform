@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   assertPointsEngineReport,
+  assertPointsFirstReleaseReport,
+  assertPointsFirstReleaseResources,
   assertPointsBackgrounds,
   assertPointsLifecycleBoundariesReport,
   assertPointsRecordBoundariesReport,
@@ -36,6 +38,124 @@ const referrals = [
   "Referral awards stop for the inviter above the monthly cap",
   "The invitee's first completed lesson counts itself for the referral",
 ];
+const firstRelease = [
+  "Registration to the first event",
+  "Releasing a partly netted obligation returns the netted Pul",
+  "Pul of a doctor without a verified phone cannot be spent",
+];
+
+function cleanupReceipts() {
+  return firstRelease.map((title, index) => {
+    const eventIds = Array.from(
+      { length: [1, 3, 1][index]! },
+      (_, i) => `event-${index}-${i}`,
+    );
+    const snapshot = {
+      accounts: [],
+      journal: [],
+      keys: [],
+      postings: [],
+      holds: [],
+      obligations: [],
+    };
+    const prices = eventIds.map((item_ref) => ({ item_ref, pul_cost: 20 }));
+    return {
+      title,
+      database: "ds_test",
+      applicationName: `case-${index}`,
+      eventIds,
+      snapshot,
+      cleanup: {
+        events: eventIds.map((id) => ({
+          id,
+          record_status: "retired",
+          deleted_at: "2026-11-12T00:00:00Z" as string | null,
+        })),
+        snapshotAfter: structuredClone(snapshot),
+        prices,
+        pricesAfter: structuredClone(prices),
+      },
+    };
+  });
+}
+const receiptLog = (rows: unknown[]) =>
+  rows.map((row) => JSON.stringify(row)).join("\n");
+describe("025 owned event cleanup receipt", () => {
+  it("EARS-1/18/35: requires all five retired events and unchanged financial tables and prices", () => {
+    expect(() =>
+      assertPointsFirstReleaseResources(receiptLog(cleanupReceipts())),
+    ).not.toThrow();
+  });
+  it("EARS-1/18/35: refuses missing, repeated or foreign scenario receipts", () => {
+    const rows = cleanupReceipts();
+    for (const invalid of [
+      [],
+      rows.slice(1),
+      [rows[0], rows[0], rows[2]],
+      [{ ...rows[0], title: "foreign" }, ...rows.slice(1)],
+    ])
+      expect(() =>
+        assertPointsFirstReleaseResources(receiptLog(invalid)),
+      ).toThrow();
+  });
+  it("EARS-1/18/35: refuses the old receipt with no cleanup proof", () => {
+    const rows = cleanupReceipts().map(({ cleanup: _cleanup, ...row }) => row);
+    expect(() => assertPointsFirstReleaseResources(receiptLog(rows))).toThrow(
+      /cleanup/,
+    );
+  });
+  it("EARS-1/18/35: refuses an active or not soft-deleted owned event", () => {
+    for (const field of ["record_status", "deleted_at"] as const) {
+      const rows = cleanupReceipts();
+      if (field === "record_status")
+        rows[0]!.cleanup.events[0]!.record_status = "active";
+      else rows[0]!.cleanup.events[0]!.deleted_at = null;
+      expect(() =>
+        assertPointsFirstReleaseResources(receiptLog(rows)),
+      ).toThrow();
+    }
+  });
+  it("EARS-1/18/35: refuses missing or substituted owned events", () => {
+    for (const substitution of [false, true]) {
+      const rows = cleanupReceipts();
+      if (substitution) rows[1]!.cleanup.events[0]!.id = "foreign";
+      else rows[1]!.cleanup.events.pop();
+      expect(() =>
+        assertPointsFirstReleaseResources(receiptLog(rows)),
+      ).toThrow();
+    }
+  });
+  it("EARS-1/18/35: refuses changes to any financial table", () => {
+    for (const key of [
+      "accounts",
+      "journal",
+      "keys",
+      "postings",
+      "holds",
+      "obligations",
+    ] as const) {
+      const rows = cleanupReceipts();
+      Object.assign(rows[0]!.cleanup.snapshotAfter, {
+        [key]: [{ id: "mutated" }],
+      });
+      expect(() => assertPointsFirstReleaseResources(receiptLog(rows))).toThrow(
+        /financial/,
+      );
+    }
+  });
+  it("EARS-1/18/35: refuses changed or missing owned prices", () => {
+    const changed = cleanupReceipts();
+    changed[0]!.cleanup.pricesAfter[0]!.pul_cost = 999;
+    expect(() =>
+      assertPointsFirstReleaseResources(receiptLog(changed)),
+    ).toThrow(/prices/);
+    const missing = cleanupReceipts();
+    missing[0]!.cleanup.prices.pop();
+    expect(() =>
+      assertPointsFirstReleaseResources(receiptLog(missing)),
+    ).toThrow(/price/);
+  });
+});
 const lifecycle = [
   "A no-show releases the reserve and annuls the advance",
   "Exclusive campaign rules apply only the highest priority one inside their window",
@@ -46,6 +166,35 @@ const rulebook = [
   "A rule reading an undeclared or ill-typed operand is refused at publish",
   "Publishing a second stacking credit rule warns the admin",
 ];
+
+it("EARS-1/18/35: the first/release receipt rejects every preceding group", () => {
+  for (const titles of [
+    previous,
+    boundaries,
+    reserves,
+    advances,
+    referrals,
+    rulebook,
+    lifecycle,
+  ]) {
+    expect(() => assertPointsFirstReleaseReport(report(titles))).toThrow(
+      /identity/,
+    );
+  }
+  expect(() =>
+    assertPointsEngineReport(
+      report([
+        ...previous,
+        ...boundaries,
+        ...reserves,
+        ...advances,
+        ...referrals,
+        ...rulebook,
+        ...lifecycle,
+      ]),
+    ),
+  ).toThrow(/identity/);
+});
 
 function report(titles: readonly string[]) {
   return {
@@ -79,6 +228,7 @@ for (const [scope, titles, assertReport] of [
       ...referrals,
       ...rulebook,
       ...lifecycle,
+      ...firstRelease,
     ],
     assertPointsEngineReport,
   ],
@@ -88,6 +238,7 @@ for (const [scope, titles, assertReport] of [
   ["referral wave", referrals, assertPointsReferralBoundariesReport],
   ["rulebook wave", rulebook, assertPointsRulebookBoundariesReport],
   ["lifecycle wave", lifecycle, assertPointsLifecycleBoundariesReport],
+  ["first/release wave", firstRelease, assertPointsFirstReleaseReport],
 ] as const) {
   describe("025 " + scope + " execution receipt", () => {
     it("EARS-4/8/31: accepts its exact source originals passing once", () => {

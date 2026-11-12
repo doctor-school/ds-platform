@@ -14,6 +14,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     And a doctor "A" of specialty "Кардиология" with a verified phone
 
   @EARS-1 @EARS-2 @EARS-3 @EARS-5 @EARS-6 @EARS-14 @EARS-19 @EARS-9 @happy
+  @points-first-release
   Scenario: Registration to the first event
     Given doctor "A" has no points account
     When the facts "account.registered" and "phone.verified" for "A" are recorded
@@ -87,6 +88,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then nothing is settled, the trace reads "no-open-hold" and the participation award is posted as late
 
   @EARS-18 @EARS-20 @EARS-35 @failure
+  @points-first-release
   Scenario: Releasing a partly netted obligation returns the netted Pul
     Given "A" holds a reserve on advance-mode event "E4" with an obligation "O1" of 30 Pul
     And an older obligation "O0" of 20 Pul is open for "A"
@@ -250,6 +252,7 @@ Feature: One attention-points ledger accrues, reserves, debits and releases Pul,
     Then 100 Pul are debited under rule "spend.debit" and "A" has 20 Pul available
 
   @EARS-5 @EARS-35 @failure
+  @points-first-release
   Scenario: Pul of a doctor without a verified phone cannot be spent
     Given doctor "J" has 30 Pul and no verified phone
     When "J" registers for a threshold-mode event priced 20 Pul

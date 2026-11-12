@@ -16,6 +16,7 @@ import {
   WHAT_CARDS,
 } from "./fixtures";
 import { LeadDemoFields } from "./lead-demo-fields";
+import { MaterialsFeedSection } from "./materials-feed-section";
 import { submitAcademyPartnership } from "./academy-partnership-action";
 import styles from "./academy-home.module.css";
 
@@ -549,6 +550,7 @@ export function AcademyHomeView() {
         <WhatSection />
         <ExpertsSection />
         <EventsSection />
+        <MaterialsFeedSection />
         <WhySection />
         <ProjectsSection />
         <PartnerValueSection />

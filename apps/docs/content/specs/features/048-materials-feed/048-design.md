@@ -137,7 +137,7 @@ sequenceDiagram
 - **Edit of a published material** (EARS-5): the same transaction re-checks the title and the body text of the publish set and calls `write(material)`; `published_at` of the entry is never rewritten. The column expert's published state is not re-checked on edit: a column whose expert is unpublished stays editable and stays hidden by the read-time predicate until the expert returns (Lead decision 11).
 - **Unpublish** (EARS-6): `status = draft`, `version++`, `F.remove(material)` deletes the entry. The admin confirms in an `AlertDialog` naming the consequence («Материал уйдёт с главной Академии, его страница станет недоступна»).
 - **Draft edits** touch no entry.
-- The home and the reading page read per request (no cache table), so a change shows on the next read without a release (US-2). The home's `revalidate` follows the public taxonomy reads; the reading page is rendered dynamically with an uncached (`no-store`) material read, because the partner mark is judged on every read (EARS-19).
+- The home and the reading page read per request (no cache table), so a change shows on the next read without a release (US-2). The home's rail reads the feed in the browser on every visit (uncached `no-store` reads of `GET /v1/public/feed`), so its first-page placeholders and «Повторить» (EARS-16) never hold up the rest of the home; the reading page is rendered dynamically with an uncached (`no-store`) material read, because the partner mark is judged on every read (EARS-19).
 
 ## Public reads (EARS-9, EARS-11, EARS-19)
 
@@ -174,7 +174,7 @@ stateDiagram-v2
 
 ## UI composition
 
-### Academy — rail and card (canvases, Stage A pending)
+### Academy — rail and card (canvases, approved by the owner at Stage A on 2026-11-11, #3516 comment 6796895267)
 
 | Surface                | Canvas → state                                                                                                                                                                                       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

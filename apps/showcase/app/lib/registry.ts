@@ -157,6 +157,11 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   //    (academy-material.dc.html «текст»): every allowlisted node, link targets.
   { id: "rich-text-content", section: "blocks" },
   { id: "RichTextContent", section: "blocks" },
+  // 048 EARS-13..16 / EARS-19 (#3516) — the shared feed card and the Academy
+  //    home rail (unit-feed-card.dc.html, academy-home.dc.html «Новости»).
+  { id: "FeedCard", section: "blocks" },
+  { id: "FeedCardSkeleton", section: "blocks" },
+  { id: "FeedRail", section: "blocks" },
   // 014 EARS-10/11 — the controlled cross-front event feed.
   { id: "EventList", section: "blocks" },
   // 020 EARS-1 — event-page composition (archive/archive-event-page-variant-a.dc.html), #1764

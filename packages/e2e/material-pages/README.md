@@ -1,10 +1,19 @@
 # Material reading originals (048)
 
-This contour runs the three unchanged spec-owned definitions tagged
-`@material-reading-pages`: retry after a failed read, a private draft's 404 and
-the absence of Academy materials on Doctor. The inherited published-expert
-Background runs in every scenario. The source remains
+This contour runs the unchanged spec-owned definitions tagged
+`@material-reading-pages`: retry after a failed read, a private draft's 404, the
+absence of Academy materials on Doctor, and the seven Academy-home rail
+scenarios (EARS-14/15/16: paging, keyboard, no auto-motion, a failed next page,
+first-page placeholders, the empty feed, a failed first read). The inherited
+published-expert Background runs in every scenario. The source remains
 `apps/docs/content/specs/features/048-materials-feed/048-scenarios.feature`.
+
+The rail reads `GET /v1/public/feed` in the browser. The production portal
+build bakes its `/v1/*` rewrite target before the runtime picks the transport's
+port, so the `page` fixture carries the browser's same-origin `/v1/*` reads to
+the owned transport (real API bytes). «Fails once» is one browser `503` on the
+first matching feed read; «slow to answer» holds that read and then forwards it
+unchanged.
 
 The contour owns a compiled real API, two production-built Next storefronts and
 one migrated task database. A loopback pass-through transport fails exactly one
@@ -17,8 +26,8 @@ Like the operational API originals, these steps have an explicit separate
 config. They are outside the default remote-stage step glob: a test may not
 interrupt a shared slot's API or add a public fault hook. The remote-stage suite
 keeps its existing unbound scenarios visible. Passing this contour proves these
-three originals on its owned runtime, not a green whole-stage suite or rail,
-mobile, preview and remaining article acceptance owned by #3517.
+originals on its owned runtime, not a green whole-stage suite or the phone,
+preview, authoring and remaining article acceptance owned by #3517.
 
 From the repository root, build and provision first:
 

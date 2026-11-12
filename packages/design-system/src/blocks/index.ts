@@ -358,6 +358,19 @@ export type {
   MaterialArticleContent,
   MaterialArticleProps,
 } from "./material-article";
+// 048 EARS-13 / EARS-19 (#3516) — the ONE shared feed card
+// (`design-source/unit-feed-card.dc.html`), variant by `card.kind`.
+export {
+  FeedCard,
+  FeedCardSkeleton,
+  FEED_CARD_COPY,
+  formatFeedCardDate,
+} from "./feed-card";
+export type { FeedCardProps } from "./feed-card";
+// 048 EARS-14 / EARS-15 / EARS-16 (#3516) — the Academy home rail
+// «Новости, блог и видео» (`design-source/academy-home.dc.html`).
+export { FeedRail, FEED_RAIL_COPY, FEED_RAIL_SIZES } from "./feed-rail";
+export type { FeedRailProps, FeedRailCopy, FeedRailPage } from "./feed-rail";
 
 // 021 EARS-9 + EARS-10 (#1546) — the ONE canonical post-confirmation success
 // state of a registration door. Data-in, presentation-out: the accrual sentence,

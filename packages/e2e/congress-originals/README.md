@@ -69,3 +69,36 @@ ledger issuance of 500 Pul and a native price of 50 Pul before taking complete
 engine quote/record counts unchanged. Actor witnesses accumulate by person ID,
 including known actors without a registration after the final unknown refusal.
 Native EARS-8.1/8.2, EARS-12.3 and EARS-41 tests remain complementary.
+
+## New participant, mail failure and participant throttling
+
+The separate `@congress-intake` group binds only 044:16/69/154. Run
+`bddgen --config congress-intake.config.ts`,
+`playwright test --config congress-intake.config.ts`, then
+`tsx api-probes/assert-congress-intake-report.ts <results.json> <backgrounds.jsonl>`.
+The checker requires the exact three passing originals and eighteen ordered
+Background receipts, with no failures, skips, flakes, retries or errors. CI
+reuses the pinned nginx binary and uploads `congress-originals-3981`.
+
+Use a fresh owned `ds_dev_3981` from `dev:db:branch 3981`. Set
+`E2E_CONGRESS_OWNER=3981` and `E2E_CONGRESS_DATABASE=ds_dev_3981` when running
+the three committed group configs as regression complements in that database.
+Only the exact owner allowlist is accepted; another group's ordinary owner is
+not an override for this group. Preserve records/manifests and obtain cleanup
+acceptance before supported `dev:db:drop 3981` and recreation. Literal
+`new@example.org` must be absent before the happy case. No shared reset.
+
+The happy case omits patronymic, checks a real taxonomy identifier, exact typed
+answers, credentialless identity, untouched account phone and exactly one
+server-version consent. Its generic response is the amended API accepted
+signal; external site copy is not browser acceptance. The dispatched confirmation
+is rendered with the native current no-link copy, including the approved plain
+cabinet-entry instruction. The mail-failure case uses the native exhausted
+transport-port refusal, records one failed attempt, drives a later dispatch as
+a happens-after barrier and verifies no new attempt until explicit resubmission.
+The actual owning dispatch has no scheduling call; its digest is retained. No
+actual relay failover or provider delivery is claimed. The client case drives
+sixty requests from A through the same nginx, checks A's further 429s and B's
+positive accepted submissions and registrations with distinct resolved client
+addresses. Native happy, confirmation and abuse suites remain complementary;
+no app-local duplicate was fully replaced. No visual artifact or product change.

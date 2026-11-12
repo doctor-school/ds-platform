@@ -202,3 +202,145 @@ Then(
     await congress.noPricedWrites();
   },
 );
+
+Given(
+  'no Doctor.School account exists for "new@example.org"',
+  async ({ congress }) => {
+    await congress.absent("new@example.org");
+  },
+);
+When(
+  'a participant submits the sign-up form with surname, first name, contact phone, "new@example.org", a specialty chosen from the taxonomy, workplace, city, region, no patronymic, a ticked personal-data consent and a valid captcha token',
+  async ({ congress }) => {
+    await congress.intake.happy();
+  },
+);
+Then(
+  'exactly one account is created for "new@example.org" with no credential in the identity provider',
+  async ({ congress }) => {
+    await congress.intake.account();
+  },
+);
+Then(
+  "that account's display name is prefilled from the submitted surname and first name",
+  async ({ congress }) => {
+    await congress.intake.displayName();
+  },
+);
+Then(
+  "exactly one registration row exists for that account and the congress event",
+  async ({ congress }) => {
+    await congress.intake.registration();
+  },
+);
+Then(
+  "the submitted answers are stored on that registration row",
+  async ({ congress }) => {
+    await congress.intake.answers();
+  },
+);
+Then(
+  "the submitted contact phone is not written into the account's phone column",
+  async ({ congress }) => {
+    await congress.intake.phone();
+  },
+);
+Then(
+  "exactly one consent record is written under the congress personal-data purpose with the server-stamped version",
+  async ({ congress }) => {
+    await congress.intake.consent();
+  },
+);
+Then(
+  "no medical-worker-declaration consent record is written",
+  async ({ congress }) => {
+    await congress.intake.noMedicalConsent();
+  },
+);
+Then(
+  "the participant receives the generic success response, which confirms the registration was accepted, states that a confirmation email has been sent to the address given, and states that nothing further is required",
+  async ({ congress }) => {
+    await congress.intake.accepted();
+  },
+);
+Then(
+  "a confirmation email is dispatched naming the event, the created Doctor.School account and code-based sign-in",
+  async ({ congress }) => {
+    await congress.intake.confirmation();
+  },
+);
+Then(
+  "the registration's confirmation-mail outcome is recorded as sent with its timestamp",
+  async ({ congress }) => {
+    await congress.intake.outcome("sent");
+  },
+);
+Given(
+  "the mailer rejects every send attempt after its failover chain",
+  async ({ congress }) => {
+    congress.intake.failMailer();
+  },
+);
+When(
+  "a participant submits the sign-up form with a new email",
+  async ({ congress }) => {
+    await congress.intake.failedSubmission();
+  },
+);
+Then(
+  "the account, the registration and the consent record are committed",
+  async ({ congress }) => {
+    await congress.intake.committedDespiteFailure();
+  },
+);
+Then(
+  "the participant still receives the generic success response",
+  async ({ congress }) => {
+    await congress.intake.accepted();
+  },
+);
+Then(
+  "the registration's confirmation-mail outcome is recorded as failed with its timestamp",
+  async ({ congress }) => {
+    await congress.intake.outcome("failed");
+  },
+);
+Then("no retry is scheduled", async ({ congress }) => {
+  await congress.intake.noScheduledRetry();
+});
+When(
+  "the same participant submits the same form again",
+  async ({ congress }) => {
+    await congress.intake.resubmit();
+  },
+);
+Then("no duplicate registration is created", async ({ congress }) => {
+  await congress.intake.noDuplicate();
+});
+Then("the confirmation email is dispatched again", async ({ congress }) => {
+  await congress.intake.dispatchedAgain();
+});
+Given(
+  "several participants submit from different client addresses through the same site proxy",
+  async ({ congress }) => {
+    await congress.intake.clients();
+  },
+);
+When(
+  "one of them exceeds the per-address submission window",
+  async ({ congress }) => {
+    await congress.intake.exhaust();
+  },
+);
+Then(
+  "only that participant's further submissions are throttled",
+  async ({ congress }) => {
+    await congress.intake.onlyParticipant();
+  },
+);
+Then(
+  "the other participants' submissions are accepted",
+  async ({ congress }) => {
+    await congress.intake.otherAccepted();
+  },
+);

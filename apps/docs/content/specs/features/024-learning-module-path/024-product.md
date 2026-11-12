@@ -14,7 +14,7 @@ lang: en
 
 > Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · **Wave 2** (022, 023, 024, 025, 044). 024 is `blocked_by` **017** (the storefront shell and the chosen specialty) and **025** (accrual and spending of attention points is part of a module's behaviour). Feature **023** (school and course) is `blocked_by` 024: the school and course are containers over the modules and lessons defined here. Domain canon: [ADR-0016](../../../adr/0016-core-domain-model-en.md) §4, §6. Discovery record: Issue #1792 (owner decisions P0, D1–D10) and #1793 (owner decision D11 — the course path).
 
-**Provenance legend.** **[owner]** — owner-approved: the principle P0 («a constructor, not code»), decisions D1–D11 (D10, 2026-11-04: doctors buy nothing; D11, 2026-11-11: a course is one continuous learner's path, [decision in #1793](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6797305382)) and the five-point constructor direction the owner confirmed on 2026-11-04 («Да, это уже верное направление»). **[proposed]** — `agent-proposed — UNCONFIRMED`: everything else, including every concrete setting, preset content, default value and interface element below. Where D4, D6 and D9 appear, they are **defaults of settings or presets, never hard rules** [owner, P0].
+**Provenance legend.** **[owner]** — owner-approved: the principle P0 («a constructor, not code»), decisions D1–D13 (D10, 2026-11-04: doctors buy nothing; D11, 2026-11-11: a course is one continuous learner's path, [decision in #1793](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6797305382); D12, 2026-11-12: the form of the path on the website is the «snake», as in the application prototype; D13, 2026-11-12: on doctor screens a course is only the path, counted in lessons, [decisions in #1793](https://github.com/doctor-school/ds-platform/issues/1793#issuecomment-6813121925)) and the five-point constructor direction the owner confirmed on 2026-11-04 («Да, это уже верное направление»). **[proposed]** — `agent-proposed — UNCONFIRMED`: everything else, including every concrete setting, preset content, default value and interface element below. Where D4, D6 and D9 appear, they are **defaults of settings or presets, never hard rules** [owner, P0].
 
 ## Feature summary
 
@@ -29,7 +29,7 @@ Lessons always live inside a **module**, and modules inside a **course** [owner,
 - **Node states** are shared by both storefronts: done · you are here · open · locked with the reason · can be reached by passing a test on what was skipped.
 - **One data set, two storefronts.** The platform is the backend for both the website and the mobile application: the path, its nodes and their states are the same data. The website and the application read that data and differ only in presentation: the application shows the path in a game form, the website shows the same path without the game layer.
 - **The game layer** (day streaks, hearts, leagues, XP) is the application's layer and is not shown on the website. The shared Pul / Bre / Con points stay on the website.
-- **The form of the path on the website is an open owner choice**, not decided in words: the «snake», as in the application prototype, or the «timeline». It is chosen on the canvas.
+- **The form of the path on the website is the «snake»**, as in the application prototype [owner, D12].
 
 The central product decision is that **those rules are settings, not code** [owner, P0]. The owner could not — and should not have to — answer in advance whether the next lesson opens after the test, after the video, or immediately: «Это всё должно быть гибко и настраиваемо… за основу мы можем взять Duolingo». So 024 specifies a **rules constructor** [owner, direction]:
 
@@ -150,4 +150,4 @@ No row exists yet in [`capability-ownership.md`](../../product/two-site-ia/capab
 
 ## Approved mockup
 
-**Pending — `author-design-mockup`.** No Stage-A canvas exists for `#d-lesson` yet; the course path (its form on the website — «snake» or «timeline» — is the owner's pick on the canvas), the lesson screen and the author's rule editor need an owner pick before building.
+**Pending — `author-design-mockup`.** No Stage-A canvas exists for `#d-lesson` yet; the course path (its form on the website is the «snake», as in the application prototype [owner, D12]), the lesson screen and the author's rule editor need an owner pick before building.

@@ -13,7 +13,7 @@ export const test = base.extend<{ congress: CongressWorld }>({
     }
   },
 });
-const { Given, When, Then } = createBdd(test);
+const { Given, When, Then } = createBdd(test, { tags: "@feature:044" });
 Given(
   'the congress event is published with participationFormat "offline"',
   async ({ congress }) => {

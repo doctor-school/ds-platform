@@ -8,8 +8,11 @@ export function congressOwner(
   group = "window-names",
   requested?: string,
 ): string {
-  const owner = owners[group];
-  if (!owner || (requested && requested !== owner && requested !== "3981"))
+  const owner = Object.hasOwn(owners, group) ? owners[group] : undefined;
+  if (
+    !owner ||
+    (requested !== undefined && requested !== owner && requested !== "3981")
+  )
     throw new Error("Unknown congress group or unrelated resource owner");
   return requested ?? owner;
 }

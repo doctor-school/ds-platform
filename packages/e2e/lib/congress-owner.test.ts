@@ -11,6 +11,8 @@ it("EARS-1: separates exact owned database attribution from regression selection
 
 it("EARS-1: rejects unknown groups and unrelated owner overrides", () => {
   expect(() => congressOwner("fourth")).toThrow();
+  expect(() => congressOwner("toString")).toThrow();
+  expect(() => congressOwner("intake", "")).toThrow();
   expect(() => congressOwner("intake", "9999")).toThrow();
   expect(() => congressOwner("intake", "3974")).toThrow();
   expect(() => congressOwner("repeat-consent-price", "3974")).toThrow();

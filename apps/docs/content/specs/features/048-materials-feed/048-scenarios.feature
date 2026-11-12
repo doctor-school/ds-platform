@@ -365,6 +365,23 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the operator runs the history import for "t.me/bbmacademy" with an export of another channel
     Then the import exits with an error and writes nothing
 
+  @EARS-30
+  Scenario: An import for a source with no bound channel id is refused with its reason
+    Given the Telegram source "t.me/bbmacademy" was added while Telegram was unreachable, so its Telegram channel id is not bound
+    And a Telegram Desktop JSON export of "bbmacademy" holds the text posts 900 and 901
+    When the operator runs the history import with that export for "t.me/bbmacademy"
+    Then the import exits with an error stating that the source has no bound Telegram channel id
+    And the feed has no card of posts 900 and 901
+
+  @EARS-21 @EARS-31
+  Scenario: Adding a source binds its channel id through the source check
+    Given a platform administrator is signed in to the admin with a second factor
+    And the Telegram connector is configured and the bot is a member of the channel "bbmacademy"
+    And the webhook has delivered no post of "bbmacademy"
+    When the administrator adds a source of platform «Telegram» with the address "t.me/bbmacademy"
+    Then the source list shows "t.me/bbmacademy" with the status «Работает»
+    And the source "t.me/bbmacademy" is bound to the channel id Telegram returns for "@bbmacademy"
+
   @EARS-31 @EARS-35
   Scenario: An unreachable Telegram marks the source failing and leaves the rail working
     Given the Telegram source "t.me/bbmacademy" has the card of post 1201 in the rail

@@ -294,7 +294,7 @@ erDiagram
     enum platform "telegram (slice 2)"
     text address "lowercase public username; UK with platform"
     bool enabled
-    bigint telegram_chat_id UK "nullable; bound on the first matching update"
+    bigint telegram_chat_id UK "nullable; bound by the source check or the first matching update"
     enum status "unchecked|ok|failing"
     text status_reason "nullable; one of the fixed reason codes"
     timestamptz checked_at "nullable"
@@ -323,7 +323,7 @@ erDiagram
 - **`feed_entry_messages` is the dedup key.** Every Telegram message id that went into an entry — one for a single post, each part of an album — is a row keyed `(feed_source_id, message_id)`. The webhook upserts through it, an edit finds its entry through it, and the import skips any message id it already holds (`ON CONFLICT DO NOTHING`), so a re-run and a webhook-delivered post can never meet as two entries (EARS-25, EARS-27, EARS-28, EARS-30). An album is found by `(feed_source_id, media_group_id)` unique.
 - **Row-local public predicate.** The feed read adds `hidden_at IS NULL AND NOT source_off` to the slice-1 predicate. `source_off` is written onto every entry of the source in the transaction of «Выключить» / «Включить» and `href` is rewritten in the transaction of an address change, so the read joins nothing beyond what EARS-10 names and never touches `feed_sources` — the same write-side denormalization slice 1 applies to own materials (EARS-10, EARS-22, EARS-33). Index `feed_entries (feed_source_id, published_at DESC)` serves «Публикации» and the bulk mark.
 - **CHECKs**: `(source_platform = 'academy') = (feed_source_id IS NULL)`; `kind = 'post'` only for a network platform; `duration_seconds IS NULL OR duration_seconds >= 0`. Every FK is `ON DELETE RESTRICT` except `feed_entry_messages.feed_entry_id`. `feed_entries.image_ref` of a Telegram entry uses the slot already registered in the 012 media-slot registry by slice 1, so no sweep deletes a preview a card still references; a preview replaced on edit is queued on `media_cleanup_jobs`.
-- **Address** is the normalized public username (EARS-21). The channel's Telegram id is bound on the first update whose `chat.username` equals it; from then on the id decides, so a channel rename keeps delivering and the source check reports «Адрес канала изменился на t.me/<имя>» until the administrator edits the address, which rewrites `href` (EARS-21, EARS-31).
+- **Address** is the normalized public username (EARS-21). The channel's Telegram id is bound by the source check — `getChat(@<address>)`, run at once on add and hourly after, binds the returned `id` when the returned `username` equals the address ignoring case — or else on the first update whose `chat.username` equals it; the import refuses a source with no bound id (EARS-30, EARS-31); from then on the id decides, so a channel rename keeps delivering and the source check reports «Адрес канала изменился на t.me/<имя>» until the administrator edits the address, which rewrites `href` (EARS-21, EARS-31).
 
 ### Webhook (EARS-24, EARS-25)
 
@@ -362,7 +362,7 @@ sequenceDiagram
   Note over W,TG: a database failure answers 500 → Telegram redelivers (at-least-once; the writes are idempotent)
 ```
 
-- The secret is compared before the body is parsed, and the comparison is constant-time. The route is anonymous for the platform's auth (`access: public` in the `endpoint-authz` matrix, the secret header being its credential), carries no CSRF or session, and is rate-limited by nginx like any public route. No IP allowlist is kept: the secret plus TLS authenticate Telegram ([setWebhook](https://core.telegram.org/bots/api#setwebhook) `secret_token`).
+- The secret is compared before the body is parsed, and the comparison is constant-time: a Nest guard runs only after the global JSON body parser, so the check is a route-scoped middleware registered ahead of it, the global parser is mounted with this path excluded and the route parses its own body after the check, bounded by nginx's 1 MB limit. The route is anonymous for the platform's auth (`access: public` in the `endpoint-authz` matrix, the secret header being its credential), carries no CSRF or session, and is rate-limited by nginx like any public route. No IP allowlist is kept: the secret plus TLS authenticate Telegram ([setWebhook](https://core.telegram.org/bots/api#setwebhook) `secret_token`).
 - A webhook needs HTTPS on port 443, 80, 88 or 8443 with a valid certificate and no redirect ([Bots FAQ](https://core.telegram.org/bots/faq)); the public API host already terminates TLS in nginx on `api-prod` (ADR-0012), so the route is one more location on the existing virtual host.
 - Registration (`telegram-webhook-register.command.ts`, EARS-24) calls `setWebhook` with `url` = `TELEGRAM_WEBHOOK_URL`, `secret_token` = `TELEGRAM_WEBHOOK_SECRET`, `allowed_updates` = `["channel_post","edited_channel_post"]`, `drop_pending_updates` = false, and prints `getWebhookInfo` (URL, pending count, last error) with the token redacted. It is run once per environment and again only when the URL or the secret changes. Each environment has its own bot (production: the BBM Academy bot; stage: a test bot in a test channel), so no two environments compete for one webhook.
 
@@ -405,7 +405,7 @@ Hourly (`@Cron`) and on add / edit / switch-on, for each switched-on Telegram so
 | `getWebhookInfo.last_error_date` within the last hour              | «Telegram не может доставить новые посты»     |
 | timeout / network error                                            | «Telegram недоступен»                         |
 
-The check writes only `status`, `status_reason` and `checked_at` of the source; Telegram's own error text goes to the log, not to the admin. The admin-requirement question is answered in «Lead decisions (slice 2)» item 5.
+The check writes `status`, `status_reason` and `checked_at` of the source and, while `telegram_chat_id` is null, binds it from `getChat(@<address>)` when the returned `username` equals the address ignoring case (EARS-31), so a source added under EARS-21, which runs the check at once, is bound before any import; Telegram's own error text goes to the log, not to the admin. The admin-requirement question is answered in «Lead decisions (slice 2)» item 5.
 
 ### One-off history import (EARS-30)
 
@@ -416,9 +416,9 @@ sequenceDiagram
   participant DB as Postgres
   participant ST as object storage
   O->>C: run --source t.me/bbmacademy --export <dir>/result.json
-  C->>C: parse whole file (Zod over the fields used); type is a channel; id matches the source's bound id
-  alt invalid
-    C-->>O: exit 1, nothing written
+  C->>C: parse whole file (Zod over the fields used); type is a channel; source has a bound id; export id matches it
+  alt invalid, or source has no bound id
+    C-->>O: exit 1 with the reason, nothing written
   else valid
     loop each message (date order)
       C->>C: map (EARS-26): skip service, forward, no-text, other content
@@ -426,12 +426,13 @@ sequenceDiagram
       C->>ST: normalize exported photo / thumbnail file (when present)
       C->>DB: INSERT feed_entries (source_off from the source, hidden_at null)
     end
-    C-->>O: read / written / skipped-existing / dropped-by-reason / previews-failed
+    C-->>O: read / written / skipped-existing / skipped-media-no-text / dropped-by-reason / previews-failed
   end
 ```
 
 - **Input**: the official Telegram Desktop «Export chat history» in the machine-readable JSON format, with photos (and video thumbnails) selected, made by a channel administrator. The fields used are `type`, `id` and `name` of the export and, per message, `id`, `type` (`message` / `service`), `date_unixtime`, `text` (a string or an array of strings and `{ type, text }` pieces), `photo`, `thumbnail`, `media_type`, `duration_seconds` and `forwarded_from`. No official document describes the export schema — **UNCONFIRMED**; the import validates exactly these fields and refuses a file that lacks them, and its Issue fixes the schema against a real export of `t.me/bbmacademy`. The export writes the channel id without the Bot API `-100` prefix — **UNCONFIRMED**, checked by the same Issue before the comparison is coded.
-- **Albums**: the export carries no `media_group_id` (**UNCONFIRMED**); the import keeps only messages that carry text, so an album imports as its captioned message with that message's own medium as the preview. A media-only message is skipped and counted.
+- **Albums**: the export carries no `media_group_id` (**UNCONFIRMED**); the import keeps only messages that carry text, so an album imports as its captioned message with that message's own medium as the preview. A media-only message — an album part or a single photo or video with no caption — is skipped and counted on its own line of the totals (requirements Constraints, known limit).
+- **Unbound source**: the channel comparison needs the source's bound id; a source whose check has not yet bound it (Telegram was unreachable at the add) is refused with «the source has no bound Telegram id; run the source check (EARS-31)», never imported unchecked.
 - **Idempotency**: every write goes through `feed_entry_messages`; a held message id is skipped, so a re-run, an overlap with webhook-delivered posts and a hidden entry are never touched. The command writes per message in its own transaction, so an interrupted run is completed by running it again.
 - **Gap recovery**: posts published while a source was off, or during a webhook outage longer than Telegram's 24-hour window, are brought back by a fresh export and a re-run.
 
@@ -473,7 +474,7 @@ Every admin route: `roles: [platform_admin]`, the MFA admin session, CSRF, `Idem
 
 ### Retention (slice 2)
 
-Telegram entries are BBM Academy's own public editorial posts, kept as card data only (text ≤ 500 characters, date, permalink, the copied preview, duration, message ids) for as long as their source row exists — switched on or off, hidden or not —, because US-3 keeps what a switched-off account brought in and the Bot Developer ToS §4.3 allows what is essential to the service. Nothing personal is stored (no `author_signature`, no `from`), so no ADR-0009 retention-matrix row is needed. Raw updates live only in the request that processes them, logs carry ids and outcomes only, and Telegram file links are never stored. A preview replaced on edit is removed through `media_cleanup_jobs`. Retiring the Telegram connector altogether — the end of operations under ToS §4 — deletes its entries, message rows and previews; that is a separate decision taken when it arises.
+Telegram entries are BBM Academy's own public editorial posts, kept as card data only (text ≤ 500 characters, date, permalink, the copied preview, duration, message ids) for as long as their source row exists — switched on or off, hidden or not —, because US-3 keeps what a switched-off account brought in and the Bot Developer ToS §4.3 allows what is essential to the service. Nothing personal is stored (no `author_signature`, no `from`), so no ADR-0009 retention-matrix row is needed. Raw updates live only in the request that processes them, logs carry ids and outcomes only, and Telegram file links are never stored. A preview replaced on edit is removed through `media_cleanup_jobs`. Retiring the Telegram connector altogether — the end of operations under ToS §4.2(c) — deletes its entries, message rows and previews; that is a separate decision taken when it arises.
 
 ### Dependencies (slice 2)
 
@@ -514,8 +515,8 @@ Its own Issue (repo-conventions «Deferred prod action»), executed after the co
 1. The lead checks from `api-prod` that `https://api.telegram.org` answers (`getMe` with the production token) — evidence: the redacted response.
 2. Owner / marketing (a Telegram account that administers `t.me/bbmacademy`): create the production bot with @BotFather and hand the token to the lead through the secret channel; add the bot to `t.me/bbmacademy` as an administrator with no posting rights needed; make the Telegram Desktop JSON export of the channel with photos and video thumbnails.
 3. The lead puts `TELEGRAM_BOT_TOKEN`, a generated `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_WEBHOOK_URL` into the production runtime config (an env change, redeployed on the owner's word), runs the registration command — evidence: `getWebhookInfo` with the production URL, `pending_update_count` and no `last_error_date` (token redacted).
-4. A platform administrator adds `t.me/bbmacademy` in «Источники» — evidence: status «Работает».
-5. The lead runs the history import once with the export — evidence: the printed counts; a second run printing `written: 0`.
+4. A platform administrator adds `t.me/bbmacademy` in «Источники»; the check run at the add binds the channel id (EARS-21, EARS-31) — evidence: status «Работает».
+5. Only after step 4 shows «Работает», the lead runs the history import once with the export (an unbound source is refused, EARS-30) — evidence: the printed counts; a second run printing `written: 0`.
 6. Post-release acceptance: a fresh channel post appears in the Academy rail and opens `t.me` in a new tab — evidence: a capture.
 
 ### Lead decisions (slice 2)

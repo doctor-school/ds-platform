@@ -97,7 +97,9 @@ messages, stacks, titles or credentials. Its `accepted: false` cannot replace th
 missing Background/resource evidence and the original failed step remain red.
 
 Every Background clause has its own prelogged phase. The lifecycle schema load
-records its exact native `@ds/schemas`/`require` boundary and Node version/platform;
+resolves `@ds/schemas` through the API package and imports its actual ESM file URL,
+using the same native dynamic-import mechanism as the compiled API modules.
+It distinguishes package resolution from native import and records Node version/platform;
 on failure it exports only allowlisted native error codes/types through a bounded
 cause chain, then rethrows the original error. An absent or unrecognized native
 code is explicit, never replaced with guessed exception text or a successful

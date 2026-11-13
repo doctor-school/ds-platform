@@ -180,8 +180,13 @@ export function eventCountFailureDiagnostic(raw?: string, rawOps?: string) {
       const row = object(JSON.parse(line));
       const phase = phases.get(String(row.command));
       if (phase) diagnostic.phase = phase;
+      const moduleLoader = new Map([
+        ["lifecycle @ds/schemas require failed", "require"],
+        ["lifecycle @ds/schemas resolve failed", "resolve"],
+        ["lifecycle @ds/schemas native import failed", "native-import"],
+      ]).get(String(row.command));
       if (
-        row.command === "lifecycle @ds/schemas require failed" &&
+        moduleLoader &&
         Array.isArray(row.codes) &&
         row.codes.length > 0 &&
         row.codes.length <= 4 &&
@@ -199,7 +204,7 @@ export function eventCountFailureDiagnostic(raw?: string, rawOps?: string) {
       ) {
         diagnostic.nativeModuleFailures.push({
           module: "@ds/schemas",
-          loader: "require",
+          loader: moduleLoader,
           codes: row.codes,
           names: row.names,
           nodeVersion: row.nodeVersion,

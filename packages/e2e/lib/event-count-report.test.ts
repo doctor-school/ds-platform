@@ -76,6 +76,28 @@ describe("count-original failure diagnostics", () => {
       },
     ]);
     expect(JSON.stringify(diagnostic)).not.toContain("private-");
+    const nativeImport = eventCountFailureDiagnostic(
+      undefined,
+      JSON.stringify({
+        command: "lifecycle @ds/schemas native import failed",
+        ...moduleFailure,
+        nodeVersion: "v24.22.2",
+        platform: "linux",
+        message: "private-message",
+      }),
+    );
+    expect(nativeImport.nativeModuleFailures[0]!.loader).toBe("native-import");
+    expect(JSON.stringify(nativeImport)).not.toContain("private-");
+    const resolution = eventCountFailureDiagnostic(
+      undefined,
+      JSON.stringify({
+        command: "lifecycle @ds/schemas resolve failed",
+        ...moduleFailure,
+        nodeVersion: "v24.22.2",
+        platform: "linux",
+      }),
+    );
+    expect(resolution.nativeModuleFailures[0]!.loader).toBe("resolve");
   });
   it("rejects a source filename that only matches an unescaped separator", () => {
     const diagnostic = eventCountFailureDiagnostic(

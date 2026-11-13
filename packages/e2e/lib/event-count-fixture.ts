@@ -30,6 +30,19 @@ export const countRoot = resolve(
 const apiRequire = createRequire(resolve(countRoot, "apps/api/package.json"));
 const load = (name: string) =>
   import(pathToFileURL(resolve(countRoot, "apps/api/dist", `${name}.js`)).href);
+
+interface CountLifecycleModule {
+  EventLifecycleStateSchema: { options: string[] };
+  validTransitions(state: string, origin: string): string[];
+}
+export async function loadCountLifecycleModule(
+  observe?: (stage: "resolve" | "native-import") => void,
+): Promise<CountLifecycleModule> {
+  observe?.("resolve");
+  const entry = apiRequire.resolve("@ds/schemas");
+  observe?.("native-import");
+  return import(pathToFileURL(entry).href);
+}
 type Row = Record<string, unknown>;
 const sha = (value: Buffer | string) =>
   createHash("sha256").update(value).digest("hex");
@@ -642,30 +655,35 @@ export class EventCountWorld {
           "SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON e.enumtypid=t.oid WHERE t.typname='event_lifecycle_state' ORDER BY e.enumsortorder",
         )
       ).rows as { enumlabel: string }[];
-      type LifecycleModule = {
-        EventLifecycleStateSchema: { options: string[] };
-        validTransitions(state: string, origin: string): string[];
-      };
       const runtime = {
         nodeVersion: process.version,
         platform: process.platform,
       };
-      countOperation("lifecycle @ds/schemas require starts", runtime);
-      let lifecycle: LifecycleModule;
+      const loader: { stage: "resolve" | "native-import" } = { stage: "resolve" };
+      let lifecycle: CountLifecycleModule;
       try {
-        lifecycle = apiRequire("@ds/schemas") as LifecycleModule;
+        lifecycle = await loadCountLifecycleModule((stage) => {
+          loader.stage = stage;
+          countOperation(
+            `lifecycle @ds/schemas ${stage === "native-import" ? "native import" : "resolve"} starts`,
+            runtime,
+          );
+        });
       } catch (error) {
         try {
-          countOperation("lifecycle @ds/schemas require failed", {
-            ...runtime,
-            ...countModuleFailure(error),
-          });
+          countOperation(
+            `lifecycle @ds/schemas ${loader.stage === "native-import" ? "native import" : "resolve"} failed`,
+            {
+              ...runtime,
+              ...countModuleFailure(error),
+            },
+          );
         } catch {
           // Diagnostic I/O must not replace the native exception.
         }
         throw error;
       }
-      countOperation("lifecycle @ds/schemas require complete", runtime);
+      countOperation("lifecycle @ds/schemas native import complete", runtime);
       const { EventLifecycleStateSchema, validTransitions } = lifecycle;
       const states = EventLifecycleStateSchema.options;
       expect(new Set(rows.map((row) => row.enumlabel))).toEqual(

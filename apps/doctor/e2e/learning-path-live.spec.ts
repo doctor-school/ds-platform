@@ -49,6 +49,17 @@ const DOCTOR_URL = (process.env.E2E_DOCTOR_URL ?? "").replace(/\/$/, "");
 const PORTAL_URL = (process.env.E2E_PORTAL_URL ?? "").replace(/\/$/, "");
 const SLUG = process.env.E2E_LEARNING_COURSE_SLUG ?? "";
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
+/** `E2E_THEME=dark` runs the same journey in the dark theme (the dark evidence renders). */
+const DARK = process.env.E2E_THEME === "dark";
+/** The doctor host's theme is class-based: the persisted choice, applied before first paint. */
+const DARK_INIT = () => {
+  try {
+    localStorage.setItem("ds-theme", "dark");
+  } catch {
+    /* storage blocked: the class below still applies */
+  }
+  document.documentElement.classList.add("dark");
+};
 
 const DESKTOP = { width: 1280, height: 900 };
 const PHONE = { width: 390, height: 844 };
@@ -56,7 +67,7 @@ const PHONE = { width: 390, height: 844 };
 async function shoot(page: Page, name: string) {
   if (!SHOT_DIR) return;
   mkdirSync(SHOT_DIR, { recursive: true });
-  await page.screenshot({ path: join(SHOT_DIR, `${name}.png`), fullPage: true });
+  await page.screenshot({ path: join(SHOT_DIR, `${name}${DARK ? "-dark" : ""}.png`), fullPage: true });
 }
 
 async function axeClean(page: Page) {
@@ -89,6 +100,9 @@ const livePassword = () => `Doc-${Date.now()}-aA1!`;
 
 test.describe("024 — the doctor's course path and step screens", () => {
   test.describe.configure({ mode: "serial" });
+  test.beforeEach(async ({ context }) => {
+    if (DARK) await context.addInitScript(DARK_INIT);
+  });
 
   test("EARS-14 / EARS-15: a guest sees the path with its states and meets the registration gate on a step", async ({ page }) => {
     for (const [size, tag] of [[DESKTOP, "1280"], [PHONE, "390"]] as const) {
@@ -123,6 +137,7 @@ test.describe("024 — the doctor's course path and step screens", () => {
     const doctor = { email: newEmail(), password: livePassword() };
     await provisionConfirmedAccount(browser, "doctor", DOCTOR_URL, doctor);
     const context = await browser.newContext({ locale: "ru-RU", viewport: DESKTOP });
+    if (DARK) await context.addInitScript(DARK_INIT);
     await context.route("https://www.youtube.com/embed/**", (route) =>
       route.fulfill({ status: 200, contentType: "text/html", body: YOUTUBE_FIXTURE }),
     );

@@ -113,10 +113,18 @@ export interface TrackQueueData {
    * `claims` / `blockers` keyed by the child's number.
    */
   children: Map<number, QueueIssue[] | null>;
-  /** Parent of a closed queue item; `null` = none, absent = not read. */
+  /**
+   * Parent of a closed queue item; `null` = none, absent = not read.
+   * `openChildren` = the parent's open sub-issues (`null` = unreadable).
+   */
   parents: Map<
     number,
-    { number: number; title: string; state: "open" | "closed" } | null
+    {
+      number: number;
+      title: string;
+      state: "open" | "closed";
+      openChildren: number[] | null;
+    } | null
   >;
 }
 
@@ -190,7 +198,13 @@ export function resolveTrackQueues(
         // Only an outcome Issue is a queue item (#4053): a closed step whose
         // open parent is not queued means the outcome fell out of the queue.
         const p = data.parents.get(n);
-        if (p && p.state === "open" && !queued.has(p.number))
+        // Silent while every open sibling is itself queued: nothing fell out.
+        if (
+          p &&
+          p.state === "open" &&
+          !queued.has(p.number) &&
+          (p.openChildren ?? []).some((c) => !queued.has(c))
+        )
           warnings.push({
             source,
             message: `#${n} is a step of #${p.number} ${clip(p.title)} — queue #${p.number} instead`,
@@ -199,12 +213,6 @@ export function resolveTrackQueues(
       }
       const blockersOf = (k: number) =>
         data.blockers.has(k) ? data.blockers.get(k)! : [];
-      const claim = data.claims.get(n);
-      if (claim) {
-        open++;
-        r.inWork.push({ number: n, title: i.title, claim });
-        continue;
-      }
       const kids = data.children.get(n);
       if (kids === null) {
         // Unreadable sub-issues: the item may be a parent — never a leaf.
@@ -213,12 +221,15 @@ export function resolveTrackQueues(
       }
       if (kids === undefined || kids.length === 0) {
         open++;
-        if (r.next === null)
+        const claim = data.claims.get(n);
+        if (claim) r.inWork.push({ number: n, title: i.title, claim });
+        else if (r.next === null)
           r.next = unknownSeen
             ? undefined
             : { number: n, title: i.title, blockers: blockersOf(n) };
         continue;
       }
+      // A parent's own claim (e.g. a spec session) never hides its children.
       const openKids = kids.filter((c) => c.state === "open");
       if (openKids.length === 0) {
         warnings.push({
@@ -449,10 +460,32 @@ export async function loadTrackQueues(
           const p = await api<GhIssueJson>(
             `repos/{owner}/{repo}/issues/${n}/parent`,
           );
+          const state = p.state === "open" ? "open" : "closed";
+          const openChildren =
+            state !== "open"
+              ? []
+              : await api<GhIssueJson[][]>(
+                  `repos/{owner}/{repo}/issues/${p.number}/sub_issues`,
+                  true,
+                )
+                  .then((pages) =>
+                    pages
+                      .flat()
+                      .filter((c) => c.state === "open")
+                      .map((c) => c.number),
+                  )
+                  .catch((e) => {
+                    warnings.push({
+                      source: `track queue #${n} parent #${p.number} sub-issues`,
+                      message: firstLine(e),
+                    });
+                    return null;
+                  });
           data.parents.set(n, {
             number: p.number,
             title: p.title,
-            state: p.state === "open" ? "open" : "closed",
+            state,
+            openChildren,
           });
         } catch (e) {
           if (httpStatus(e, /HTTP 404/)) data.parents.set(n, null);

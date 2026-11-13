@@ -326,10 +326,36 @@ describe("track queues hold outcome Issues — a parent expands to its next open
     expect(tracks[0]!.next).toBeUndefined();
   });
 
-  it("a closed step queued instead of its open, unqueued parent warns", () => {
+  it("a claimed parent with open children is still expanded — its own claim never hides delivery children", () => {
+    const claim = {
+      source: "start-comment" as const,
+      ageMs: 60_000,
+      session: "spec-session",
+    };
+    const children = new Map([[10, kids([30, "open"], [31, "open"])]]);
+    const { tracks } = resolveTrackQueues(
+      parsed(),
+      data({ children, claims: new Map([[10, claim]]) }),
+    );
+    expect(tracks[0]!.inWork.map((w) => w.number)).toEqual([]);
+    expect(tracks[0]!.next).toMatchObject({
+      number: 30,
+      parent: { number: 10 },
+    });
+  });
+
+  it("a closed step warns when its open, unqueued parent has open children outside the queue", () => {
     const d = data({
       parents: new Map([
-        [10, { number: 40, title: "Feed epic", state: "open" as const }],
+        [
+          10,
+          {
+            number: 40,
+            title: "Feed epic",
+            state: "open" as const,
+            openChildren: [11, 45],
+          },
+        ],
       ]),
     });
     d.issues.set(10, issue(10, "track:academy", "closed"));
@@ -347,8 +373,24 @@ describe("track queues hold outcome Issues — a parent expands to its next open
     const d = data({
       parents: new Map([
         [10, null],
-        [11, { number: 41, title: "done", state: "closed" as const }],
-        [12, { number: 20, title: "Issue 20", state: "open" as const }],
+        [
+          11,
+          {
+            number: 41,
+            title: "done",
+            state: "closed" as const,
+            openChildren: [],
+          },
+        ],
+        [
+          12,
+          {
+            number: 20,
+            title: "Issue 20",
+            state: "open" as const,
+            openChildren: [46],
+          },
+        ],
       ]),
     });
     d.issues.set(10, issue(10, "track:academy", "closed"));
@@ -365,11 +407,39 @@ describe("track queues hold outcome Issues — a parent expands to its next open
       parsed(),
       data({
         parents: new Map([
-          [10, { number: 40, title: "epic", state: "open" as const }],
+          [
+            10,
+            {
+              number: 40,
+              title: "epic",
+              state: "open" as const,
+              openChildren: [10, 47],
+            },
+          ],
         ]),
       }),
     );
     expect(tracks[0]!.next?.number).toBe(10);
+    expect(warnings).toEqual([]);
+  });
+
+  it("a closed step whose open parent's open children are all queued is silent (doctor #1503 shape)", () => {
+    const d = data({
+      parents: new Map([
+        [
+          10,
+          {
+            number: 40,
+            title: "Specialty feed",
+            state: "open" as const,
+            openChildren: [11, 12],
+          },
+        ],
+      ]),
+    });
+    d.issues.set(10, issue(10, "track:academy", "closed"));
+    const { tracks, warnings } = resolveTrackQueues(parsed(), d);
+    expect(tracks[0]!.next?.number).toBe(11);
     expect(warnings).toEqual([]);
   });
 });

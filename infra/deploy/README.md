@@ -739,7 +739,8 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    ```
 
    Why 8 days, the protection of pre-lock objects and the pgBackRest version floor:
-   [`RECOVERY.md`](./RECOVERY.md) §1.4 «One provider».
+   [`RECOVERY.md`](./RECOVERY.md) §1.4 «One provider». Both data-prod images
+   (`compose/data-prod/postgres` and `pgbackrest`) pin pgBackRest 2.60.0.
 
    **The restricted pgBackRest S3 user.** The box's `PGBACKREST_REPO1_S3_KEY` /
    `PGBACKREST_REPO1_S3_KEY_SECRET` are the access key of an additional S3 user,

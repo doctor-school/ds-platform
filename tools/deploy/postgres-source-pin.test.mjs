@@ -21,11 +21,14 @@ import { readPostgresTarget } from "./postgres-guard.mjs";
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 
 /**
- * The accepted v2 source hash: the v2 of the tree live on data-prod, whose record holds
- * it with hashVersion 2 (#3475).
+ * The accepted v2 source hash: the v2 of the data-prod images that pin pgBackRest 2.60.0,
+ * pg_partman and both bases by digest (#3992), certified by postgres-artifact-prepare.mjs
+ * on the approved build host. Until the certified break-glass release ships them, the
+ * record on data-prod holds the previous hash and Actions releases refuse at
+ * postgres-verify.
  */
 const ACCEPTED_SOURCE_HASH =
-  "537a33d8de0890dcfd724ebd90184d52d3ee69f9588bb824bd71fee9d42dd271";
+  "a8d1460e9231a32969a55ef5bc7cc78b18527866dc52968a1a95439851e1e390";
 
 test("3418: the committed data-prod postgres source hash is the accepted one", () => {
   const { sourceHash } = readPostgresTarget("HEAD", REPO_ROOT);

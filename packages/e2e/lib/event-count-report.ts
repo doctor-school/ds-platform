@@ -20,6 +20,33 @@ export function decodeCountEvidence(bytes: Buffer): string {
     return Buffer.from(bytes.subarray(2)).swap16().toString("utf16le");
   return bytes.toString("utf8").replace(/^\uFEFF/, "");
 }
+export function assertCountStorageProvider(
+  provider: Record<string, unknown>,
+  native: Record<string, unknown>,
+) {
+  requireEvidence(
+    provider.endpoint === native.storageEndpoint &&
+      provider.bucket === native.storageBucket,
+    "storage provider/native API binding",
+  );
+  if (provider.provider === "dev-stand MinIO")
+    requireEvidence(
+      typeof provider.imageId === "string" &&
+        /^sha256:[a-f0-9]{64}$/.test(provider.imageId),
+      "actual dev-stand MinIO image identity",
+    );
+  else
+    requireEvidence(
+      provider.provider === "official-source MinIO" &&
+        provider.source === "7aac2a2c5b7c882e68c1ce017d8256be2feea27f" &&
+        provider.goArchiveSha256 ===
+          "6842c516ca66c89d648a7f1dbe28e28c47b61b59f8f06633eb2ceb1188e9251d" &&
+        typeof provider.binarySha256 === "string" &&
+        /^[a-f0-9]{64}$/.test(provider.binarySha256) &&
+        provider.listenerReleased === true,
+      "official MinIO source/toolchain/binary identity and owned listener cleanup",
+    );
+}
 export function assertNoCountCredentials(
   files: Record<string, string | Buffer>,
   secrets: readonly string[],
@@ -55,8 +82,10 @@ export interface CountResource {
   reopened: boolean;
   defaultHidden: boolean;
   defaultPresence: boolean;
-  registrationCount: number;
-  presenceCount: number;
+  backgroundRegistrationCount: number;
+  backgroundPresenceCount: number;
+  caseRegistrationCount: number;
+  casePresenceCount: number;
   cleanup: {
     eventState: string;
     backgroundState: string;
@@ -135,8 +164,14 @@ export function assertEventCountEvidence(value: {
       "persisted and reopened option",
     );
     requireEvidence(
-      resource.registrationCount === 1 && resource.presenceCount === 1,
+      resource.backgroundRegistrationCount === 1 &&
+        resource.backgroundPresenceCount === 1,
       "known nonzero native producer counts",
+    );
+    requireEvidence(
+      resource.caseRegistrationCount === (index === 0 ? 0 : 1) &&
+        resource.casePresenceCount === (index === 2 ? 1 : 0),
+      "case producer counts distinct from Background witnesses",
     );
     requireEvidence(
       resource.expectedCount === (index === 0 ? null : 1) &&

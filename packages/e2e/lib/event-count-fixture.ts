@@ -129,6 +129,15 @@ export async function bootEventCountApi() {
   set("DATABASE_URL", databaseUrl);
   set("RECONCILE_SWEEP_INTERVAL_MS", "0");
   for (const key of [
+    "S3_ENDPOINT",
+    "S3_ACCESS_KEY",
+    "S3_SECRET_KEY",
+    "S3_BUCKET_UPLOADS",
+  ]) {
+    const own = process.env[`E2E_EVENT_COUNT_${key}`];
+    if (own) set(key, own);
+  }
+  for (const key of [
     "AUDIT_IDENTIFIER_PEPPER",
     "LIFECYCLE_IMPACT_TOKEN_SECRET",
   ])
@@ -211,6 +220,8 @@ export async function bootEventCountApi() {
       url,
       ...binding,
       compiledApi: digestTree(resolve(countRoot, "apps/api/dist")),
+      storageEndpoint: process.env.S3_ENDPOINT,
+      storageBucket: process.env.S3_BUCKET_UPLOADS,
       sourceHashes,
       adminAssets: digestTree(resolve(countRoot, "apps/admin/.next/static")),
     };
@@ -723,6 +734,14 @@ export class EventCountWorld {
         ).rows[0] as { registrations: number; beats: number };
         expect(history.registrations).toBe(1);
         expect(history.beats).toBe(1);
+        const caseHistory = (
+          await this.api.query(
+            "SELECT (SELECT count(*)::int FROM registrations WHERE event_id=$1) AS registrations,(SELECT count(*)::int FROM presence_beats WHERE event_id=$1) AS beats",
+            [this.eventId],
+          )
+        ).rows[0] as { registrations: number; beats: number };
+        expect(caseHistory.registrations).toBe(this.ordinal === 0 ? 0 : 1);
+        expect(caseHistory.beats).toBe(this.ordinal === 2 ? 1 : 0);
         const resource: CountResource = {
           title: this.title,
           head: this.api.head,
@@ -739,8 +758,10 @@ export class EventCountWorld {
           reopened: this.reopened,
           defaultHidden: true,
           defaultPresence: false,
-          registrationCount: history.registrations,
-          presenceCount: history.beats,
+          backgroundRegistrationCount: history.registrations,
+          backgroundPresenceCount: history.beats,
+          caseRegistrationCount: caseHistory.registrations,
+          casePresenceCount: caseHistory.beats,
           cleanup: {
             eventState: "hidden",
             backgroundState: "hidden",

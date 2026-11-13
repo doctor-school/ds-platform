@@ -6,6 +6,7 @@ import {
   assertEventCountEvidence,
   assertNoCountCredentials,
   decodeCountEvidence,
+  assertCountStorageProvider,
 } from "../lib/event-count-report.js";
 
 const directory = process.argv[2];
@@ -34,15 +35,17 @@ const safe = resolve(directory, "safe");
 mkdirSync(safe);
 interface Suite {
   title?: string | undefined;
-  specs?: {
-    title: string;
-    tests: {
-      status: string;
-      projectName: string;
-      projectId: string;
-      results: { status: string; retry: number }[];
-    }[];
-  }[] | undefined;
+  specs?:
+    | {
+        title: string;
+        tests: {
+          status: string;
+          projectName: string;
+          projectId: string;
+          results: { status: string; retry: number }[];
+        }[];
+      }[]
+    | undefined;
   suites?: Suite[] | undefined;
 }
 function counters(suite: Suite): Suite {
@@ -98,10 +101,25 @@ for (const row of jsonLines("dynamic-secrets.private.jsonl")) {
       }
   }
 }
+function collectIssuedTokens(value: unknown) {
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    if (
+      /token|secret|credential|jwt/i.test(key) &&
+      typeof child === "string" &&
+      child.length >= 6
+    )
+      secrets.add(child);
+    if (child && typeof child === "object") collectIssuedTokens(child);
+  }
+}
+for (const response of jsonLines("http-responses.private.jsonl"))
+  collectIssuedTokens(response);
+const provider = JSON.parse(read("s3-provider.json"));
+assertCountStorageProvider(provider, JSON.parse(read("provenance.json")));
+files["s3-provider.json"] = read("s3-provider.json");
 assertNoCountCredentials(files, [...secrets]);
-function privateInventory(
-  path: string,
-): {
+function privateInventory(path: string): {
   path: string;
   sha256: string;
   bytes: number;

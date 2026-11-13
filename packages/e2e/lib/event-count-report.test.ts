@@ -4,6 +4,7 @@ import {
   eventCountOriginals,
   eventCountBackgrounds,
   assertNoCountCredentials,
+  assertCountStorageProvider,
 } from "./event-count-report.js";
 
 function proof() {
@@ -24,8 +25,10 @@ function proof() {
     reopened: index !== 1,
     defaultHidden: true,
     defaultPresence: false,
-    registrationCount: 1,
-    presenceCount: 1,
+    backgroundRegistrationCount: 1,
+    backgroundPresenceCount: 1,
+    caseRegistrationCount: index === 0 ? 0 : 1,
+    casePresenceCount: index === 2 ? 1 : 0,
     cleanup: {
       eventState: "hidden",
       backgroundState: "hidden",
@@ -97,6 +100,31 @@ function proof() {
 }
 
 describe("4035 exact original evidence", () => {
+  it("requires actual MinIO provider identity bound to the native API endpoint and bucket", () => {
+    const native = {
+      storageEndpoint: "http://localhost:9000",
+      storageBucket: "count4035",
+    };
+    const provider = {
+      provider: "dev-stand MinIO",
+      endpoint: native.storageEndpoint,
+      bucket: native.storageBucket,
+      imageId: `sha256:${"a".repeat(64)}`,
+    };
+    expect(() => assertCountStorageProvider(provider, native)).not.toThrow();
+    expect(() =>
+      assertCountStorageProvider({ ...provider, provider: "S3Mock" }, native),
+    ).toThrow();
+    expect(() =>
+      assertCountStorageProvider(
+        { ...provider, endpoint: "http://foreign:9000" },
+        native,
+      ),
+    ).toThrow();
+    expect(() =>
+      assertCountStorageProvider({ ...provider, imageId: "" }, native),
+    ).toThrow();
+  });
   it("refuses configured and dynamically issued credentials in either export encoding", () => {
     const secret = "fixture-issued-private-cookie-4035";
     expect(() =>
@@ -134,6 +162,7 @@ describe("4035 exact original evidence", () => {
     "order",
     "identity",
     "count",
+    "case-count",
     "cleanup",
     "head",
     "database",
@@ -168,6 +197,9 @@ describe("4035 exact original evidence", () => {
           break;
         case "count":
           value.resources[1]!.observedCount = 0;
+          break;
+        case "case-count":
+          value.resources[1]!.caseRegistrationCount = 0;
           break;
         case "cleanup":
           value.resources[0]!.cleanup.beatsRetained = false;

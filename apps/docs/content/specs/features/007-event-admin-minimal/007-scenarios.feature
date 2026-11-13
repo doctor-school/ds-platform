@@ -1,7 +1,8 @@
 # 007 — Minimal event admin scenarios
 # Gherkin for the authoring vertical of the Webinars epic wave 1 (create/edit an event, configure
-# the stream from an explicit provider enum, drive the single event state machine
-# draft → published → live → ended → archived, open/close the live room). Happy path = the full
+# the stream from an explicit provider enum, drive the origin-selected disjoint lifecycles:
+# platform draft → published → live → ended → hidden; legacy in_archive ⇄ hidden,
+# and open/close the platform live room). Happy path = the full
 # arc one operator/director runs for the 2026-07-17 webinar; plus failure branches. Translated to
 # Playwright via playwright-bdd against the Refine admin app — this is a user-facing spec, so the
 # browser run is a required deliverable (owned + tracked by the 007 admin-integration + E2E child
@@ -14,7 +15,7 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
   Background:
     Given the admin app is served on its configured origin with a platform_admin session (feature 003)
     And the object storage (MinIO/Timeweb) is available for the program PDF
-    And the event lifecycle is a single EventLifecycleState with the closed set draft → published → live → ended → archived
+    And EventLifecycleState has the closed set draft, published, live, ended, hidden, in_archive with origin selecting the disjoint platform lifecycle draft → published → live → ended → hidden or legacy lifecycle in_archive ⇄ hidden
     And all absolute times are entered as МСК and stored as one canonical instant
     And the public event page and listing (feature 004), registration (feature 005), and the room (feature 006) read the state 007 writes
 
@@ -250,7 +251,7 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
 
   # --- Amendment 2026-10-13: hide the registrant count; on by default since 2026-10-29, #3479 (US-1, US-2) ---
 
-  @EARS-12 @happy
+  @EARS-12 @happy @event-count-visibility
   Scenario: A new event hides its registrant count by default
     Given an operator creating an event without touching the «Скрыть число записавшихся» option
     When the operator saves the event
@@ -258,7 +259,7 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
     And the editor shows the option as on when the event is reopened
     And a public read of the event carries signUpCount null
 
-  @EARS-12 @happy
+  @EARS-12 @happy @event-count-visibility
   Scenario: An operator shows the registrant count of an event
     Given an event with registrants and the «Скрыть число записавшихся» option on by default
     When the operator turns the option off and saves the event
@@ -282,7 +283,7 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
 
   # --- Amendment 2026-10-28: show the live participant count to viewers (US-1, US-2) ---
 
-  @EARS-13 @happy
+  @EARS-13 @happy @event-count-visibility
   Scenario: An operator shows the live participant count of an event to viewers
     Given an event with the «Показывать зрителям число участников» option off by default
     When the operator turns the option on and saves the event

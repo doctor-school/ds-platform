@@ -8868,6 +8868,440 @@
         "tags": ["ExpertsAdmin"]
       }
     },
+    "/v1/admin/learning/courses": {
+      "get": {
+        "operationId": "LearningAdminController_courses",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "schoolId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      },
+      "post": {
+        "operationId": "LearningAdminController_createCourse",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/courses/{id}": {
+      "get": {
+        "operationId": "LearningAdminController_course",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/courses/{id}/publish": {
+      "post": {
+        "operationId": "LearningAdminController_publishCourse",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/courses/{id}/unpublish": {
+      "post": {
+        "operationId": "LearningAdminController_unpublishCourse",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/lessons": {
+      "post": {
+        "operationId": "LearningAdminController_createLesson",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/lessons/{id}": {
+      "get": {
+        "operationId": "LearningAdminController_lesson",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      },
+      "patch": {
+        "operationId": "LearningAdminController_updateLesson",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/lessons/{id}/publish": {
+      "post": {
+        "operationId": "LearningAdminController_publishLesson",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/lessons/{id}/step-order": {
+      "put": {
+        "operationId": "LearningAdminController_reorderSteps",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/lessons/{id}/unpublish": {
+      "post": {
+        "operationId": "LearningAdminController_unpublishLesson",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/modules": {
+      "post": {
+        "operationId": "LearningAdminController_createModule",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/presets": {
+      "get": {
+        "operationId": "LearningAdminController_presets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/rules/{scopeKind}/{scopeId}": {
+      "get": {
+        "operationId": "LearningAdminController_rules",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scopeKind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scopeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      },
+      "put": {
+        "operationId": "LearningAdminController_setRules",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scopeKind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scopeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/rules/{scopeKind}/{scopeId}/apply-preset": {
+      "post": {
+        "operationId": "LearningAdminController_applyPreset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scopeKind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scopeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/schools": {
+      "get": {
+        "operationId": "LearningAdminController_schools",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      },
+      "post": {
+        "operationId": "LearningAdminController_createSchool",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/steps": {
+      "post": {
+        "operationId": "LearningAdminController_createStep",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/steps/{id}": {
+      "delete": {
+        "operationId": "LearningAdminController_removeStep",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      },
+      "patch": {
+        "operationId": "LearningAdminController_updateStep",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/steps/{id}/media": {
+      "put": {
+        "operationId": "LearningAdminController_setStepMedia",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/steps/{id}/source": {
+      "put": {
+        "operationId": "LearningAdminController_setStepSource",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
     "/v1/admin/legacy-broadcasts": {
       "post": {
         "operationId": "LegacyBroadcastsAdminController_create",
@@ -10205,6 +10639,48 @@
         "tags": ["Health"]
       }
     },
+    "/v1/learning/courses/{courseSlug}/path": {
+      "get": {
+        "operationId": "LearningPublicController_path",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "courseSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningPublic"]
+      }
+    },
+    "/v1/learning/lessons/{lessonId}": {
+      "get": {
+        "operationId": "LearningPublicController_lesson",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lessonId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningPublic"]
+      }
+    },
     "/v1/me/birth-date": {
       "put": {
         "operationId": "CongressBirthDateMeController_set",
@@ -10537,6 +11013,81 @@
           }
         },
         "tags": ["MyEvents"]
+      }
+    },
+    "/v1/me/learning/attempts/{attemptId}/submit": {
+      "post": {
+        "operationId": "LearningMeController_submit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attemptId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningMe"]
+      }
+    },
+    "/v1/me/learning/facts": {
+      "post": {
+        "operationId": "LearningMeController_fact",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningMe"]
+      }
+    },
+    "/v1/me/learning/steps/{stepId}": {
+      "get": {
+        "operationId": "LearningMeController_step",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "stepId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningMe"]
+      }
+    },
+    "/v1/me/learning/tests/{testId}/attempts": {
+      "post": {
+        "operationId": "LearningMeController_start",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "testId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["LearningMe"]
       }
     },
     "/v1/me/phone": {

@@ -252,6 +252,9 @@ importers:
       '@ds/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@ds/learning':
+        specifier: workspace:*
+        version: link:../../packages/learning
       '@ds/legal-content':
         specifier: workspace:*
         version: link:../../packages/legal-content

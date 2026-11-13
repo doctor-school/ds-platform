@@ -2,14 +2,14 @@ import { type ArgumentsHost, Catch } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LearningServerError } from "@ds/learning/server";
 import { TaxonomyProblemFilter } from "../taxonomy/index.js";
+import type { TaxonomyErrorCode } from "@ds/schemas";
 import {
   markReplayable,
   PROBLEM_TYPE_BASE,
+  type ReplayLeaseRef,
   resolveTraceId,
   TaxonomyError,
-  type TaxonomyErrorCode,
 } from "../taxonomy/taxonomy.errors.js";
-import type { ReplayLeaseRef } from "../taxonomy/idempotency.service.js";
 
 // 024-design §7 — the learning problem shapes. The admin routes speak the 012
 // admin problem contract (a `LearningServerError` becomes the `TaxonomyError`

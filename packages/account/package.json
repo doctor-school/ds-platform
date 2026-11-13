@@ -1,6 +1,6 @@
 {
   "name": "@ds/account",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "DS Platform shared account cabinet — the one /account surface (server guest guard, the client cabinet over the shared card, its default RU copy), mounted by both storefronts with a data-only host config (ADR-0013 A1, feature 003, epic #2020 wave 4).",

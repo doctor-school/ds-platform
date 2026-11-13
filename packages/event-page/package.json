@@ -1,6 +1,6 @@
 {
   "name": "@ds/event-page",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "DS Platform shared event page — the one event-page composition (hero, sign-up card, recording gate / player, programme, speakers, format, partners), its reads and its copy, mounted by both storefronts with a data-only host config (ADR-0013 A1, feature 020, epic #2020 wave 3).",

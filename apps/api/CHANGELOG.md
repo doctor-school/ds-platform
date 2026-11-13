@@ -1,5 +1,715 @@
 # @ds/api
 
+## 5.0.0
+
+### Major Changes
+
+- [#2711](https://github.com/doctor-school/ds-platform/pull/2711) [`b54d3db`](https://github.com/doctor-school/ds-platform/commit/b54d3dbda91585981f3c29b162049031cd7d3336) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Events storefront wave 2 ([#2028](https://github.com/doctor-school/ds-platform/issues/2028)), the read contract of the one feed view on both hosts: `GET /v1/public/events?timeframe=…` accepts the horizon `from`/`to` of the one listing codec and echoes `horizon { from, to, nextTo, nextFrom, remaining, nextBatch }`; a read stating neither a bound nor a cursor page (`cursor` / `limit`) is the horizon read of the tense's default extent, so the bare «Будущие» and «Прошедшие» reads offer «Показать ещё». The cursor page stays for a read that states `cursor` or `limit` and never combines with a horizon. Every Academy listing card carries its event `kind`, attendance `format` and the colleagues' `signUpCount`; the listing `counts` gain `upcomingSchools`, the distinct schools among the upcoming listing-eligible events («N эфиров · M школ»). The new `GET /v1/public/events/live` serves the Academy «Идёт сейчас» from the one live resolution the doctor host uses.
+
+  The doctor feed `GET /v1/storefront/doctor/events` selects each tense by lifecycle, as the Academy listing does: «Будущие» = published and live events, soonest first; «Прошедшие» = ended and archived events, newest first. Both feed reads carry `nextFrom` («Прошедшие» widens backward), `remaining` (the M of «Показать ещё N из M») and `nextBatch` (the N — the events the next widening step adds). «Прошедшие» has no age floor — «Показать ещё» walks back to the oldest archived event, and a requested `from` older than every matching event is echoed clamped to that event's day. «Будущие» reaches at most a year ahead of today. Every horizon response carries at most 500 events in whole days: a larger extent keeps the days next to the edge «Показать ещё» advances — the oldest («Прошедшие») / farthest («Будущие») — and echoes the moved opposite bound (`to` / `from`), so the next «Показать ещё» URL carries both returned bounds and slides the window; every step brings new events until nothing lies beyond. A doctor feed card of an ended event carries the same 014 `recording` projection as the Academy past card, and the projection gains `durationSec`, the primary cut's length.
+
+  **Breaking:**
+
+  - `@ds/api` / `@ds/api-client`: `GET /v1/storefront/doctor/events/live` returns a list of strips (`[]` when nothing is live) instead of one strip or `null`; `GET /v1/storefront/doctor/events` no longer returns today's ended events under «Будущие» or today's not-yet-ended ones under «Прошедшие»; a bare `GET /v1/public/events?timeframe=…` returns the horizon page, not the first 20-card cursor page (send `limit` for a cursor page).
+  - `@ds/schemas`: `DoctorEventsLiveStripSchema`, `DoctorEventsLiveReadSchema`, the `DoctorEventsLive*` types and `DOCTOR_EVENTS_LIVE_REFRESH_SECONDS` are removed; `UpcomingBroadcastCardSchema` requires `kind`, `format` and `signUpCount`; `DoctorEventsFeedSchema` and the listing `horizon` require `nextBatch`; `RecordingProjectionSchema` requires `durationSec`; `PublicEventListingQuerySchema.limit` has no default.
+
+- [#2797](https://github.com/doctor-school/ds-platform/pull/2797) [`0d8d973`](https://github.com/doctor-school/ds-platform/commit/0d8d973b1e42c3ec60635d8856c1f65dc2085265) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 044 EARS-29/36, 046 EARS-28 ([#2770](https://github.com/doctor-school/ds-platform/issues/2770)): the admin shows every congress contact phone in one format built from its normalised E.164 value — a Russian number as `+7 (XXX) XXX-XX-XX`, any other as plain `+<digits>` — in the roster, the participant card and the 046 submission card, so one number typed two ways never reads two ways. The typed phone stays stored but is no longer displayed.
+
+  **Breaking (`@ds/api`, `@ds/schemas`):** changed field semantics — `phone` on `CongressRosterRow`, `CongressParticipantCard` and `CongressSubmissionCard.submitter` now carries the normalised E.164 value instead of the phone exactly as typed (field names and shapes unchanged). `@ds/schemas` also adds `formatContactPhone`. `@ds/admin` (minor): the three surfaces render the phone through it.
+
+- [#2869](https://github.com/doctor-school/ds-platform/pull/2869) [`65af6b1`](https://github.com/doctor-school/ds-platform/commit/65af6b1b8c7490cb0982233a3c41fa4bf0009da1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-28 / 019 EARS-7, EARS-17 (Amendment — 2026-10-13, owner decision «Даже если вид снят с публикации, это не повод его исключать из фильтров.»): a retired event kind stays a storefront filter value. `@ds/api`: `GET /v1/public/event-kinds` now serves published and retired kinds (same `{ id, slug, title }`, no status, never a draft), and the doctor feed's kind facet offers a retired kind under its title while its events are in the reading — breaking for any consumer that read the list as «published only». `@ds/design-system`: `EventsFilterOptions` gains the optional `appliedNames`, so an applied «Формат» / «Вид события» value the reading does not offer stays a selected, removable chip under the name the host gives it. Behaviour change for a host that passes no `appliedNames`: such an applied value is now drawn as a chip labelled by its raw id (before: no chip, yet counted), and a chip facet with no options now renders while it has an applied value. `@ds/events-storefront`: an applied kind is always named by its title from the public dictionary (panel and empty state); a kind slug the dictionary does not carry is dropped before any read, like a format outside the fixed set; adds `fetchEventKindTitles` (`null` on a failed read), `KindTitle`, `withKnownKinds`; `FacetColumn`, `FeedSection` and `MonthView` take the required `kinds` dictionary.
+
+- [#3426](https://github.com/doctor-school/ds-platform/pull/3426) [`0614f2c`](https://github.com/doctor-school/ds-platform/commit/0614f2c6ac5c52fe7b7b107505c0fdcf2cd29d1b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The live participant count is hidden from viewers by default (006 EARS-19, 007 EARS-13, 020 EARS-24, 019 EARS-30, [#2911](https://github.com/doctor-school/ds-platform/issues/2911)). Migration `0052` adds `events.show_presence_count boolean not null default false` (every existing event now hides the count from viewers). `CreateEvent` accepts `showPresenceCount` (default `false`), `UpdateEvent` sets it only when the key is present, and `EventAdminDetail` returns its state. While it is off, a caller whose session claims carry no staff role receives `presenceCount: null` from the `RoomConfig` read, every heartbeat ack, the room-entry participation CTA and each «Идёт сейчас» strip, and the realtime `presence-count` message rides the new staff-only `room:staff:<id>` channel that only a staff caller's connection token lists (`RoomChatCredential.staffChannel`, `null` for a viewer); while it is on, it rides the shared `room:event:<id>` channel as before. Staff always receive the count. Turning the setting on or off on a live event re-publishes the count to the new audience at once. Presence capture and minutes are unchanged. Breaking: `RoomConfig.presenceCount`, `PresenceHeartbeatAck.presenceCount` and `EventLiveStrip.presenceCount` are now `number | null`, and `RoomChatCredential` gains the required `staffChannel: string | null`.
+
+- [#2922](https://github.com/doctor-school/ds-platform/pull/2922) [`6040122`](https://github.com/doctor-school/ds-platform/commit/6040122fdbe6d98643612e1a3ad851b0861257a0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - An event can hide its registrant count (007 EARS-12, 019 EARS-19, [#2913](https://github.com/doctor-school/ds-platform/issues/2913)). Migration `0048` adds `events.hide_sign_up_count boolean not null default false` (every existing event keeps showing its count). `CreateEvent` accepts `hideSignUpCount` (default `false`), `UpdateEvent` sets it only when the key is present, and `EventAdminDetail` returns its state — no admin read carries the count itself. While it is on, every public card read serves `signUpCount: null` and does not count the event at all: the Academy listing (`UpcomingBroadcastCardSchema`, upcoming and past, and the bare `/v1/public/events` read) and the doctor feed that the 018 nearest-events block also reads (`DoctorEventCardSchema`). Breaking: both `signUpCount` fields are now `number | null`; the `events-storefront` card model follows, and a `null` count hands the shared card no count line and no label.
+
+- [#3586](https://github.com/doctor-school/ds-platform/pull/3586) [`0d505a0`](https://github.com/doctor-school/ds-platform/commit/0d505a0452c2579719f4d106978ec4504e6f553f) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Projects catalog (030, [#3503](https://github.com/doctor-school/ds-platform/issues/3503)): migration 0055 absorbs the 012 projects — every project keeps its id, slug, state, version and links, gets the stage «Проект идёт», keeps its former kind only as the read-only `legacyKind` hint, and has no results; every organisation link gets the investor role. The project form drops the kind and gains the stage («Проект идёт» / «Скоро» / «Завершён», «Скоро» by default) with «Что происходит сейчас» required for «Скоро»; `GET/PUT /v1/admin/projects/:id/results` read and replace a project's ordered results (0–20, each with an output kind, a title, an optional description and an optional doctor-storefront link); `/v1/admin/project-output-kinds` lists the «Виды результатов» (Школа, Курс, Подкаст, Событие, Конгресс, Клуб) with result counts, adds, renames, retires (refused while a draft or published project's result holds the kind) and restores them. Publishing a project now reports every missing item together — title, description, at least one result, the stage note of «Скоро» and the curator — as `409 PUBLISH_REQUIREMENTS_NOT_MET` field errors. The public project summary no longer carries `kind`.
+
+  The admin gains the «Результаты» tab on a project (ordered rows, move up/down, saved as one set), the «Виды результатов» section, a «Стадия» column with «Не на сайте: нет результатов» in the project list, and a refused «Опубликовать» that lists each missing item with a control opening the tab that fixes it.
+
+  Deploy window: between migration 0055 and the new api container, the still-running old api reads the renamed `projects.kind` column, so admin project reads and the public project relationship routes fail until the new api is up; the hot public event and Academy paths select explicit project columns and are unaffected.
+
+- [#3858](https://github.com/doctor-school/ds-platform/pull/3858) [`826cc75`](https://github.com/doctor-school/ds-platform/commit/826cc75e7b75a785dcd8f88652baf77ccd209bcb) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The 025 universal rule engine core ([#3838](https://github.com/doctor-school/ds-platform/issues/3838); EARS-3, 4, 25 amended; EARS-32…40, 42, 44): rules and settings become data. A developer-registered fact-type catalog with typed attributes and predicates, one rule body schema (trigger, condition AST, `credit` / `debit` effect, limits `oncePer` / `countPer` / `unlimited`, validity window, stacking), and `PointsEngine.record(fact)` — a producer reports what happened; every matching rule version active at `occurredAt` is evaluated, written as one ledger fact `<event id>#<rule id>`, and journaled in `points_facts` with its full evaluation trace. A `countPer` scope is serialised by a transaction-scoped advisory lock, so concurrent facts never exceed the cap. Migration 0060 adds the engine columns, the journal and the PRD seed at the epoch, each seeded id numbered `max(version) + 1`. Spend effects (reserve / settle / release, price-list debit, `concurrentOpen`) wait for [#3810](https://github.com/doctor-school/ds-platform/issues/3810) and are refused at publish.
+
+  **Breaking:**
+
+  - `@ds/api` / `@ds/api-client`: `POST /v1/admin/points/rules/:ruleId/versions` takes the one rule body (`parameters` = a `rule` or `setting` body) for any admin slug, answers `PublishedPointsRuleVersion` (with `kind` and stacking `warnings`), refuses a retired 0059 id with 422 `points-rule-retired`; `points-rule-unknown` (404) is gone.
+  - `@ds/api`: `PointsFactIntake` (`accept` / `acceptWithin`) is removed — producers call `PointsEngine.record`.
+  - `@ds/schemas`: the error code `POINTS_RULE_UNKNOWN` is removed (`POINTS_PHONE_UNVERIFIED`, `POINTS_RULE_RETIRED` added); the publish request and response schemas follow the one rule body.
+
+- [#2610](https://github.com/doctor-school/ds-platform/pull/2610) [`bb4b540`](https://github.com/doctor-school/ds-platform/commit/bb4b540302e36d4edace761fe5e68e96932cdecd) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Each event now carries an audience and a kind from an editable dictionary
+  (012 EARS-25…30, [#2509](https://github.com/doctor-school/ds-platform/issues/2509)). The audience — doctors or market experts — alone
+  decides the storefront: doctors' events show only on the doctor storefront,
+  experts' events only on the Academy, in every public read. The kind (Вебинар,
+  Эфир, Конгресс, Встреча клуба, Мастер-класс, and any kind an editor adds in the
+  admin «Типы мероприятий» screen) allows a set of participation formats; the
+  admin event form offers only the formats the chosen kind allows, and narrowing
+  a kind while its events use a removed format is refused with those events
+  named. A project carries a default audience that prefills a new linked event.
+  Breaking API contract: creating an event requires `kindId` and `audience` (plus
+  a `participationFormat` the kind allows); creating a project requires
+  `defaultAudience`. The doctor storefront card shows the event's kind title.
+  Migration 0046 maps the existing events per the reviewed table and removes five
+  test events.
+
+- [#2460](https://github.com/doctor-school/ds-platform/pull/2460) [`103c74d`](https://github.com/doctor-school/ds-platform/commit/103c74deb7f6e51c0467c520ebfd1813272000bb) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One registration-confirmation mechanism on both storefronts ([#2455](https://github.com/doctor-school/ds-platform/issues/2455)).
+
+  - The doctor storefront now confirms a registration on its own `/verify` route
+    (`apps/doctor/app/(auth)/verify/page.tsx`), the same `@ds/auth-flow/verify`
+    step the Academy mounts: registration hands the visitor over with the address
+    and the carried return target in the query. The in-place confirmation branch of
+    the registration door is gone.
+  - ONE confirm command on both hosts: the 003 `POST /v1/auth/verify` (address +
+    code). The doctor-storefront command `POST /v1/storefront/doctor/confirm`, its
+    `DoctorConfirm*` schemas and SDK types are removed — it was that 003
+    verification plus a server-side landing decision.
+  - The landing after confirmation is decided the same way on both hosts (owner
+    decision «Б», 2026-09-29, 021 Amendment — 2026-09-29): the page of the эфир
+    the visitor came from, even when it has ended or filled up (the page states
+    that itself); an эфир that no longer exists → the default landing. The one
+    public event read is asked on every host when the code is accepted; only its
+    not-found answer means «no longer exists» — a failed read keeps the эфир page.
+  - `AuthFlowHostConfig` breaking changes: `routes.verify` is required;
+    `api.confirmPath`, `api.confirmCarriesReturnTarget` and
+    `verify.deepLinkEntry` are removed (the verification mail is link-free, so the
+    `/verify#email=` fragment is no address); the auth client's `confirm` is
+    replaced by a typed `verify`. `resolveConfirmLanding` is removed.
+  - The return-context card («Вы вернётесь к этому событию» + the эфир + the
+    assurance line) is drawn on both storefronts, on «Вход», «Регистрация» and
+    «Подтверждение», wherever the arrival resolved an эфир — the canvas `auth`
+    draws it for both hosts. `returnTo.card` is removed from
+    `AuthFlowHostConfig`; the sign-in door takes the same one эфир read as the
+    other doors. Only a not-found answer drops the target, and on the Academy it
+    drops the parked copy of that target too: after sign-in the visitor lands on
+    the default landing, never on the page of an эфир that no longer exists. The
+    parked target still carries every arrival the door does not judge (a room, the
+    personal account, a direct arrival).
+  - A signed-in visitor on the Academy `/verify` is sent to the landing the
+    registration door would send them to (`/webinars`), not to `/account`.
+
+### Minor Changes
+
+- [#3678](https://github.com/doctor-school/ds-platform/pull/3678) [`ffcbc8b`](https://github.com/doctor-school/ds-platform/commit/ffcbc8b953769a71c4cce16d6540730125f1cc31) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The specialty feed (018 EARS-1, EARS-4, [#1496](https://github.com/doctor-school/ds-platform/issues/1496) / [#1499](https://github.com/doctor-school/ds-platform/issues/1499)): `GET /v1/storefront/feed/{specialty}` answers the `SpecialtyFeed` envelope (the specialty, the connected blocks in the F-018-1 order — release 1: events only — `order: "events-first"`, `viewer.loggedIn`; an unknown specialty is `SPECIALTY_FEED_NOT_FOUND`, 404) and `GET /v1/storefront/feed/{specialty}/events` the nearest three events of the specialty from 019's doctor events feed service. `@ds/events-storefront/feed` adds `SpecialtyEventsBlock`, which renders that read through the events feed's card list with the feed's own error copy, empty state and block retry. The doctor host serves `/feed/<specialty>` inside 017's shell: breadcrumbs, the specialty heading with «сменить специальность» re-opening the specialty catalog, then the nearest-events block with «Все события по специальности →» into the events feed for the specialty.
+
+- [#3928](https://github.com/doctor-school/ds-platform/pull/3928) [`b196077`](https://github.com/doctor-school/ds-platform/commit/b1960779456bd91bc0906788c356f822140fa855) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - «Зачем это мне» on the specialty feed (018 EARS-7, [#1502](https://github.com/doctor-school/ds-platform/issues/1502)). Breaking for `@ds/schemas` and `@ds/api-client`: a `SpecialtyFeed` block is now a discriminated union on `kind` — read-backed kinds (`events`) keep `{ kind, read }`, the new `value` kind is `{ kind: "value", items: { title, body }[4] }` with no `read` — so a consumer narrows on `kind` before reading `read`; `specialtyFeedBlocks(code, { value })` now takes the value block's content, and `specialtyFeedBlockRead` accepts only read-backed kinds. The api's feed envelope carries the value block right after the events block, one editorial copy for every specialty (no new endpoint). The doctor feed renders it below the nearest events: the four items and nothing else — the canvas closing strip is not built, and the block makes no statement about money or who pays (LD-9).
+
+- [#3945](https://github.com/doctor-school/ds-platform/pull/3945) [`b697504`](https://github.com/doctor-school/ds-platform/commit/b697504df84a2278ea4151847ea444f84fcff516) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - «Смежные области» on the specialty feed (018 EARS-8, [#1503](https://github.com/doctor-school/ds-platform/issues/1503)). Breaking for `@ds/schemas` and `@ds/api-client`: the `SpecialtyFeed` block union gains the read-backed `adjacent` kind (last in the F-018-1 order), so an exhaustive switch over `kind` needs a new case; new `AdjacentAreas` schema `{ items: { specialty, direction: { id, slug, title }, feedHref }[] }`. The api adds `GET /v1/storefront/feed/{specialty}/adjacent` (public): adjacent specialties reached only through the managed direction ↔ specialty links and the direction adjacency relation, one entry per specialty through its highest-weight edge, never the chosen specialty or «Другое». `@ds/design-system`: `Link` gains a `chip` variant (a bordered pill link). `@ds/events-storefront`: new `./block` export re-exporting `BlockError` and `BlockRetry`. The doctor feed renders the block last: one chip per adjacent specialty opening that specialty's feed, a statement when there are none, and its own error + «Повторить».
+
+- [#2663](https://github.com/doctor-school/ds-platform/pull/2663) [`9388284`](https://github.com/doctor-school/ds-platform/commit/9388284e74a18eeb87478fc8ccc405a7caf631c9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - «Мои события» on both hosts ([#1972](https://github.com/doctor-school/ds-platform/issues/1972)): every `MyEventItem` now carries `roomHref` — the calling host's room path for a registered row on a live event, otherwise `null` — and `participationFormat`, the event's attendance mode. `GET /v1/me/events` resolves the Academy room (`/webinars/<slug>/room`); the new `GET /v1/storefront/doctor/me/events` serves the same read for the doctor storefront (`/events/<slug>/room`), with the same `doctor_guest` posture.
+
+- [#3053](https://github.com/doctor-school/ds-platform/pull/3053) [`ba5c902`](https://github.com/doctor-school/ds-platform/commit/ba5c902323c279cba67e535cc431bc7c89ead8e1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Event page wave 3 ([#2072](https://github.com/doctor-school/ds-platform/issues/2072)), the read contract of the social proof and the viewers count, on both hosts at once: `GET /v1/public/events/:idOrSlug` and `GET /v1/storefront/doctor/events/:idOrSlug` carry `signUps: { total, sameSpecialty, adjacentSpecialties } | null` and `viewers: number | null`. `signUps.total` is the same colleagues' count the feed and listing cards carry as `signUpCount`; `sameSpecialty` counts registrants whose profile specialty owns one of the event's directions and `adjacentSpecialties` those who reach one through the managed direction adjacency instead. `signUps` is `null` at zero colleague sign-ups and while the event's «Скрыть число записавшихся» option is on. `viewers` is the number of distinct doctors who were in the event's room, `null` unless the event has ended and that number is above zero. Both are the same for a guest and a signed-in reader.
+
+  **Breaking:**
+
+  - `@ds/schemas`: `EventPageViewSchema` (and `EventPageViewBaseSchema`) require `signUps` (`SignUpProofSchema`, whose `total` is positive) and `viewers` (a positive whole number); each is `null` when absent, never omitted.
+
+- [#2715](https://github.com/doctor-school/ds-platform/pull/2715) [`1d16a70`](https://github.com/doctor-school/ds-platform/commit/1d16a704a67f8f88db036b45d103cde9f8b55bd7) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Registration and password-reset code emails now go through one ordered chain — Postbox, then an optional mail.ru reserve, then Resend — within a 40-second budget, so a provider outage no longer leaves the visitor without a code while a doubtful send is never repeated. The mail.ru reserve is off until explicitly enabled (`MAILER_FALLBACK_SMTP_*`), and each channel's readiness is checked at startup and on every real-email switch without sending a message ([#2144](https://github.com/doctor-school/ds-platform/issues/2144)).
+
+- [#2757](https://github.com/doctor-school/ds-platform/pull/2757) [`423dd7d`](https://github.com/doctor-school/ds-platform/commit/423dd7d9151d4d078c6d4c6df040ef5c75acb90e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Congress roster sort (044 EARS-22, narrowed by EARS-37): `GET /v1/admin/events/:idOrSlug/roster` accepts `sort` (`fullName`, `specialty`, `city`, `phone`, `registeredAt`, `presence`) and `dir` (`asc`/`desc`), composable with `q`, the presence filter and the page. Text columns order under the Russian collation with empty cells last, the phone by its normalised digits, `presence` by the mark of `attendanceDay` (required with that key, 400 otherwise); without `sort` the order stays registration date ascending. `@ds/schemas` exports `CONGRESS_ROSTER_SORT_KEYS`, `CONGRESS_ROSTER_SORT_DEFAULT` and the sort key/direction schemas.
+
+- [#2809](https://github.com/doctor-school/ds-platform/pull/2809) [`9bce5b4`](https://github.com/doctor-school/ds-platform/commit/9bce5b49b6ae7849ed003fcb4c145fba052eec77) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 044 EARS-23 — the congress roster route (`GET /v1/admin/events/:idOrSlug/roster`) takes server-side per-column filters, each composable with the search, the presence filter, the sort and the page: `name`, `workplace`, `email` (case-insensitive contains), `phone` (contains on digits against the normalised number, `8 …` finds `+7 …`), `city` and `region` (case-insensitive equality with the directory value), `specialtyId` (directory id), `mailStatus` (`sent` / `failed` / `none`) and `registeredFrom` / `registeredTo` (inclusive Moscow calendar days). `CongressRosterQuerySchema` declares them; the generated client carries them ([#2317](https://github.com/doctor-school/ds-platform/issues/2317)).
+
+- [#2851](https://github.com/doctor-school/ds-platform/pull/2851) [`d343086`](https://github.com/doctor-school/ds-platform/commit/d34308684b0abd775bd38a6d79f8535a19d3ca53) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 044 EARS-31 — every congress roster row (`GET /v1/admin/events/:idOrSlug/roster`) carries the EARS-30 `possibleDuplicate` marker, and the route takes `possibleDuplicate=yes|no` (absent = any, anything else 400) as one more conjunct composing with the search, the column filters, the sort and the page. The marker is derived over the whole event's participants before any filter applies, so the row, the filter and the participant card never disagree; a staff account's registration never marks a participant ([#2456](https://github.com/doctor-school/ds-platform/issues/2456)). `CongressRosterQuerySchema` / `CongressRosterRowSchema` declare it; the generated client carries it ([#2328](https://github.com/doctor-school/ds-platform/issues/2328)).
+
+- [#2719](https://github.com/doctor-school/ds-platform/pull/2719) [`8350915`](https://github.com/doctor-school/ds-platform/commit/835091584a7a9f2e44a3e5dbbc70bd27e7b17495) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 046 programme committee ([#2437](https://github.com/doctor-school/ds-platform/issues/2437)): the `congress-program-committee` role (TOTP, bound to one or more events by migration 0047), the event-scoped submission registry, card and status change with the committee letters and the three-working-day revision deadline, and the platform administrator's deadline extension (ADR-0001 A3).
+
+- [#3043](https://github.com/doctor-school/ds-platform/pull/3043) [`3cbb163`](https://github.com/doctor-school/ds-platform/commit/3cbb16363e5cda884853b49278a30d373507c408) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Congress submissions deadline reminder (046 EARS-33, [#2439](https://github.com/doctor-school/ds-platform/issues/2439)): every 15 minutes the api sweeps open kinds whose intake closes within 72 hours and sends each account with unsent drafts of that kind one letter «Doctor.School — приём {вида} заканчивается {дата}» listing the drafts and the last day, with no link and the cabinet-entry paragraph — at most once per account, event, kind and closing instant (a conditional claim on `reminded_for_closes_at`, safe across parallel api instances); a moved closing instant re-arms it. The outcome is recorded on every listed draft (`last_letter_kind = 'reminder'`). `@ds/schemas` adds `CONGRESS_SUBMISSION_KIND_GENITIVE_PLURAL`.
+
+- [#3048](https://github.com/doctor-school/ds-platform/pull/3048) [`6afe6e3`](https://github.com/doctor-school/ds-platform/commit/6afe6e336b15e8a0eaa9c502e72a17c9a1f09a99) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress confirmation email now takes «{место}» from the registered event
+  itself ([#2517](https://github.com/doctor-school/ds-platform/issues/2517), 044 EARS-13 amendment). Every event gains an optional
+  «Место проведения» field in the admin event form (`events.venue`, free text up
+  to 300 characters, trimmed; an emptied field stores no venue), and an
+  administrator's edit reaches the next email with no deployment. A congress
+  sign-up (site form or desk) whose event has no venue is refused with the same
+  generic refusal as before, before any account is created.
+
+  Migration 0049 adds the column and sets the production congress event's venue.
+  The `CONGRESS_SIGNUP_EVENT_VENUE` environment key is removed: the API no longer
+  reads it, and the deploy needs no new key — the stale line may be deleted from
+  the server env file after the release.
+
+- [#3046](https://github.com/doctor-school/ds-platform/pull/3046) [`44902f9`](https://github.com/doctor-school/ds-platform/commit/44902f9e0b23af2eb8e3227ed78392f3afaa891d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Staff are participants, not statistics ([#2518](https://github.com/doctor-school/ds-platform/issues/2518)): a staff account's registration now appears in the congress roster (`GET /v1/admin/events/:idOrSlug/roster` — rows, total and the «возможный дубль» population), and the roster takes `hideStaff=true` to leave staff out of all three. The admin roster's «Все фильтры» panel carries the «Скрыть сотрудников» switch (off by default, kept in the address, shown as a chip). The storefront sign-up count, the room's online count and presence minutes still exclude staff. `RegistrationService.eventRoster` / `RegistrationRepository.findEventRoster` take a required `{ excludeStaff }`.
+
+- [#2572](https://github.com/doctor-school/ds-platform/pull/2572) [`de024c9`](https://github.com/doctor-school/ds-platform/commit/de024c9daecee663cc52a498712e7641e18759fb) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One email code (003 EARS-41/34/23): `/verify`, `/login/otp` and the new doctor-host `/v1/storefront/doctor/verify` accept one emailed code whatever the account state — an unverified address is verified by it and signed in (session cookie set), its pre-verification password replaced by the registration step's or invalidated on sign-in by code. A registration onto an existing address sends a link-free code mail instead of the account-exists notice; the ticked consents the account lacks are recorded only after the code is accepted, never overwriting a held one. `MAILER_PORTAL_BASE_URL` is retired — no mail carries a portal link.
+
+- [#2641](https://github.com/doctor-school/ds-platform/pull/2641) [`1e18f3f`](https://github.com/doctor-school/ds-platform/commit/1e18f3fcad2965d8494fba1339d170eddc8d06d2) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Congress sign-in hand-off (003 EARS-44, 044 EARS-39): an accepted `POST /v1/congress/sign-up` now answers `{status:"accepted", handoff}` — an opaque 32-byte random reference, the same shape for new, existing and repeat submissions; only its SHA-256 is kept in Redis for 24 h. The new public `POST /v1/auth/login/otp/handoff {ref}` (no captcha, EARS-13 limits, timing-equalized) sends the account's login code as a code request does and returns the address; a reference redeems at most three times, and a missing, malformed, unknown, expired or exhausted one gets the one `handoff_refused` answer with no mail.
+
+- [#2637](https://github.com/doctor-school/ds-platform/pull/2637) [`0e7d0f9`](https://github.com/doctor-school/ds-platform/commit/0e7d0f9345dda51cb63d9ad39649ae76b870d208) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Congress letters carry no links (046 EARS-14 / EARS-15 amended, [#2634](https://github.com/doctor-school/ds-platform/issues/2634)). The
+  submission receipt drops its «Мои заявки на Конгресс» action and instead tells
+  in text how to reach the cabinet from the congress site; the 044 confirmation
+  letter (site form and desk) gains one such line. `orthobio.ru` is plain text in
+  both parts, never a link. With no letter linking to the doctor storefront, the
+  api no longer reads `MAILER_DOCTOR_BASE_URL`: the key is no longer required at
+  boot, and a leftover line in an env file is ignored.
+
+- [#2656](https://github.com/doctor-school/ds-platform/pull/2656) [`4016b60`](https://github.com/doctor-school/ds-platform/commit/4016b60050758927b682d76baae9cddbfd2d9330) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Six-digit codes in every emailed/SMS code ([#2636](https://github.com/doctor-school/ds-platform/issues/2636)): the Zitadel generators converge to six digits, `VERIFY_CODE_PATTERN` is `^[0-9]{6}$` and the BFF refuses any other value before an IdP hop. Code cells (003 EARS-22/EARS-42, 021 EARS-11): `<OtpField charset="numeric">` takes the `design-source/auth.dc.html` code-cell attributes (`pattern="[0-9]*"`, `autocapitalize`/`autocorrect` off, no spellcheck) and keeps only the digits of every keystroke, paste and autofill — a letter never fills a cell; `<OtpFocusScreen>` and `<PasswordRecoveryCard>` take the numeric charset — the digit keypad and one-time-code autofill on every registration, sign-in and reset code step of both storefronts. `resolveVerificationCode` follows the six-digit `VERIFY_CODE_PATTERN`.
+
+- [#2667](https://github.com/doctor-school/ds-platform/pull/2667) [`a8eed16`](https://github.com/doctor-school/ds-platform/commit/a8eed16a5c10884386df93c1af1fd650296ef2d9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The Congress «Войти в кабинет» sign-in link now works in a browser that is already signed in ([#2659](https://github.com/doctor-school/ds-platform/issues/2659)). Signed in as the link's own account, `/login` goes straight to the carried target with no code (the hand-off answers `already_signed_in`, sends nothing and counts no redemption); signed in as another account, the code goes to the link's account and the code sign-in revokes the prior session, so the browser ends with the link account's session only.
+
+- [#2771](https://github.com/doctor-school/ds-platform/pull/2771) [`0b41632`](https://github.com/doctor-school/ds-platform/commit/0b41632eda3cdbbf574fe202624bbdf6b1e754e3) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - «Прошедшие» on both storefronts pages by count, not by 14-day windows (019 «Amendment — 2026-10-12», [#2768](https://github.com/doctor-school/ds-platform/issues/2768)): the bare «Прошедшие» read of `GET /v1/public/events?timeframe=past` and `GET /v1/storefront/doctor/events?tense=past` opens on the 10 most recent past events that match the facets, however old, and every `nextFrom` takes in the next 10 older ones (the last step the remainder), in whole МСК days; the control reads «Показать ещё 10 (осталось N)». «Будущие» keeps its day horizon and «Показать ещё N из M». The head subline «N эфиров · M школ» counts the open tab — on «Прошедшие» the past events and their schools — and is not rendered for a tab with no events. The month view on «Прошедшие» without an explicit month opens on the month of the latest past event under the facets.
+
+  **Breaking:**
+
+  - `@ds/schemas`: `PublicEventListingCountsSchema` requires `pastSchools`, the distinct schools among the past listing-eligible events; `DOCTOR_EVENTS_FEED_PAST_STEP_EVENTS` (10) is the «Прошедшие» step.
+
+- [#2787](https://github.com/doctor-school/ds-platform/pull/2787) [`d2df276`](https://github.com/doctor-school/ds-platform/commit/d2df276fae7fa13cedbd6c3ba22a628908b7b1d0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A signed-in user can confirm a phone number from `/account` ([#2774](https://github.com/doctor-school/ds-platform/issues/2774)): `POST /v1/me/phone` sends a six-digit code by SMS through the IdP, `POST /v1/me/phone/confirm` makes the number the account's confirmed phone and emails a security notice. A phone signs in and resets only while it is confirmed, and `GET /v1/me/profile` suggests the phone from the latest congress registration (`suggestedPhone`). A number confirmed on another account gets the ordinary answer and no SMS, so the surface reveals no registered numbers.
+
+- [#2813](https://github.com/doctor-school/ds-platform/pull/2813) [`07431e2`](https://github.com/doctor-school/ds-platform/commit/07431e20f21d24d7d75dc281dbaa2e0d28c23cd1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A password reset requested with a confirmed phone sends the code by SMS ([#2775](https://github.com/doctor-school/ds-platform/issues/2775)): the IdP generates and texts the code to that phone and checks it on completion, so it never passes through the BFF. An unknown or unconfirmed number gets the same answer as any reset request and nothing is sent; such SMS sign-in and reset requests are counted (`auth_sms_unconfirmed_phone_requests_total`, by flow) with a masked log line. An SMS code is sent only to an account whose email is already verified, so a reset can never mark an unproven email verified.
+
+- [#2828](https://github.com/doctor-school/ds-platform/pull/2828) [`0d4da1f`](https://github.com/doctor-school/ds-platform/commit/0d4da1f1f7cbdf106e09e1907dc2d07d5478591f) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `GET /v1/ready` now also reports `checks.objectStorage`: the api checks the uploads bucket at startup and every 60 seconds, so a stale or revoked storage key shows as `down` (HTTP 503) and a single warning log with the store's reason (`InvalidAccessKeyId (HTTP 403)`) instead of staying invisible until an upload fails. Storage write and delete errors now carry that same readable reason in place of `UnknownError`. `GET /v1/health` is unchanged. A prod deploy or rollback onto a store that refuses the key now ends red at the smoke step, naming `objectStorage=down` ([#2821](https://github.com/doctor-school/ds-platform/issues/2821)).
+
+- [#2889](https://github.com/doctor-school/ds-platform/pull/2889) [`477fb14`](https://github.com/doctor-school/ds-platform/commit/477fb1436b9796becaf35b3f390576afc2e15bc0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The doctor events feed falls back to every specialty when the doctor's default «Моя и смежные» — own specialty plus adjacent areas — has no events (019 LD-9, EARS-9, [#2871](https://github.com/doctor-school/ds-platform/issues/2871)); a doctor whose own specialty is empty but whose adjacent areas have events keeps «Моя и смежные». When the read names no specialty scope and the remembered specialty's directions and their adjacent ones carry no upcoming doctors-audience event, `GET /v1/storefront/doctor/events` (and the month reads) answer with `targeting.mode: "all"`; an explicit `specialty` in the request is honoured as before. The new `targeting.defaultScopeEmpty` describes the visitor, not the query: every read reports it, whatever scope the request names. `DoctorEventsFeedQuerySchema.specialty` and the month query's `specialty` are optional with no default, so an absent scope is distinguishable from an explicit «Моя и смежные». The shared facet panel shows «Все специальности» selected under the fall-back as this visitor's default: `EventsFilter` takes `defaultSpecialtyScope` and `countAppliedFacets` an `AppliedCountOptions`, so the default scope is counted in neither «Применено: N» nor «Фильтры (N)» and «Сбросить» appears only for a facet beyond it. For this visitor an explicit `specialty=all` is the default too (uncounted, left out of the URL), while «Моя и смежные» is a narrowing: counted with «Сбросить», written as `specialty=mine-and-adjacent` and kept across later facet changes, so the fall-back does not take it back. Removing the last picked specialty returns to the visitor's default scope (`EventsFilter` uses `defaultSpecialtyScope`), and `hasAppliedFacets` / the empty state treat only that default as no facet. In the no-match state, a picked specialty whose removal falls back to every specialty is passed over — no «Показать смежные специальности» — and the next applied facet is weakened (`WidenMatching` now answers a `WidenRead`).
+
+- [#2890](https://github.com/doctor-school/ds-platform/pull/2890) [`4fcb5c7`](https://github.com/doctor-school/ds-platform/commit/4fcb5c756b1b7fcb6cade20c32f1d4c96193ea2a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - «Будущие» on both storefronts pages by count, not by a 14-day horizon (019 «Amendment — 2026-10-12», [#2884](https://github.com/doctor-school/ds-platform/issues/2884)): the bare «Будущие» read of `GET /v1/public/events` and `GET /v1/storefront/doctor/events` opens on the 10 nearest upcoming events that match the facets, however far ahead, and every `nextTo` takes in the next 10 later ones (the last step the remainder), in whole МСК days — a day the tenth event shares with later ones is served whole. With 10 or fewer matching events the whole tense is served and no «Показать ещё» renders. Both tenses now read «Показать ещё N (осталось M)». A day picked in the month view beyond the current «Будущие» extent widens it to take that day in.
+
+  **Breaking:**
+
+  - `@ds/schemas`: `DOCTOR_EVENTS_FEED_HORIZON_DAYS`, `DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS` and `DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS` are removed; `DOCTOR_EVENTS_FEED_PAST_STEP_EVENTS` is renamed `DOCTOR_EVENTS_FEED_STEP_EVENTS` (10), the step of both tenses.
+  - `@ds/events-storefront`: `FEED_COPY.feed.showMorePast` is removed — `showMoreOf` is the one «Показать ещё N (осталось M)» label of both tenses.
+
+- [#2921](https://github.com/doctor-school/ds-platform/pull/2921) [`ca8b0ec`](https://github.com/doctor-school/ds-platform/commit/ca8b0ec7ef2229680f7ac3893cc5329528b6539c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Staff access (047 EARS-1…EARS-6, EARS-8, EARS-9 grant half): `GET /v1/admin/staff-access` lists every holder of a grantable staff role, one row per person, role and event, reading every page of the IdP grant search; `POST /v1/admin/staff-access/grants` (`platform_admin`, live revalidation, `stepUp`) finds or creates the account, adds the role to its existing IdP grant, writes the event binding and the `auth.role.granted` row, and returns a one-time temporary password for a new account or one without a password; an existing account whose email was never verified is refused with `409 STAFF_GRANT_EMAIL_UNVERIFIED` and nothing changed. An email that more than one IdP account holds is refused with `409 STAFF_GRANT_EMAIL_AMBIGUOUS` and nothing changed. Grants for one email are serialized under a per-email advisory lock. A stale second factor answers `STEP_UP_REQUIRED` with `stepUpUrl: "/mfa/challenge?mode=reverify"`; `POST /v1/admin/auth/mfa/reverify` refreshes the session's second factor in place and appends `auth.step_up.*` rows. `@ds/schemas` exports the staff-access and reverify contracts; `@ds/db` adds the event-grant list and insert helpers.
+
+- [#2953](https://github.com/doctor-school/ds-platform/pull/2953) [`8735745`](https://github.com/doctor-school/ds-platform/commit/8735745144c3cee0815777dd4f72cce6d331e3e0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Staff access revocation (047 EARS-7…EARS-9): `POST /v1/admin/staff-access/revocations` (`platform_admin`, live revalidation, `stepUp`) takes `{userId, role, eventId?}`, ends every admin session and pending admin sign-in of the person, removes the role at the IdP (and the IdP grant itself when it was the grant's last role), deletes the event binding and appends the `auth.role.revoked` row; it answers `204`. Refusals: `403 REVOKE_SELF_PLATFORM_ADMIN` (the caller's own platform-administrator role), `409 REVOKE_ALREADY_COMPLETE` (a role the person does not hold — nothing changed), `401 STEP_UP_REQUIRED`, `400`, and `503` when the IdP fails after the sessions were already ended. `@ds/db` adds the event-binding delete helper; the SDK is regenerated.
+
+- [#2912](https://github.com/doctor-school/ds-platform/pull/2912) [`94e9c36`](https://github.com/doctor-school/ds-platform/commit/94e9c36ccdaa90005a9a9958279b6b521e5bbf8a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - «Будущие» steps add exactly 10 events on both storefronts (019 LD-2, [#2908](https://github.com/doctor-school/ds-platform/issues/2908)): «Показать ещё N (осталось M)» names what the step actually adds — 10, or every remaining event when 11 or fewer remain, so there is never a one-event tail — instead of growing the step to the 10th event's whole day. A day the 10th event shares with later ones continues on the next step. The «Будущие» extent is now `from` plus a `count` cursor that «Показать ещё» grows; a stated `to` stays a whole-day extent (a month-view day click on the extent's last day takes the whole day in). With 11 or fewer matching events the default screen shows them all.
+
+  **Breaking:**
+
+  - `@ds/schemas`: the doctor feed and the Academy horizon page replace `nextTo` with `nextCount` (the `count` «Показать ещё» writes into the URL); `DoctorEventsFeedQuerySchema`, `PublicEventListingQuerySchema` and the events-page codec gain `count` (`DoctorEventsFeedCountSchema`).
+  - `@ds/events-storefront`: `EventsFeedHorizon.nextTo` is replaced by `nextCount`.
+
+- [#3200](https://github.com/doctor-school/ds-platform/pull/3200) [`0212f80`](https://github.com/doctor-school/ds-platform/commit/0212f80678da2fb087688192404cf0c5447f1521) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The sign-in host's API (003 EARS-5/24/44/60/64/66–71, ADR-0015 §4, [#3170](https://github.com/doctor-school/ds-platform/issues/3170)):
+  `/v1/sign-in-host/*` reads a Zitadel auth request, picks the storefront by
+  `client_id`, runs the storefront's own sign-in, code, registration and reset
+  steps under the same guards, and keeps one shared browser session per browser
+  (`sign_in_host_records`, sealed at rest, 30-day lifetime, 7-day idle). Revoking
+  every session of a person (reset, first verification) now also ends their
+  sign-in-host records. Disabled (404) until the whole configuration block is set.
+
+- [#3265](https://github.com/doctor-school/ds-platform/pull/3265) [`d8ab3cf`](https://github.com/doctor-school/ds-platform/commit/d8ab3cfd6532eec4e41db63a5953a4d114c50d82) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - «Войти», registration and password reset on both storefronts now run on the shared sign-in page, and the person comes back signed in on the page they started from. Signing out on a storefront also ends the shared sign-in, so the next «Войти» asks for the password again.
+
+- [#3449](https://github.com/doctor-school/ds-platform/pull/3449) [`c8c05f2`](https://github.com/doctor-school/ds-platform/commit/c8c05f2845da1edaf3376eeda5a8c0fa103ad8b7) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A doctor signed in on one storefront now opens pages on the other storefront already signed in, with no second «Войти» and no signed-out page shown first. Without a shared sign-in the page is the usual guest page.
+
+- [#3534](https://github.com/doctor-school/ds-platform/pull/3534) [`b7e60a5`](https://github.com/doctor-school/ds-platform/commit/b7e60a50f125a4c0e587a073d979b3dd0aa7b01a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#3174](https://github.com/doctor-school/ds-platform/issues/3174): one sign-out everywhere (003 EARS-10 amended, EARS-65). `POST /v1/auth/back-channel-logout` serves the storefront clients' provisioned OIDC Back-Channel Logout URI: a verified logout token revokes every storefront session linked to its `sid` on both storefronts; an invalid one revokes nothing. Refresh-token reuse on a linked session (a refresh Zitadel refuses as `invalid_grant`) now ends every linked session too; any other refused refresh — an IdP outage, a locked person — ends only the presenting session and records no theft. An IdP admin or console lock (failed passwords never lock) ends the person's sessions inside Zitadel, which refuses their refresh; the API adds no revocation of its own. Revocations record their ADR-0001 §7.3 reason: `logout`, `force` (back-channel logout, a refused refresh) or `theft_detected` (the reuse cascade). The storefront sign-out runs through its own `/auth/sign-out` route (`storefrontSignOut`, both storefronts), which calls the API sign-out and sets the signed guest marker so the next navigation runs no silent check.
+
+- [#3482](https://github.com/doctor-school/ds-platform/pull/3482) [`ee5f0d5`](https://github.com/doctor-school/ds-platform/commit/ee5f0d5cc4b86a1e6dc45722ff88cc03cf690dd5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The colleagues' sign-up count is hidden by default on every event (007 EARS-12, 019 EARS-19, [#3479](https://github.com/doctor-school/ds-platform/issues/3479)). Migration `0053` sets `events.hide_sign_up_count` to `default true` and back-fills `true` on every existing event, so every public read (doctor feed and month read, 018 nearest-events block, Academy listing, 020 event page) serves `signUpCount: null` / `signUps: null` until an operator turns «Скрыть число записавшихся» off for that event. `CreateEventRequest.hideSignUpCount` now defaults to `true` when omitted; `UpdateEvent` is unchanged. `@ds/admin`: the event create form starts «Скрыть число записавшихся» ticked; the edit form keeps showing the event's own state.
+
+- [#3543](https://github.com/doctor-school/ds-platform/pull/3543) [`fb38777`](https://github.com/doctor-school/ds-platform/commit/fb387779501473a8c19f1aaf19272b4b4bc3962e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Organisation registry (032, [#3492](https://github.com/doctor-school/ds-platform/issues/3492)): migration 0054 renames the partner registry to `organisations` / `project_organisations` with every id, slug, state and link kept, adds the organisation-role reference book (Инвестор, Клиническая площадка, Образовательный лицензиат) and gives every absorbed partner the investor role. The admin API moves to `/v1/admin/organisations` and gains a description, two public display rules and a role set; `/v1/admin/organisation-roles` lists, adds and renames roles. In the admin, «Партнёры» become «Организации» — a list with roles, status and update date, and a full-page form with a description, the roles as checkboxes and the two display rules — and the new «Роли организаций» section lists the roles with their holder counts, adds and renames them.
+
+- [#3592](https://github.com/doctor-school/ds-platform/pull/3592) [`7ac7bd1`](https://github.com/doctor-school/ds-platform/commit/7ac7bd1567b47af7d321d87b94a68eb171e2598b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Organisation public display rules and count (032, [#3494](https://github.com/doctor-school/ds-platform/issues/3494)): every public read that projects an organisation — a project's partners, a partner's projects and the primary partner embedded in project summaries — now honours the two display rules. An organisation whose name may not be shown is left out entirely (its own partner page answers 404 like an unknown one, and a project it leads shows no primary partner); one whose logo may not be shown keeps its place with no logo. The new `GET /v1/public/organisations/count` returns `{ count }` of the published organisations of any role, hidden ones included, computed on every request.
+
+- [#4025](https://github.com/doctor-school/ds-platform/pull/4025) [`7ce803d`](https://github.com/doctor-school/ds-platform/commit/7ce803d52e9f4dd7df9f71d19d0e912030205174) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Public project reads of the Academy (030 EARS-8, EARS-9, EARS-13, [#3505](https://github.com/doctor-school/ds-platform/issues/3505)). The api adds `GET /v1/public/projects` (catalog cards: running and soon first, then completed, each in the operator's order; the outputs line from the distinct kinds of the results; the investor projected by 032 EARS-5; no kind), `GET /v1/public/projects/scale` (`{ projects, partners, broadcasts, firstBroadcastYear }`, partners being the 032 EARS-12 count), `GET /v1/public/projects/{idOrSlug}` (hero fields, the curator's display name only, counts, since-year, organisations, `investorPlaceOpen`) and `…/results` (results in order); a draft, retired, non-public or unknown project answers `404` alike. New `@ds/schemas` contract `public-project.ts`; `PublicProjectSummary` gains the required `stage`. `scale` and `order` are reserved project slugs.
+
+- [#3583](https://github.com/doctor-school/ds-platform/pull/3583) [`d67683f`](https://github.com/doctor-school/ds-platform/commit/d67683f69b9df535d13e9735e2931c1647d18e7f) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 048 materials feed ([#3512](https://github.com/doctor-school/ds-platform/issues/3512)): the `materials` and `feed_entries` tables (migration `0056_materials_feed`, 010 audit triggers, `first_published_at` and the slug pinned once published), the material authoring contract (`CreateMaterialRequestSchema`, `UpdateMaterialRequestSchema`, `AdminMaterialListQuerySchema`, `MaterialAdminDetailSchema`, `MaterialAdminListSchema`, `materialPublishMissing`) and the «Материалы» admin API — `GET/POST /v1/admin/materials`, `GET/PATCH /v1/admin/materials/{id}`, `POST /v1/admin/materials/{id}/publish` and `/unpublish` — where a publish, an edit of a published material and an unpublish write or remove the material's feed entry in the same transaction. The material cover is the 012 media slot `materials.cover_ref`: multipart `cover` part on create / edit (normalized WebP under a server-generated key), `mediaAction: "clear"` on edit, the released object handed to `media_cleanup_jobs` (`media_entity_kind` gains `material`, migration `0057_media_entity_kind_material`), and the slot registered with the 012 media-slot registry so neither media sweep deletes a live cover.
+
+- [#3601](https://github.com/doctor-school/ds-platform/pull/3601) [`b8e3b43`](https://github.com/doctor-school/ds-platform/commit/b8e3b4300efab5408ebccc70f9b6affdfe6e2eca) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 048 materials feed ([#3513](https://github.com/doctor-school/ds-platform/issues/3513)): the two anonymous reads — `GET /v1/public/feed?cursor=&limit=` (cards of the common `FeedCardSchema` union, newest first with ties by id, microsecond-exact keyset cursor, `limit` 1–24 default 12, `nextCursor` `null` at the end, read from `feed_entries` joined only to the column's expert and the partner organisation) and `GET /v1/public/materials/{slug}` (`PublicMaterialSchema`; the same `404` for draft, unknown and non-public). A column is shown only while its expert is published, its card source line built at the read by the new `expertShortName` («Фамилия И. О.»); `partner` follows the 032 organisation display predicate and never hides a material.
+
+- [#3620](https://github.com/doctor-school/ds-platform/pull/3620) [`b35d573`](https://github.com/doctor-school/ds-platform/commit/b35d573a0e9e15c315cf9f8e0c641c5917f9a29f) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#3565](https://github.com/doctor-school/ds-platform/issues/3565): the five legacy routes that minted a storefront session with no link to a shared (Zitadel) session are retired — `POST /v1/auth/login`, `/v1/auth/login/otp`, `/v1/auth/password/reset/complete`, `/v1/auth/verify` and `/v1/storefront/doctor/verify` now answer 404, and the unlinked `SessionService.establish` path is gone. Every credential check runs on the sign-in host, and a storefront session is minted only by the storefront callback (003 EARS-8 amended, EARS-69), so every session takes part in the one sign-out. The SDK drops the retired operations.
+
+- [#3754](https://github.com/doctor-school/ds-platform/pull/3754) [`94d9097`](https://github.com/doctor-school/ds-platform/commit/94d90975cad24a53acfa6d5ecec218cd1f39193b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 049 EARS-1, EARS-2: two new staff roles, `superadmin` and `broadcast_director`. Both are in the role vocabulary, the staff precedence of the `users.role` mirror (`superadmin` first, `broadcast_director` after the congress roles) and the TOTP policy, and every admin-session endpoint admits them. Live revalidation (ADR-0001 A4) asks the IdP about `superadmin` on a row naming it and about `broadcast_director` for a director-only session, answering `403 SUPERADMIN_REQUIRED` / `403 BROADCAST_DIRECTOR_REQUIRED` once the grant is withdrawn. The IdP seed creates both project roles.
+
+- [#3763](https://github.com/doctor-school/ds-platform/pull/3763) [`c0c5ca6`](https://github.com/doctor-school/ds-platform/commit/c0c5ca67601210283e4ca28d6619e881196ddcd5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#3740](https://github.com/doctor-school/ds-platform/issues/3740) (049 EARS-3…EARS-5): «Доступы» belongs to the superadministrator. The three staff-access endpoints require `superadmin` (live revalidation, step-up unchanged); a platform administrator no longer sees the section and `/access` shows the refusal page. The grant form offers «Режиссёр трансляций» (`broadcast_director`, no event); `superadmin` is listed («Суперадминистратор») but refused `400` on grant and revoke. Each list row carries `revocable`, and «Отозвать» is drawn only on revocable rows; revoking `platform_admin` from a holder of `superadmin` is refused `409 STAFF_REVOKE_SUPERADMIN_HOLDER` with nothing changed.
+
+- [#3761](https://github.com/doctor-school/ds-platform/pull/3761) [`5a5db40`](https://github.com/doctor-school/ds-platform/commit/5a5db40a6b84705dfb21bd21aa4648c468d7264f) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 049 EARS-6: the superadmin operator command (`pnpm --filter @ds/api superadmin -- grant|remove --email <e> --by-admin <sub>`) — the only path that gives and removes `superadmin`, audited as `auth.role.granted` / `auth.role.revoked` through the staff-access writers.
+
+- [#3792](https://github.com/doctor-school/ds-platform/pull/3792) [`5c8d368`](https://github.com/doctor-school/ds-platform/commit/5c8d368d6c0e36f24814ee81647be749ea164351) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#3743](https://github.com/doctor-school/ds-platform/issues/3743) (049 EARS-7, EARS-8): the broadcast director («Режиссёр трансляций») reaches the admin events. The event list and card, create and edit, the stream config, the 007 lifecycle commands, the event's experts / projects / directions links and the dictionary reads those screens make admit `broadcast_director`; every other admin endpoint refuses it with `403`. In the admin a director without `platform_admin` sees «Мероприятия» alone, opens the event list, create form and card, and never sees the roster / intake / submissions links, the recordings tab, the «Архивный эфир» option or the legacy commands; any other route shows the refusal page.
+
+- [#3821](https://github.com/doctor-school/ds-platform/pull/3821) [`1d044ef`](https://github.com/doctor-school/ds-platform/commit/1d044eff367955f42e720b8daede06456f7edafe) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The 025 attention-points ledger core (EARS-1, 4, 22, 27, 31, [#3807](https://github.com/doctor-school/ds-platform/issues/3807)): tables `points_accounts`, `points_posting_keys`, `points_rule_versions` and the monthly-partitioned, append-only `points_postings` (migration 0058); `PointsLedgerService` in `apps/api/src/points/` — the one account-resolution API and the one fact write entry point (per-account serialisation, database-enforced dedupe by event id or dedupe key, no overdraw of available Pul, `points-account-closed` for a frozen account) — and the fact/outcome contracts in `@ds/schemas`.
+
+- [#3825](https://github.com/doctor-school/ds-platform/pull/3825) [`b4ef887`](https://github.com/doctor-school/ds-platform/commit/b4ef8870accda653433603550d8d4c1a3ccc91d8) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The 025 rule book and accrual intake (EARS-3, 12, 25, [#3808](https://github.com/doctor-school/ds-platform/issues/3808)): versioned rule parameters with the PRD defaults seeded as version 1 (migration 0059, immutable versions), `RuleBookService.activeVersion`, `PointsFactIntake.accept` turning an accrual fact into one posting per non-zero denomination and publishing `PointsCredited` after commit, the ledger core's refusal of any Bre/Con debit that is not a reversal, and `POST /v1/admin/points/rules/:ruleId/versions` for publishing a new rule version.
+
+- [#3885](https://github.com/doctor-school/ds-platform/pull/3885) [`83a6ac3`](https://github.com/doctor-school/ds-platform/commit/83a6ac363ff91b430a20dcff73b7032f74c22e80) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The attention-points spend slice (025 EARS-13, 14, 17, 18, 19, 21, 26, 35, 41, EARS-2 read side, [#3810](https://github.com/doctor-school/ds-platform/issues/3810)): migration 0061 adds the price list (`points_prices`, any item kind, mode open/advance/threshold, Pul price) and the `points_reserves` / `points_obligations` hold projections. The engine gains reserve / settle / release effects with per-obligation netting, the `concurrentOpen` reserve limit, real `item.*` predicates and a write-free `quote`. New endpoints: admin `PUT /v1/admin/points/prices/:itemRef` (refuses lesson / module / НМО-accredited items; advance refused like threshold until [#3811](https://github.com/doctor-school/ds-platform/issues/3811)) and doctor `GET /v1/me/points/gating/:itemRef` (a decision for every valid request: `open` / `reserve` / `short` / `blocked`). The 005 registration reports `registration.created` in its transaction (a refusal fails the sign-up closed with a 4xx naming the problem); the no-show sweep releases holds; attendance settles them. The public 044 congress intake stays out of the spend path: a priced event is refused with its generic refusal (044 EARS-41).
+
+- [#3908](https://github.com/doctor-school/ds-platform/pull/3908) [`93def2c`](https://github.com/doctor-school/ds-platform/commit/93def2ccacfc1543efac5bfa68d4f173110f2754) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The attention-points event advance (025 EARS-15, 16, 20 and the advance parts of EARS-13 and 18, [#3811](https://github.com/doctor-school/ds-platform/issues/3811)). A sign-up on an advance-mode priced event with too little Pul now reserves the available Pul and covers exactly the shortfall from the system advance account (`reserve:advance`), opening a per-registration obligation — while the person's open obligations stay within `setting.advance.cap`; beyond the cap the item refuses `points-threshold-short` like a threshold one. Every later Pul credit first nets the beneficiary's open obligations in the same ledger fact (`obligation-settle:<obligationId>`, oldest first) and publishes `AdvanceSettled` after COMMIT. A release reverses the hold's advance and its own obligation's netting and annuls the obligation; other obligations keep their remaining amounts. `GET /v1/me/points/gating/:itemRef` answers `reserve-with-advance` (`reservedFromBalance` + `coveredByAdvance`), and `GET /v1/me/points` reads `advance` from the obligation projection. No migration, no contract change (doc comments only in `@ds/schemas` / `@ds/db`).
+
+- [#3836](https://github.com/doctor-school/ds-platform/pull/3836) [`46d306f`](https://github.com/doctor-school/ds-platform/commit/46d306fe67fe63de6527ce6aed9eae7f6545c491) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The 025 consumer read (EARS-2, EARS-30, [#3813](https://github.com/doctor-school/ds-platform/issues/3813)): `GET /v1/me/points` returns the caller's `PointsAccount` — Pul available and reserved, Bre, Con and the open advance — folded over the ledger's postings at read time, with Pul as integers in unit `Pul`; a request naming another person is refused with 403.
+
+- [#3895](https://github.com/doctor-school/ds-platform/pull/3895) [`84f9123`](https://github.com/doctor-school/ds-platform/commit/84f9123b525232a3e028e0acaf2979adeb078c79) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 025 EARS-43 ([#3840](https://github.com/doctor-school/ds-platform/issues/3840)): the audited starter-bonus run `POST /v1/admin/points/starter-bonus { registeredBefore, reason }` (`platform_admin` only). Every doctor registered before the instant whose identity is not deactivated and whose points account is not closed gets `person.starter-bonus-eligible` recorded once through `record` (event id `starter-bonus:<personId>`, `runId` attribute), so the seeded `accrual.starter-bonus` credits +20 Pul unless the doctor already has the registration grant (shared key `welcome`). Opening and closing `audit_ledger` records name the admin, reason, instant and counts; a re-run answers `duplicate`. New problem `points-starter-bonus-no-rule` (422) when no active rule triggers on the fact.
+
+- [#3886](https://github.com/doctor-school/ds-platform/pull/3886) [`4e438b3`](https://github.com/doctor-school/ds-platform/commit/4e438b35bd1ab456f7e0a33dc16a139521ee2ce0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The attention-points admin read API (025 EARS-45, [#3841](https://github.com/doctor-school/ds-platform/issues/3841)), `platform_admin` only, `Cache-Control: no-store`: `GET /v1/admin/points/fact-types` answers the fact-type catalog with its attribute schemas and predicates; `GET /v1/admin/points/rules` every rule and setting id with its active version and its version history; `GET /v1/admin/points/facts?personId=&cursor=&limit=` one person's fact journal with the evaluation traces as stored, newest first, cursor-paginated (`limit` 1–100, default 50); a malformed journal query is refused with problem `points-facts-query-invalid` (400). `@ds/schemas` adds `PointsFactTypeCatalogSchema`, `PointsRuleBookSchema` and the fact-journal page/query schemas.
+
+- [#3874](https://github.com/doctor-school/ds-platform/pull/3874) [`55054a8`](https://github.com/doctor-school/ds-platform/commit/55054a8ee23840025ee7bc75cd0bf5da0139df63) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The doctor's attention-points posting history (025 EARS-46, [#3842](https://github.com/doctor-school/ds-platform/issues/3842)): `GET /v1/me/points/postings?cursor=&limit=` answers `PostingHistory` — every posting on the caller's own account, newest first by (`occurred_at`, `id`), with a signed amount (credit +, debit −), the fact type as `action`, the content ref, rule id and version and `reversesPostingId` on a reversal; no attribution field and no other person's identifier. Cursor-paginated (`limit` 1–100, default 50, `POINTS_POSTING_HISTORY_LIMIT`); an out-of-range query is refused with problem `points-history-query-invalid` (400). `@ds/schemas` adds `PointsPostingHistorySchema` and its item/query schemas.
+
+- [#2390](https://github.com/doctor-school/ds-platform/pull/2390) [`ed94b36`](https://github.com/doctor-school/ds-platform/commit/ed94b36260d4ef98d16a9d8f0f1e1bdbd33c8449) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A congress desk registrar is bound to one event (044 EARS-38, [#2384](https://github.com/doctor-school/ds-platform/issues/2384)). The new
+  `event_role_grants` table (migration 0039, audited by the 010 trigger) binds a
+  user's `event-registrar` role to exactly one event; the roster route
+  `GET /v1/admin/events/:idOrSlug/roster` becomes an `auth_check: policy` row whose
+  handler admits a registrar only for the bound event — another event, an unknown
+  one, or a registrar with no binding row is refused with 403 — while the platform
+  administrator is not limited. `GET /v1/admin/auth/session` now also returns
+  `eventGrants` (role, event id, event slug) for the admin navigation. `@ds/db`
+  exports `findEventGrant` / `listEventGrantsBySub`; until the grants screen
+  ([#2378](https://github.com/doctor-school/ds-platform/issues/2378)) the tech lead inserts a binding by hand (runbook in
+  `apps/api/src/registration/README.md`).
+
+- [#2402](https://github.com/doctor-school/ds-platform/pull/2402) [`dbc5624`](https://github.com/doctor-school/ds-platform/commit/dbc5624ef3cacf00d7fb60119f5045248fe22299) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A congress registrar can mark a participant present per congress day (044
+  EARS-34, [#2381](https://github.com/doctor-school/ds-platform/issues/2381), backend layer). New route
+  `PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day`
+  with body `{ present: boolean }` (`check: policy`, bound to the registrar's event
+  per EARS-38, live revalidation): an idempotent mark/clear whose no-op writes no
+  ledger row; a day outside the new REQUIRED `CONGRESS_SIGNUP_EVENT_DAYS` setting is
+  422 `CONGRESS_DAY_UNKNOWN`. Migration 0041 adds the audited
+  `registration_attendance(registration_id, day, present)` table (no author/time
+  columns — the 010 ledger holds who and when). The roster read gains
+  `congressDays`, per-row `attendance`, and the `attendanceDay` + `present`
+  (`marked` | `unmarked`) filter. `@ds/db` exports `registrationAttendance`;
+  `@ds/schemas` exports the `CongressAttendance*` schemas; `@ds/api-client` is the
+  regenerated SDK.
+
+- [#2345](https://github.com/doctor-school/ds-platform/pull/2345) [`fdd6a73`](https://github.com/doctor-school/ds-platform/commit/fdd6a73db692d0d806dc502cb1179b0ee105ebf5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress intake now sends the participant the confirmation email its
+  `accepted` answer has been promising ([#2304](https://github.com/doctor-school/ds-platform/issues/2304) / [#2305](https://github.com/doctor-school/ds-platform/issues/2305) / [#2306](https://github.com/doctor-school/ds-platform/issues/2306), feature 044 slice
+  4). The mail names the event, its start in Moscow wall-clock time and the venue,
+  and carries one branch: an address the platform did not know is told an account
+  was created for it and that no password is needed, while an address that already
+  had an account is told the registration was added to the account it already has.
+  That branch lives in the inbox of the person the fact is about — the HTTP
+  response stays the single `accepted` state on both paths, so the congress site
+  still cannot tell the two apart.
+
+  The send runs AFTER the transaction has committed and is never awaited by the
+  response: a slow, unreachable or hostile relay can neither delay an accepted
+  registration nor turn it into a refusal. Its outcome is not a log line. Each
+  registration row now carries `confirmation_mail_status` (`sent` | `failed`) and
+  `confirmation_mail_at`, added by migration `0038_registration_confirmation_mail`
+  as nullable columns — `NULL` means no dispatch was ever attempted, which is what
+  the platform-origin registrations read. The dispatcher re-reads that column
+  before sending, so a participant who submits the form twice receives exactly one
+  email, and a row left `failed` (or `NULL` by an interrupted attempt) sends again
+  on the next submission. That is the entire recovery mechanism: no outbox, no
+  scheduled sweep, nothing to operate.
+
+  Deployments gain one REQUIRED key, `CONGRESS_SIGNUP_EVENT_VENUE`, the venue the
+  mail names. `events` has no venue column and 044 adds no admin-editable
+  settings, so the venue is a per-deployment constant of this congress exactly as
+  the registration window is. It is validated with the other congress keys: unset
+  or blank refuses every submission through the same generic refusal, before any
+  side effect, rather than mailing a confirmation with a blank place in it.
+
+- [#2395](https://github.com/doctor-school/ds-platform/pull/2395) [`87e7143`](https://github.com/doctor-school/ds-platform/commit/87e7143dd89b7d6d9942f7008f92c64899dd8431) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A congress registrar can enter a walk-in participant at the desk (044 EARS-35,
+  [#2382](https://github.com/doctor-school/ds-platform/issues/2382)). The new route `POST /v1/admin/events/:idOrSlug/registrations`
+  (`check: policy`, bound to the registrar's event per EARS-38; the platform
+  administrator is not limited) runs the SAME congress intake use-case as the site
+  form — one credential-less account per email, one registration per pair, one
+  consent per version, the same confirmation email — without the captcha, the rate
+  limit and the registration window, and requires `paperConsent: true`. It answers
+  `{ status: "accepted" | "existing", registrationId }` and never whether the
+  account existed before. Migration 0040 adds `registrations.intake_origin`
+  (`site` | `desk` | `platform`, backfilled `site` where answers exist and
+  `platform` otherwise, then `NOT NULL DEFAULT 'platform'`) and the nullable
+  `consent_records.origin` (`paper` for a desk-recorded consent). `@ds/db` exports
+  `IntakeOrigin` / `ConsentOrigin`; `@ds/schemas` exports
+  `CongressDeskRegistrationRequestSchema` / `CongressDeskRegistrationResponseSchema`;
+  `@ds/api-client` is the regenerated SDK.
+
+- [#2342](https://github.com/doctor-school/ds-platform/pull/2342) [`871974f`](https://github.com/doctor-school/ds-platform/commit/871974f49b1fe9ead17b6b6cd76b248cb55689db) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress intake now accepts an address the platform already knows ([#2299](https://github.com/doctor-school/ds-platform/issues/2299) /
+  [#2300](https://github.com/doctor-school/ds-platform/issues/2300) / [#2301](https://github.com/doctor-school/ds-platform/issues/2301), feature 044 slice 3). Where slice 2 refused such a submission
+  generically, `POST /v1/congress/sign-up` attaches the registration to the
+  account that address already has and leaves every field of that account's own
+  profile byte-identical: the submitted surname, first name, patronymic,
+  workplace, city, region and contact phone are stored on the registration row
+  only. A congress form is not a profile editor, and an unauthenticated endpoint
+  must never be able to rewrite an existing doctor's account.
+
+  Both branches now run the SAME callback inside the same audited transaction, so
+  the written state and the response are identical by construction rather than by
+  two code paths agreeing. The registration insert is `ON CONFLICT (user_id,
+event_id) DO NOTHING` and the consent row is written only when the published
+  version differs from the one last recorded for that account and purpose — a
+  repeat submission therefore answers exactly as the first one did and writes
+  nothing new, while a submission made after the consent text was republished
+  records exactly one fresh acceptance row at the new version.
+
+  Every path answers with the one `accepted` state and HTTP 200. That single
+  state is all the congress site needs to render its confirmation, and it is the
+  reason the site cannot tell whether the address was already on the platform.
+
+  The remaining difference between the two branches was latency — the new-account
+  branch really does create a user in the IdP. `@TimingEqualized` now takes an
+  optional route-specific floor, and the intake carries one: a conservative
+  default of one second, overridable through the new `CONGRESS_SIGNUP_TIMING_FLOOR_MS`
+  key and read per request, so raising it after a production measurement needs no
+  redeploy. The platform-wide 40 ms auth-door floor is below either branch and
+  equalised neither; the bare `@TimingEqualized()` used by the auth doors is
+  unchanged. A floor that is not whole milliseconds refuses the intake through the
+  same generic refusal as the other configuration keys, before any side effect,
+  rather than silently reverting to the default.
+
+  The confirmation email the success state promises still lands with slice 4
+  ([#2304](https://github.com/doctor-school/ds-platform/issues/2304)–[#2306](https://github.com/doctor-school/ds-platform/issues/2306)).
+
+- [#2451](https://github.com/doctor-school/ds-platform/pull/2451) [`b7e535c`](https://github.com/doctor-school/ds-platform/commit/b7e535c34ce4bbd750c5167f750c3e88dd7b381d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A platform administrator can read and save the congress intake settings of an
+  event (046 EARS-1…EARS-3, [#2432](https://github.com/doctor-school/ds-platform/issues/2432), backend layer). New routes
+  `GET` / `PUT /v1/admin/events/:id/congress-intake-settings` (`platform_admin`,
+  fast-path; the `PUT` revalidates live): per event the registration address, the
+  first-author rule; per kind (`oral`, `poster`,
+  `abstract`) the opening day, the last day, the submit limit and the age limit.
+  Days are Moscow calendar days, stored as 00:00 Moscow of the opening day and of
+  the day after each last day. An event without settings reads
+  `configured: false` with the product defaults. An opening without a last day, a
+  last day before the opening, a limit below 1 and an age limit outside 18…99 are 400. Migration 0042 adds the audited `congress_submission_settings` and
+  `congress_submission_kind_settings` tables. `@ds/schemas` exports the
+  `CongressIntakeSettings*` contract, the Moscow day↔instant helpers,
+  `isCongressKindIntakeOpen`; `@ds/api-client` is
+  the regenerated SDK.
+
+- [#2474](https://github.com/doctor-school/ds-platform/pull/2474) [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Congress letters (046 EARS-14, EARS-15, [#2433](https://github.com/doctor-school/ds-platform/issues/2433)): a sent submission gets the
+  receipt «Doctor.School — заявка получена» after commit, with the outcome
+  recorded on the submission and a mail failure never touching the status; the
+  044 confirmation letter (site form and desk) gains its one action «Подать
+  материалы в кабинете». Both link to `{MAILER_DOCTOR_BASE_URL}/account/congress`
+  — a new REQUIRED api key: the api refuses to boot without it, so an existing
+  local dev-stand `~/.ds-platform/.env.local` needs the line
+  `MAILER_DOCTOR_BASE_URL=http://localhost:3004` (see `infra/dev-stand/.env.example`). `@ds/schemas`
+  exports `CONGRESS_SUBMISSION_KIND_LABELS`.
+
+- [#2414](https://github.com/doctor-school/ds-platform/pull/2414) [`b1e5396`](https://github.com/doctor-school/ds-platform/commit/b1e5396f7a3516895a1e1dcd10a7fd62090d9f61) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A congress registrar can read one participant's card (044 EARS-36, [#2383](https://github.com/doctor-school/ds-platform/issues/2383),
+  backend layer). New read-only route
+  `GET /v1/admin/events/:idOrSlug/registrations/:registrationId` (`check: policy`,
+  bound to the registrar's event per EARS-38, `revalidate: none`): every stored
+  answer (surname, first name, patronymic, full name, specialty, workplace, city,
+  region, phone as typed, email), the registration date and `intakeOrigin`
+  (`site` | `desk` | `platform`), the congress consent rows (purpose, version,
+  captured-at, `paper` origin), the confirmation-mail outcome with its time, the
+  read-time «возможный дубль» marker, and per congress day the current mark
+  (`null` = never marked) with its history of changes — value, time, actor name,
+  source — read from the 010 change audit (the first reader of `audit_ledger`).
+  The card never carries whether the account pre-existed the registration. A
+  registration of another event through this event's path is a 404. `@ds/schemas`
+  exports the `CongressParticipantCard*` schemas; `@ds/api-client` is the
+  regenerated SDK.
+
+- [#2339](https://github.com/doctor-school/ds-platform/pull/2339) [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress sign-up intake is live on the API ([#2294](https://github.com/doctor-school/ds-platform/issues/2294), feature 044 slice 2):
+  `POST /v1/congress/sign-up` takes a submission from the congress site — public,
+  captcha-gated and throttled — and, for an address the platform does not know
+  yet, creates the whole cascade in one transaction: a credential-less account
+  through the shared 003 engine, a registration for the configured congress event
+  carrying the typed answers, and one personal-data consent row stamped at the
+  server-configured version (ADR-0009 §2.1). Nothing asks the participant for a
+  password, and nothing sends a verification mail: a congress sign-up is not a
+  platform registration.
+
+  The registration window is decided first and from the clock alone, before the
+  configuration is read and before the account lookup, so a submission outside it
+  is refused identically for a known and an unknown address and provably writes
+  nothing. Outside the window the refusal names the state (`not-yet-open`, with
+  the opening instant, or `closed`); every other reason the intake cannot take a
+  submission collapses into one generic refusal, so the unauthenticated endpoint
+  is no «is this doctor on the platform?» oracle.
+
+  `@ds/schemas` gains the congress request/response contract and the
+  personal-data consent purpose; `@ds/api-client` is the regenerated SDK for the
+  new route. The rate limiter gains a per-scope ceiling map: the intake keeps its
+  own 60 / 15 min per client address — a congress landing page behind one
+  corporate NAT legitimately submits far more than an auth door does — while the
+  platform default of 20 for register / login / reset is untouched.
+
+  The existing-email path is refused generically until slice 3 ([#2299](https://github.com/doctor-school/ds-platform/issues/2299) / [#2300](https://github.com/doctor-school/ds-platform/issues/2300) /
+  [#2301](https://github.com/doctor-school/ds-platform/issues/2301)), and the confirmation email lands with slice 4 ([#2304](https://github.com/doctor-school/ds-platform/issues/2304)–[#2306](https://github.com/doctor-school/ds-platform/issues/2306)).
+
+- [#2355](https://github.com/doctor-school/ds-platform/pull/2355) [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the roster HTTP route over the event read model (044 EARS-18, [#2311](https://github.com/doctor-school/ds-platform/issues/2311)): `GET /v1/admin/events/:idOrSlug/roster` answers a paged, instant-searchable page of the registrar's desk roster — ФИО, specialty name, место работы, город, область, телефон as typed, email, registration instant and the confirmation-letter outcome — authorized for `event-registrar` and `platform_admin` on its own controller. It is a second, widened read (`eventRosterPage`) beside the PII-free `eventRoster()` the room gate consumes, which is unchanged. Query state is the `AdminDataList` baseline (`q`, `page`, `pageSize`) only; sorting, per-column filters and the «возможный дубль» marker on this row are EARS-22/23/30/31.
+
+- [#2519](https://github.com/doctor-school/ds-platform/pull/2519) [`3ae7607`](https://github.com/doctor-school/ds-platform/commit/3ae7607a52c1143dcd1fae78b854ce627cf94b6b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Congress abstracts on the author's submissions API (046 EARS-21…25, [#2435](https://github.com/doctor-school/ds-platform/issues/2435)): an
+  abstract draft carries the title, the authors with no presenting mark and five
+  plain-text sections — «Актуальность», «Цель», «Материалы и методы»,
+  «Результаты и обсуждение», «Выводы» — each non-empty at send and together at
+  most 5000 characters by `abstractLength` (`@ds/schemas`: each section trimmed,
+  CRLF as one line break, spaces and line breaks counted), the same function the
+  form's counter uses; above it the send is refused (`field-invalid` on `body`
+  with `{length, max}`). The send takes the two statements «В тексте нет
+  некорректных заимствований» and «В тексте нет торговых наименований»
+  (`statements: ["plag", "trade"]`), each missing one refused as
+  `statement-required`, and stores them with their instant; publication is
+  covered by the one submission consent. With the event's first-author rule on,
+  the kind's limit also binds every submitter's counted submissions with the
+  same normalised first author (`first-author-limit-reached` with
+  `{limit, used, firstAuthor}`). Creating an
+  abstract with `derivedFromId` («Подать тезисы по этой работе») copies the title
+  and authors of the author's own sent oral talk or poster — not a draft or a
+  withdrawn one — and links to it. A submission now carries `derivedFromId` and
+  `statements`.
+
+  The cabinet offers abstracts: «Начать заявку» on «Тезисы» opens the abstract
+  form — «Название тезисов», the authors in publication order, «Текст тезисов»
+  with its five sections and one total counter in the send panel («4 998 /
+  5 000», marked from 4 500, «осталось N» / «больше на N») — with the two
+  statements before the consent, sent with it. The refusals read in the canvas
+  words — «Сократите текст тезисов до 5 000 знаков — сейчас N», «Подтвердите,
+  что в тексте нет некорректных заимствований» / «… торговых наименований» —
+  and the first-author refusal names the author: «С первым автором «{ФИО}» уже
+  отправлено N тезисов из N — эту заявку отправить нельзя.» Like every failed
+  send, a refusal at the abstracts' limit or by the first-author rule keeps
+  «Текст заявки сохранён.» under it. A sent oral talk or
+  poster offers «Подать тезисы по этой работе» in the list and in its detail
+  while abstracts can be started; it opens the prefilled abstract draft. Each statement's and the consent's error line is part of its box's
+  aria-describedby, like the title and section fields.
+
+- [#2474](https://github.com/doctor-school/ds-platform/pull/2474) [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The author's congress submissions API (046 EARS-5…13, 16, 17, [#2433](https://github.com/doctor-school/ds-platform/issues/2433)):
+  `/v1/me/congress-submissions` lists the section for an event, creates an oral
+  talk draft with author 1 from the 044 registration answers, autosaves it, sends
+  it through one cascade (registration, kind window, field set, limit over every
+  sent status, submission consent), takes it back to a draft or withdraws it to
+  «Отозвана», resends a `needs_revision` talk before its revision deadline
+  (`revision-closed` after it; a new receipt, never counted against the limit a
+  second time), and deletes a draft by retiring the row. Migration 0043 adds
+  `congress_submissions` with `revision_due_at`; migration 0044 adds a partial
+  unique index keeping one `congress-submission-personal-data` consent row per
+  account and version. The submission consent is the organising committee's own
+  `@ds/legal-content` document `consent-congress-submissions` (one consent for
+  every kind, abstracts publication included); its version is stamped from that
+  file — edition plus sha256 of its text — independently of the 044
+  `CONGRESS_SIGNUP_CONSENT_VERSION`, so a new edition asks every author again.
+  Each submission carries
+  `statusChangedAt`, the date its committee comment is shown with.
+
+- [#2513](https://github.com/doctor-school/ds-platform/pull/2513) [`1d53550`](https://github.com/doctor-school/ds-platform/commit/1d535508dc5f0bcb0b82964b12ecc1f74d58b52a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Congress posters on the author's submissions API (046 EARS-18…20, [#2434](https://github.com/doctor-school/ds-platform/issues/2434)): a
+  poster draft carries the title, the authors in publication order with no
+  presenting mark, the goal (1–1000) and the content (1–3000), with no file
+  field. Migration 0045 adds the nullable `users.birth_date`, written only by its
+  holder through the new `PUT /v1/me/birth-date` and shown back to them in the
+  section (`birthDate`). A poster draft is created without a birth date; sending
+  it without one is refused (`field-invalid` on `birthDate`). A kind with an age
+  limit refuses an account whose full years on the event's Moscow start day
+  reach it — at creation when a birth date is stored, and at send — with an
+  `age-limit` refusal carrying `{maxAgeYears, eventStartDate, age}` that the
+  cabinet reads as «Постерные доклады принимают от участников младше {N} лет на
+  дату начала Конгресса — {дата}. На эту дату вам будет {возраст} лет.». The
+  section's kinds carry `maxAgeYears`; other kinds are unaffected.
+
+  The cabinet offers the poster: the kind choice creates the draft. The poster
+  form holds the topic, the authors in publication order (no speaker choice, no
+  on-site line), «Цель» and «Содержание», and — until the holder has an earlier
+  sent poster — the birth date («Дата рождения», the DS date control: a calendar
+  day from 1900-01-01 up to today in Moscow, «Спрашиваем один раз — перед первым
+  постером.»), written on blur, with «Укажите дату рождения» when it is empty or
+  out of that range at send. A holder at or above the age limit sees the
+  refusal on the poster card with no start and on a poster draft in place of the
+  send; the birth date stays editable there for correction.
+
+  A failed send keeps «Текст заявки сохранён.» under the refusal also when the
+  refusal is tied to no field (limit, revision deadline, closed intake).
+
+  `@ds/design-system`: the theme root declares `color-scheme` — `light` on
+  `:root`, `dark` under `.dark` — so native control parts (the date picker
+  indicator, scrollbars, autofill, select chrome) follow the resolved theme; in
+  dark the calendar glyph of a date input was a dark icon on the near-black field.
+  Embedded frames keep the UA scheme (`iframe { color-scheme: normal }`): per
+  CSS Color Adjust 1 §2.4 a frame whose scheme differs from its document's gets
+  an opaque Canvas backdrop, so the inherited `dark` turned the light SmartCaptcha
+  challenge into a solid light box over a dark page.
+
+  A cabinet field's error line is referenced by its control's
+  `aria-describedby` (topic, «Цель»/«Содержание» and the other text fields, the
+  birth date with its hint).
+
+- [#2910](https://github.com/doctor-school/ds-platform/pull/2910) [`2680028`](https://github.com/doctor-school/ds-platform/commit/26800282aa5c1ec2e30bc099b836f8aab06b9c18) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The doctor «Идёт сейчас» strip follows the whole applied filter set — the
+  specialty scope and every facet the feed below it reads (019 «Amendment —
+  2026-10-13», [#2907](https://github.com/doctor-school/ds-platform/issues/2907)) — so it no longer shows on a page load and then vanishes on
+  its first refresh, and never shows a live event the feed's facets hide.
+
+  `GET /v1/storefront/doctor/events/live` takes the feed's facet query
+  (`specialty` — `mine-and-adjacent` by default, `all`, or a pick — and `format`,
+  `kind`, `city`, `nmo`, `free`, `q`), decoded by the new
+  `parseDoctorEventsLiveQuery` in `@ds/schemas` (the month query's facet half),
+  and selects through the feed's own predicate. In `@ds/events-storefront`,
+  `fetchEventsLive(liveHref, config, session, request)` now carries the guest's
+  remembered-specialty relay cookie like the feed read (breaking signature
+  change); `LiveSection` takes the page's `raw` query and `request`; the server
+  render and the client refresh read the one href built by `liveReadHref`, the
+  block is keyed by it, and a new server answer replaces the held one.
+
+  The Academy strip follows the Academy's applied facets by the same rule:
+  `GET /v1/public/events/live` takes `project`, `expert` and `topic`, decoded by
+  the Academy facet codec and narrowed by the listing's own facet predicate, and
+  `liveReadHref` carries each host's facet keys.
+
+- [#3882](https://github.com/doctor-school/ds-platform/pull/3882) [`2b6942d`](https://github.com/doctor-school/ds-platform/commit/2b6942d8a8ad3bb5482f51d22ca05dfbb82955da) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 025 EARS-9: when an event ends (007 `CloseRoom`), the room reports `attendance.confirmed` for every doctor with presence through `PointsEngine.record`, inside the end's transaction — presence share over the scheduled duration, below-threshold shares included; the seeded `accrual.participation` credits +2 Bre +1 Con at ≥ 30 %, `PointsCredited` after COMMIT only. EARS-10 engagement producers are deferred to [#3879](https://github.com/doctor-school/ds-platform/issues/3879).
+
+- [#2341](https://github.com/doctor-school/ds-platform/pull/2341) [`5912916`](https://github.com/doctor-school/ds-platform/commit/5912916deaab5efea847a94fada3f0ea232634b1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The event roster now carries the «возможный дубль» marker ([#2327](https://github.com/doctor-school/ds-platform/issues/2327), feature 044
+  EARS-30): an entry is marked when another registration of the same event holds
+  the same normalised contact phone — the comparison key the intake writes onto
+  the registration answers. Two people submitting from one phone are still
+  accepted exactly like anyone else, with the same generic success body and no
+  hint that the number is already there: the intake is not an oracle, and sorting
+  a genuine family out from a genuine duplicate is the registrar's judgement, not
+  the server's.
+
+  The marker is derived on every read of the roster rather than stored as a flag.
+  A window count inside the roster query groups the event's registrations by that
+  normalised phone; nothing is written, no migration is added and no sweep exists,
+  so when the team removes one of the sharing registrations on request the
+  survivor's marker clears by itself, with no write to the surviving row. Only the
+  boolean leaves the query — the phone is neither selected nor returned — so the
+  roster read model keeps its no-registrant-PII invariant. A registration created
+  through the signed-in platform path carries no answers payload at all, and such
+  rows are never marked, not even against each other.
+
+  `@ds/schemas` gains the required `possibleDuplicate` field on the roster entry
+  contract. The read model has no HTTP route yet, so no SDK surface changes; the
+  registrar-facing indicator and its roster filter land next ([#2328](https://github.com/doctor-school/ds-platform/issues/2328), [#2329](https://github.com/doctor-school/ds-platform/issues/2329)).
+
+### Patch Changes
+
+- [#3381](https://github.com/doctor-school/ds-platform/pull/3381) [`7c196df`](https://github.com/doctor-school/ds-platform/commit/7c196df34bf9d8b4299f1d6c8778f7e02eaae065) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1468](https://github.com/doctor-school/ds-platform/issues/1468): one runtime-env contract (`@ds/schemas/runtime-env`) lists the variables production's `api.env` must set. A production api boot (`NODE_ENV=production`) now refuses at env load, naming every missing contract variable (`DATABASE_URL`, `AUDIT_IDENTIFIER_PEPPER`, `LIFECYCLE_IMPACT_TOKEN_SECRET`; blank or `<placeholder>` counts as missing), instead of crash-looping later in DI construction; the prod release checks the same contract on the box before any state change.
+
+- [#2727](https://github.com/doctor-school/ds-platform/pull/2727) [`5922a37`](https://github.com/doctor-school/ds-platform/commit/5922a373daa5fd617f2b3076cf7ea9be97f4c32b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Events storefront wave 2 ([#2028](https://github.com/doctor-school/ds-platform/issues/2028)), the read contract of the month view and the facet panel on both hosts. The Academy reads take the 014 facets Проект, Эксперт, Тема as the repeatable slug lists `project`, `expert`, `topic` of the one listing codec (`ACADEMY_EVENT_FACETS_QUERY_CODEC`, `parseAcademyEventFacets`): `GET /v1/public/events?timeframe=…`, `?month=YYYY-MM` and `/month-counts?year=YYYY` narrow alike — values of one facet OR together, the facets AND together; a malformed slug is a 400, a slug nothing carries reads empty, and a facet on the bare legacy read is a 400. A horizon listing page carries the additive `facets { project, expert, topic }` options block (`{ slug, title, count }`, each counted under the other facets; zero-yield options stay listed at 0). The doctor storefront gains `GET /v1/storefront/doctor/events/month-counts?year=YYYY` with the month read's facets and posture, answering the Academy `MonthlyEventCount[12]`. The doctor month read `GET /v1/storefront/doctor/events/month` now covers the whole month — past days count their ended events — and carries `entries`, the month's events in the Academy `MonthBroadcastEntry` shape (the month grid's pills). The doctor feed `GET /v1/storefront/doctor/events` carries the additive `facets { city, kind }` options block in the same `{ slug, title, count }` item shape (counted under the other doctor facets over the tense's reach; a city option's `slug` is the city value). Every `MonthBroadcastEntry` (the Academy `?month=` read and the doctor month `entries`) gains `participationFormat`, so a month pill states its time in the viewer's zone like the feed card (offline in МСК). Both feed reads carry the api's «сегодня» as `today` (`YYYY-MM-DD`, МСК, the doctor month read's field): the doctor feed at the top level, the Academy horizon page inside `horizon` — the events page takes its one today from the read it renders with.
+
+- [#2622](https://github.com/doctor-school/ds-platform/pull/2622) [`22c8d1e`](https://github.com/doctor-school/ds-platform/commit/22c8d1ef07a7ebf501389b75ae8b1309eb3e0de9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One event-time formatter (004 EARS-12 as amended): `formatEventTime` in `@ds/schemas` presents an online/hybrid event in the viewer's zone and an offline one in Moscow, with an explicit «МСК» / «GMT±N[:MM]» label and grouping keys of the shown time; `@ds/events-storefront` re-exports it and adds `useViewerZone()` (`./ui`); the design system adds the `min-w-zone-label` token. Every former Moscow-time copy (portal, admin, auth-flow, doctor feed, event page, mailer) now delegates to it pinned to Moscow — output unchanged.
+
+- [#2627](https://github.com/doctor-school/ds-platform/pull/2627) [`7050d95`](https://github.com/doctor-school/ds-platform/commit/7050d95ab7601df9b1f28d319f4a7eacbc745616) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Code emails say «Введите код в уже открытой вкладке…» instead of «Введите его…», which read as the password in the re-registration letter.
+
+- [#2620](https://github.com/doctor-school/ds-platform/pull/2620) [`31343af`](https://github.com/doctor-school/ds-platform/commit/31343af5899779d1bfd135ac3abfaf720eac8e48) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A successful sign-in by code (003 EARS-13) — `/v1/auth/login/otp`, `/v1/auth/verify` and the doctor-host `/v1/storefront/doctor/verify` — now forgives the per-user rate-limit window for that address exactly as a password login does; the per-IP / per-ASN windows stay intact and a wrong code forgives nothing.
+
+- [#2629](https://github.com/doctor-school/ds-platform/pull/2629) [`a8c9928`](https://github.com/doctor-school/ds-platform/commit/a8c99284bc664bc08ca486da4908dc017c2180ef) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Events: a new event with a Cyrillic title keeps its words in the slug — the title is transliterated through the canonical taxonomy slugify (`kongress-po-ortobiologii-…` instead of `event-…`); existing slugs are unchanged.
+
+- [#2647](https://github.com/doctor-school/ds-platform/pull/2647) [`39d88c9`](https://github.com/doctor-school/ds-platform/commit/39d88c9cdfebddbeb20f0e61c88fa8122dd2f773) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - An email address typed in a different letter case now finds the existing account (003 EARS-16, 044 EARS-7): the Zitadel account lookup behind Congress sign-up, sign-in by code and password reset matches the email case-insensitively, so a repeat Congress sign-up no longer fails with 503 and the code / reset letters reach the account's owner.
+
+- [#2662](https://github.com/doctor-school/ds-platform/pull/2662) [`72b1a79`](https://github.com/doctor-school/ds-platform/commit/72b1a79269928b1cf68d41a154e15a513d27fe0b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Verify an account's email after a proven password reset and before automatic sign-in, so an unverified registrant can finish recovery and subsequently sign in by email code.
+
+- [#2692](https://github.com/doctor-school/ds-platform/pull/2692) [`7e76d4c`](https://github.com/doctor-school/ds-platform/commit/7e76d4c54600e36a054d2664af4ff2d55db2c5a7) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - EARS-13 ([#2684](https://github.com/doctor-school/ds-platform/issues/2684)): the per-IP auth rate-limit window splits by door. Verification doors (password login, code login, verify, password-reset-complete) give back their own per-IP unit on success, so 20 / 15 min per IP counts failed verifications; sending doors (code request, register, resend, password-reset request, sign-in hand-off) consume their own per-IP window of 60 / 15 min. Per-user and per-ASN are unchanged; `RATE_LIMIT_PER_IP_15MIN` moves both per-IP windows.
+
+- [#2737](https://github.com/doctor-school/ds-platform/pull/2737) [`c5b00a4`](https://github.com/doctor-school/ds-platform/commit/c5b00a46231c2505c378df27fc0856f07260483b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 046 revision copy ([#2734](https://github.com/doctor-school/ds-platform/issues/2734)): the needs-revision letter no longer prints a second full stop after a committee comment that already ends with `.` `!` `?` or `…`, and the author's cabinet shows the revision deadline with its year («до 22 декабря 2026, 23:59 МСК»).
+
+- [#2834](https://github.com/doctor-school/ds-platform/pull/2834) [`1266211`](https://github.com/doctor-school/ds-platform/commit/12662112e88dbbbf0b202207fa961796f39ff6aa) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Doctor events feed ([#2830](https://github.com/doctor-school/ds-platform/issues/2830)): the kind facet now offers only published event kinds. After an editor retires a kind, it disappears from the facet; events that carry it keep their kind label on the card (012 EARS-28, 019 EARS-17).
+
+- [#3915](https://github.com/doctor-school/ds-platform/pull/3915) [`53e43e0`](https://github.com/doctor-school/ds-platform/commit/53e43e0d5ebdab6e93517e9b8cd149e487284a33) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#2885](https://github.com/doctor-school/ds-platform/issues/2885): the doctor events reads (`GET /v1/storefront/doctor/events`, `…/month`, `…/month-counts`, `…/live`) target a signed-in doctor on the specialty their profile holds, even with no `__Host-ds_specialty` cookie, and the profile wins over a stale cookie of another specialty (019 EARS-3, 017 LD-2). A guest is unchanged: the cookie when present, the untargeted read when not.
+
+- [#2952](https://github.com/doctor-school/ds-platform/pull/2952) [`68eda66`](https://github.com/doctor-school/ds-platform/commit/68eda66a9527bc38218da64bcb10097451d856f6) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A signed-in visitor opening their own congress sign-in link is now redirected by the server straight to the account, with no login page shown. The api gains a read-only `POST /v1/auth/login/otp/handoff/own` check (session required; never redeems the link or sends a code).
+
+- [#3625](https://github.com/doctor-school/ds-platform/pull/3625) [`0de09b0`](https://github.com/doctor-school/ds-platform/commit/0de09b0e5028f60944ba34582302bbb28d9c3728) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Storefront session switch-over (003 EARS-8 amended, [#3175](https://github.com/doctor-school/ds-platform/issues/3175)): a storefront session the storefront callback did not mint from a sign-in-host record — no Zitadel session id, or no storefront client — is refused on every read (auth hook, refresh, logout): it resolves to no subject, is deleted with a `SessionRevoked` (`force`), and is never refreshed. The Redis store parses records against their stored shape instead of casting, and `SessionService` no longer refreshes through the BFF client. The switch-over note and its post-release verification are in `operations/auth-operations.md`.
+
+- [#3502](https://github.com/doctor-school/ds-platform/pull/3502) [`ff5db15`](https://github.com/doctor-school/ds-platform/commit/ff5db156d853a5ab755d8f022638e0df7d946374) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A request refused by a per-IP auth rate-limit window now answers 429 with `Retry-After` in whole seconds until that window resets (003 EARS-13). A refusal by the per-user window stays header-less (003 EARS-16), and so does a refusal by the per-ASN window: a whole network shares it, so its reset reflects other clients' traffic.
+
+- [#3417](https://github.com/doctor-school/ds-platform/pull/3417) [`b9aa9ea`](https://github.com/doctor-school/ds-platform/commit/b9aa9eaf3a02e7ae2c879351bc775de2f82b2fa2) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#3412](https://github.com/doctor-school/ds-platform/issues/3412): a failed api boot (a module's `onModuleInit`, `createApiApplication` or `listen` rejecting — e.g. data-prod Postgres unreachable after a provider reboot) now logs the error, reports it to GlitchTip (`Sentry.captureException`), flushes for at most 2 s and exits with code 1, so Docker's `restart: unless-stopped` retries the boot. Before, with `SENTRY_DSN` set the Sentry SDK's `warn`-mode unhandled-rejection handler kept the process alive with no HTTP listener.
+
+- [#3430](https://github.com/doctor-school/ds-platform/pull/3430) [`2b93353`](https://github.com/doctor-school/ds-platform/commit/2b933531dd53c1470880aa78daec1258eaab3d34) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#3421](https://github.com/doctor-school/ds-platform/issues/3421): the Postgres pool now bounds opening a connection (TCP connect + startup handshake) with `connectionTimeoutMillis`, default 5000 ms (api: `DATABASE_CONNECT_TIMEOUT_MS`). A boot against an unresponsive data box rejects within that bound, so the boot-failure exit path exits 1 and the restart policy retries, instead of the process hanging forever. pg-pool applies the same bound to waiting for a free pooled client: with every pool client busy, a request that waits longer than the bound now fails (5xx) instead of queueing.
+
+- [#3916](https://github.com/doctor-school/ds-platform/pull/3916) [`9402011`](https://github.com/doctor-school/ds-platform/commit/9402011d777659ccafab1e4556ee75ea1acdf907) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#3424](https://github.com/doctor-school/ds-platform/issues/3424): a registration that takes an offline seat (an offline event, or a hybrid event while offline seats remain) now counts `events.seats_left` down by one in the registration's own transaction, under a row lock, so the event page turns «Мест нет» / «Участвовать онлайн» by itself when the last seat is taken and concurrent registrations for the last seat yield exactly one success (the rest get the existing 409 `sold-out`). `seats_left = null` (no limit), online events and repeated registrations take no seat (020 EARS-9 / LD-5).
+
+- [#3537](https://github.com/doctor-school/ds-platform/pull/3537) [`451919a`](https://github.com/doctor-school/ds-platform/commit/451919ab4c991853b71874e44ccbcf910f730c58) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A correct email code entered right after sign-up is no longer refused (003 EARS-41, [#3525](https://github.com/doctor-school/ds-platform/issues/3525)). The email-code paths (code submission, resend, login-code and reset requests) resolve their subject from the `users` mirror, written synchronously at registration, and read it from Zitadel by id (`GET /v2/users/{id}`); the eventually consistent Zitadel user search answers only a mirror miss. Every miss and fault stays the one generic failure (EARS-16).
+
+- [#3552](https://github.com/doctor-school/ds-platform/pull/3552) [`3f66714`](https://github.com/doctor-school/ds-platform/commit/3f66714944aee6aed96c76fcf5037a0d1f2b312b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#3539](https://github.com/doctor-school/ds-platform/issues/3539): wrong passwords no longer lock an account. IdP provisioning turns the Zitadel password lockout off (`maxPasswordAttempts = 0`) on every environment and reads it back fail-closed, because a lock signed the person out of every device and anyone who knew their address could trigger it. Guessing stays bounded by the per-user / per-IP / per-ASN rate limits and captcha, whose windows now live in Redis so a restart, deploy or second replica cannot reset them; a password login the limiter refuses is audited as `auth.login.failure` reason `throttled` (003 EARS-15, ADR-0001 §7).
+
+- [#3861](https://github.com/doctor-school/ds-platform/pull/3861) [`6ceb6fb`](https://github.com/doctor-school/ds-platform/commit/6ceb6fb7e383924ff21a9fc31637e55bef7c50bb) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The auth audit ledger hashes the normalized sign-in identifier (trim + NFKC + lower-case), so variant spellings of one login record one `identifier_hash` ([#3555](https://github.com/doctor-school/ds-platform/issues/3555)).
+
+- [#3577](https://github.com/doctor-school/ds-platform/pull/3577) [`f095e1c`](https://github.com/doctor-school/ds-platform/commit/f095e1c4577ad04b6267ef281919107cdf50a4b6) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#3572](https://github.com/doctor-school/ds-platform/issues/3572): both media sweeps (the cleanup worker and the upload reconciler) now keep an object any registered media slot still references, including `organisations.logo_ref`; the reference predicate iterates one `MediaSlotRegistry` that modules outside taxonomy extend from their own `onModuleInit`.
+
+- [#3587](https://github.com/doctor-school/ds-platform/pull/3587) [`3d480a4`](https://github.com/doctor-school/ds-platform/commit/3d480a4c06905cf91f8904d45c7c12318ef7a3ac) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#3585](https://github.com/doctor-school/ds-platform/issues/3585): the sign-in host form entry gets a NAT-sized ceiling. Opening `/login`, `/register` or `/reset` on the sign-in host now counts in its own `sign-in-host:entry` per-IP bucket of 1200 per 15 minutes — the storefront entry's sizing — instead of falling back to the password limiter's 20, so people behind one shared address (a hospital, a congress hall) are no longer refused when they open the sign-in form; a page view never spends the EARS-13 credential budget (003 EARS-69, ADR-0015 §4 req. 9).
+
+- [#3790](https://github.com/doctor-school/ds-platform/pull/3790) [`a614b79`](https://github.com/doctor-school/ds-platform/commit/a614b7973c94a37d6ee6e54b065f4736243c5e5d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A silent (`prompt=none`) sign-in-host entry now counts only in the silent-check bucket, so a tripped entry limit ends it with `login_required` (a quiet guest render) instead of a throttled refusal; interactive entries keep their per-IP and per-ASN ceiling.
+
+- [#3833](https://github.com/doctor-school/ds-platform/pull/3833) [`2e860af`](https://github.com/doctor-school/ds-platform/commit/2e860af065ff0064b2f482b8731a2b7f2786966c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#3595](https://github.com/doctor-school/ds-platform/issues/3595): IdP provisioning no longer stores sign-in, phone-confirmation or password-reset SMS and email texts as `?`. Request bodies reach curl on stdin, because a Windows curl turned Cyrillic in its arguments into `?` before sending. A shell whose jq mangles non-ASCII is refused before any write. Every message-text write is read back, and a stored copy that differs from the source fails the run.
+
+- [#3640](https://github.com/doctor-school/ds-platform/pull/3640) [`96ede31`](https://github.com/doctor-school/ds-platform/commit/96ede313887dfaf5f72190894169a90f7df2258e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A live эфир that started before Moscow midnight stays in «Будущие» while it runs (004 EARS-9, [#3639](https://github.com/doctor-school/ds-platform/issues/3639)): the one horizon codec marks a range that holds today as `running`, and the shared `event-horizon-where.ts` clause then also selects every `live` event that started before the range's start — on the Academy listing and the doctor feed (and the home nearest-events block built on it), their «Показать ещё» resolution and the doctor facet reach. A later window and the reach past a moving edge never hold it, so it is listed once and never counted again as lying beyond; `ended`/`archived` still drop.
+
+- [#3666](https://github.com/doctor-school/ds-platform/pull/3666) [`e14c930`](https://github.com/doctor-school/ds-platform/commit/e14c930bcf16cf120b706a1757fedb9aa0c822bb) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Silent check on the other storefront ([#3660](https://github.com/doctor-school/ds-platform/issues/3660), 003 EARS-63): a browser prerender or navigational prefetch of a checkable page (`Sec-Purpose: prefetch` / `prefetch;prerender`, e.g. Chrome's address bar, also when the legacy `Purpose: prefetch` is sent beside it) is now refused with `503`, so the browser discards it and the real navigation runs the check — a doctor signed in on the Academy who types the doctor storefront's address now arrives signed in instead of on an unchecked guest page. The storefront proxy logs one line per check decision and the sign-in-host entry one line per entry decision (the record it met and how the entry ended), with no identifiers.
+
+- [#2606](https://github.com/doctor-school/ds-platform/pull/2606) [`ac3c945`](https://github.com/doctor-school/ds-platform/commit/ac3c9452087aa2a12c1fdd5f4932bb3ce3c454e8) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A non-production stand can accept a secret bot-protection test token
+  (`BOT_PROTECTION_TEST_TOKEN`) in place of the Yandex SmartCaptcha validation,
+  with a distinct `test-token` result reason (not written to the audit ledger); the api refuses to boot with it unless
+  `SENTRY_ENVIRONMENT` is `stage`, `development` or `test` ([#2605](https://github.com/doctor-school/ds-platform/issues/2605)). `@ds/e2e`
+  exports `installCaptchaStub` (`@ds/e2e/captcha-stub`) to resolve the widget
+  with that token in browser drives. Production behaviour is unchanged.
+
+- [#2423](https://github.com/doctor-school/ds-platform/pull/2423) [`2f10e2b`](https://github.com/doctor-school/ds-platform/commit/2f10e2b0da93fa61f34a1dfbfa373d11a14871db) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The participant card's attendance history names a registrar who has no display
+  name by their account email instead of the raw IdP subject id (044 EARS-36,
+  [#2383](https://github.com/doctor-school/ds-platform/issues/2383)); only a change made by a principal with no account row at all still
+  shows the raw id.
+
+- [#2372](https://github.com/doctor-school/ds-platform/pull/2372) [`84cdeb6`](https://github.com/doctor-school/ds-platform/commit/84cdeb69860d69828fef7fcbb016dba008a6b3d0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 044: the congress confirmation email is one copy for every participant — no account paragraph and no «Войти» action ([#2369](https://github.com/doctor-school/ds-platform/issues/2369)).
+
+- [#2354](https://github.com/doctor-school/ds-platform/pull/2354) [`33d4899`](https://github.com/doctor-school/ds-platform/commit/33d4899eb80239139650707795fab82fc8be84e9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add `event-registrar` to the API coarse-role vocabulary (044 EARS-17, [#2310](https://github.com/doctor-school/ds-platform/issues/2310)): the congress registrar is authorized from the Zitadel project-roles claim like every other role and only mirrored into `users.role`, the dev-stand/staging IdP converge seeds the project role key by default, and the golden IdP contract can declare it. No endpoint names the role yet — the authorization matrix is unchanged.
+
+- [#2561](https://github.com/doctor-school/ds-platform/pull/2561) [`61543e5`](https://github.com/doctor-school/ds-platform/commit/61543e5e9ee265515f5eb49ec136d5fa948422f0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress registration confirmation letter (site form and registrar desk)
+  carries no link, no button and no URL again — HTML and text parts (046 EARS-15).
+  The 046 submission letters keep their «Мои заявки на Конгресс» link.
+
+  `/login?method=code` opens the sign-in card on «По коду» on both storefronts
+  (003 EARS-43). `@ds/auth-flow/login/route` exports `LOGIN_METHOD_PARAM` and
+  `resolveLoginMethod` (closed allow-list: only `code` preselects the email-code
+  method; anything else keeps «Пароль»), and `LoginDoor` takes `defaultMethod`.
+  The tab bar stays and the carried `returnTo` is handled exactly as before.
+
+- [#2346](https://github.com/doctor-school/ds-platform/pull/2346) [`096f73f`](https://github.com/doctor-school/ds-platform/commit/096f73ff412db2ac636cd04cb624209e7613da93) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress intake now cleans up the name a participant types ([#2340](https://github.com/doctor-school/ds-platform/issues/2340), feature
+  044 EARS-33). « иван » is stored as «Иван», «ПЕТРОВ» as «Петров»,
+  «анна-мария» as «Анна-Мария» and «салтыков щедрин» as «Салтыков Щедрин»:
+  surrounding whitespace removed, every internal run of spaces collapsed to one,
+  and each name segment capitalised, where a segment ends at a space, a hyphen or
+  an apostrophe. It applies to the surname, the first name and the patronymic and
+  to nothing else — workplace, city and region keep the capitalisation the
+  participant gave them, because institution and place names do not obey a
+  two-rule pass. What an organiser reads off the roster and the printed attendance
+  sheet, and the display name of the account the intake creates, are all the
+  cleaned form.
+
+  The rule lives in the intake contract (`normaliseNameAnswer` in `@ds/schemas`),
+  not in an input mask on the congress site: the intake endpoint is public, so the
+  site's JavaScript cannot be the guarantee, and a mask would fight the
+  participant mid-word in the one field where that is least welcome. Only the
+  cleaned value is kept — unlike the contact phone, which keeps the typed form
+  beside its comparison key, there is nothing here to compare, and one spelling per
+  name is the point. The transform is idempotent, which it has to be: the same
+  declaration validates the stored answers column that validates the submission,
+  so it runs again on every read of a row it already cleaned. Existing rows are
+  left exactly as they are; no migration and no configuration change.
+
+- [#2356](https://github.com/doctor-school/ds-platform/pull/2356) [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Fence the `event-registrar` role to its allow-set (044 EARS-19, [#2312](https://github.com/doctor-school/ds-platform/issues/2312)): the role joins the `role → mfa_required` policy and the admin second-factor entry routes, so a registrar reaches the admin origin on the `platform_admin` TOTP flow and may hold a session — sign in, enrol/answer the factor, read back its own roles through the new `GET /v1/admin/auth/session`, sign out. Reach is unchanged everywhere else: every other real route, including every create, update and delete, omits the role and `AuthzGuard` refuses it. The generated matrix carries no denial-set column, so that half is proven by a sweep over the real registered route set.
+
+- [#2349](https://github.com/doctor-school/ds-platform/pull/2349) [`1b507cb`](https://github.com/doctor-school/ds-platform/commit/1b507cb5ac987404976d705b3cadd0cfb8688076) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress registration window is now API configuration rather than two
+  constants in the code ([#2348](https://github.com/doctor-school/ds-platform/issues/2348), feature 044 EARS-28). Two required env keys,
+  `CONGRESS_SIGNUP_WINDOW_OPENS_AT` and `CONGRESS_SIGNUP_WINDOW_CLOSES_AT`, state
+  the instant the public congress intake starts accepting submissions and the
+  instant it stops. Each is an ISO-8601 date-time that states its own offset
+  (`2026-10-01T00:00:00.000+03:00`, or a `Z` value); an offset-less string is
+  refused rather than guessed, because the API runs in UTC while the congress is
+  in Moscow and the silent three-hour shift would open registration a day the
+  owner did not approve. The close must be strictly after the open.
+
+  They are configuration for the reason the event id and the consent version
+  already are: the instants differ per environment. A dev stand and each stage
+  slot need a window that is open right now for the form to be reviewable at all,
+  production carries the owner's real dates — and the closing date-time, which
+  lands as a launch input, must not cost an API release. The pair is validated
+  beside the other 044 keys and fails CLOSED: unset, unparseable or inverted
+  refuses the submission through the one generic refusal every submitter gets,
+  before any account, registration, consent row or email — not through a window
+  refusal, since a deployment that has no opening instant cannot honestly announce
+  one. The wire is unchanged: `not-yet-open` still carries the opening instant
+  exactly as configured, and `closed` is still the same refusal.
+
+  Deployment note: every environment running the intake must carry both keys
+  before this version is deployed, or the intake refuses every submission.
+
+- [#2399](https://github.com/doctor-school/ds-platform/pull/2399) [`5dd751f`](https://github.com/doctor-school/ds-platform/commit/5dd751fae545e980a4ddc50c79c1fd601b64fb8d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A registrar refused by the event binding (044 EARS-38 — no binding, a withdrawn
+  or re-pointed one, another or an unknown event) now gets the stable
+  `403 EVENT_BINDING_REQUIRED` problem code instead of a codeless 403. The admin
+  desk side panel shows it as the «нет прав» refusal, never a retry; a desk answer that
+  arrives after the side panel was closed no longer leaves a stale line on the next
+  open. Across the admin, only a 401 signs the operator out: a 403 keeps the
+  session and the screen shows its refusal (ADR-0001 A1).
+
+- [#2568](https://github.com/doctor-school/ds-platform/pull/2568) [`b4e9e75`](https://github.com/doctor-school/ds-platform/commit/b4e9e757d4b9b448d01726f39097d901a35df5b5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Login codes sent by email and SMS now have the same format as the email-confirmation
+  code: 6 characters, upper-case letters and digits (previously 8 digits). The IdP
+  provisioning run converges the OTP email/SMS secret generators; the 5-minute
+  lifetime is unchanged ([#2555](https://github.com/doctor-school/ds-platform/issues/2555), epic [#2552](https://github.com/doctor-school/ds-platform/issues/2552)).
+
+- [#2125](https://github.com/doctor-school/ds-platform/pull/2125) [`31ba498`](https://github.com/doctor-school/ds-platform/commit/31ba49863d99564905db934f46d52a122cb738b0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add explicit Postbox SMTP selection with bounded, cancellable email attempts and opt-in fallback. Keep uncertain acceptance from triggering duplicate sends, and report provider acceptance separately from delivery.
+
+- [#2190](https://github.com/doctor-school/ds-platform/pull/2190) [`42c3d48`](https://github.com/doctor-school/ds-platform/commit/42c3d483e808611ecbcdfc2bb11d8deec553c6e2) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Send verified-account login codes through the existing shared email template without native action links.
+
+- [#3422](https://github.com/doctor-school/ds-platform/pull/3422) [`d7414fc`](https://github.com/doctor-school/ds-platform/commit/d7414fc7d6b99bf10eeb52cbb2933900225dba3c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Registration no longer accepts a retired event (the not-found answer, as the public event page), and a pure offline event with no seats left refuses the registration with a `sold-out` conflict instead of recording it; a hybrid event with its offline seats exhausted still registers the doctor online. A registrar can no longer mark attendance on, or desk-register into, a retired event.
+
+- [#2163](https://github.com/doctor-school/ds-platform/pull/2163) [`c94c3de`](https://github.com/doctor-school/ds-platform/commit/c94c3de46a378d9a2c0abb96be228d7708e54b10) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Select a separate native Postbox SMTP profile while retaining the existing mail.ru profile for deliberate rollback.
+
+- [#2461](https://github.com/doctor-school/ds-platform/pull/2461) [`2886d85`](https://github.com/doctor-school/ds-platform/commit/2886d856bdb3e594c42940e936fd17aa762fde57) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Staff accounts are users ([#2456](https://github.com/doctor-school/ds-platform/issues/2456)): the account endpoints (`GET /v1/me/profile`, `GET`/`PUT /v1/me/display-name`) serve the visitor and platform-administrator roles (a registrar-only principal stays refused, 044 EARS-19), so a staff session opens its own profile and signs out from it instead of hitting the «Не удалось загрузить профиль» frame. The `users.role` mirror now follows the session's project-roles claim on every signed-in request (any staff role ⇒ that staff role, else `doctor_guest`), and the participant queries — the storefront sign-up count, the roster read model, the registrar's roster page (rows and total), the live room population, its expiry timer and the derived presence minutes — leave staff accounts out. Staff are onboarded with `doctor_guest` + `platform_admin` (runbook step 5; the golden admin and its stage mirror carry both).
+
+- [#2176](https://github.com/doctor-school/ds-platform/pull/2176) [`0e8d27a`](https://github.com/doctor-school/ds-platform/commit/0e8d27aa624dc62a7abd9982c48a245aac1dab10) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Reuse the existing code-email layout for BFF transactional notices, keep only the duplicate-registration login action, and clarify code entry in the requesting tab with consistent Doctor.School sender naming.
+
+- [#2932](https://github.com/doctor-school/ds-platform/pull/2932) [`8d2cc59`](https://github.com/doctor-school/ds-platform/commit/8d2cc595bf468222e349510955b8f0bb616b4200) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Equalize verification-code responses above the real IdP's account-state branches
+  with a safe route-specific timing default and a bounded calibration setting.
+- Updated dependencies [[`7c196df`](https://github.com/doctor-school/ds-platform/commit/7c196df34bf9d8b4299f1d6c8778f7e02eaae065), [`ffcbc8b`](https://github.com/doctor-school/ds-platform/commit/ffcbc8b953769a71c4cce16d6540730125f1cc31), [`b196077`](https://github.com/doctor-school/ds-platform/commit/b1960779456bd91bc0906788c356f822140fa855), [`b697504`](https://github.com/doctor-school/ds-platform/commit/b697504df84a2278ea4151847ea444f84fcff516), [`9388284`](https://github.com/doctor-school/ds-platform/commit/9388284e74a18eeb87478fc8ccc405a7caf631c9), [`9388284`](https://github.com/doctor-school/ds-platform/commit/9388284e74a18eeb87478fc8ccc405a7caf631c9), [`5922a37`](https://github.com/doctor-school/ds-platform/commit/5922a373daa5fd617f2b3076cf7ea9be97f4c32b), [`b54d3db`](https://github.com/doctor-school/ds-platform/commit/b54d3dbda91585981f3c29b162049031cd7d3336), [`ba5c902`](https://github.com/doctor-school/ds-platform/commit/ba5c902323c279cba67e535cc431bc7c89ead8e1), [`ba5c902`](https://github.com/doctor-school/ds-platform/commit/ba5c902323c279cba67e535cc431bc7c89ead8e1), [`423dd7d`](https://github.com/doctor-school/ds-platform/commit/423dd7d9151d4d078c6d4c6df040ef5c75acb90e), [`9bce5b4`](https://github.com/doctor-school/ds-platform/commit/9bce5b49b6ae7849ed003fcb4c145fba052eec77), [`d343086`](https://github.com/doctor-school/ds-platform/commit/d34308684b0abd775bd38a6d79f8535a19d3ca53), [`8350915`](https://github.com/doctor-school/ds-platform/commit/835091584a7a9f2e44a3e5dbbc70bd27e7b17495), [`3cbb163`](https://github.com/doctor-school/ds-platform/commit/3cbb16363e5cda884853b49278a30d373507c408), [`6afe6e3`](https://github.com/doctor-school/ds-platform/commit/6afe6e336b15e8a0eaa9c502e72a17c9a1f09a99), [`44902f9`](https://github.com/doctor-school/ds-platform/commit/44902f9e0b23af2eb8e3227ed78392f3afaa891d), [`cea32b7`](https://github.com/doctor-school/ds-platform/commit/cea32b79bc496b99220c03bca8d072dfbde76a1b), [`22c8d1e`](https://github.com/doctor-school/ds-platform/commit/22c8d1ef07a7ebf501389b75ae8b1309eb3e0de9), [`de024c9`](https://github.com/doctor-school/ds-platform/commit/de024c9daecee663cc52a498712e7641e18759fb), [`3f5fb3e`](https://github.com/doctor-school/ds-platform/commit/3f5fb3efc32cb9b49e61662a57e79157e52fc2eb), [`1e18f3f`](https://github.com/doctor-school/ds-platform/commit/1e18f3fcad2965d8494fba1339d170eddc8d06d2), [`7a13a8a`](https://github.com/doctor-school/ds-platform/commit/7a13a8a82f723ee0f84f5709a7d3dcd91499530e), [`4016b60`](https://github.com/doctor-school/ds-platform/commit/4016b60050758927b682d76baae9cddbfd2d9330), [`a8eed16`](https://github.com/doctor-school/ds-platform/commit/a8eed16a5c10884386df93c1af1fd650296ef2d9), [`0b41632`](https://github.com/doctor-school/ds-platform/commit/0b41632eda3cdbbf574fe202624bbdf6b1e754e3), [`0d8d973`](https://github.com/doctor-school/ds-platform/commit/0d8d973b1e42c3ec60635d8856c1f65dc2085265), [`d2df276`](https://github.com/doctor-school/ds-platform/commit/d2df276fae7fa13cedbd6c3ba22a628908b7b1d0), [`0d4da1f`](https://github.com/doctor-school/ds-platform/commit/0d4da1f1f7cbdf106e09e1907dc2d07d5478591f), [`8c46e5a`](https://github.com/doctor-school/ds-platform/commit/8c46e5a7a9c912d43e9dbe69c46810cbbc2f5a1b), [`47e4b5a`](https://github.com/doctor-school/ds-platform/commit/47e4b5a2cb43f438e20aa609a28b877e66670cb6), [`477fb14`](https://github.com/doctor-school/ds-platform/commit/477fb1436b9796becaf35b3f390576afc2e15bc0), [`4fcb5c7`](https://github.com/doctor-school/ds-platform/commit/4fcb5c756b1b7fcb6cade20c32f1d4c96193ea2a), [`ca8b0ec`](https://github.com/doctor-school/ds-platform/commit/ca8b0ec7ef2229680f7ac3893cc5329528b6539c), [`8735745`](https://github.com/doctor-school/ds-platform/commit/8735745144c3cee0815777dd4f72cce6d331e3e0), [`94e9c36`](https://github.com/doctor-school/ds-platform/commit/94e9c36ccdaa90005a9a9958279b6b521e5bbf8a), [`0614f2c`](https://github.com/doctor-school/ds-platform/commit/0614f2c6ac5c52fe7b7b107505c0fdcf2cd29d1b), [`6040122`](https://github.com/doctor-school/ds-platform/commit/6040122fdbe6d98643612e1a3ad851b0861257a0), [`68eda66`](https://github.com/doctor-school/ds-platform/commit/68eda66a9527bc38218da64bcb10097451d856f6), [`0212f80`](https://github.com/doctor-school/ds-platform/commit/0212f80678da2fb087688192404cf0c5447f1521), [`d8ab3cf`](https://github.com/doctor-school/ds-platform/commit/d8ab3cfd6532eec4e41db63a5953a4d114c50d82), [`c8c05f2`](https://github.com/doctor-school/ds-platform/commit/c8c05f2845da1edaf3376eeda5a8c0fa103ad8b7), [`2b93353`](https://github.com/doctor-school/ds-platform/commit/2b933531dd53c1470880aa78daec1258eaab3d34), [`ee5f0d5`](https://github.com/doctor-school/ds-platform/commit/ee5f0d5cc4b86a1e6dc45722ff88cc03cf690dd5), [`fb38777`](https://github.com/doctor-school/ds-platform/commit/fb387779501473a8c19f1aaf19272b4b4bc3962e), [`7ac7bd1`](https://github.com/doctor-school/ds-platform/commit/7ac7bd1567b47af7d321d87b94a68eb171e2598b), [`0d505a0`](https://github.com/doctor-school/ds-platform/commit/0d505a0452c2579719f4d106978ec4504e6f553f), [`7ce803d`](https://github.com/doctor-school/ds-platform/commit/7ce803d52e9f4dd7df9f71d19d0e912030205174), [`95f8ef7`](https://github.com/doctor-school/ds-platform/commit/95f8ef7a0c9d1a2be9e0d2f530b6c2ad3452e27e), [`d67683f`](https://github.com/doctor-school/ds-platform/commit/d67683f69b9df535d13e9735e2931c1647d18e7f), [`b8e3b43`](https://github.com/doctor-school/ds-platform/commit/b8e3b4300efab5408ebccc70f9b6affdfe6e2eca), [`b35d573`](https://github.com/doctor-school/ds-platform/commit/b35d573a0e9e15c315cf9f8e0c641c5917f9a29f), [`f509761`](https://github.com/doctor-school/ds-platform/commit/f509761c720e501f312b880c2076254fe8265833), [`c0c5ca6`](https://github.com/doctor-school/ds-platform/commit/c0c5ca67601210283e4ca28d6619e881196ddcd5), [`1d044ef`](https://github.com/doctor-school/ds-platform/commit/1d044eff367955f42e720b8daede06456f7edafe), [`b4ef887`](https://github.com/doctor-school/ds-platform/commit/b4ef8870accda653433603550d8d4c1a3ccc91d8), [`83a6ac3`](https://github.com/doctor-school/ds-platform/commit/83a6ac363ff91b430a20dcff73b7032f74c22e80), [`93def2c`](https://github.com/doctor-school/ds-platform/commit/93def2ccacfc1543efac5bfa68d4f173110f2754), [`46d306f`](https://github.com/doctor-school/ds-platform/commit/46d306fe67fe63de6527ce6aed9eae7f6545c491), [`826cc75`](https://github.com/doctor-school/ds-platform/commit/826cc75e7b75a785dcd8f88652baf77ccd209bcb), [`84f9123`](https://github.com/doctor-school/ds-platform/commit/84f9123b525232a3e028e0acaf2979adeb078c79), [`4e438b3`](https://github.com/doctor-school/ds-platform/commit/4e438b35bd1ab456f7e0a33dc16a139521ee2ce0), [`55054a8`](https://github.com/doctor-school/ds-platform/commit/55054a8ee23840025ee7bc75cd0bf5da0139df63), [`b7e535c`](https://github.com/doctor-school/ds-platform/commit/b7e535c34ce4bbd750c5167f750c3e88dd7b381d), [`ed94b36`](https://github.com/doctor-school/ds-platform/commit/ed94b36260d4ef98d16a9d8f0f1e1bdbd33c8449), [`dbc5624`](https://github.com/doctor-school/ds-platform/commit/dbc5624ef3cacf00d7fb60119f5045248fe22299), [`87e7143`](https://github.com/doctor-school/ds-platform/commit/87e7143dd89b7d6d9942f7008f92c64899dd8431), [`33d4899`](https://github.com/doctor-school/ds-platform/commit/33d4899eb80239139650707795fab82fc8be84e9), [`1853c46`](https://github.com/doctor-school/ds-platform/commit/1853c46b619aa78d69e4da96c6d5e1a7a02d517d), [`b7e535c`](https://github.com/doctor-school/ds-platform/commit/b7e535c34ce4bbd750c5167f750c3e88dd7b381d), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`096f73f`](https://github.com/doctor-school/ds-platform/commit/096f73ff412db2ac636cd04cb624209e7613da93), [`b1e5396`](https://github.com/doctor-school/ds-platform/commit/b1e5396f7a3516895a1e1dcd10a7fd62090d9f61), [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a), [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508), [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84), [`3ae7607`](https://github.com/doctor-school/ds-platform/commit/3ae7607a52c1143dcd1fae78b854ce627cf94b6b), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`1d53550`](https://github.com/doctor-school/ds-platform/commit/1d535508dc5f0bcb0b82964b12ecc1f74d58b52a), [`bb4b540`](https://github.com/doctor-school/ds-platform/commit/bb4b540302e36d4edace761fe5e68e96932cdecd), [`390c917`](https://github.com/doctor-school/ds-platform/commit/390c9178288cc3737efbad87ba9ee1dbe5289d6b), [`640a608`](https://github.com/doctor-school/ds-platform/commit/640a60846ef16544d4bf4e61d4d22db6e6d53ba1), [`2680028`](https://github.com/doctor-school/ds-platform/commit/26800282aa5c1ec2e30bc099b836f8aab06b9c18), [`103c74d`](https://github.com/doctor-school/ds-platform/commit/103c74deb7f6e51c0467c520ebfd1813272000bb), [`5912916`](https://github.com/doctor-school/ds-platform/commit/5912916deaab5efea847a94fada3f0ea232634b1), [`972ccca`](https://github.com/doctor-school/ds-platform/commit/972ccca5d12e9bbe83f2be7c0c4ca90aa9401e9e), [`2886d85`](https://github.com/doctor-school/ds-platform/commit/2886d856bdb3e594c42940e936fd17aa762fde57)]:
+  - @ds/schemas@7.0.0
+  - @ds/db@4.0.0
+
 ## 4.0.0
 
 ### Major Changes

@@ -21,7 +21,7 @@ import {
   registerHref,
   stepHref,
 } from "./host-config";
-import { LEARNING_UI_COPY as C, lockReasonText } from "./learning-ui-copy";
+import { LEARNING_UI_COPY as C, STEP_TYPE_LABEL, lockReasonText } from "./learning-ui-copy";
 import { StepIcon } from "./step-icon";
 
 // 024 EARS-15, EARS-16, EARS-18 — one screen per step per
@@ -51,6 +51,22 @@ const STRIP_TONE = {
   open: "bg-card text-tint-foreground border-primary",
   closed: "bg-muted text-muted-foreground border-hairline",
 } as const;
+
+type Connector = "none" | "reached" | "ahead";
+
+function StripLine({ kind }: { kind: Connector }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-connector={kind}
+      className={cn(
+        "h-0 min-w-1 flex-1 basis-0",
+        kind === "reached" && "border-t-4 border-solid border-primary-action",
+        kind === "ahead" && "border-t-4 border-dashed border-muted-2",
+      )}
+    />
+  );
+}
 
 export function StepScreen({ courseSlug, config, lesson, stepId, step }: StepScreenProps) {
   const l = lesson.lesson;
@@ -91,31 +107,50 @@ export function StepScreen({ courseSlug, config, lesson, stepId, step }: StepScr
               const word = C.statusWord[here ? "current" : s.state.status];
               const label = `Шаг ${i + 1}. ${s.title}. ${word}`;
               const box = cn(
-                "inline-flex size-12 flex-none items-center justify-center border-2 no-underline",
+                "inline-flex size-11 flex-none items-center justify-center border-2 no-underline md:size-14",
                 STRIP_TONE[tone],
               );
+              // The line into a step is solid once that step is reachable, dashed
+              // while it is locked; nothing past either end (canvas v18).
+              const into = (j: number): Connector =>
+                j < 0 || j >= lesson.steps.length
+                  ? "none"
+                  : lesson.steps[j]!.state.status === "locked"
+                    ? "ahead"
+                    : "reached";
               return (
                 <li key={s.id} className="flex min-w-0 flex-1 basis-0 flex-col items-center gap-2">
                   <div className="flex items-center self-stretch">
-                    <span aria-hidden="true" className={cn("flex-1 border-t-4", i === 0 ? "border-transparent" : "border-primary-action")} />
+                    <StripLine kind={i === 0 ? "none" : into(i)} />
                     {tone === "closed" ? (
-                      <span role="img" aria-label={label} aria-disabled="true" className={box}>
+                      <span data-step-box role="img" aria-label={label} aria-disabled="true" className={box}>
                         <StepIcon kind={s.type} size={22} />
                       </span>
                     ) : (
                       <Link
                         variant="wrapper"
+                        className="flex-none"
                         href={stepHref(config, courseSlug, s.id)}
                         aria-label={label}
                         aria-current={here ? "step" : undefined}
                       >
-                        <span className={cn(box, "[a:hover>&]:shadow-btn")}>
+                        <span data-step-box className={cn(box, "[a:hover>&]:shadow-btn")}>
                           <StepIcon kind={s.type} size={22} />
                         </span>
                       </Link>
                     )}
-                    <span aria-hidden="true" className={cn("flex-1 border-t-4", i === lesson.steps.length - 1 ? "border-transparent" : "border-primary-action")} />
+                    <StripLine kind={into(i + 1)} />
                   </div>
+                  <span
+                    data-step-caption
+                    className={cn(
+                      "hidden max-w-full px-1 text-center text-xs leading-tight md:block",
+                      here ? "font-extrabold" : "font-semibold",
+                      tone === "closed" ? "text-muted-foreground" : "text-foreground",
+                    )}
+                  >
+                    {STEP_TYPE_LABEL[s.type]}
+                  </span>
                 </li>
               );
             })}

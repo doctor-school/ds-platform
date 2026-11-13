@@ -154,4 +154,43 @@ describe("024 EARS-15…18 — the step screen", () => {
     expect(await screen.findByText("Осталось попыток: 0.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Повторить тест" })).toBeDisabled();
   });
+
+  describe("EARS-15: the strip of the lesson's steps (doctor-lesson.dc.html v18)", () => {
+    const stripLesson = () =>
+      lessonRead({
+        steps: [
+          ...lessonRead().steps,
+          { id: ID.s4, type: "test", title: "Итоговый тест", durationMin: 10, state: { status: "locked", reason: { kind: "previous" } }, completionSentence: "Сдайте тест." },
+        ] as ReturnType<typeof lessonRead>["steps"],
+      });
+    const connectors = () => {
+      const strip = screen.getByRole("list", { name: "Шаги урока" });
+      return [...strip.querySelectorAll("li")].map((li) => [...li.querySelectorAll("[data-connector]")]);
+    };
+
+    it("EARS-15: joins the steps with a line — solid up to the reachable steps, dashed to a locked one, none past the ends", () => {
+      renderStep(videoStep(), ID.s2, stripLesson());
+      const [first, second, third] = connectors();
+      expect(first![0]).toHaveAttribute("data-connector", "none");
+      expect(first![1]).toHaveAttribute("data-connector", "reached");
+      expect(second![0]).toHaveAttribute("data-connector", "reached");
+      expect(second![1]).toHaveAttribute("data-connector", "ahead");
+      expect(third![0]).toHaveAttribute("data-connector", "ahead");
+      expect(third![1]).toHaveAttribute("data-connector", "none");
+      for (const line of [first![1]!, second![0]!]) expect(line).toHaveClass("border-t-4", "border-solid", "border-primary-action");
+      for (const line of [second![1]!, third![0]!]) expect(line).toHaveClass("border-t-4", "border-dashed", "border-muted-2");
+      for (const end of [first![0]!, third![1]!]) expect(end).not.toHaveClass("border-t-4");
+    });
+
+    it("EARS-15: a step box is 2.75rem on a phone and 3.5rem from md, with the step type under it on desktop", () => {
+      renderStep(videoStep(), ID.s2, stripLesson());
+      const strip = screen.getByRole("list", { name: "Шаги урока" });
+      const boxes = strip.querySelectorAll("[data-step-box]");
+      expect(boxes).toHaveLength(3);
+      for (const box of boxes) expect(box).toHaveClass("size-11", "md:size-14");
+      const captions = [...strip.querySelectorAll("[data-step-caption]")];
+      expect(captions.map((c) => c.textContent)).toEqual(["Серия", "Материал для скачивания", "Тест"]);
+      for (const c of captions) expect(c).toHaveClass("hidden", "md:block");
+    });
+  });
 });

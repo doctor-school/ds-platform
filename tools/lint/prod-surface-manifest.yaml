@@ -520,3 +520,15 @@ routes:
     route: /project-output-kinds/[id]
     file: apps/admin/app/project-output-kinds/[id]/page.tsx
     status: product-ready
+  - app: admin
+    route: /learning
+    file: apps/admin/app/learning/page.tsx
+    status: product-ready
+  - app: admin
+    route: /learning/courses/[id]
+    file: apps/admin/app/learning/courses/[id]/page.tsx
+    status: product-ready
+  - app: admin
+    route: /learning/lessons/[id]
+    file: apps/admin/app/learning/lessons/[id]/page.tsx
+    status: product-ready

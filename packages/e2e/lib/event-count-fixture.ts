@@ -17,6 +17,7 @@ import { openEventLive } from "../admin/events.js";
 import { seedStorefrontSession } from "./storefront-session-seed.js";
 import {
   eventCountBackgrounds,
+  countBrowserRoute,
   type CountBackground,
   type CountResource,
 } from "./event-count-report.js";
@@ -290,6 +291,30 @@ export class EventCountWorld {
     const adminOrigin = new URL(process.env.E2E_ADMIN_URL!).origin;
     const target = new URL(this.api.url);
     target.hostname = new URL(adminOrigin).hostname;
+    this.page.on("response", (response) => {
+      const route = countBrowserRoute(
+        response.url(),
+        adminOrigin,
+        target.origin,
+      );
+      if (route)
+        countOperation("own Admin browser response", {
+          ...route,
+          status: response.status(),
+        });
+    });
+    this.page.on("requestfailed", (request) => {
+      const route = countBrowserRoute(
+        request.url(),
+        adminOrigin,
+        target.origin,
+      );
+      if (route)
+        countOperation("own Admin browser request failure", {
+          ...route,
+          status: 0,
+        });
+    });
     await context.route(
       (url) => url.origin === adminOrigin && url.pathname.startsWith("/v1/"),
       async (route) => {
@@ -404,7 +429,9 @@ export class EventCountWorld {
       resolve(countDirectory(), "dynamic-secrets.private.jsonl"),
       JSON.stringify({ doctorCookie: this.doctorCookie }) + "\n",
     );
+    countOperation("count editor: navigate");
     await this.page.goto("/events/create");
+    countOperation("count editor: form-visible");
     await expect(this.page.getByTestId("event-form")).toBeVisible();
     this.backgroundId = await this.createEvent("Background", true);
     await openEventLive(this.page);
@@ -428,8 +455,11 @@ export class EventCountWorld {
       title: this.title,
       purpose: name,
     });
+    countOperation("count editor: navigate");
     await this.page.goto("/events/create");
+    countOperation("count editor: form-visible");
     await expect(this.page.getByTestId("event-form")).toBeVisible();
+    countOperation("count editor: defaults");
     await expect(this.page.getByTestId("hide-sign-up-count")).toBeChecked();
     await expect(
       this.page.getByTestId("show-presence-count"),
@@ -438,15 +468,21 @@ export class EventCountWorld {
       .toISOString()
       .slice(0, 16);
     this.pendingMsk = msk;
+    countOperation("count editor: title");
     await this.page.locator("#title").fill(`4035 ${name} ${randomUUID()}`);
+    countOperation("count editor: school");
     await this.page.locator("#school").fill("Кардиология");
+    countOperation("count editor: starts-at");
     await this.page.locator("#startsAtMsk").fill(msk);
+    countOperation("count editor: duration");
     await this.page.locator("#durationMin").fill("90");
+    countOperation("count editor: pdf");
     await this.page.getByTestId("program-pdf").setInputFiles({
       name: "program.pdf",
       mimeType: "application/pdf",
       buffer: PDF,
     });
+    countOperation("count editor: select classification");
     await chooseEventClassification(this.page, { audience: "experts" });
   }
   async saveNewEvent(name: string): Promise<string> {
@@ -455,7 +491,9 @@ export class EventCountWorld {
       purpose: name,
     });
     const msk = this.pendingMsk;
+    countOperation("count editor: submit");
     await this.page.getByTestId("submit-event").click();
+    countOperation("count editor: saved-url");
     await this.page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 20_000 });
     const id = this.page.url().split("/").pop()!;
     const row = (

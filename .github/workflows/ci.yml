@@ -2259,6 +2259,128 @@ jobs:
       # 048 (#3517): the reading-page storefront group of
       # `materials-reading-page.spec.ts` reads the Academy, so this tier boots
       # the Academy storefront and names it; in CI that group has no skip path.
+      - name: Prepare the owned official-source MinIO for 4035
+        id: count-minio
+        if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          build="$RUNNER_TEMP/event-count-4035-minio"
+          dir="$RUNNER_TEMP/event-count-4035"
+          ops="$RUNNER_TEMP/event-count-4035-ops.jsonl"
+          mkdir "$build" "$dir"
+          printf '%s\n' '{"phase":"pre","command":"download/checksum own Go1.24.8 and build pinned official MinIO source"}' >> "$ops"
+          test "$(uname -m)" = x86_64
+          curl -fsSL --retry 2 --retry-all-errors --connect-timeout 15 --max-time 120 --retry-max-time 300 https://go.dev/dl/go1.24.8.linux-amd64.tar.gz -o "$build/go.tar.gz"
+          printf '%s  %s\n' 6842c516ca66c89d648a7f1dbe28e28c47b61b59f8f06633eb2ceb1188e9251d "$build/go.tar.gz" | sha256sum -c -
+          tar -xzf "$build/go.tar.gz" -C "$build"
+          export GOROOT="$build/go" GOBIN="$build/bin" GOMODCACHE="$build/mod" GOCACHE="$build/cache" GOPATH="$build/gopath"
+          export GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GOFLAGS=-p=2 CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+          version=v0.0.0-20260212201848-7aac2a2c5b7c
+          curl -fsSL "https://proxy.golang.org/github.com/minio/minio/@v/$version.info" > "$build/source.json"
+          node --input-type=module - "$build/source.json" <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const source = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          if (source.Origin?.URL !== 'https://github.com/minio/minio' || source.Origin?.Hash !== '7aac2a2c5b7c882e68c1ce017d8256be2feea27f') throw Error('MinIO source mismatch');
+          NODE
+          "$build/go/bin/go" install "github.com/minio/minio@$version" > "$dir/minio-build.private.log" 2>&1
+          binary_sha="$(sha256sum "$build/bin/minio" | cut -d' ' -f1)"
+          printf '%s\n' '{"phase":"pre","command":"allocate own free loopback MinIO port and start exact task binary"}' >> "$ops"
+          port="$(node --input-type=module <<'NODE'
+          import { createServer } from 'node:net';
+          const server=createServer(); await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve)}); console.log(server.address().port); await new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+          NODE
+          )"
+          export MINIO_ROOT_USER="count4035$(openssl rand -hex 8)" MINIO_ROOT_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$MINIO_ROOT_USER"
+          echo "::add-mask::$MINIO_ROOT_PASSWORD"
+          "$build/bin/minio" server "$build/data" --address "127.0.0.1:$port" --console-address 127.0.0.1:0 > "$dir/minio.private.log" 2>&1 &
+          echo $! > "$build/minio.pid"
+          endpoint="http://127.0.0.1:$port"
+          ready=false
+          for i in $(seq 1 30); do if curl -fsS "$endpoint/minio/health/live" >/dev/null; then ready=true; break; fi; sleep 1; done
+          test "$ready" = true
+          printf '%s\n' '{"phase":"pre","command":"create exact own ds-event-count-4035 bucket on real MinIO"}' >> "$ops"
+          export E2E_EVENT_COUNT_S3_ENDPOINT="$endpoint" E2E_EVENT_COUNT_S3_ACCESS_KEY="$MINIO_ROOT_USER" E2E_EVENT_COUNT_S3_SECRET_KEY="$MINIO_ROOT_PASSWORD" E2E_EVENT_COUNT_S3_BUCKET_UPLOADS=ds-event-count-4035
+          node --input-type=module <<'NODE'
+          import {createRequire} from 'node:module';
+          const require=createRequire(process.cwd()+'/apps/api/package.json'); const {S3Client,CreateBucketCommand}=require('@aws-sdk/client-s3');
+          const client=new S3Client({endpoint:process.env.E2E_EVENT_COUNT_S3_ENDPOINT,region:'us-east-1',forcePathStyle:true,credentials:{accessKeyId:process.env.E2E_EVENT_COUNT_S3_ACCESS_KEY,secretAccessKey:process.env.E2E_EVENT_COUNT_S3_SECRET_KEY}}); await client.send(new CreateBucketCommand({Bucket:process.env.E2E_EVENT_COUNT_S3_BUCKET_UPLOADS})); client.destroy();
+          NODE
+          printf '{"provider":"official-source MinIO","source":"7aac2a2c5b7c882e68c1ce017d8256be2feea27f","goArchiveSha256":"6842c516ca66c89d648a7f1dbe28e28c47b61b59f8f06633eb2ceb1188e9251d","binarySha256":"%s","bucket":"ds-event-count-4035","endpoint":"%s"}\n' "$binary_sha" "$endpoint" > "$dir/s3-provider.json"
+          for key in E2E_EVENT_COUNT_S3_ENDPOINT E2E_EVENT_COUNT_S3_ACCESS_KEY E2E_EVENT_COUNT_S3_SECRET_KEY E2E_EVENT_COUNT_S3_BUCKET_UPLOADS; do printf '%s=%s\n' "$key" "${!key}" >> "$GITHUB_ENV"; done
+      - name: Prepare the isolated 4035 count-originals database
+        if: ${{ !cancelled() && steps.count-minio.outcome == 'success' }}
+        env:
+          DATABASE_URL: postgres://ds:ds@localhost:5432/ds_probe_4035
+        run: |
+          set -euo pipefail
+          ops="$RUNNER_TEMP/event-count-4035-ops.jsonl"
+          printf '%s\n' '{"phase":"pre","command":"CREATE DATABASE ds_probe_4035 OWNER ds in job-owned ds-postgres"}' >> "$ops"
+          docker exec ds-postgres psql -U ds -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ds_probe_4035 OWNER ds'
+          printf '%s\n' '{"phase":"pre","command":"pnpm --filter @ds/api drizzle:migrate:ci against ds_probe_4035"}' >> "$ops"
+          pnpm --filter @ds/api drizzle:migrate:ci > "$RUNNER_TEMP/event-count-4035/migrate.private.log" 2>&1
+          cp "$ops" "$RUNNER_TEMP/event-count-4035/ops.jsonl"
+      - name: Run and certify the exact three 007 count originals
+        id: count-originals
+        if: ${{ !cancelled() && steps.count-minio.outcome == 'success' }}
+        env:
+          IDP_REDIRECT_URI: http://localhost:3000/auth/callback
+          E2E_EVENT_COUNT_DATABASE_URL: postgres://ds:ds@localhost:5432/ds_probe_4035
+          E2E_EVENT_COUNT_DIR: ${{ runner.temp }}/event-count-4035
+          E2E_EVENT_COUNT_OPS_LOG: ${{ runner.temp }}/event-count-4035-ops.jsonl
+        run: |
+          set -euo pipefail
+          printf '%s\n' '{"phase":"pre","command":"bddgen event-count-visibility; Playwright one worker retries0; strict certificate"}' >> "$E2E_EVENT_COUNT_OPS_LOG"
+          if pnpm --filter @ds/e2e exec bddgen --config event-count-visibility.config.ts &&
+             pnpm --filter @ds/e2e exec playwright test --config event-count-visibility.config.ts > "$E2E_EVENT_COUNT_DIR/console.private.log" 2>&1; then
+            exit 0
+          else
+            original_status=$?
+            printf '%s\n' '{"phase":"pre","command":"export allowlisted failure-only diagnostics in the actual worker environment"}' >> "$E2E_EVENT_COUNT_OPS_LOG"
+            if ! pnpm --filter @ds/e2e exec tsx api-probes/export-event-count-failure.ts "$E2E_EVENT_COUNT_DIR"; then
+              echo '4035 failure diagnostics unavailable; raw evidence remains private'
+            fi
+            exit "$original_status"
+          fi
+      - name: Upload 4035 failure-only diagnostics
+        if: ${{ !cancelled() && steps.count-originals.outcome == 'failure' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: event-count-visibility-originals-4035-failure
+          path: ${{ runner.temp }}/event-count-4035/failure-safe
+          if-no-files-found: error
+          retention-days: 7
+      - name: Stop only the owned 4035 MinIO process
+        if: ${{ !cancelled() && steps.count-minio.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          build="$RUNNER_TEMP/event-count-4035-minio"
+          pid="$(cat "$build/minio.pid")"
+          test "$(readlink "/proc/$pid/exe")" = "$build/bin/minio"
+          printf '%s\n' '{"phase":"pre","command":"stop verified exact own 4035 MinIO binary PID"}' | tee -a "$RUNNER_TEMP/event-count-4035/ops.jsonl" >> "$RUNNER_TEMP/event-count-4035-ops.jsonl"
+          kill "$pid"
+          node --input-type=module - "$RUNNER_TEMP/event-count-4035/s3-provider.json" <<'NODE'
+          import {readFileSync,writeFileSync} from 'node:fs'; import {createServer} from 'node:net';
+          const file=process.argv[2], provider=JSON.parse(readFileSync(file,'utf8'));
+          let released=false;
+          for(let attempt=0;attempt<30&&!released;attempt++) { const server=createServer(); try { await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(Number(new URL(provider.endpoint).port),'127.0.0.1',resolve)}); await new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve())); released=true; } catch { await new Promise(resolve=>setTimeout(resolve,100)); } }
+          if(!released)throw Error('Owned MinIO listener was not released'); provider.listenerReleased=true; writeFileSync(file,JSON.stringify(provider));
+          NODE
+      - name: Certify 4035 count originals and safe-only export
+        if: ${{ !cancelled() && steps.count-minio.outcome == 'success' }}
+        env:
+          E2E_EVENT_COUNT_DIR: ${{ runner.temp }}/event-count-4035
+        run: |
+          pnpm --filter @ds/e2e exec tsx api-probes/assert-event-count-report.ts "$E2E_EVENT_COUNT_DIR"
+      - name: Upload reviewed 4035 counters and owning receipts
+        if: ${{ !cancelled() && steps.count-minio.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: event-count-visibility-originals-4035
+          path: ${{ runner.temp }}/event-count-4035/safe
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Admin flows tier
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
         env:
@@ -2413,128 +2535,6 @@ jobs:
         with:
           name: recording-attachment-originals
           path: ${{ runner.temp }}/recording-attachment
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Prepare the owned official-source MinIO for 4035
-        id: count-minio
-        if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
-        run: |
-          set -euo pipefail
-          build="$RUNNER_TEMP/event-count-4035-minio"
-          dir="$RUNNER_TEMP/event-count-4035"
-          ops="$RUNNER_TEMP/event-count-4035-ops.jsonl"
-          mkdir "$build" "$dir"
-          printf '%s\n' '{"phase":"pre","command":"download/checksum own Go1.24.8 and build pinned official MinIO source"}' >> "$ops"
-          test "$(uname -m)" = x86_64
-          curl -fsSL --retry 2 --retry-all-errors --connect-timeout 15 --max-time 120 --retry-max-time 300 https://go.dev/dl/go1.24.8.linux-amd64.tar.gz -o "$build/go.tar.gz"
-          printf '%s  %s\n' 6842c516ca66c89d648a7f1dbe28e28c47b61b59f8f06633eb2ceb1188e9251d "$build/go.tar.gz" | sha256sum -c -
-          tar -xzf "$build/go.tar.gz" -C "$build"
-          export GOROOT="$build/go" GOBIN="$build/bin" GOMODCACHE="$build/mod" GOCACHE="$build/cache" GOPATH="$build/gopath"
-          export GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GOFLAGS=-p=2 CGO_ENABLED=0 GOOS=linux GOARCH=amd64
-          version=v0.0.0-20260212201848-7aac2a2c5b7c
-          curl -fsSL "https://proxy.golang.org/github.com/minio/minio/@v/$version.info" > "$build/source.json"
-          node --input-type=module - "$build/source.json" <<'NODE'
-          import { readFileSync } from 'node:fs';
-          const source = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-          if (source.Origin?.URL !== 'https://github.com/minio/minio' || source.Origin?.Hash !== '7aac2a2c5b7c882e68c1ce017d8256be2feea27f') throw Error('MinIO source mismatch');
-          NODE
-          "$build/go/bin/go" install "github.com/minio/minio@$version" > "$dir/minio-build.private.log" 2>&1
-          binary_sha="$(sha256sum "$build/bin/minio" | cut -d' ' -f1)"
-          printf '%s\n' '{"phase":"pre","command":"allocate own free loopback MinIO port and start exact task binary"}' >> "$ops"
-          port="$(node --input-type=module <<'NODE'
-          import { createServer } from 'node:net';
-          const server=createServer(); await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve)}); console.log(server.address().port); await new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
-          NODE
-          )"
-          export MINIO_ROOT_USER="count4035$(openssl rand -hex 8)" MINIO_ROOT_PASSWORD="$(openssl rand -hex 24)"
-          echo "::add-mask::$MINIO_ROOT_USER"
-          echo "::add-mask::$MINIO_ROOT_PASSWORD"
-          "$build/bin/minio" server "$build/data" --address "127.0.0.1:$port" --console-address 127.0.0.1:0 > "$dir/minio.private.log" 2>&1 &
-          echo $! > "$build/minio.pid"
-          endpoint="http://127.0.0.1:$port"
-          ready=false
-          for i in $(seq 1 30); do if curl -fsS "$endpoint/minio/health/live" >/dev/null; then ready=true; break; fi; sleep 1; done
-          test "$ready" = true
-          printf '%s\n' '{"phase":"pre","command":"create exact own ds-event-count-4035 bucket on real MinIO"}' >> "$ops"
-          export E2E_EVENT_COUNT_S3_ENDPOINT="$endpoint" E2E_EVENT_COUNT_S3_ACCESS_KEY="$MINIO_ROOT_USER" E2E_EVENT_COUNT_S3_SECRET_KEY="$MINIO_ROOT_PASSWORD" E2E_EVENT_COUNT_S3_BUCKET_UPLOADS=ds-event-count-4035
-          node --input-type=module <<'NODE'
-          import {createRequire} from 'node:module';
-          const require=createRequire(process.cwd()+'/apps/api/package.json'); const {S3Client,CreateBucketCommand}=require('@aws-sdk/client-s3');
-          const client=new S3Client({endpoint:process.env.E2E_EVENT_COUNT_S3_ENDPOINT,region:'us-east-1',forcePathStyle:true,credentials:{accessKeyId:process.env.E2E_EVENT_COUNT_S3_ACCESS_KEY,secretAccessKey:process.env.E2E_EVENT_COUNT_S3_SECRET_KEY}}); await client.send(new CreateBucketCommand({Bucket:process.env.E2E_EVENT_COUNT_S3_BUCKET_UPLOADS})); client.destroy();
-          NODE
-          printf '{"provider":"official-source MinIO","source":"7aac2a2c5b7c882e68c1ce017d8256be2feea27f","goArchiveSha256":"6842c516ca66c89d648a7f1dbe28e28c47b61b59f8f06633eb2ceb1188e9251d","binarySha256":"%s","bucket":"ds-event-count-4035","endpoint":"%s"}\n' "$binary_sha" "$endpoint" > "$dir/s3-provider.json"
-          for key in E2E_EVENT_COUNT_S3_ENDPOINT E2E_EVENT_COUNT_S3_ACCESS_KEY E2E_EVENT_COUNT_S3_SECRET_KEY E2E_EVENT_COUNT_S3_BUCKET_UPLOADS; do printf '%s=%s\n' "$key" "${!key}" >> "$GITHUB_ENV"; done
-      - name: Prepare the isolated 4035 count-originals database
-        if: ${{ !cancelled() && steps.count-minio.outcome == 'success' }}
-        env:
-          DATABASE_URL: postgres://ds:ds@localhost:5432/ds_probe_4035
-        run: |
-          set -euo pipefail
-          ops="$RUNNER_TEMP/event-count-4035-ops.jsonl"
-          printf '%s\n' '{"phase":"pre","command":"CREATE DATABASE ds_probe_4035 OWNER ds in job-owned ds-postgres"}' >> "$ops"
-          docker exec ds-postgres psql -U ds -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ds_probe_4035 OWNER ds'
-          printf '%s\n' '{"phase":"pre","command":"pnpm --filter @ds/api drizzle:migrate:ci against ds_probe_4035"}' >> "$ops"
-          pnpm --filter @ds/api drizzle:migrate:ci > "$RUNNER_TEMP/event-count-4035/migrate.private.log" 2>&1
-          cp "$ops" "$RUNNER_TEMP/event-count-4035/ops.jsonl"
-      - name: Run and certify the exact three 007 count originals
-        id: count-originals
-        if: ${{ !cancelled() && steps.count-minio.outcome == 'success' }}
-        env:
-          IDP_REDIRECT_URI: http://localhost:3000/auth/callback
-          E2E_EVENT_COUNT_DATABASE_URL: postgres://ds:ds@localhost:5432/ds_probe_4035
-          E2E_EVENT_COUNT_DIR: ${{ runner.temp }}/event-count-4035
-          E2E_EVENT_COUNT_OPS_LOG: ${{ runner.temp }}/event-count-4035-ops.jsonl
-        run: |
-          set -euo pipefail
-          printf '%s\n' '{"phase":"pre","command":"bddgen event-count-visibility; Playwright one worker retries0; strict certificate"}' >> "$E2E_EVENT_COUNT_OPS_LOG"
-          if pnpm --filter @ds/e2e exec bddgen --config event-count-visibility.config.ts &&
-             pnpm --filter @ds/e2e exec playwright test --config event-count-visibility.config.ts > "$E2E_EVENT_COUNT_DIR/console.private.log" 2>&1; then
-            exit 0
-          else
-            original_status=$?
-            printf '%s\n' '{"phase":"pre","command":"export allowlisted failure-only diagnostics in the actual worker environment"}' >> "$E2E_EVENT_COUNT_OPS_LOG"
-            if ! pnpm --filter @ds/e2e exec tsx api-probes/export-event-count-failure.ts "$E2E_EVENT_COUNT_DIR"; then
-              echo '4035 failure diagnostics unavailable; raw evidence remains private'
-            fi
-            exit "$original_status"
-          fi
-      - name: Upload 4035 failure-only diagnostics
-        if: ${{ !cancelled() && steps.count-originals.outcome == 'failure' }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: event-count-visibility-originals-4035-failure
-          path: ${{ runner.temp }}/event-count-4035/failure-safe
-          if-no-files-found: error
-          retention-days: 7
-      - name: Stop only the owned 4035 MinIO process
-        if: ${{ !cancelled() && steps.count-minio.outcome == 'success' }}
-        run: |
-          set -euo pipefail
-          build="$RUNNER_TEMP/event-count-4035-minio"
-          pid="$(cat "$build/minio.pid")"
-          test "$(readlink "/proc/$pid/exe")" = "$build/bin/minio"
-          printf '%s\n' '{"phase":"pre","command":"stop verified exact own 4035 MinIO binary PID"}' | tee -a "$RUNNER_TEMP/event-count-4035/ops.jsonl" >> "$RUNNER_TEMP/event-count-4035-ops.jsonl"
-          kill "$pid"
-          node --input-type=module - "$RUNNER_TEMP/event-count-4035/s3-provider.json" <<'NODE'
-          import {readFileSync,writeFileSync} from 'node:fs'; import {createServer} from 'node:net';
-          const file=process.argv[2], provider=JSON.parse(readFileSync(file,'utf8'));
-          let released=false;
-          for(let attempt=0;attempt<30&&!released;attempt++) { const server=createServer(); try { await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(Number(new URL(provider.endpoint).port),'127.0.0.1',resolve)}); await new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve())); released=true; } catch { await new Promise(resolve=>setTimeout(resolve,100)); } }
-          if(!released)throw Error('Owned MinIO listener was not released'); provider.listenerReleased=true; writeFileSync(file,JSON.stringify(provider));
-          NODE
-      - name: Certify 4035 count originals and safe-only export
-        if: ${{ !cancelled() && steps.count-minio.outcome == 'success' }}
-        env:
-          E2E_EVENT_COUNT_DIR: ${{ runner.temp }}/event-count-4035
-        run: |
-          pnpm --filter @ds/e2e exec tsx api-probes/assert-event-count-report.ts "$E2E_EVENT_COUNT_DIR"
-      - name: Upload reviewed 4035 counters and owning receipts
-        if: ${{ !cancelled() && steps.count-minio.outcome == 'success' }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: event-count-visibility-originals-4035
-          path: ${{ runner.temp }}/event-count-4035/safe
           if-no-files-found: error
           retention-days: 7
 

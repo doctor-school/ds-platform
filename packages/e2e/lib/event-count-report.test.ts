@@ -6,9 +6,143 @@ import {
   assertNoCountCredentials,
   assertCountStorageProvider,
   eventCountFailureDiagnostic,
+  countBrowserRoute,
 } from "./event-count-report.js";
 
 describe("count-original failure diagnostics", () => {
+  it("locates the failed browser operation without publishing its message, stack or arbitrary selector", () => {
+    const diagnostic = eventCountFailureDiagnostic(
+      JSON.stringify({
+        errors: [
+          {
+            message:
+              "Error: expect(locator).toBeVisible() failed\nLocator: getByTestId('event-form')\nprivate-email@ds.test private-cookie-value",
+            stack:
+              "Error: private-cookie-value\n at initialize (C:\\private-user\\repo\\packages\\e2e\\lib\\event-count-fixture.ts:409:22)\n at foreign (/private/email.ts:33:4)",
+          },
+        ],
+      }),
+    );
+    expect(diagnostic.errors).toEqual(["BROWSER_ASSERTION_FAILED"]);
+    expect(diagnostic.browserFailures).toEqual([
+      {
+        category: "BROWSER_ASSERTION_FAILED",
+        selectors: ["event-form"],
+        locations: [
+          {
+            file: "packages/e2e/lib/event-count-fixture.ts",
+            line: 409,
+            column: 22,
+          },
+        ],
+      },
+    ]);
+    expect(JSON.stringify(diagnostic)).not.toMatch(
+      /private-|private-user|email\.ts|expect\(/,
+    );
+  });
+  for (const [message, category] of [
+    [
+      "locator.fill: Timeout 20000ms exceeded; private-value",
+      "BROWSER_LOCATOR_TIMEOUT",
+    ],
+    [
+      "locator.click: Element is not attached to the DOM private-value",
+      "BROWSER_TARGET_DETACHED",
+    ],
+    [
+      "expect(locator).toBeVisible() failed\nError: element(s) not found private-value",
+      "BROWSER_TARGET_MISSING",
+    ],
+    [
+      "page.goto: net::ERR_CONNECTION_REFUSED at http://private-host/",
+      "BROWSER_CONNECTION_REFUSED",
+    ],
+    [
+      "page.waitForURL: Timeout 20000ms exceeded private-value",
+      "BROWSER_NAVIGATION_TIMEOUT",
+    ],
+    [
+      "Error: strict mode violation: locator resolved to 2 elements private-value",
+      "BROWSER_TARGET_AMBIGUOUS",
+    ],
+  ]) {
+    it(`classifies ${category} without arbitrary error text`, () => {
+      const diagnostic = eventCountFailureDiagnostic(
+        JSON.stringify({ errors: [{ message }] }),
+      );
+      expect(diagnostic.errors).toEqual([category]);
+      expect(JSON.stringify(diagnostic)).not.toContain("private-");
+    });
+  }
+  it("exports only fixed browser route classes and validated status observations", () => {
+    const admin = "http://localhost:3200",
+      api = "http://localhost:41999";
+    expect(
+      countBrowserRoute(
+        admin + "/v1/admin/event-kinds?private-query",
+        admin,
+        api,
+      ),
+    ).toEqual({ origin: "admin", route: "event-kinds" });
+    expect(
+      countBrowserRoute(api + "/v1/admin/events/private-id", admin, api),
+    ).toEqual({ origin: "owned-api", route: "events" });
+    expect(
+      countBrowserRoute("http://foreign/v1/admin/auth/session", admin, api),
+    ).toBeUndefined();
+    expect(
+      countBrowserRoute(admin + "/private-email", admin, api),
+    ).toBeUndefined();
+    const diagnostic = eventCountFailureDiagnostic(
+      undefined,
+      [
+        {
+          command: "own Admin browser response",
+          origin: "admin",
+          route: "event-kinds",
+          status: 401,
+          private: "private-cookie",
+        },
+        {
+          command: "own Admin browser response",
+          origin: "private-origin",
+          route: "private-route",
+          status: 200,
+        },
+        {
+          command: "own Admin browser response",
+          origin: "admin",
+          route: "events",
+          status: "private-value",
+        },
+        {
+          command: "own Admin browser request failure",
+          origin: "owned-api",
+          route: "events",
+          status: 0,
+        },
+        {
+          command: "own Admin browser response",
+          origin: "admin",
+          route: "events",
+          status: 0,
+        },
+        {
+          command: "count editor: select classification",
+          private: "private-cookie",
+        },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join("\n"),
+    );
+    expect(diagnostic.phase).toBe("editor-classification");
+    expect(diagnostic.browserResponses).toEqual([
+      { origin: "admin", route: "event-kinds", status: 401 },
+      { origin: "owned-api", route: "events", status: 0 },
+    ]);
+    expect(JSON.stringify(diagnostic)).not.toContain("private-");
+  });
   it("reports missing evidence as failure without inventing successful receipts", () => {
     const diagnostic = eventCountFailureDiagnostic(undefined, undefined);
     expect(diagnostic.accepted).toBe(false);

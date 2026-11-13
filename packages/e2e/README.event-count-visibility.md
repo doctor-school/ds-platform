@@ -86,7 +86,12 @@ for private review. CI uploads only `safe/` under the distinct
 or owner Stage-B approval is required for this test/tooling-only change.
 
 On a failed browser run CI separately uploads an allowlisted `failure.json`:
-static phase, configuration-presence booleans, error categories, result counters
-and raw-report/operation hashes. It never copies raw messages, stacks, titles or
-credentials. Its `accepted: false` cannot replace the strict success certificate;
+static editor subphase, configuration-presence booleans, error categories,
+allowlisted selector names and repository source locations, result counters,
+fixed route/origin classes with HTTP status (zero means no response), and
+raw-report/operation hashes. Navigation, default assertions, individual field
+input, PDF, classification and save have separate prelogged phases. Only the
+configured Admin and owned API origins are observed; URLs, query strings, IDs,
+response bodies and headers are not diagnostic output. It never copies raw
+messages, stacks, titles or credentials. Its `accepted: false` cannot replace the strict success certificate;
 missing Background/resource evidence and the original failed step remain red.

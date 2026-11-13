@@ -1,6 +1,44 @@
 import { assertOperationalReport } from "../api-probes/operational-report.js";
 import { createHash } from "node:crypto";
 
+const browserRoutes = [
+  "auth-state",
+  "auth-session",
+  "event-kinds",
+  "events",
+  "projects",
+  "editor",
+];
+export function countBrowserRoute(
+  raw: string,
+  adminOrigin: string,
+  apiOrigin: string,
+) {
+  const url = new URL(raw);
+  const origin =
+    url.origin === adminOrigin
+      ? "admin"
+      : url.origin === apiOrigin
+        ? "owned-api"
+        : undefined;
+  if (!origin) return;
+  const route =
+    url.pathname === "/v1/admin/auth/state"
+      ? "auth-state"
+      : url.pathname === "/v1/admin/auth/session"
+        ? "auth-session"
+        : /^\/v1\/admin\/event-kinds(?:\/|$)/.test(url.pathname)
+          ? "event-kinds"
+          : /^\/v1\/admin\/events(?:\/|$)/.test(url.pathname)
+            ? "events"
+            : /^\/v1\/admin\/projects(?:\/|$)/.test(url.pathname)
+              ? "projects"
+              : /^\/events(?:\/|$)/.test(url.pathname)
+                ? "editor"
+                : undefined;
+  if (route) return { origin, route };
+}
+
 export function eventCountFailureDiagnostic(raw?: string, rawOps?: string) {
   const diagnostic = {
     accepted: false,
@@ -16,6 +54,12 @@ export function eventCountFailureDiagnostic(raw?: string, rawOps?: string) {
       globalErrors: 0,
     },
     errors: [] as string[],
+    browserFailures: [] as {
+      category: string;
+      selectors: string[];
+      locations: { file: string; line: number; column: number }[];
+    }[],
+    browserResponses: [] as { origin: string; route: string; status: number }[],
     rawReportSha256:
       raw === undefined ? null : createHash("sha256").update(raw).digest("hex"),
     rawOperationsSha256:
@@ -44,23 +88,102 @@ export function eventCountFailureDiagnostic(raw?: string, rawOps?: string) {
     ],
     ["actual Admin create form; count defaults untouched", "admin-editor"],
     ["public page and listing owning reads", "consumer-reads"],
+    ...[
+      "navigate",
+      "form-visible",
+      "defaults",
+      "title",
+      "school",
+      "starts-at",
+      "duration",
+      "pdf",
+      "classification",
+      "submit",
+      "saved-url",
+    ].map((stage): [string, string] => [
+      `count editor: ${stage === "classification" ? "select classification" : stage}`,
+      `editor-${stage}`,
+    ]),
   ]);
   for (const line of rawOps?.split(/\r?\n/) ?? []) {
     try {
-      const phase = phases.get(String(object(JSON.parse(line)).command));
+      const row = object(JSON.parse(line));
+      const phase = phases.get(String(row.command));
       if (phase) diagnostic.phase = phase;
+      if (
+        (row.command === "own Admin browser response" ||
+          row.command === "own Admin browser request failure") &&
+        ["admin", "owned-api"].includes(String(row.origin)) &&
+        browserRoutes.includes(String(row.route)) &&
+        typeof row.status === "number" &&
+        Number.isInteger(row.status) &&
+        (row.command === "own Admin browser request failure"
+          ? row.status === 0
+          : row.status >= 100 && row.status <= 599)
+      ) {
+        diagnostic.browserResponses.push({
+          origin: String(row.origin),
+          route: String(row.route),
+          status: row.status,
+        });
+      }
     } catch {
       /* Raw diagnostics remain private. */
     }
   }
   const classify = (error: unknown) => {
-    const message = object(error).message;
-    diagnostic.errors.push(
-      typeof message === "string" &&
-        /zitadel OIDC application config[^\n]*is not set/.test(message)
-        ? "OIDC_APPLICATION_CONFIG_MISSING"
-        : "UNCLASSIFIED_FAILURE",
+    const row = object(error),
+      message = typeof row.message === "string" ? row.message : "";
+    const category = /zitadel OIDC application config[^\n]*is not set/.test(
+      message,
+    )
+      ? "OIDC_APPLICATION_CONFIG_MISSING"
+      : /ERR_CONNECTION_REFUSED/.test(message)
+        ? "BROWSER_CONNECTION_REFUSED"
+        : /element\(s\) not found/.test(message)
+          ? "BROWSER_TARGET_MISSING"
+          : /not attached to the DOM|detached from the DOM/.test(message)
+            ? "BROWSER_TARGET_DETACHED"
+            : /strict mode violation/.test(message)
+              ? "BROWSER_TARGET_AMBIGUOUS"
+              : /page\.(?:goto|waitForURL).*Timeout/.test(message)
+                ? "BROWSER_NAVIGATION_TIMEOUT"
+                : /locator\.[a-zA-Z]+.*Timeout/.test(message)
+                  ? "BROWSER_LOCATOR_TIMEOUT"
+                  : /expect\(.*\)\.(?:toBeVisible|toBeChecked|toHave|toBe|toEqual)/.test(
+                        message,
+                      )
+                    ? "BROWSER_ASSERTION_FAILED"
+                    : /ERR_|Failed to fetch|fetch failed/.test(message)
+                      ? "BROWSER_NETWORK_FAILURE"
+                      : "UNCLASSIFIED_FAILURE";
+    diagnostic.errors.push(category);
+    const selectors = [
+      "event-form",
+      "hide-sign-up-count",
+      "show-presence-count",
+      "program-pdf",
+      "event-kind",
+      "event-audience",
+      "submit-event",
+      "edit-ok",
+    ].filter(
+      (selector) =>
+        message.includes(`getByTestId('${selector}')`) ||
+        message.includes(`getByTestId("${selector}")`),
     );
+    const locations: { file: string; line: number; column: number }[] = [];
+    const stack =
+      typeof row.stack === "string" ? row.stack.replaceAll("\\", "/") : "";
+    for (const match of stack.matchAll(
+      /(?:^|[/(\s])((?:packages\/e2e\/)(?:lib\/event-count-fixture|admin\/event-classification|admin\/events|steps\/event-count-visibility.steps)\.ts):(\d{1,5}):(\d{1,4})(?=[)\s]|$)/g,
+    )) {
+      const line = Number(match[2]),
+        column = Number(match[3]);
+      if (line > 0 && line <= 10000 && column > 0 && column <= 1000)
+        locations.push({ file: match[1]!, line, column });
+    }
+    diagnostic.browserFailures.push({ category, selectors, locations });
   };
   if (raw === undefined) diagnostic.errors.push("REPORT_UNAVAILABLE");
   else {
@@ -101,6 +224,15 @@ export function eventCountFailureDiagnostic(raw?: string, rawOps?: string) {
     }
   }
   diagnostic.errors = [...new Set(diagnostic.errors)];
+  diagnostic.browserFailures = [
+    ...new Map(
+      diagnostic.browserFailures.map((failure) => [
+        JSON.stringify(failure),
+        failure,
+      ]),
+    ).values(),
+  ].slice(-30);
+  diagnostic.browserResponses = diagnostic.browserResponses.slice(-60);
   return diagnostic;
 }
 

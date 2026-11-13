@@ -9,6 +9,7 @@ export * from "./statistics/index.js";
 export * from "./recordings/index.js";
 export * from "./materials/index.js";
 export * from "./points/index.js";
+export * from "./learning/index.js";
 export * from "./me/index.js";
 export * from "./health/index.js";
 export * from "./readiness/index.js";

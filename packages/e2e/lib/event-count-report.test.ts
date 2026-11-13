@@ -10,6 +10,23 @@ import {
 } from "./event-count-report.js";
 
 describe("count-original failure diagnostics", () => {
+  it("rejects a source filename that only matches an unescaped separator", () => {
+    const diagnostic = eventCountFailureDiagnostic(
+      JSON.stringify({
+        errors: [
+          {
+            message: "private-error",
+            stack:
+              "at synthetic (/private/packages/e2e/steps/event-count-visibilityXsteps.ts:12:3)",
+          },
+        ],
+      }),
+    );
+    expect(diagnostic.browserFailures[0]!.locations).toEqual([]);
+    expect(JSON.stringify(diagnostic)).not.toContain(
+      "event-count-visibilityXsteps",
+    );
+  });
   it("locates the failed browser operation without publishing its message, stack or arbitrary selector", () => {
     const diagnostic = eventCountFailureDiagnostic(
       JSON.stringify({

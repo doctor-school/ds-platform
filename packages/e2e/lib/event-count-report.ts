@@ -176,7 +176,7 @@ export function eventCountFailureDiagnostic(raw?: string, rawOps?: string) {
     const stack =
       typeof row.stack === "string" ? row.stack.replaceAll("\\", "/") : "";
     for (const match of stack.matchAll(
-      /(?:^|[/(\s])((?:packages\/e2e\/)(?:lib\/event-count-fixture|admin\/event-classification|admin\/events|steps\/event-count-visibility.steps)\.ts):(\d{1,5}):(\d{1,4})(?=[)\s]|$)/g,
+      /(?:^|[/(\s])((?:packages\/e2e\/)(?:lib\/event-count-fixture|admin\/event-classification|admin\/events|steps\/event-count-visibility\.steps)\.ts):(\d{1,5}):(\d{1,4})(?=[)\s]|$)/g,
     )) {
       const line = Number(match[2]),
         column = Number(match[3]);

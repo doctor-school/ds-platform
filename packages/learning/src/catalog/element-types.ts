@@ -28,6 +28,11 @@ export interface LearningElementTypeDef {
   payloadSchema: z.ZodType;
   /** The step's required media, or null for a type with none (EARS-4 requires it on publish). */
   media: LearningMediaDef | null;
+  /**
+   * Whether the step plays from the 006 provider abstraction
+   * (`{ provider, embedRef }`, as a 014 recording); EARS-4 requires it on publish.
+   */
+  providerSource: boolean;
   /** The facts `POST /v1/me/learning/facts` accepts on a step of this type. */
   clientFacts: readonly LearningClientFactKind[];
   /** The type's «viewed» definition over the doctor's facts and the resolved settings. */
@@ -84,10 +89,8 @@ export const LEARNING_ELEMENT_CATALOG: Readonly<
   video: {
     type: "video",
     payloadSchema: LEARNING_STEP_PAYLOAD_SCHEMAS.video,
-    media: {
-      contentTypes: ["video/mp4", "video/webm"],
-      maxBytes: LEARNING_STEP_MEDIA_MAX_BYTES,
-    },
+    media: null,
+    providerSource: true,
     clientFacts: ["position"],
     viewed: (step, ctx) =>
       watchedPercent(step, ctx) >= ctx.setting("viewed.video.percent", step),
@@ -108,6 +111,7 @@ export const LEARNING_ELEMENT_CATALOG: Readonly<
       ],
       maxBytes: LEARNING_STEP_MEDIA_MAX_BYTES,
     },
+    providerSource: false,
     clientFacts: ["opened"],
     viewed: (step, ctx) => ctx.facts.opened(step.id),
     viewedPhrase: () => LEARNING_COPY_RU.phrase.downloadOpened,
@@ -116,6 +120,7 @@ export const LEARNING_ELEMENT_CATALOG: Readonly<
     type: "test",
     payloadSchema: LEARNING_STEP_PAYLOAD_SCHEMAS.test,
     media: null,
+    providerSource: false,
     clientFacts: [],
     viewed: (step, ctx) =>
       ctx.facts.bestScore(step.id) >= ctx.setting("test.threshold", step),

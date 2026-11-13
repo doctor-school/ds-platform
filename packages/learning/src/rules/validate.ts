@@ -252,6 +252,8 @@ export function publishRequirements(
   storedPayloadOf: (stepId: string) => unknown,
   /** Whether the step's 012 media object is uploaded (a type with media requires it). */
   hasMedia: (stepId: string) => boolean,
+  /** Whether the step's provider source is set (a provider-sourced type requires it). */
+  hasSource: (stepId: string) => boolean,
 ): LearningFieldIssue[] {
   const issues: LearningFieldIssue[] = [];
   if (lesson.steps.length === 0)
@@ -269,6 +271,12 @@ export function publishRequirements(
       issues.push({
         path: `steps.${i}.media`,
         message: "upload the step's file",
+      });
+    }
+    if (elementType(step.type)?.providerSource && !hasSource(step.id)) {
+      issues.push({
+        path: `steps.${i}.source`,
+        message: "set the video's provider and id",
       });
     }
   });

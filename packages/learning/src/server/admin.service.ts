@@ -40,6 +40,8 @@ import {
   type UpdateLearningStepRequest,
   LEARNING_SETTING_KEYS,
   LearningTestPayloadSchema,
+  SetLearningStepSourceRequestSchema,
+  type SetLearningStepSourceRequest,
 } from "@ds/schemas";
 import { and, asc, eq, isNull, max, sql } from "drizzle-orm";
 import {
@@ -493,6 +495,7 @@ export class LearningAdminService {
           },
           (id) => stored.get(id),
           (id) => steps.find((s) => s.id === id)?.mediaRef != null,
+          (id) => steps.find((s) => s.id === id)?.embedRef != null,
         );
         if (issues.length > 0)
           throw new LearningServerError(
@@ -665,6 +668,34 @@ export class LearningAdminService {
       });
       if (current.mediaRef && current.mediaRef !== media.ref)
         await onReleased(tx, current.mediaRef);
+      return this.finishStep(tx, row, complete);
+    });
+  }
+
+  /**
+   * EARS-28 — set a `video` step's source: the 006 provider abstraction, as a
+   * 014 recording (`{ provider, embedRef }`, validated per provider). The API
+   * never fetches what it points at.
+   */
+  async setStepSource(
+    stepId: string,
+    raw: SetLearningStepSourceRequest,
+    expectedVersion: number,
+    complete: LearningComplete = noComplete,
+  ): Promise<LearningCommandResult<LearningStepAdmin>> {
+    const parsed = SetLearningStepSourceRequestSchema.safeParse(raw);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]!;
+      throw fieldError(issue.path.join(".") || "source", issue.message);
+    }
+    return this.deps.transaction(async (tx) => {
+      const current = await this.lockStep(tx, stepId, expectedVersion);
+      if (!elementType(current.type)?.providerSource)
+        throw fieldError("provider", "this step type plays no provider video");
+      const row = await this.bumpStep(tx, current, {
+        provider: parsed.data.provider,
+        embedRef: parsed.data.embedRef,
+      });
       return this.finishStep(tx, row, complete);
     });
   }
@@ -1184,6 +1215,10 @@ export class LearningAdminService {
       media:
         row.mediaRef && row.mediaContentType && row.mediaSizeBytes !== null
           ? { contentType: row.mediaContentType, sizeBytes: row.mediaSizeBytes }
+          : null,
+      source:
+        row.provider && row.embedRef
+          ? { provider: row.provider, embedRef: row.embedRef }
           : null,
       version: row.version,
     };

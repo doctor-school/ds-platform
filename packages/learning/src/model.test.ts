@@ -98,10 +98,11 @@ describe("024 learning model", () => {
     const refused = validateStepPayload("hologram", {});
     expect(refused).toEqual({ ok: false, issues: [{ path: "type", message: expect.stringContaining("hologram") }] });
     expect(validateStepPayload("video", { durationSec: 60 }).ok).toBe(true);
-    // Media ride the 012 media contract (an uploaded object), never a client URL.
+    // A video plays from the 006 provider abstraction and a file rides the 012 media contract — never a payload URL.
     const urlPayload = validateStepPayload("video", { videoUrl: "https://cdn.example/v.mp4", durationSec: 60 });
     expect(urlPayload.ok).toBe(false);
-    expect(LEARNING_ELEMENT_CATALOG.video.media?.contentTypes).toContain("video/mp4");
+    expect(LEARNING_ELEMENT_CATALOG.video.providerSource).toBe(true);
+    expect(LEARNING_ELEMENT_CATALOG.video.media).toBeNull();
     expect(LEARNING_ELEMENT_CATALOG.download.media?.contentTypes).toContain("application/pdf");
     expect(LEARNING_ELEMENT_CATALOG.test.media).toBeNull();
     // «viewed» defaults: video to the setting's 100 %, download opened once, test at its threshold.
@@ -268,17 +269,18 @@ describe("024 learning model", () => {
     const l = layers();
     const path = { school: SCHOOL, course: COURSE, module: M1, lesson: L1 };
     const withMedia = () => true;
-    expect(publishRequirements({ id: L1, title: "", steps: [] }, l, path, () => ({}), withMedia).map((i) => i.path)).toEqual(["steps", "exitTest"]);
+    expect(publishRequirements({ id: L1, title: "", steps: [] }, l, path, () => ({}), withMedia, withMedia).map((i) => i.path)).toEqual(["steps", "exitTest"]);
     const lesson = COURSE_MODEL.modules[0]!.lessons[0]!;
     const stored = (sid: string) =>
       sid === S_TEST
         ? { kind: "exit", questions: [{ text: "?", options: [{ text: "a", correct: true }, { text: "b", correct: false }] }] }
         : lesson.steps.find((s) => s.id === sid)!.payload;
-    expect(publishRequirements(lesson, l, path, stored, withMedia)).toEqual([]);
-    // A video or download step with no uploaded media is not whole.
-    expect(publishRequirements(lesson, l, path, stored, (sid) => sid !== S_DOWNLOAD).map((i) => i.path)).toEqual(["steps.1.media"]);
+    expect(publishRequirements(lesson, l, path, stored, withMedia, withMedia)).toEqual([]);
+    // A download step with no uploaded file, or a video step with no provider source, is not whole.
+    expect(publishRequirements(lesson, l, path, stored, (sid) => sid !== S_DOWNLOAD, withMedia).map((i) => i.path)).toEqual(["steps.1.media"]);
+    expect(publishRequirements(lesson, l, path, stored, withMedia, (sid) => sid !== S_VIDEO).map((i) => i.path)).toEqual(["steps.0.source"]);
     const entry = layers({ scopeKind: "course", scopeId: COURSE, values: { "test.entryRequired": true }, preset: null });
-    expect(publishRequirements(lesson, entry, path, stored, withMedia).map((i) => i.path)).toEqual(["entryTest"]);
+    expect(publishRequirements(lesson, entry, path, stored, withMedia, withMedia).map((i) => i.path)).toEqual(["entryTest"]);
   });
 
   it("EARS-10: a reported position is clamped to the media length and to what the server clock allows since the last accepted one", async () => {

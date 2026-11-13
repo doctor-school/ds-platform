@@ -13,6 +13,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { streamProvider } from "./events.js";
 import { directions, experts, organisations, projects } from "./taxonomy.js";
 import { users } from "./users.js";
 
@@ -143,8 +144,15 @@ export const learningSteps = pgTable(
     ),
     companion: boolean("companion").notNull().default(false),
     /**
-     * The step's media under the 012 media contract: the server-generated
-     * object key of the uploaded `video` / `download` file (a registered media
+     * A `video` step's source — the 006 provider abstraction reused verbatim,
+     * exactly as `event_recordings` (014): the provider and its provider-scoped
+     * id. The API never fetches what it points at and stores no media bytes.
+     */
+    provider: streamProvider("provider"),
+    embedRef: text("embed_ref"),
+    /**
+     * A `download` step's file under the 012 media contract: the
+     * server-generated object key of the uploaded file (a registered media
      * slot), its content type and size. Never client input, never served raw —
      * the doctor's gated step read signs it (EARS-22).
      */
@@ -157,6 +165,10 @@ export const learningSteps = pgTable(
   (t) => [
     index("learning_steps_lesson_idx").on(t.lessonId, t.position),
     check("learning_steps_duration_positive", sql`${t.durationMin} > 0`),
+    check(
+      "learning_steps_source_pair",
+      sql`(${t.provider} IS NULL) = (${t.embedRef} IS NULL)`,
+    ),
   ],
 );
 

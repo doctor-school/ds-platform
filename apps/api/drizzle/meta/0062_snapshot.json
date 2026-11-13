@@ -7372,6 +7372,19 @@
           "notNull": true,
           "default": false
         },
+        "provider": {
+          "name": "provider",
+          "type": "stream_provider",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "embed_ref": {
+          "name": "embed_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "media_ref": {
           "name": "media_ref",
           "type": "text",
@@ -7468,6 +7481,10 @@
         "learning_steps_duration_positive": {
           "name": "learning_steps_duration_positive",
           "value": "\"learning_steps\".\"duration_min\" > 0"
+        },
+        "learning_steps_source_pair": {
+          "name": "learning_steps_source_pair",
+          "value": "(\"learning_steps\".\"provider\" IS NULL) = (\"learning_steps\".\"embed_ref\" IS NULL)"
         }
       },
       "isRLSEnabled": false

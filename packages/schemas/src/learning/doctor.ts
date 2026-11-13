@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { StreamProviderSchema } from "../events/events.schema.js";
 import { LearningElementTypeSchema } from "./settings.js";
 
 // 024 EARS-10, EARS-11, EARS-13, EARS-15, EARS-17, EARS-18 — the doctor-side
@@ -111,8 +112,9 @@ export type LearningLessonRead = z.infer<typeof LearningLessonReadSchema>;
 export const LearningStepBodySchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("video"),
-    /** A short-lived signed URL of the 012 media object (EARS-22: signed-in reads only). */
-    mediaUrl: z.string(),
+    /** The 006 provider abstraction: the player is built from `{ provider, embedRef }` (EARS-22: signed-in reads only). */
+    provider: StreamProviderSchema,
+    embedRef: z.string(),
     durationSec: z.number().int(),
     /** «Просмотрено 35 %» — the watched share, whole percent, capped at 100. */
     watchedPercent: z.number().int().min(0).max(100),
@@ -164,7 +166,8 @@ const factBase = {
     .regex(/^[A-Za-z0-9:._-]+$/),
   stepId: z.uuid(),
   source: z.enum(["web", "app"]),
-  occurredAt: z.iso.datetime().optional(),
+  /** The client's clock, kept for information only; the server sets the fact's time (EARS-10). */
+  clientOccurredAt: z.iso.datetime().optional(),
 };
 
 /** `POST /v1/me/learning/facts` — the client-reportable progress kinds of this slice. */

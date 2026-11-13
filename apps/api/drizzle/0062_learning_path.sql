@@ -169,6 +169,8 @@ CREATE TABLE "learning_steps" (
 	"payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"partner_organisation_id" uuid,
 	"companion" boolean DEFAULT false NOT NULL,
+	"provider" "stream_provider",
+	"embed_ref" text,
 	"media_ref" text,
 	"media_content_type" text,
 	"media_size_bytes" integer,
@@ -176,7 +178,8 @@ CREATE TABLE "learning_steps" (
 	"version" integer DEFAULT 1 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "learning_steps_duration_positive" CHECK ("learning_steps"."duration_min" > 0)
+	CONSTRAINT "learning_steps_duration_positive" CHECK ("learning_steps"."duration_min" > 0),
+	CONSTRAINT "learning_steps_source_pair" CHECK (("learning_steps"."provider" IS NULL) = ("learning_steps"."embed_ref" IS NULL))
 );
 --> statement-breakpoint
 CREATE TABLE "learning_tests" (

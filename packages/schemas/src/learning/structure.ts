@@ -1,5 +1,10 @@
 import { z } from "zod";
 import {
+  EmbedRefSchema,
+  refineEmbedRefForProvider,
+  StreamProviderSchema,
+} from "../events/events.schema.js";
+import {
   LearningElementTypeSchema,
   LearningResolvedSettingSchema,
   LearningScopeKindSchema,
@@ -27,12 +32,35 @@ export type LearningState = z.infer<typeof LearningStateSchema>;
 
 // ── Step payloads per element type (EARS-2) ─────────────────────────────────
 
-// A step's media (the `video` file, the `download` file) is NOT in the payload:
-// it rides the 012 media contract — uploaded through
-// `PUT /v1/admin/learning/steps/{stepId}/media`, kept as a server-generated
-// object key in `learning_steps.media_ref` (a registered media slot) and
-// served only as a short-lived signed URL on the doctor's gated step read
-// (EARS-22). No client ever sends or receives a storage key or a raw URL.
+// A step's source is NOT in the payload. A `video` step plays from the 006
+// provider abstraction, exactly as a 014 recording: `{ provider, embedRef }`
+// set through `PUT /v1/admin/learning/steps/{stepId}/source`, stored in
+// `learning_steps.provider` + `embed_ref`; the API never fetches or stores the
+// media bytes. A `download` file rides the 012 media contract — uploaded
+// through `PUT /v1/admin/learning/steps/{stepId}/media`, kept as a
+// server-generated object key in `learning_steps.media_ref` (a registered
+// media slot) and served only as a short-lived signed URL on the doctor's
+// gated step read (EARS-22). No client ever sends or receives a storage key.
+
+/** `PUT /v1/admin/learning/steps/{stepId}/source` — a video step's provider-scoped source. */
+export const SetLearningStepSourceRequestSchema = z
+  .strictObject({
+    provider: StreamProviderSchema,
+    embedRef: EmbedRefSchema,
+  })
+  .superRefine((value, ctx) => {
+    refineEmbedRefForProvider(ctx, value.provider, value.embedRef);
+  });
+export type SetLearningStepSourceRequest = z.infer<
+  typeof SetLearningStepSourceRequestSchema
+>;
+
+/** The provider-scoped source of a `video` step (admin and doctor reads alike). */
+export const LearningStepSourceSchema = z.strictObject({
+  provider: StreamProviderSchema,
+  embedRef: z.string(),
+});
+export type LearningStepSource = z.infer<typeof LearningStepSourceSchema>;
 
 /** The one multipart file part the step-media upload accepts. */
 export const LEARNING_STEP_MEDIA_PART = "file";
@@ -242,8 +270,10 @@ export const LearningStepAdminSchema = z.strictObject({
   /** The stored payload; for `test` the `kind` only — questions are in `questions`. */
   payload: z.record(z.string(), z.unknown()),
   questions: z.array(LearningTestQuestionAdminSchema).nullable(),
-  /** The uploaded media of a `video` / `download` step; null = none yet (or a test). */
+  /** The uploaded file of a `download` step; null = none yet (or another type). */
   media: LearningStepMediaAdminSchema.nullable(),
+  /** The provider source of a `video` step; null = none yet (or another type). */
+  source: LearningStepSourceSchema.nullable(),
   version: z.number().int(),
 });
 export type LearningStepAdmin = z.infer<typeof LearningStepAdminSchema>;

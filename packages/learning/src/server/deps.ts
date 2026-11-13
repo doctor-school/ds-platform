@@ -81,7 +81,11 @@ export type LearningServerErrorCode =
   | "SLUG_CONFLICT"
   | "PRECONDITION_FAILED"
   | "LEARNING_STEP_LOCKED"
-  | "LEARNING_ATTEMPT_UNAVAILABLE";
+  | "LEARNING_ATTEMPT_UNAVAILABLE"
+  | "EVENT_ID_RESERVED";
+
+/** Event ids the server writes itself (an attempt's fact); a client may never use the prefix. */
+export const SERVER_EVENT_PREFIX = "learning:";
 
 /** A refusal the host maps to its RFC 7807 problem (024-design §7). */
 export class LearningServerError extends Error {

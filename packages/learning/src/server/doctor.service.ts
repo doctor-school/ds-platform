@@ -18,8 +18,9 @@ import type {
   SubmitLearningAttemptRequest,
 } from "@ds/schemas";
 import { RecordLearningFactRequestSchema } from "@ds/schemas";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import {
+  clampReportedPosition,
   elementType,
   videoDurationSec,
   watchedPercent,
@@ -31,6 +32,7 @@ import {
 } from "../evaluator/evaluator.js";
 import {
   LearningServerError,
+  SERVER_EVENT_PREFIX,
   type LearningServerDeps,
   type LearningTx,
 } from "./deps.js";
@@ -284,23 +286,23 @@ export class LearningDoctorService {
     personId: string,
   ): Promise<LearningStepBody> {
     const step = e.evaluator.index.steps.get(row.id)!.step;
-    if (step.type === "video" || step.type === "download") {
-      // Published steps always carry their media (EARS-4); sign it per read.
+    if (step.type === "video") {
+      // A published video always carries its provider source (EARS-4).
+      if (!row.provider || !row.embedRef) throw notFound("step source");
+      const duration = videoDurationSec(step);
+      return {
+        type: "video",
+        provider: row.provider,
+        embedRef: row.embedRef,
+        durationSec: duration,
+        watchedPercent: Math.min(100, watchedPercent(step, e.evaluator)),
+        positionSec: Math.min(e.evaluator.facts.maxPosition(step.id), duration),
+      };
+    }
+    if (step.type === "download") {
+      // A published download always carries its file (EARS-4); sign it per read.
       if (!row.mediaRef) throw notFound("step media");
       const mediaUrl = await this.deps.media.signedUrl(row.mediaRef);
-      if (step.type === "video") {
-        const duration = videoDurationSec(step);
-        return {
-          type: "video",
-          mediaUrl,
-          durationSec: duration,
-          watchedPercent: Math.min(100, watchedPercent(step, e.evaluator)),
-          positionSec: Math.min(
-            e.evaluator.facts.maxPosition(step.id),
-            duration,
-          ),
-        };
-      }
       return {
         type: "download",
         mediaUrl,
@@ -353,6 +355,12 @@ export class LearningDoctorService {
     raw: RecordLearningFactRequest,
   ): Promise<RecordLearningFactResponse> {
     const fact = RecordLearningFactRequestSchema.parse(raw);
+    if (fact.eventId.startsWith(SERVER_EVENT_PREFIX))
+      throw new LearningServerError(
+        "EVENT_ID_RESERVED",
+        `event ids starting with «${SERVER_EVENT_PREFIX}» are the server's`,
+        [{ path: "eventId", message: "reserved prefix" }],
+      );
     let afterCommit: (() => Promise<void>) | null = null;
     const response = await this.deps.transaction(async (tx) => {
       const owner = await this.publishedStep(tx, fact.stepId);
@@ -372,6 +380,40 @@ export class LearningDoctorService {
       await lockPersonCourse(tx, personId, owner.course.id);
       const before = await this.evaluate(tx, owner.course, personId);
       if (this.stateOf(before, fact.stepId).status === "locked") throw locked();
+      // The server's clock is the fact's time; the client's is informational.
+      const occurredAt = this.now();
+      const data: Record<string, unknown> = fact.clientOccurredAt
+        ? { clientOccurredAt: fact.clientOccurredAt }
+        : {};
+      if (fact.kind === "position") {
+        const step = before.evaluator.index.steps.get(fact.stepId)!.step;
+        const [previous] = await tx
+          .select({ at: learningFacts.occurredAt })
+          .from(learningFacts)
+          .where(
+            and(
+              eq(learningFacts.personId, personId),
+              eq(learningFacts.stepId, fact.stepId),
+              eq(learningFacts.kind, "position"),
+            ),
+          )
+          .orderBy(desc(learningFacts.occurredAt))
+          .limit(1);
+        data["reportedSec"] = fact.data.positionSec;
+        data["positionSec"] = clampReportedPosition({
+          reportedSec: fact.data.positionSec,
+          durationSec: videoDurationSec(step),
+          previousMaxSec: before.evaluator.facts.maxPosition(fact.stepId),
+          elapsedSec: previous
+            ? (occurredAt.getTime() - previous.at.getTime()) / 1000
+            : null,
+          maxPlaybackRate: before.evaluator.setting(
+            "progress.maxPlaybackRate",
+            step,
+          ),
+          slackSec: before.evaluator.setting("progress.slackSec", step),
+        });
+      }
       const inserted = await tx
         .insert(learningFacts)
         .values({
@@ -379,11 +421,13 @@ export class LearningDoctorService {
           personId,
           kind: fact.kind,
           stepId: fact.stepId,
-          data: fact.data,
+          data,
           source: fact.source,
-          occurredAt: fact.occurredAt ? new Date(fact.occurredAt) : this.now(),
+          occurredAt,
         })
-        .onConflictDoNothing({ target: learningFacts.eventId })
+        .onConflictDoNothing({
+          target: [learningFacts.personId, learningFacts.eventId],
+        })
         .returning({ id: learningFacts.id });
       if (inserted.length === 0)
         return { outcome: "duplicate" as const, changed: [] };
@@ -404,30 +448,43 @@ export class LearningDoctorService {
 
   // ── Attempts (EARS-18) ────────────────────────────────────────────────────
 
-  /** How many attempts are left and when the next one opens. */
+  /**
+   * How many attempts are left and when the next one opens. Every STARTED
+   * attempt counts toward the limit (an abandoned one included), so starting
+   * and never submitting cannot buy extra tries. `excluding` (submit's
+   * re-check) leaves that attempt itself out: at most one attempt is open at
+   * a time, so the others were all started before it.
+   */
   private async attemptUsage(
     db: Handle,
     personId: string,
     testId: string,
     e: Evaluated,
+    excluding?: string,
   ): Promise<{ attemptsLeft: number | null; nextAt: Date | null }> {
     const ref = { kind: "step" as const, id: testId };
     const limit = e.evaluator.setting("test.attempts", ref);
     const pauseMin = e.evaluator.setting("test.pauseMin", ref);
-    const submitted = await db
-      .select({ at: learningAttempts.submittedAt })
+    const started = await db
+      .select({
+        id: learningAttempts.id,
+        submittedAt: learningAttempts.submittedAt,
+      })
       .from(learningAttempts)
       .where(
         and(
           eq(learningAttempts.personId, personId),
           eq(learningAttempts.testId, testId),
-          isNotNull(learningAttempts.submittedAt),
         ),
-      )
-      .orderBy(desc(learningAttempts.submittedAt));
+      );
+    const counted = started.filter((a) => a.id !== excluding);
     const attemptsLeft =
-      limit === "unlimited" ? null : Math.max(0, limit - submitted.length);
-    const lastAt = submitted[0]?.at ?? null;
+      limit === "unlimited" ? null : Math.max(0, limit - counted.length);
+    const lastAt =
+      counted
+        .map((a) => a.submittedAt)
+        .filter((at): at is Date => at !== null)
+        .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
     const opensAt =
       lastAt && pauseMin > 0
         ? new Date(lastAt.getTime() + pauseMin * 60_000)
@@ -453,6 +510,29 @@ export class LearningDoctorService {
       await lockPersonCourse(tx, personId, owner.course.id);
       const e = await this.evaluate(tx, owner.course, personId);
       if (this.stateOf(e, testId).status === "locked") throw locked();
+      const all = await loadQuestions(tx, testId);
+      // An open (unsubmitted) attempt is the doctor's current one: return it
+      // with the questions it drew, never a fresh draw.
+      const [open] = await tx
+        .select()
+        .from(learningAttempts)
+        .where(
+          and(
+            eq(learningAttempts.personId, personId),
+            eq(learningAttempts.testId, testId),
+            isNull(learningAttempts.submittedAt),
+          ),
+        )
+        .limit(1);
+      if (open) {
+        const byId = new Map(all.map((q) => [q.id, q]));
+        const drawnIds = open.questionIds as string[];
+        return toAttempt(
+          open.id,
+          testId,
+          drawnIds.flatMap((id) => byId.get(id) ?? []),
+        );
+      }
       const usage = await this.attemptUsage(tx, personId, testId, e);
       if (usage.attemptsLeft === 0)
         throw new LearningServerError(
@@ -466,7 +546,6 @@ export class LearningDoctorService {
           [],
           usage.nextAt,
         );
-      const all = await loadQuestions(tx, testId);
       const perAttempt = e.evaluator.setting("test.questions", {
         kind: "step",
         id: testId,
@@ -484,15 +563,7 @@ export class LearningDoctorService {
           startedAt: this.now(),
         })
         .returning({ id: learningAttempts.id });
-      return {
-        attemptId: attempt!.id,
-        testId,
-        questions: drawn.map((q) => ({
-          id: q.id,
-          text: q.text,
-          options: q.options.map((o) => ({ id: o.id, text: o.text })),
-        })),
-      };
+      return toAttempt(attempt!.id, testId, drawn);
     });
   }
 
@@ -504,19 +575,51 @@ export class LearningDoctorService {
   ): Promise<LearningAttemptResult> {
     let afterCommit: (() => Promise<void>) | null = null;
     const result = await this.deps.transaction(async (tx) => {
+      const [found] = await tx
+        .select({
+          personId: learningAttempts.personId,
+          testId: learningAttempts.testId,
+        })
+        .from(learningAttempts)
+        .where(eq(learningAttempts.id, attemptId));
+      if (!found || found.personId !== personId) throw notFound("attempt");
+      const owner = await this.publishedStep(tx, found.testId);
+      // The same lock order as start and facts: person+course, then the row.
+      await lockPersonCourse(tx, personId, owner.course.id);
       const [attempt] = await tx
         .select()
         .from(learningAttempts)
         .where(eq(learningAttempts.id, attemptId))
         .for("update");
-      if (!attempt || attempt.personId !== personId) throw notFound("attempt");
+      if (!attempt) throw notFound("attempt");
       if (attempt.submittedAt)
         throw new LearningServerError(
           "INVALID_TRANSITION",
           "this attempt is already submitted",
         );
-      const owner = await this.publishedStep(tx, attempt.testId);
-      await lockPersonCourse(tx, personId, owner.course.id);
+      // Re-check under the lock: the rules may have changed since the start.
+      const current = await this.evaluate(tx, owner.course, personId);
+      if (this.stateOf(current, attempt.testId).status === "locked")
+        throw locked();
+      const allowed = await this.attemptUsage(
+        tx,
+        personId,
+        attempt.testId,
+        current,
+        attemptId,
+      );
+      if (allowed.attemptsLeft === 0)
+        throw new LearningServerError(
+          "LEARNING_ATTEMPT_UNAVAILABLE",
+          "no attempts are left",
+        );
+      if (allowed.nextAt)
+        throw new LearningServerError(
+          "LEARNING_ATTEMPT_UNAVAILABLE",
+          "the next attempt opens after the pause",
+          [],
+          allowed.nextAt,
+        );
       const questionIds = attempt.questionIds as string[];
       const questions = (await loadQuestions(tx, attempt.testId)).filter((q) =>
         questionIds.includes(q.id),
@@ -539,7 +642,7 @@ export class LearningDoctorService {
       const [fact] = await tx
         .insert(learningFacts)
         .values({
-          eventId: `learning:attempt:${attemptId}`,
+          eventId: `${SERVER_EVENT_PREFIX}attempt:${attemptId}`,
           personId,
           kind: "attempt-submitted",
           stepId: attempt.testId,
@@ -580,6 +683,23 @@ export class LearningDoctorService {
     if (afterCommit) await (afterCommit as () => Promise<void>)();
     return result;
   }
+}
+
+/** An attempt as the doctor sees it: the drawn questions, no correct answers. */
+function toAttempt(
+  attemptId: string,
+  testId: string,
+  drawn: Awaited<ReturnType<typeof loadQuestions>>,
+): LearningAttempt {
+  return {
+    attemptId,
+    testId,
+    questions: drawn.map((q) => ({
+      id: q.id,
+      text: q.text,
+      options: q.options.map((o) => ({ id: o.id, text: o.text })),
+    })),
+  };
 }
 
 function shuffle<T>(items: readonly T[]): T[] {

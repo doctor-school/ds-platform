@@ -56,6 +56,7 @@ const DOCTOR_STATUS: Record<LearningServerError["code"], number> = {
   PRECONDITION_FAILED: 412,
   LEARNING_STEP_LOCKED: 403,
   LEARNING_ATTEMPT_UNAVAILABLE: 409,
+  EVENT_ID_RESERVED: 422,
 };
 
 /**

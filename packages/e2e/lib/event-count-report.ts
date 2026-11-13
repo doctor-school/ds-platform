@@ -1,4 +1,108 @@
 import { assertOperationalReport } from "../api-probes/operational-report.js";
+import { createHash } from "node:crypto";
+
+export function eventCountFailureDiagnostic(raw?: string, rawOps?: string) {
+  const diagnostic = {
+    accepted: false,
+    reportAvailable: false,
+    phase: "before-native-boot",
+    counts: {
+      passed: 0,
+      failed: 0,
+      skipped: 0,
+      timedOut: 0,
+      interrupted: 0,
+      retries: 0,
+      globalErrors: 0,
+    },
+    errors: [] as string[],
+    rawReportSha256:
+      raw === undefined ? null : createHash("sha256").update(raw).digest("hex"),
+    rawOperationsSha256:
+      rawOps === undefined
+        ? null
+        : createHash("sha256").update(rawOps).digest("hex"),
+  };
+  const object = (value: unknown): Record<string, unknown> =>
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  const array = (value: unknown): unknown[] =>
+    Array.isArray(value) ? value : [];
+  const phases = new Map([
+    [
+      "git HEAD and clean shipping source binding before native boot",
+      "native-boot",
+    ],
+    [
+      "standard native AdminSessionService fixture startLogin/upgradePending; no factor acceptance",
+      "operator-session",
+    ],
+    [
+      "actual storefront session-seed fixture through native OIDC transaction/redeem",
+      "doctor-session",
+    ],
+    ["actual Admin create form; count defaults untouched", "admin-editor"],
+    ["public page and listing owning reads", "consumer-reads"],
+  ]);
+  for (const line of rawOps?.split(/\r?\n/) ?? []) {
+    try {
+      const phase = phases.get(String(object(JSON.parse(line)).command));
+      if (phase) diagnostic.phase = phase;
+    } catch {
+      /* Raw diagnostics remain private. */
+    }
+  }
+  const classify = (error: unknown) => {
+    const message = object(error).message;
+    diagnostic.errors.push(
+      typeof message === "string" &&
+        /zitadel OIDC application config[^\n]*is not set/.test(message)
+        ? "OIDC_APPLICATION_CONFIG_MISSING"
+        : "UNCLASSIFIED_FAILURE",
+    );
+  };
+  if (raw === undefined) diagnostic.errors.push("REPORT_UNAVAILABLE");
+  else {
+    try {
+      const report = object(JSON.parse(raw));
+      diagnostic.reportAvailable = true;
+      const errors = array(report.errors);
+      diagnostic.counts.globalErrors = errors.length;
+      errors.forEach(classify);
+      const visit = (suite: unknown) => {
+        const row = object(suite);
+        for (const spec of array(row.specs))
+          for (const test of array(object(spec).tests))
+            for (const result of array(object(test).results)) {
+              const item = object(result);
+              for (const status of [
+                "passed",
+                "failed",
+                "skipped",
+                "timedOut",
+                "interrupted",
+              ] as const)
+                if (item.status === status) diagnostic.counts[status]++;
+              if (
+                typeof item.retry === "number" &&
+                Number.isSafeInteger(item.retry) &&
+                item.retry > 0
+              )
+                diagnostic.counts.retries += item.retry;
+              if (item.error) classify(item.error);
+              array(item.errors).forEach(classify);
+            }
+        array(row.suites).forEach(visit);
+      };
+      array(report.suites).forEach(visit);
+    } catch {
+      diagnostic.errors.push("REPORT_UNREADABLE");
+    }
+  }
+  diagnostic.errors = [...new Set(diagnostic.errors)];
+  return diagnostic;
+}
 
 export const eventCountOriginals = [
   "A new event hides its registrant count by default",

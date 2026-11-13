@@ -5,7 +5,102 @@ import {
   eventCountBackgrounds,
   assertNoCountCredentials,
   assertCountStorageProvider,
+  eventCountFailureDiagnostic,
 } from "./event-count-report.js";
+
+describe("count-original failure diagnostics", () => {
+  it("reports missing evidence as failure without inventing successful receipts", () => {
+    const diagnostic = eventCountFailureDiagnostic(undefined, undefined);
+    expect(diagnostic.accepted).toBe(false);
+    expect(diagnostic.reportAvailable).toBe(false);
+    expect(diagnostic.phase).toBe("before-native-boot");
+    expect(diagnostic.errors).toEqual(["REPORT_UNAVAILABLE"]);
+  });
+  it("classifies the native OIDC failure while discarding authenticated error contents", () => {
+    const raw = JSON.stringify({
+      errors: [],
+      suites: [
+        {
+          specs: [
+            {
+              title: eventCountOriginals[0],
+              tests: [
+                {
+                  results: [
+                    {
+                      status: "failed",
+                      retry: 0,
+                      error: {
+                        message:
+                          "zitadel OIDC application config (IDP_CLIENT_ID / redirect URI) is not set; cookie=private-cookie-value",
+                        stack: "secret-password",
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const diagnostic = eventCountFailureDiagnostic(
+      raw,
+      JSON.stringify({
+        command:
+          "standard native AdminSessionService fixture startLogin/upgradePending; no factor acceptance",
+      }),
+    );
+    expect(diagnostic.errors).toEqual(["OIDC_APPLICATION_CONFIG_MISSING"]);
+    expect(diagnostic.phase).toBe("operator-session");
+    expect(diagnostic.counts.failed).toBe(1);
+    expect(diagnostic.rawReportSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(diagnostic)).not.toMatch(
+      /private-cookie-value|secret-password|redirect URI/,
+    );
+  });
+  it("never publishes arbitrary titles, errors, operation text or malformed raw input", () => {
+    const diagnostic = eventCountFailureDiagnostic(
+      JSON.stringify({
+        errors: [{ message: "Bearer private-access-token" }],
+        suites: [
+          {
+            specs: [
+              {
+                title: "private-email@ds.test",
+                tests: [
+                  {
+                    results: [
+                      {
+                        status: "timedOut",
+                        retry: 1,
+                        error: { message: "private-room-key" },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+      JSON.stringify({
+        command: "private-cookie-value",
+        password: "secret-password",
+      }),
+    );
+    expect(diagnostic.errors).toContain("UNCLASSIFIED_FAILURE");
+    expect(diagnostic.counts.timedOut).toBe(1);
+    expect(diagnostic.counts.retries).toBe(1);
+    expect(JSON.stringify(diagnostic)).not.toMatch(
+      /private-|secret-password|Bearer/,
+    );
+    expect(
+      eventCountFailureDiagnostic("private-secret-invalid-json", "invalid")
+        .errors,
+    ).toEqual(["REPORT_UNREADABLE"]);
+  });
+});
 
 function proof() {
   const head = "a".repeat(40);

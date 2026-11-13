@@ -42,6 +42,10 @@ These are setup only. Session roles and subjects are read back, and the browser
 receives the native cookies privately. Authentication is not accepted by this
 contour. No fake IdP/provider is installed.
 
+The worker needs the registered `IDP_REDIRECT_URI` as well as the IdP/client
+configuration. CI supplies the same callback as its separate API launch; a
+step-local API environment does not propagate to this in-process worker.
+
 Build the affected dependencies/API/Admin and start an owned production Admin
 with its required configured `ACADEMY_PUBLIC_ORIGIN`. Provision the dedicated
 branch DB with the supported wrapper, export its printed URL privately and
@@ -80,3 +84,9 @@ and inventories UTF-8/UTF-16 evidence. Unexpected ZIP/HAR evidence blocks export
 for private review. CI uploads only `safe/` under the distinct
 `event-count-visibility-originals-4035` artifact name. No visual product artifact
 or owner Stage-B approval is required for this test/tooling-only change.
+
+On a failed browser run CI separately uploads an allowlisted `failure.json`:
+static phase, configuration-presence booleans, error categories, result counters
+and raw-report/operation hashes. It never copies raw messages, stacks, titles or
+credentials. Its `accepted: false` cannot replace the strict success certificate;
+missing Background/resource evidence and the original failed step remain red.

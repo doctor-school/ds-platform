@@ -5339,6 +5339,10 @@ export interface components {
             }[];
             /** @enum {string} */
             outcome: "recorded" | "duplicate";
+            progress: {
+                positionSec: number;
+                watchedPercent: number;
+            } | null;
         };
         RegisterRequestDto: {
             captchaToken?: string;

@@ -15,6 +15,7 @@ import {
   createLearningClient,
   newLearningEventId,
 } from "../client/index";
+import { VIDEO_END_WINDOW_SEC } from "../catalog/element-types";
 import {
   type LearningHostConfig,
   coursePathHref,
@@ -258,7 +259,7 @@ function VideoBody({ step, body }: { step: LearningStepRead; body: Body<"video">
   const onClock = useCallback(
     (sec: number) => {
       const position = Math.min(Math.floor(sec), body.durationSec);
-      const atEnd = position >= body.durationSec - 1;
+      const atEnd = position >= body.durationSec - VIDEO_END_WINDOW_SEC;
       if (sending.current) return;
       if (position - reported.current < VIDEO_REPORT_EVERY_SEC && !(atEnd && position > reported.current)) return;
       sending.current = true;
@@ -271,9 +272,12 @@ function VideoBody({ step, body }: { step: LearningStepRead; body: Body<"video">
           clientOccurredAt: new Date().toISOString(),
           data: { positionSec: atEnd ? body.durationSec : position },
         })
-        .then(() => {
-          reported.current = atEnd ? body.durationSec : position;
-          setWatched(Math.min(100, Math.floor((reported.current / body.durationSec) * 100)));
+        // The bar shows what the server accepted after its clamp; the next
+        // report is measured from there.
+        .then((res) => {
+          if (!res.progress) return;
+          reported.current = res.progress.positionSec;
+          setWatched(res.progress.watchedPercent);
         })
         // A refused report changes nothing on screen; the next tick retries.
         .catch(() => undefined)

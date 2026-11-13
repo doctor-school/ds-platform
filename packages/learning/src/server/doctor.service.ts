@@ -232,6 +232,12 @@ export class LearningDoctorService {
     const e = await this.evaluate(this.deps.db, owner.course, personId);
     const model = e.evaluator.index.lessons.get(lessonId)?.lesson;
     if (!model) throw notFound("lesson");
+    // EARS-13 — what the path omits as hidden and locked is not served here either.
+    if (
+      this.hidden(e, "module", owner.module.id) ||
+      this.hidden(e, "lesson", lessonId)
+    )
+      throw notFound("lesson");
     return {
       course: {
         id: owner.course.id,
@@ -452,8 +458,23 @@ export class LearningDoctorService {
           target: [learningFacts.personId, learningFacts.eventId],
         })
         .returning({ id: learningFacts.id });
+      const progressOf = (evaluator: typeof before.evaluator) => {
+        if (owner.step.type !== "video") return null;
+        const step = evaluator.index.steps.get(fact.stepId)!.step;
+        return {
+          positionSec: Math.min(
+            evaluator.facts.maxPosition(fact.stepId),
+            videoDurationSec(step),
+          ),
+          watchedPercent: Math.min(100, watchedPercent(step, evaluator)),
+        };
+      };
       if (inserted.length === 0)
-        return { outcome: "duplicate" as const, changed: [] };
+        return {
+          outcome: "duplicate" as const,
+          changed: [],
+          progress: progressOf(before.evaluator),
+        };
       const after = await this.evaluate(tx, owner.course, personId);
       const projection = await project(this.deps, tx, {
         personId,
@@ -463,7 +484,11 @@ export class LearningDoctorService {
         at: this.now(),
       });
       afterCommit = projection.afterCommit;
-      return { outcome: "recorded" as const, changed: projection.changed };
+      return {
+        outcome: "recorded" as const,
+        changed: projection.changed,
+        progress: progressOf(after.evaluator),
+      };
     });
     if (afterCommit) await (afterCommit as () => Promise<void>)();
     return response;

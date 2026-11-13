@@ -19,7 +19,11 @@ import {
 // gated step read, the facts intake (with its abuse cases), attempts, the
 // evaluator cascade and the 025 completion fact.
 
-type Facts = { outcome: string; changed: { itemId: string; status: string }[] };
+type Facts = {
+  outcome: string;
+  changed: { itemId: string; status: string }[];
+  progress: { positionSec: number; watchedPercent: number } | null;
+};
 type Attempt = { attemptId: string; questions: { id: string }[] };
 
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
@@ -57,7 +61,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     const storedFacts = async (personId: string, stepId: string) =>
       (
-        await h.pool.query<{ data: Record<string, unknown>; occurred_at: Date }>(
+        await h.pool.query<{
+          data: Record<string, unknown>;
+          occurred_at: Date;
+        }>(
           "SELECT data, occurred_at FROM learning_facts WHERE person_id = $1 AND step_id = $2 ORDER BY recorded_at",
           [personId, stepId],
         )
@@ -119,17 +126,30 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("EARS-13: a guest reads the published path with every state from no facts; an unknown or draft course is 404", async () => {
       const guest = await call<{
         signedIn: boolean;
-        modules: { lessons: { steps: { id: string; state: { status: string } }[] }[] }[];
+        modules: {
+          lessons: { steps: { id: string; state: { status: string } }[] }[];
+        }[];
       }>(h, "GET", `/learning/courses/${c.courseSlug}/path`);
       expect(guest.status).toBe(200);
       expect(guest.body.signedIn).toBe(false);
       const steps = guest.body.modules[0]!.lessons[0]!.steps;
-      expect(steps.map((s) => s.id)).toEqual([c.videoId, c.downloadId, c.testId]);
+      expect(steps.map((s) => s.id)).toEqual([
+        c.videoId,
+        c.downloadId,
+        c.testId,
+      ]);
       // after-previous: only the first step is open.
-      expect(steps.slice(1).every((s) => s.state.status === "locked")).toBe(true);
-      expect((await call(h, "GET", "/learning/courses/no-such-course/path")).status).toBe(404);
+      expect(steps.slice(1).every((s) => s.state.status === "locked")).toBe(
+        true,
+      );
+      expect(
+        (await call(h, "GET", "/learning/courses/no-such-course/path")).status,
+      ).toBe(404);
       const draft = await buildCourse(h, { publish: false });
-      expect((await call(h, "GET", `/learning/courses/${draft.courseSlug}/path`)).status).toBe(404);
+      expect(
+        (await call(h, "GET", `/learning/courses/${draft.courseSlug}/path`))
+          .status,
+      ).toBe(404);
     });
 
     it("EARS-14: the path read names the course's direction, school and author from the school's rows", async () => {
@@ -140,9 +160,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }>(h, "GET", `/learning/courses/${c.courseSlug}/path`);
       expect(res.status).toBe(200);
       const s = c.f.suffix;
-      expect(res.body.direction).toEqual({ slug: `learn-dir-${s}`, title: `Кардиология ${s}` });
-      expect(res.body.school).toEqual({ slug: `school-${s}`, title: `Школа ${s}` });
-      expect(res.body.author).toMatchObject({ slug: `learn-exp-${s}`, name: `Учебная Анна ${s}`, photoUrl: null });
+      expect(res.body.direction).toEqual({
+        slug: `learn-dir-${s}`,
+        title: `Кардиология ${s}`,
+      });
+      expect(res.body.school).toEqual({
+        slug: `school-${s}`,
+        title: `Школа ${s}`,
+      });
+      expect(res.body.author).toMatchObject({
+        slug: `learn-exp-${s}`,
+        name: `Учебная Анна ${s}`,
+        photoUrl: null,
+      });
     });
 
     it("EARS-14: a non-public expert is no author and a non-public direction is no breadcrumb segment; the course still reads", async () => {
@@ -154,7 +184,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "GET",
           `/learning/courses/${course.courseSlug}/path`,
         );
-      await h.pool.query("UPDATE experts SET photo_ref = $2 WHERE id = $1", [expertId, `experts/${expertId}.webp`]);
+      await h.pool.query("UPDATE experts SET photo_ref = $2 WHERE id = $1", [
+        expertId,
+        `experts/${expertId}.webp`,
+      ]);
       for (const hide of [
         "UPDATE experts SET status = 'draft' WHERE id = $1",
         "UPDATE experts SET status = 'retired', deleted_at = now() WHERE id = $1",
@@ -175,11 +208,89 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           [expertId],
         );
       }
-      await h.pool.query("UPDATE directions SET status = 'draft' WHERE id = $1", [directionId]);
+      await h.pool.query(
+        "UPDATE directions SET status = 'draft' WHERE id = $1",
+        [directionId],
+      );
       const res = await read();
       expect(res.status).toBe(200);
       expect(res.body.direction).toBeNull();
-      expect(res.body.school).toMatchObject({ slug: `school-${course.f.suffix}` });
+      expect(res.body.school).toMatchObject({
+        slug: `school-${course.f.suffix}`,
+      });
+    });
+
+    it("EARS-13: WHILE locked items are hidden, a locked lesson is off the path and its lesson read is 404", async () => {
+      const two = await buildCourse(h, { publish: false });
+      const ok = (r: { status: number; body: unknown }, status: number) =>
+        expect(r.status, JSON.stringify(r.body)).toBe(status);
+      const lesson2 = await admin<{ id: string }>(h, "POST", "/lessons", {
+        payload: {
+          moduleId: two.moduleId,
+          projectId: two.f.projectId,
+          title: "Урок 2",
+        },
+      });
+      ok(lesson2, 201);
+      const exit = await admin(h, "POST", "/steps", {
+        payload: {
+          lessonId: lesson2.body.id,
+          type: "test",
+          title: "Итоговый тест 2",
+          durationMin: 3,
+          payload: {
+            kind: "exit",
+            questions: [
+              {
+                text: "Вопрос",
+                options: [
+                  { text: "Да", correct: true },
+                  { text: "Нет", correct: false },
+                ],
+              },
+            ],
+          },
+        },
+      });
+      ok(exit, 201);
+      for (const id of [two.lessonId, lesson2.body.id]) {
+        const l = await admin(h, "GET", `/lessons/${id}`);
+        ok(
+          await admin(h, "POST", `/lessons/${id}/publish`, {
+            ifMatch: l.etag!,
+          }),
+          200,
+        );
+      }
+      const course = await admin(h, "GET", `/courses/${two.courseId}`);
+      ok(
+        await admin(h, "POST", `/courses/${two.courseId}/publish`, {
+          ifMatch: course.etag!,
+        }),
+        200,
+      );
+      ok(
+        await setRules(h, "course", two.courseId, {
+          lockedVisibility: "hidden",
+        }),
+        200,
+      );
+
+      const path = await call<{ modules: { lessons: { id: string }[] }[] }>(
+        h,
+        "GET",
+        `/learning/courses/${two.courseSlug}/path`,
+      );
+      ok(path, 200);
+      expect(path.body.modules[0]!.lessons.map((l) => l.id)).toEqual([
+        two.lessonId,
+      ]);
+      expect(
+        (await call(h, "GET", `/learning/lessons/${two.lessonId}`)).status,
+      ).toBe(200);
+      expect(
+        (await call(h, "GET", `/learning/lessons/${lesson2.body.id}`)).status,
+      ).toBe(404);
     });
 
     it("EARS-15/17:the lesson read names its completion rule and carries no step payload", async () => {
@@ -190,11 +301,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.status).toBe(200);
       expect(res.body.lesson.completionSentence).toContain("80 %");
       expect(JSON.stringify(res.body)).not.toContain("embedRef");
-      expect((await call(h, "GET", "/learning/lessons/not-a-uuid")).status).toBe(404);
+      expect(
+        (await call(h, "GET", "/learning/lessons/not-a-uuid")).status,
+      ).toBe(404);
     });
 
     it("EARS-22: a guest is refused every step payload and every write with 401", async () => {
-      expect((await call(h, "GET", `/me/learning/steps/${c.videoId}`)).status).toBe(401);
+      expect(
+        (await call(h, "GET", `/me/learning/steps/${c.videoId}`)).status,
+      ).toBe(401);
       expect((await position({ "user-agent": "x" }, 10)).status).toBe(401);
       expect((await start({ "user-agent": "x" })).status).toBe(401);
     });
@@ -215,7 +330,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         durationSec: VIDEO_SEC,
         watchedPercent: 0,
       });
-      const lockedRead = await call<Problem>(h, "GET", `/me/learning/steps/${c.downloadId}`, d.headers);
+      const lockedRead = await call<Problem>(
+        h,
+        "GET",
+        `/me/learning/steps/${c.downloadId}`,
+        d.headers,
+      );
       expect(lockedRead.status).toBe(403);
       expect(lockedRead.body.errorCode).toBe("LEARNING_STEP_LOCKED");
       expect(JSON.stringify(lockedRead.body)).not.toContain("mediaUrl");
@@ -279,16 +399,45 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.status).toBe(200);
       const [row] = await storedFacts(d.personId, c.videoId);
       // The first report gets the slack only (`progress.slackSec`, seeded 30).
-      expect(row!.data).toMatchObject({ reportedSec: 600, positionSec: 30, clientOccurredAt: "2020-01-01T00:00:00Z" });
+      expect(row!.data).toMatchObject({
+        reportedSec: 600,
+        positionSec: 30,
+        clientOccurredAt: "2020-01-01T00:00:00Z",
+      });
       expect(row!.occurred_at.getTime()).toBeGreaterThanOrEqual(before - 1000);
-      const read = await call<{ body: { watchedPercent: number }; step: { state: { status: string } } }>(
+      const read = await call<{
+        body: { watchedPercent: number };
+        step: { state: { status: string } };
+      }>(h, "GET", `/me/learning/steps/${c.videoId}`, d.headers);
+      expect(read.body.body.watchedPercent).toBe(50);
+      expect(read.body.step.state.status).not.toBe("done");
+    });
+
+    it("EARS-10: a position report answers the accepted position and watched share, after the clamp", async () => {
+      const d = await doctor(h);
+      const res = await position(d.headers, 600);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.progress).toEqual({
+        positionSec: 30,
+        watchedPercent: 50,
+      });
+    });
+
+    it("EARS-10: a last clock tick within the end window of the media length counts as watched to the end", async () => {
+      const d = await doctor(h);
+      expect((await position(d.headers, VIDEO_SEC / 2)).status).toBe(200);
+      const res = await position(d.headers, VIDEO_SEC - 2);
+      expect(res.body.progress).toEqual({
+        positionSec: VIDEO_SEC - 2,
+        watchedPercent: 100,
+      });
+      const read = await call<{ step: { state: { status: string } } }>(
         h,
         "GET",
         `/me/learning/steps/${c.videoId}`,
         d.headers,
       );
-      expect(read.body.body.watchedPercent).toBe(50);
-      expect(read.body.step.state.status).not.toBe("done");
+      expect(read.body.step.state.status).toBe("done");
     });
 
     // ── The cascade and 025 (EARS-11, EARS-12, EARS-18) ───────────────────
@@ -302,12 +451,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const result = await submit(d.headers, attempt.body, true);
       expect(result.status).toBe(200);
       expect(result.body).toMatchObject({ score: 100, passed: true });
-      const path = await call<{ modules: { lessons: { id: string; state: { status: string } }[] }[]; course: { state: { status: string } } }>(
-        h,
-        "GET",
-        `/learning/courses/${c.courseSlug}/path`,
-        d.headers,
-      );
+      const path = await call<{
+        modules: { lessons: { id: string; state: { status: string } }[] }[];
+        course: { state: { status: string } };
+      }>(h, "GET", `/learning/courses/${c.courseSlug}/path`, d.headers);
       expect(path.body.modules[0]!.lessons[0]!.state.status).toBe("done");
       expect(path.body.course.state.status).toBe("done");
       expect(await pointsFacts(d.personId, c.lessonId)).toBe(1);
@@ -317,56 +464,124 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const course = await buildCourse(h);
       const d = await doctor(h);
       const at = (s: number) =>
-        fact(d.headers, { eventId: eventId(), stepId: course.videoId, source: "web", kind: "position", data: { positionSec: s } });
-      expect((await setRules(h, "course", course.courseId, { "test.threshold": 50 })).status).toBe(200);
+        fact(d.headers, {
+          eventId: eventId(),
+          stepId: course.videoId,
+          source: "web",
+          kind: "position",
+          data: { positionSec: s },
+        });
+      expect(
+        (await setRules(h, "course", course.courseId, { "test.threshold": 50 }))
+          .status,
+      ).toBe(200);
       await at(VIDEO_SEC / 2);
       await at(VIDEO_SEC);
-      await fact(d.headers, { eventId: eventId(), stepId: course.downloadId, source: "web", kind: "opened", data: {} });
+      await fact(d.headers, {
+        eventId: eventId(),
+        stepId: course.downloadId,
+        source: "web",
+        kind: "opened",
+        data: {},
+      });
       const attempt = await start(d.headers, course);
-      expect((await submit(d.headers, attempt.body, "half", course)).body).toMatchObject({ score: 50, passed: true });
+      expect(
+        (await submit(d.headers, attempt.body, "half", course)).body,
+      ).toMatchObject({ score: 50, passed: true });
       expect(await pointsFacts(d.personId, course.lessonId)).toBe(1);
 
       // The threshold rises: the next fact re-evaluates the lesson as not done.
-      expect((await setRules(h, "course", course.courseId, { "test.threshold": 80 })).status).toBe(200);
+      expect(
+        (await setRules(h, "course", course.courseId, { "test.threshold": 80 }))
+          .status,
+      ).toBe(200);
       const reversed = await at(VIDEO_SEC);
-      expect(reversed.body.changed.find((x) => x.itemId === course.lessonId)?.status).not.toBe("done");
+      expect(
+        reversed.body.changed.find((x) => x.itemId === course.lessonId)?.status,
+      ).not.toBe("done");
       expect(await pointsFacts(d.personId, course.lessonId)).toBe(1);
 
       // It falls again: done again, and the 025 fact is the same one.
-      expect((await setRules(h, "course", course.courseId, { "test.threshold": 50 })).status).toBe(200);
+      expect(
+        (await setRules(h, "course", course.courseId, { "test.threshold": 50 }))
+          .status,
+      ).toBe(200);
       const again = await at(VIDEO_SEC);
-      expect(again.body.changed.find((x) => x.itemId === course.lessonId)?.status).toBe("done");
+      expect(
+        again.body.changed.find((x) => x.itemId === course.lessonId)?.status,
+      ).toBe("done");
       expect(await pointsFacts(d.personId, course.lessonId)).toBe(1);
     });
 
     it("EARS-5: the resolver takes the nearest layer — lesson over course over platform", async () => {
       const course = await buildCourse(h);
       const sentence = async () =>
-        (await call<{ lesson: { completionSentence: string } }>(h, "GET", `/learning/lessons/${course.lessonId}`)).body.lesson.completionSentence;
+        (
+          await call<{ lesson: { completionSentence: string } }>(
+            h,
+            "GET",
+            `/learning/lessons/${course.lessonId}`,
+          )
+        ).body.lesson.completionSentence;
       expect(await sentence()).toContain("80 %");
-      expect((await setRules(h, "course", course.courseId, { "test.threshold": 60 })).status).toBe(200);
+      expect(
+        (await setRules(h, "course", course.courseId, { "test.threshold": 60 }))
+          .status,
+      ).toBe(200);
       expect(await sentence()).toContain("60 %");
-      expect((await setRules(h, "lesson", course.lessonId, { "test.threshold": 90 })).status).toBe(200);
+      expect(
+        (await setRules(h, "lesson", course.lessonId, { "test.threshold": 90 }))
+          .status,
+      ).toBe(200);
       expect(await sentence()).toContain("90 %");
-      const rules = await admin<{ effective: { key: string; value: unknown }[] }>(h, "GET", `/rules/course/${course.courseId}`);
-      expect(rules.body.effective.find((e) => e.key === "test.threshold")?.value).toBe(60);
+      const rules = await admin<{
+        effective: { key: string; value: unknown }[];
+      }>(h, "GET", `/rules/course/${course.courseId}`);
+      expect(
+        rules.body.effective.find((e) => e.key === "test.threshold")?.value,
+      ).toBe(60);
     });
 
     // ── Attempts (EARS-18) ────────────────────────────────────────────────
 
     it("EARS-18: an open attempt is returned again, never redrawn; every started attempt counts toward the limit", async () => {
       const course = await buildCourse(h);
-      expect((await setRules(h, "course", course.courseId, { "test.attempts": 1 })).status).toBe(200);
+      expect(
+        (await setRules(h, "course", course.courseId, { "test.attempts": 1 }))
+          .status,
+      ).toBe(200);
       const d = await doctor(h);
-      await call(h, "POST", "/me/learning/facts", d.headers, { eventId: eventId(), stepId: course.videoId, source: "web", kind: "position", data: { positionSec: 30 } });
-      await call(h, "POST", "/me/learning/facts", d.headers, { eventId: eventId(), stepId: course.videoId, source: "web", kind: "position", data: { positionSec: 60 } });
-      await call(h, "POST", "/me/learning/facts", d.headers, { eventId: eventId(), stepId: course.downloadId, source: "web", kind: "opened", data: {} });
+      await call(h, "POST", "/me/learning/facts", d.headers, {
+        eventId: eventId(),
+        stepId: course.videoId,
+        source: "web",
+        kind: "position",
+        data: { positionSec: 30 },
+      });
+      await call(h, "POST", "/me/learning/facts", d.headers, {
+        eventId: eventId(),
+        stepId: course.videoId,
+        source: "web",
+        kind: "position",
+        data: { positionSec: 60 },
+      });
+      await call(h, "POST", "/me/learning/facts", d.headers, {
+        eventId: eventId(),
+        stepId: course.downloadId,
+        source: "web",
+        kind: "opened",
+        data: {},
+      });
       const first = await start(d.headers, course);
       const again = await start(d.headers, course);
       expect(again.status).toBe(201);
       expect(again.body.attemptId).toBe(first.body.attemptId);
-      expect(again.body.questions.map((q) => q.id)).toEqual(first.body.questions.map((q) => q.id));
-      expect((await submit(d.headers, first.body, false, course)).body.passed).toBe(false);
+      expect(again.body.questions.map((q) => q.id)).toEqual(
+        first.body.questions.map((q) => q.id),
+      );
+      expect(
+        (await submit(d.headers, first.body, false, course)).body.passed,
+      ).toBe(false);
       const refused = await start(d.headers, course);
       expect(refused.status).toBe(409);
       expect(refused.body.errorCode).toBe("LEARNING_ATTEMPT_UNAVAILABLE");
@@ -377,15 +592,28 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("EARS-18: submit re-checks the limit and the pause under the lock; a refused submit stores nothing", async () => {
       const course = await buildCourse(h);
       const d = await doctor(h);
-      for (const [s, kind, step] of [[30, "position", course.videoId], [60, "position", course.videoId], [0, "opened", course.downloadId]] as const) {
-        await call(h, "POST", "/me/learning/facts", d.headers, { eventId: eventId(), stepId: step, source: "web", kind, data: kind === "position" ? { positionSec: s } : {} });
+      for (const [s, kind, step] of [
+        [30, "position", course.videoId],
+        [60, "position", course.videoId],
+        [0, "opened", course.downloadId],
+      ] as const) {
+        await call(h, "POST", "/me/learning/facts", d.headers, {
+          eventId: eventId(),
+          stepId: step,
+          source: "web",
+          kind,
+          data: kind === "position" ? { positionSec: s } : {},
+        });
       }
       const a = await start(d.headers, course);
       await submit(d.headers, a.body, false, course);
       const b = await start(d.headers, course);
       expect(b.status).toBe(201);
       // The rules tighten while attempt B is open.
-      expect((await setRules(h, "course", course.courseId, { "test.attempts": 1 })).status).toBe(200);
+      expect(
+        (await setRules(h, "course", course.courseId, { "test.attempts": 1 }))
+          .status,
+      ).toBe(200);
       const late = await submit(d.headers, b.body, true, course);
       expect(late.status).toBe(409);
       expect(late.body.errorCode).toBe("LEARNING_ATTEMPT_UNAVAILABLE");
@@ -397,13 +625,25 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       // A pause set while B is open: B's submit falls inside A's pause, and
       // the refusal says when the next attempt opens.
-      expect((await setRules(h, "course", course.courseId, { "test.attempts": "unlimited", "test.pauseMin": 60 })).status).toBe(200);
+      expect(
+        (
+          await setRules(h, "course", course.courseId, {
+            "test.attempts": "unlimited",
+            "test.pauseMin": 60,
+          })
+        ).status,
+      ).toBe(200);
       const paused = await submit(d.headers, b.body, true, course);
       expect(paused.status).toBe(409);
       expect(paused.body.nextAt).toEqual(expect.any(String));
       // Lifted, the same open attempt submits.
-      expect((await setRules(h, "course", course.courseId, { "test.pauseMin": 0 })).status).toBe(200);
-      expect((await submit(d.headers, b.body, true, course)).body.passed).toBe(true);
+      expect(
+        (await setRules(h, "course", course.courseId, { "test.pauseMin": 0 }))
+          .status,
+      ).toBe(200);
+      expect((await submit(d.headers, b.body, true, course)).body.passed).toBe(
+        true,
+      );
     });
   },
 );

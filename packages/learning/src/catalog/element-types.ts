@@ -72,15 +72,27 @@ export function clampReportedPosition(input: {
   return Math.max(0, Math.min(Math.floor(input.reportedSec), Math.floor(cap)));
 }
 
+/**
+ * EARS-10 — the end window: a provider clock ticks about once a second and
+ * the last tick before the player stops can fall short of the media length,
+ * so a position this close to the end counts as the end. It absorbs clock
+ * granularity only, never skipped content.
+ */
+export const VIDEO_END_WINDOW_SEC = 2;
+
 /** EARS-10 — the watched share, positions capped at the real media duration. */
+export function watchedShare(duration: number, maxPosition: number): number {
+  if (duration <= 0) return 0;
+  const position = Math.min(maxPosition, duration);
+  if (position > 0 && duration - position <= VIDEO_END_WINDOW_SEC) return 100;
+  return Math.floor((position / duration) * 100);
+}
+
 export function watchedPercent(
   step: LearningStepModel,
   ctx: LearningEvalContext,
 ): number {
-  const duration = videoDurationSec(step);
-  if (duration === 0) return 0;
-  const position = Math.min(ctx.facts.maxPosition(step.id), duration);
-  return Math.floor((position / duration) * 100);
+  return watchedShare(videoDurationSec(step), ctx.facts.maxPosition(step.id));
 }
 
 export const LEARNING_ELEMENT_CATALOG: Readonly<

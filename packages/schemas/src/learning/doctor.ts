@@ -217,6 +217,17 @@ export const LearningStatusChangeSchema = z.strictObject({
 export const RecordLearningFactResponseSchema = z.strictObject({
   outcome: z.enum(["recorded", "duplicate"]),
   changed: z.array(LearningStatusChangeSchema),
+  /**
+   * A video step's progress as the server holds it after this fact — the
+   * clamped position and the watched share the condition reads (EARS-10);
+   * null for a step that records no position.
+   */
+  progress: z
+    .strictObject({
+      positionSec: z.number().int().min(0),
+      watchedPercent: z.number().int().min(0).max(100),
+    })
+    .nullable(),
 });
 export type RecordLearningFactResponse = z.infer<
   typeof RecordLearningFactResponseSchema

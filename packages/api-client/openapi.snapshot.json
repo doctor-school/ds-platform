@@ -8902,9 +8902,33 @@
           "outcome": {
             "enum": ["recorded", "duplicate"],
             "type": "string"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "positionSec": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "watchedPercent": {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["positionSec", "watchedPercent"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
-        "required": ["outcome", "changed"],
+        "required": ["outcome", "changed", "progress"],
         "type": "object"
       },
       "RegisterRequestDto": {

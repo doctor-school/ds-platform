@@ -18,7 +18,7 @@ import { learningUrl } from "@/providers/data-provider";
  * «Обучение» (024 EARS-28 / EARS-29, #4011) — the platform's courses on the
  * `AdminDataList` block tier; a row opens the course's composition (modules,
  * lessons, the course's rule preset). The API answers the list whole, so the
- * pager slices what it holds and the list asks for no search or facet. Courses
+ * search (title or slug) and the pager work on what it holds, like «Доступы». Courses
  * themselves are created through the admin API in slice 1 (024-design §10);
  * the school → course structure editor is #4018.
  */
@@ -31,7 +31,13 @@ export default function LearningCoursesPage() {
     url: learningUrl.courses(),
     method: "get",
   });
-  const courses = result.data?.data ?? [];
+  const needle = query.q.trim().toLowerCase();
+  const courses = (result.data?.data ?? []).filter(
+    (row) =>
+      !needle ||
+      row.title.toLowerCase().includes(needle) ||
+      row.slug.toLowerCase().includes(needle),
+  );
   const start = (query.page - 1) * query.pageSize;
   const rows = courses.slice(start, start + query.pageSize);
 
@@ -58,7 +64,8 @@ export default function LearningCoursesPage() {
         <AdminDataList<LearningCourseAdmin, never>
           title={t("learning.listTitle")}
           description={t("learning.listDescription")}
-          searchable={false}
+          searchLabel={t("learning.searchLabel")}
+          searchPlaceholder={t("learning.searchPlaceholder")}
           filterable={false}
           caption={t("learning.tableCaption")}
           record={{

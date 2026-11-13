@@ -18,6 +18,7 @@ import { seedStorefrontSession } from "./storefront-session-seed.js";
 import {
   eventCountBackgrounds,
   countBrowserRoute,
+  countModuleFailure,
   type CountBackground,
   type CountResource,
 } from "./event-count-report.js";
@@ -606,6 +607,7 @@ export class EventCountWorld {
     );
   }
   async background(clause: (typeof eventCountBackgrounds)[number]) {
+    countOperation(`count Background: ${clause}`);
     if (clause === "admin") {
       const read = await this.page.evaluate(async () => {
         const r = await fetch("/v1/admin/auth/session");
@@ -640,12 +642,31 @@ export class EventCountWorld {
           "SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON e.enumtypid=t.oid WHERE t.typname='event_lifecycle_state' ORDER BY e.enumsortorder",
         )
       ).rows as { enumlabel: string }[];
-      const { EventLifecycleStateSchema, validTransitions } = apiRequire(
-        "@ds/schemas",
-      ) as {
+      type LifecycleModule = {
         EventLifecycleStateSchema: { options: string[] };
         validTransitions(state: string, origin: string): string[];
       };
+      const runtime = {
+        nodeVersion: process.version,
+        platform: process.platform,
+      };
+      countOperation("lifecycle @ds/schemas require starts", runtime);
+      let lifecycle: LifecycleModule;
+      try {
+        lifecycle = apiRequire("@ds/schemas") as LifecycleModule;
+      } catch (error) {
+        try {
+          countOperation("lifecycle @ds/schemas require failed", {
+            ...runtime,
+            ...countModuleFailure(error),
+          });
+        } catch {
+          // Diagnostic I/O must not replace the native exception.
+        }
+        throw error;
+      }
+      countOperation("lifecycle @ds/schemas require complete", runtime);
+      const { EventLifecycleStateSchema, validTransitions } = lifecycle;
       const states = EventLifecycleStateSchema.options;
       expect(new Set(rows.map((row) => row.enumlabel))).toEqual(
         new Set(states),

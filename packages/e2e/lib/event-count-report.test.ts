@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createRequire } from "node:module";
 import {
   assertEventCountEvidence,
   eventCountOriginals,
@@ -7,9 +8,75 @@ import {
   assertCountStorageProvider,
   eventCountFailureDiagnostic,
   countBrowserRoute,
+  countModuleFailure,
 } from "./event-count-report.js";
 
 describe("count-original failure diagnostics", () => {
+  it("retains an actual native module error code through a private wrapped cause", () => {
+    let native: unknown;
+    try {
+      createRequire(import.meta.url)("./__4035_private_missing_module__");
+    } catch (error) {
+      native = error;
+    }
+    expect(native).toBeDefined();
+    const result = countModuleFailure(
+      new Error("private-wrapper", { cause: native }),
+    );
+    expect(result).toEqual({
+      codes: ["UNCLASSIFIED_MODULE_LOAD_FAILURE", "MODULE_NOT_FOUND"],
+      names: ["Error", "Error"],
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      /private|requireStack|message|stack/,
+    );
+  });
+  it("exports exact lifecycle module-stage evidence while rejecting arbitrary code/name/environment values", () => {
+    const raw = {
+      code: "private-code",
+      name: "private-name",
+      cause: { code: "ERR_REQUIRE_ESM", name: "Error" },
+    };
+    const moduleFailure = countModuleFailure(raw);
+    expect(moduleFailure).toEqual({
+      codes: ["UNCLASSIFIED_MODULE_LOAD_FAILURE", "ERR_REQUIRE_ESM"],
+      names: ["UNKNOWN_ERROR_TYPE", "Error"],
+    });
+    const diagnostic = eventCountFailureDiagnostic(
+      undefined,
+      [
+        { command: "count Background: lifecycles" },
+        {
+          command: "lifecycle @ds/schemas require failed",
+          ...moduleFailure,
+          nodeVersion: "v24.18.0",
+          platform: "linux",
+          message: "private-message",
+          path: "private-path",
+        },
+        {
+          command: "lifecycle @ds/schemas require failed",
+          codes: ["private-code"],
+          names: ["private-name"],
+          nodeVersion: "private-version",
+          platform: "private-platform",
+        },
+      ]
+        .map((value) => JSON.stringify(value))
+        .join("\n"),
+    );
+    expect(diagnostic.phase).toBe("background-lifecycles");
+    expect(diagnostic.nativeModuleFailures).toEqual([
+      {
+        module: "@ds/schemas",
+        loader: "require",
+        ...moduleFailure,
+        nodeVersion: "v24.18.0",
+        platform: "linux",
+      },
+    ]);
+    expect(JSON.stringify(diagnostic)).not.toContain("private-");
+  });
   it("rejects a source filename that only matches an unescaped separator", () => {
     const diagnostic = eventCountFailureDiagnostic(
       JSON.stringify({

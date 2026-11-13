@@ -95,3 +95,10 @@ configured Admin and owned API origins are observed; URLs, query strings, IDs,
 response bodies and headers are not diagnostic output. It never copies raw
 messages, stacks, titles or credentials. Its `accepted: false` cannot replace the strict success certificate;
 missing Background/resource evidence and the original failed step remain red.
+
+Every Background clause has its own prelogged phase. The lifecycle schema load
+records its exact native `@ds/schemas`/`require` boundary and Node version/platform;
+on failure it exports only allowlisted native error codes/types through a bounded
+cause chain, then rethrows the original error. An absent or unrecognized native
+code is explicit, never replaced with guessed exception text or a successful
+lifecycle receipt.

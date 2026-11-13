@@ -1,6 +1,62 @@
 import { assertOperationalReport } from "../api-probes/operational-report.js";
 import { createHash } from "node:crypto";
 
+const moduleErrorCodes = [
+  "UNCLASSIFIED_MODULE_LOAD_FAILURE",
+  "MODULE_NOT_FOUND",
+  "ERR_MODULE_NOT_FOUND",
+  "ERR_REQUIRE_ESM",
+  "ERR_REQUIRE_ASYNC_MODULE",
+  "ERR_REQUIRE_CYCLE_MODULE",
+  "ERR_UNKNOWN_FILE_EXTENSION",
+  "ERR_PACKAGE_PATH_NOT_EXPORTED",
+  "ERR_PACKAGE_IMPORT_NOT_DEFINED",
+  "ERR_INVALID_PACKAGE_CONFIG",
+  "ERR_UNSUPPORTED_DIR_IMPORT",
+  "ERR_IMPORT_ATTRIBUTE_MISSING",
+  "ERR_INVALID_ARG_VALUE",
+  "ERR_INVALID_URL",
+  "ERR_INVALID_FILE_URL_PATH",
+  "ERR_INTERNAL_ASSERTION",
+  "ERR_DLOPEN_FAILED",
+];
+const moduleErrorNames = [
+  "Error",
+  "TypeError",
+  "ReferenceError",
+  "SyntaxError",
+  "RangeError",
+  "AggregateError",
+  "UNKNOWN_ERROR_TYPE",
+];
+export function countModuleFailure(error: unknown) {
+  const codes: string[] = [],
+    names: string[] = [],
+    seen = new Set<unknown>();
+  for (
+    let current = error;
+    current &&
+    typeof current === "object" &&
+    !seen.has(current) &&
+    codes.length < 4;
+  ) {
+    seen.add(current);
+    const row = current as Record<string, unknown>;
+    codes.push(
+      typeof row.code === "string" && moduleErrorCodes.includes(row.code)
+        ? row.code
+        : "UNCLASSIFIED_MODULE_LOAD_FAILURE",
+    );
+    names.push(
+      typeof row.name === "string" && moduleErrorNames.includes(row.name)
+        ? row.name
+        : "UNKNOWN_ERROR_TYPE",
+    );
+    current = row.cause;
+  }
+  return { codes, names };
+}
+
 const browserRoutes = [
   "auth-state",
   "auth-session",
@@ -60,6 +116,14 @@ export function eventCountFailureDiagnostic(raw?: string, rawOps?: string) {
       locations: { file: string; line: number; column: number }[];
     }[],
     browserResponses: [] as { origin: string; route: string; status: number }[],
+    nativeModuleFailures: [] as {
+      module: string;
+      loader: string;
+      codes: string[];
+      names: string[];
+      nodeVersion: string;
+      platform: string;
+    }[],
     rawReportSha256:
       raw === undefined ? null : createHash("sha256").update(raw).digest("hex"),
     rawOperationsSha256:
@@ -88,6 +152,12 @@ export function eventCountFailureDiagnostic(raw?: string, rawOps?: string) {
     ],
     ["actual Admin create form; count defaults untouched", "admin-editor"],
     ["public page and listing owning reads", "consumer-reads"],
+    ...["admin", "pdf", "lifecycles", "msk", "consumers"].map(
+      (clause): [string, string] => [
+        `count Background: ${clause}`,
+        `background-${clause}`,
+      ],
+    ),
     ...[
       "navigate",
       "form-visible",
@@ -110,6 +180,32 @@ export function eventCountFailureDiagnostic(raw?: string, rawOps?: string) {
       const row = object(JSON.parse(line));
       const phase = phases.get(String(row.command));
       if (phase) diagnostic.phase = phase;
+      if (
+        row.command === "lifecycle @ds/schemas require failed" &&
+        Array.isArray(row.codes) &&
+        row.codes.length > 0 &&
+        row.codes.length <= 4 &&
+        row.codes.every(
+          (code) => typeof code === "string" && moduleErrorCodes.includes(code),
+        ) &&
+        Array.isArray(row.names) &&
+        row.names.length === row.codes.length &&
+        row.names.every(
+          (name) => typeof name === "string" && moduleErrorNames.includes(name),
+        ) &&
+        typeof row.nodeVersion === "string" &&
+        /^v\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(row.nodeVersion) &&
+        ["linux", "win32", "darwin"].includes(String(row.platform))
+      ) {
+        diagnostic.nativeModuleFailures.push({
+          module: "@ds/schemas",
+          loader: "require",
+          codes: row.codes,
+          names: row.names,
+          nodeVersion: row.nodeVersion,
+          platform: String(row.platform),
+        });
+      }
       if (
         (row.command === "own Admin browser response" ||
           row.command === "own Admin browser request failure") &&

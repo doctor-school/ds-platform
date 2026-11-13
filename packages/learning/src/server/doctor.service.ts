@@ -18,7 +18,7 @@ import type {
   SubmitLearningAttemptRequest,
 } from "@ds/schemas";
 import { RecordLearningFactRequestSchema } from "@ds/schemas";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import {
   clampReportedPosition,
   elementType,
@@ -449,39 +449,33 @@ export class LearningDoctorService {
   // ── Attempts (EARS-18) ────────────────────────────────────────────────────
 
   /**
-   * How many attempts are left and when the next one opens. Every STARTED
-   * attempt counts toward the limit (an abandoned one included), so starting
-   * and never submitting cannot buy extra tries. `excluding` (submit's
-   * re-check) leaves that attempt itself out: at most one attempt is open at
-   * a time, so the others were all started before it.
+   * How many attempts are left and when the next one opens, from the
+   * SUBMITTED attempts. At most one attempt is open at a time and a start
+   * returns it again, so an unsubmitted attempt never buys an extra try.
    */
   private async attemptUsage(
     db: Handle,
     personId: string,
     testId: string,
     e: Evaluated,
-    excluding?: string,
   ): Promise<{ attemptsLeft: number | null; nextAt: Date | null }> {
     const ref = { kind: "step" as const, id: testId };
     const limit = e.evaluator.setting("test.attempts", ref);
     const pauseMin = e.evaluator.setting("test.pauseMin", ref);
-    const started = await db
-      .select({
-        id: learningAttempts.id,
-        submittedAt: learningAttempts.submittedAt,
-      })
+    const submitted = await db
+      .select({ submittedAt: learningAttempts.submittedAt })
       .from(learningAttempts)
       .where(
         and(
           eq(learningAttempts.personId, personId),
           eq(learningAttempts.testId, testId),
+          isNotNull(learningAttempts.submittedAt),
         ),
       );
-    const counted = started.filter((a) => a.id !== excluding);
     const attemptsLeft =
-      limit === "unlimited" ? null : Math.max(0, limit - counted.length);
+      limit === "unlimited" ? null : Math.max(0, limit - submitted.length);
     const lastAt =
-      counted
+      submitted
         .map((a) => a.submittedAt)
         .filter((at): at is Date => at !== null)
         .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
@@ -606,7 +600,6 @@ export class LearningDoctorService {
         personId,
         attempt.testId,
         current,
-        attemptId,
       );
       if (allowed.attemptsLeft === 0)
         throw new LearningServerError(

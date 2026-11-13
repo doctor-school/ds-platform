@@ -4173,6 +4173,777 @@ export interface components {
                 title: string;
             }[];
         };
+        LearningAttemptDto: {
+            /** Format: uuid */
+            attemptId: string;
+            questions: {
+                /** Format: uuid */
+                id: string;
+                options: {
+                    /** Format: uuid */
+                    id: string;
+                    text: string;
+                }[];
+                text: string;
+            }[];
+            /** Format: uuid */
+            testId: string;
+        };
+        LearningAttemptResultDto: {
+            attemptsLeft: number | null;
+            changed: {
+                /** Format: uuid */
+                itemId: string;
+                /** @enum {string} */
+                itemKind: "step" | "lesson" | "module" | "course";
+                /** @enum {string} */
+                status: "done" | "current" | "open" | "locked" | "test-out-reachable";
+            }[];
+            nextAt: string | null;
+            passed: boolean;
+            score: number;
+            threshold: number;
+        };
+        LearningCourseAdminDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            schoolId: string;
+            slug: string;
+            /** @enum {string} */
+            state: "draft" | "published";
+            title: string;
+            version: number;
+        };
+        LearningCourseCompositionDto: {
+            /** Format: uuid */
+            id: string;
+            modules: {
+                /** Format: uuid */
+                courseId: string;
+                /** Format: uuid */
+                id: string;
+                lessons: {
+                    description: string;
+                    durationMin: number;
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    moduleId: string;
+                    position: number;
+                    /** Format: uuid */
+                    projectId: string;
+                    /** @enum {string} */
+                    state: "draft" | "published";
+                    teaser: string;
+                    title: string;
+                    version: number;
+                }[];
+                position: number;
+                title: string;
+                version: number;
+            }[];
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            schoolId: string;
+            slug: string;
+            /** @enum {string} */
+            state: "draft" | "published";
+            title: string;
+            version: number;
+        };
+        LearningCourseListDto: {
+            data: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                projectId: string;
+                /** Format: uuid */
+                schoolId: string;
+                slug: string;
+                /** @enum {string} */
+                state: "draft" | "published";
+                title: string;
+                version: number;
+            }[];
+        };
+        LearningCoursePathDto: {
+            course: {
+                /** Format: uuid */
+                id: string;
+                slug: string;
+                state: {
+                    /** @constant */
+                    status: "done";
+                } | {
+                    /** @constant */
+                    status: "current";
+                } | {
+                    /** @constant */
+                    status: "open";
+                } | {
+                    reason: {
+                        /** @constant */
+                        kind: "previous";
+                    } | {
+                        /** Format: date-time */
+                        at: string;
+                        /** @constant */
+                        kind: "date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                    } | {
+                        /** @constant */
+                        kind: "registration";
+                    };
+                    /** @constant */
+                    status: "locked";
+                } | {
+                    /** @constant */
+                    status: "test-out-reachable";
+                };
+                title: string;
+            };
+            current: {
+                /** Format: uuid */
+                lessonId: string;
+                /** Format: uuid */
+                stepId: string;
+            } | null;
+            document: {
+                state: {
+                    /** @constant */
+                    status: "done";
+                } | {
+                    /** @constant */
+                    status: "current";
+                } | {
+                    /** @constant */
+                    status: "open";
+                } | {
+                    reason: {
+                        /** @constant */
+                        kind: "previous";
+                    } | {
+                        /** Format: date-time */
+                        at: string;
+                        /** @constant */
+                        kind: "date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                    } | {
+                        /** @constant */
+                        kind: "registration";
+                    };
+                    /** @constant */
+                    status: "locked";
+                } | {
+                    /** @constant */
+                    status: "test-out-reachable";
+                };
+            };
+            modules: {
+                club: {
+                    state: {
+                        /** @constant */
+                        status: "done";
+                    } | {
+                        /** @constant */
+                        status: "current";
+                    } | {
+                        /** @constant */
+                        status: "open";
+                    } | {
+                        reason: {
+                            /** @constant */
+                            kind: "previous";
+                        } | {
+                            /** Format: date-time */
+                            at: string;
+                            /** @constant */
+                            kind: "date";
+                        } | {
+                            /** @constant */
+                            kind: "expression";
+                        } | {
+                            /** @constant */
+                            kind: "registration";
+                        };
+                        /** @constant */
+                        status: "locked";
+                    } | {
+                        /** @constant */
+                        status: "test-out-reachable";
+                    };
+                } | null;
+                /** Format: uuid */
+                id: string;
+                lessons: {
+                    durationMin: number;
+                    /** Format: uuid */
+                    id: string;
+                    number: number;
+                    state: {
+                        /** @constant */
+                        status: "done";
+                    } | {
+                        /** @constant */
+                        status: "current";
+                    } | {
+                        /** @constant */
+                        status: "open";
+                    } | {
+                        reason: {
+                            /** @constant */
+                            kind: "previous";
+                        } | {
+                            /** Format: date-time */
+                            at: string;
+                            /** @constant */
+                            kind: "date";
+                        } | {
+                            /** @constant */
+                            kind: "expression";
+                        } | {
+                            /** @constant */
+                            kind: "registration";
+                        };
+                        /** @constant */
+                        status: "locked";
+                    } | {
+                        /** @constant */
+                        status: "test-out-reachable";
+                    };
+                    stepCount: number;
+                    steps: {
+                        durationMin: number;
+                        /** Format: uuid */
+                        id: string;
+                        state: {
+                            /** @constant */
+                            status: "done";
+                        } | {
+                            /** @constant */
+                            status: "current";
+                        } | {
+                            /** @constant */
+                            status: "open";
+                        } | {
+                            reason: {
+                                /** @constant */
+                                kind: "previous";
+                            } | {
+                                /** Format: date-time */
+                                at: string;
+                                /** @constant */
+                                kind: "date";
+                            } | {
+                                /** @constant */
+                                kind: "expression";
+                            } | {
+                                /** @constant */
+                                kind: "registration";
+                            };
+                            /** @constant */
+                            status: "locked";
+                        } | {
+                            /** @constant */
+                            status: "test-out-reachable";
+                        };
+                        title: string;
+                        /** @enum {string} */
+                        type: "video" | "download" | "test";
+                    }[];
+                    title: string;
+                }[];
+                position: number;
+                state: {
+                    /** @constant */
+                    status: "done";
+                } | {
+                    /** @constant */
+                    status: "current";
+                } | {
+                    /** @constant */
+                    status: "open";
+                } | {
+                    reason: {
+                        /** @constant */
+                        kind: "previous";
+                    } | {
+                        /** Format: date-time */
+                        at: string;
+                        /** @constant */
+                        kind: "date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                    } | {
+                        /** @constant */
+                        kind: "registration";
+                    };
+                    /** @constant */
+                    status: "locked";
+                } | {
+                    /** @constant */
+                    status: "test-out-reachable";
+                };
+                title: string;
+            }[];
+            signedIn: boolean;
+        };
+        LearningLessonAdminDto: {
+            description: string;
+            durationMin: number;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            moduleId: string;
+            position: number;
+            /** Format: uuid */
+            projectId: string;
+            /** @enum {string} */
+            state: "draft" | "published";
+            steps: {
+                durationMin: number;
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                lessonId: string;
+                media: {
+                    contentType: string;
+                    sizeBytes: number;
+                } | null;
+                payload: {
+                    [key: string]: unknown;
+                };
+                position: number;
+                questions: {
+                    correctiveText: string | null;
+                    /** Format: uuid */
+                    id: string;
+                    options: {
+                        correct: boolean;
+                        /** Format: uuid */
+                        id: string;
+                        text: string;
+                    }[];
+                    text: string;
+                }[] | null;
+                source: {
+                    embedRef: string;
+                    /** @enum {string} */
+                    provider: "rutube" | "youtube" | "vk" | "cdnvideo";
+                } | null;
+                title: string;
+                /** @enum {string} */
+                type: "video" | "download" | "test";
+                version: number;
+            }[];
+            teaser: string;
+            title: string;
+            version: number;
+        };
+        LearningLessonReadDto: {
+            course: {
+                /** Format: uuid */
+                id: string;
+                slug: string;
+                title: string;
+            };
+            lesson: {
+                completionSentence: string;
+                description: string;
+                durationMin: number;
+                /** Format: uuid */
+                id: string;
+                number: number;
+                state: {
+                    /** @constant */
+                    status: "done";
+                } | {
+                    /** @constant */
+                    status: "current";
+                } | {
+                    /** @constant */
+                    status: "open";
+                } | {
+                    reason: {
+                        /** @constant */
+                        kind: "previous";
+                    } | {
+                        /** Format: date-time */
+                        at: string;
+                        /** @constant */
+                        kind: "date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                    } | {
+                        /** @constant */
+                        kind: "registration";
+                    };
+                    /** @constant */
+                    status: "locked";
+                } | {
+                    /** @constant */
+                    status: "test-out-reachable";
+                };
+                stepCount: number;
+                teaser: string;
+                title: string;
+            };
+            signedIn: boolean;
+            steps: {
+                completionSentence: string;
+                durationMin: number;
+                /** Format: uuid */
+                id: string;
+                state: {
+                    /** @constant */
+                    status: "done";
+                } | {
+                    /** @constant */
+                    status: "current";
+                } | {
+                    /** @constant */
+                    status: "open";
+                } | {
+                    reason: {
+                        /** @constant */
+                        kind: "previous";
+                    } | {
+                        /** Format: date-time */
+                        at: string;
+                        /** @constant */
+                        kind: "date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                    } | {
+                        /** @constant */
+                        kind: "registration";
+                    };
+                    /** @constant */
+                    status: "locked";
+                } | {
+                    /** @constant */
+                    status: "test-out-reachable";
+                };
+                title: string;
+                /** @enum {string} */
+                type: "video" | "download" | "test";
+            }[];
+        };
+        LearningModuleAdminDto: {
+            /** Format: uuid */
+            courseId: string;
+            /** Format: uuid */
+            id: string;
+            position: number;
+            title: string;
+            version: number;
+        };
+        LearningPresetListDto: {
+            data: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                values: {
+                    "completion.course"?: components["schemas"]["LearningPresetListDto__schema0"];
+                    "completion.lesson"?: components["schemas"]["LearningPresetListDto__schema0"];
+                    "completion.module"?: components["schemas"]["LearningPresetListDto__schema0"];
+                    "completion.step"?: components["schemas"]["LearningPresetListDto__schema0"];
+                    "course.closingClub"?: boolean;
+                    "course.clubInCompletion"?: boolean;
+                    /** @enum {string} */
+                    "course.deliveryMode"?: "online" | "offline" | "open";
+                    "course.moduleSize"?: number;
+                    /** @enum {string} */
+                    lockedVisibility?: "hidden" | "locked";
+                    /** @enum {string} */
+                    order?: "strict" | "free";
+                    "progress.maxPlaybackRate"?: number;
+                    "progress.slackSec"?: number;
+                    "repeat.allowed"?: boolean;
+                    "test.attempts"?: number | "unlimited";
+                    "test.entryCounts"?: boolean;
+                    "test.entryRequired"?: boolean;
+                    "test.exitRequired"?: boolean;
+                    "test.pauseMin"?: number;
+                    "test.questions"?: number | "all";
+                    "test.threshold"?: number;
+                    "testOut.allowed"?: boolean;
+                    "testOut.pauseMin"?: number;
+                    unlock?: {
+                        /** @constant */
+                        kind: "immediate";
+                    } | {
+                        /** @constant */
+                        kind: "after-previous";
+                    } | {
+                        /** Format: date-time */
+                        instant: string;
+                        /** @constant */
+                        kind: "from-date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                        rule: components["schemas"]["LearningPresetListDto__schema0"];
+                    };
+                    "viewed.podcast.percent"?: number;
+                    "viewed.video.percent"?: number;
+                };
+                version: number;
+            }[];
+        };
+        LearningPresetListDto__schema0: {
+            condition: string;
+            /** Format: uuid */
+            module?: string;
+            percent?: number;
+            /** Format: uuid */
+            step?: string;
+            test?: string;
+        } | {
+            all: components["schemas"]["LearningPresetListDto__schema0"][];
+        } | {
+            any: components["schemas"]["LearningPresetListDto__schema0"][];
+        } | {
+            nOf: {
+                n: number;
+                of: components["schemas"]["LearningPresetListDto__schema0"][];
+            };
+        };
+        LearningSchoolAdminDto: {
+            /** Format: uuid */
+            directionId: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            leadExpertId: string;
+            /** Format: uuid */
+            projectId: string;
+            slug: string;
+            /** @enum {string} */
+            state: "draft" | "published";
+            title: string;
+            version: number;
+        };
+        LearningSchoolListDto: {
+            data: {
+                /** Format: uuid */
+                directionId: string;
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                leadExpertId: string;
+                /** Format: uuid */
+                projectId: string;
+                slug: string;
+                /** @enum {string} */
+                state: "draft" | "published";
+                title: string;
+                version: number;
+            }[];
+        };
+        LearningScopeRulesDto: {
+            appliedPreset: string | null;
+            effective: {
+                /** @enum {string} */
+                key: "completion.step" | "completion.lesson" | "completion.module" | "completion.course" | "viewed.video.percent" | "viewed.podcast.percent" | "unlock" | "order" | "lockedVisibility" | "test.threshold" | "test.attempts" | "test.pauseMin" | "test.questions" | "test.exitRequired" | "test.entryRequired" | "test.entryCounts" | "testOut.allowed" | "testOut.pauseMin" | "repeat.allowed" | "progress.maxPlaybackRate" | "progress.slackSec" | "course.deliveryMode" | "course.moduleSize" | "course.closingClub" | "course.clubInCompletion";
+                /** @enum {string} */
+                level: "platform" | "school" | "course" | "module" | "lesson" | "step";
+                preset: string | null;
+                value: unknown;
+            }[];
+            layerVersion: number;
+            scopeId: string;
+            /** @enum {string} */
+            scopeKind: "platform" | "school" | "course" | "module" | "lesson" | "step";
+            values: {
+                "completion.course"?: components["schemas"]["LearningScopeRulesDto__schema0"];
+                "completion.lesson"?: components["schemas"]["LearningScopeRulesDto__schema0"];
+                "completion.module"?: components["schemas"]["LearningScopeRulesDto__schema0"];
+                "completion.step"?: components["schemas"]["LearningScopeRulesDto__schema0"];
+                "course.closingClub"?: boolean;
+                "course.clubInCompletion"?: boolean;
+                /** @enum {string} */
+                "course.deliveryMode"?: "online" | "offline" | "open";
+                "course.moduleSize"?: number;
+                /** @enum {string} */
+                lockedVisibility?: "hidden" | "locked";
+                /** @enum {string} */
+                order?: "strict" | "free";
+                "progress.maxPlaybackRate"?: number;
+                "progress.slackSec"?: number;
+                "repeat.allowed"?: boolean;
+                "test.attempts"?: number | "unlimited";
+                "test.entryCounts"?: boolean;
+                "test.entryRequired"?: boolean;
+                "test.exitRequired"?: boolean;
+                "test.pauseMin"?: number;
+                "test.questions"?: number | "all";
+                "test.threshold"?: number;
+                "testOut.allowed"?: boolean;
+                "testOut.pauseMin"?: number;
+                unlock?: {
+                    /** @constant */
+                    kind: "immediate";
+                } | {
+                    /** @constant */
+                    kind: "after-previous";
+                } | {
+                    /** Format: date-time */
+                    instant: string;
+                    /** @constant */
+                    kind: "from-date";
+                } | {
+                    /** @constant */
+                    kind: "expression";
+                    rule: components["schemas"]["LearningScopeRulesDto__schema0"];
+                };
+                "viewed.podcast.percent"?: number;
+                "viewed.video.percent"?: number;
+            };
+        };
+        LearningScopeRulesDto__schema0: {
+            condition: string;
+            /** Format: uuid */
+            module?: string;
+            percent?: number;
+            /** Format: uuid */
+            step?: string;
+            test?: string;
+        } | {
+            all: components["schemas"]["LearningScopeRulesDto__schema0"][];
+        } | {
+            any: components["schemas"]["LearningScopeRulesDto__schema0"][];
+        } | {
+            nOf: {
+                n: number;
+                of: components["schemas"]["LearningScopeRulesDto__schema0"][];
+            };
+        };
+        LearningStepAdminDto: {
+            durationMin: number;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            lessonId: string;
+            media: {
+                contentType: string;
+                sizeBytes: number;
+            } | null;
+            payload: {
+                [key: string]: unknown;
+            };
+            position: number;
+            questions: {
+                correctiveText: string | null;
+                /** Format: uuid */
+                id: string;
+                options: {
+                    correct: boolean;
+                    /** Format: uuid */
+                    id: string;
+                    text: string;
+                }[];
+                text: string;
+            }[] | null;
+            source: {
+                embedRef: string;
+                /** @enum {string} */
+                provider: "rutube" | "youtube" | "vk" | "cdnvideo";
+            } | null;
+            title: string;
+            /** @enum {string} */
+            type: "video" | "download" | "test";
+            version: number;
+        };
+        LearningStepReadDto: {
+            body: {
+                durationSec: number;
+                embedRef: string;
+                positionSec: number;
+                /** @enum {string} */
+                provider: "rutube" | "youtube" | "vk" | "cdnvideo";
+                /** @constant */
+                type: "video";
+                watchedPercent: number;
+            } | {
+                fileName: string;
+                fileSizeBytes: number;
+                mediaUrl: string;
+                opened: boolean;
+                /** @constant */
+                type: "download";
+            } | {
+                attemptsLeft: number | null;
+                /** @constant */
+                kind: "exit";
+                lastResult: {
+                    passed: boolean;
+                    score: number;
+                } | null;
+                questionCount: number;
+                /** Format: uuid */
+                testId: string;
+                threshold: number;
+                /** @constant */
+                type: "test";
+            };
+            courseSlug: string;
+            lessonCompletionSentence: string;
+            /** Format: uuid */
+            lessonId: string;
+            nextStepId: string | null;
+            step: {
+                completionSentence: string;
+                durationMin: number;
+                /** Format: uuid */
+                id: string;
+                state: {
+                    /** @constant */
+                    status: "done";
+                } | {
+                    /** @constant */
+                    status: "current";
+                } | {
+                    /** @constant */
+                    status: "open";
+                } | {
+                    reason: {
+                        /** @constant */
+                        kind: "previous";
+                    } | {
+                        /** Format: date-time */
+                        at: string;
+                        /** @constant */
+                        kind: "date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                    } | {
+                        /** @constant */
+                        kind: "registration";
+                    };
+                    /** @constant */
+                    status: "locked";
+                } | {
+                    /** @constant */
+                    status: "test-out-reachable";
+                };
+                title: string;
+                /** @enum {string} */
+                type: "video" | "download" | "test";
+            };
+        };
         LegacyBroadcastCreateDto: {
             /** @enum {string} */
             audience: "doctors" | "experts";
@@ -4540,6 +5311,18 @@ export interface components {
             /** @enum {string} */
             mode: "open" | "advance" | "threshold";
             pulCost: number;
+        };
+        RecordLearningFactResponseDto: {
+            changed: {
+                /** Format: uuid */
+                itemId: string;
+                /** @enum {string} */
+                itemKind: "step" | "lesson" | "module" | "course";
+                /** @enum {string} */
+                status: "done" | "current" | "open" | "locked" | "test-out-reachable";
+            }[];
+            /** @enum {string} */
+            outcome: "recorded" | "duplicate";
         };
         RegisterRequestDto: {
             captchaToken?: string;
@@ -6501,7 +7284,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningCourseListDto"];
+                };
             };
         };
     };
@@ -6518,7 +7303,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningCourseAdminDto"];
+                };
             };
         };
     };
@@ -6537,7 +7324,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningCourseCompositionDto"];
+                };
             };
         };
     };
@@ -6556,7 +7345,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningCourseAdminDto"];
+                };
             };
         };
     };
@@ -6575,7 +7366,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningCourseAdminDto"];
+                };
             };
         };
     };
@@ -6592,7 +7385,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningLessonAdminDto"];
+                };
             };
         };
     };
@@ -6611,7 +7406,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningLessonAdminDto"];
+                };
             };
         };
     };
@@ -6630,7 +7427,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningLessonAdminDto"];
+                };
             };
         };
     };
@@ -6649,7 +7448,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningLessonAdminDto"];
+                };
             };
         };
     };
@@ -6668,7 +7469,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningLessonAdminDto"];
+                };
             };
         };
     };
@@ -6687,7 +7490,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningLessonAdminDto"];
+                };
             };
         };
     };
@@ -6704,7 +7509,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningModuleAdminDto"];
+                };
             };
         };
     };
@@ -6721,7 +7528,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningPresetListDto"];
+                };
             };
         };
     };
@@ -6741,7 +7550,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningScopeRulesDto"];
+                };
             };
         };
     };
@@ -6761,7 +7572,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningScopeRulesDto"];
+                };
             };
         };
     };
@@ -6781,7 +7594,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningScopeRulesDto"];
+                };
             };
         };
     };
@@ -6798,7 +7613,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningSchoolListDto"];
+                };
             };
         };
     };
@@ -6815,7 +7632,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningSchoolAdminDto"];
+                };
             };
         };
     };
@@ -6832,7 +7651,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningStepAdminDto"];
+                };
             };
         };
     };
@@ -6851,7 +7672,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningStepAdminDto"];
+                };
             };
         };
     };
@@ -6870,7 +7693,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningStepAdminDto"];
+                };
             };
         };
     };
@@ -6889,7 +7714,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningStepAdminDto"];
+                };
             };
         };
     };
@@ -6908,7 +7735,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningStepAdminDto"];
+                };
             };
         };
     };
@@ -8236,7 +9065,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningCoursePathDto"];
+                };
             };
         };
     };
@@ -8255,7 +9086,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningLessonReadDto"];
+                };
             };
         };
     };
@@ -8546,7 +9379,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningAttemptResultDto"];
+                };
             };
         };
     };
@@ -8563,7 +9398,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["RecordLearningFactResponseDto"];
+                };
             };
         };
     };
@@ -8582,7 +9419,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningStepReadDto"];
+                };
             };
         };
     };
@@ -8601,7 +9440,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LearningAttemptDto"];
+                };
             };
         };
     };

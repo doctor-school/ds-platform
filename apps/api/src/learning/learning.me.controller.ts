@@ -25,6 +25,13 @@ import type { z } from "zod";
 import { Authz } from "../authz/index.js";
 import type { Role } from "../authz/authz.types.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { ApiCreatedResponse, ApiOkResponse } from "@nestjs/swagger";
+import {
+  LearningAttemptDto,
+  LearningAttemptResultDto,
+  LearningStepReadDto,
+  RecordLearningFactResponseDto,
+} from "./learning.dto.js";
 import { LearningProblemFilter } from "./learning.errors.js";
 import { callerPersonId } from "./learning.person.js";
 
@@ -52,6 +59,7 @@ export class LearningMeController {
   @Get("steps/:stepId")
   @Header("Cache-Control", "no-store")
   @Authz({ ...ME, audit: "none", tests: ["EARS-15", "EARS-16", "EARS-22"] })
+  @ApiOkResponse({ type: LearningStepReadDto })
   async step(
     @Param("stepId") stepId: string,
     @Req() req: FastifyRequest,
@@ -64,6 +72,7 @@ export class LearningMeController {
   @Post("facts")
   @HttpCode(200)
   @Authz({ ...ME, audit: "low-stakes", tests: ["EARS-10", "EARS-22"] })
+  @ApiOkResponse({ type: RecordLearningFactResponseDto })
   async fact(@Req() req: FastifyRequest): Promise<RecordLearningFactResponse> {
     const personId = await callerPersonId(this.db, req);
     const body = parse(RecordLearningFactRequestSchema, req.body);
@@ -73,6 +82,7 @@ export class LearningMeController {
   @Post("tests/:testId/attempts")
   @HttpCode(201)
   @Authz({ ...ME, audit: "low-stakes", tests: ["EARS-18", "EARS-22"] })
+  @ApiCreatedResponse({ type: LearningAttemptDto })
   async start(
     @Param("testId") testId: string,
     @Req() req: FastifyRequest,
@@ -85,6 +95,7 @@ export class LearningMeController {
   @Post("attempts/:attemptId/submit")
   @HttpCode(200)
   @Authz({ ...ME, audit: "low-stakes", tests: ["EARS-18", "EARS-22"] })
+  @ApiOkResponse({ type: LearningAttemptResultDto })
   async submit(
     @Param("attemptId") attemptId: string,
     @Req() req: FastifyRequest,

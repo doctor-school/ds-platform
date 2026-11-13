@@ -52,6 +52,19 @@ import {
   IdempotencyService,
 } from "../taxonomy/idempotency.service.js";
 import { TaxonomyError } from "../taxonomy/taxonomy.errors.js";
+import { ApiCreatedResponse, ApiOkResponse } from "@nestjs/swagger";
+import {
+  LearningCourseAdminDto,
+  LearningCourseCompositionDto,
+  LearningCourseListDto,
+  LearningLessonAdminDto,
+  LearningModuleAdminDto,
+  LearningPresetListDto,
+  LearningSchoolAdminDto,
+  LearningSchoolListDto,
+  LearningScopeRulesDto,
+  LearningStepAdminDto,
+} from "./learning.dto.js";
 import { adminCommand, LearningProblemFilter } from "./learning.errors.js";
 
 // 024 EARS-1, EARS-4, EARS-9, EARS-28, EARS-29 (#4011) — the learning admin
@@ -105,6 +118,7 @@ export class LearningAdminController {
 
   @Get("schools")
   @Authz({ ...READ, tests: ["EARS-1"] })
+  @ApiOkResponse({ type: LearningSchoolListDto })
   async schools(): Promise<unknown> {
     return { data: await adminCommand(() => this.admin.listSchools()) };
   }
@@ -112,6 +126,7 @@ export class LearningAdminController {
   @Post("schools")
   @HttpCode(201)
   @Authz({ ...WRITE, tests: ["EARS-1"] })
+  @ApiCreatedResponse({ type: LearningSchoolAdminDto })
   createSchool(
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
@@ -127,6 +142,7 @@ export class LearningAdminController {
 
   @Get("courses")
   @Authz({ ...READ, tests: ["EARS-1"] })
+  @ApiOkResponse({ type: LearningCourseListDto })
   async courses(@Query("schoolId") schoolId?: string): Promise<unknown> {
     if (schoolId !== undefined) requireUuid(schoolId);
     return { data: await adminCommand(() => this.admin.listCourses(schoolId)) };
@@ -135,6 +151,7 @@ export class LearningAdminController {
   @Post("courses")
   @HttpCode(201)
   @Authz({ ...WRITE, tests: ["EARS-1"] })
+  @ApiCreatedResponse({ type: LearningCourseAdminDto })
   createCourse(
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
@@ -150,6 +167,7 @@ export class LearningAdminController {
 
   @Get("courses/:id")
   @Authz({ ...READ, tests: ["EARS-1", "EARS-28"] })
+  @ApiOkResponse({ type: LearningCourseCompositionDto })
   async course(
     @Param("id") id: string,
     @Res({ passthrough: true }) reply: FastifyReply,
@@ -165,6 +183,7 @@ export class LearningAdminController {
   @Post("courses/:id/publish")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-4"] })
+  @ApiOkResponse({ type: LearningCourseAdminDto })
   publishCourse(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
@@ -176,6 +195,7 @@ export class LearningAdminController {
   @Post("courses/:id/unpublish")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-4"] })
+  @ApiOkResponse({ type: LearningCourseAdminDto })
   unpublishCourse(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
@@ -205,6 +225,7 @@ export class LearningAdminController {
   @Post("modules")
   @HttpCode(201)
   @Authz({ ...WRITE, tests: ["EARS-1", "EARS-28"] })
+  @ApiCreatedResponse({ type: LearningModuleAdminDto })
   createModule(
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
@@ -221,6 +242,7 @@ export class LearningAdminController {
   @Post("lessons")
   @HttpCode(201)
   @Authz({ ...WRITE, tests: ["EARS-1", "EARS-28"] })
+  @ApiCreatedResponse({ type: LearningLessonAdminDto })
   createLesson(
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
@@ -236,6 +258,7 @@ export class LearningAdminController {
 
   @Get("lessons/:id")
   @Authz({ ...READ, tests: ["EARS-28"] })
+  @ApiOkResponse({ type: LearningLessonAdminDto })
   async lesson(
     @Param("id") id: string,
     @Res({ passthrough: true }) reply: FastifyReply,
@@ -249,6 +272,7 @@ export class LearningAdminController {
   @Patch("lessons/:id")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-28"] })
+  @ApiOkResponse({ type: LearningLessonAdminDto })
   updateLesson(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
@@ -267,6 +291,7 @@ export class LearningAdminController {
   @Post("lessons/:id/publish")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-4"] })
+  @ApiOkResponse({ type: LearningLessonAdminDto })
   publishLesson(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
@@ -278,6 +303,7 @@ export class LearningAdminController {
   @Post("lessons/:id/unpublish")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-4"] })
+  @ApiOkResponse({ type: LearningLessonAdminDto })
   unpublishLesson(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
@@ -306,6 +332,7 @@ export class LearningAdminController {
   @Put("lessons/:id/step-order")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-28"] })
+  @ApiOkResponse({ type: LearningLessonAdminDto })
   reorderSteps(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
@@ -327,6 +354,7 @@ export class LearningAdminController {
   @Post("steps")
   @HttpCode(201)
   @Authz({ ...WRITE, tests: ["EARS-2", "EARS-28"] })
+  @ApiCreatedResponse({ type: LearningStepAdminDto })
   createStep(
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
@@ -343,6 +371,7 @@ export class LearningAdminController {
   @Patch("steps/:id")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-2", "EARS-28"] })
+  @ApiOkResponse({ type: LearningStepAdminDto })
   updateStep(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
@@ -361,6 +390,7 @@ export class LearningAdminController {
   @Delete("steps/:id")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-28"] })
+  @ApiOkResponse({ type: LearningStepAdminDto })
   removeStep(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
@@ -379,6 +409,7 @@ export class LearningAdminController {
   @Put("steps/:id/source")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-4", "EARS-28"] })
+  @ApiOkResponse({ type: LearningStepAdminDto })
   setStepSource(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
@@ -403,6 +434,7 @@ export class LearningAdminController {
   @Put("steps/:id/media")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-4", "EARS-28"] })
+  @ApiOkResponse({ type: LearningStepAdminDto })
   async setStepMedia(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
@@ -487,12 +519,14 @@ export class LearningAdminController {
 
   @Get("presets")
   @Authz({ ...READ, tests: ["EARS-9", "EARS-29"] })
+  @ApiOkResponse({ type: LearningPresetListDto })
   async presets(): Promise<unknown> {
     return { data: await adminCommand(() => this.admin.presets()) };
   }
 
   @Get("rules/:scopeKind/:scopeId")
   @Authz({ ...READ, tests: ["EARS-5", "EARS-29"] })
+  @ApiOkResponse({ type: LearningScopeRulesDto })
   async rules(
     @Param("scopeKind") rawKind: string,
     @Param("scopeId") scopeId: string,
@@ -507,6 +541,7 @@ export class LearningAdminController {
   @Put("rules/:scopeKind/:scopeId")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-5", "EARS-29"] })
+  @ApiOkResponse({ type: LearningScopeRulesDto })
   setRules(
     @Param("scopeKind") rawKind: string,
     @Param("scopeId") scopeId: string,
@@ -528,6 +563,7 @@ export class LearningAdminController {
   @Post("rules/:scopeKind/:scopeId/apply-preset")
   @HttpCode(200)
   @Authz({ ...WRITE, tests: ["EARS-9", "EARS-29"] })
+  @ApiOkResponse({ type: LearningScopeRulesDto })
   applyPreset(
     @Param("scopeKind") rawKind: string,
     @Param("scopeId") scopeId: string,

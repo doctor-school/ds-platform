@@ -17,6 +17,8 @@ import {
 } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { ApiOkResponse } from "@nestjs/swagger";
+import { LearningCoursePathDto, LearningLessonReadDto } from "./learning.dto.js";
 import { LearningProblemFilter } from "./learning.errors.js";
 import { optionalPersonId } from "./learning.person.js";
 
@@ -43,6 +45,7 @@ export class LearningPublicController {
     audit: "none",
     tests: ["EARS-13"],
   })
+  @ApiOkResponse({ type: LearningCoursePathDto })
   async path(
     @Param("courseSlug") courseSlug: string,
     @Req() req: FastifyRequest,
@@ -63,6 +66,7 @@ export class LearningPublicController {
     audit: "none",
     tests: ["EARS-15", "EARS-17", "EARS-22"],
   })
+  @ApiOkResponse({ type: LearningLessonReadDto })
   async lesson(
     @Param("lessonId") lessonId: string,
     @Req() req: FastifyRequest,

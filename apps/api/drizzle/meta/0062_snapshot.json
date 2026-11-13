@@ -6351,10 +6351,10 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "learning_facts_event_id_unique": {
-          "name": "learning_facts_event_id_unique",
+        "learning_facts_person_event_key": {
+          "name": "learning_facts_person_event_key",
           "nullsNotDistinct": false,
-          "columns": ["event_id"]
+          "columns": ["person_id", "event_id"]
         }
       },
       "policies": {},
@@ -7654,12 +7654,12 @@
     "public.media_entity_kind": {
       "name": "media_entity_kind",
       "schema": "public",
-      "values": ["project", "expert", "partner", "material"]
+      "values": ["project", "expert", "partner", "material", "learning_step"]
     },
     "public.media_slot": {
       "name": "media_slot",
       "schema": "public",
-      "values": ["cover", "photo", "logo"]
+      "values": ["cover", "photo", "logo", "file"]
     },
     "public.recording_kind": {
       "name": "recording_kind",

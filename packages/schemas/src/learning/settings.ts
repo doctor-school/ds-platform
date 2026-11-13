@@ -123,6 +123,10 @@ export const LEARNING_SETTING_SCHEMAS = {
   "testOut.allowed": z.boolean(),
   "testOut.pauseMin": minutes,
   "repeat.allowed": z.boolean(),
+  /** EARS-10 — the fastest playback the server credits (positions beyond it are clamped). */
+  "progress.maxPlaybackRate": z.number().min(1).max(4),
+  /** EARS-10 — the seconds of position the server credits beyond that allowance. */
+  "progress.slackSec": z.number().int().min(0).max(600),
   "course.deliveryMode": z.enum(["online", "offline", "open"]),
   "course.moduleSize": z.number().int().min(1).max(50),
   "course.closingClub": z.boolean(),

@@ -284,7 +284,7 @@ export const learningFacts = pgTable(
   "learning_facts",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    eventId: text("event_id").notNull().unique(),
+    eventId: text("event_id").notNull(),
     personId: uuid("person_id")
       .notNull()
       .references(() => users.id),
@@ -300,6 +300,9 @@ export const learningFacts = pgTable(
   },
   (t) => [
     index("learning_facts_person_idx").on(t.personId, t.recordedAt),
+    // EARS-10 — a client event id is deduplicated per person: one doctor's id
+    // can never collide with (and silently drop) another doctor's fact.
+    unique("learning_facts_person_event_key").on(t.personId, t.eventId),
     check(
       "learning_facts_source",
       sql`${t.source} IN ('web', 'app', 'system')`,

@@ -33,6 +33,8 @@ export const LEARNING_PLATFORM_SEED: LearningSettings = {
   "testOut.allowed": false,
   "testOut.pauseMin": 0,
   "repeat.allowed": true,
+  "progress.maxPlaybackRate": 2,
+  "progress.slackSec": 30,
   "course.deliveryMode": "online",
   "course.moduleSize": 6,
   "course.closingClub": true,

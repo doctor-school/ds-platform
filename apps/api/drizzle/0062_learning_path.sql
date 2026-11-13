@@ -32,7 +32,7 @@ CREATE TABLE "learning_facts" (
 	"source" text NOT NULL,
 	"occurred_at" timestamp with time zone NOT NULL,
 	"recorded_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "learning_facts_event_id_unique" UNIQUE("event_id"),
+	CONSTRAINT "learning_facts_person_event_key" UNIQUE("person_id","event_id"),
 	CONSTRAINT "learning_facts_source" CHECK ("learning_facts"."source" IN ('web', 'app', 'system'))
 );
 --> statement-breakpoint
@@ -291,10 +291,15 @@ CREATE TRIGGER learning_feedback_audit AFTER INSERT OR UPDATE OR DELETE
 -- three presets, exactly LEARNING_PLATFORM_SEED / LEARNING_PRESET_SEEDS of
 -- packages/learning/src/rules/seed.ts (an api e2e pins rows = constants).
 INSERT INTO "learning_rule_layers" ("scope_kind", "scope_id", "values") VALUES
-	('platform', 'platform', '{"completion.step":{"condition":"viewed"},"completion.lesson":{"all":[{"condition":"all-steps-done"},{"condition":"test-passed","test":"exit"}]},"completion.module":{"all":[{"condition":"lessons-done"},{"condition":"club-attended"}]},"completion.course":{"condition":"lessons-done"},"viewed.video.percent":100,"viewed.podcast.percent":90,"unlock":{"kind":"after-previous"},"order":"strict","lockedVisibility":"locked","test.threshold":80,"test.attempts":"unlimited","test.pauseMin":0,"test.questions":"all","test.exitRequired":true,"test.entryRequired":false,"test.entryCounts":false,"testOut.allowed":false,"testOut.pauseMin":0,"repeat.allowed":true,"course.deliveryMode":"online","course.moduleSize":6,"course.closingClub":true,"course.clubInCompletion":false}'::jsonb);
+	('platform', 'platform', '{"completion.step":{"condition":"viewed"},"completion.lesson":{"all":[{"condition":"all-steps-done"},{"condition":"test-passed","test":"exit"}]},"completion.module":{"all":[{"condition":"lessons-done"},{"condition":"club-attended"}]},"completion.course":{"condition":"lessons-done"},"viewed.video.percent":100,"viewed.podcast.percent":90,"unlock":{"kind":"after-previous"},"order":"strict","lockedVisibility":"locked","test.threshold":80,"test.attempts":"unlimited","test.pauseMin":0,"test.questions":"all","test.exitRequired":true,"test.entryRequired":false,"test.entryCounts":false,"testOut.allowed":false,"testOut.pauseMin":0,"repeat.allowed":true,"progress.maxPlaybackRate":2,"progress.slackSec":30,"course.deliveryMode":"online","course.moduleSize":6,"course.closingClub":true,"course.clubInCompletion":false}'::jsonb);
 --> statement-breakpoint
 INSERT INTO "learning_presets" ("name", "values") VALUES
 	('Путь (Duolingo)', '{"order":"strict","unlock":{"kind":"after-previous"},"testOut.allowed":true,"repeat.allowed":true,"lockedVisibility":"locked","test.exitRequired":true}'::jsonb),
 	('Открытый курс', '{"unlock":{"kind":"immediate"},"order":"free","completion.lesson":{"all":[{"condition":"all-steps-done"},{"condition":"test-passed","test":"exit"}]},"test.exitRequired":true}'::jsonb),
 	('ДПО / аккредитация', '{"completion.lesson":{"all":[{"condition":"all-steps-done"},{"condition":"test-passed","test":"exit"}]},"test.threshold":80,"test.entryRequired":true,"order":"strict","testOut.allowed":false,"test.exitRequired":true}'::jsonb);
 -- learning-seed:end
+--> statement-breakpoint
+-- 012 media pipeline: a step's video / download file is a media slot whose
+-- released object the cleanup worker reclaims (024-design §2).
+ALTER TYPE "public"."media_entity_kind" ADD VALUE 'learning_step';--> statement-breakpoint
+ALTER TYPE "public"."media_slot" ADD VALUE 'file';

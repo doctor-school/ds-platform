@@ -281,6 +281,21 @@ describe("024 learning model", () => {
     expect(publishRequirements(lesson, entry, path, stored, withMedia).map((i) => i.path)).toEqual(["entryTest"]);
   });
 
+  it("EARS-10: a reported position is clamped to the media length and to what the server clock allows since the last accepted one", async () => {
+    const { clampReportedPosition } = await import("./catalog/element-types.js");
+    expect(LEARNING_PLATFORM_SEED["progress.maxPlaybackRate"]).toBeGreaterThan(1);
+    expect(LEARNING_PLATFORM_SEED["progress.slackSec"]).toBeGreaterThanOrEqual(0);
+    const rule = { maxPlaybackRate: 2, slackSec: 10 };
+    // A forged jump to the end right after the first report is clamped, not refused.
+    expect(clampReportedPosition({ reportedSec: 600, durationSec: 600, previousMaxSec: 0, elapsedSec: 30, ...rule })).toBe(70);
+    // Honest playback inside the allowance passes unchanged.
+    expect(clampReportedPosition({ reportedSec: 50, durationSec: 600, previousMaxSec: 0, elapsedSec: 30, ...rule })).toBe(50);
+    // Never past the real media length, never below zero.
+    expect(clampReportedPosition({ reportedSec: 9999, durationSec: 600, previousMaxSec: 590, elapsedSec: 3600, ...rule })).toBe(600);
+    // A first report has no previous fact: only the slack is allowed.
+    expect(clampReportedPosition({ reportedSec: 600, durationSec: 600, previousMaxSec: 0, elapsedSec: null, ...rule })).toBe(10);
+  });
+
   it("EARS-26: the rule sentences and lock reasons carry no money or «бесплатно» wording", async () => {
     const { LEARNING_COPY_RU } = await import("./copy/learning-copy-ru.js");
     const text = JSON.stringify(LEARNING_COPY_RU, (_k, v) => (typeof v === "function" ? String(v) : v)).toLowerCase();

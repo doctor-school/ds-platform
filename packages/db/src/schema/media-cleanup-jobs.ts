@@ -44,17 +44,24 @@ export const mediaCleanupKind = pgEnum("media_cleanup_kind", [
 
 /**
  * Which entity kind owned the released reference: the taxonomy kinds, plus the
- * 048 material whose cover rides the same media pipeline.
+ * 048 material whose cover rides the same media pipeline, and the 024
+ * learning step whose video / download file does.
  */
 export const mediaEntityKind = pgEnum("media_entity_kind", [
   "project",
   "expert",
   "partner",
   "material",
+  "learning_step",
 ]);
 
 /** The kind-specific media slot the reference occupied. */
-export const mediaSlot = pgEnum("media_slot", ["cover", "photo", "logo"]);
+export const mediaSlot = pgEnum("media_slot", [
+  "cover",
+  "photo",
+  "logo",
+  "file",
+]);
 
 /**
  * Enum-only last error (012-design §5.1) — never free-text provider output, so
@@ -130,7 +137,10 @@ export const mediaCleanupJobs = pgTable(
       "media_cleanup_jobs_active_has_locator",
       sql`${t.status} <> 'active' OR (${t.objectKey} IS NOT NULL AND ${t.entityId} IS NOT NULL)`,
     ),
-    check("media_cleanup_jobs_lease_epoch_non_negative", sql`${t.leaseEpoch} >= 0`),
+    check(
+      "media_cleanup_jobs_lease_epoch_non_negative",
+      sql`${t.leaseEpoch} >= 0`,
+    ),
     check(
       "media_cleanup_jobs_attempts_non_negative",
       sql`${t.attemptCount} >= 0`,

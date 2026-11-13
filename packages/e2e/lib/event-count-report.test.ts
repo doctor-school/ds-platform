@@ -3,6 +3,7 @@ import {
   assertEventCountEvidence,
   eventCountOriginals,
   eventCountBackgrounds,
+  assertNoCountCredentials,
 } from "./event-count-report.js";
 
 function proof() {
@@ -96,6 +97,31 @@ function proof() {
 }
 
 describe("4035 exact original evidence", () => {
+  it("refuses configured and dynamically issued credentials in either export encoding", () => {
+    const secret = "fixture-issued-private-cookie-4035";
+    expect(() =>
+      assertNoCountCredentials(
+        { "ops.jsonl": Buffer.from(JSON.stringify({ session: secret })) },
+        [secret],
+      ),
+    ).toThrow();
+    expect(() =>
+      assertNoCountCredentials(
+        {
+          "ops.jsonl": Buffer.concat([
+            Buffer.from([255, 254]),
+            Buffer.from(JSON.stringify({ session: secret }), "utf16le"),
+          ]),
+        },
+        [secret],
+      ),
+    ).toThrow();
+    expect(() =>
+      assertNoCountCredentials({ "safe.json": Buffer.from('{"count":1}') }, [
+        secret,
+      ]),
+    ).not.toThrow();
+  });
   it("accepts all three originals, fifteen ordered owning witnesses and retained history", () => {
     const value = proof();
     expect(() => assertEventCountEvidence(value)).not.toThrow();

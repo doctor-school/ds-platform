@@ -431,13 +431,11 @@ export class EventCountWorld {
     await this.page.locator("#school").fill("Кардиология");
     await this.page.locator("#startsAtMsk").fill(msk);
     await this.page.locator("#durationMin").fill("90");
-    await this.page
-      .getByTestId("program-pdf")
-      .setInputFiles({
-        name: "program.pdf",
-        mimeType: "application/pdf",
-        buffer: PDF,
-      });
+    await this.page.getByTestId("program-pdf").setInputFiles({
+      name: "program.pdf",
+      mimeType: "application/pdf",
+      buffer: PDF,
+    });
     await chooseEventClassification(this.page, { audience: "experts" });
   }
   async saveNewEvent(name: string): Promise<string> {
@@ -561,10 +559,11 @@ export class EventCountWorld {
   async background(clause: (typeof eventCountBackgrounds)[number]) {
     if (clause === "admin") {
       const read = await this.page.evaluate(async () => {
-        const r = await fetch("/v1/admin/auth/me");
+        const r = await fetch("/v1/admin/auth/session");
         return { status: r.status, body: await r.json() };
       });
       expect(read.status).toBe(200);
+      expect(read.body.roles).toEqual(this.adminRoles);
       await expect(this.page.getByTestId("event-form")).toBeVisible();
       this.receipt(clause, {
         status: read.status,

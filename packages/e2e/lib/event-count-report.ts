@@ -13,6 +13,32 @@ export const eventCountBackgrounds = [
   "consumers",
 ] as const;
 
+export function decodeCountEvidence(bytes: Buffer): string {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe)
+    return bytes.subarray(2).toString("utf16le");
+  if (bytes[0] === 0xfe && bytes[1] === 0xff)
+    return Buffer.from(bytes.subarray(2)).swap16().toString("utf16le");
+  return bytes.toString("utf8").replace(/^\uFEFF/, "");
+}
+export function assertNoCountCredentials(
+  files: Record<string, string | Buffer>,
+  secrets: readonly string[],
+) {
+  for (const [name, bytes] of Object.entries(files)) {
+    const text = typeof bytes === "string" ? bytes : decodeCountEvidence(bytes);
+    if (secrets.some((secret) => secret.length >= 6 && text.includes(secret)))
+      throw new Error(
+        `Configured or dynamically issued credential in safe export: ${name}`,
+      );
+    if (
+      /"(?:accessToken|refreshToken|csrfToken|password|authorization|cookie)"\s*:/i.test(
+        text,
+      )
+    )
+      throw new Error(`Credential field in safe export: ${name}`);
+  }
+}
+
 export interface CountResource {
   title: string;
   head: string;

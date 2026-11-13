@@ -132,7 +132,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await call(h, "GET", `/learning/courses/${draft.courseSlug}/path`)).status).toBe(404);
     });
 
-    it("EARS-15, EARS-17: the lesson read names its completion rule and carries no step payload", async () => {
+    it("EARS-15/17:the lesson read names its completion rule and carries no step payload", async () => {
       const res = await call<{
         lesson: { completionSentence: string };
         steps: Record<string, unknown>[];
@@ -149,7 +149,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await start({ "user-agent": "x" })).status).toBe(401);
     });
 
-    it("EARS-16, EARS-18: the doctor reads the open video from its provider source; a locked step is 403 with no content", async () => {
+    it("EARS-16/18:the doctor reads the open video from its provider source; a locked step is 403 with no content", async () => {
       const d = await doctor(h);
       const video = await call<{ body: Record<string, unknown> }>(
         h,
@@ -243,7 +243,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     // ── The cascade and 025 (EARS-11, EARS-12, EARS-18) ───────────────────
 
-    it("EARS-11, EARS-12: content steps → test passed → lesson done records one 025 lesson.completed fact", async () => {
+    it("EARS-11/12:content steps → test passed → lesson done records one 025 lesson.completed fact", async () => {
       const d = await doctor(h);
       await doContentSteps(d.headers);
       const attempt = await start(d.headers);

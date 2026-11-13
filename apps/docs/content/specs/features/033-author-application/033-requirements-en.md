@@ -1,0 +1,155 @@
+---
+title: "033 — Author application: the «Подать заявку» page and the shared application queue (Requirements, slice 1)"
+description: "Requirements for slice 1 of feature 033: the Academy page «Подать заявку» at academy.doctor.school/apply with its path of the application and author terms as text, the account gate for a guest with return to the form, the form of a signed-in expert (topic, specialty from the Минздрав book or «Другое», format, about) with the purpose-bound personal-data consent, one application per submission, the confirmation state and the «previous application in work» banner; the one admin application queue that also receives the 034 investor requests and the migrated interim partnership requests — list, detail, statuses with an outcome, internal notes, platform-administrator-only access with the second factor and the 010 change audit; the team notification and the «Заявка получена» receipt that never lose an application; bot protection of every public intake; retention and erasure under ADR-0009."
+slug: 033-author-application
+status: Draft
+issues: [4028, 4029, 4030, 4031, 4032, 4033, 4034]
+surface: user-facing
+storefronts: academy-only
+storefronts_reason: "The «Подать заявку» page is an Academy page (experts apply to make a project with the Academy, and projects are Academy-owned per ADR-0016 §4) plus the apps/admin application queue; the doctor storefront has no author-application surface (EARS-2)."
+tracker: https://github.com/doctor-school/ds-platform/issues/1802
+prior_decisions:
+  - "ADR-0016 §1 — one person, one account: an author application is sent under the same Doctor.School account a doctor uses; there is no expert account"
+  - "ADR-0016 §7 — consents are separate per purpose: the application consent is its own purpose and version, never folded into registration consent"
+  - "ADR-0016 §8 — storefront ownership: the page is `academy`; applications and the queue are admin-only"
+  - "ADR-0009 §2.3 / §2.6 — erasure on the subject's request; the application tables get their rows in the retention matrix at design time"
+  - "ADR-0014 §2 — every EARS clause carries `realizes: US-N` of `033-product.md`"
+  - "ADR-0006 §4 — triplet layout, flat EARS numbering"
+  - "ADR-0013 §A1 — one capability, one owner: the application queue is registered in capability-ownership.md; 034 adds a request kind to it and never a second queue"
+  - "ADR-0002 / ADR-0003 — NestJS + Zod contract in `packages/schemas` + Drizzle schema in `packages/db`"
+  - "003 EARS-16 / EARS-17 — the bot-protection gate (`@BotProtected`) and its stable codes; 003 / 021 — sign-in and registration with return to the page"
+  - "010 — the change audit; 011 / 047 — `platform_admin` in the dedicated admin session with the second factor"
+  - "012 EARS-16 / EARS-17 / EARS-23 — admin session, CSRF, idempotency, preconditions and the `AdminDataList` list contract reused by the queue"
+  - "046 EARS-16 — the purpose-bound submission consent recorded in `consent_records` (precedent for the application consent)"
+lang: en
+---
+
+> **EN (this)** · **RU:** [`033-requirements-ru.md`](./033-requirements-ru.md)
+>
+> Product source: [`033-product.md`](./033-product.md) (slice 1). Public UI: the canvas `design-source/academy-apply.dc.html` (switch «Объём» = «срез 1») and the «Экспертам» entries of `design-source/academy-home.dc.html` (Stage A pending). Admin UI: approved-non-canvas (AGENTS.md §6; the admin-screen default of #3490) — the states are listed in [`033-design.md`](./033-design.md) «UI composition». Hence `surface: user-facing`.
+
+# 033 — Author application: the «Подать заявку» page and the shared application queue (Requirements, slice 1)
+
+## Outcomes
+
+- `academy.doctor.school/apply` is a real page: an expert reads what they can make with the Academy, how the application is handled and who contacts them, before filling anything in.
+- An application is sent only under a signed-in Doctor.School account; a guest signs in or registers and comes back to the form; there is no expert account.
+- One submission is one application, stored with its purpose-bound consent; a failure never loses what the expert typed.
+- Every request to the Academy team — author applications, 034 investor requests and the migrated interim partnership requests — lives in one admin queue, worked by platform administrators with statuses, an outcome and internal notes, every change attributed and timed.
+- The team learns of each new application without watching the admin, and the applicant gets «Заявка получена»; neither notification can lose the application.
+- Application personal data is kept only under the ADR-0009 retention row and erased on the subject's request.
+
+## Scope
+
+- The Academy route `/apply` in `apps/portal` with the page, the account gate and the form, and the «Экспертам → Подать заявку» entries of the Academy home.
+- The application queue in `apps/api` (a new `applications` module): the author intake, the partnership intake, the applicant read, the admin list / detail / status / note / erasure endpoints, the team notification and the receipt email over `apps/api/src/mailer`, the retention purge; their Zod contract in `packages/schemas`; the Drizzle schema and forward migration in `packages/db`.
+- The admin «Заявки» section in `apps/admin` (list, detail with status, notes and erasure), built from the approved admin kit of `@ds/design-system`.
+- The re-pointing of the interim home partnership form at the queue, the one-off import of its stored records and the retirement of its file storage.
+- The «Пока не готовы?» and «Пока ждёте — посмотрите» project links of the page over the 030 catalog read and the shared project card.
+
+### Out of scope
+
+- Producer routing (the administrator assigns a producer, the producer decides) and the producer as the single contact (REQ-110, REQ-142) — later slice of 033, `blocked_by` 040.
+- The draft that survives sign-in and the guest filling the form first — later slice of 033, `blocked_by` 031.
+- Links to the experts and the expert card on the page — later slice of 033, after the expert pages of 031.
+- The clinical-case field (REQ-141) — later slice of 033, with the methodologist route of 040.
+- The growth path of the expert (REQ-131, canvas variants А/Б/В) — later slice, `blocked_by` 031; the author terms as live data — `blocked_by` 036 (slice 1 shows them as text).
+- The applicant's «my applications» view in the cabinet and any email to the applicant beyond «Заявка получена».
+- Roles narrower than `platform_admin` for working the queue — 039.
+- The investor page, its form and its request kind — 034 (it adds its kind to this queue, EARS-7 / design «Request kinds»).
+
+## Constraints
+
+- An author application references the applicant's `users` row; the account's name, email and phone are read from it, never copied into the application (ADR-0016 §1).
+- The application consent is its own purpose `author-application-personal-data` with its own version, recorded in `consent_records`, separate from registration consents (ADR-0016 §7).
+- The specialty is either one entry of the Минздрав book `specialties_minzdrav` by its code or the free text of «Другое» — never both, never a code outside the book.
+- A request kind is a member of a closed enum in `packages/schemas` with its own payload schema; adding a kind is a schema + migration change of the queue, never a second table or a second list.
+- Every public intake into the queue is `@BotProtected` (003 EARS-17); no kind may be intaken without it.
+- The applicant never receives a status beyond «received», an outcome, a note or an administrator identity on any read or email.
+- The doctor storefront (`apps/doctor`) serves no `/apply` route and reads no application contract (ADR-0016 §8).
+
+## Prior decisions
+
+- PRD [`033-product.md`](./033-product.md) slice 1 and its recorded lead decisions of 2026-10-28 (field set = canvas minus the clinical case; «Заявка получена» email; interim partnership requests migrated; retention row at design; no producer, growth path or expert link on the slice-1 page).
+- The settlements of the PRD's _agent-proposed — UNCONFIRMED_ items are recorded in [`033-design.md`](./033-design.md) «Lead decisions».
+- ADR-0016 §1, §7, §8; ADR-0009 §2.3, §2.6; ADR-0014 §2; ADR-0006 §4; ADR-0013 §A1; ADR-0002 / ADR-0003 (frontmatter `prior_decisions`).
+- 003 EARS-16 / EARS-17 (bot protection), 012 EARS-16 / EARS-17 / EARS-23 (admin session, idempotency, preconditions, list), 046 EARS-16 (purpose-bound submission consent), 010 (change audit), 047 (`platform_admin`).
+
+## Event Model
+
+**Commands** — `SubmitAuthorApplication` (signed-in expert), `SubmitPartnershipRequest` (guest, interim home form), `ImportPartnershipRecords` (operator, one-off); `MoveApplicationStatus`, `AddApplicationNote`, `EraseApplicationPersonalData` (platform administrator); `PurgeExpiredApplications` (system, daily).
+
+**Events** — `ApplicationSubmitted` (kind, id), `ApplicationTeamNotified` / `ApplicationTeamNoticeFailed`, `ApplicationReceiptSent` / `ApplicationReceiptFailed`, `ApplicationStatusMoved`, `ApplicationNoteAdded`, `ApplicationPersonalDataErased` — the administrator events are 010 change-audit rows under the acting administrator.
+
+**Read models** — the applicant's open author applications (each «received»); the admin queue list (newest first, filtered by kind and status); the admin application detail with its notes.
+
+**Policies** — «one submission, one application» (idempotency key); «the queue is the record of truth; a notification is attempted after the row is committed and its failure is recorded, never raised»; «a public intake is bot-protected»; «the applicant sees only `received`»; «notes are internal»; «closed is final in slice 1»; «a kind is a schema member, not a second queue»; «personal data is erased at term or on request and a tombstone remains».
+
+## EARS requirements
+
+> Flat numbering per ADR-0006 §4. Every clause realizes one or more PRD stories and is covered by `033-scenarios.feature`.
+
+- **EARS-1** _(realizes: US-1)_ — WHEN a visitor, signed in or not, opens `academy.doctor.school/apply`, THE SYSTEM SHALL render the page heading «Подать заявку» with the line on what an expert can make with the Academy (a course-series, a single lesson, a podcast, a talk); the block «Что будет дальше» stating, in order, that an Academy administrator reviews the application and contacts the expert, then programme, production, medical expertise and publication; the text block «Условия автора»; and the form area of EARS-3 or EARS-4; THE SYSTEM SHALL name no producer, show no growth path, no clinical-case field and no link to an expert page.
+- **EARS-2** _(realizes: US-1)_ — WHEN a visitor activates any «Экспертам → Подать заявку» entry of the Academy home or the Academy navigation, THE SYSTEM SHALL lead to `/apply`; THE SYSTEM SHALL serve `/apply` only on the Academy host: the doctor storefront SHALL have no `/apply` route, SHALL import no application contract, and doctor-storefront requests for that path SHALL get its not-found page.
+- **EARS-3** _(realizes: US-2)_ — WHILE the visitor is not signed in, THE SYSTEM SHALL show in place of the form the account gate «Заявка отправляется под той же учётной записью, что у врача» with «Войти» and «Регистрация», each starting the 003 / 021 flow with `/apply` as its return target, and SHALL show no form field; WHEN that flow completes, THE SYSTEM SHALL return the visitor to `/apply` with the form of EARS-4 open.
+- **EARS-4** _(realizes: US-3)_ — WHILE the visitor is signed in, THE SYSTEM SHALL show «Отправите как <display name> · <email>» from the account, and the form with «Тема» (required, trimmed 1–200), «Специальность» (optional; the entries of `specialties_minzdrav` by name, plus «Другое», which reveals a required text field trimmed 1–120), «Формат» (required; one of «курс-сериал», «отдельный урок», «подкаст», «выступление»), «О себе» (optional, trimmed 0–2000), the consent of EARS-6 and «Отправить заявку»; required fields SHALL carry the mark «обязательно».
+- **EARS-5** _(realizes: US-4)_ — WHEN the expert taps «Отправить заявку» with a required field empty, a value out of bounds or the consent unticked, THE SYSTEM SHALL send nothing, SHALL show next to each such field what to fix (the consent: «Отметьте согласие — без него заявку не отправить.») and move focus to the first one, and SHALL keep every other value typed; WHEN the server refuses the body with field errors (`400`), THE SYSTEM SHALL show them next to the same fields with the same rule.
+- **EARS-6** _(realizes: US-8)_ — THE SYSTEM SHALL show the consent checkbox unticked, with the text of the current version of purpose `author-application-personal-data` and a link to the personal-data policy; WHEN an author application is stored, THE SYSTEM SHALL record in the same transaction one `consent_records` row of that purpose and version for the applicant and link it to the application; THE SYSTEM SHALL refuse a submission whose body does not carry the current version tag with `400` and a field error on the consent.
+- **EARS-7** _(realizes: US-3, US-9)_ — WHEN a signed-in caller posts `POST /v1/me/applications/author` with a canonical UUID idempotency key, a valid bot-protection proof and a valid body, THE SYSTEM SHALL store one `applications` row of kind `author`, status `new`, the applicant's user id, the payload (topic, specialty code or «Другое» text, format, about), the consent link and `submitted_at`, and SHALL answer `201 { id, submittedAt }`; a repeat of the same key with the same body SHALL answer the same result and create nothing; the same key with a different body SHALL be refused with `422 IDEMPOTENCY_KEY_REUSED`; an anonymous caller SHALL get `401`, a missing or rejected proof `BOT_PROTECTION_REQUIRED` / `BOT_PROTECTION_REJECTED`, and an unknown specialty code `400` with a field error.
+- **EARS-8** _(realizes: US-5)_ — WHEN the submission fails on the network or with a `5xx`, THE SYSTEM SHALL show «Не удалось отправить — сервер недоступен. Введённое сохранено.» with «Попробовать ещё раз», keep every value, and retry with the same idempotency key; WHILE a submission is in flight, THE SYSTEM SHALL disable «Отправить заявку», so a double tap sends one request.
+- **EARS-9** _(realizes: US-6)_ — WHEN the submission succeeds, THE SYSTEM SHALL replace the form with the state «Заявка отправлена»: an Academy administrator will review the application and contact the expert, and the letter «Заявка получена» comes to the account's email; and SHALL offer «Отправить ещё одну заявку — про другой проект», which opens an empty form with a new idempotency key.
+- **EARS-10** _(realizes: US-7)_ — WHEN a signed-in caller reads `GET /v1/me/applications?kind=author`, THE SYSTEM SHALL return the caller's own author applications that are not `closed`, newest first, each as `{ id, submittedAt, topic, state: "received" }` and nothing else; WHEN the page loads for an expert with at least one such application, THE SYSTEM SHALL show above the form «Ваша предыдущая заявка в работе. Новую можно отправить, если это другой проект.» and keep the form; a failure of that read SHALL hide the banner and keep the form.
+- **EARS-11** _(realizes: US-12)_ — WHEN an application of any kind is committed, THE SYSTEM SHALL send after the commit one team notification email through the `apps/api` mailer chain to every address of the configured team list, carrying the kind, the submission time, the subject line of the application (topic, or company / name) and the link to its admin detail, and no other personal data; THE SYSTEM SHALL record the outcome `sent` or `failed` on the application, SHALL NOT change the intake's answer on a failure, and SHALL mark a `failed` application in the admin list «Команда не уведомлена».
+- **EARS-12** _(realizes: US-6)_ — WHEN an author application is committed, THE SYSTEM SHALL send after the commit one «Заявка получена» email to the applicant account's email, in the platform email layout, stating that an Academy administrator will review the application and contact them, naming the topic and linking to the Academy projects; THE SYSTEM SHALL record `sent` or `failed` on the application and SHALL NOT change the intake's answer on a failure.
+- **EARS-13** _(realizes: US-9)_ — WHEN a platform administrator opens «Заявки» in the admin, THE SYSTEM SHALL list every application on the `AdminDataList` composition newest first, each row with its kind («Автор», «Партнёрство», and every kind added later), submission time, applicant, subject line, status with its outcome, and the «Команда не уведомлена» mark of EARS-11, with filters by kind and by status, cursor paging per 012 EARS-23, and an empty state per filter.
+- **EARS-14** _(realizes: US-10)_ — WHEN a platform administrator opens an application, THE SYSTEM SHALL show everything the applicant sent with its field labels, the submission time, the consent purpose, version and time, the notification outcomes, and the applicant — for an author application the account it came from with its current display name, email and phone, for a no-account kind the contact the requester gave — and the notes of EARS-16 oldest first; an unknown id SHALL be answered `404`.
+- **EARS-15** _(realizes: US-11)_ — WHEN a platform administrator moves an application's status, THE SYSTEM SHALL accept only `new → in_review`, `new → closed` and `in_review → closed`, SHALL require the outcome `accepted` or `declined` exactly when the target is `closed`, SHALL store the status, the outcome, the acting administrator and the time under the application's `If-Match` version, and SHALL refuse any other transition with `409 APPLICATION_TRANSITION_NOT_ALLOWED`, a missing or extra outcome with `400`, and a stale version with `412 PRECONDITION_FAILED`, changing nothing.
+- **EARS-16** _(realizes: US-11)_ — WHEN a platform administrator adds a note to an application, THE SYSTEM SHALL append one immutable note (trimmed 1–2000) with its author and time; no applicant read, applicant email or public read SHALL carry a note, a status other than «received», an outcome or an administrator identity.
+- **EARS-17** _(realizes: US-9, US-10, US-11)_ — THE SYSTEM SHALL serve the «Заявки» section and every admin application endpoint only to a `platform_admin` in the dedicated admin session with the second factor (011, 047), with CSRF, and SHALL refuse anyone else server-side; every mutating admin endpoint SHALL require a canonical UUID idempotency key and, for a status move, the current `If-Match` version per 012 EARS-17; every status move, note and erasure SHALL be recorded in the 010 change audit under the acting administrator.
+- **EARS-18** _(realizes: US-13)_ — WHEN a guest submits the interim partnership form of the Academy home, THE SYSTEM SHALL post it through `POST /v1/public/applications/partnership` with a bot-protection proof and an idempotency key, SHALL store one `applications` row of kind `partnership` with the name, company or clinic, contact, role and the consent of purpose `academy_partnership_contact` with its version tag, SHALL show the form's existing success and error states, and SHALL write no file; a missing or rejected proof SHALL be refused with the 003 codes and a field-invalid body with `400`.
+- **EARS-19** _(realizes: US-13)_ — WHEN the operator runs the one-off partnership import against the interim submissions directory, THE SYSTEM SHALL store every valid stored record as one `applications` row of kind `partnership` keyed by the record's own id, keeping its submission time and consent, so a re-run imports nothing twice; SHALL report the counts imported, already present and invalid with the invalid file names; and SHALL send no team notification for an imported row; the portal SHALL keep no code path that reads or writes that directory.
+- **EARS-20** _(realizes: US-14)_ — WHEN a platform administrator erases an application's personal data on the subject's request («Стереть персональные данные заявителя», confirmed), or WHEN an application has been `closed` for one year (daily purge), THE SYSTEM SHALL replace its payload and contact fields with the erasure tombstone, unlink the applicant user id, delete its notes' bodies, keep kind, status, outcome and times, and SHALL show the application in the admin as «Персональные данные стёрты»; an erased application SHALL not be erased again.
+- **EARS-21** _(realizes: US-1, US-6)_ — WHEN the page renders «Пока не готовы?», THE SYSTEM SHALL show the link «Посмотреть проекты →» to `/projects` and the first item of the 030 public catalog read (030 EARS-8) as the shared project card; WHEN the confirmation state of EARS-9 renders, THE SYSTEM SHALL show «Пока ждёте — посмотрите» linking to `/projects`; WHEN the catalog has no public project or its read fails, THE SYSTEM SHALL show the link and no card.
+- **EARS-22** _(realizes: US-1, US-9)_ — WHILE the viewport is a phone or a narrow screen, THE SYSTEM SHALL keep the page, the account gate, the form with its errors, the confirmation state, the admin queue list and the application detail usable without horizontal scrolling of the page, with every field and action keyboard-reachable, and every one of these screens SHALL pass the platform's `playwright-axe` gate.
+
+## Invariants
+
+- One submission is one application: a repeat of its idempotency key never creates a second row (EARS-7, EARS-8, EARS-18, EARS-19).
+- An author application exists only with a signed-in applicant and a consent row of its purpose (EARS-6, EARS-7).
+- The queue row is committed before any notification is attempted; no notification outcome changes the intake's answer or removes the row (EARS-11, EARS-12).
+- Every intake reachable without an account is bot-protected (EARS-7, EARS-18; 034's kind inherits it).
+- The applicant sees only «received» — never a note, an outcome, another status or an administrator (EARS-10, EARS-16).
+- Every application change by an administrator is made by a `platform_admin` with the second factor and leaves one 010 audit row (EARS-15, EARS-16, EARS-17, EARS-20).
+- No application personal data outlives its retention row (EARS-20); no request lives outside the queue once the import ran (EARS-18, EARS-19).
+
+## Verification
+
+| #    | Type                                             | What it proves                                                                                                                                                                                                                                                                                       |
+| ---- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V-1  | Vitest — `packages/db`                           | The forward migration creates `applications` and `application_notes` with the kind, status and outcome checks, the unique idempotency key and legacy record id, the specialty-or-other check and the consent link (EARS-6, EARS-7, EARS-15).                                                         |
+| V-2  | Vitest e2e — `apps/api`                          | Author intake: `201` with one row and one consent row; replay with the same key; the same key with another body `422`; anonymous `401`; missing / rejected proof; unknown specialty, «Другое» without text, out-of-bounds fields and a stale consent tag `400` with field errors (EARS-6, EARS-7).   |
+| V-3  | Vitest e2e — `apps/api`                          | Team notification and receipt sent after commit with no personal data beyond the subject line in the team email; a mailer failure records `failed`, answers `201` and keeps the row; the admin list mark (EARS-11, EARS-12).                                                                         |
+| V-4  | Vitest e2e — `apps/api`                          | Applicant read returns only own open author applications as «received»; no note, outcome or status leaks (EARS-10, EARS-16).                                                                                                                                                                         |
+| V-5  | Vitest e2e — `apps/api`                          | Admin list order, kind and status filters, paging; detail with the account's current contact; allowed and refused transitions, outcome rule, stale `If-Match` `412`; notes appended; non-`platform_admin` and no-second-factor refused; each change one 010 audit row (EARS-13…EARS-17).             |
+| V-6  | Vitest e2e — `apps/api` + Vitest — `apps/portal` | Partnership intake stores a `partnership` row with its consent and writes no file; the import stores each valid record once, re-run imports nothing, invalid files reported, no notification sent; the portal no longer imports the file store (EARS-18, EARS-19).                                   |
+| V-7  | Vitest e2e — `apps/api`                          | Erasure on request and the daily purge of applications closed for a year replace payload and contact, unlink the user, blank the notes, keep kind / status / outcome / times, refuse a second erasure, audit the administrator action (EARS-20).                                                     |
+| V-8  | Vitest — UI (`apps/portal`)                      | Gate vs form by session; «Отправите как»; required marks; inline errors with focus and kept input; consent error; in-flight disable; failure state and retry with the same key; confirmation and «Отправить ещё одну заявку»; repeat banner (EARS-3…EARS-6, EARS-8…EARS-10).                         |
+| V-9  | Playwright / E2E — Academy                       | A guest opens «Подать заявку» from the home, sees the page and the gate, signs in and returns to the form, submits with a missing topic and is told, fixes it, submits, sees «Заявка отправлена», sees the banner on reload; the server-unavailable branch keeps input and retries (EARS-1…EARS-10). |
+| V-10 | Playwright / E2E — admin                         | A platform administrator sees the new application first in «Заявки», filters by kind, opens it, moves it to «На рассмотрении», adds a note, closes it «Принята»; the applicant's page still shows «received» only; erases a test applicant's data (EARS-13…EARS-17, EARS-20).                        |
+| V-11 | Playwright / E2E — doctor                        | `doctor.school/apply` renders the doctor not-found page (EARS-2).                                                                                                                                                                                                                                    |
+| V-12 | Playwright — Academy                             | «Пока не готовы?» shows the first catalog project card and the projects link; with an empty catalog only the link; the confirmation state links to `/projects` (EARS-21).                                                                                                                            |
+| V-13 | Playwright + axe                                 | At a 390 px viewport the page, the gate, the form with errors, the confirmation, the queue list and the detail have no horizontal page scroll; clean `playwright-axe` runs on each (EARS-22).                                                                                                        |
+
+## Work-package map
+
+Each Issue is a sub-issue of #1802 and ships its UI with its backend; slices and dependencies: `033-design.md` («Delivery slices»). Issue numbers written back by `open-ears-issues`.
+
+| EARS                                            | Issue | Work package                                                                                                                           |
+| ----------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| EARS-6, EARS-7, EARS-20                         | #4028 | **Queue core** — schema and migration, author intake with consent, idempotency and bot protection, retention purge and erasure handler |
+| EARS-11, EARS-12                                | #4029 | **Notifications** — team notification and «Заявка получена» receipt                                                                    |
+| EARS-13, EARS-14, EARS-15, EARS-16, EARS-17     | #4030 | **Admin queue** — «Заявки» list, detail, statuses, notes, erasure action, access and audit                                             |
+| EARS-1…EARS-5, EARS-8, EARS-9, EARS-10, EARS-22 | #4031 | **«Подать заявку» page** — route, home entries, doctor-host absence, gate, form, states, banner, narrow screens and axe                |
+| EARS-18, EARS-19                                | #4032 | **Interim partnership form into the queue** — public intake, home form re-pointed, import, file storage retired                        |
+| EARS-21                                         | #4033 | **Project links of the page** — «Пока не готовы?» card and «Пока ждёте» link over the 030 catalog                                      |
+| V-9 / V-10 journeys (EARS-1…EARS-17, EARS-20)   | #4034 | **Browser journeys** — CI Playwright Academy and admin journeys over the delivered UI; integration Issue                               |

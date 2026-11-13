@@ -307,7 +307,12 @@ export async function courseBySlug(
   return row;
 }
 
-/** EARS-14 — the course's direction, school and the school's leading expert. */
+/**
+ * EARS-14 — the course's direction, school and the school's leading expert, on
+ * the public read: the expert only when publicly visible (012 — published, not
+ * retired, not editorially removed) and the direction only when published and
+ * not retired; otherwise that part is null and the course still reads.
+ */
 export async function coursePlaces(db: Handle, schoolId: string) {
   const [row] = await db
     .select({
@@ -325,8 +330,23 @@ export async function coursePlaces(db: Handle, schoolId: string) {
       },
     })
     .from(learningSchools)
-    .innerJoin(directions, eq(directions.id, learningSchools.directionId))
-    .innerJoin(experts, eq(experts.id, learningSchools.leadExpertId))
+    .leftJoin(
+      directions,
+      and(
+        eq(directions.id, learningSchools.directionId),
+        eq(directions.status, "published"),
+        isNull(directions.deletedAt),
+      ),
+    )
+    .leftJoin(
+      experts,
+      and(
+        eq(experts.id, learningSchools.leadExpertId),
+        eq(experts.status, "published"),
+        isNull(experts.deletedAt),
+        isNull(experts.contentRemovedAt),
+      ),
+    )
     .where(eq(learningSchools.id, schoolId));
   return row;
 }

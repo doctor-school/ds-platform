@@ -69,7 +69,7 @@ export const LearningPathPlaceSchema = z.strictObject({
   title: z.string(),
 });
 
-/** The course author — the school's leading expert (EARS-14); null when the expert has no public name. */
+/** The course author — the school's leading expert (EARS-14); null unless the expert is public and named. */
 export const LearningPathAuthorSchema = z.strictObject({
   slug: z.string(),
   name: z.string(),
@@ -87,8 +87,8 @@ export const LearningCoursePathSchema = z.strictObject({
     title: z.string(),
     state: LearningNodeStateSchema,
   }),
-  /** The breadcrumb above the course: its direction and its school (EARS-14). */
-  direction: LearningPathPlaceSchema,
+  /** The breadcrumb above the course: its direction (null unless public) and its school (EARS-14). */
+  direction: LearningPathPlaceSchema.nullable(),
   school: LearningPathPlaceSchema,
   author: LearningPathAuthorSchema.nullable(),
   /** false = a guest; states computed with no facts (EARS-13). */

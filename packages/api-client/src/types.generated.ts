@@ -4325,7 +4325,7 @@ export interface components {
             direction: {
                 slug: string;
                 title: string;
-            };
+            } | null;
             document: {
                 state: {
                     /** @constant */

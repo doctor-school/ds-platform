@@ -4687,17 +4687,24 @@
             ]
           },
           "direction": {
-            "additionalProperties": false,
-            "properties": {
-              "slug": {
-                "type": "string"
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "slug": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": ["slug", "title"],
+                "type": "object"
               },
-              "title": {
-                "type": "string"
+              {
+                "type": "null"
               }
-            },
-            "required": ["slug", "title"],
-            "type": "object"
+            ]
           },
           "document": {
             "additionalProperties": false,

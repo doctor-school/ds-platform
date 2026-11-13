@@ -145,6 +145,43 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.body.author).toMatchObject({ slug: `learn-exp-${s}`, name: `Учебная Анна ${s}`, photoUrl: null });
     });
 
+    it("EARS-14: a non-public expert is no author and a non-public direction is no breadcrumb segment; the course still reads", async () => {
+      const course = await buildCourse(h);
+      const { expertId, directionId } = course.f;
+      const read = async () =>
+        call<{ direction: unknown; school: unknown; author: unknown }>(
+          h,
+          "GET",
+          `/learning/courses/${course.courseSlug}/path`,
+        );
+      await h.pool.query("UPDATE experts SET photo_ref = $2 WHERE id = $1", [expertId, `experts/${expertId}.webp`]);
+      for (const hide of [
+        "UPDATE experts SET status = 'draft' WHERE id = $1",
+        "UPDATE experts SET status = 'retired', deleted_at = now() WHERE id = $1",
+        // The 012 editorial-removal shape: retired, deleted, every person field cleared.
+        `UPDATE experts SET status = 'retired', deleted_at = now(), content_removed_at = now(),
+           family_name = NULL, given_name = NULL, patronymic = NULL, photo_ref = NULL,
+           professional_role = NULL, credentials = NULL, affiliation = NULL, bio = NULL
+         WHERE id = $1`,
+      ]) {
+        await h.pool.query(hide, [expertId]);
+        const res = await read();
+        expect(res.status).toBe(200);
+        expect(res.body.author).toBeNull();
+        expect(JSON.stringify(res.body)).not.toContain(`experts/${expertId}`);
+        if (hide.includes("content_removed_at")) break;
+        await h.pool.query(
+          "UPDATE experts SET status = 'published', deleted_at = NULL WHERE id = $1",
+          [expertId],
+        );
+      }
+      await h.pool.query("UPDATE directions SET status = 'draft' WHERE id = $1", [directionId]);
+      const res = await read();
+      expect(res.status).toBe(200);
+      expect(res.body.direction).toBeNull();
+      expect(res.body.school).toMatchObject({ slug: `school-${course.f.suffix}` });
+    });
+
     it("EARS-15/17:the lesson read names its completion rule and carries no step payload", async () => {
       const res = await call<{
         lesson: { completionSentence: string };

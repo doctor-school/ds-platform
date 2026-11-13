@@ -17,7 +17,10 @@ import type {
   RecordLearningFactResponse,
   SubmitLearningAttemptRequest,
 } from "@ds/schemas";
-import { RecordLearningFactRequestSchema, expertDisplayName } from "@ds/schemas";
+import {
+  RecordLearningFactRequestSchema,
+  expertDisplayName,
+} from "@ds/schemas";
 import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import {
   clampReportedPosition,
@@ -184,7 +187,7 @@ export class LearningDoctorService {
     const places = await coursePlaces(this.deps.db, course.schoolId);
     if (!places) throw notFound("course");
     const x = places.expert;
-    const name = expertDisplayName(x);
+    const name = x ? expertDisplayName(x) : null;
     return {
       course: {
         id: course.id,
@@ -194,18 +197,19 @@ export class LearningDoctorService {
       },
       direction: places.direction,
       school: places.school,
-      author: name
-        ? {
-            slug: x.slug,
-            name,
-            role: x.professionalRole,
-            credentials: x.credentials,
-            affiliation: x.affiliation,
-            photoUrl: x.photoRef
-              ? await this.deps.media.signedUrl(x.photoRef)
-              : null,
-          }
-        : null,
+      author:
+        x && name
+          ? {
+              slug: x.slug,
+              name,
+              role: x.professionalRole,
+              credentials: x.credentials,
+              affiliation: x.affiliation,
+              photoUrl: x.photoRef
+                ? await this.deps.media.signedUrl(x.photoRef)
+                : null,
+            }
+          : null,
       signedIn: personId !== null,
       modules,
       document: { state: e.evaluation.document },

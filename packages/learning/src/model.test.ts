@@ -42,7 +42,7 @@ const video = (sid: string) => ({
   type: "video" as const,
   title: "Видео",
   durationMin: 10,
-  payload: { videoUrl: "https://cdn.example/v.mp4", durationSec: 600 },
+  payload: { durationSec: 600 },
 });
 const exitTest = (sid: string) => ({ id: sid, type: "test" as const, title: "Тест", durationMin: 5, payload: { kind: "exit" } });
 
@@ -59,7 +59,7 @@ const COURSE_MODEL: LearningCourseModel = {
           title: "Урок 1",
           steps: [
             video(S_VIDEO),
-            { id: S_DOWNLOAD, type: "download", title: "Материал", durationMin: 3, payload: { fileUrl: "https://cdn.example/f.pdf", fileName: "f.pdf" } },
+            { id: S_DOWNLOAD, type: "download", title: "Материал", durationMin: 3, payload: { fileName: "f.pdf" } },
             exitTest(S_TEST),
           ],
         },
@@ -97,9 +97,13 @@ describe("024 learning model", () => {
     expect(elementType("podcast-x")).toBeUndefined();
     const refused = validateStepPayload("hologram", {});
     expect(refused).toEqual({ ok: false, issues: [{ path: "type", message: expect.stringContaining("hologram") }] });
-    expect(validateStepPayload("video", { videoUrl: "https://cdn.example/v.mp4", durationSec: 60 }).ok).toBe(true);
-    const badPayload = validateStepPayload("video", { videoUrl: "http://insecure/v.mp4" });
-    expect(badPayload.ok).toBe(false);
+    expect(validateStepPayload("video", { durationSec: 60 }).ok).toBe(true);
+    // Media ride the 012 media contract (an uploaded object), never a client URL.
+    const urlPayload = validateStepPayload("video", { videoUrl: "https://cdn.example/v.mp4", durationSec: 60 });
+    expect(urlPayload.ok).toBe(false);
+    expect(LEARNING_ELEMENT_CATALOG.video.media?.contentTypes).toContain("video/mp4");
+    expect(LEARNING_ELEMENT_CATALOG.download.media?.contentTypes).toContain("application/pdf");
+    expect(LEARNING_ELEMENT_CATALOG.test.media).toBeNull();
     // «viewed» defaults: video to the setting's 100 %, download opened once, test at its threshold.
     expect(LEARNING_PLATFORM_SEED["viewed.video.percent"]).toBe(100);
     const watched = run([{ kind: "position", stepId: S_VIDEO, positionSec: 599 }]);
@@ -263,15 +267,18 @@ describe("024 learning model", () => {
   it("EARS-4: when a lesson misses a step, a payload or a required test, system shall name each missing item", () => {
     const l = layers();
     const path = { school: SCHOOL, course: COURSE, module: M1, lesson: L1 };
-    expect(publishRequirements({ id: L1, title: "", steps: [] }, l, path, () => ({})).map((i) => i.path)).toEqual(["steps", "exitTest"]);
+    const withMedia = () => true;
+    expect(publishRequirements({ id: L1, title: "", steps: [] }, l, path, () => ({}), withMedia).map((i) => i.path)).toEqual(["steps", "exitTest"]);
     const lesson = COURSE_MODEL.modules[0]!.lessons[0]!;
     const stored = (sid: string) =>
       sid === S_TEST
         ? { kind: "exit", questions: [{ text: "?", options: [{ text: "a", correct: true }, { text: "b", correct: false }] }] }
         : lesson.steps.find((s) => s.id === sid)!.payload;
-    expect(publishRequirements(lesson, l, path, stored)).toEqual([]);
+    expect(publishRequirements(lesson, l, path, stored, withMedia)).toEqual([]);
+    // A video or download step with no uploaded media is not whole.
+    expect(publishRequirements(lesson, l, path, stored, (sid) => sid !== S_DOWNLOAD).map((i) => i.path)).toEqual(["steps.1.media"]);
     const entry = layers({ scopeKind: "course", scopeId: COURSE, values: { "test.entryRequired": true }, preset: null });
-    expect(publishRequirements(lesson, entry, path, stored).map((i) => i.path)).toEqual(["entryTest"]);
+    expect(publishRequirements(lesson, entry, path, stored, withMedia).map((i) => i.path)).toEqual(["entryTest"]);
   });
 
   it("EARS-26: the rule sentences and lock reasons carry no money or «бесплатно» wording", async () => {

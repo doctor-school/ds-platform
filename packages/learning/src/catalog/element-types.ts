@@ -1,5 +1,6 @@
 import {
   LEARNING_ELEMENT_TYPES,
+  LEARNING_STEP_MEDIA_MAX_BYTES,
   LEARNING_STEP_PAYLOAD_SCHEMAS,
   type LearningElementType,
 } from "@ds/schemas";
@@ -15,9 +16,18 @@ import type { LearningEvalContext } from "../evaluator/context.js";
 
 export type LearningClientFactKind = "position" | "opened";
 
+/** A type's media slot under the 012 media contract (an uploaded object, never a URL). */
+export interface LearningMediaDef {
+  /** The content types the upload accepts. */
+  contentTypes: readonly string[];
+  maxBytes: number;
+}
+
 export interface LearningElementTypeDef {
   type: LearningElementType;
   payloadSchema: z.ZodType;
+  /** The step's required media, or null for a type with none (EARS-4 requires it on publish). */
+  media: LearningMediaDef | null;
   /** The facts `POST /v1/me/learning/facts` accepts on a step of this type. */
   clientFacts: readonly LearningClientFactKind[];
   /** The type's «viewed» definition over the doctor's facts and the resolved settings. */
@@ -33,7 +43,10 @@ export function videoDurationSec(step: LearningStepModel): number {
 }
 
 /** EARS-10 — the watched share, positions capped at the real media duration. */
-export function watchedPercent(step: LearningStepModel, ctx: LearningEvalContext): number {
+export function watchedPercent(
+  step: LearningStepModel,
+  ctx: LearningEvalContext,
+): number {
   const duration = videoDurationSec(step);
   if (duration === 0) return 0;
   const position = Math.min(ctx.facts.maxPosition(step.id), duration);
@@ -46,15 +59,30 @@ export const LEARNING_ELEMENT_CATALOG: Readonly<
   video: {
     type: "video",
     payloadSchema: LEARNING_STEP_PAYLOAD_SCHEMAS.video,
+    media: {
+      contentTypes: ["video/mp4", "video/webm"],
+      maxBytes: LEARNING_STEP_MEDIA_MAX_BYTES,
+    },
     clientFacts: ["position"],
     viewed: (step, ctx) =>
       watchedPercent(step, ctx) >= ctx.setting("viewed.video.percent", step),
     viewedPhrase: (step, ctx) =>
-      LEARNING_COPY_RU.phrase.videoWatched(ctx.setting("viewed.video.percent", step)),
+      LEARNING_COPY_RU.phrase.videoWatched(
+        ctx.setting("viewed.video.percent", step),
+      ),
   },
   download: {
     type: "download",
     payloadSchema: LEARNING_STEP_PAYLOAD_SCHEMAS.download,
+    media: {
+      contentTypes: [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ],
+      maxBytes: LEARNING_STEP_MEDIA_MAX_BYTES,
+    },
     clientFacts: ["opened"],
     viewed: (step, ctx) => ctx.facts.opened(step.id),
     viewedPhrase: () => LEARNING_COPY_RU.phrase.downloadOpened,
@@ -62,8 +90,10 @@ export const LEARNING_ELEMENT_CATALOG: Readonly<
   test: {
     type: "test",
     payloadSchema: LEARNING_STEP_PAYLOAD_SCHEMAS.test,
+    media: null,
     clientFacts: [],
-    viewed: (step, ctx) => ctx.facts.bestScore(step.id) >= ctx.setting("test.threshold", step),
+    viewed: (step, ctx) =>
+      ctx.facts.bestScore(step.id) >= ctx.setting("test.threshold", step),
     viewedPhrase: (step, ctx) =>
       LEARNING_COPY_RU.phrase.testPassed(ctx.setting("test.threshold", step)),
   },

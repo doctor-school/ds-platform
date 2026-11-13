@@ -34,8 +34,12 @@ export const learningState = pgEnum("learning_state", ["draft", "published"]);
 const versioned = {
   /** Optimistic-concurrency counter behind the admin ETag; starts at 1. */
   version: integer("version").notNull().default(1),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 };
 
 /** EARS-1 — the minimal school row; one school per leading expert and direction. Ownership `doctor`. */
@@ -43,22 +47,37 @@ export const learningSchools = pgTable(
   "learning_schools",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    directionId: uuid("direction_id").notNull().references(() => directions.id),
-    leadExpertId: uuid("lead_expert_id").notNull().references(() => experts.id),
-    projectId: uuid("project_id").notNull().references(() => projects.id),
+    directionId: uuid("direction_id")
+      .notNull()
+      .references(() => directions.id),
+    leadExpertId: uuid("lead_expert_id")
+      .notNull()
+      .references(() => experts.id),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
     slug: text("slug").notNull().unique(),
     title: text("title").notNull(),
     state: learningState("state").notNull().default("draft"),
     ...versioned,
   },
-  (t) => [unique("learning_schools_direction_expert_key").on(t.directionId, t.leadExpertId)],
+  (t) => [
+    unique("learning_schools_direction_expert_key").on(
+      t.directionId,
+      t.leadExpertId,
+    ),
+  ],
 );
 
 /** EARS-1 — a course always lives in a school (`school_id` NOT NULL). Ownership `doctor`. */
 export const learningCourses = pgTable("learning_courses", {
   id: uuid("id").defaultRandom().primaryKey(),
-  schoolId: uuid("school_id").notNull().references(() => learningSchools.id),
-  projectId: uuid("project_id").notNull().references(() => projects.id),
+  schoolId: uuid("school_id")
+    .notNull()
+    .references(() => learningSchools.id),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id),
   slug: text("slug").notNull().unique(),
   title: text("title").notNull(),
   state: learningState("state").notNull().default("draft"),
@@ -70,7 +89,9 @@ export const learningModules = pgTable(
   "learning_modules",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    courseId: uuid("course_id").notNull().references(() => learningCourses.id),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => learningCourses.id),
     position: integer("position").notNull(),
     title: text("title").notNull(),
     ...versioned,
@@ -83,8 +104,12 @@ export const learningLessons = pgTable(
   "learning_lessons",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    moduleId: uuid("module_id").notNull().references(() => learningModules.id),
-    projectId: uuid("project_id").notNull().references(() => projects.id),
+    moduleId: uuid("module_id")
+      .notNull()
+      .references(() => learningModules.id),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
     position: integer("position").notNull(),
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
@@ -105,14 +130,27 @@ export const learningSteps = pgTable(
   "learning_steps",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    lessonId: uuid("lesson_id").notNull().references(() => learningLessons.id),
+    lessonId: uuid("lesson_id")
+      .notNull()
+      .references(() => learningLessons.id),
     position: integer("position").notNull(),
     type: text("type").notNull(),
     title: text("title").notNull(),
     durationMin: integer("duration_min").notNull(),
     payload: jsonb("payload").notNull().default({}),
-    partnerOrganisationId: uuid("partner_organisation_id").references(() => organisations.id),
+    partnerOrganisationId: uuid("partner_organisation_id").references(
+      () => organisations.id,
+    ),
     companion: boolean("companion").notNull().default(false),
+    /**
+     * The step's media under the 012 media contract: the server-generated
+     * object key of the uploaded `video` / `download` file (a registered media
+     * slot), its content type and size. Never client input, never served raw —
+     * the doctor's gated step read signs it (EARS-22).
+     */
+    mediaRef: text("media_ref"),
+    mediaContentType: text("media_content_type"),
+    mediaSizeBytes: integer("media_size_bytes"),
     removedAt: timestamp("removed_at", { withTimezone: true }),
     ...versioned,
   },
@@ -126,13 +164,20 @@ export const learningSteps = pgTable(
 export const learningTests = pgTable(
   "learning_tests",
   {
-    stepId: uuid("step_id").primaryKey().references(() => learningSteps.id),
+    stepId: uuid("step_id")
+      .primaryKey()
+      .references(() => learningSteps.id),
     kind: text("kind").notNull(),
     /** The lesson or module a test-out test reaches (#4014); null otherwise. */
     scopeItem: uuid("scope_item"),
     ...versioned,
   },
-  (t) => [check("learning_tests_kind", sql`${t.kind} IN ('entry', 'exit', 'test-out')`)],
+  (t) => [
+    check(
+      "learning_tests_kind",
+      sql`${t.kind} IN ('entry', 'exit', 'test-out')`,
+    ),
+  ],
 );
 
 /** A test's questions; corrective material per question (EARS-19, #4014). Ownership `doctor`. */
@@ -140,13 +185,19 @@ export const learningQuestions = pgTable(
   "learning_questions",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    testId: uuid("test_id").notNull().references(() => learningTests.stepId),
+    testId: uuid("test_id")
+      .notNull()
+      .references(() => learningTests.stepId),
     position: integer("position").notNull(),
     text: text("text").notNull(),
-    correctiveStepId: uuid("corrective_step_id").references(() => learningSteps.id),
+    correctiveStepId: uuid("corrective_step_id").references(
+      () => learningSteps.id,
+    ),
     correctiveText: text("corrective_text"),
     removedAt: timestamp("removed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [index("learning_questions_test_idx").on(t.testId, t.position)],
 );
@@ -156,11 +207,15 @@ export const learningOptions = pgTable(
   "learning_options",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    questionId: uuid("question_id").notNull().references(() => learningQuestions.id),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => learningQuestions.id),
     position: integer("position").notNull(),
     text: text("text").notNull(),
     correct: boolean("correct").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [index("learning_options_question_idx").on(t.questionId, t.position)],
 );
@@ -185,7 +240,9 @@ export const learningRuleLayers = pgTable(
     scopeKind: text("scope_kind").notNull(),
     scopeId: text("scope_id").notNull(),
     values: jsonb("values").notNull().default({}),
-    appliedPresetId: uuid("applied_preset_id").references(() => learningPresets.id),
+    appliedPresetId: uuid("applied_preset_id").references(
+      () => learningPresets.id,
+    ),
     ...versioned,
   },
   (t) => [
@@ -210,7 +267,12 @@ export const learningRuleChanges = pgTable(
     actorSub: text("actor_sub"),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [check("learning_rule_changes_earned", sql`${t.earnedProgress} IN ('keep', 'require-again')`)],
+  (t) => [
+    check(
+      "learning_rule_changes_earned",
+      sql`${t.earnedProgress} IN ('keep', 'require-again')`,
+    ),
+  ],
 );
 
 /**
@@ -223,18 +285,25 @@ export const learningFacts = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     eventId: text("event_id").notNull().unique(),
-    personId: uuid("person_id").notNull().references(() => users.id),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => users.id),
     kind: text("kind").notNull(),
     stepId: uuid("step_id").references(() => learningSteps.id),
     itemRef: uuid("item_ref"),
     data: jsonb("data").notNull().default({}),
     source: text("source").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
     index("learning_facts_person_idx").on(t.personId, t.recordedAt),
-    check("learning_facts_source", sql`${t.source} IN ('web', 'app', 'system')`),
+    check(
+      "learning_facts_source",
+      sql`${t.source} IN ('web', 'app', 'system')`,
+    ),
   ],
 );
 
@@ -243,20 +312,34 @@ export const learningAttempts = pgTable(
   "learning_attempts",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    personId: uuid("person_id").notNull().references(() => users.id),
-    testId: uuid("test_id").notNull().references(() => learningTests.stepId),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => users.id),
+    testId: uuid("test_id")
+      .notNull()
+      .references(() => learningTests.stepId),
     questionIds: jsonb("question_ids").notNull(),
-    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
   },
-  (t) => [index("learning_attempts_person_test_idx").on(t.personId, t.testId, t.startedAt)],
+  (t) => [
+    index("learning_attempts_person_test_idx").on(
+      t.personId,
+      t.testId,
+      t.startedAt,
+    ),
+  ],
 );
 
 /** EARS-11 — the rebuildable status projection, used to detect transitions (EARS-12). Ownership `doctor`. */
 export const learningNodeStatus = pgTable(
   "learning_node_status",
   {
-    personId: uuid("person_id").notNull().references(() => users.id),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => users.id),
     itemKind: text("item_kind").notNull(),
     itemId: uuid("item_id").notNull(),
     status: text("status").notNull(),
@@ -266,7 +349,10 @@ export const learningNodeStatus = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.personId, t.itemId] }),
-    check("learning_node_status_cause", sql`${t.causeKind} IN ('fact', 'rule-change')`),
+    check(
+      "learning_node_status_cause",
+      sql`${t.causeKind} IN ('fact', 'rule-change')`,
+    ),
   ],
 );
 
@@ -274,8 +360,12 @@ export const learningNodeStatus = pgTable(
 export const learningLessonRatings = pgTable(
   "learning_lesson_ratings",
   {
-    personId: uuid("person_id").notNull().references(() => users.id),
-    lessonId: uuid("lesson_id").notNull().references(() => learningLessons.id),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => users.id),
+    lessonId: uuid("lesson_id")
+      .notNull()
+      .references(() => learningLessons.id),
     stars: integer("stars").notNull(),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -288,8 +378,12 @@ export const learningLessonRatings = pgTable(
 /** EARS-23 (#4013) — a doctor's feedback on a partner's step. Ownership `doctor`. */
 export const learningFeedback = pgTable("learning_feedback", {
   id: uuid("id").defaultRandom().primaryKey(),
-  personId: uuid("person_id").notNull().references(() => users.id),
-  stepId: uuid("step_id").notNull().references(() => learningSteps.id),
+  personId: uuid("person_id")
+    .notNull()
+    .references(() => users.id),
+  stepId: uuid("step_id")
+    .notNull()
+    .references(() => learningSteps.id),
   text: text("text").notNull(),
   at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
 });

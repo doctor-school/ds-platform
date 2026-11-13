@@ -83,7 +83,10 @@ export const LearningUnlockSchema = z.union([
   z.strictObject({ kind: z.literal("immediate") }),
   z.strictObject({ kind: z.literal("after-previous") }),
   z.strictObject({ kind: z.literal("from-date"), instant: z.iso.datetime() }),
-  z.strictObject({ kind: z.literal("expression"), rule: LearningRuleNodeSchema }),
+  z.strictObject({
+    kind: z.literal("expression"),
+    rule: LearningRuleNodeSchema,
+  }),
 ]);
 export type LearningUnlock = z.infer<typeof LearningUnlockSchema>;
 
@@ -105,9 +108,15 @@ export const LEARNING_SETTING_SCHEMAS = {
   order: z.enum(["strict", "free"]),
   lockedVisibility: z.enum(["hidden", "locked"]),
   "test.threshold": z.number().int().min(0).max(100),
-  "test.attempts": z.union([z.number().int().min(1).max(100), z.literal("unlimited")]),
+  "test.attempts": z.union([
+    z.number().int().min(1).max(100),
+    z.literal("unlimited"),
+  ]),
   "test.pauseMin": minutes,
-  "test.questions": z.union([z.number().int().min(1).max(200), z.literal("all")]),
+  "test.questions": z.union([
+    z.number().int().min(1).max(200),
+    z.literal("all"),
+  ]),
   "test.exitRequired": z.boolean(),
   "test.entryRequired": z.boolean(),
   "test.entryCounts": z.boolean(),
@@ -131,19 +140,32 @@ export type LearningSettings = {
 /** A layer's or a preset's partial map of setting values. */
 export const LearningSettingValuesSchema = z.strictObject(
   Object.fromEntries(
-    LEARNING_SETTING_KEYS.map((k) => [k, LEARNING_SETTING_SCHEMAS[k].optional()]),
-  ) as { [K in LearningSettingKey]: z.ZodOptional<(typeof LEARNING_SETTING_SCHEMAS)[K]> },
+    LEARNING_SETTING_KEYS.map((k) => [
+      k,
+      LEARNING_SETTING_SCHEMAS[k].optional(),
+    ]),
+  ) as {
+    [K in LearningSettingKey]: z.ZodOptional<
+      (typeof LEARNING_SETTING_SCHEMAS)[K]
+    >;
+  },
 );
 export type LearningSettingValues = Partial<LearningSettings>;
 
 /** The platform layer: every key present (EARS-5). */
-export const LearningPlatformValuesSchema = z.strictObject(LEARNING_SETTING_SCHEMAS);
+export const LearningPlatformValuesSchema = z.strictObject(
+  LEARNING_SETTING_SCHEMAS,
+);
 
 /** EARS-5 — one resolved setting: value, the level it comes from, the preset that wrote it. */
 export const LearningResolvedSettingSchema = z.strictObject({
-  key: z.enum(LEARNING_SETTING_KEYS as [LearningSettingKey, ...LearningSettingKey[]]),
+  key: z.enum(
+    LEARNING_SETTING_KEYS as [LearningSettingKey, ...LearningSettingKey[]],
+  ),
   value: z.unknown(),
   level: LearningScopeKindSchema,
   preset: z.string().nullable(),
 });
-export type LearningResolvedSetting = z.infer<typeof LearningResolvedSettingSchema>;
+export type LearningResolvedSetting = z.infer<
+  typeof LearningResolvedSettingSchema
+>;

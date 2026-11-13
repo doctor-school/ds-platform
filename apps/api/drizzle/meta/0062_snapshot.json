@@ -7372,6 +7372,24 @@
           "notNull": true,
           "default": false
         },
+        "media_ref": {
+          "name": "media_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "media_content_type": {
+          "name": "media_content_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "media_size_bytes": {
+          "name": "media_size_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "removed_at": {
           "name": "removed_at",
           "type": "timestamp with time zone",

@@ -18,7 +18,10 @@ export const LearningNodeStateSchema = z.discriminatedUnion("status", [
   z.strictObject({ status: z.literal("done") }),
   z.strictObject({ status: z.literal("current") }),
   z.strictObject({ status: z.literal("open") }),
-  z.strictObject({ status: z.literal("locked"), reason: LearningLockReasonSchema }),
+  z.strictObject({
+    status: z.literal("locked"),
+    reason: LearningLockReasonSchema,
+  }),
   z.strictObject({ status: z.literal("test-out-reachable") }),
 ]);
 export type LearningNodeState = z.infer<typeof LearningNodeStateSchema>;
@@ -108,7 +111,8 @@ export type LearningLessonRead = z.infer<typeof LearningLessonReadSchema>;
 export const LearningStepBodySchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("video"),
-    videoUrl: z.string(),
+    /** A short-lived signed URL of the 012 media object (EARS-22: signed-in reads only). */
+    mediaUrl: z.string(),
     durationSec: z.number().int(),
     /** «Просмотрено 35 %» — the watched share, whole percent, capped at 100. */
     watchedPercent: z.number().int().min(0).max(100),
@@ -116,9 +120,10 @@ export const LearningStepBodySchema = z.discriminatedUnion("type", [
   }),
   z.strictObject({
     type: z.literal("download"),
-    fileUrl: z.string(),
+    /** A short-lived signed URL of the 012 media object (EARS-22: signed-in reads only). */
+    mediaUrl: z.string(),
     fileName: z.string(),
-    fileSizeBytes: z.number().int().nullable(),
+    fileSizeBytes: z.number().int(),
     opened: z.boolean(),
   }),
   z.strictObject({
@@ -152,7 +157,11 @@ export type LearningStepRead = z.infer<typeof LearningStepReadSchema>;
 
 const factBase = {
   /** The client's event id; a replay answers as a duplicate. */
-  eventId: z.string().min(8).max(200).regex(/^[A-Za-z0-9:._-]+$/),
+  eventId: z
+    .string()
+    .min(8)
+    .max(200)
+    .regex(/^[A-Za-z0-9:._-]+$/),
   stepId: z.uuid(),
   source: z.enum(["web", "app"]),
   occurredAt: z.iso.datetime().optional(),
@@ -171,7 +180,9 @@ export const RecordLearningFactRequestSchema = z.discriminatedUnion("kind", [
     data: z.strictObject({}).default({}),
   }),
 ]);
-export type RecordLearningFactRequest = z.input<typeof RecordLearningFactRequestSchema>;
+export type RecordLearningFactRequest = z.input<
+  typeof RecordLearningFactRequestSchema
+>;
 
 export const LearningStatusChangeSchema = z.strictObject({
   itemKind: z.enum(["step", "lesson", "module", "course"]),
@@ -183,7 +194,9 @@ export const RecordLearningFactResponseSchema = z.strictObject({
   outcome: z.enum(["recorded", "duplicate"]),
   changed: z.array(LearningStatusChangeSchema),
 });
-export type RecordLearningFactResponse = z.infer<typeof RecordLearningFactResponseSchema>;
+export type RecordLearningFactResponse = z.infer<
+  typeof RecordLearningFactResponseSchema
+>;
 
 // ── Attempts (EARS-18) ──────────────────────────────────────────────────────
 
@@ -206,7 +219,9 @@ export const SubmitLearningAttemptRequestSchema = z.strictObject({
     .array(z.strictObject({ questionId: z.uuid(), optionId: z.uuid() }))
     .max(200),
 });
-export type SubmitLearningAttemptRequest = z.infer<typeof SubmitLearningAttemptRequestSchema>;
+export type SubmitLearningAttemptRequest = z.infer<
+  typeof SubmitLearningAttemptRequestSchema
+>;
 
 export const LearningAttemptResultSchema = z.strictObject({
   score: z.number().int().min(0).max(100),

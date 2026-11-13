@@ -14,10 +14,12 @@ const slug = z
   .string()
   .min(1)
   .max(80)
-  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "lowercase letters, digits and single hyphens");
+  .regex(
+    /^[a-z0-9]+(-[a-z0-9]+)*$/,
+    "lowercase letters, digits and single hyphens",
+  );
 const title = z.string().trim().min(1).max(200);
 const text = z.string().trim().max(4000);
-const httpsUrl = z.url({ protocol: /^https$/ }).max(2048);
 
 /** The learning structure's two-state lifecycle. */
 export const LearningStateSchema = z.enum(["draft", "published"]);
@@ -25,18 +27,37 @@ export type LearningState = z.infer<typeof LearningStateSchema>;
 
 // ── Step payloads per element type (EARS-2) ─────────────────────────────────
 
+// A step's media (the `video` file, the `download` file) is NOT in the payload:
+// it rides the 012 media contract — uploaded through
+// `PUT /v1/admin/learning/steps/{stepId}/media`, kept as a server-generated
+// object key in `learning_steps.media_ref` (a registered media slot) and
+// served only as a short-lived signed URL on the doctor's gated step read
+// (EARS-22). No client ever sends or receives a storage key or a raw URL.
+
+/** The one multipart file part the step-media upload accepts. */
+export const LEARNING_STEP_MEDIA_PART = "file";
+
+/** The step-media size cap — the API's shared multipart cap (012 upload pipeline). */
+export const LEARNING_STEP_MEDIA_MAX_BYTES = 25 * 1024 * 1024;
+
 /** `video` — a series episode; `durationSec` is the media's real length (EARS-10 cap). */
 export const LearningVideoPayloadSchema = z.strictObject({
-  videoUrl: httpsUrl,
   durationSec: z.number().int().min(1).max(86_400),
 });
 
-/** `download` — a downloadable material. */
+/** `download` — a downloadable material; `fileName` is what the doctor saves. */
 export const LearningDownloadPayloadSchema = z.strictObject({
-  fileUrl: httpsUrl,
   fileName: z.string().trim().min(1).max(255),
-  fileSizeBytes: z.number().int().min(1).optional(),
 });
+
+/** The admin view of a step's uploaded media — never its object key. */
+export const LearningStepMediaAdminSchema = z.strictObject({
+  contentType: z.string(),
+  sizeBytes: z.number().int(),
+});
+export type LearningStepMediaAdmin = z.infer<
+  typeof LearningStepMediaAdminSchema
+>;
 
 /** One option of a test question; `correct` never reaches a doctor (EARS-18). */
 export const LearningTestOptionInputSchema = z.strictObject({
@@ -77,7 +98,9 @@ export const CreateLearningSchoolRequestSchema = z.strictObject({
   slug,
   title,
 });
-export type CreateLearningSchoolRequest = z.infer<typeof CreateLearningSchoolRequestSchema>;
+export type CreateLearningSchoolRequest = z.infer<
+  typeof CreateLearningSchoolRequestSchema
+>;
 
 /** EARS-1 — a course always names its school. */
 export const CreateLearningCourseRequestSchema = z.strictObject({
@@ -86,13 +109,17 @@ export const CreateLearningCourseRequestSchema = z.strictObject({
   slug,
   title,
 });
-export type CreateLearningCourseRequest = z.infer<typeof CreateLearningCourseRequestSchema>;
+export type CreateLearningCourseRequest = z.infer<
+  typeof CreateLearningCourseRequestSchema
+>;
 
 export const CreateLearningModuleRequestSchema = z.strictObject({
   courseId: z.uuid(),
   title,
 });
-export type CreateLearningModuleRequest = z.infer<typeof CreateLearningModuleRequestSchema>;
+export type CreateLearningModuleRequest = z.infer<
+  typeof CreateLearningModuleRequestSchema
+>;
 
 export const CreateLearningLessonRequestSchema = z.strictObject({
   moduleId: z.uuid(),
@@ -101,12 +128,20 @@ export const CreateLearningLessonRequestSchema = z.strictObject({
   description: text.default(""),
   teaser: text.default(""),
 });
-export type CreateLearningLessonRequest = z.input<typeof CreateLearningLessonRequestSchema>;
+export type CreateLearningLessonRequest = z.input<
+  typeof CreateLearningLessonRequestSchema
+>;
 
 export const UpdateLearningLessonRequestSchema = z
-  .strictObject({ title: title.optional(), description: text.optional(), teaser: text.optional() })
+  .strictObject({
+    title: title.optional(),
+    description: text.optional(),
+    teaser: text.optional(),
+  })
   .refine((v) => Object.keys(v).length > 0, { message: "nothing to change" });
-export type UpdateLearningLessonRequest = z.infer<typeof UpdateLearningLessonRequestSchema>;
+export type UpdateLearningLessonRequest = z.infer<
+  typeof UpdateLearningLessonRequestSchema
+>;
 
 /**
  * EARS-2 / EARS-28 — add a step. `type` is a string so an unknown type is
@@ -120,7 +155,9 @@ export const CreateLearningStepRequestSchema = z.strictObject({
   durationMin: z.number().int().min(1).max(600),
   payload: z.unknown(),
 });
-export type CreateLearningStepRequest = z.infer<typeof CreateLearningStepRequestSchema>;
+export type CreateLearningStepRequest = z.infer<
+  typeof CreateLearningStepRequestSchema
+>;
 
 export const UpdateLearningStepRequestSchema = z
   .strictObject({
@@ -129,17 +166,25 @@ export const UpdateLearningStepRequestSchema = z
     payload: z.unknown().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "nothing to change" });
-export type UpdateLearningStepRequest = z.infer<typeof UpdateLearningStepRequestSchema>;
+export type UpdateLearningStepRequest = z.infer<
+  typeof UpdateLearningStepRequestSchema
+>;
 
 /** EARS-28 — the lesson's steps in their new order (every live step exactly once). */
 export const ReorderLearningStepsRequestSchema = z.strictObject({
   stepIds: z.array(z.uuid()).min(1).max(200),
 });
-export type ReorderLearningStepsRequest = z.infer<typeof ReorderLearningStepsRequestSchema>;
+export type ReorderLearningStepsRequest = z.infer<
+  typeof ReorderLearningStepsRequestSchema
+>;
 
 /** EARS-9 / EARS-29 — apply a preset on a school or a course. */
-export const ApplyLearningPresetRequestSchema = z.strictObject({ presetId: z.uuid() });
-export type ApplyLearningPresetRequest = z.infer<typeof ApplyLearningPresetRequestSchema>;
+export const ApplyLearningPresetRequestSchema = z.strictObject({
+  presetId: z.uuid(),
+});
+export type ApplyLearningPresetRequest = z.infer<
+  typeof ApplyLearningPresetRequestSchema
+>;
 
 // ── Admin read models ───────────────────────────────────────────────────────
 
@@ -197,6 +242,8 @@ export const LearningStepAdminSchema = z.strictObject({
   /** The stored payload; for `test` the `kind` only — questions are in `questions`. */
   payload: z.record(z.string(), z.unknown()),
   questions: z.array(LearningTestQuestionAdminSchema).nullable(),
+  /** The uploaded media of a `video` / `download` step; null = none yet (or a test). */
+  media: LearningStepMediaAdminSchema.nullable(),
   version: z.number().int(),
 });
 export type LearningStepAdmin = z.infer<typeof LearningStepAdminSchema>;
@@ -218,18 +265,26 @@ export const LearningLessonAdminSchema = z.strictObject({
 export type LearningLessonAdmin = z.infer<typeof LearningLessonAdminSchema>;
 
 /** The course composition: modules → lessons (no steps) for the admin outline. */
-export const LearningCourseCompositionSchema = LearningCourseAdminSchema.extend({
-  modules: z.array(
-    LearningModuleAdminSchema.extend({
-      lessons: z.array(LearningLessonAdminSchema.omit({ steps: true })),
-    }),
-  ),
-});
-export type LearningCourseComposition = z.infer<typeof LearningCourseCompositionSchema>;
+export const LearningCourseCompositionSchema = LearningCourseAdminSchema.extend(
+  {
+    modules: z.array(
+      LearningModuleAdminSchema.extend({
+        lessons: z.array(LearningLessonAdminSchema.omit({ steps: true })),
+      }),
+    ),
+  },
+);
+export type LearningCourseComposition = z.infer<
+  typeof LearningCourseCompositionSchema
+>;
 
-export const LearningSchoolListSchema = z.strictObject({ data: z.array(LearningSchoolAdminSchema) });
+export const LearningSchoolListSchema = z.strictObject({
+  data: z.array(LearningSchoolAdminSchema),
+});
 export type LearningSchoolList = z.infer<typeof LearningSchoolListSchema>;
-export const LearningCourseListSchema = z.strictObject({ data: z.array(LearningCourseAdminSchema) });
+export const LearningCourseListSchema = z.strictObject({
+  data: z.array(LearningCourseAdminSchema),
+});
 export type LearningCourseList = z.infer<typeof LearningCourseListSchema>;
 
 /** EARS-9 — a preset as data. */
@@ -240,7 +295,9 @@ export const LearningPresetSchema = z.strictObject({
   version: z.number().int(),
 });
 export type LearningPreset = z.infer<typeof LearningPresetSchema>;
-export const LearningPresetListSchema = z.strictObject({ data: z.array(LearningPresetSchema) });
+export const LearningPresetListSchema = z.strictObject({
+  data: z.array(LearningPresetSchema),
+});
 export type LearningPresetList = z.infer<typeof LearningPresetListSchema>;
 
 /** EARS-5 / EARS-29 — the effective rules of a scope; `layerVersion` 0 = no row yet. */

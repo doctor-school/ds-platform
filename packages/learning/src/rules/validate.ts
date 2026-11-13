@@ -250,6 +250,8 @@ export function publishRequirements(
   path: Parameters<LearningLayers["resolve"]>[1],
   /** The step's stored payload as an admin wrote it (a test's questions included). */
   storedPayloadOf: (stepId: string) => unknown,
+  /** Whether the step's 012 media object is uploaded (a type with media requires it). */
+  hasMedia: (stepId: string) => boolean,
 ): LearningFieldIssue[] {
   const issues: LearningFieldIssue[] = [];
   if (lesson.steps.length === 0)
@@ -262,6 +264,12 @@ export function publishRequirements(
           path: `steps.${i}.${issue.path}`,
           message: issue.message,
         });
+    }
+    if (elementType(step.type)?.media && !hasMedia(step.id)) {
+      issues.push({
+        path: `steps.${i}.media`,
+        message: "upload the step's file",
+      });
     }
   });
   if (

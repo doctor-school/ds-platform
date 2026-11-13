@@ -53,6 +53,8 @@ export interface LearningLayer {
   values: LearningSettingValues;
   /** The preset's name when this layer was written by «Применить пресет». */
   preset: string | null;
+  /** The applied preset's values; a key counts as the preset's only while it still holds them. */
+  presetValues?: LearningSettingValues;
 }
 
 /** The ids above an item, nearest-first resolution walks step → … → school → platform. */

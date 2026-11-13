@@ -76,7 +76,12 @@ export class LearningLayers {
     if (!layer || !Object.hasOwn(layer.values, key)) return undefined;
     const value = layer.values[key];
     if (value === undefined) return undefined;
-    return { key, value: value as LearningSettings[K], level, preset: layer.preset };
+    const fromPreset =
+      layer.preset !== null &&
+      (layer.presetValues === undefined ||
+        (Object.hasOwn(layer.presetValues, key) &&
+          JSON.stringify(layer.presetValues[key]) === JSON.stringify(value)));
+    return { key, value: value as LearningSettings[K], level, preset: fromPreset ? layer.preset : null };
   }
 }
 

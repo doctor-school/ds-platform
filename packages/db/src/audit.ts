@@ -65,6 +65,16 @@ export const AUDIT_CAPTURE_ALLOWLIST: readonly {
       "the 025 attention-points ledger itself — append-only double-entry postings (UPDATE/DELETE refused by trigger, 025 EARS-27), each row already the WHO/WHAT/WHEN record of one domain fact; auditing would duplicate the ledger 1:1 (the audit_ledger recursion argument, 010-design §5)",
   },
   {
+    table: "learning_facts",
+    rationale:
+      "the 024 learning progress facts — append-only (UPDATE/DELETE refused by trigger, 024 EARS-10; only the ADR-0009 erasure re-pointing of person_id passes), each row already the WHO/WHAT/WHEN record of one doctor's progress event; auditing would duplicate it 1:1",
+  },
+  {
+    table: "learning_node_status",
+    rationale:
+      "the 024 rebuildable status projection (024 EARS-11) — derived state recomputed from learning_facts and the audited rule layers on every write; no domain truth of its own, so its churn would only duplicate the facts that cause it",
+  },
+  {
     table: "points_facts",
     rationale:
       "the 025 engine's fact journal — one INSERT-only row per accepted fact with its evaluation trace (UPDATE/DELETE refused by trigger, 025 EARS-40; only the ADR-0009 erasure re-pointing of person_id passes), written in the transaction of that fact's postings; it is itself the WHO/WHAT/WHEN record of the fact, so auditing would duplicate it 1:1",

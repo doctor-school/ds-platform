@@ -113,8 +113,7 @@ not secrets; their values are in the templates or derive from the environment.
   carry none (`VersionId null`); the backup set is fully protected once daily fulls
   have replaced them, about 7 days after the lock. Versions count toward the billed
   bucket size (about 1.3× the current set). Locked buckets need pgBackRest ≥ 2.55.1,
-  version paging ≥ 2.59.2; both containers run 2.59.3, and the unpinned images are
-  #3992.
+  version paging ≥ 2.59.2; both data-prod images pin pgBackRest 2.60.0 (#3992).
 - **Restore proof runs on the source host.** The automated drill (§3) restores a
   throw-away copy on ds-data-prod itself; a restore onto a different host is the
   fresh-host drill above.

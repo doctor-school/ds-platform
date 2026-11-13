@@ -9,7 +9,10 @@ import type { LearningSettings, LearningSettingValues } from "@ds/schemas";
 export const LEARNING_PLATFORM_SEED: LearningSettings = {
   "completion.step": { condition: "viewed" },
   "completion.lesson": {
-    all: [{ condition: "all-steps-done" }, { condition: "test-passed", test: "exit" }],
+    all: [
+      { condition: "all-steps-done" },
+      { condition: "test-passed", test: "exit" },
+    ],
   },
   "completion.module": {
     all: [{ condition: "lessons-done" }, { condition: "club-attended" }],
@@ -64,7 +67,10 @@ export const LEARNING_PRESET_SEEDS: ReadonlyArray<{
       unlock: { kind: "immediate" },
       order: "free",
       "completion.lesson": {
-        all: [{ condition: "all-steps-done" }, { condition: "test-passed", test: "exit" }],
+        all: [
+          { condition: "all-steps-done" },
+          { condition: "test-passed", test: "exit" },
+        ],
       },
       "test.exitRequired": true,
     },
@@ -73,7 +79,10 @@ export const LEARNING_PRESET_SEEDS: ReadonlyArray<{
     name: LEARNING_PRESET_NAMES.accredited,
     values: {
       "completion.lesson": {
-        all: [{ condition: "all-steps-done" }, { condition: "test-passed", test: "exit" }],
+        all: [
+          { condition: "all-steps-done" },
+          { condition: "test-passed", test: "exit" },
+        ],
       },
       "test.threshold": 80,
       "test.entryRequired": true,

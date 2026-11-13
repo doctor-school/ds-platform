@@ -1,6 +1,9 @@
 import { learningNodeStatus } from "@ds/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import type { LearningCourseEvaluator, LearningEvaluation } from "../evaluator/evaluator.js";
+import type {
+  LearningCourseEvaluator,
+  LearningEvaluation,
+} from "../evaluator/evaluator.js";
 import type { LearningEvent, LearningServerDeps, LearningTx } from "./deps.js";
 
 // 024 EARS-11, EARS-12 — the status projector. It diffs the evaluator's
@@ -24,11 +27,21 @@ export interface LearningProjection {
 }
 
 /** Serialise one doctor's writes on one course (the projection diff is read-modify-write). */
-export async function lockPersonCourse(tx: LearningTx, personId: string, courseId: string): Promise<void> {
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`learning:${personId}:${courseId}`}))`);
+export async function lockPersonCourse(
+  tx: LearningTx,
+  personId: string,
+  courseId: string,
+): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`learning:${personId}:${courseId}`}))`,
+  );
 }
 
-export function completionEventId(type: "lesson.completed" | "module.completed", personId: string, itemId: string): string {
+export function completionEventId(
+  type: "lesson.completed" | "module.completed",
+  personId: string,
+  itemId: string,
+): string {
   return `learning:${type}:${personId}:${itemId}`;
 }
 
@@ -49,15 +62,26 @@ export async function project(
     ids.length === 0
       ? []
       : await tx
-          .select({ itemId: learningNodeStatus.itemId, status: learningNodeStatus.status })
+          .select({
+            itemId: learningNodeStatus.itemId,
+            status: learningNodeStatus.status,
+          })
           .from(learningNodeStatus)
-          .where(and(eq(learningNodeStatus.personId, personId), inArray(learningNodeStatus.itemId, ids)));
+          .where(
+            and(
+              eq(learningNodeStatus.personId, personId),
+              inArray(learningNodeStatus.itemId, ids),
+            ),
+          );
   const before = new Map(existing.map((r) => [r.itemId, r.status]));
 
   const changed: LearningStatusChange[] = [];
   const publishers: Array<() => Promise<void>> = [];
   const events: LearningEvent[] = [];
-  const mode = evaluator.setting("course.deliveryMode", { kind: "course", id: evaluator.index.course.id });
+  const mode = evaluator.setting("course.deliveryMode", {
+    kind: "course",
+    id: evaluator.index.course.id,
+  });
 
   for (const [itemId, state] of evaluation.states) {
     const previous = before.get(itemId);
@@ -66,14 +90,28 @@ export async function project(
     changed.push({ itemKind, itemId, status: state.status });
     await tx
       .insert(learningNodeStatus)
-      .values({ personId, itemKind, itemId, status: state.status, since: at, causeKind: cause.kind, causeId: cause.id })
+      .values({
+        personId,
+        itemKind,
+        itemId,
+        status: state.status,
+        since: at,
+        causeKind: cause.kind,
+        causeId: cause.id,
+      })
       .onConflictDoUpdate({
         target: [learningNodeStatus.personId, learningNodeStatus.itemId],
-        set: { status: state.status, since: at, causeKind: cause.kind, causeId: cause.id },
+        set: {
+          status: state.status,
+          since: at,
+          causeKind: cause.kind,
+          causeId: cause.id,
+        },
       });
     if (state.status !== "done") continue;
     if (itemKind === "lesson" || itemKind === "module") {
-      const type = itemKind === "lesson" ? "lesson.completed" : "module.completed";
+      const type =
+        itemKind === "lesson" ? "lesson.completed" : "module.completed";
       const recorded = await deps.points.record(tx, {
         type,
         eventId: completionEventId(type, personId, itemId),
@@ -87,7 +125,13 @@ export async function project(
       events.push({ type: "StepCompleted", personId, stepId: itemId, at });
       const step = evaluator.index.steps.get(itemId)?.step;
       if (step?.type === "test") {
-        events.push({ type: "TestPassed", personId, testId: itemId, score: evaluator.facts.bestScore(itemId), at });
+        events.push({
+          type: "TestPassed",
+          personId,
+          testId: itemId,
+          score: evaluator.facts.bestScore(itemId),
+          at,
+        });
       }
     } else if (itemKind === "course") {
       events.push({ type: "CourseCompleted", personId, courseId: itemId, at });

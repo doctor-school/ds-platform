@@ -13,7 +13,11 @@ import {
   type LearningModuleRow,
   type LearningStepRow,
 } from "@ds/db";
-import type { LearningElementType, LearningScopeKind, LearningSettingValues } from "@ds/schemas";
+import type {
+  LearningElementType,
+  LearningScopeKind,
+  LearningSettingValues,
+} from "@ds/schemas";
 import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   LEARNING_PLATFORM_SCOPE_ID,
@@ -43,7 +47,11 @@ export interface LoadedCourse {
  * that hold one (EARS-4: an unpublished lesson is on no doctor read); removed
  * steps never appear.
  */
-export async function loadCourseTree(db: Handle, course: LearningCourseRow, doctorView: boolean): Promise<LoadedCourse> {
+export async function loadCourseTree(
+  db: Handle,
+  course: LearningCourseRow,
+  doctorView: boolean,
+): Promise<LoadedCourse> {
   const modules = await db
     .select()
     .from(learningModules)
@@ -62,7 +70,10 @@ export async function loadCourseTree(db: Handle, course: LearningCourseRow, doct
               doctorView ? eq(learningLessons.state, "published") : undefined,
             ),
           )
-          .orderBy(asc(learningLessons.position), asc(learningLessons.createdAt));
+          .orderBy(
+            asc(learningLessons.position),
+            asc(learningLessons.createdAt),
+          );
   const lessonIds = lessons.map((l) => l.id);
   const steps =
     lessonIds.length === 0
@@ -70,7 +81,12 @@ export async function loadCourseTree(db: Handle, course: LearningCourseRow, doct
       : await db
           .select()
           .from(learningSteps)
-          .where(and(inArray(learningSteps.lessonId, lessonIds), isNull(learningSteps.removedAt)))
+          .where(
+            and(
+              inArray(learningSteps.lessonId, lessonIds),
+              isNull(learningSteps.removedAt),
+            ),
+          )
           .orderBy(asc(learningSteps.position), asc(learningSteps.createdAt));
 
   const model: LearningCourseModel = {
@@ -109,15 +125,32 @@ export async function loadLayersFor(
   scopes: Array<{ kind: LearningScopeKind; id: string }>,
 ): Promise<LearningLayers> {
   const conditions = [
-    and(eq(learningRuleLayers.scopeKind, "platform"), eq(learningRuleLayers.scopeId, LEARNING_PLATFORM_SCOPE_ID)),
-    ...scopes.map((s) => and(eq(learningRuleLayers.scopeKind, s.kind), eq(learningRuleLayers.scopeId, s.id))),
+    and(
+      eq(learningRuleLayers.scopeKind, "platform"),
+      eq(learningRuleLayers.scopeId, LEARNING_PLATFORM_SCOPE_ID),
+    ),
+    ...scopes.map((s) =>
+      and(
+        eq(learningRuleLayers.scopeKind, s.kind),
+        eq(learningRuleLayers.scopeId, s.id),
+      ),
+    ),
   ];
   const rows = await db
-    .select({ layer: learningRuleLayers, presetName: learningPresets.name, presetValues: learningPresets.values })
+    .select({
+      layer: learningRuleLayers,
+      presetName: learningPresets.name,
+      presetValues: learningPresets.values,
+    })
     .from(learningRuleLayers)
-    .leftJoin(learningPresets, eq(learningPresets.id, learningRuleLayers.appliedPresetId))
+    .leftJoin(
+      learningPresets,
+      eq(learningPresets.id, learningRuleLayers.appliedPresetId),
+    )
     .where(or(...conditions));
-  return new LearningLayers(rows.map((r) => toLayer(r.layer, r.presetName, r.presetValues)));
+  return new LearningLayers(
+    rows.map((r) => toLayer(r.layer, r.presetName, r.presetValues)),
+  );
 }
 
 export function toLayer(
@@ -130,12 +163,16 @@ export function toLayer(
     scopeId: layer.scopeId,
     values: layer.values as LearningSettingValues,
     preset: presetName,
-    ...(presetValues ? { presetValues: presetValues as LearningSettingValues } : {}),
+    ...(presetValues
+      ? { presetValues: presetValues as LearningSettingValues }
+      : {}),
   };
 }
 
 /** The scopes of every item of a loaded course, for {@link loadLayersFor}. */
-export function scopesOf(loaded: Pick<LoadedCourse, "row" | "modules" | "lessons" | "steps">) {
+export function scopesOf(
+  loaded: Pick<LoadedCourse, "row" | "modules" | "lessons" | "steps">,
+) {
   return [
     { kind: "school" as const, id: loaded.row.schoolId },
     { kind: "course" as const, id: loaded.row.id },
@@ -146,17 +183,33 @@ export function scopesOf(loaded: Pick<LoadedCourse, "row" | "modules" | "lessons
 }
 
 /** A doctor's facts on a course's steps and items (024-design §2 «Facts»). */
-export async function loadFacts(db: Handle, personId: string, loaded: LoadedCourse): Promise<LearningFactModel[]> {
+export async function loadFacts(
+  db: Handle,
+  personId: string,
+  loaded: LoadedCourse,
+): Promise<LearningFactModel[]> {
   const stepIds = loaded.steps.map((s) => s.id);
-  const itemIds = [loaded.row.id, ...loaded.modules.map((m) => m.id), ...loaded.lessons.map((l) => l.id), ...stepIds];
+  const itemIds = [
+    loaded.row.id,
+    ...loaded.modules.map((m) => m.id),
+    ...loaded.lessons.map((l) => l.id),
+    ...stepIds,
+  ];
   const rows = await db
-    .select({ kind: learningFacts.kind, stepId: learningFacts.stepId, itemRef: learningFacts.itemRef, data: learningFacts.data })
+    .select({
+      kind: learningFacts.kind,
+      stepId: learningFacts.stepId,
+      itemRef: learningFacts.itemRef,
+      data: learningFacts.data,
+    })
     .from(learningFacts)
     .where(
       and(
         eq(learningFacts.personId, personId),
         or(
-          stepIds.length > 0 ? inArray(learningFacts.stepId, stepIds) : undefined,
+          stepIds.length > 0
+            ? inArray(learningFacts.stepId, stepIds)
+            : undefined,
           inArray(learningFacts.itemRef, itemIds),
         ),
       ),
@@ -166,13 +219,23 @@ export async function loadFacts(db: Handle, personId: string, loaded: LoadedCour
     const data = (r.data ?? {}) as Record<string, unknown>;
     switch (r.kind) {
       case "position":
-        if (r.stepId) facts.push({ kind: "position", stepId: r.stepId, positionSec: Number(data["positionSec"] ?? 0) });
+        if (r.stepId)
+          facts.push({
+            kind: "position",
+            stepId: r.stepId,
+            positionSec: Number(data["positionSec"] ?? 0),
+          });
         break;
       case "opened":
         if (r.stepId) facts.push({ kind: "opened", stepId: r.stepId });
         break;
       case "attempt-submitted":
-        if (r.stepId) facts.push({ kind: "attempt-submitted", stepId: r.stepId, score: Number(data["score"] ?? 0) });
+        if (r.stepId)
+          facts.push({
+            kind: "attempt-submitted",
+            stepId: r.stepId,
+            score: Number(data["score"] ?? 0),
+          });
         break;
       case "manual-mark":
       case "completion-kept":
@@ -180,7 +243,8 @@ export async function loadFacts(db: Handle, personId: string, loaded: LoadedCour
         if (r.itemRef) facts.push({ kind: r.kind, itemId: r.itemRef });
         break;
       case "club-attended":
-        if (r.itemRef) facts.push({ kind: "club-attended", moduleId: r.itemRef });
+        if (r.itemRef)
+          facts.push({ kind: "club-attended", moduleId: r.itemRef });
         break;
     }
   }
@@ -192,7 +256,12 @@ export async function loadQuestions(db: Handle, testId: string) {
   const questions = await db
     .select()
     .from(learningQuestions)
-    .where(and(eq(learningQuestions.testId, testId), isNull(learningQuestions.removedAt)))
+    .where(
+      and(
+        eq(learningQuestions.testId, testId),
+        isNull(learningQuestions.removedAt),
+      ),
+    )
     .orderBy(asc(learningQuestions.position));
   const options =
     questions.length === 0
@@ -200,18 +269,38 @@ export async function loadQuestions(db: Handle, testId: string) {
       : await db
           .select()
           .from(learningOptions)
-          .where(inArray(learningOptions.questionId, questions.map((q) => q.id)))
+          .where(
+            inArray(
+              learningOptions.questionId,
+              questions.map((q) => q.id),
+            ),
+          )
           .orderBy(asc(learningOptions.position));
-  return questions.map((q) => ({ ...q, options: options.filter((o) => o.questionId === q.id) }));
+  return questions.map((q) => ({
+    ...q,
+    options: options.filter((o) => o.questionId === q.id),
+  }));
 }
 
-export async function courseById(db: Handle, id: string): Promise<LearningCourseRow | undefined> {
-  const [row] = await db.select().from(learningCourses).where(eq(learningCourses.id, id));
+export async function courseById(
+  db: Handle,
+  id: string,
+): Promise<LearningCourseRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(learningCourses)
+    .where(eq(learningCourses.id, id));
   return row;
 }
 
-export async function courseBySlug(db: Handle, slug: string): Promise<LearningCourseRow | undefined> {
-  const [row] = await db.select().from(learningCourses).where(eq(learningCourses.slug, slug));
+export async function courseBySlug(
+  db: Handle,
+  slug: string,
+): Promise<LearningCourseRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(learningCourses)
+    .where(eq(learningCourses.slug, slug));
   return row;
 }
 
@@ -220,28 +309,52 @@ export async function courseOfModule(db: Handle, moduleId: string) {
   const [row] = await db
     .select({ course: learningCourses, module: learningModules })
     .from(learningModules)
-    .innerJoin(learningCourses, eq(learningCourses.id, learningModules.courseId))
+    .innerJoin(
+      learningCourses,
+      eq(learningCourses.id, learningModules.courseId),
+    )
     .where(eq(learningModules.id, moduleId));
   return row;
 }
 
 export async function courseOfLesson(db: Handle, lessonId: string) {
   const [row] = await db
-    .select({ course: learningCourses, module: learningModules, lesson: learningLessons })
+    .select({
+      course: learningCourses,
+      module: learningModules,
+      lesson: learningLessons,
+    })
     .from(learningLessons)
-    .innerJoin(learningModules, eq(learningModules.id, learningLessons.moduleId))
-    .innerJoin(learningCourses, eq(learningCourses.id, learningModules.courseId))
+    .innerJoin(
+      learningModules,
+      eq(learningModules.id, learningLessons.moduleId),
+    )
+    .innerJoin(
+      learningCourses,
+      eq(learningCourses.id, learningModules.courseId),
+    )
     .where(eq(learningLessons.id, lessonId));
   return row;
 }
 
 export async function courseOfStep(db: Handle, stepId: string) {
   const [row] = await db
-    .select({ course: learningCourses, module: learningModules, lesson: learningLessons, step: learningSteps })
+    .select({
+      course: learningCourses,
+      module: learningModules,
+      lesson: learningLessons,
+      step: learningSteps,
+    })
     .from(learningSteps)
     .innerJoin(learningLessons, eq(learningLessons.id, learningSteps.lessonId))
-    .innerJoin(learningModules, eq(learningModules.id, learningLessons.moduleId))
-    .innerJoin(learningCourses, eq(learningCourses.id, learningModules.courseId))
+    .innerJoin(
+      learningModules,
+      eq(learningModules.id, learningLessons.moduleId),
+    )
+    .innerJoin(
+      learningCourses,
+      eq(learningCourses.id, learningModules.courseId),
+    )
     .where(eq(learningSteps.id, stepId));
   return row;
 }

@@ -63,7 +63,10 @@ export class LearningLayers {
   }
 
   /** Shorthand for the value only. */
-  value<K extends LearningSettingKey>(key: K, path: LearningScopePath): LearningSettings[K] {
+  value<K extends LearningSettingKey>(
+    key: K,
+    path: LearningScopePath,
+  ): LearningSettings[K] {
     return this.resolve(key, path).value;
   }
 
@@ -81,7 +84,12 @@ export class LearningLayers {
       (layer.presetValues === undefined ||
         (Object.hasOwn(layer.presetValues, key) &&
           JSON.stringify(layer.presetValues[key]) === JSON.stringify(value)));
-    return { key, value: value as LearningSettings[K], level, preset: fromPreset ? layer.preset : null };
+    return {
+      key,
+      value: value as LearningSettings[K],
+      level,
+      preset: fromPreset ? layer.preset : null,
+    };
   }
 }
 

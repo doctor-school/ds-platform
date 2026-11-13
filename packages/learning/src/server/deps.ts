@@ -7,7 +7,9 @@ import type { LearningFieldIssue } from "../rules/validate.js";
 // owns the logic and never imports a host.
 
 export type LearningDb = DrizzleHandle["db"];
-export type LearningTx = Parameters<Parameters<LearningDb["transaction"]>[0]>[0];
+export type LearningTx = Parameters<
+  Parameters<LearningDb["transaction"]>[0]
+>[0];
 
 /** The 025 fact a completion records (025 EARS-7 / EARS-8; 024 EARS-12). */
 export interface LearningCompletionFact {
@@ -21,19 +23,32 @@ export interface LearningCompletionFact {
 
 /** `PointsEngine.record(tx, fact)` — recorded inside the causing transaction. */
 export interface LearningPointsPort {
-  record(tx: LearningTx, fact: LearningCompletionFact): Promise<{ publishAfterCommit: () => Promise<void> }>;
+  record(
+    tx: LearningTx,
+    fact: LearningCompletionFact,
+  ): Promise<{ publishAfterCommit: () => Promise<void> }>;
 }
 
 /** EARS-12 — the in-process transitions published after commit. */
 export type LearningEvent =
   | { type: "StepCompleted"; personId: string; stepId: string; at: Date }
-  | { type: "TestPassed"; personId: string; testId: string; score: number; at: Date }
+  | {
+      type: "TestPassed";
+      personId: string;
+      testId: string;
+      score: number;
+      at: Date;
+    }
   | { type: "CourseCompleted"; personId: string; courseId: string; at: Date };
 
 export class LearningEventBus {
-  private readonly listeners = new Set<(event: LearningEvent) => void | Promise<void>>();
+  private readonly listeners = new Set<
+    (event: LearningEvent) => void | Promise<void>
+  >();
 
-  subscribe(listener: (event: LearningEvent) => void | Promise<void>): () => void {
+  subscribe(
+    listener: (event: LearningEvent) => void | Promise<void>,
+  ): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
@@ -76,5 +91,7 @@ export class LearningServerError extends Error {
 }
 
 export function fieldError(path: string, message: string): LearningServerError {
-  return new LearningServerError("VALIDATION_FAILED", message, [{ path, message }]);
+  return new LearningServerError("VALIDATION_FAILED", message, [
+    { path, message },
+  ]);
 }

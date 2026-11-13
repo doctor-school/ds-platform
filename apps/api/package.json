@@ -27,6 +27,7 @@
     "@aws-sdk/client-s3": "^3.1128.0",
     "@aws-sdk/s3-request-presigner": "^3.1128.0",
     "@ds/db": "workspace:*",
+    "@ds/learning": "workspace:*",
     "@ds/legal-content": "workspace:*",
     "@ds/schemas": "workspace:*",
     "@fastify/multipart": "^10.1.1",

@@ -289,6 +289,29 @@ export const LIVE_TIERS = Object.freeze([
     ],
   },
   {
+    // 024 (#4011): the doctor's course path and step screens, with the Academy
+    // not-found leg of EARS-27 — hence the portal URL on a doctor tier.
+    name: "live/doctor/learning",
+    host: "doctor",
+    app: "apps/doctor",
+    pkg: "@ds/doctor",
+    config: "playwright.learning-live.config.ts",
+    rootDir: "e2e",
+    gated: [
+      {
+        file: "e2e/learning-path-live.spec.ts",
+        slotReason:
+          "the golden dataset seeds no published learning course, so a slot has no course slug for the journey to open",
+        requires: [
+          URL_DOCTOR,
+          URL_ACADEMY,
+          ...IDP_MAIL,
+          "E2E_LEARNING_COURSE_SLUG",
+        ],
+      },
+    ],
+  },
+  {
     name: "live/doctor/congress",
     host: "doctor",
     app: "apps/doctor",

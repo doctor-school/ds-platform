@@ -24,6 +24,7 @@
     "@ds/design-system": "workspace:*",
     "@ds/event-page": "workspace:*",
     "@ds/events-storefront": "workspace:*",
+    "@ds/learning": "workspace:*",
     "@ds/legal-content": "workspace:*",
     "@ds/room": "workspace:*",
     "@ds/room-page": "workspace:*",

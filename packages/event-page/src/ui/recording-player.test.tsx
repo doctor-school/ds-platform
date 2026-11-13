@@ -133,3 +133,62 @@ describe("014 EARS-5 — an authenticated read that carried no source", () => {
     expect(screen.getByTestId("recording-player-retry")).not.toBeNull();
   });
 });
+
+// 024 EARS-10 / EARS-16 (#4011) — a step video reports the provider's own clock:
+// `onClock` hears only the mounted frame's messages, from the provider's origin.
+describe("024 EARS-10 — the recording player reports the provider clock", () => {
+  const post = (iframe: HTMLIFrameElement, origin: string, data: unknown) =>
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", { origin, data, source: iframe.contentWindow }),
+      );
+    });
+
+  it("EARS-10: forwards the Rutube player clock of its own frame to onClock", () => {
+    const onClock = vi.fn();
+    renderPlayer({ onClock });
+    const iframe = frame() as HTMLIFrameElement;
+    post(iframe, "https://rutube.ru", JSON.stringify({ type: "player:currentTime", data: { time: 17 } }));
+    expect(onClock).toHaveBeenCalledWith(17);
+  });
+
+  it("EARS-10: ignores a clock from a foreign origin or from another window", () => {
+    const onClock = vi.fn();
+    renderPlayer({ onClock });
+    const iframe = frame() as HTMLIFrameElement;
+    post(iframe, "https://evil.example", { type: "player:currentTime", data: { time: 17 } });
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: "https://rutube.ru",
+          data: { type: "player:currentTime", data: { time: 18 } },
+          source: window,
+        }),
+      );
+    });
+    expect(onClock).not.toHaveBeenCalled();
+  });
+
+  it("EARS-10: asks YouTube for its player API and sends the listening handshake on load", () => {
+    const onClock = vi.fn();
+    renderPlayer({ provider: "youtube", embedRef: "dQw4w9WgXcQ", onClock });
+    const iframe = screen.getByTestId("recording-player-youtube") as HTMLIFrameElement;
+    expect(iframe).toHaveAttribute("src", "https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1");
+    const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage");
+    fireEvent.load(iframe);
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.stringContaining('"listening"'),
+      "https://www.youtube.com",
+    );
+    post(iframe, "https://www.youtube.com", JSON.stringify({ event: "infoDelivery", info: { currentTime: 9.5 } }));
+    expect(onClock).toHaveBeenCalledWith(9.5);
+  });
+
+  it("EARS-10: without onClock the YouTube src stays as the 014 recording plays it", () => {
+    renderPlayer({ provider: "youtube", embedRef: "dQw4w9WgXcQ" });
+    expect(screen.getByTestId("recording-player-youtube")).toHaveAttribute(
+      "src",
+      "https://www.youtube.com/embed/dQw4w9WgXcQ",
+    );
+  });
+});

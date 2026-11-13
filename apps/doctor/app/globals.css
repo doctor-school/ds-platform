@@ -47,3 +47,9 @@
  * mounts — its client wrapper carries the header cluster's layout classes.
  */
 @source "../../../packages/room-page/src";
+
+/*
+ * And `@ds/learning` (024), the course path `/courses/:slug` and its step
+ * screens mount.
+ */
+@source "../../../packages/learning/src";

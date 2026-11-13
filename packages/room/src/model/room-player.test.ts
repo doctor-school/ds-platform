@@ -100,3 +100,20 @@ describe("006 EARS-2 resolveEmbed — provider enum → embed frame, never URL-s
     expect(resolveEmbed(stream).kind).toBe("rutube");
   });
 });
+
+// 024 EARS-10 (#4011) — a step video asks the YouTube embed for its player API,
+// so the frame can report its clock to the parent.
+describe("024 EARS-10 resolveEmbed with the player API", () => {
+  it("EARS-10: adds enablejsapi=1 to the YouTube src only when the player API is asked for", () => {
+    const stream = { provider: "youtube" as const, embedRef: "dQw4w9WgXcQ" };
+    expect(resolveEmbed(stream, { playerApi: true })).toEqual({
+      kind: "youtube",
+      src: "https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1",
+    });
+    expect(resolveEmbed(stream)).toEqual({ kind: "youtube", src: "https://www.youtube.com/embed/dQw4w9WgXcQ" });
+    expect(resolveEmbed({ provider: "rutube", embedRef: "abc" }, { playerApi: true })).toEqual({
+      kind: "rutube",
+      src: "https://rutube.ru/play/embed/abc",
+    });
+  });
+});

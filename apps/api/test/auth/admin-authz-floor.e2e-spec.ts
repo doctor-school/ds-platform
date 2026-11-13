@@ -1092,6 +1092,41 @@ const FLOOR_ROUTES: {
     url: "/v1/admin/points/starter-bonus",
     payload: {},
   },
+  // 024 EARS-28/29 (#4011) — the learning admin API. Reads name absent ids;
+  // every write carries no Idempotency-Key, so an admitted principal gets a
+  // 428 (or a 404 for an absent id) and nothing is ever stored by this suite.
+  ...(
+    [
+      ["GET", "/v1/admin/learning/schools", "/v1/admin/learning/schools"],
+      ["POST", "/v1/admin/learning/schools", "/v1/admin/learning/schools"],
+      ["GET", "/v1/admin/learning/courses", "/v1/admin/learning/courses"],
+      ["POST", "/v1/admin/learning/courses", "/v1/admin/learning/courses"],
+      ["GET", "/v1/admin/learning/courses/:id", `/v1/admin/learning/courses/${ABSENT_ID}`],
+      ["POST", "/v1/admin/learning/courses/:id/publish", `/v1/admin/learning/courses/${ABSENT_ID}/publish`],
+      ["POST", "/v1/admin/learning/courses/:id/unpublish", `/v1/admin/learning/courses/${ABSENT_ID}/unpublish`],
+      ["POST", "/v1/admin/learning/modules", "/v1/admin/learning/modules"],
+      ["POST", "/v1/admin/learning/lessons", "/v1/admin/learning/lessons"],
+      ["GET", "/v1/admin/learning/lessons/:id", `/v1/admin/learning/lessons/${ABSENT_ID}`],
+      ["PATCH", "/v1/admin/learning/lessons/:id", `/v1/admin/learning/lessons/${ABSENT_ID}`],
+      ["POST", "/v1/admin/learning/lessons/:id/publish", `/v1/admin/learning/lessons/${ABSENT_ID}/publish`],
+      ["POST", "/v1/admin/learning/lessons/:id/unpublish", `/v1/admin/learning/lessons/${ABSENT_ID}/unpublish`],
+      ["PUT", "/v1/admin/learning/lessons/:id/step-order", `/v1/admin/learning/lessons/${ABSENT_ID}/step-order`],
+      ["POST", "/v1/admin/learning/steps", "/v1/admin/learning/steps"],
+      ["PATCH", "/v1/admin/learning/steps/:id", `/v1/admin/learning/steps/${ABSENT_ID}`],
+      ["DELETE", "/v1/admin/learning/steps/:id", `/v1/admin/learning/steps/${ABSENT_ID}`],
+      ["PUT", "/v1/admin/learning/steps/:id/source", `/v1/admin/learning/steps/${ABSENT_ID}/source`],
+      ["PUT", "/v1/admin/learning/steps/:id/media", `/v1/admin/learning/steps/${ABSENT_ID}/media`],
+      ["GET", "/v1/admin/learning/presets", "/v1/admin/learning/presets"],
+      ["GET", "/v1/admin/learning/rules/:scopeKind/:scopeId", `/v1/admin/learning/rules/course/${ABSENT_ID}`],
+      ["PUT", "/v1/admin/learning/rules/:scopeKind/:scopeId", `/v1/admin/learning/rules/course/${ABSENT_ID}`],
+      ["POST", "/v1/admin/learning/rules/:scopeKind/:scopeId/apply-preset", `/v1/admin/learning/rules/course/${ABSENT_ID}/apply-preset`],
+    ] as const
+  ).map(([method, path, url]) => ({
+    endpoint: `${method} ${path}`,
+    method,
+    url,
+    ...(method === "GET" || method === "DELETE" ? {} : { payload: {} }),
+  })),
 ];
 
 /** An authz refusal — never a 2xx, never a partially-served admin answer. */

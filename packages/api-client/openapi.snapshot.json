@@ -4079,6 +4079,3203 @@
         "required": ["items", "allEventsHref"],
         "type": "object"
       },
+      "LearningAttemptDto": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "questions": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "options": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id", "text"],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "text", "options"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "testId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": ["attemptId", "testId", "questions"],
+        "type": "object"
+      },
+      "LearningAttemptResultDto": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptsLeft": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "changed": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "itemId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "itemKind": {
+                  "enum": ["step", "lesson", "module", "course"],
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "done",
+                    "current",
+                    "open",
+                    "locked",
+                    "test-out-reachable"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": ["itemKind", "itemId", "status"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "nextAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "score": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "threshold": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "score",
+          "threshold",
+          "passed",
+          "attemptsLeft",
+          "nextAt",
+          "changed"
+        ],
+        "type": "object"
+      },
+      "LearningCourseAdminDto": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "projectId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "schoolId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "state": {
+            "enum": ["draft", "published"],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "schoolId",
+          "projectId",
+          "slug",
+          "title",
+          "state",
+          "version"
+        ],
+        "type": "object"
+      },
+      "LearningCourseCompositionDto": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "modules": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "courseId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "lessons": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "description": {
+                        "type": "string"
+                      },
+                      "durationMin": {
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
+                        "type": "integer"
+                      },
+                      "id": {
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                        "type": "string"
+                      },
+                      "moduleId": {
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                        "type": "string"
+                      },
+                      "position": {
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
+                        "type": "integer"
+                      },
+                      "projectId": {
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                        "type": "string"
+                      },
+                      "state": {
+                        "enum": ["draft", "published"],
+                        "type": "string"
+                      },
+                      "teaser": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "moduleId",
+                      "projectId",
+                      "position",
+                      "title",
+                      "description",
+                      "teaser",
+                      "state",
+                      "durationMin",
+                      "version"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "position": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "version": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "courseId",
+                "position",
+                "title",
+                "version",
+                "lessons"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "projectId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "schoolId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "state": {
+            "enum": ["draft", "published"],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "schoolId",
+          "projectId",
+          "slug",
+          "title",
+          "state",
+          "version",
+          "modules"
+        ],
+        "type": "object"
+      },
+      "LearningCourseListDto": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "projectId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "schoolId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "slug": {
+                  "type": "string"
+                },
+                "state": {
+                  "enum": ["draft", "published"],
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "version": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "schoolId",
+                "projectId",
+                "slug",
+                "title",
+                "state",
+                "version"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["data"],
+        "type": "object"
+      },
+      "LearningCoursePathDto": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "affiliation": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "credentials": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "photoUrl": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "slug": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "slug",
+                  "name",
+                  "role",
+                  "credentials",
+                  "affiliation",
+                  "photoUrl"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "course": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "slug": {
+                "type": "string"
+              },
+              "state": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "done",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "current",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "open",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "reason": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "previous",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "at": {
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "date",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind", "at"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "expression",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "registration",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "const": "locked",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status", "reason"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "test-out-reachable",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  }
+                ]
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "slug", "title", "state"],
+            "type": "object"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "lessonId": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "stepId": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  }
+                },
+                "required": ["stepId", "lessonId"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "slug": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": ["slug", "title"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "document": {
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "done",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "current",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "open",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "reason": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "previous",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "at": {
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "date",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind", "at"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "expression",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "registration",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "const": "locked",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status", "reason"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "test-out-reachable",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": ["state"],
+            "type": "object"
+          },
+          "modules": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "club": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "state": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "status": {
+                                  "const": "done",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["status"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "status": {
+                                  "const": "current",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["status"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "status": {
+                                  "const": "open",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["status"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "reason": {
+                                  "oneOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "kind": {
+                                          "const": "previous",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": ["kind"],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "at": {
+                                          "format": "date-time",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "const": "date",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": ["kind", "at"],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "kind": {
+                                          "const": "expression",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": ["kind"],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "kind": {
+                                          "const": "registration",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": ["kind"],
+                                      "type": "object"
+                                    }
+                                  ]
+                                },
+                                "status": {
+                                  "const": "locked",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["status", "reason"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "status": {
+                                  "const": "test-out-reachable",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["status"],
+                              "type": "object"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["state"],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "lessons": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "durationMin": {
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
+                        "type": "integer"
+                      },
+                      "id": {
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                        "type": "string"
+                      },
+                      "number": {
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "state": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "status": {
+                                "const": "done",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["status"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "status": {
+                                "const": "current",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["status"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "status": {
+                                "const": "open",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["status"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "reason": {
+                                "oneOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "previous",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["kind"],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "at": {
+                                        "format": "date-time",
+                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "date",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["kind", "at"],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "expression",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["kind"],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "registration",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["kind"],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "status": {
+                                "const": "locked",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["status", "reason"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "status": {
+                                "const": "test-out-reachable",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["status"],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "stepCount": {
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
+                        "type": "integer"
+                      },
+                      "steps": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "durationMin": {
+                              "maximum": 9007199254740991,
+                              "minimum": -9007199254740991,
+                              "type": "integer"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                              "type": "string"
+                            },
+                            "state": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "status": {
+                                      "const": "done",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["status"],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "status": {
+                                      "const": "current",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["status"],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "status": {
+                                      "const": "open",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["status"],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "reason": {
+                                      "oneOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "kind": {
+                                              "const": "previous",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["kind"],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "at": {
+                                              "format": "date-time",
+                                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "date",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["kind", "at"],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "kind": {
+                                              "const": "expression",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["kind"],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "kind": {
+                                              "const": "registration",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["kind"],
+                                          "type": "object"
+                                        }
+                                      ]
+                                    },
+                                    "status": {
+                                      "const": "locked",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["status", "reason"],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "status": {
+                                      "const": "test-out-reachable",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["status"],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": ["video", "download", "test"],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type",
+                            "title",
+                            "durationMin",
+                            "state"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "title": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "number",
+                      "title",
+                      "durationMin",
+                      "stepCount",
+                      "state",
+                      "steps"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "position": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                },
+                "state": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "const": "done",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "const": "current",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "reason": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "previous",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "at": {
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "date",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind", "at"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "expression",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "registration",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind"],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "const": "locked",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status", "reason"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "const": "test-out-reachable",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "position",
+                "state",
+                "lessons",
+                "club"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "school": {
+            "additionalProperties": false,
+            "properties": {
+              "slug": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": ["slug", "title"],
+            "type": "object"
+          },
+          "signedIn": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "course",
+          "direction",
+          "school",
+          "author",
+          "signedIn",
+          "modules",
+          "document",
+          "current"
+        ],
+        "type": "object"
+      },
+      "LearningLessonAdminDto": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "durationMin": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "moduleId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "position": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "projectId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "state": {
+            "enum": ["draft", "published"],
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "durationMin": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                },
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "lessonId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "media": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contentType": {
+                          "type": "string"
+                        },
+                        "sizeBytes": {
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        }
+                      },
+                      "required": ["contentType", "sizeBytes"],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "payload": {
+                  "additionalProperties": {},
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "position": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                },
+                "questions": {
+                  "anyOf": [
+                    {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "correctiveText": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          "options": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "correct": {
+                                  "type": "boolean"
+                                },
+                                "id": {
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "text", "correct"],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "text", "correctiveText", "options"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "embedRef": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "enum": ["rutube", "youtube", "vk", "cdnvideo"],
+                          "type": "string"
+                        }
+                      },
+                      "required": ["provider", "embedRef"],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": ["video", "download", "test"],
+                  "type": "string"
+                },
+                "version": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "lessonId",
+                "position",
+                "type",
+                "title",
+                "durationMin",
+                "payload",
+                "questions",
+                "media",
+                "source",
+                "version"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "teaser": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "moduleId",
+          "projectId",
+          "position",
+          "title",
+          "description",
+          "teaser",
+          "state",
+          "durationMin",
+          "steps",
+          "version"
+        ],
+        "type": "object"
+      },
+      "LearningLessonReadDto": {
+        "additionalProperties": false,
+        "properties": {
+          "course": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "slug": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "slug", "title"],
+            "type": "object"
+          },
+          "lesson": {
+            "additionalProperties": false,
+            "properties": {
+              "completionSentence": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "durationMin": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "number": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "state": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "done",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "current",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "open",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "reason": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "previous",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "at": {
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "date",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind", "at"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "expression",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "registration",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "const": "locked",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status", "reason"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "test-out-reachable",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  }
+                ]
+              },
+              "stepCount": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "teaser": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "number",
+              "title",
+              "description",
+              "teaser",
+              "durationMin",
+              "stepCount",
+              "state",
+              "completionSentence"
+            ],
+            "type": "object"
+          },
+          "signedIn": {
+            "type": "boolean"
+          },
+          "steps": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "completionSentence": {
+                  "type": "string"
+                },
+                "durationMin": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                },
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "state": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "const": "done",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "const": "current",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "reason": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "previous",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "at": {
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "date",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind", "at"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "expression",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "registration",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind"],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "const": "locked",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status", "reason"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "const": "test-out-reachable",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": ["video", "download", "test"],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "title",
+                "durationMin",
+                "state",
+                "completionSentence"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["course", "lesson", "signedIn", "steps"],
+        "type": "object"
+      },
+      "LearningModuleAdminDto": {
+        "additionalProperties": false,
+        "properties": {
+          "courseId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "position": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": ["id", "courseId", "position", "title", "version"],
+        "type": "object"
+      },
+      "LearningPresetListDto": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "values": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "completion.course": {
+                      "$ref": "#/components/schemas/LearningPresetListDto__schema0"
+                    },
+                    "completion.lesson": {
+                      "$ref": "#/components/schemas/LearningPresetListDto__schema0"
+                    },
+                    "completion.module": {
+                      "$ref": "#/components/schemas/LearningPresetListDto__schema0"
+                    },
+                    "completion.step": {
+                      "$ref": "#/components/schemas/LearningPresetListDto__schema0"
+                    },
+                    "course.closingClub": {
+                      "type": "boolean"
+                    },
+                    "course.clubInCompletion": {
+                      "type": "boolean"
+                    },
+                    "course.deliveryMode": {
+                      "enum": ["online", "offline", "open"],
+                      "type": "string"
+                    },
+                    "course.moduleSize": {
+                      "maximum": 50,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "lockedVisibility": {
+                      "enum": ["hidden", "locked"],
+                      "type": "string"
+                    },
+                    "order": {
+                      "enum": ["strict", "free"],
+                      "type": "string"
+                    },
+                    "progress.maxPlaybackRate": {
+                      "maximum": 4,
+                      "minimum": 1,
+                      "type": "number"
+                    },
+                    "progress.slackSec": {
+                      "maximum": 600,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "repeat.allowed": {
+                      "type": "boolean"
+                    },
+                    "test.attempts": {
+                      "anyOf": [
+                        {
+                          "maximum": 100,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "const": "unlimited",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "test.entryCounts": {
+                      "type": "boolean"
+                    },
+                    "test.entryRequired": {
+                      "type": "boolean"
+                    },
+                    "test.exitRequired": {
+                      "type": "boolean"
+                    },
+                    "test.pauseMin": {
+                      "maximum": 525600,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "test.questions": {
+                      "anyOf": [
+                        {
+                          "maximum": 200,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "const": "all",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "test.threshold": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "testOut.allowed": {
+                      "type": "boolean"
+                    },
+                    "testOut.pauseMin": {
+                      "maximum": 525600,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "unlock": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "immediate",
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind"],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "after-previous",
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind"],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "instant": {
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "from-date",
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind", "instant"],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "expression",
+                              "type": "string"
+                            },
+                            "rule": {
+                              "$ref": "#/components/schemas/LearningPresetListDto__schema0"
+                            }
+                          },
+                          "required": ["kind", "rule"],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "viewed.podcast.percent": {
+                      "maximum": 100,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "viewed.video.percent": {
+                      "maximum": 100,
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                },
+                "version": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                }
+              },
+              "required": ["id", "name", "values", "version"],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["data"],
+        "type": "object"
+      },
+      "LearningPresetListDto__schema0": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "condition": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "module": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "percent": {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "step": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "test": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["condition"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "all": {
+                "items": {
+                  "$ref": "#/components/schemas/LearningPresetListDto__schema0"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": ["all"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "any": {
+                "items": {
+                  "$ref": "#/components/schemas/LearningPresetListDto__schema0"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": ["any"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "nOf": {
+                "additionalProperties": false,
+                "properties": {
+                  "n": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "of": {
+                    "items": {
+                      "$ref": "#/components/schemas/LearningPresetListDto__schema0"
+                    },
+                    "maxItems": 20,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": ["n", "of"],
+                "type": "object"
+              }
+            },
+            "required": ["nOf"],
+            "type": "object"
+          }
+        ]
+      },
+      "LearningSchoolAdminDto": {
+        "additionalProperties": false,
+        "properties": {
+          "directionId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "leadExpertId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "projectId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "state": {
+            "enum": ["draft", "published"],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "directionId",
+          "leadExpertId",
+          "projectId",
+          "slug",
+          "title",
+          "state",
+          "version"
+        ],
+        "type": "object"
+      },
+      "LearningSchoolListDto": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "directionId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "leadExpertId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "projectId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "slug": {
+                  "type": "string"
+                },
+                "state": {
+                  "enum": ["draft", "published"],
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "version": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "directionId",
+                "leadExpertId",
+                "projectId",
+                "slug",
+                "title",
+                "state",
+                "version"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["data"],
+        "type": "object"
+      },
+      "LearningScopeRulesDto": {
+        "additionalProperties": false,
+        "properties": {
+          "appliedPreset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effective": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "enum": [
+                    "completion.step",
+                    "completion.lesson",
+                    "completion.module",
+                    "completion.course",
+                    "viewed.video.percent",
+                    "viewed.podcast.percent",
+                    "unlock",
+                    "order",
+                    "lockedVisibility",
+                    "test.threshold",
+                    "test.attempts",
+                    "test.pauseMin",
+                    "test.questions",
+                    "test.exitRequired",
+                    "test.entryRequired",
+                    "test.entryCounts",
+                    "testOut.allowed",
+                    "testOut.pauseMin",
+                    "repeat.allowed",
+                    "progress.maxPlaybackRate",
+                    "progress.slackSec",
+                    "course.deliveryMode",
+                    "course.moduleSize",
+                    "course.closingClub",
+                    "course.clubInCompletion"
+                  ],
+                  "type": "string"
+                },
+                "level": {
+                  "enum": [
+                    "platform",
+                    "school",
+                    "course",
+                    "module",
+                    "lesson",
+                    "step"
+                  ],
+                  "type": "string"
+                },
+                "preset": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "value": {}
+              },
+              "required": ["key", "value", "level", "preset"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "layerVersion": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "scopeId": {
+            "type": "string"
+          },
+          "scopeKind": {
+            "enum": [
+              "platform",
+              "school",
+              "course",
+              "module",
+              "lesson",
+              "step"
+            ],
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": false,
+            "properties": {
+              "completion.course": {
+                "$ref": "#/components/schemas/LearningScopeRulesDto__schema0"
+              },
+              "completion.lesson": {
+                "$ref": "#/components/schemas/LearningScopeRulesDto__schema0"
+              },
+              "completion.module": {
+                "$ref": "#/components/schemas/LearningScopeRulesDto__schema0"
+              },
+              "completion.step": {
+                "$ref": "#/components/schemas/LearningScopeRulesDto__schema0"
+              },
+              "course.closingClub": {
+                "type": "boolean"
+              },
+              "course.clubInCompletion": {
+                "type": "boolean"
+              },
+              "course.deliveryMode": {
+                "enum": ["online", "offline", "open"],
+                "type": "string"
+              },
+              "course.moduleSize": {
+                "maximum": 50,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "lockedVisibility": {
+                "enum": ["hidden", "locked"],
+                "type": "string"
+              },
+              "order": {
+                "enum": ["strict", "free"],
+                "type": "string"
+              },
+              "progress.maxPlaybackRate": {
+                "maximum": 4,
+                "minimum": 1,
+                "type": "number"
+              },
+              "progress.slackSec": {
+                "maximum": 600,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "repeat.allowed": {
+                "type": "boolean"
+              },
+              "test.attempts": {
+                "anyOf": [
+                  {
+                    "maximum": 100,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "const": "unlimited",
+                    "type": "string"
+                  }
+                ]
+              },
+              "test.entryCounts": {
+                "type": "boolean"
+              },
+              "test.entryRequired": {
+                "type": "boolean"
+              },
+              "test.exitRequired": {
+                "type": "boolean"
+              },
+              "test.pauseMin": {
+                "maximum": 525600,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "test.questions": {
+                "anyOf": [
+                  {
+                    "maximum": 200,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "const": "all",
+                    "type": "string"
+                  }
+                ]
+              },
+              "test.threshold": {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "testOut.allowed": {
+                "type": "boolean"
+              },
+              "testOut.pauseMin": {
+                "maximum": 525600,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unlock": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "immediate",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "after-previous",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "instant": {
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "from-date",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "instant"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "expression",
+                        "type": "string"
+                      },
+                      "rule": {
+                        "$ref": "#/components/schemas/LearningScopeRulesDto__schema0"
+                      }
+                    },
+                    "required": ["kind", "rule"],
+                    "type": "object"
+                  }
+                ]
+              },
+              "viewed.podcast.percent": {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "viewed.video.percent": {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "scopeKind",
+          "scopeId",
+          "layerVersion",
+          "appliedPreset",
+          "values",
+          "effective"
+        ],
+        "type": "object"
+      },
+      "LearningScopeRulesDto__schema0": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "condition": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "module": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "percent": {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "step": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "test": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["condition"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "all": {
+                "items": {
+                  "$ref": "#/components/schemas/LearningScopeRulesDto__schema0"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": ["all"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "any": {
+                "items": {
+                  "$ref": "#/components/schemas/LearningScopeRulesDto__schema0"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": ["any"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "nOf": {
+                "additionalProperties": false,
+                "properties": {
+                  "n": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "of": {
+                    "items": {
+                      "$ref": "#/components/schemas/LearningScopeRulesDto__schema0"
+                    },
+                    "maxItems": 20,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": ["n", "of"],
+                "type": "object"
+              }
+            },
+            "required": ["nOf"],
+            "type": "object"
+          }
+        ]
+      },
+      "LearningStepAdminDto": {
+        "additionalProperties": false,
+        "properties": {
+          "durationMin": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "lessonId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "media": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contentType": {
+                    "type": "string"
+                  },
+                  "sizeBytes": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  }
+                },
+                "required": ["contentType", "sizeBytes"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payload": {
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "position": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "questions": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "correctiveText": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    "options": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "correct": {
+                            "type": "boolean"
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "text", "correct"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "text", "correctiveText", "options"],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "embedRef": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "enum": ["rutube", "youtube", "vk", "cdnvideo"],
+                    "type": "string"
+                  }
+                },
+                "required": ["provider", "embedRef"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "enum": ["video", "download", "test"],
+            "type": "string"
+          },
+          "version": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "lessonId",
+          "position",
+          "type",
+          "title",
+          "durationMin",
+          "payload",
+          "questions",
+          "media",
+          "source",
+          "version"
+        ],
+        "type": "object"
+      },
+      "LearningStepReadDto": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "durationSec": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  "embedRef": {
+                    "type": "string"
+                  },
+                  "positionSec": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "provider": {
+                    "enum": ["rutube", "youtube", "vk", "cdnvideo"],
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "video",
+                    "type": "string"
+                  },
+                  "watchedPercent": {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "type",
+                  "provider",
+                  "embedRef",
+                  "durationSec",
+                  "watchedPercent",
+                  "positionSec"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "fileName": {
+                    "type": "string"
+                  },
+                  "fileSizeBytes": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  "mediaUrl": {
+                    "type": "string"
+                  },
+                  "opened": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "download",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "mediaUrl",
+                  "fileName",
+                  "fileSizeBytes",
+                  "opened"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "attemptsLeft": {
+                    "anyOf": [
+                      {
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "const": "exit",
+                    "type": "string"
+                  },
+                  "lastResult": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "passed": {
+                            "type": "boolean"
+                          },
+                          "score": {
+                            "maximum": 9007199254740991,
+                            "minimum": -9007199254740991,
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["score", "passed"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "questionCount": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  "testId": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "threshold": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "test",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "testId",
+                  "kind",
+                  "questionCount",
+                  "threshold",
+                  "attemptsLeft",
+                  "lastResult"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "courseSlug": {
+            "type": "string"
+          },
+          "lessonCompletionSentence": {
+            "type": "string"
+          },
+          "lessonId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "nextStepId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "step": {
+            "additionalProperties": false,
+            "properties": {
+              "completionSentence": {
+                "type": "string"
+              },
+              "durationMin": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "state": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "done",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "current",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "open",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "reason": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "previous",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "at": {
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "date",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind", "at"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "expression",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "registration",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "const": "locked",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status", "reason"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "const": "test-out-reachable",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status"],
+                    "type": "object"
+                  }
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "enum": ["video", "download", "test"],
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "title",
+              "durationMin",
+              "state",
+              "completionSentence"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "courseSlug",
+          "lessonId",
+          "step",
+          "lessonCompletionSentence",
+          "body",
+          "nextStepId"
+        ],
+        "type": "object"
+      },
       "LegacyBroadcastCreateDto": {
         "additionalProperties": false,
         "properties": {
@@ -5668,6 +8865,46 @@
           }
         },
         "required": ["itemKind", "mode", "pulCost"],
+        "type": "object"
+      },
+      "RecordLearningFactResponseDto": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "itemId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "itemKind": {
+                  "enum": ["step", "lesson", "module", "course"],
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "done",
+                    "current",
+                    "open",
+                    "locked",
+                    "test-out-reachable"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": ["itemKind", "itemId", "status"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "outcome": {
+            "enum": ["recorded", "duplicate"],
+            "type": "string"
+          }
+        },
+        "required": ["outcome", "changed"],
         "type": "object"
       },
       "RegisterRequestDto": {
@@ -8868,6 +12105,601 @@
         "tags": ["ExpertsAdmin"]
       }
     },
+    "/v1/admin/learning/courses": {
+      "get": {
+        "operationId": "LearningAdminController_courses",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "schoolId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningCourseListDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      },
+      "post": {
+        "operationId": "LearningAdminController_createCourse",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningCourseAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/courses/{id}": {
+      "get": {
+        "operationId": "LearningAdminController_course",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningCourseCompositionDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/courses/{id}/publish": {
+      "post": {
+        "operationId": "LearningAdminController_publishCourse",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningCourseAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/courses/{id}/unpublish": {
+      "post": {
+        "operationId": "LearningAdminController_unpublishCourse",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningCourseAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/lessons": {
+      "post": {
+        "operationId": "LearningAdminController_createLesson",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningLessonAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/lessons/{id}": {
+      "get": {
+        "operationId": "LearningAdminController_lesson",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningLessonAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      },
+      "patch": {
+        "operationId": "LearningAdminController_updateLesson",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningLessonAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/lessons/{id}/publish": {
+      "post": {
+        "operationId": "LearningAdminController_publishLesson",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningLessonAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/lessons/{id}/step-order": {
+      "put": {
+        "operationId": "LearningAdminController_reorderSteps",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningLessonAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/lessons/{id}/unpublish": {
+      "post": {
+        "operationId": "LearningAdminController_unpublishLesson",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningLessonAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/modules": {
+      "post": {
+        "operationId": "LearningAdminController_createModule",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningModuleAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/presets": {
+      "get": {
+        "operationId": "LearningAdminController_presets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningPresetListDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/rules/{scopeKind}/{scopeId}": {
+      "get": {
+        "operationId": "LearningAdminController_rules",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scopeKind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scopeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningScopeRulesDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      },
+      "put": {
+        "operationId": "LearningAdminController_setRules",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scopeKind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scopeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningScopeRulesDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/rules/{scopeKind}/{scopeId}/apply-preset": {
+      "post": {
+        "operationId": "LearningAdminController_applyPreset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scopeKind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scopeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningScopeRulesDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/schools": {
+      "get": {
+        "operationId": "LearningAdminController_schools",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSchoolListDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      },
+      "post": {
+        "operationId": "LearningAdminController_createSchool",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSchoolAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/steps": {
+      "post": {
+        "operationId": "LearningAdminController_createStep",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningStepAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/steps/{id}": {
+      "delete": {
+        "operationId": "LearningAdminController_removeStep",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningStepAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      },
+      "patch": {
+        "operationId": "LearningAdminController_updateStep",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningStepAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/steps/{id}/media": {
+      "put": {
+        "operationId": "LearningAdminController_setStepMedia",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningStepAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/steps/{id}/source": {
+      "put": {
+        "operationId": "LearningAdminController_setStepSource",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningStepAdminDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
     "/v1/admin/legacy-broadcasts": {
       "post": {
         "operationId": "LegacyBroadcastsAdminController_create",
@@ -10205,6 +14037,62 @@
         "tags": ["Health"]
       }
     },
+    "/v1/learning/courses/{courseSlug}/path": {
+      "get": {
+        "operationId": "LearningPublicController_path",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "courseSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningCoursePathDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningPublic"]
+      }
+    },
+    "/v1/learning/lessons/{lessonId}": {
+      "get": {
+        "operationId": "LearningPublicController_lesson",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lessonId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningLessonReadDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningPublic"]
+      }
+    },
     "/v1/me/birth-date": {
       "put": {
         "operationId": "CongressBirthDateMeController_set",
@@ -10537,6 +14425,109 @@
           }
         },
         "tags": ["MyEvents"]
+      }
+    },
+    "/v1/me/learning/attempts/{attemptId}/submit": {
+      "post": {
+        "operationId": "LearningMeController_submit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attemptId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningAttemptResultDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningMe"]
+      }
+    },
+    "/v1/me/learning/facts": {
+      "post": {
+        "operationId": "LearningMeController_fact",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordLearningFactResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningMe"]
+      }
+    },
+    "/v1/me/learning/steps/{stepId}": {
+      "get": {
+        "operationId": "LearningMeController_step",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "stepId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningStepReadDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningMe"]
+      }
+    },
+    "/v1/me/learning/tests/{testId}/attempts": {
+      "post": {
+        "operationId": "LearningMeController_start",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "testId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningAttemptDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningMe"]
       }
     },
     "/v1/me/phone": {

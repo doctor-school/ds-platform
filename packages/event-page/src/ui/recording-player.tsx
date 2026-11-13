@@ -1,9 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { StreamProvider } from "@ds/schemas";
 import { Button } from "@ds/design-system/button";
 import { resolveEmbed } from "@ds/room/embed";
+import {
+  parseProviderClock,
+  providerClockHandshake,
+} from "@ds/room/player-signals";
 
 /**
  * 014 EARS-7 — the recording player's FAILURE BOUNDARY: the arm of the player
@@ -73,6 +77,13 @@ export interface RecordingPlayerProps {
   unavailableBody: string;
   /** «Попробовать ещё раз» (`EVENT_PAGE_COPY.playerUnavailable.retry`, `../copy/event-page-copy.ts`). */
   retryLabel: string;
+  /**
+   * 024 EARS-10 (#4011) — the provider's own playback position, in seconds,
+   * each time the mounted frame reports it. Set, the frame is asked for its
+   * player API (YouTube `enablejsapi=1` + the `listening` handshake); a
+   * provider with no clock (cdnvideo) never calls it.
+   */
+  onClock?: (positionSec: number) => void;
 }
 
 export function RecordingPlayer({
@@ -83,6 +94,7 @@ export function RecordingPlayer({
   unavailableTitle,
   unavailableBody,
   retryLabel,
+  onClock,
 }: RecordingPlayerProps) {
   // `attempt` doubles as the iframe `key`: bumping it unmounts the failed frame
   // and mounts a genuinely fresh one, so a retry re-requests the embed instead of
@@ -119,9 +131,34 @@ export function RecordingPlayer({
    * hole this boundary exists to close. The listeners are torn down with the
    * element on unmount and on every retry remount, so none outlives its frame.
    */
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const clockRef = useRef(onClock);
+  clockRef.current = onClock;
+  const listening = onClock !== undefined;
+
+  useEffect(() => {
+    if (!listening || !provider) return;
+    const onMessage = (event: MessageEvent) => {
+      const own = frameRef.current?.contentWindow;
+      if (!own || event.source !== own) return;
+      const sec = parseProviderClock(provider, event);
+      if (sec !== null) clockRef.current?.(sec);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [listening, provider]);
+
   const bindFrame = useCallback((node: HTMLIFrameElement | null) => {
+    frameRef.current = node;
     if (!node) return;
-    const onLoad = () => setWatching(false);
+    const onLoad = () => {
+      setWatching(false);
+      const hello =
+        listening && provider ? providerClockHandshake(provider) : null;
+      if (hello && node.src) {
+        node.contentWindow?.postMessage(hello, new URL(node.src).origin);
+      }
+    };
     const onError = () => setFailed(true);
     node.addEventListener("load", onLoad);
     node.addEventListener("error", onError);
@@ -129,13 +166,15 @@ export function RecordingPlayer({
       node.removeEventListener("load", onLoad);
       node.removeEventListener("error", onError);
     };
-  }, []);
+  }, [listening, provider]);
 
   // No source at all (the authenticated read answered without one) is decided
   // before `resolveEmbed` is asked anything — the resolver maps a provider to a
   // src and has no opinion about an absent provider.
   const embed =
-    provider && embedRef ? resolveEmbed({ provider, embedRef }) : null;
+    provider && embedRef
+      ? resolveEmbed({ provider, embedRef }, { playerApi: listening })
+      : null;
 
   // A provider whose src cannot be composed is the SAME honest failure, reached
   // before a frame is ever mounted — never a blank card.

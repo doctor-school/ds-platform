@@ -72,6 +72,7 @@ const config: NextConfig = {
     "@ds/design-system",
     "@ds/event-page",
     "@ds/events-storefront",
+    "@ds/learning",
     "@ds/room",
     "@ds/room-page",
     "@ds/storefront-shell",

@@ -1092,6 +1092,294 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/learning/courses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LearningAdminController_courses"];
+        put?: never;
+        post: operations["LearningAdminController_createCourse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/courses/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LearningAdminController_course"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/courses/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningAdminController_publishCourse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/courses/{id}/unpublish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningAdminController_unpublishCourse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/lessons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningAdminController_createLesson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/lessons/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LearningAdminController_lesson"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["LearningAdminController_updateLesson"];
+        trace?: never;
+    };
+    "/v1/admin/learning/lessons/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningAdminController_publishLesson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/lessons/{id}/step-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["LearningAdminController_reorderSteps"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/lessons/{id}/unpublish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningAdminController_unpublishLesson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningAdminController_createModule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LearningAdminController_presets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/rules/{scopeKind}/{scopeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LearningAdminController_rules"];
+        put: operations["LearningAdminController_setRules"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/rules/{scopeKind}/{scopeId}/apply-preset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningAdminController_applyPreset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/schools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LearningAdminController_schools"];
+        put?: never;
+        post: operations["LearningAdminController_createSchool"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningAdminController_createStep"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/steps/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["LearningAdminController_removeStep"];
+        options?: never;
+        head?: never;
+        patch: operations["LearningAdminController_updateStep"];
+        trace?: never;
+    };
+    "/v1/admin/learning/steps/{id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["LearningAdminController_setStepMedia"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/steps/{id}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["LearningAdminController_setStepSource"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/legacy-broadcasts": {
         parameters: {
             query?: never;
@@ -1956,6 +2244,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/learning/courses/{courseSlug}/path": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LearningPublicController_path"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/learning/lessons/{lessonId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LearningPublicController_lesson"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/birth-date": {
         parameters: {
             query?: never;
@@ -2062,6 +2382,70 @@ export interface paths {
         get: operations["MyEventsController_list"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/learning/attempts/{attemptId}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningMeController_submit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/learning/facts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningMeController_fact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/learning/steps/{stepId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LearningMeController_step"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/learning/tests/{testId}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningMeController_start"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3789,6 +4173,793 @@ export interface components {
                 title: string;
             }[];
         };
+        LearningAttemptDto: {
+            /** Format: uuid */
+            attemptId: string;
+            questions: {
+                /** Format: uuid */
+                id: string;
+                options: {
+                    /** Format: uuid */
+                    id: string;
+                    text: string;
+                }[];
+                text: string;
+            }[];
+            /** Format: uuid */
+            testId: string;
+        };
+        LearningAttemptResultDto: {
+            attemptsLeft: number | null;
+            changed: {
+                /** Format: uuid */
+                itemId: string;
+                /** @enum {string} */
+                itemKind: "step" | "lesson" | "module" | "course";
+                /** @enum {string} */
+                status: "done" | "current" | "open" | "locked" | "test-out-reachable";
+            }[];
+            nextAt: string | null;
+            passed: boolean;
+            score: number;
+            threshold: number;
+        };
+        LearningCourseAdminDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            schoolId: string;
+            slug: string;
+            /** @enum {string} */
+            state: "draft" | "published";
+            title: string;
+            version: number;
+        };
+        LearningCourseCompositionDto: {
+            /** Format: uuid */
+            id: string;
+            modules: {
+                /** Format: uuid */
+                courseId: string;
+                /** Format: uuid */
+                id: string;
+                lessons: {
+                    description: string;
+                    durationMin: number;
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    moduleId: string;
+                    position: number;
+                    /** Format: uuid */
+                    projectId: string;
+                    /** @enum {string} */
+                    state: "draft" | "published";
+                    teaser: string;
+                    title: string;
+                    version: number;
+                }[];
+                position: number;
+                title: string;
+                version: number;
+            }[];
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            schoolId: string;
+            slug: string;
+            /** @enum {string} */
+            state: "draft" | "published";
+            title: string;
+            version: number;
+        };
+        LearningCourseListDto: {
+            data: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                projectId: string;
+                /** Format: uuid */
+                schoolId: string;
+                slug: string;
+                /** @enum {string} */
+                state: "draft" | "published";
+                title: string;
+                version: number;
+            }[];
+        };
+        LearningCoursePathDto: {
+            author: {
+                affiliation: string | null;
+                credentials: string | null;
+                name: string;
+                photoUrl: string | null;
+                role: string | null;
+                slug: string;
+            } | null;
+            course: {
+                /** Format: uuid */
+                id: string;
+                slug: string;
+                state: {
+                    /** @constant */
+                    status: "done";
+                } | {
+                    /** @constant */
+                    status: "current";
+                } | {
+                    /** @constant */
+                    status: "open";
+                } | {
+                    reason: {
+                        /** @constant */
+                        kind: "previous";
+                    } | {
+                        /** Format: date-time */
+                        at: string;
+                        /** @constant */
+                        kind: "date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                    } | {
+                        /** @constant */
+                        kind: "registration";
+                    };
+                    /** @constant */
+                    status: "locked";
+                } | {
+                    /** @constant */
+                    status: "test-out-reachable";
+                };
+                title: string;
+            };
+            current: {
+                /** Format: uuid */
+                lessonId: string;
+                /** Format: uuid */
+                stepId: string;
+            } | null;
+            direction: {
+                slug: string;
+                title: string;
+            } | null;
+            document: {
+                state: {
+                    /** @constant */
+                    status: "done";
+                } | {
+                    /** @constant */
+                    status: "current";
+                } | {
+                    /** @constant */
+                    status: "open";
+                } | {
+                    reason: {
+                        /** @constant */
+                        kind: "previous";
+                    } | {
+                        /** Format: date-time */
+                        at: string;
+                        /** @constant */
+                        kind: "date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                    } | {
+                        /** @constant */
+                        kind: "registration";
+                    };
+                    /** @constant */
+                    status: "locked";
+                } | {
+                    /** @constant */
+                    status: "test-out-reachable";
+                };
+            };
+            modules: {
+                club: {
+                    state: {
+                        /** @constant */
+                        status: "done";
+                    } | {
+                        /** @constant */
+                        status: "current";
+                    } | {
+                        /** @constant */
+                        status: "open";
+                    } | {
+                        reason: {
+                            /** @constant */
+                            kind: "previous";
+                        } | {
+                            /** Format: date-time */
+                            at: string;
+                            /** @constant */
+                            kind: "date";
+                        } | {
+                            /** @constant */
+                            kind: "expression";
+                        } | {
+                            /** @constant */
+                            kind: "registration";
+                        };
+                        /** @constant */
+                        status: "locked";
+                    } | {
+                        /** @constant */
+                        status: "test-out-reachable";
+                    };
+                } | null;
+                /** Format: uuid */
+                id: string;
+                lessons: {
+                    durationMin: number;
+                    /** Format: uuid */
+                    id: string;
+                    number: number;
+                    state: {
+                        /** @constant */
+                        status: "done";
+                    } | {
+                        /** @constant */
+                        status: "current";
+                    } | {
+                        /** @constant */
+                        status: "open";
+                    } | {
+                        reason: {
+                            /** @constant */
+                            kind: "previous";
+                        } | {
+                            /** Format: date-time */
+                            at: string;
+                            /** @constant */
+                            kind: "date";
+                        } | {
+                            /** @constant */
+                            kind: "expression";
+                        } | {
+                            /** @constant */
+                            kind: "registration";
+                        };
+                        /** @constant */
+                        status: "locked";
+                    } | {
+                        /** @constant */
+                        status: "test-out-reachable";
+                    };
+                    stepCount: number;
+                    steps: {
+                        durationMin: number;
+                        /** Format: uuid */
+                        id: string;
+                        state: {
+                            /** @constant */
+                            status: "done";
+                        } | {
+                            /** @constant */
+                            status: "current";
+                        } | {
+                            /** @constant */
+                            status: "open";
+                        } | {
+                            reason: {
+                                /** @constant */
+                                kind: "previous";
+                            } | {
+                                /** Format: date-time */
+                                at: string;
+                                /** @constant */
+                                kind: "date";
+                            } | {
+                                /** @constant */
+                                kind: "expression";
+                            } | {
+                                /** @constant */
+                                kind: "registration";
+                            };
+                            /** @constant */
+                            status: "locked";
+                        } | {
+                            /** @constant */
+                            status: "test-out-reachable";
+                        };
+                        title: string;
+                        /** @enum {string} */
+                        type: "video" | "download" | "test";
+                    }[];
+                    title: string;
+                }[];
+                position: number;
+                state: {
+                    /** @constant */
+                    status: "done";
+                } | {
+                    /** @constant */
+                    status: "current";
+                } | {
+                    /** @constant */
+                    status: "open";
+                } | {
+                    reason: {
+                        /** @constant */
+                        kind: "previous";
+                    } | {
+                        /** Format: date-time */
+                        at: string;
+                        /** @constant */
+                        kind: "date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                    } | {
+                        /** @constant */
+                        kind: "registration";
+                    };
+                    /** @constant */
+                    status: "locked";
+                } | {
+                    /** @constant */
+                    status: "test-out-reachable";
+                };
+                title: string;
+            }[];
+            school: {
+                slug: string;
+                title: string;
+            };
+            signedIn: boolean;
+        };
+        LearningLessonAdminDto: {
+            description: string;
+            durationMin: number;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            moduleId: string;
+            position: number;
+            /** Format: uuid */
+            projectId: string;
+            /** @enum {string} */
+            state: "draft" | "published";
+            steps: {
+                durationMin: number;
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                lessonId: string;
+                media: {
+                    contentType: string;
+                    sizeBytes: number;
+                } | null;
+                payload: {
+                    [key: string]: unknown;
+                };
+                position: number;
+                questions: {
+                    correctiveText: string | null;
+                    /** Format: uuid */
+                    id: string;
+                    options: {
+                        correct: boolean;
+                        /** Format: uuid */
+                        id: string;
+                        text: string;
+                    }[];
+                    text: string;
+                }[] | null;
+                source: {
+                    embedRef: string;
+                    /** @enum {string} */
+                    provider: "rutube" | "youtube" | "vk" | "cdnvideo";
+                } | null;
+                title: string;
+                /** @enum {string} */
+                type: "video" | "download" | "test";
+                version: number;
+            }[];
+            teaser: string;
+            title: string;
+            version: number;
+        };
+        LearningLessonReadDto: {
+            course: {
+                /** Format: uuid */
+                id: string;
+                slug: string;
+                title: string;
+            };
+            lesson: {
+                completionSentence: string;
+                description: string;
+                durationMin: number;
+                /** Format: uuid */
+                id: string;
+                number: number;
+                state: {
+                    /** @constant */
+                    status: "done";
+                } | {
+                    /** @constant */
+                    status: "current";
+                } | {
+                    /** @constant */
+                    status: "open";
+                } | {
+                    reason: {
+                        /** @constant */
+                        kind: "previous";
+                    } | {
+                        /** Format: date-time */
+                        at: string;
+                        /** @constant */
+                        kind: "date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                    } | {
+                        /** @constant */
+                        kind: "registration";
+                    };
+                    /** @constant */
+                    status: "locked";
+                } | {
+                    /** @constant */
+                    status: "test-out-reachable";
+                };
+                stepCount: number;
+                teaser: string;
+                title: string;
+            };
+            signedIn: boolean;
+            steps: {
+                completionSentence: string;
+                durationMin: number;
+                /** Format: uuid */
+                id: string;
+                state: {
+                    /** @constant */
+                    status: "done";
+                } | {
+                    /** @constant */
+                    status: "current";
+                } | {
+                    /** @constant */
+                    status: "open";
+                } | {
+                    reason: {
+                        /** @constant */
+                        kind: "previous";
+                    } | {
+                        /** Format: date-time */
+                        at: string;
+                        /** @constant */
+                        kind: "date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                    } | {
+                        /** @constant */
+                        kind: "registration";
+                    };
+                    /** @constant */
+                    status: "locked";
+                } | {
+                    /** @constant */
+                    status: "test-out-reachable";
+                };
+                title: string;
+                /** @enum {string} */
+                type: "video" | "download" | "test";
+            }[];
+        };
+        LearningModuleAdminDto: {
+            /** Format: uuid */
+            courseId: string;
+            /** Format: uuid */
+            id: string;
+            position: number;
+            title: string;
+            version: number;
+        };
+        LearningPresetListDto: {
+            data: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                values: {
+                    "completion.course"?: components["schemas"]["LearningPresetListDto__schema0"];
+                    "completion.lesson"?: components["schemas"]["LearningPresetListDto__schema0"];
+                    "completion.module"?: components["schemas"]["LearningPresetListDto__schema0"];
+                    "completion.step"?: components["schemas"]["LearningPresetListDto__schema0"];
+                    "course.closingClub"?: boolean;
+                    "course.clubInCompletion"?: boolean;
+                    /** @enum {string} */
+                    "course.deliveryMode"?: "online" | "offline" | "open";
+                    "course.moduleSize"?: number;
+                    /** @enum {string} */
+                    lockedVisibility?: "hidden" | "locked";
+                    /** @enum {string} */
+                    order?: "strict" | "free";
+                    "progress.maxPlaybackRate"?: number;
+                    "progress.slackSec"?: number;
+                    "repeat.allowed"?: boolean;
+                    "test.attempts"?: number | "unlimited";
+                    "test.entryCounts"?: boolean;
+                    "test.entryRequired"?: boolean;
+                    "test.exitRequired"?: boolean;
+                    "test.pauseMin"?: number;
+                    "test.questions"?: number | "all";
+                    "test.threshold"?: number;
+                    "testOut.allowed"?: boolean;
+                    "testOut.pauseMin"?: number;
+                    unlock?: {
+                        /** @constant */
+                        kind: "immediate";
+                    } | {
+                        /** @constant */
+                        kind: "after-previous";
+                    } | {
+                        /** Format: date-time */
+                        instant: string;
+                        /** @constant */
+                        kind: "from-date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                        rule: components["schemas"]["LearningPresetListDto__schema0"];
+                    };
+                    "viewed.podcast.percent"?: number;
+                    "viewed.video.percent"?: number;
+                };
+                version: number;
+            }[];
+        };
+        LearningPresetListDto__schema0: {
+            condition: string;
+            /** Format: uuid */
+            module?: string;
+            percent?: number;
+            /** Format: uuid */
+            step?: string;
+            test?: string;
+        } | {
+            all: components["schemas"]["LearningPresetListDto__schema0"][];
+        } | {
+            any: components["schemas"]["LearningPresetListDto__schema0"][];
+        } | {
+            nOf: {
+                n: number;
+                of: components["schemas"]["LearningPresetListDto__schema0"][];
+            };
+        };
+        LearningSchoolAdminDto: {
+            /** Format: uuid */
+            directionId: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            leadExpertId: string;
+            /** Format: uuid */
+            projectId: string;
+            slug: string;
+            /** @enum {string} */
+            state: "draft" | "published";
+            title: string;
+            version: number;
+        };
+        LearningSchoolListDto: {
+            data: {
+                /** Format: uuid */
+                directionId: string;
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                leadExpertId: string;
+                /** Format: uuid */
+                projectId: string;
+                slug: string;
+                /** @enum {string} */
+                state: "draft" | "published";
+                title: string;
+                version: number;
+            }[];
+        };
+        LearningScopeRulesDto: {
+            appliedPreset: string | null;
+            effective: {
+                /** @enum {string} */
+                key: "completion.step" | "completion.lesson" | "completion.module" | "completion.course" | "viewed.video.percent" | "viewed.podcast.percent" | "unlock" | "order" | "lockedVisibility" | "test.threshold" | "test.attempts" | "test.pauseMin" | "test.questions" | "test.exitRequired" | "test.entryRequired" | "test.entryCounts" | "testOut.allowed" | "testOut.pauseMin" | "repeat.allowed" | "progress.maxPlaybackRate" | "progress.slackSec" | "course.deliveryMode" | "course.moduleSize" | "course.closingClub" | "course.clubInCompletion";
+                /** @enum {string} */
+                level: "platform" | "school" | "course" | "module" | "lesson" | "step";
+                preset: string | null;
+                value: unknown;
+            }[];
+            layerVersion: number;
+            scopeId: string;
+            /** @enum {string} */
+            scopeKind: "platform" | "school" | "course" | "module" | "lesson" | "step";
+            values: {
+                "completion.course"?: components["schemas"]["LearningScopeRulesDto__schema0"];
+                "completion.lesson"?: components["schemas"]["LearningScopeRulesDto__schema0"];
+                "completion.module"?: components["schemas"]["LearningScopeRulesDto__schema0"];
+                "completion.step"?: components["schemas"]["LearningScopeRulesDto__schema0"];
+                "course.closingClub"?: boolean;
+                "course.clubInCompletion"?: boolean;
+                /** @enum {string} */
+                "course.deliveryMode"?: "online" | "offline" | "open";
+                "course.moduleSize"?: number;
+                /** @enum {string} */
+                lockedVisibility?: "hidden" | "locked";
+                /** @enum {string} */
+                order?: "strict" | "free";
+                "progress.maxPlaybackRate"?: number;
+                "progress.slackSec"?: number;
+                "repeat.allowed"?: boolean;
+                "test.attempts"?: number | "unlimited";
+                "test.entryCounts"?: boolean;
+                "test.entryRequired"?: boolean;
+                "test.exitRequired"?: boolean;
+                "test.pauseMin"?: number;
+                "test.questions"?: number | "all";
+                "test.threshold"?: number;
+                "testOut.allowed"?: boolean;
+                "testOut.pauseMin"?: number;
+                unlock?: {
+                    /** @constant */
+                    kind: "immediate";
+                } | {
+                    /** @constant */
+                    kind: "after-previous";
+                } | {
+                    /** Format: date-time */
+                    instant: string;
+                    /** @constant */
+                    kind: "from-date";
+                } | {
+                    /** @constant */
+                    kind: "expression";
+                    rule: components["schemas"]["LearningScopeRulesDto__schema0"];
+                };
+                "viewed.podcast.percent"?: number;
+                "viewed.video.percent"?: number;
+            };
+        };
+        LearningScopeRulesDto__schema0: {
+            condition: string;
+            /** Format: uuid */
+            module?: string;
+            percent?: number;
+            /** Format: uuid */
+            step?: string;
+            test?: string;
+        } | {
+            all: components["schemas"]["LearningScopeRulesDto__schema0"][];
+        } | {
+            any: components["schemas"]["LearningScopeRulesDto__schema0"][];
+        } | {
+            nOf: {
+                n: number;
+                of: components["schemas"]["LearningScopeRulesDto__schema0"][];
+            };
+        };
+        LearningStepAdminDto: {
+            durationMin: number;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            lessonId: string;
+            media: {
+                contentType: string;
+                sizeBytes: number;
+            } | null;
+            payload: {
+                [key: string]: unknown;
+            };
+            position: number;
+            questions: {
+                correctiveText: string | null;
+                /** Format: uuid */
+                id: string;
+                options: {
+                    correct: boolean;
+                    /** Format: uuid */
+                    id: string;
+                    text: string;
+                }[];
+                text: string;
+            }[] | null;
+            source: {
+                embedRef: string;
+                /** @enum {string} */
+                provider: "rutube" | "youtube" | "vk" | "cdnvideo";
+            } | null;
+            title: string;
+            /** @enum {string} */
+            type: "video" | "download" | "test";
+            version: number;
+        };
+        LearningStepReadDto: {
+            body: {
+                durationSec: number;
+                embedRef: string;
+                positionSec: number;
+                /** @enum {string} */
+                provider: "rutube" | "youtube" | "vk" | "cdnvideo";
+                /** @constant */
+                type: "video";
+                watchedPercent: number;
+            } | {
+                fileName: string;
+                fileSizeBytes: number;
+                mediaUrl: string;
+                opened: boolean;
+                /** @constant */
+                type: "download";
+            } | {
+                attemptsLeft: number | null;
+                /** @constant */
+                kind: "exit";
+                lastResult: {
+                    passed: boolean;
+                    score: number;
+                } | null;
+                questionCount: number;
+                /** Format: uuid */
+                testId: string;
+                threshold: number;
+                /** @constant */
+                type: "test";
+            };
+            courseSlug: string;
+            lessonCompletionSentence: string;
+            /** Format: uuid */
+            lessonId: string;
+            nextStepId: string | null;
+            step: {
+                completionSentence: string;
+                durationMin: number;
+                /** Format: uuid */
+                id: string;
+                state: {
+                    /** @constant */
+                    status: "done";
+                } | {
+                    /** @constant */
+                    status: "current";
+                } | {
+                    /** @constant */
+                    status: "open";
+                } | {
+                    reason: {
+                        /** @constant */
+                        kind: "previous";
+                    } | {
+                        /** Format: date-time */
+                        at: string;
+                        /** @constant */
+                        kind: "date";
+                    } | {
+                        /** @constant */
+                        kind: "expression";
+                    } | {
+                        /** @constant */
+                        kind: "registration";
+                    };
+                    /** @constant */
+                    status: "locked";
+                } | {
+                    /** @constant */
+                    status: "test-out-reachable";
+                };
+                title: string;
+                /** @enum {string} */
+                type: "video" | "download" | "test";
+            };
+        };
         LegacyBroadcastCreateDto: {
             /** @enum {string} */
             audience: "doctors" | "experts";
@@ -4156,6 +5327,18 @@ export interface components {
             /** @enum {string} */
             mode: "open" | "advance" | "threshold";
             pulCost: number;
+        };
+        RecordLearningFactResponseDto: {
+            changed: {
+                /** Format: uuid */
+                itemId: string;
+                /** @enum {string} */
+                itemKind: "step" | "lesson" | "module" | "course";
+                /** @enum {string} */
+                status: "done" | "current" | "open" | "locked" | "test-out-reachable";
+            }[];
+            /** @enum {string} */
+            outcome: "recorded" | "duplicate";
         };
         RegisterRequestDto: {
             captchaToken?: string;
@@ -6102,6 +7285,478 @@ export interface operations {
             };
         };
     };
+    LearningAdminController_courses: {
+        parameters: {
+            query: {
+                schoolId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningCourseListDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_createCourse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningCourseAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_course: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningCourseCompositionDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_publishCourse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningCourseAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_unpublishCourse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningCourseAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_createLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningLessonAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_lesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningLessonAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_updateLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningLessonAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_publishLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningLessonAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_reorderSteps: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningLessonAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_unpublishLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningLessonAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_createModule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningModuleAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_presets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningPresetListDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_rules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scopeId: string;
+                scopeKind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningScopeRulesDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_setRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scopeId: string;
+                scopeKind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningScopeRulesDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_applyPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scopeId: string;
+                scopeKind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningScopeRulesDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_schools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSchoolListDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_createSchool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSchoolAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_createStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningStepAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_removeStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningStepAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_updateStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningStepAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_setStepMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningStepAdminDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_setStepSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningStepAdminDto"];
+                };
+            };
+        };
+    };
     LegacyBroadcastsAdminController_create: {
         parameters: {
             query?: never;
@@ -7411,6 +9066,48 @@ export interface operations {
             };
         };
     };
+    LearningPublicController_path: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                courseSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningCoursePathDto"];
+                };
+            };
+        };
+    };
+    LearningPublicController_lesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lessonId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningLessonReadDto"];
+                };
+            };
+        };
+    };
     CongressBirthDateMeController_set: {
         parameters: {
             query?: never;
@@ -7680,6 +9377,88 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    LearningMeController_submit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attemptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningAttemptResultDto"];
+                };
+            };
+        };
+    };
+    LearningMeController_fact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordLearningFactResponseDto"];
+                };
+            };
+        };
+    };
+    LearningMeController_step: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stepId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningStepReadDto"];
+                };
+            };
+        };
+    };
+    LearningMeController_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                testId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningAttemptDto"];
+                };
             };
         };
     };

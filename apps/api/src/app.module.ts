@@ -26,6 +26,7 @@ import { SignInHostModule } from "./sign-in-host/sign-in-host.module.js";
 import { CongressModule } from "./congress/congress.module.js";
 
 import { StaffAccessModule } from "./staff-access/staff-access.module.js";
+import { LearningModule } from "./learning/learning.module.js";
 import { PointsModule } from "./points/points.module.js";
 @Module({
   imports: [
@@ -99,6 +100,9 @@ import { PointsModule } from "./points/points.module.js";
     // 025 attention-points ledger core (#3807): the one ledger write/resolve
     // API later 025 slices and producer features call in-process.
     PointsModule,
+    // 024 — the learning path (#4011): structure, rules, facts and the course
+    // path; records its completions through the 025 PointsEngine above.
+    LearningModule,
     HealthModule,
     ReadinessModule,
   ],

@@ -1,0 +1,60 @@
+{
+  "name": "@ds/learning",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DS Platform learning path — the structure model, the element-type and condition-type catalogs, layered rules with presets, the evaluator and the rule-sentence builder (`.`), the server half over packages/db (`./server`), the browser transport (`./client`) the doctor screens — the course path and the step screen (`./ui`) — and the staff screens — lesson composition and preset choice (`./admin`) (024, ADR-0013 A1).",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./client": "./src/client/index.ts",
+    "./ui": "./src/ui/index.ts",
+    "./admin": "./src/admin/index.ts"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.ui.json",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "clean": "rm -rf dist .tsbuildinfo"
+  },
+  "dependencies": {
+    "@ds/db": "workspace:*",
+    "@ds/design-system": "workspace:*",
+    "@ds/event-page": "workspace:*",
+    "@ds/schemas": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "zod": "4.4.3"
+  },
+  "peerDependencies": {
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "jsdom": "^30.0.1",
+    "next": "16.4.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.12"
+  }
+}

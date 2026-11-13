@@ -235,6 +235,22 @@ CREATE TRIGGER learning_facts_no_mutate
 	BEFORE UPDATE OR DELETE ON "learning_facts"
 	FOR EACH ROW EXECUTE FUNCTION learning_facts_append_only();
 --> statement-breakpoint
+-- ── feature-010 PD masking (010 EARS-7) ────────────────────────────────────
+-- `learning_feedback.text` is the doctor's free-text comment on a step: it can
+-- carry anything typed (names, contacts), so the audit diff masks it. This
+-- regenerates the whole registry (mirror: AUDIT_PD_COLUMNS in
+-- packages/db/src/audit.ts, parity asserted by universal-edit-audit.e2e-spec).
+CREATE OR REPLACE FUNCTION audit_pd_columns(p_table text) RETURNS text[] AS $$
+  SELECT CASE p_table
+    WHEN 'users' THEN ARRAY['email', 'phone', 'display_name']
+    WHEN 'consent_records' THEN ARRAY['user_id']
+    WHEN 'registrations' THEN ARRAY['answers']
+    WHEN 'congress_submissions' THEN ARRAY['authors']
+    WHEN 'learning_feedback' THEN ARRAY['text']
+    ELSE ARRAY[]::text[]
+  END;
+$$ LANGUAGE sql IMMUTABLE;
+--> statement-breakpoint
 -- ── feature-010 audit attachment (010 EARS-8) ──────────────────────────────
 -- Every mutable 024 table carries the row audit; `learning_facts` (append-only,
 -- itself the record) and `learning_node_status` (a rebuildable projection) are

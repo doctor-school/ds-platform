@@ -69,8 +69,14 @@ const EMBED_SRC: Record<StreamProvider, (embedRef: string) => string> = {
   cdnvideo: (url) => url,
 };
 
+/**
+ * `playerApi` (024 EARS-10, #4011): the caller listens to the provider's clock,
+ * so the YouTube src asks for its IFrame Player API (`enablejsapi=1`). rutube and
+ * vk speak by default (vk always carries `js_api=1`); cdnvideo cannot.
+ */
 export function resolveEmbed(
   stream: StreamConfig | null | undefined,
+  options: { playerApi?: boolean } = {},
 ): ResolvedEmbed {
   // Absent / unknown stream → the truthful "stream unavailable" room state
   // (the server already fails closed on an unknown provider, EARS-2). The portal
@@ -78,5 +84,12 @@ export function resolveEmbed(
   if (!stream) return { kind: "unavailable" };
   const build = EMBED_SRC[stream.provider];
   if (!build) return { kind: "unavailable" };
-  return { kind: stream.provider, src: build(stream.embedRef) };
+  const src = build(stream.embedRef);
+  return {
+    kind: stream.provider,
+    src:
+      options.playerApi && stream.provider === "youtube" && src
+        ? `${src}?enablejsapi=1`
+        : src,
+  };
 }

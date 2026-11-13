@@ -128,6 +128,23 @@ routes:
     file: apps/doctor/app/(storefront)/events/page.tsx
     status: product-ready
 
+  # 024 EARS-14…18 (#4011) — the course path and one screen per step, built
+  # from data with no placeholder copy. `deferred` because the first course
+  # path is not whole yet — every step type (#4013), tests in depth (#4014),
+  # repeat and the guest return (#4015), the phone journeys (#4016) still have
+  # to land — and the routes carry no Stage-B verdict; #1793 (the 024 feature)
+  # owns the flip to `product-ready`.
+  - app: doctor
+    route: /courses/[courseSlug]
+    file: apps/doctor/app/(storefront)/courses/[courseSlug]/page.tsx
+    status: deferred
+    issue: "#1793"
+  - app: doctor
+    route: /courses/[courseSlug]/steps/[stepId]
+    file: apps/doctor/app/(storefront)/courses/[courseSlug]/steps/[stepId]/page.tsx
+    status: deferred
+    issue: "#1793"
+
   # 018 EARS-1 / EARS-4 (#1496, #1499) — the specialty feed inside 017's shell:
   # breadcrumbs, the specialty heading with «сменить специальность», and the
   # connected blocks only (release 1: the nearest events through the events

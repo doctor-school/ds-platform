@@ -58,8 +58,14 @@ export class LearningEventBus {
   }
 }
 
+/** The 012 media store: a short-lived signed GET for a stored object key (EARS-22: gated reads only). */
+export interface LearningMediaPort {
+  signedUrl(objectKey: string): Promise<string>;
+}
+
 export interface LearningServerDeps {
   db: LearningDb;
+  media: LearningMediaPort;
   /** One audit-attributed transaction (apps/api: `withRequestAuditContext`). */
   transaction<T>(fn: (tx: LearningTx) => Promise<T>): Promise<T>;
   points: LearningPointsPort;

@@ -33,8 +33,9 @@ Feature: 033 — Author application: the «Подать заявку» page and 
     And taps «Отправить заявку»
     Then the page shows «Заявка отправлена»
     And one application of kind "author" with status "new" is stored with its consent record
-    And the team list receives one notification linking to the application in the admin
-    And "anna@example.test" receives the email «Заявка получена»
+    And every active platform administrator receives one notification with the kind, the time and the link to the application in the admin
+    And that notification names neither the topic nor the applicant
+    And "anna@example.test" receives the email «Заявка получена» that names no topic
 
   @EARS-5
   Scenario: A missing topic is reported and the rest of the input is kept
@@ -69,6 +70,15 @@ Feature: 033 — Author application: the «Подать заявку» page and 
     When the expert taps «Отправить заявку»
     Then the page shows «Заявка отправлена»
     And the application is stored
+    And the admin list marks it «Команда не уведомлена»
+
+  @EARS-11
+  Scenario: With no platform administrator the application is kept and marked
+    Given no active staff account holds the role "platform_admin"
+    And the expert "anna@example.test" is signed in on «Подать заявку» with the form filled
+    When the expert taps «Отправить заявку»
+    Then the page shows «Заявка отправлена»
+    And the application is stored with its team notification "skipped"
     And the admin list marks it «Команда не уведомлена»
 
   @EARS-10
@@ -117,6 +127,26 @@ Feature: 033 — Author application: the «Подать заявку» page and 
     And the expert "anna@example.test" has a closed application
     When the administrator erases the applicant's personal data on it
     Then the application shows «Персональные данные стёрты» and keeps its kind, status and outcome
+    And its notes read the erasure sentinel
+
+  @EARS-23
+  Scenario: An application nobody took up expires and is later erased
+    Given an application of kind "partnership" with status "new" and no status change for one year
+    When the daily purge runs
+    Then the application is closed with the outcome «Истекла» and no acting administrator
+    And one year after that closing the daily purge erases its personal data
+
+  @EARS-24
+  Scenario: Erasing the applicant's account erases the applications
+    Given the expert "anna@example.test" has one open and one closed application
+    When the account of "anna@example.test" is erased
+    Then both applications show «Персональные данные стёрты»
+
+  @EARS-25
+  Scenario: The change audit never holds the application's content
+    Given the expert "anna@example.test" has sent an application with the topic "Ортобиология в амбулаторной практике"
+    And a platform administrator has added a note and erased the applicant's personal data
+    Then no change-audit row of the application or its notes contains "Ортобиология в амбулаторной практике" or the note text
 
   @EARS-21
   Scenario: «Пока не готовы?» leads to the projects

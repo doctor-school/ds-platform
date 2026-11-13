@@ -1,4 +1,4 @@
-import type { StreamProvider } from "@ds/schemas";
+import { STREAM_PROVIDER_HAS_PARENT_API, type StreamProvider } from "@ds/schemas";
 
 /**
  * 006 EARS-18 — the in-room player-failure state machine (watchdog + provider-event
@@ -105,14 +105,11 @@ export type PlayerFailureKind = "embedding-disabled" | "unavailable" | "generic"
  * structural capability constraint verified by probe. This flag therefore also decides
  * the MOUNT state ({@link initialPlayerState}): an observable provider starts in
  * `loading` under the watchdog, the silent one starts in `unverified` and is never
- * graded at all.
+ * graded at all. The values live beside the provider enum in `@ds/schemas`
+ * (`STREAM_PROVIDER_HAS_PARENT_API`) so the compiled api reads the same fact.
  */
-export const PROVIDER_HAS_PARENT_API: Record<StreamProvider, boolean> = {
-  youtube: true,
-  rutube: true,
-  vk: true,
-  cdnvideo: false,
-};
+export const PROVIDER_HAS_PARENT_API: Record<StreamProvider, boolean> =
+  STREAM_PROVIDER_HAS_PARENT_API;
 
 /** The origin each provider's embed posts messages from (postMessage source guard). */
 const PROVIDER_ORIGIN: Partial<Record<StreamProvider, string>> = {

@@ -42,6 +42,11 @@ export function refusedFieldLines(error: unknown): string[] {
   });
 }
 
+/** A step write refused because the lesson is published (EARS-4). */
+export function isPublishedRefusal(error: unknown): boolean {
+  return asRefusal(error).errorCode === "INVALID_TRANSITION";
+}
+
 export function isStale(error: unknown): boolean {
   const r = asRefusal(error);
   return r.statusCode === 412 || r.errorCode === "PRECONDITION_FAILED";

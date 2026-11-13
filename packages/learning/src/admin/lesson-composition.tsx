@@ -20,7 +20,12 @@ import type {
 
 import { STEP_TYPE_LABEL } from "../ui/learning-ui-copy";
 import { ADMIN_COPY as C, LESSON_STATE_LABEL } from "./admin-copy";
-import { isStale, publishRefusalItems, refusedFieldLines } from "./refusals";
+import {
+  isPublishedRefusal,
+  isStale,
+  publishRefusalItems,
+  refusedFieldLines,
+} from "./refusals";
 import { StepFileForm, StepSourceForm, AddStepForm } from "./step-forms";
 import type { LearningAdminTransport } from "./transport";
 
@@ -93,7 +98,10 @@ export function LessonCompositionScreen({
     } catch (error) {
       const items = publishRefusalItems(error, lesson.steps);
       if (items) setRefusal({ kind: "publish", items });
-      else if (isStale(error)) {
+      else if (isPublishedRefusal(error)) {
+        setRefusal({ kind: "write", lines: [C.publishedReadOnly] });
+        await load();
+      } else if (isStale(error)) {
         setRefusal({ kind: "write", lines: [C.stale] });
         await load();
       } else {
@@ -135,6 +143,8 @@ export function LessonCompositionScreen({
     );
 
   const steps = lesson.steps;
+  // EARS-4 — a published lesson's steps take no write until it is unpublished.
+  const editable = lesson.state === "draft";
   const move = (index: number, delta: number) => {
     const ids = steps.map((s) => s.id);
     const [moved] = ids.splice(index, 1);
@@ -198,6 +208,12 @@ export function LessonCompositionScreen({
         </Alert>
       ) : null}
 
+      {!editable ? (
+        <Alert variant="info" data-testid="lesson-read-only">
+          {C.publishedReadOnly}
+        </Alert>
+      ) : null}
+
       <div className="flex flex-wrap gap-3">
         {lesson.state === "draft" ? (
           <Button
@@ -248,6 +264,7 @@ export function LessonCompositionScreen({
               no={i + 1}
               last={i === steps.length - 1}
               busy={busy}
+              editable={editable}
               threshold={threshold}
               providerLabels={providerLabels}
               onUp={() => void move(i, -1)}
@@ -270,13 +287,15 @@ export function LessonCompositionScreen({
         </ol>
       </section>
 
-      <AddStepForm
-        lessonId={lesson.id}
-        busy={busy}
-        onAdd={(body: CreateLearningStepRequest) =>
-          write(() => transport.createStep(body))
-        }
-      />
+      {editable ? (
+        <AddStepForm
+          lessonId={lesson.id}
+          busy={busy}
+          onAdd={(body: CreateLearningStepRequest) =>
+            write(() => transport.createStep(body))
+          }
+        />
+      ) : null}
     </div>
   );
 }
@@ -286,6 +305,7 @@ function StepRow({
   no,
   last,
   busy,
+  editable,
   threshold,
   providerLabels,
   onUp,
@@ -298,6 +318,7 @@ function StepRow({
   no: number;
   last: boolean;
   busy: boolean;
+  editable: boolean;
   threshold: number | null;
   providerLabels: Record<StreamProvider, string>;
   onUp: () => void;
@@ -319,35 +340,37 @@ function StepRow({
                 step.durationMin,
               )}
             </p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                aria-label={C.upLabel(no)}
-                disabled={busy || no === 1}
-                onClick={onUp}
-              >
-                {C.up}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                aria-label={C.downLabel(no)}
-                disabled={busy || last}
-                onClick={onDown}
-              >
-                {C.down}
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                aria-label={C.removeLabel(no)}
-                disabled={busy}
-                onClick={onRemove}
-              >
-                {C.remove}
-              </Button>
-            </div>
+            {editable ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-label={C.upLabel(no)}
+                  disabled={busy || no === 1}
+                  onClick={onUp}
+                >
+                  {C.up}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-label={C.downLabel(no)}
+                  disabled={busy || last}
+                  onClick={onDown}
+                >
+                  {C.down}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  aria-label={C.removeLabel(no)}
+                  disabled={busy}
+                  onClick={onRemove}
+                >
+                  {C.remove}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </CardHeader>
         <CardContent>
@@ -370,13 +393,17 @@ function StepRow({
                 {C.fileSet(step.media.contentType, step.media.sizeBytes)}
               </p>
             ) : null}
-            <StepSourceForm
-              step={step}
-              busy={busy}
-              providerLabels={providerLabels}
-              onSave={onSource}
-            />
-            <StepFileForm step={step} busy={busy} onUpload={onUpload} />
+            {editable ? (
+              <>
+                <StepSourceForm
+                  step={step}
+                  busy={busy}
+                  providerLabels={providerLabels}
+                  onSave={onSource}
+                />
+                <StepFileForm step={step} busy={busy} onUpload={onUpload} />
+              </>
+            ) : null}
           </div>
         </CardContent>
       </Card>

@@ -41,6 +41,7 @@ import {
   LEARNING_SETTING_KEYS,
   LearningTestPayloadSchema,
   SetLearningStepSourceRequestSchema,
+  STREAM_PROVIDER_HAS_PARENT_API,
   type SetLearningStepSourceRequest,
 } from "@ds/schemas";
 import { and, asc, eq, isNull, max, sql } from "drizzle-orm";
@@ -110,6 +111,14 @@ function stale(): LearningServerError {
 function notFound(what: string): LearningServerError {
   return new LearningServerError("NOT_FOUND", `${what} not found`);
 }
+
+/**
+ * EARS-4 — a published lesson is whole and on doctors' paths: its steps take
+ * no write (add, change, re-source, re-file, remove, reorder) until it is
+ * unpublished, so the publish gate cannot be bypassed and no doctor's earned
+ * completion turns un-done under them.
+ */
+const PUBLISHED_READ_ONLY = "the lesson is published; unpublish it to change its steps";
 
 /** A uniqueness violation (Postgres 23505) by constraint name, if any. */
 function uniqueViolation(err: unknown): string | null {
@@ -456,6 +465,9 @@ export class LearningAdminService {
     complete: LearningComplete = noComplete,
   ): Promise<LearningCommandResult<LearningLessonAdmin>> {
     return this.deps.transaction(async (tx) => {
+      // Lesson row first (the lock order of every step write), so no step
+      // changes between the requirements check and the state change.
+      await this.lockLesson(tx, lessonId);
       const owner = await courseOfLesson(tx, lessonId);
       if (!owner) throw notFound("lesson");
       if (owner.lesson.state === state)
@@ -527,6 +539,7 @@ export class LearningAdminService {
     return this.deps.transaction(async (tx) => {
       const owner = await courseOfLesson(tx, input.lessonId);
       if (!owner) throw fieldError("lessonId", "unknown lesson");
+      await this.lockDraftLesson(tx, input.lessonId);
       const [{ last } = { last: null }] = await tx
         .select({ last: max(learningSteps.position) })
         .from(learningSteps)
@@ -613,6 +626,7 @@ export class LearningAdminService {
     complete: LearningComplete = noComplete,
   ): Promise<LearningCommandResult<LearningLessonAdmin>> {
     return this.deps.transaction(async (tx) => {
+      await this.lockDraftLesson(tx, lessonId);
       const live = await this.liveSteps(tx, lessonId);
       const liveIds = new Set(live.map((s) => s.id));
       if (
@@ -642,6 +656,9 @@ export class LearningAdminService {
   ): Promise<{ step: LearningStepRow; media: LearningMediaDef }> {
     const owner = await courseOfStep(this.deps.db, stepId);
     if (!owner || owner.step.removedAt) throw notFound("step");
+    // Refused before the host stores the upload; `setStepMedia` re-checks under lock.
+    if (owner.lesson.state === "published")
+      throw new LearningServerError("INVALID_TRANSITION", PUBLISHED_READ_ONLY);
     const media = elementType(owner.step.type)?.media;
     if (!media) throw fieldError("file", "this step type carries no file");
     return { step: owner.step, media };
@@ -688,6 +705,14 @@ export class LearningAdminService {
       const issue = parsed.error.issues[0]!;
       throw fieldError(issue.path.join(".") || "source", issue.message);
     }
+    // EARS-10 — a video step is credited from the provider player's own clock;
+    // a provider whose embed reports none (cdnvideo, #4055) could never reach
+    // the «viewed» condition, so it is refused for a step.
+    if (!STREAM_PROVIDER_HAS_PARENT_API[parsed.data.provider])
+      throw fieldError(
+        "provider",
+        "this provider reports no playback position; a step video needs one",
+      );
     return this.deps.transaction(async (tx) => {
       const current = await this.lockStep(tx, stepId, expectedVersion);
       if (!elementType(current.type)?.providerSource)
@@ -854,11 +879,43 @@ export class LearningAdminService {
       .orderBy(asc(learningSteps.position), asc(learningSteps.createdAt));
   }
 
+  /** The lesson row, locked for the transaction (the first lock of every lesson write). */
+  private async lockLesson(
+    tx: LearningTx,
+    lessonId: string,
+  ): Promise<LearningLessonRow> {
+    const [row] = await tx
+      .select()
+      .from(learningLessons)
+      .where(eq(learningLessons.id, lessonId))
+      .for("update");
+    if (!row) throw notFound("lesson");
+    return row;
+  }
+
+  /** {@link lockLesson}, refusing a published lesson ({@link PUBLISHED_READ_ONLY}). */
+  private async lockDraftLesson(
+    tx: LearningTx,
+    lessonId: string,
+  ): Promise<LearningLessonRow> {
+    const row = await this.lockLesson(tx, lessonId);
+    if (row.state === "published")
+      throw new LearningServerError("INVALID_TRANSITION", PUBLISHED_READ_ONLY);
+    return row;
+  }
+
+  /** The step for a write: its lesson locked and draft first, then the step. */
   private async lockStep(
     tx: LearningTx,
     stepId: string,
     expectedVersion: number,
   ): Promise<LearningStepRow> {
+    const [owner] = await tx
+      .select({ lessonId: learningSteps.lessonId })
+      .from(learningSteps)
+      .where(eq(learningSteps.id, stepId));
+    if (!owner) throw notFound("step");
+    await this.lockDraftLesson(tx, owner.lessonId);
     const [row] = await tx
       .select()
       .from(learningSteps)

@@ -15,6 +15,7 @@ import {
   type BuiltCourse,
   type Harness,
   type Problem,
+  type Reply,
 } from "./harness.js";
 import { seedStructure, seedTaxonomy } from "./fixtures.js";
 
@@ -271,6 +272,86 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         ifMatch: d.etag!,
       });
       expect(r.status).toBe(400);
+    });
+
+    it("EARS-28: a video source on a provider with no playback clock (cdnvideo) is refused 400 naming `provider`", async () => {
+      const { lessonId } = await draftLesson();
+      const video = await step(lessonId, "video", { durationSec: 30 });
+      const r = await admin<Problem>(h, "PUT", `/steps/${video.body.id}/source`, {
+        payload: {
+          provider: "cdnvideo",
+          embedRef:
+            "https://playercdn.cdnvideo.ru/aloha/players/auto_player1.html?clid=kcta544ubo&plid=c263cdf6-253e-400b-a008-d1775d3ee190",
+        },
+        ifMatch: video.etag!,
+      });
+      expect(r.status, JSON.stringify(r.body)).toBe(400);
+      expect(r.body.errorCode).toBe("VALIDATION_FAILED");
+      expect(r.body.errors?.map((e) => e.path)).toEqual(["provider"]);
+      const row = await h.pool.query<{ provider: string | null }>(
+        "SELECT provider FROM learning_steps WHERE id = $1",
+        [video.body.id],
+      );
+      expect(row.rows[0]!.provider).toBeNull();
+    });
+
+    // ── A published lesson is read-only (EARS-4) ──────────────────────────
+
+    it("EARS-4: every step write on a published lesson is refused 409 INVALID_TRANSITION and changes nothing", async () => {
+      const p = await buildCourse(h);
+      const before = await h.pool.query<{ id: string; version: number }>(
+        "SELECT id, version FROM learning_steps WHERE lesson_id = $1 ORDER BY position",
+        [p.lessonId],
+      );
+      const etagOf = (id: string) =>
+        `W/"${before.rows.find((r) => r.id === id)!.version}"`;
+      const lesson = await admin(h, "GET", `/lessons/${p.lessonId}`);
+      const writes: Reply<Problem>[] = [
+        await step(p.lessonId, "download", { fileName: "late.pdf" }),
+        await admin<Problem>(h, "PATCH", `/steps/${p.videoId}`, {
+          payload: { title: "Новое имя" },
+          ifMatch: etagOf(p.videoId),
+        }),
+        await admin<Problem>(h, "PUT", `/steps/${p.videoId}/source`, {
+          payload: { provider: "rutube", embedRef: "caafe83ff1c6ed38d394635b83ece578" },
+          ifMatch: etagOf(p.videoId),
+        }),
+        await admin<Problem>(h, "PUT", `/steps/${p.downloadId}/media`, {
+          raw: multipartFile({
+            field: "file",
+            filename: "memo2.pdf",
+            contentType: "application/pdf",
+            body: PDF,
+          }),
+          ifMatch: etagOf(p.downloadId),
+        }),
+        await admin<Problem>(h, "DELETE", `/steps/${p.testId}`, {
+          ifMatch: etagOf(p.testId),
+        }),
+        await admin<Problem>(h, "PUT", `/lessons/${p.lessonId}/step-order`, {
+          payload: { stepIds: [...before.rows].reverse().map((r) => r.id) },
+          ifMatch: lesson.etag!,
+        }),
+      ];
+      for (const w of writes) {
+        expect(w.status, JSON.stringify(w.body)).toBe(409);
+        expect(w.body.errorCode).toBe("INVALID_TRANSITION");
+      }
+      const after = await h.pool.query<{ id: string; version: number }>(
+        "SELECT id, version FROM learning_steps WHERE lesson_id = $1 AND removed_at IS NULL ORDER BY position",
+        [p.lessonId],
+      );
+      expect(after.rows).toEqual(before.rows);
+    });
+
+    it("EARS-4: after unpublish the lesson's steps take writes again", async () => {
+      const p = await buildCourse(h);
+      const lesson = await admin(h, "GET", `/lessons/${p.lessonId}`);
+      const un = await admin(h, "POST", `/lessons/${p.lessonId}/unpublish`, {
+        ifMatch: lesson.etag!,
+      });
+      expect(un.status, JSON.stringify(un.body)).toBe(200);
+      expect((await step(p.lessonId, "download", { fileName: "late.pdf" })).status).toBe(201);
     });
 
     it("EARS-28: a download file of a refused content type is MEDIA_INVALID; a file on a video step is 400", async () => {

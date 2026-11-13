@@ -19,6 +19,7 @@ import {
   LEARNING_STEP_INPUTS,
   LearningTestPayloadSchema,
   STREAM_PROVIDERS,
+  STREAM_PROVIDERS_WITH_CLOCK,
   type CreateLearningStepRequest,
   type LearningElementType,
   type LearningStepAdmin,
@@ -282,8 +283,14 @@ export function StepSourceForm({
   providerLabels: Record<StreamProvider, string>;
   onSave: (body: SetLearningStepSourceRequest) => void;
 }) {
+  // EARS-10 — a step video is credited from the player's own clock; a
+  // provider whose embed reports none (cdnvideo, #4055) is not offered.
+  const offered = STREAM_PROVIDERS_WITH_CLOCK;
+  const silent = STREAM_PROVIDERS.filter((p) => !offered.includes(p));
   const [provider, setProvider] = useState<StreamProvider>(
-    step.source?.provider ?? STREAM_PROVIDERS[0],
+    step.source && offered.includes(step.source.provider)
+      ? step.source.provider
+      : offered[0]!,
   );
   const [embedRef, setEmbedRef] = useState(step.source?.embedRef ?? "");
   if (!LEARNING_STEP_INPUTS[step.type].providerSource) return null;
@@ -303,7 +310,7 @@ export function StepSourceForm({
           value={provider}
           onChange={(e) => setProvider(e.target.value as StreamProvider)}
         >
-          {STREAM_PROVIDERS.map((p) => (
+          {offered.map((p) => (
             <option key={p} value={p}>
               {providerLabels[p]}
             </option>
@@ -322,6 +329,13 @@ export function StepSourceForm({
       <Button type="submit" size="field" variant="outline" disabled={busy}>
         {C.saveSource}
       </Button>
+      {silent.length > 0 ? (
+        <p className="basis-full text-sm text-muted-foreground sm:order-last">
+          {C.providersWithoutClock(
+            silent.map((p) => providerLabels[p]).join(", "),
+          )}
+        </p>
+      ) : null}
     </form>
   );
 }

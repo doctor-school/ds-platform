@@ -7,7 +7,11 @@ import {
   within,
 } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { LEARNING_ELEMENT_TYPES, STREAM_PROVIDERS } from "@ds/schemas";
+import {
+  LEARNING_ELEMENT_TYPES,
+  STREAM_PROVIDERS,
+  STREAM_PROVIDERS_WITH_CLOCK,
+} from "@ds/schemas";
 
 import { LessonCompositionScreen } from "./lesson-composition";
 import {
@@ -326,5 +330,52 @@ describe("LessonCompositionScreen", () => {
     expect(
       await screen.findByText("Файл загружен: application/pdf, 2 КБ"),
     ).toBeInTheDocument();
+  });
+  it("EARS-4: a published lesson is read-only — no step controls, the reason in words, unpublish offered", async () => {
+    mount(
+      fakeTransport({
+        lesson: async () =>
+          lesson({ state: "published", steps: [videoStep(), downloadStep()] }),
+      }),
+    );
+    expect(await screen.findByTestId("lesson-read-only")).toHaveTextContent(
+      "Урок опубликован, его шаги не меняются. Чтобы изменить шаги, снимите урок с публикации.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Снять с публикации" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Добавить шаг" })).toBeNull();
+    expect(screen.queryByLabelText("Тип шага")).toBeNull();
+    expect(within(row(1)).queryAllByRole("button")).toEqual([]);
+    expect(within(row(2)).queryAllByRole("button")).toEqual([]);
+    expect(within(row(1)).queryByLabelText("Площадка")).toBeNull();
+  });
+
+  it("EARS-4: a step write refused because the lesson was published meanwhile says so in words", async () => {
+    mount(
+      fakeTransport({
+        removeStep: async () => {
+          throw refusal("INVALID_TRANSITION", undefined, 409);
+        },
+      }),
+    );
+    await screen.findByTestId("step-row-1");
+    fireEvent.click(within(row(1)).getByRole("button", { name: /Удалить/ }));
+    expect(await screen.findByTestId("write-refusal")).toHaveTextContent(
+      "Урок опубликован, его шаги не меняются. Чтобы изменить шаги, снимите урок с публикации.",
+    );
+  });
+
+  it("EARS-10 / EARS-28: the video provider picker offers only providers that report a playback position", async () => {
+    mount();
+    await screen.findByTestId("step-row-1");
+    const values = within(within(row(1)).getByLabelText("Площадка"))
+      .getAllByRole("option")
+      .map((o) => (o as HTMLOptionElement).value);
+    expect(values).toEqual([...STREAM_PROVIDERS_WITH_CLOCK]);
+    expect(values).not.toContain("cdnvideo");
+    expect(row(1)).toHaveTextContent(
+      "Площадка cdnvideo для шагов недоступна: её плеер не сообщает, сколько видео просмотрено.",
+    );
   });
 });

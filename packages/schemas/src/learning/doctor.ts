@@ -63,6 +63,23 @@ export const LearningPathModuleSchema = z.strictObject({
 export type LearningPathModule = z.infer<typeof LearningPathModuleSchema>;
 
 /** `GET /v1/learning/courses/{courseSlug}/path`. */
+/** A named place the course sits under — its direction and its school (EARS-14). */
+export const LearningPathPlaceSchema = z.strictObject({
+  slug: z.string(),
+  title: z.string(),
+});
+
+/** The course author — the school's leading expert (EARS-14); null when the expert has no public name. */
+export const LearningPathAuthorSchema = z.strictObject({
+  slug: z.string(),
+  name: z.string(),
+  role: z.string().nullable(),
+  credentials: z.string().nullable(),
+  affiliation: z.string().nullable(),
+  /** Issued at read time from the stored photo; null without one. */
+  photoUrl: z.string().nullable(),
+});
+
 export const LearningCoursePathSchema = z.strictObject({
   course: z.strictObject({
     id: z.uuid(),
@@ -70,6 +87,10 @@ export const LearningCoursePathSchema = z.strictObject({
     title: z.string(),
     state: LearningNodeStateSchema,
   }),
+  /** The breadcrumb above the course: its direction and its school (EARS-14). */
+  direction: LearningPathPlaceSchema,
+  school: LearningPathPlaceSchema,
+  author: LearningPathAuthorSchema.nullable(),
   /** false = a guest; states computed with no facts (EARS-13). */
   signedIn: z.boolean(),
   modules: z.array(LearningPathModuleSchema),

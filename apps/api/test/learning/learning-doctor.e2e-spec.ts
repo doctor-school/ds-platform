@@ -132,6 +132,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await call(h, "GET", `/learning/courses/${draft.courseSlug}/path`)).status).toBe(404);
     });
 
+    it("EARS-14: the path read names the course's direction, school and author from the school's rows", async () => {
+      const res = await call<{
+        direction: { slug: string; title: string };
+        school: { slug: string; title: string };
+        author: { slug: string; name: string; photoUrl: string | null } | null;
+      }>(h, "GET", `/learning/courses/${c.courseSlug}/path`);
+      expect(res.status).toBe(200);
+      const s = c.f.suffix;
+      expect(res.body.direction).toEqual({ slug: `learn-dir-${s}`, title: `Кардиология ${s}` });
+      expect(res.body.school).toEqual({ slug: `school-${s}`, title: `Школа ${s}` });
+      expect(res.body.author).toMatchObject({ slug: `learn-exp-${s}`, name: `Учебная Анна ${s}`, photoUrl: null });
+    });
+
     it("EARS-15/17:the lesson read names its completion rule and carries no step payload", async () => {
       const res = await call<{
         lesson: { completionSentence: string };

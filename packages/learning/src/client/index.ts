@@ -65,7 +65,7 @@ export function createLearningClient(
         ...(body === undefined ? {} : { "content-type": "application/json" }),
         ...options.headers,
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       credentials: "include",
       cache: "no-store",
     });

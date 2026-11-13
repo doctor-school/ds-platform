@@ -4271,6 +4271,14 @@ export interface components {
             }[];
         };
         LearningCoursePathDto: {
+            author: {
+                affiliation: string | null;
+                credentials: string | null;
+                name: string;
+                photoUrl: string | null;
+                role: string | null;
+                slug: string;
+            } | null;
             course: {
                 /** Format: uuid */
                 id: string;
@@ -4314,6 +4322,10 @@ export interface components {
                 /** Format: uuid */
                 stepId: string;
             } | null;
+            direction: {
+                slug: string;
+                title: string;
+            };
             document: {
                 state: {
                     /** @constant */
@@ -4495,6 +4507,10 @@ export interface components {
                 };
                 title: string;
             }[];
+            school: {
+                slug: string;
+                title: string;
+            };
             signedIn: boolean;
         };
         LearningLessonAdminDto: {

@@ -41,11 +41,8 @@ const DATE_TIME = new Intl.DateTimeFormat("ru-RU", {
 
 export const STEP_TYPE_LABEL: Record<LearningElementType, string> = {
   video: "Серия",
-  microlearning: "Микрообучение",
   download: "Материал для скачивания",
-  podcast: "Подкаст",
   test: "Тест",
-  "clinical-case": "Клинический случай",
 };
 
 /** EARS-11 / EARS-14 — a locked node's reason in the doctor's words. */

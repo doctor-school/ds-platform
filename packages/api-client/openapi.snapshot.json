@@ -4465,6 +4465,73 @@
       "LearningCoursePathDto": {
         "additionalProperties": false,
         "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "affiliation": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "credentials": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "photoUrl": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "slug": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "slug",
+                  "name",
+                  "role",
+                  "credentials",
+                  "affiliation",
+                  "photoUrl"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "course": {
             "additionalProperties": false,
             "properties": {
@@ -4618,6 +4685,19 @@
                 "type": "null"
               }
             ]
+          },
+          "direction": {
+            "additionalProperties": false,
+            "properties": {
+              "slug": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": ["slug", "title"],
+            "type": "object"
           },
           "document": {
             "additionalProperties": false,
@@ -5304,11 +5384,33 @@
             },
             "type": "array"
           },
+          "school": {
+            "additionalProperties": false,
+            "properties": {
+              "slug": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": ["slug", "title"],
+            "type": "object"
+          },
           "signedIn": {
             "type": "boolean"
           }
         },
-        "required": ["course", "signedIn", "modules", "document", "current"],
+        "required": [
+          "course",
+          "direction",
+          "school",
+          "author",
+          "signedIn",
+          "modules",
+          "document",
+          "current"
+        ],
         "type": "object"
       },
       "LearningLessonAdminDto": {

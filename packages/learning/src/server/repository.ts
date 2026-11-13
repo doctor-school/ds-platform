@@ -1,4 +1,6 @@
 import {
+  directions,
+  experts,
   learningCourses,
   learningFacts,
   learningLessons,
@@ -7,6 +9,7 @@ import {
   learningPresets,
   learningQuestions,
   learningRuleLayers,
+  learningSchools,
   learningSteps,
   type LearningCourseRow,
   type LearningLessonRow,
@@ -301,6 +304,30 @@ export async function courseBySlug(
     .select()
     .from(learningCourses)
     .where(eq(learningCourses.slug, slug));
+  return row;
+}
+
+/** EARS-14 — the course's direction, school and the school's leading expert. */
+export async function coursePlaces(db: Handle, schoolId: string) {
+  const [row] = await db
+    .select({
+      direction: { slug: directions.slug, title: directions.title },
+      school: { slug: learningSchools.slug, title: learningSchools.title },
+      expert: {
+        slug: experts.slug,
+        familyName: experts.familyName,
+        givenName: experts.givenName,
+        patronymic: experts.patronymic,
+        professionalRole: experts.professionalRole,
+        credentials: experts.credentials,
+        affiliation: experts.affiliation,
+        photoRef: experts.photoRef,
+      },
+    })
+    .from(learningSchools)
+    .innerJoin(directions, eq(directions.id, learningSchools.directionId))
+    .innerJoin(experts, eq(experts.id, learningSchools.leadExpertId))
+    .where(eq(learningSchools.id, schoolId));
   return row;
 }
 

@@ -31,32 +31,11 @@ export function StepIcon({ kind, size }: { kind: NodeGlyph; size: number }) {
           <path d="M8.5 9l1.5 1.5L13 7.5M8.5 15.5l1.5 1.5 3-3" />
         </svg>
       );
-    case "microlearning":
-      return (
-        <svg {...common}>
-          <rect x="8" y="3" width="12" height="14" />
-          <path d="M4 8v13h11" />
-        </svg>
-      );
-    case "clinical-case":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="8" r="3.5" />
-          <path d="M5 21c0-4 3-6.5 7-6.5s7 2.5 7 6.5" />
-        </svg>
-      );
     case "download":
       return (
         <svg {...common}>
           <path d="M6 3h9l4 4v14H6z" />
           <path d="M12 10v6M9.5 13.5l2.5 2.5 2.5-2.5" />
-        </svg>
-      );
-    case "podcast":
-      return (
-        <svg {...common}>
-          <rect x="9" y="3" width="6" height="11" />
-          <path d="M6 11a6 6 0 0 0 12 0M12 17v4" />
         </svg>
       );
     case "club":

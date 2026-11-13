@@ -13,5 +13,13 @@
     "sourceMap": true
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "node_modules", "src/**/*.test.ts"]
+  // `./client` and `./ui` ship as sources the storefront transpiles (like
+  // `@ds/event-page`); `tsconfig.ui.json` typechecks them.
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/**/*.test.ts",
+    "src/client/**",
+    "src/ui/**"
+  ]
 }

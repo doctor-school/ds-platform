@@ -1,6 +1,6 @@
 import {
   LEARNING_ELEMENT_TYPES,
-  LEARNING_STEP_MEDIA_MAX_BYTES,
+  LEARNING_STEP_INPUTS,
   LEARNING_STEP_PAYLOAD_SCHEMAS,
   type LearningElementType,
 } from "@ds/schemas";
@@ -89,8 +89,7 @@ export const LEARNING_ELEMENT_CATALOG: Readonly<
   video: {
     type: "video",
     payloadSchema: LEARNING_STEP_PAYLOAD_SCHEMAS.video,
-    media: null,
-    providerSource: true,
+    ...LEARNING_STEP_INPUTS.video,
     clientFacts: ["position"],
     viewed: (step, ctx) =>
       watchedPercent(step, ctx) >= ctx.setting("viewed.video.percent", step),
@@ -102,16 +101,7 @@ export const LEARNING_ELEMENT_CATALOG: Readonly<
   download: {
     type: "download",
     payloadSchema: LEARNING_STEP_PAYLOAD_SCHEMAS.download,
-    media: {
-      contentTypes: [
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ],
-      maxBytes: LEARNING_STEP_MEDIA_MAX_BYTES,
-    },
-    providerSource: false,
+    ...LEARNING_STEP_INPUTS.download,
     clientFacts: ["opened"],
     viewed: (step, ctx) => ctx.facts.opened(step.id),
     viewedPhrase: () => LEARNING_COPY_RU.phrase.downloadOpened,
@@ -119,8 +109,7 @@ export const LEARNING_ELEMENT_CATALOG: Readonly<
   test: {
     type: "test",
     payloadSchema: LEARNING_STEP_PAYLOAD_SCHEMAS.test,
-    media: null,
-    providerSource: false,
+    ...LEARNING_STEP_INPUTS.test,
     clientFacts: [],
     viewed: (step, ctx) =>
       ctx.facts.bestScore(step.id) >= ctx.setting("test.threshold", step),

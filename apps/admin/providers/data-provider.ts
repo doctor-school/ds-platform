@@ -6,6 +6,7 @@ import { adminCsrfHeaders } from "@/lib/admin-auth";
 import type { RosterFilterKey } from "@/lib/congress-roster";
 import {
   ADMIN_LIST_PAGE_SIZE_MAX,
+  LEARNING_STEP_MEDIA_PART,
   LIFECYCLE_IMPACT_TOKEN_HEADER,
 } from "@ds/schemas";
 import type {
@@ -1188,4 +1189,62 @@ function relationQuery(query: Record<string, unknown>): string {
     params.set(key, String(value));
   }
   return params.toString();
+}
+
+/**
+ * 024 (#4011) — the learning admin endpoints (`/v1/admin/learning`, 024-design
+ * §7), built in ONE place. Every JSON command rides `custom`, which owns the
+ * CSRF, `Idempotency-Key` and `If-Match` (`meta.version`) headers; the one
+ * multipart write is {@link putLearningStepMedia}.
+ */
+const LEARNING_BASE = `${ADMIN_BASE}/learning`;
+export const learningUrl = {
+  courses: () => `${LEARNING_BASE}/courses`,
+  course: (id: string) => `${LEARNING_BASE}/courses/${encodeURIComponent(id)}`,
+  modules: () => `${LEARNING_BASE}/modules`,
+  lessons: () => `${LEARNING_BASE}/lessons`,
+  lesson: (id: string) => `${LEARNING_BASE}/lessons/${encodeURIComponent(id)}`,
+  lessonState: (id: string, verb: "publish" | "unpublish") =>
+    `${LEARNING_BASE}/lessons/${encodeURIComponent(id)}/${verb}`,
+  stepOrder: (lessonId: string) =>
+    `${LEARNING_BASE}/lessons/${encodeURIComponent(lessonId)}/step-order`,
+  steps: () => `${LEARNING_BASE}/steps`,
+  step: (id: string) => `${LEARNING_BASE}/steps/${encodeURIComponent(id)}`,
+  stepSource: (id: string) =>
+    `${LEARNING_BASE}/steps/${encodeURIComponent(id)}/source`,
+  stepMedia: (id: string) =>
+    `${LEARNING_BASE}/steps/${encodeURIComponent(id)}/media`,
+  presets: () => `${LEARNING_BASE}/presets`,
+  rules: (scopeKind: string, scopeId: string) =>
+    `${LEARNING_BASE}/rules/${encodeURIComponent(scopeKind)}/${encodeURIComponent(scopeId)}`,
+  applyPreset: (scopeKind: string, scopeId: string) =>
+    `${LEARNING_BASE}/rules/${encodeURIComponent(scopeKind)}/${encodeURIComponent(scopeId)}/apply-preset`,
+};
+
+/**
+ * 024 EARS-28 — a `download` step's file through the 012 upload pipeline:
+ * multipart with the one `file` part, under the step's `If-Match`, with a fresh
+ * `Idempotency-Key` and the CSRF proof. A refusal is the same problem body
+ * every other write throws.
+ */
+export async function putLearningStepMedia<T>(
+  stepId: string,
+  file: File,
+  version: number,
+): Promise<T> {
+  const form = new FormData();
+  form.append(LEARNING_STEP_MEDIA_PART, file);
+  const res = await fetch(learningUrl.stepMedia(stepId), {
+    method: "PUT",
+    credentials: "include",
+    headers: {
+      accept: "application/json",
+      "idempotency-key": idempotencyKey(),
+      "if-match": `W/"${version}"`,
+      ...adminCsrfHeaders(),
+    },
+    body: form,
+  });
+  if (!res.ok) throw await toHttpError(res);
+  return (await res.json()) as T;
 }

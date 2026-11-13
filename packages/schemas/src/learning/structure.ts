@@ -117,6 +117,42 @@ export const LEARNING_STEP_PAYLOAD_SCHEMAS = {
   test: LearningTestPayloadSchema,
 } as const;
 
+/** A step type's uploaded file under the 012 media contract. */
+export interface LearningStepMediaRule {
+  /** The content types the upload accepts. */
+  readonly contentTypes: readonly string[];
+  readonly maxBytes: number;
+}
+
+/**
+ * EARS-2 / EARS-4 / EARS-28 — what each element type takes besides its
+ * payload: an uploaded file (`media`) and/or a 006 provider source
+ * (`providerSource`). The `@ds/learning` catalog, the API's upload check, the
+ * publish requirements and the admin composition screen all read this one
+ * table, so the screen offers exactly the inputs the server requires.
+ */
+export const LEARNING_STEP_INPUTS: Readonly<
+  Record<
+    z.infer<typeof LearningElementTypeSchema>,
+    { readonly media: LearningStepMediaRule | null; readonly providerSource: boolean }
+  >
+> = {
+  video: { media: null, providerSource: true },
+  download: {
+    media: {
+      contentTypes: [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ],
+      maxBytes: LEARNING_STEP_MEDIA_MAX_BYTES,
+    },
+    providerSource: false,
+  },
+  test: { media: null, providerSource: false },
+};
+
 // ── Requests ────────────────────────────────────────────────────────────────
 
 export const CreateLearningSchoolRequestSchema = z.strictObject({

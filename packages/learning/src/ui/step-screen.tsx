@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type {
   LearningAttempt,
   LearningAttemptResult,
   LearningLessonRead,
   LearningStepRead,
 } from "@ds/schemas";
-import { Alert, Badge, Button, cn } from "@ds/design-system";
+import { Alert, Badge, Button, Link, Radio, cn } from "@ds/design-system";
 import { RecordingPlayer } from "@ds/event-page/recording-player";
 
 import {
@@ -30,8 +30,11 @@ import { StepIcon } from "./step-icon";
 // the lesson's completion sentences (EARS-17, from the read), and «Дальше»
 // WHEN the order allows the next step. A locked step shows its reason only.
 
-/** How often a playing video reports its position (EARS-10; the server clamps). */
-export const VIDEO_REPORT_INTERVAL_MS = 15_000;
+/**
+ * How much provider playback time passes between two position facts (EARS-10);
+ * the end of the media is always reported, so 100 % (D15) is reachable.
+ */
+export const VIDEO_REPORT_EVERY_SEC = 10;
 
 export interface StepScreenProps {
   courseSlug: string;
@@ -60,9 +63,9 @@ export function StepScreen({ courseSlug, config, lesson, stepId, step }: StepScr
       <section className="px-gutter pt-10">
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
           <nav aria-label={C.here} className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <a href={coursePathHref(config, courseSlug)} className="cursor-pointer text-muted-foreground no-underline hover:underline">
+            <Link href={coursePathHref(config, courseSlug)} size="sm" tone="neutral" weight="semibold">
               {C.breadcrumbPath}
-            </a>
+            </Link>
             <span aria-hidden="true">›</span>
             <span className="font-semibold text-foreground">{C.lessonLabel(l.number)}</span>
           </nav>
@@ -100,14 +103,16 @@ export function StepScreen({ courseSlug, config, lesson, stepId, step }: StepScr
                         <StepIcon kind={s.type} size={22} />
                       </span>
                     ) : (
-                      <a
+                      <Link
+                        variant="wrapper"
                         href={stepHref(config, courseSlug, s.id)}
                         aria-label={label}
                         aria-current={here ? "step" : undefined}
-                        className={cn(box, "cursor-pointer hover:shadow-btn focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring")}
                       >
-                        <StepIcon kind={s.type} size={22} />
-                      </a>
+                        <span className={cn(box, "[a:hover>&]:shadow-btn")}>
+                          <StepIcon kind={s.type} size={22} />
+                        </span>
+                      </Link>
                     )}
                     <span aria-hidden="true" className={cn("flex-1 border-t-4", i === lesson.steps.length - 1 ? "border-transparent" : "border-primary-action")} />
                   </div>
@@ -203,43 +208,46 @@ type Body<T extends LearningStepRead["body"]["type"]> = Extract<LearningStepRead
 
 /**
  * EARS-16 / EARS-10 — the 006 provider embed played exactly as a 014
- * recording (`RecordingPlayer`); the cross-origin frame exposes no universal
- * playback clock, so while the frame is shown and the page is visible the
- * screen reports the advancing position as a fact; the server clamps it to the
- * media length and to `progress.maxPlaybackRate` / `progress.slackSec`.
+ * recording (`RecordingPlayer`); the position reported is the provider
+ * player's own clock (`onClock`), every {@link VIDEO_REPORT_EVERY_SEC} s of
+ * playback and at the end; the server clamps it to the media length and to
+ * `progress.maxPlaybackRate` / `progress.slackSec`. A provider with no clock
+ * (cdnvideo, #4055) plays but reports nothing.
  */
 function VideoBody({ step, body }: { step: LearningStepRead; body: Body<"video"> }) {
   const [playing, setPlaying] = useState(false);
   const [watched, setWatched] = useState(body.watchedPercent);
-  const position = useRef(body.positionSec);
+  const reported = useRef(body.positionSec);
+  const sending = useRef(false);
 
-  useEffect(() => {
-    if (!playing) return;
-    const client = createLearningClient();
-    let last = Date.now();
-    const tick = async () => {
-      const now = Date.now();
-      if (document.visibilityState === "visible") {
-        position.current = Math.min(body.durationSec, position.current + Math.round((now - last) / 1000));
-      }
-      last = now;
-      try {
-        await client.recordFact({
+  const onClock = useCallback(
+    (sec: number) => {
+      const position = Math.min(Math.floor(sec), body.durationSec);
+      const atEnd = position >= body.durationSec - 1;
+      if (sending.current) return;
+      if (position - reported.current < VIDEO_REPORT_EVERY_SEC && !(atEnd && position > reported.current)) return;
+      sending.current = true;
+      createLearningClient()
+        .recordFact({
           eventId: newLearningEventId(step.step.id),
           stepId: step.step.id,
           source: "web",
           kind: "position",
-          clientOccurredAt: new Date(now).toISOString(),
-          data: { positionSec: position.current },
-        });
-        setWatched(Math.min(100, Math.floor((position.current / body.durationSec) * 100)));
-      } catch {
+          clientOccurredAt: new Date().toISOString(),
+          data: { positionSec: atEnd ? body.durationSec : position },
+        })
+        .then(() => {
+          reported.current = atEnd ? body.durationSec : position;
+          setWatched(Math.min(100, Math.floor((reported.current / body.durationSec) * 100)));
+        })
         // A refused report changes nothing on screen; the next tick retries.
-      }
-    };
-    const id = window.setInterval(() => void tick(), VIDEO_REPORT_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [playing, body.durationSec, step.step.id]);
+        .catch(() => undefined)
+        .finally(() => {
+          sending.current = false;
+        });
+    },
+    [body.durationSec, step.step.id],
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -252,19 +260,16 @@ function VideoBody({ step, body }: { step: LearningStepRead; body: Body<"video">
           unavailableTitle={C.videoUnavailable.title}
           unavailableBody={C.videoUnavailable.body}
           retryLabel={C.videoUnavailable.retry}
+          onClock={onClock}
         />
       ) : (
         <div className="relative flex aspect-video items-center justify-center border-2 border-border bg-primary-surface text-primary-surface-foreground">
-          <button
-            type="button"
-            aria-label={C.watch}
-            onClick={() => setPlaying(true)}
-            className="inline-flex size-16 cursor-pointer items-center justify-center border-2 border-border bg-background p-0 text-foreground shadow-btn transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-btn-hover focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring"
-          >
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <Button size="lg" onClick={() => setPlaying(true)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M8 5l12 7-12 7z" />
             </svg>
-          </button>
+            {C.watch}
+          </Button>
         </div>
       )}
       <div className="flex items-center gap-3 text-xs font-bold tabular-nums">
@@ -404,23 +409,26 @@ function TestBody({ body }: { body: Body<"test"> }) {
     <div className="flex flex-col gap-4">
       <div className="text-sm font-bold tabular-nums text-faint">{C.question(q + 1, attempt.questions.length)}</div>
       <div className="text-lg font-extrabold leading-snug">{question.text}</div>
-      <div role="group" aria-label={C.optionsLabel} className="flex flex-col gap-2">
+      <div role="radiogroup" aria-label={C.optionsLabel} className="flex flex-col gap-2">
         {question.options.map((o) => {
           const on = chosen === o.id;
           return (
-            <button
+            <div
               key={o.id}
-              type="button"
-              aria-pressed={on}
-              onClick={() => setAnswers((a) => ({ ...a, [question.id]: o.id }))}
               className={cn(
-                "flex w-full cursor-pointer items-center gap-3 border-2 px-4 py-3 text-left text-base font-semibold transition-colors hover:border-primary hover:bg-tint focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring",
-                on ? "border-primary bg-tint text-tint-foreground" : "border-border bg-card text-foreground",
+                "flex border-2 px-4 py-3 transition-colors",
+                on ? "border-primary bg-tint" : "border-border bg-card",
               )}
             >
-              <span aria-hidden="true" className={cn("size-4 flex-none border-2", on ? "border-primary bg-primary-action" : "border-border bg-card")} />
-              <span>{o.text}</span>
-            </button>
+              <Radio
+                name={`question-${question.id}`}
+                value={o.id}
+                checked={on}
+                onChange={() => setAnswers((a) => ({ ...a, [question.id]: o.id }))}
+              >
+                {o.text}
+              </Radio>
+            </div>
           );
         })}
       </div>

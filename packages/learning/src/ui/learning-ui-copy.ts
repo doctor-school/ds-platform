@@ -61,6 +61,16 @@ export function lockReasonText(reason: LearningLockReason): string {
 
 export const LEARNING_UI_COPY = {
   breadcrumbPath: "Путь курса",
+  breadcrumbLabel: "Вы здесь",
+  authorHeading: "Автор курса",
+  summaryLabel: "Выбранный шаг пути",
+  summaryActions: {
+    start: "Начать",
+    continue: "Продолжить",
+    repeat: "Повторить",
+    guest: "Открыть",
+  },
+  sheetNote: "Шаг пути курса",
   pathHeading: "Путь курса",
   outlineHeading: "Модули и уроки",
   outlineLabel: "Навигация по пути курса",

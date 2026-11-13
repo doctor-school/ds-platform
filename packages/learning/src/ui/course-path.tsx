@@ -1,12 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { LearningCoursePath } from "@ds/schemas";
-import { Badge, Button, Skeleton, cn } from "@ds/design-system";
-import { EmptyState } from "@ds/design-system/blocks";
+import { expertInitials, type LearningCoursePath } from "@ds/schemas";
+import {
+  Badge,
+  Button,
+  Link,
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  Skeleton,
+  cn,
+} from "@ds/design-system";
+import { EmptyState, EventSpeakerCard } from "@ds/design-system/blocks";
 
 import { createLearningClient } from "../client/index";
-import { type LearningHostConfig, stepHref } from "./host-config";
+import {
+  type LearningHostConfig,
+  coursePathHref,
+  registerHref,
+  stepHref,
+} from "./host-config";
+import { NodeSummary, summaryAction } from "./node-summary";
 import { LEARNING_UI_COPY as C } from "./learning-ui-copy";
 import {
   type NodeTone,
@@ -79,12 +97,46 @@ export function CoursePath({ courseSlug, config, initial }: CoursePathProps) {
   const view = path ? buildPathView(path) : null;
   const g = snakeGeometry(narrow);
   const href = (id: string) => stepHref(config, courseSlug, id);
+  const nodes = view ? view.sections.flatMap((sec) => sec.nodes) : [];
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const selected =
+    nodes.find((n) => n.id === selectedId) ??
+    nodes.find((n) => n.here) ??
+    nodes[0] ??
+    null;
+  const action = selected
+    ? summaryAction(selected, path?.signedIn ?? false, {
+        step: href(selected.id),
+        register: registerHref(config, coursePathHref(config, courseSlug)),
+      })
+    : null;
+  const select = (id: string) => {
+    setSelectedId(id);
+    if (narrow) setSheetOpen(true);
+  };
 
   return (
     <div className="bg-background pb-16 text-foreground">
       {path ? (
         <section className="px-gutter pt-10">
           <div className="mx-auto flex max-w-content flex-col gap-4">
+            <nav
+              aria-label={C.breadcrumbLabel}
+              className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+            >
+              {[path.direction?.title, path.school.title]
+                .filter((t): t is string => Boolean(t))
+                .map((t) => (
+                  <span key={t} className="contents">
+                    <span>{t}</span>
+                    <span aria-hidden="true">›</span>
+                  </span>
+                ))}
+              <span aria-current="page" className="font-semibold text-foreground">
+                {path.course.title}
+              </span>
+            </nav>
             <div className="text-eyebrow font-extrabold uppercase tracking-eyebrow text-primary-action">
               {C.courseEyebrow(path.modules.length, view?.lessonCount ?? 0)}
             </div>
@@ -138,11 +190,13 @@ export function CoursePath({ courseSlug, config, initial }: CoursePathProps) {
 
           {state === "loading" ? (
             <div aria-busy="true" aria-label={C.loadingPath} className="flex flex-col gap-6">
-              <Skeleton className="h-16 w-full" />
+              <div className="h-16">
+                <Skeleton className="h-full w-full" />
+              </div>
               {[0, 1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className={cn("flex", !narrow && i % 2 === 1 ? "justify-end" : "justify-start")}>
-                  <div className={narrow ? "w-full" : "w-5/12"}>
-                    <Skeleton className="h-18 w-full" />
+                  <div className={cn("h-18", narrow ? "w-full" : "w-5/12")}>
+                    <Skeleton className="h-full w-full" />
                   </div>
                 </div>
               ))}
@@ -204,7 +258,8 @@ export function CoursePath({ courseSlug, config, initial }: CoursePathProps) {
                             index={start + i}
                             row={i}
                             narrow={narrow}
-                            href={n.kind === "step" && n.openable ? href(n.id) : null}
+                            selected={selected?.id === n.id}
+                            onSelect={() => select(n.id)}
                           />
                         ))}
                       </div>
@@ -218,6 +273,14 @@ export function CoursePath({ courseSlug, config, initial }: CoursePathProps) {
                   aria-label={C.outlineLabel}
                   className="sticky top-6 flex min-w-0 flex-col self-start border-2 border-border bg-card shadow-lg"
                 >
+                  {selected ? (
+                    <section
+                      aria-label={C.summaryLabel}
+                      className="border-b-2 border-border px-6 py-5"
+                    >
+                      <NodeSummary node={selected} action={action} />
+                    </section>
+                  ) : null}
                   <nav aria-label={C.outlineHeading} className="flex flex-col">
                     <div className="px-6 py-3 text-eyebrow font-extrabold uppercase tracking-eyebrow text-muted-foreground">
                       {C.outlineHeading}
@@ -231,21 +294,25 @@ export function CoursePath({ courseSlug, config, initial }: CoursePathProps) {
                         <ol className="m-0 flex list-none flex-col p-0">
                           {m.lessons.map((l) => (
                             <li key={l.id} className="flex flex-col">
-                              <a
+                              <Link
+                                variant="wrapper"
+                                tone="neutral"
                                 href={l.firstStepId && l.tone !== "closed" ? href(l.firstStepId) : `#node-${l.firstStepId ?? ""}`}
                                 aria-label={l.label}
                                 aria-current={l.tone === "here" ? "step" : undefined}
-                                data-ghost=""
-                                className={cn(
-                                  "flex min-h-9 w-full cursor-pointer items-center gap-3 border-t border-hairline px-6 py-2 text-left text-sm font-semibold no-underline transition-colors hover:bg-tint hover:text-tint-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset",
-                                  l.tone === "here" ? "bg-tint text-tint-foreground" : "bg-card",
-                                  l.tone === "closed" ? "text-muted-foreground" : l.tone === "here" ? "" : "text-foreground",
-                                )}
                               >
-                                <span aria-hidden="true" className={cn("size-3 flex-none border-2", MARK_TONE[l.tone])} />
-                                <span className="min-w-5 flex-none tabular-nums">{l.number}</span>
-                                <span title={l.title} className="min-w-0 flex-auto truncate">{l.title}</span>
-                              </a>
+                                <span
+                                  className={cn(
+                                    "flex min-h-10 w-full items-center gap-3 border-t border-hairline px-6 py-2 text-left text-sm font-semibold transition-colors hover:bg-tint hover:text-tint-foreground",
+                                    l.tone === "here" ? "bg-tint text-tint-foreground" : "bg-card",
+                                    l.tone === "closed" ? "text-muted-foreground" : l.tone === "here" ? "" : "text-foreground",
+                                  )}
+                                >
+                                  <span aria-hidden="true" className={cn("size-3 flex-none border-2", MARK_TONE[l.tone])} />
+                                  <span className="min-w-5 flex-none tabular-nums">{l.number}</span>
+                                  <span title={l.title} className="min-w-0 flex-auto truncate">{l.title}</span>
+                                </span>
+                              </Link>
                             </li>
                           ))}
                         </ol>
@@ -258,6 +325,37 @@ export function CoursePath({ courseSlug, config, initial }: CoursePathProps) {
           ) : null}
         </div>
       </section>
+
+      {path?.author ? (
+        <section className="px-gutter pt-section">
+          <div className="mx-auto max-w-content">
+            <EventSpeakerCard
+              heading={C.authorHeading}
+              name={path.author.name}
+              roleKicker={path.author.role}
+              affiliation={[path.author.credentials, path.author.affiliation]
+                .filter(Boolean)
+                .join(", ")}
+              {...(path.author.photoUrl ? { photoUrl: path.author.photoUrl } : {})}
+              initials={expertInitials(path.author.name)}
+            />
+          </div>
+        </section>
+      ) : null}
+
+      {narrow && selected ? (
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>{selected.title}</SheetTitle>
+              <SheetDescription>{selected.kicker}</SheetDescription>
+            </SheetHeader>
+            <SheetBody>
+              <NodeSummary node={selected} action={action} showTitle={false} />
+            </SheetBody>
+          </SheetContent>
+        </Sheet>
+      ) : null}
     </div>
   );
 }
@@ -267,13 +365,15 @@ function SnakeNode({
   index,
   row,
   narrow,
-  href,
+  selected,
+  onSelect,
 }: {
   node: PathNode;
   index: number;
   row: number;
   narrow: boolean;
-  href: string | null;
+  selected: boolean;
+  onSelect: () => void;
 }) {
   const g = snakeGeometry(narrow);
   const P = SNAKE.pitch;
@@ -282,9 +382,9 @@ function SnakeNode({
   const right = narrow || off > 0;
   const edge = S / 2 + 16;
   const box = cn(
-    "absolute inline-flex items-center justify-center border-2 p-0 no-underline",
+    "inline-flex size-full items-center justify-center border-2 [button:hover>&]:shadow-btn [button:focus-visible>&]:shadow-focus",
     NODE_TONE[node.tone],
-    href ? "cursor-pointer hover:shadow-btn focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring" : "cursor-default",
+    selected && "shadow-md",
   );
   const boxStyle = {
     top: (P - S) / 2,
@@ -305,15 +405,22 @@ function SnakeNode({
           </span>
         </div>
       ) : null}
-      {href ? (
-        <a id={`node-${node.id}`} href={href} aria-label={node.label} className={box} style={boxStyle}>
-          <StepIcon kind={glyph} size={26} />
-        </a>
-      ) : (
-        <span id={`node-${node.id}`} role="img" aria-label={node.label} className={box} style={boxStyle}>
+      {/* The canvas node is a bespoke path control (no design-system node
+          primitive; recorded in the #4011 build-ui report): the button carries
+          only its position, the box inside it carries the look. */}
+      <button
+        type="button"
+        id={`node-${node.id}`}
+        aria-label={node.label}
+        aria-pressed={selected}
+        onClick={onSelect}
+        className="absolute"
+        style={boxStyle}
+      >
+        <span className={box}>
           <StepIcon kind={glyph} size={26} />
         </span>
-      )}
+      </button>
       <div
         className={cn(
           "absolute inset-y-0 flex min-w-0 flex-col justify-center gap-1",

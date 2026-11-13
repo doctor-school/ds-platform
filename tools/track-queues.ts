@@ -107,6 +107,25 @@ export interface TrackQueueData {
   blockers: Map<number, Blocker[] | null>;
   /** Claimed / in-progress open Issues per product track label. */
   claimedOnTrack: Map<string, Array<{ number: number; title: string }>>;
+  /**
+   * Sub-issues of open queue items, in sub-issue order (#4053); absent or
+   * empty = a leaf, `null` = unreadable. Their claims and blockers live in
+   * `claims` / `blockers` keyed by the child's number.
+   */
+  children: Map<number, QueueIssue[] | null>;
+  /**
+   * Parent of a closed queue item; `null` = none, absent = not read.
+   * `openChildren` = the parent's open sub-issues (`null` = unreadable).
+   */
+  parents: Map<
+    number,
+    {
+      number: number;
+      title: string;
+      state: "open" | "closed";
+      openChildren: number[] | null;
+    } | null
+  >;
 }
 
 export interface ResolvedTrack {
@@ -115,7 +134,13 @@ export interface ResolvedTrack {
   inWork: Array<{ number: number; title: string; claim: ClaimSignal }>;
   /** `null` = queue empty; `undefined` = an earlier item is unreadable. */
   next:
-    | { number: number; title: string; blockers: Blocker[] | null }
+    | {
+        number: number;
+        title: string;
+        blockers: Blocker[] | null;
+        /** Set when the queue item is a parent expanded to this child. */
+        parent?: { number: number; title: string };
+      }
     | null
     | undefined;
 }
@@ -125,7 +150,15 @@ export function resolveTrackQueues(
   data: TrackQueueData,
 ): { tracks: ResolvedTrack[]; warnings: Warn[] } {
   const warnings: Warn[] = [];
-  const queued = new Set(tracks.flatMap((t) => t.items));
+  // A child of a queued parent is queue work (#4053), not work outside it.
+  const queued = new Set(
+    tracks.flatMap((t) =>
+      t.items.flatMap((n) => [
+        n,
+        ...(data.children.get(n) ?? []).map((c) => c.number),
+      ]),
+    ),
+  );
   const blocking = new Set(
     [...data.blockers.values()].flatMap((bs) => bs ?? []).map((b) => b.number),
   );
@@ -161,17 +194,66 @@ export function resolveTrackQueues(
           source,
           message: `#${n} carries ${i.tracks.join(", ") || "no track:* label"}, not ${t.label} — fix the queue or the label`,
         });
-      if (i.state !== "open") continue;
+      if (i.state !== "open") {
+        // Only an outcome Issue is a queue item (#4053): a closed step whose
+        // open parent is not queued means the outcome fell out of the queue.
+        const p = data.parents.get(n);
+        // Silent while every open sibling is itself queued: nothing fell out.
+        if (
+          p &&
+          p.state === "open" &&
+          !queued.has(p.number) &&
+          (p.openChildren ?? []).some((c) => !queued.has(c))
+        )
+          warnings.push({
+            source,
+            message: `#${n} is a step of #${p.number} ${clip(p.title)} — queue #${p.number} instead`,
+          });
+        continue;
+      }
+      const blockersOf = (k: number) =>
+        data.blockers.has(k) ? data.blockers.get(k)! : [];
+      const kids = data.children.get(n);
+      if (kids === null) {
+        // Unreadable sub-issues: the item may be a parent — never a leaf.
+        unknownSeen = true;
+        continue;
+      }
+      if (kids === undefined || kids.length === 0) {
+        open++;
+        const claim = data.claims.get(n);
+        if (claim) r.inWork.push({ number: n, title: i.title, claim });
+        else if (r.next === null)
+          r.next = unknownSeen
+            ? undefined
+            : { number: n, title: i.title, blockers: blockersOf(n) };
+        continue;
+      }
+      // A parent's own claim (e.g. a spec session) never hides its children.
+      const openKids = kids.filter((c) => c.state === "open");
+      if (openKids.length === 0) {
+        warnings.push({
+          source,
+          message: `#${n} is open with no open sub-issues — open the next slice or close it (ask the owner)`,
+        });
+        continue;
+      }
       open++;
-      const claim = data.claims.get(n);
-      if (claim) r.inWork.push({ number: n, title: i.title, claim });
-      else if (r.next === null)
+      const free = openKids.filter((c) => {
+        const cc = data.claims.get(c.number);
+        if (cc) r.inWork.push({ number: c.number, title: c.title, claim: cc });
+        return !cc;
+      });
+      const pick =
+        free.find((c) => blockersOf(c.number)?.length === 0) ?? free[0];
+      if (pick && r.next === null)
         r.next = unknownSeen
           ? undefined
           : {
-              number: n,
-              title: i.title,
-              blockers: data.blockers.has(n) ? data.blockers.get(n)! : [],
+              number: pick.number,
+              title: pick.title,
+              blockers: blockersOf(pick.number),
+              parent: { number: n, title: i.title },
             };
     }
     if (r.next === null && unknownSeen) r.next = undefined;
@@ -220,7 +302,12 @@ export function renderTracksSection(
     else {
       const unknown =
         t.next.blockers === null ? " — blockers unknown — see Warnings" : "";
-      out.push(`- next #${t.next.number} ${clip(t.next.title)}${unknown}`);
+      const step = t.next.parent
+        ? ` — step of #${t.next.parent.number} ${clip(t.next.parent.title)}`
+        : "";
+      out.push(
+        `- next #${t.next.number} ${clip(t.next.title)}${step}${unknown}`,
+      );
       for (const b of t.next.blockers ?? [])
         out.push(
           `  - blocked by #${b.number} ${clip(b.title)} (${b.track ?? "no track"})`,
@@ -247,6 +334,10 @@ const trackLabels = (i: GhIssueJson): string[] =>
 
 const firstLine = (e: unknown) =>
   e instanceof Error ? e.message.split("\n")[0]! : String(e);
+
+/** execa puts `gh: Not Found (HTTP 404)` in stderr, below the first line. */
+const httpStatus = (e: unknown, re: RegExp) =>
+  re.test(e instanceof Error ? e.message : String(e));
 
 /**
  * Read the queue file and resolve it against live GitHub. Never throws: every
@@ -289,6 +380,8 @@ export async function loadTrackQueues(
     claims: new Map(),
     blockers: new Map(),
     claimedOnTrack: new Map(),
+    children: new Map(),
+    parents: new Map(),
   };
   const api = async <T>(path: string, paginate = false): Promise<T> => {
     const args = ["api", path];
@@ -296,6 +389,53 @@ export async function loadTrackQueues(
     const { stdout } = await execa("gh", args, { cwd: repoRoot });
     return JSON.parse(stdout) as T;
   };
+  /** Claim + open native blockers of one open Issue (queue item or child). */
+  const loadWork = async (n: number) => {
+    const [blockers, worktreeMtimeMs, comments] = await Promise.all([
+      api<GhIssueJson[][]>(
+        `repos/{owner}/{repo}/issues/${n}/dependencies/blocked_by`,
+        true,
+      ).catch((e) => {
+        warnings.push({
+          source: `track queue #${n} blocked_by`,
+          message: firstLine(e),
+        });
+        return null;
+      }),
+      worktreeClaimMtime(mainRoot, n),
+      fetchClaimComments(n, repoRoot),
+    ]);
+    if (comments === undefined)
+      warnings.push({
+        source: `track queue #${n} claim comments`,
+        message: "unreadable — claim checked by worktree only",
+      });
+    const claim = detectClaim({
+      nowMs,
+      ...(worktreeMtimeMs === undefined ? {} : { worktreeMtimeMs }),
+      ...(comments === undefined ? {} : { comments }),
+    });
+    if (claim) data.claims.set(n, claim);
+    if (blockers === null) {
+      data.blockers.set(n, null);
+      return;
+    }
+    const open = blockers
+      .flat()
+      .filter((b) => b.state === "open")
+      .map((b) => ({
+        number: b.number,
+        title: b.title,
+        track: trackLabels(b)[0] ?? null,
+      }));
+    if (open.length > 0) data.blockers.set(n, open);
+  };
+  const toQueueIssue = (i: GhIssueJson): QueueIssue => ({
+    number: i.number,
+    title: i.title,
+    state: i.state === "open" ? "open" : "closed",
+    tracks: trackLabels(i),
+  });
   const numbers = [...new Set(parsed.tracks.flatMap((t) => t.items))];
   await Promise.all(
     numbers.map(async (n) => {
@@ -303,7 +443,7 @@ export async function loadTrackQueues(
       try {
         i = await api<GhIssueJson>(`repos/{owner}/{repo}/issues/${n}`);
       } catch (e) {
-        if (/HTTP 404|HTTP 410/.test(firstLine(e))) data.issues.set(n, null);
+        if (httpStatus(e, /HTTP 404|HTTP 410/)) data.issues.set(n, null);
         else
           warnings.push({ source: `track queue #${n}`, message: firstLine(e) });
         return;
@@ -312,52 +452,72 @@ export async function loadTrackQueues(
         data.issues.set(n, null);
         return;
       }
-      const state = i.state === "open" ? "open" : "closed";
-      data.issues.set(n, {
-        number: n,
-        title: i.title,
-        state,
-        tracks: trackLabels(i),
-      });
-      if (state !== "open") return;
-      const [blockers, worktreeMtimeMs, comments] = await Promise.all([
-        api<GhIssueJson[][]>(
-          `repos/{owner}/{repo}/issues/${n}/dependencies/blocked_by`,
-          true,
-        ).catch((e) => {
-          warnings.push({
-            source: `track queue #${n} blocked_by`,
-            message: firstLine(e),
+      const item = { ...toQueueIssue(i), number: n };
+      data.issues.set(n, item);
+      if (item.state !== "open") {
+        // A closed step under an open, unqueued parent is a Warnings row (#4053).
+        try {
+          const p = await api<GhIssueJson>(
+            `repos/{owner}/{repo}/issues/${n}/parent`,
+          );
+          const state = p.state === "open" ? "open" : "closed";
+          const openChildren =
+            state !== "open"
+              ? []
+              : await api<GhIssueJson[][]>(
+                  `repos/{owner}/{repo}/issues/${p.number}/sub_issues`,
+                  true,
+                )
+                  .then((pages) =>
+                    pages
+                      .flat()
+                      .filter((c) => c.state === "open")
+                      .map((c) => c.number),
+                  )
+                  .catch((e) => {
+                    warnings.push({
+                      source: `track queue #${n} parent #${p.number} sub-issues`,
+                      message: firstLine(e),
+                    });
+                    return null;
+                  });
+          data.parents.set(n, {
+            number: p.number,
+            title: p.title,
+            state,
+            openChildren,
           });
-          return null;
-        }),
-        worktreeClaimMtime(mainRoot, n),
-        fetchClaimComments(n, repoRoot),
-      ]);
-      if (comments === undefined)
-        warnings.push({
-          source: `track queue #${n} claim comments`,
-          message: "unreadable — claim checked by worktree only",
-        });
-      const claim = detectClaim({
-        nowMs,
-        ...(worktreeMtimeMs === undefined ? {} : { worktreeMtimeMs }),
-        ...(comments === undefined ? {} : { comments }),
-      });
-      if (claim) data.claims.set(n, claim);
-      if (blockers === null) {
-        data.blockers.set(n, null);
+        } catch (e) {
+          if (httpStatus(e, /HTTP 404/)) data.parents.set(n, null);
+          else
+            warnings.push({
+              source: `track queue #${n} parent`,
+              message: firstLine(e),
+            });
+        }
         return;
       }
-      const open = blockers
-        .flat()
-        .filter((b) => b.state === "open")
-        .map((b) => ({
-          number: b.number,
-          title: b.title,
-          track: trackLabels(b)[0] ?? null,
-        }));
-      if (open.length > 0) data.blockers.set(n, open);
+      const [, kids] = await Promise.all([
+        loadWork(n),
+        api<GhIssueJson[][]>(
+          `repos/{owner}/{repo}/issues/${n}/sub_issues`,
+          true,
+        )
+          .then((pages) => pages.flat().map(toQueueIssue))
+          .catch((e) => {
+            warnings.push({
+              source: `track queue #${n} sub-issues`,
+              message: firstLine(e),
+            });
+            return null;
+          }),
+      ]);
+      data.children.set(n, kids);
+      await Promise.all(
+        (kids ?? [])
+          .filter((c) => c.state === "open")
+          .map((c) => loadWork(c.number)),
+      );
     }),
   );
 

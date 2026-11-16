@@ -237,7 +237,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         subject_id: string | null;
       }>(
         `SELECT event_type, subject_id FROM audit_ledger
-          WHERE event_type LIKE 'data.materials.%' AND metadata->'pk'->>'id' = $1`,
+          WHERE event_type LIKE 'data.materials.%' AND metadata->'pk'->>'id' = $1
+          ORDER BY created_at`,
         [id],
       );
       return rows;

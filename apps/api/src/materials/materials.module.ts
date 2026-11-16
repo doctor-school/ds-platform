@@ -3,6 +3,9 @@ import { feedEntries, materials } from "@ds/db";
 import { MediaSlotRegistry } from "../taxonomy/index.js";
 import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
 import { FeedEntriesRepository } from "./feed-entries.repository.js";
+import { FeedSourcesAdminController } from "./feed-sources.admin.controller.js";
+import { FeedSourcesRepository } from "./feed-sources.repository.js";
+import { FeedSourcesService } from "./feed-sources.service.js";
 import { MaterialsAdminController } from "./materials.admin.controller.js";
 import { MaterialsRepository } from "./materials.repository.js";
 import { MaterialsService } from "./materials.service.js";
@@ -13,7 +16,8 @@ import { OwnMaterialsFeedSource } from "./own-materials.feed-source.js";
 
 /**
  * 048 — the materials feed, slice 1 (#3512 opens it with the admin authoring
- * surface; #3513 adds the anonymous feed and material reads).
+ * surface; #3513 adds the anonymous feed and material reads); slice 2 adds the
+ * «Источники» source list (#3993).
  *
  * `TaxonomyModule` is imported for the SHARED 012 mechanisms, never copied
  * (Lead decision 11): `IdempotencyService` (one `idempotency_keys` record),
@@ -26,6 +30,7 @@ import { OwnMaterialsFeedSource } from "./own-materials.feed-source.js";
   imports: [TaxonomyModule],
   controllers: [
     MaterialsAdminController,
+    FeedSourcesAdminController,
     PublicFeedController,
     PublicMaterialsController,
   ],
@@ -33,6 +38,8 @@ import { OwnMaterialsFeedSource } from "./own-materials.feed-source.js";
     MaterialsRepository,
     MaterialsService,
     FeedEntriesRepository,
+    FeedSourcesRepository,
+    FeedSourcesService,
     OwnMaterialsFeedSource,
     MaterialsPublicReadsService,
   ],

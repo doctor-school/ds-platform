@@ -1,5 +1,15 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, isNull, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  not,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
 import { experts, feedEntries, organisations } from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
@@ -16,6 +26,16 @@ import type { MaterialsTx } from "./materials.repository.js";
 // directly. Slice 1 has one source, `academy` (own-materials.feed-source.ts).
 
 type Db = DrizzleHandle["db"];
+
+/**
+ * The platforms whose entries the public feed read serves: those the card
+ * contract has a member for (048-design §Delivery slices (slice 2)). A network
+ * platform joins this list in the same change that ships its card member
+ * (#3997), so a stored network entry is never served before it can render.
+ */
+export const FEED_CARD_PLATFORMS = [
+  "academy",
+] as const satisfies readonly (typeof feedEntries.sourcePlatform.enumValues)[number][];
 
 /** One card as a source writes it; the card date is kept on a rewrite. */
 export interface FeedEntryWrite {
@@ -55,14 +75,22 @@ export const expertPubliclyVisible: SQL = and(
  * name parts, judged now — a column is absent while its expert is not public)
  * and its 032 partner through the shared display predicate (the partner never
  * hides an entry, so it is a LEFT JOIN on the predicate). `materials` is never
- * read (V-6). A pure builder so the unit suite can inspect its SQL.
+ * read (V-6). Slice 2 (#3993, EARS-22, EARS-32): a hidden entry and an entry
+ * of a switched-off source are excluded by their row-local marks, so the read
+ * never reads `feed_sources`. A pure builder so the unit suite can inspect its
+ * SQL.
  */
 export function publicFeedPageQuery(
   db: Db,
   limit: number,
   before: FeedCursorPosition | null,
 ) {
-  const visible = or(isNull(feedEntries.authorExpertId), expertPubliclyVisible);
+  const visible = and(
+    inArray(feedEntries.sourcePlatform, [...FEED_CARD_PLATFORMS]),
+    isNull(feedEntries.hiddenAt),
+    not(feedEntries.sourceOff),
+    or(isNull(feedEntries.authorExpertId), expertPubliclyVisible),
+  );
   return db
     .select({
       id: feedEntries.id,

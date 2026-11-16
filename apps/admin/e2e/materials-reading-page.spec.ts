@@ -227,8 +227,17 @@ async function expectNoAxeViolationsBothSchemes(
   label: string,
 ): Promise<void> {
   for (const dark of [false, true]) {
-    await page.evaluate((on) => {
+    // The scheme flip starts the primitives' colour transitions (Button
+    // `transition-all`, Input `transition-colors`); axe must read the settled
+    // scheme, not a mid-transition mix of the two palettes.
+    await page.evaluate(async (on) => {
       document.documentElement.classList.toggle("dark", on);
+      await Promise.all(
+        document
+          .getAnimations()
+          .filter((a) => a instanceof CSSTransition)
+          .map((a) => a.finished.catch(() => undefined)),
+      );
     }, dark);
     await expectNoAxeViolations(page, `${label} (${dark ? "dark" : "light"})`);
   }

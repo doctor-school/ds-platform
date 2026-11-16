@@ -239,7 +239,7 @@ test.describe("048 EARS-20…EARS-23 — «Источники»", () => {
     await expect(cell(admin, `feed-source-row-${OFFICIAL}`)).toHaveText(
       `t.me/${OFFICIAL}`,
     );
-    await expect(added.getByText("Telegram")).toBeVisible();
+    await expect(added.getByText("Telegram", { exact: true })).toBeVisible();
     await expect(cell(admin, `feed-source-state-${OFFICIAL}`)).toHaveText(
       "Включён",
     );

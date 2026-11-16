@@ -345,12 +345,19 @@ describe("024 EARS-15…18 — the step screen", () => {
 
     // Every POST answers 503 while `down`; the backoff timer is fake, the
     // network settles on real macrotasks.
-    function outagePlayer() {
-      const state = { down: true };
+    const OK = () =>
+      new Response(
+        JSON.stringify({ outcome: "recorded", changed: [], progress: { positionSec: 120, watchedPercent: 100 } }),
+        { status: 200 },
+      );
+
+    function outagePlayer(refuse: () => Promise<Response> = async () => new Response("{}", { status: 503 })) {
+      const state = { down: true, held: null as null | Promise<Response> };
       const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
         void init;
+        if (state.held) return state.held;
         return state.down
-          ? new Response("{}", { status: 503 })
+          ? refuse()
           : new Response(
               JSON.stringify({ outcome: "recorded", changed: [], progress: { positionSec: 120, watchedPercent: 100 } }),
               { status: 200 },
@@ -410,6 +417,46 @@ describe("024 EARS-15…18 — the step screen", () => {
       expect(screen.getAllByText("Просмотрено 100 %").length).toBeGreaterThan(0);
       await wait(REPORT_RETRY_MAX_MS * 4);
       expect(sent()).toHaveLength(3);
+    });
+
+    it("EARS-10: a report in flight when the player reaches the end and stops is followed by the end report once it settles", async () => {
+      const { state, tick, wait, sent } = outagePlayer();
+      state.down = false;
+      let release!: () => void;
+      state.held = new Promise<Response>((r) => {
+        release = () => r(OK());
+      });
+      await tick(10.2);
+      await tick(118.3);
+      await tick(120);
+      expect(sent()).toEqual([10]);
+      state.held = null;
+      await act(async () => {
+        release();
+        await new Promise((r) => setImmediate(r));
+      });
+      await wait(0);
+      expect(sent()).toEqual([10, 120]);
+      await wait(REPORT_RETRY_MAX_MS * 2);
+      expect(sent()).toEqual([10, 120]);
+    });
+
+    it.each([401, 403, 422])("EARS-10: a %i refusal is not retried for that position", async (status) => {
+      const { wait, tick, sent } = outagePlayer(async () => new Response("{}", { status }));
+      await tick(118.3);
+      await wait(REPORT_RETRY_MAX_MS * 3);
+      expect(sent()).toEqual([120]);
+    });
+
+    it.each([
+      ["a 503", async () => new Response("{}", { status: 503 })],
+      ["a 429", async () => new Response("{}", { status: 429 })],
+      ["a network error", async (): Promise<Response> => Promise.reject(new TypeError("Failed to fetch"))],
+    ] as const)("EARS-10: %s is retried on the backoff", async (_label, refuse) => {
+      const { wait, tick, sent } = outagePlayer(refuse);
+      await tick(118.3);
+      await wait(REPORT_RETRY_FIRST_MS);
+      expect(sent()).toEqual([120, 120]);
     });
 
     it("EARS-10: the backoff stops at its cap, and a pending retry is cleared when the screen goes away", async () => {

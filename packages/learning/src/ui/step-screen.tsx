@@ -355,6 +355,17 @@ function VideoBody({
     };
   }, []);
 
+  // A report is due when the clock moved VIDEO_REPORT_EVERY_SEC since the last
+  // attempt (a seek back included), or the end was reached past it. A
+  // completion the server allows only later is not polled for: a replay
+  // reports it again.
+  const due = useCallback(
+    (position: number) =>
+      Math.abs(position - sent.current) >= VIDEO_REPORT_EVERY_SEC ||
+      (position >= body.durationSec - VIDEO_END_WINDOW_SEC && position > sent.current),
+    [body.durationSec],
+  );
+
   const report = useCallback(
     (first: number) => {
       const attempt = (positionSec: number) => {
@@ -377,11 +388,16 @@ function VideoBody({
             onChanged(res.changed);
             if (res.progress) setWatched(res.progress.watchedPercent);
           })
-          // A refused report changes nothing on screen. The newest position is
-          // retried after the backoff, so the end still goes out once the API
-          // is back with the player stopped; a tick report meanwhile replaces it.
-          .catch(() => {
+          // A failed report changes nothing on screen. A network error, a 5xx
+          // or a 429 retries the newest position after the backoff, so the end
+          // still goes out once the API is back with the player stopped; a
+          // tick report meanwhile replaces it. Any other refusal (401/403/422…)
+          // is final for that position: retrying it cannot change the answer.
+          .catch((e: unknown) => {
             if (!alive.current) return;
+            const transient =
+              !(e instanceof LearningClientError) || e.status >= 500 || e.status === 429;
+            if (!transient) return;
             const wait = backoff.current;
             backoff.current = Math.min(wait * 2, REPORT_RETRY_MAX_MS);
             retry.current = setTimeout(() => {
@@ -389,13 +405,17 @@ function VideoBody({
               if (alive.current && !sending.current) attempt(latest.current);
             }, wait);
           })
+          // A position the player reached while this report was in flight
+          // (the end, with the player then stopped) goes out now — no tick
+          // may come to carry it.
           .finally(() => {
             sending.current = false;
+            if (alive.current && !retry.current && due(latest.current)) attempt(latest.current);
           });
       };
       attempt(first);
     },
-    [step.step.id, onChanged],
+    [step.step.id, onChanged, due],
   );
 
   const onClock = useCallback(
@@ -403,15 +423,10 @@ function VideoBody({
       const position = Math.min(Math.floor(sec), body.durationSec);
       const atEnd = position >= body.durationSec - VIDEO_END_WINDOW_SEC;
       latest.current = atEnd ? body.durationSec : position;
-      if (sending.current) return;
-      // A report per VIDEO_REPORT_EVERY_SEC of the clock moved since the last
-      // attempt (a seek back included), and the end once. A completion the
-      // server allows only later is not polled for: a replay reports it again.
-      const moved = Math.abs(position - sent.current) >= VIDEO_REPORT_EVERY_SEC;
-      if (!moved && !(atEnd && position > sent.current)) return;
+      if (sending.current || !due(position)) return;
       report(latest.current);
     },
-    [body.durationSec, report],
+    [body.durationSec, report, due],
   );
 
   return (

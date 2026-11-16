@@ -5,6 +5,7 @@ import {
   provisionConfirmedAccount,
   signInPageThroughHost,
 } from "@ds/e2e/host-sign-in";
+import { signInWithPassword } from "@ds/e2e/sign-in";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { requireLiveStandEnv } from "./support/live-stand-env";

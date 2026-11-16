@@ -528,7 +528,7 @@ describe("024 EARS-22: the learning family lands and carries on the doctor host 
     ["the package fixture", ACADEMY_FIXTURE],
     ["the shipped Academy host", ACADEMY_AUTH_FLOW],
   ])("024 EARS-27: %s declares no learning family and admits none", (_label, host) => {
-    expect(host.routes.courses).toBeUndefined();
+    expect("courses" in host.routes).toBe(false);
     expect(resolveReturnLandingPath(host, "/courses/osnovy-prp")).toBeNull();
     expect(resolveCarriedReturnTarget(host, STEP)).toBeNull();
     expect(isCoursesReturnTarget(host, STEP)).toBe(false);

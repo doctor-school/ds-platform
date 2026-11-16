@@ -89,11 +89,15 @@ images of <sha12>: admin, portal (…)`. Pick a SHA whose images the registry
   phase id and one control-free line of at most 160 characters. The reason is an
   allow-list: only a refusal prod.mjs authors, a `die(…, { authored: true })` whose
   first line interpolates no Error message, stderr or box output (a
-  `prod-local.test.mjs` source check holds every such call to that), gives its
-  first line. Every other failure (the `main().catch` catch-all, a wrapped
-  child-process error, a JSON.parse or network error) reads
-  `unexpected error — see the box journal`, with its phase still named; the full
-  message and the journal stay on the box. The failure
+  `prod-local.test.mjs` source check holds every such call to that), or a refusal
+  the PostgreSQL guard raises (`postgres-guard.mjs` `postgresGuardRefusal`: only the
+  guard's own `fail` marks one, keyed to its exact text; a `postgres-guard.test.mjs`
+  source check holds every guard message to fixed text), gives its first line. Every
+  other failure (the `main().catch` catch-all, a wrapped child-process error — the
+  probe's `PostgreSQL evidence unavailable: …` included — a JSON.parse or network
+  error) reads `unexpected error — see the box journal`, with its phase still named;
+  the full message and the journal stay on the box, and `prod-observe.yml`
+  `release-journal` reads them with no break-glass key (below). The failure
   Deployment record's status description reads
   `release failed @ <sha12> in <phase>: <reason>` (redeploy alike), and its payload
   keeps the note as `failure`. A new attempt drops the earlier note.
@@ -447,7 +451,8 @@ and the retention `prune` — each run as their own transient systemd unit
 `ds-prod-<sha12>-<step>` instead of a streamed ssh command, so killing the operator
 session no longer kills the step. The deploy starts (or attaches to) the unit, then polls
 `sudo ds-release status prod <sha>` every 10 s and prints one status line per poll; the
-full step log stays in the box's journal (`sudo journalctl -u ds-prod-<sha12>-<step>`).
+full step log stays in the box's journal (`sudo journalctl -u ds-prod-<sha12>-<step>`;
+ds-api-prod's failed steps also through `prod-observe.yml` `release-journal`, #4067).
 Each box keeps its status file `/var/lib/ds-platform/release/prod/<sha>.json` (tech spec
 2026-10-16 release pipeline §5) and takes its env lock `/run/ds-platform/ds-prod.lock` in
 a root-owned 0755 directory, never the world-writable `/run/lock` (#3297); the release
@@ -676,7 +681,10 @@ stay on the operator path above.
   basis of the Deployment-record notes the runner writes (spec §5).
 
 The unit's whole output stays in its journal (`journalctl -u ds-prod-<sha12>-driver`);
-the runner sees status lines only.
+the runner sees status lines only. The operator reads it with no break-glass key (#4067):
+`gh workflow run prod-observe.yml --ref main -f verb=release-journal -f sha=<sha>`, then
+`pnpm prod:read <run-id>` prints the driver's journal tail, the tails of ds-api-prod's
+failed step units and the failure note (spec §5 «Prod read verbs.»).
 
 ## Docker Hub login on the boxes (#2240)
 

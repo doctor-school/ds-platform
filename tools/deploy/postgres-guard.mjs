@@ -5,11 +5,26 @@ import { join, relative, sep } from "node:path";
 
 export const DATA_PATH = "infra/deploy/compose/data-prod/";
 export const SOURCE_LABEL = "org.doctor-school.postgres-source";
+// #4067: every refusal `fail` raises, keyed to the text it was raised with. Each
+// `message` below is a fixed string authored in this file (interpolating only the
+// literal `key` / `role` of its own loop — a source check in postgres-guard.test.mjs
+// holds that), so the text may become the release's public failure reason. Only this
+// module adds entries: no other code can forge a refusal, and an error that wraps one
+// (or whose text changed since) is not one.
+const refusals = new WeakMap();
 const fail = (message) => {
-  throw new Error(
+  const error = new Error(
     `PostgreSQL guard: ${message}; ordinary deployment refused (migration: #2101)`,
   );
+  refusals.set(error, error.message);
+  throw error;
 };
+/** The authored text of a guard refusal (#4067), or null for any other error. */
+export function postgresGuardRefusal(error) {
+  if (!(error instanceof Error) || !refusals.has(error)) return null;
+  const text = refusals.get(error);
+  return error.message === text ? text : null;
+}
 const requireFact = (condition, message) => {
   if (!condition) fail(message);
 };

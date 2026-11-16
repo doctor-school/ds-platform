@@ -127,6 +127,7 @@ import {
   assertPostgresEvidence,
   certifiedTarget,
   guardedPostgresStep,
+  postgresGuardRefusal,
   postgresImageOverride,
   postgresProbeRequest,
   postgresStateRecord,
@@ -367,6 +368,18 @@ export function planWalker({ local = false, redeploy = false } = {}) {
       if (missed) throw new Error(`deploy phase ${missed} was left out`);
     },
   };
+}
+
+/**
+ * The catch-all's message (#4067). A refusal the PostgreSQL guard raised is authored
+ * text (postgresGuardRefusal: only `fail` in postgres-guard.mjs makes one, from its own
+ * fixed strings), so it becomes the public reason; any other error — a wrapped probe
+ * failure («PostgreSQL evidence unavailable: <box stderr>») included — stays unexpected.
+ */
+export function uncaughtFailure(err) {
+  const refusal = postgresGuardRefusal(err);
+  if (refusal !== null) return { message: refusal, authored: true };
+  return { message: err?.stack || err?.message || String(err), authored: false };
 }
 
 /** The longest reason a failure note carries (#3439). */
@@ -3069,6 +3082,7 @@ if (
   import.meta.url === pathToFileURL(invokedPath).href
 ) {
   main().catch((err) => {
-    die(err.stack || err.message);
+    const { message, authored } = uncaughtFailure(err);
+    die(message, { authored });
   });
 }

@@ -31,6 +31,7 @@ import {
   readRun,
   answerOf,
   resultKey,
+  releaseJournalLines,
   stateWord,
   statusLine,
 } from "./lib/prod-read.mjs";
@@ -88,10 +89,18 @@ describe("3646: the runner-side input shape check", () => {
       command: `rehearsal-status ${SHA}`,
       stdin: null,
     });
+    assert.deepEqual(checkInputs({ verb: "release-journal", sha: SHA }), {
+      ok: true,
+      command: `release-journal ${SHA}`,
+      stdin: null,
+    });
   });
   for (const [what, inputs] of [
     ["an unknown verb", { verb: "release" }],
     ["schema with a name", { verb: "schema", name: "x" }],
+    ["release-journal without a sha", { verb: "release-journal" }],
+    ["release-journal with a short sha", { verb: "release-journal", sha: SHA.slice(0, 12) }],
+    ["release-journal with a name", { verb: "release-journal", name: "x", sha: SHA }],
     ["schema with a sha", { verb: "schema", sha: SHA }],
     ["schema with params", { verb: "schema", params: '{"a":1}' }],
     ["observe without a name", { verb: "observe" }],
@@ -140,6 +149,52 @@ test("3646: capabilities must be the prod read entrypoint naming the verb", () =
     false,
   );
   assert.equal(checkCapabilities("not json", "schema").ok, false);
+});
+
+describe("4067: release-journal — the job prints status lines only, the operator reads the journal", () => {
+  const cms = Buffer.from([0x30, 0x82, 0x01, 0x00, 0xaa]);
+  it("the job's line is verb, rc, size and sha256 — no journal text", () => {
+    const r = statusLine({ verb: "release-journal", rc: 0, cms, stderr: "ds-api-prod node[1]: PASSWORD=x\n" });
+    assert.equal(r.upload, true);
+    assert.equal(r.failed, false);
+    assert.equal(r.line, `prod-observe: verb=release-journal rc=0 bytes=5 sha256=${sha256(cms)}`);
+  });
+  it("pnpm prod:read prints the failure note, then each unit's tail, control characters dropped", () => {
+    const answer = {
+      verb: "release-journal",
+      sha: SHA,
+      takenAt: "2026-11-16T00:00:00Z",
+      failure: { phase: "postgres-verify", reason: "unexpected error — see the box journal" },
+      units: [
+        { unit: "ds-prod-aaaaaaaaaaaa-driver", lines: ["a", "PostgreSQL guard: refused\u001b[31m"], truncated: true },
+        { unit: "ds-prod-aaaaaaaaaaaa-migrate", lines: [], truncated: false },
+      ],
+    };
+    assert.deepEqual(releaseJournalLines(answer), [
+      `release ${SHA} journal, taken 2026-11-16T00:00:00Z`,
+      "failure: phase postgres-verify — unexpected error — see the box journal",
+      "",
+      "== ds-prod-aaaaaaaaaaaa-driver (2 lines, the tail only)",
+      "a",
+      "PostgreSQL guard: refused[31m",
+      "",
+      "== ds-prod-aaaaaaaaaaaa-migrate (0 lines)",
+    ]);
+    assert.equal(releaseJournalLines({ ...answer, failure: null, units: [] })[1], "failure: no note recorded");
+    // C1 controls (U+009B is a one-byte CSI) are dropped too, in the note and the unit name alike
+    const c1 = releaseJournalLines({
+      ...answer,
+      failure: { phase: "postgres\u009b2J-verify", reason: "refused\u001b]0;x\u0007\u0085" },
+      units: [{ unit: "ds-prod-aaaaaaaaaaaa-\u009bdriver", lines: ["b\u009b31m\u0090q\u009f"], truncated: false }],
+    });
+    assert.deepEqual(c1.slice(1), [
+      "failure: phase postgres2J-verify — refused]0;x",
+      "",
+      "== ds-prod-aaaaaaaaaaaa-driver (1 lines)",
+      "b31mq",
+    ]);
+    assert.throws(() => releaseJournalLines({ verb: "schema" }), /not a release-journal answer/);
+  });
 });
 
 describe("3646: status lines only — verb, rc, size and sha256, or one fixed reason", () => {
@@ -272,6 +327,7 @@ describe("3646: prod-observe.yml", () => {
       "rehearse",
       "rehearse-restore",
       "rehearsal-status",
+      "release-journal",
     ]);
     assert.equal(inputs.params.default, "{}");
     assert.deepEqual(Object.keys(inputs), ["verb", "name", "params", "sha"]);

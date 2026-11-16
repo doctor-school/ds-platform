@@ -1354,7 +1354,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     readBoxes({ cert: false });
     const r = readRun("capabilities");
     assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema", "observe", "rehearse", "rehearse-restore", "rehearsal-status", "recovery-bundle", "recovery-check"] });
+    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema", "observe", "rehearse", "rehearse-restore", "rehearsal-status", "release-journal", "recovery-bundle", "recovery-check"] });
     assert.match(log("logger"), /auth\.info accepted: capabilities/);
   });
 
@@ -1388,6 +1388,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     `rehearse-restore ${SHA} now`,
     `rehearse-restore --apply ${SHA}`,
     `rehearsal-status`,
+    "release-journal",
+    `release-journal ${SHA.slice(0, 12)}`,
+    `release-journal ${SHA} now`,
+    `release-journal ../${SHA}`,
     "read-schema",
     "check",
     `converge ${SHA}`,
@@ -1711,6 +1715,94 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.deepEqual(decrypt(r.stdout), { verb: "rehearsal-status", sha: SHA, state: "absent" });
     assert.equal(log("ds-release") + log("curl"), "");
     assert.equal(log("docker"), "");
+  });
+
+  // --- 4067: a failed release's journal, key-free --------------------------------------
+  const journalBox = ({ status, failure, lines = 3 } = {}) => {
+    readBoxes();
+    writeFileSync(
+      join(stubs, "journalctl"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "$*" >> "$STUB_DIR/journalctl.log"',
+        `for i in $(seq 1 ${lines}); do echo "2026-11-13T10:00:0$((i % 10))+00:00 ds-api-prod node[1]: $2 line $i"; done`,
+      ].join("\n") + "\n",
+    );
+    chmodSync(join(stubs, "journalctl"), 0o755);
+    const sha12 = SHA.slice(0, 12);
+    if (status) {
+      mkdirSync(join(root, "var/lib/ds-platform/release/prod"), { recursive: true });
+      writeFileSync(join(root, `var/lib/ds-platform/release/prod/${SHA}.json`), JSON.stringify(status(sha12)));
+    }
+    if (failure !== undefined) {
+      mkdirSync(join(root, "var/lib/ds-platform/release-driver"), { recursive: true });
+      writeFileSync(join(root, `var/lib/ds-platform/release-driver/${SHA}.failure`), failure);
+    }
+    return sha12;
+  };
+
+  it("4067: release-journal answers the driver's journal, the failed step units and the failure note, encrypted", () => {
+    const note = { phase: "postgres-verify", reason: "PostgreSQL guard: missing/stale artifact certification" };
+    const sha12 = journalBox({
+      status: (s) => ({
+        steps: [
+          { name: "pull", unit: `ds-prod-${s}-pull`, rc: 0 },
+          { name: "migrate", unit: `ds-prod-${s}-migrate`, rc: 1 },
+          { name: "prune", unit: `ds-prod-${s}-prune`, rc: null },
+          { name: "other", unit: `ds-prod-ffffffffffff-migrate`, rc: 1 },
+          { name: "evil", unit: `ds-prod-${s}-x; reboot`, rc: 1 },
+        ],
+      }),
+      failure: `${JSON.stringify(note)}\n`,
+    });
+    const r = readRun(`release-journal ${SHA}`);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, "", "status lines only: the journal leaves encrypted");
+    assert.doesNotMatch(r.stdout.toString("latin1"), /line 1/);
+    const answer = decrypt(r.stdout);
+    assert.equal(answer.verb, "release-journal");
+    assert.equal(answer.sha, SHA);
+    assert.deepEqual(answer.failure, note);
+    assert.deepEqual(
+      answer.units.map((u) => u.unit),
+      [`ds-prod-${sha12}-driver`, `ds-prod-${sha12}-migrate`, `ds-prod-${sha12}-prune`],
+    );
+    assert.deepEqual(answer.units[0].lines.map((l) => l.split(": ").at(-1)), [
+      `ds-prod-${sha12}-driver line 1`,
+      `ds-prod-${sha12}-driver line 2`,
+      `ds-prod-${sha12}-driver line 3`,
+    ]);
+    assert.equal(answer.units[0].truncated, false);
+    assert.equal(
+      log("journalctl"),
+      ["driver", "migrate", "prune"].map((u) => `-u ds-prod-${sha12}-${u} -n 400 -o short-iso -q --no-pager\n`).join(""),
+    );
+    assert.equal(log("ds-release") + log("ssh") + log("docker"), "", "no release check, no hop");
+  });
+
+  it("4067: release-journal bounds each unit's tail and answers the driver's alone with no status file or note", () => {
+    const sha12 = journalBox({ lines: 4000, failure: "not json" });
+    const r = readRun(`release-journal ${SHA}`);
+    assert.equal(r.status, 0, r.stderr);
+    const answer = decrypt(r.stdout);
+    assert.equal(answer.failure, null);
+    assert.equal(answer.units.length, 1);
+    assert.equal(answer.units[0].unit, `ds-prod-${sha12}-driver`);
+    // the stub ignores -n: the byte bound holds the answer
+    assert.ok(Buffer.byteLength(answer.units[0].lines.join("\n")) <= 256 * 1024);
+    assert.equal(answer.units[0].truncated, true);
+    assert.match(answer.units[0].lines.at(-1), /line 4000$/);
+  });
+
+  it("4067: release-journal refuses (exit 3) with no recipient certificate and on any box but the prod box", () => {
+    journalBox();
+    rmSync(recipient());
+    const r = readRun(`release-journal ${SHA}`);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /the read-result recipient certificate is not installed/);
+    setRole("data");
+    assert.equal(readRun(`release-journal ${SHA}`).status, 3);
+    assert.equal(log("journalctl"), "");
   });
 
   it("3648: the data box's rehearse rejects (exit 2) an archive over 16 MiB; elsewhere it is the data box's verb", () => {

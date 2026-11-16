@@ -54,6 +54,7 @@ test("3662: the verb whitelist — ds-read-entrypoint serves the two recovery ve
     "rehearse",
     "rehearse-restore",
     "rehearsal-status",
+    "release-journal",
     ...RECOVERY_VERBS,
   ]);
   assert.match(

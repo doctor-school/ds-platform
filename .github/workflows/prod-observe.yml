@@ -9,6 +9,7 @@ name: Prod observe
 #   gh workflow run prod-observe.yml --ref main -f verb=rehearse -f sha=<40-hex main SHA>
 #   gh workflow run prod-observe.yml --ref main -f verb=rehearse-restore -f sha=<40-hex main SHA>
 #   gh workflow run prod-observe.yml --ref main -f verb=observe -f name=table-rows -f params='{"table":"users"}'
+#   gh workflow run prod-observe.yml --ref main -f verb=release-journal -f sha=<40-hex release SHA>
 #   pnpm prod:read <run-id>            # or: pnpm prod:schema-drift <run-id>
 #
 # The key reaches only ds-read-entrypoint on ds-api-prod (forced command). The job
@@ -24,6 +25,9 @@ name: Prod observe
 # and its copy checks with no migration applied, its report carrying the measured
 # headroom. A final state `failed` (or still `started` / `running` at the cap) fails
 # the job after the upload, so a green run is a green rehearsal.
+# `release-journal` (#4067) answers a release's driver journal, its failed step units'
+# journals and its failure note — the box journal a failed release points to, read
+# with no break-glass key; `pnpm prod:read <run-id>` prints it on the operator's terminal.
 
 on:
   workflow_dispatch:
@@ -32,7 +36,15 @@ on:
         description: "The read verb."
         required: true
         type: choice
-        options: [schema, observe, rehearse, rehearse-restore, rehearsal-status]
+        options:
+          [
+            schema,
+            observe,
+            rehearse,
+            rehearse-restore,
+            rehearsal-status,
+            release-journal,
+          ]
         default: schema
       name:
         description: "observe: the catalogue entry name."
@@ -45,7 +57,7 @@ on:
         type: string
         default: "{}"
       sha:
-        description: "rehearse / rehearse-restore / rehearsal-status: the full 40-hex SHA."
+        description: "rehearse / rehearse-restore / rehearsal-status / release-journal: the full 40-hex SHA."
         required: false
         type: string
         default: ""

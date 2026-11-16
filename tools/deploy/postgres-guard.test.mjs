@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
+import ts from "typescript";
 import {
   postgresContract,
   assertPostgresEvidence,
   guardedPostgresStep,
+  postgresGuardRefusal,
   readPostgresTarget,
 } from "./postgres-guard.mjs";
-import { preparePostgresDeployment } from "./prod.mjs";
+import {
+  UNEXPECTED_FAILURE_REASON,
+  preparePostgresDeployment,
+  releaseFailureNote,
+  uncaughtFailure,
+} from "./prod.mjs";
 import {
   artifactBuildPlan,
   certifyImage,
@@ -451,4 +458,252 @@ test("3157: a compose contract that is not JSON refuses — the bare-tree releas
     () => postgresContract({ ...files, "compose.yml": "name: ds-data-prod\n" }),
     /compose contract is not JSON/,
   );
+});
+
+// #4067: what the catch-all of prod.mjs leaves as the release's public failure note.
+const noteOf = (error) => {
+  const { message, authored } = uncaughtFailure(error);
+  return releaseFailureNote("postgres-verify", message, { authored });
+};
+
+test("4067: a guard refusal reaches the failure note as its authored text", async () => {
+  const f = fixture();
+  f.live.backupSystemId = "7544271560000000009";
+  const error = await preparePostgresDeployment("test", {
+    readTarget: () => ({ ...f, files }),
+    client: { call: async () => JSON.stringify(f.live) },
+  }).catch((e) => e);
+  assert.match(
+    error.message,
+    /^PostgreSQL guard: .+; ordinary deployment refused \(migration: #2101\)$/,
+  );
+  assert.equal(postgresGuardRefusal(error), error.message);
+  assert.deepEqual(noteOf(error), {
+    phase: "postgres-verify",
+    reason:
+      error.message.length > 160
+        ? `${error.message.slice(0, 159)}…`
+        : error.message,
+  });
+  assert.notEqual(noteOf(error).reason, UNEXPECTED_FAILURE_REASON);
+});
+
+test("4067: a probe failure, a forged or wrapped guard text and any other error stay unexpected", async () => {
+  const f = fixture();
+  const probeError = await preparePostgresDeployment("test", {
+    readTarget: () => ({ ...f, files }),
+    client: {
+      call: async () => {
+        throw new Error(
+          "PostgreSQL evidence unavailable: PostgreSQL evidence command failed: sudo PASSWORD=x",
+        );
+      },
+    },
+  }).catch((e) => e);
+  assert.match(probeError.message, /PostgreSQL evidence unavailable/);
+  f.live.backupSystemId = "7544271560000000009";
+  const refusal = await preparePostgresDeployment("test", {
+    readTarget: () => ({ ...f, files }),
+    client: { call: async () => JSON.stringify(f.live) },
+  }).catch((e) => e);
+  const edited = await preparePostgresDeployment("test", {
+    readTarget: () => ({ ...f, files }),
+    client: { call: async () => JSON.stringify(f.live) },
+  }).catch((e) => e);
+  edited.message += " postgres://u:p@h/db";
+  for (const error of [
+    probeError,
+    // the same text, not raised by the guard
+    new Error(refusal.message),
+    // a refusal wrapped with foreign text
+    new Error(`checkpoint failed: ${refusal.message} PASSWORD=x`, {
+      cause: refusal,
+    }),
+    // a refusal whose text changed after it was raised
+    edited,
+    new TypeError("fetch failed"),
+    "a thrown string",
+  ]) {
+    assert.equal(postgresGuardRefusal(error), null);
+    assert.deepEqual(noteOf(error), {
+      phase: "postgres-verify",
+      reason: UNEXPECTED_FAILURE_REASON,
+    });
+  }
+});
+
+test("4067: every guard refusal message is authored in the guard's source", () => {
+  const file = "postgres-guard.mjs";
+  const src = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
+  const ast = ts.createSourceFile(
+    file,
+    src,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  const GUARDS = ["fail", "requireFact"];
+  const isFunction = (node) =>
+    ts.isArrowFunction(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isFunctionDeclaration(node) ||
+    ts.isMethodDeclaration(node);
+  // every name a binding (identifier or destructuring pattern) introduces
+  const boundNames = (name) =>
+    ts.isIdentifier(name)
+      ? [name.text]
+      : name.elements.flatMap((e) =>
+          ts.isBindingElement(e) ? boundNames(e.name) : [],
+        );
+  const declares = (statement, name) =>
+    ts.isVariableStatement(statement) &&
+    statement.declarationList.declarations.some((d) =>
+      boundNames(d.name).includes(name),
+    );
+  // the `const` object literal `name` declared in a block enclosing `from`, its keys plain
+  const literalObject = (from, name) => {
+    for (let scope = from.parent; scope; scope = scope.parent) {
+      if (!ts.isBlock(scope) && !ts.isSourceFile(scope)) continue;
+      for (const statement of scope.statements) {
+        if (!declares(statement, name)) continue;
+        const d = statement.declarationList.declarations.find(
+          (x) => ts.isIdentifier(x.name) && x.name.text === name,
+        );
+        if (!d) return false;
+        return (
+          (statement.declarationList.flags & ts.NodeFlags.Const) !== 0 &&
+          d.initializer &&
+          ts.isObjectLiteralExpression(d.initializer) &&
+          d.initializer.properties.every(
+            (p) =>
+              ts.isPropertyAssignment(p) &&
+              (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)),
+          )
+        );
+      }
+    }
+    return false;
+  };
+  // what a `for…of` binding takes from each element: the element itself or its [0]
+  const literalValues = (loop, first) => {
+    const it = loop.expression;
+    if (
+      first &&
+      ts.isCallExpression(it) &&
+      it.expression.getText() === "Object.entries" &&
+      it.arguments.length === 1 &&
+      ts.isIdentifier(it.arguments[0])
+    ) {
+      return literalObject(loop, it.arguments[0].text);
+    }
+    return (
+      ts.isArrayLiteralExpression(it) &&
+      it.elements.every((e) =>
+        first
+          ? ts.isArrayLiteralExpression(e) && ts.isStringLiteral(e.elements[0])
+          : ts.isStringLiteral(e),
+      )
+    );
+  };
+  // `id` resolves to the loop variable of a `for…of` over literal strings (or the
+  // literal keys of a `const` object), with no nearer binding of the same name
+  const literalLoopBinding = (id) => {
+    const name = id.text;
+    for (let node = id.parent; node; node = node.parent) {
+      if (
+        isFunction(node) &&
+        node.parameters.some((p) => boundNames(p.name).includes(name))
+      ) {
+        return false;
+      }
+      if (
+        (ts.isBlock(node) || ts.isSourceFile(node)) &&
+        node.statements.some((st) => declares(st, name))
+      ) {
+        return false;
+      }
+      if (
+        !ts.isForOfStatement(node) ||
+        !ts.isVariableDeclarationList(node.initializer)
+      )
+        continue;
+      const binding = node.initializer.declarations[0]?.name;
+      if (ts.isIdentifier(binding) && binding.text === name)
+        return literalValues(node, false);
+      if (ts.isArrayBindingPattern(binding)) {
+        const at = binding.elements.findIndex(
+          (e) =>
+            ts.isBindingElement(e) &&
+            ts.isIdentifier(e.name) &&
+            e.name.text === name,
+        );
+        if (at === 0) return literalValues(node, true);
+        if (at > 0) return false;
+      }
+    }
+    return false;
+  };
+  // a fixed string, or a template interpolating only literal loop bindings
+  const authored = (node) =>
+    ts.isStringLiteral(node) ||
+    ts.isNoSubstitutionTemplateLiteral(node) ||
+    (ts.isTemplateExpression(node) &&
+      node.templateSpans.every(
+        (span) =>
+          ts.isIdentifier(span.expression) &&
+          literalLoopBinding(span.expression),
+      ));
+  // the one forward: `fail(message)` inside `requireFact`'s own body, `message` its parameter
+  const requireFactBody = ast.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((st) => st.declarationList.declarations)
+    .find((d) => d.name.getText() === "requireFact")?.initializer;
+  assert.ok(
+    requireFactBody && ts.isArrowFunction(requireFactBody),
+    "requireFact is an arrow function",
+  );
+  const isForward = (call) => {
+    if (call.expression.text !== "fail" || call.arguments.length !== 1)
+      return false;
+    const arg = call.arguments[0];
+    let fn = call.parent;
+    while (fn && !isFunction(fn)) fn = fn.parent;
+    return (
+      fn === requireFactBody &&
+      ts.isIdentifier(arg) &&
+      arg.text === "message" &&
+      requireFactBody.parameters[1]?.name.getText() === "message"
+    );
+  };
+  const calls = [];
+  const visit = (node) => {
+    if (ts.isIdentifier(node) && GUARDS.includes(node.text)) {
+      const p = node.parent;
+      const declaration = ts.isVariableDeclaration(p) && p.name === node;
+      const callee = ts.isCallExpression(p) && p.expression === node;
+      // no alias, no pass-by-reference: every other use would hide a refusal's message
+      assert.ok(
+        declaration || callee,
+        `\`${node.text}\` is referenced other than called: ${p.getText().slice(0, 80)}`,
+      );
+      if (callee) calls.push(p);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(ast);
+  const forwards = calls.filter(isForward);
+  assert.equal(
+    forwards.length,
+    1,
+    "requireFact forwards its message to fail once",
+  );
+  const refusals = calls.filter((c) => !isForward(c));
+  assert.ok(refusals.length >= 45, `found ${refusals.length} guard refusals`);
+  for (const call of refusals) {
+    const message = call.arguments.at(-1);
+    assert.ok(
+      message && authored(message),
+      `${call.getText().slice(0, 80)}… refuses with a message that is not a fixed authored string`,
+    );
+  }
 });

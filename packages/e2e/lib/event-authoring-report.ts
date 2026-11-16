@@ -49,6 +49,36 @@ export const eventAuthoringProjections = [
 ] as const;
 
 type Row = Record<string, unknown>;
+export function assertAuthoringRateIsolation(ops: unknown) {
+  const witnesses = rows(ops).filter(
+    (item) => item.command === "native rate namespace witness",
+  );
+  const observed = new Set<string>(),
+    absent = new Set<string>();
+  for (const item of witnesses) {
+    if (item.observed === true) {
+      requireEvidence(
+        item.disjoint === true && digest(item.keySha256),
+        "native rate isolation observation",
+      );
+      observed.add(String(item.keySha256));
+    }
+    if (item.action === "verified-absent") {
+      requireEvidence(
+        Array.isArray(item.keySha256s) && item.keySha256s.every(digest),
+        "native rate isolation cleanup keys",
+      );
+      item.keySha256s.forEach((key: string) => absent.add(key));
+    }
+  }
+  requireEvidence(
+    observed.size > 0 &&
+      observed.size === absent.size &&
+      [...observed].every((key) => absent.has(key)),
+    "complete native rate isolation and exact-key cleanup",
+  );
+  return { observedKeySha256s: [...observed], absentKeySha256s: [...absent] };
+}
 export function assertAuthoringTerminal(value: unknown) {
   if (!value || typeof value !== "object") return;
   for (const [key, child] of Object.entries(value)) {

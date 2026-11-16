@@ -57,8 +57,54 @@ export async function bootEventAuthoringRuntime() {
   );
   authoringCapture("room-player-unit.json", {
     passed: true,
+    exitCode: 0,
+    stdout: unit,
     sha256: authoringSha(unit),
   });
+  expect(
+    execFileSync("git", ["diff", "HEAD", "--"], {
+      cwd: countRoot,
+      encoding: "utf8",
+    }),
+  ).toBe("");
+  const commit = execFileSync("git", ["cat-file", "-p", "HEAD"], {
+    cwd: countRoot,
+    encoding: "utf8",
+  });
+  const parents = [...commit.matchAll(/^parent ([a-f0-9]{40})$/gm)].map(
+    (match) => match[1],
+  );
+  const tracked = execFileSync(
+    "git",
+    [
+      "ls-files",
+      "-s",
+      "apps/api/src",
+      "apps/admin",
+      "apps/portal",
+      "apps/doctor",
+      "packages/room",
+      "packages/schemas/src",
+      "packages/db/src",
+      "packages/e2e",
+      "apps/docs/content/specs/features/007-event-admin-minimal/007-scenarios.feature",
+    ],
+    { cwd: countRoot, encoding: "utf8" },
+  )
+    .trim()
+    .split(/\r?\n/);
+  const sourceBlobs = Object.fromEntries(
+    tracked.map((line) => {
+      const [metadata, path] = line.split("\t");
+      return [
+        path!,
+        {
+          blob: metadata!.split(" ")[1],
+          sha256: authoringSha(readFileSync(resolve(countRoot, path!))),
+        },
+      ];
+    }),
+  );
   const api = await bootEventCountApi(4061);
   const children: ChildProcess[] = [];
   const origins: Record<string, string> = {};
@@ -194,6 +240,14 @@ export async function bootEventAuthoringRuntime() {
     }
     authoringCapture("runtime-provenance.json", {
       head: api.head,
+      checkout: {
+        sha: api.head,
+        parents,
+        githubSha: process.env.GITHUB_SHA ?? null,
+        headRef: process.env.GITHUB_HEAD_REF ?? null,
+        baseRef: process.env.GITHUB_BASE_REF ?? null,
+      },
+      sourceBlobs,
       root: countRoot,
       origins,
       assets,

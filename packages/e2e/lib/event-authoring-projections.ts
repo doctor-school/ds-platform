@@ -233,7 +233,35 @@ export async function proveDraftProjections(world: EventAuthoringWorld) {
     (body as { count: number }[]).reduce((total, row) => total + row.count, 0);
   expect(sum(negative["academy-month-counts"]!.body)).toBe(0);
   expect(sum(negative["doctor-month-counts"]!.body)).toBe(0);
-  expect((negative["project-page"]!.body as AuthoringRow).sinceYear).toBeNull();
+  const projectModule = await import(
+    pathToFileURL(
+      resolve(
+        countRoot,
+        "apps/api/dist/taxonomy/public-projects.repository.js",
+      ),
+    ).href
+  );
+  const projectRepository = world.api.app.get<{
+    broadcastFigures(
+      id: string,
+    ): Promise<{ broadcasts: number; firstYear: number | null }>;
+  }>(projectModule.PublicProjectsRepository);
+  countOperation("native public project figures oracle before publication", {
+    projectId: project.id,
+  });
+  const figuresBefore = await projectRepository.broadcastFigures(
+    String(project.id),
+  );
+  expect(figuresBefore).toEqual({ broadcasts: 0, firstYear: null });
+  const publishedYear = (
+    await world.api.query(
+      "SELECT extract(year from first_published_at AT TIME ZONE 'UTC')::int AS year FROM projects WHERE id=$1",
+      [project.id],
+    )
+  ).rows[0]!.year;
+  expect((negative["project-page"]!.body as AuthoringRow).sinceYear).toBe(
+    publishedYear,
+  );
   const positive: Record<string, Read> = {};
   positive["academy-live"] = await read(routes["academy-live"]!);
   contains(positive["academy-live"]!, world.backgroundId);
@@ -276,6 +304,13 @@ export async function proveDraftProjections(world: EventAuthoringWorld) {
     Number(year),
   );
   positive["project-scale"] = await read(routes["project-scale"]!);
+  countOperation("native public project figures oracle after publication", {
+    projectId: project.id,
+  });
+  const figuresAfter = await projectRepository.broadcastFigures(
+    String(project.id),
+  );
+  expect(figuresAfter).toEqual({ broadcasts: 1, firstYear: Number(year) });
   const scaleDelta =
     Number((positive["project-scale"]!.body as AuthoringRow).broadcasts) -
     Number((negative["project-scale"]!.body as AuthoringRow).broadcasts);
@@ -341,6 +376,11 @@ export async function proveDraftProjections(world: EventAuthoringWorld) {
     raw,
     proof: world.proof,
     taxonomy: { direction, expert, project, kind },
+    projectFigures: {
+      before: figuresBefore,
+      after: figuresAfter,
+      publishedYear,
+    },
     control,
     doctorDraft,
   });

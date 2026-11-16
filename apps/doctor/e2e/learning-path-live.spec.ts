@@ -131,7 +131,9 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await page.getByRole("button", { name: /Урок 1, шаг 1\. Серия/ }).click();
     const open = page.getByTestId("node-summary").getByRole("link", { name: "Открыть" });
     await expect(open).toHaveAttribute("href", /\/register\?returnTo=/);
-    await page.getByRole("link", { name: /Урок 1\. / }).first().click();
+    // The step route itself answers a guest with the registration gate.
+    const firstStep = (await page.getByRole("button", { name: /Урок 1, шаг 1\. Серия/ }).getAttribute("id"))!.replace(/^node-/, "");
+    await page.goto(`${DOCTOR_URL}/courses/${SLUG}/steps/${firstStep}`);
     await expect(page.getByRole("link", { name: "Зарегистрироваться" })).toHaveAttribute("href", /\/register\?returnTo=%2Fcourses%2F/);
     await axeClean(page);
     await shoot(page, "guest-gate-1280");
@@ -178,8 +180,11 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await page.keyboard.press("Escape");
     await page.setViewportSize(DESKTOP);
 
-    // Video: the provider clock → position facts → 100 %.
+    // Video: the provider clock → position facts → 100 %. The band jumps to
+    // the «Вы здесь» node on the path (canvas `goHere`); its summary opens the step.
     await page.getByRole("link", { name: /Продолжить — урок 1/ }).click();
+    await expect(page.getByRole("button", { name: /Урок 1, шаг 1\. .*Вы здесь/ })).toHaveAttribute("aria-pressed", "true");
+    await page.getByTestId("node-summary").getByRole("link", { name: "Продолжить" }).click();
     // Hydrated: the action is armed (it ships disabled from the server render).
     await expect(page.getByRole("button", { name: "Смотреть видео" })).toBeEnabled();
     // 024-design §8 — the step screen carries the same plate.
@@ -259,6 +264,11 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await axeClean(page);
     await shoot(page, "doctor-path-next-lesson-390");
     await page.getByRole("link", { name: /Продолжить — урок 2/ }).click();
+    // On the phone the jump selects the node; its Sheet opens the step.
+    const here2 = page.getByRole("button", { name: /Урок 2, шаг 1\. .*Вы здесь/ });
+    await expect(here2).toHaveAttribute("aria-pressed", "true");
+    await here2.click();
+    await page.getByRole("dialog").getByRole("link", { name: "Продолжить" }).click();
     // Hydrated: the action is armed (it ships disabled from the server render).
     await expect(page.getByRole("button", { name: "Смотреть видео" })).toBeEnabled();
     await axeClean(page);

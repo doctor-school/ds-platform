@@ -9,7 +9,7 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  */
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /learning-path-live\.spec\.ts$/,
+  testMatch: /learning-path(-volume)?-live\.spec\.ts$/,
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

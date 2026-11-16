@@ -309,6 +309,12 @@ export const LIVE_TIERS = Object.freeze([
           "E2E_LEARNING_COURSE_SLUG",
         ],
       },
+      {
+        file: "e2e/learning-path-volume-live.spec.ts",
+        slotReason:
+          "the golden dataset seeds no published multi-module learning course, so a slot has no course slug for the volume journey",
+        requires: [URL_DOCTOR, "E2E_LEARNING_MULTI_COURSE_SLUG"],
+      },
     ],
   },
   {

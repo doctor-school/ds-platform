@@ -76,7 +76,8 @@ function parsePathFamily(returnTo: unknown, root: string): string | null {
   const safe = parseSameOriginReturnTarget(returnTo);
   if (safe === null) return null;
   // `safe` is the guard's canonical reconstruction: an absolute-path reference
-  // with the query and the fragment already stripped, so the boundary test is a
-  // plain segment comparison and nothing can be smuggled past it in a query.
+  // with the fragment stripped and only the guard's allow-listed query params
+  // kept. The boundary test compares segments, so a query never carries a path
+  // across it; a bare root with a query (`/courses?mode=online`) is refused.
   return safe === root || safe.startsWith(`${root}/`) ? safe : null;
 }

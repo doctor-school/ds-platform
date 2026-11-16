@@ -327,7 +327,9 @@ export class EventCountWorld {
   readonly events = new Map<string, { msk: string; ref: string }>();
   readonly subjects: string[] = [];
   readonly backgrounds: CountBackground[] = [];
-  readonly ua = "EventCount4035/1.0";
+  get ua() {
+    return `EventCount${this.issue}/1.0`;
+  }
   readonly language = "ru-RU";
   adminSub = "";
   doctorSub = "";
@@ -343,6 +345,7 @@ export class EventCountWorld {
     readonly page: Page,
     readonly title: string,
     readonly ordinal: number,
+    readonly issue: 4035 | 4061 = 4035,
   ) {}
   async initialize(context: BrowserContext) {
     const adminOrigin = new URL(process.env.E2E_ADMIN_URL!).origin;
@@ -393,7 +396,7 @@ export class EventCountWorld {
       },
     );
     const create = async (role: "platform_admin" | "doctor_guest") => {
-      const email = `count4035-${this.ordinal}-${role}-${randomUUID()}@ds.test`,
+      const email = `count${this.issue}-${this.ordinal}-${role}-${randomUUID()}@ds.test`,
         password = `Aa1!${randomUUID()}`;
       countOperation("create unique exact owned IdP fixture account", { role });
       const created = await this.api.idp.createUser({ email, password });
@@ -526,7 +529,9 @@ export class EventCountWorld {
       .slice(0, 16);
     this.pendingMsk = msk;
     countOperation("count editor: title");
-    await this.page.locator("#title").fill(`4035 ${name} ${randomUUID()}`);
+    await this.page
+      .locator("#title")
+      .fill(`${this.issue} ${name} ${randomUUID()}`);
     countOperation("count editor: school");
     await this.page.locator("#school").fill("Кардиология");
     countOperation("count editor: starts-at");
@@ -807,7 +812,7 @@ export class EventCountWorld {
     await expect(this.page.getByTestId(testId)).toBeChecked({ checked });
     this.reopened = checked;
   }
-  async cleanup() {
+  async cleanup(emitCountResource = true) {
     let objectsDeleted = 0;
     try {
       for (const [id, { ref }] of this.events) {
@@ -847,7 +852,7 @@ export class EventCountWorld {
         expect(await this.api.storage.exists(ref)).toBe(false);
         objectsDeleted++;
       }
-      if (this.backgrounds.length === 5 && this.eventId) {
+      if (emitCountResource && this.backgrounds.length === 5 && this.eventId) {
         const history = (
           await this.api.query(
             "SELECT (SELECT count(*)::int FROM registrations WHERE event_id=$1) AS registrations,(SELECT count(*)::int FROM presence_beats WHERE event_id=$1) AS beats",

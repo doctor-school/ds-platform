@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsAdmin } from "@ds/e2e/admin-events";
 import { adminWrite, expectNoPageSideScroll } from "./support/admin-write";
+import { evidenceShot } from "./support/evidence-shot";
 
 /**
  * 024 EARS-28 / EARS-29 slice 1 (#4011) — the «Обучение» section on the REAL
@@ -18,7 +19,6 @@ import { adminWrite, expectNoPageSideScroll } from "./support/admin-write";
  * `--config=playwright.flows.config.ts` against a booted admin + api.
  * `E2E_SHOT_DIR` opts into the captures the PR body cites.
  */
-const SHOT_DIR = process.env.E2E_SHOT_DIR;
 const NARROW = { width: 390, height: 844 };
 const WIDE = { width: 1280, height: 900 };
 
@@ -33,28 +33,67 @@ const PDF = Buffer.from(
 );
 
 async function shots(page: Page, name: string): Promise<void> {
-  if (!SHOT_DIR) {
-    await page.setViewportSize(NARROW);
-    await expectNoPageSideScroll(page);
-    await page.setViewportSize(WIDE);
-    return;
-  }
-  for (const [width, viewport] of [
-    ["1280", WIDE],
-    ["390", NARROW],
-  ] as const) {
-    await page.setViewportSize(viewport);
-    await expectNoPageSideScroll(page);
-    for (const colorScheme of ["light", "dark"] as const) {
-      await page.emulateMedia({ colorScheme });
-      await page.screenshot({
-        path: `${SHOT_DIR}/admin-${name}-${width}-${colorScheme}.png`,
-        fullPage: true,
-      });
-    }
-  }
-  await page.emulateMedia({ colorScheme: "light" });
+  // The phone width never side-scrolls, with or without captures.
+  await page.setViewportSize(NARROW);
+  await expectNoPageSideScroll(page);
   await page.setViewportSize(WIDE);
+  // Captures at both widths and both palettes: the admin's dark palette is the
+  // `.dark` token block on the document root, not `prefers-color-scheme`.
+  await evidenceShot(page, `admin-${name}`);
+}
+
+/**
+ * A raw admin write whose refusal the journey asserts (`adminWrite` expects a
+ * success): the same CSRF + `Idempotency-Key` envelope, `If-Match` from the
+ * row's version.
+ */
+async function adminRefusal(
+  page: Page,
+  input: { method: "POST" | "PUT"; path: string; payload: unknown; version?: number },
+): Promise<{ status: number; errorCode?: string; paths: string[] }> {
+  return page.evaluate(async ({ method, path, payload, version }) => {
+    const csrf =
+      document.cookie
+        .split("; ")
+        .find((pair) => pair.startsWith("__Host-ds_admin_csrf="))
+        ?.split("=")[1] ?? "";
+    const headers: Record<string, string> = {
+      accept: "application/json",
+      "content-type": "application/json",
+      "x-ds-admin-csrf": decodeURIComponent(csrf),
+      "idempotency-key": crypto.randomUUID(),
+    };
+    if (version !== undefined) headers["if-match"] = `W/"${version}"`;
+    const res = await fetch(path, {
+      method,
+      credentials: "include",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const json = (await res.json().catch(() => null)) as {
+      errorCode?: string;
+      errors?: { path: string }[];
+    } | null;
+    return {
+      status: res.status,
+      errorCode: json?.errorCode,
+      paths: (json?.errors ?? []).map((e) => e.path),
+    };
+  }, input);
+}
+
+/** The lesson as the admin API holds it (step ids and versions). */
+async function adminLesson(
+  page: Page,
+  lessonId: string,
+): Promise<{ steps: { id: string; version: number }[] }> {
+  return page.evaluate(async (id) => {
+    const res = await fetch(`/v1/admin/learning/lessons/${id}`, {
+      credentials: "include",
+      headers: { accept: "application/json" },
+    });
+    return res.json();
+  }, lessonId);
 }
 
 /** Direction, expert, project, school and course through the admin API. */
@@ -187,6 +226,34 @@ test("024 EARS-28 / EARS-29 — a staff member composes a lesson, publishes it a
 
   // The missing items: the video's source, the file, the exit test.
   const video = page.getByTestId("step-row-1");
+  // EARS-10: the picker offers only providers whose player reports a position
+  // and names the one it leaves out; the API refuses that provider too.
+  const providers = await video
+    .getByLabel("Площадка")
+    .locator("option")
+    .evaluateAll((options) => options.map((o) => (o as HTMLOptionElement).value));
+  expect(providers).not.toContain("cdnvideo");
+  await expect(video).toContainText(
+    "для шагов недоступна: её плеер не сообщает, сколько видео просмотрено.",
+  );
+  const lessonId = page.url().split("/").pop()!;
+  const draft = await adminLesson(page, lessonId);
+  const cdn = await adminRefusal(page, {
+    method: "PUT",
+    path: `/v1/admin/learning/steps/${draft.steps[0]!.id}/source`,
+    payload: {
+      provider: "cdnvideo",
+      embedRef:
+        "https://playercdn.cdnvideo.ru/aloha/players/auto_player1.html?clid=kcta544ubo&plid=c263cdf6-253e-400b-a008-d1775d3ee190",
+    },
+    version: draft.steps[0]!.version,
+  });
+  expect(cdn).toEqual({
+    status: 400,
+    errorCode: "VALIDATION_FAILED",
+    paths: ["provider"],
+  });
+  await shots(page, "step-video-provider-hint");
   await video.getByLabel("Площадка").selectOption("youtube");
   await video.getByLabel("Ссылка или идентификатор видео").fill("dQw4w9WgXcQ");
   await video.getByRole("button", { name: "Сохранить источник" }).click();
@@ -216,7 +283,32 @@ test("024 EARS-28 / EARS-29 — a staff member composes a lesson, publishes it a
   await page.getByRole("button", { name: "Опубликовать урок" }).click();
   await expect(page.getByTestId("lesson-state")).toHaveText("Опубликован");
   await expect(page.getByTestId("publish-refusal")).toHaveCount(0);
+  // A published lesson is read-only (EARS-4): no add form, no step controls,
+  // the reason in words, and the API refuses a step write.
+  await expect(page.getByTestId("lesson-read-only")).toContainText(
+    "Урок опубликован, его шаги не меняются. Чтобы изменить шаги, снимите урок с публикации.",
+  );
+  await expect(page.getByTestId("add-step-form")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Сохранить источник" })).toHaveCount(0);
   await shots(page, "lesson-published");
+  const added = await adminRefusal(page, {
+    method: "POST",
+    path: "/v1/admin/learning/steps",
+    payload: { lessonId, type: "download", title: "Ещё памятка", durationMin: 1, payload: { fileName: "x.pdf" } },
+  });
+  expect(added.status).toBe(409);
+  expect(added.errorCode).toBe("INVALID_TRANSITION");
+  await expect(page.getByTestId("step-row-4")).toHaveCount(0);
+
+  // «Снять с публикации» returns it to a draft whose steps can change again,
+  // then the lesson is published once more for the course.
+  await page.getByRole("button", { name: "Снять с публикации" }).click();
+  await expect(page.getByTestId("lesson-state")).toHaveText("Черновик");
+  await expect(page.getByTestId("lesson-read-only")).toHaveCount(0);
+  await expect(page.getByTestId("add-step-form")).toBeVisible();
+  await shots(page, "lesson-unpublished");
+  await page.getByRole("button", { name: "Опубликовать урок" }).click();
+  await expect(page.getByTestId("lesson-state")).toHaveText("Опубликован");
 
   // The course's preset.
   await page.goto(`/learning/courses/${courseId}`);

@@ -112,6 +112,13 @@ test.describe("024 — the doctor's course path and step screens", () => {
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expect(page.getByRole("button", { name: /Урок 1, шаг 1\. Серия/ })).toBeVisible();
       await expect(page.getByText("Автор курса")).toBeVisible();
+      // EARS-14 — the points plate: a guest has no balance, every kind reads «—».
+      const guestPlate = page.getByTestId("points-plate");
+      await expect(guestPlate.getByRole("heading", { name: "Очки внимания" })).toBeVisible();
+      await expect(guestPlate.getByTestId("points-plate-value")).toHaveCount(3);
+      for (const value of await guestPlate.getByTestId("points-plate-value").allTextContents()) {
+        expect(value).toMatch(/^— /);
+      }
       await axeClean(page);
       await shoot(page, `guest-path-${tag}`);
     }
@@ -148,6 +155,12 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await page.goto(`${DOCTOR_URL}/courses/${SLUG}`);
     await expect(page.getByRole("button", { name: /Урок 1, шаг 1\. Серия\. .*Вы здесь/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Урок 2, шаг 1\. .*Закрыт/ })).toBeVisible();
+    // EARS-14 — the signed-in plate carries the doctor's own balances from 025.
+    const plate = page.getByTestId("points-plate");
+    await expect(plate.getByTestId("points-plate-value")).toHaveCount(3);
+    for (const value of await plate.getByTestId("points-plate-value").allTextContents()) {
+      expect(value).toMatch(/^\d[\d\s]* /);
+    }
     await page.getByRole("button", { name: /Урок 2, шаг 1\./ }).click();
     await expect(page.getByTestId("node-summary").getByText("Шаг откроется, когда будут пройдены предыдущие.")).toBeVisible();
     await axeClean(page);
@@ -163,6 +176,8 @@ test.describe("024 — the doctor's course path and step screens", () => {
     // Video: the provider clock → position facts → 100 %.
     await page.getByRole("link", { name: /Продолжить — урок 1/ }).click();
     await expect(page.getByRole("button", { name: "Смотреть видео" })).toBeVisible();
+    // 024-design §8 — the step screen carries the same plate.
+    await expect(page.getByTestId("points-plate").getByTestId("points-plate-value").first()).toHaveText(/^\d/);
     await axeClean(page);
     await shoot(page, "step-video-1280");
     const facts: string[] = [];

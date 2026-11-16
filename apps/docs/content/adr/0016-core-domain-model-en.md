@@ -86,7 +86,7 @@ Per OWD-13 and REQ-112 the platform is the **source of truth** for accruals and 
 - **No mutable balance column.** A balance is a fold over postings, materialised as a cache if and when read performance demands it. This is what keeps "one points balance on web and mobile" (OWD-10) true by construction rather than by synchronisation.
 - The **"contributed → unit fund → accruals"** chain (OWD-3) is a **report over the ledger**, not a stored structure. Money moves by contracts off-platform on the first bet; the platform records the postings that mirror those contracts.
 
-**REQ-134 (investor terminology fork) is left open deliberately** and the model is built so it costs nothing to settle: the ledger subject is an account attached to a person or an organisation, and the smart-contract role is a **role assignment plus the postings that reference it**. The same organisation (or person) can therefore be the smart-contract subject, an Academy audience member, or both, with **no schema change** — only different role assignments and different postings. The fork is about the two **labels** REQ-134 will pick; the model commits to neither and needs no rename whichever way it lands.
+**REQ-134 (investor terminology) is closed by the owner** (chat 2026-08-22, functional map §F-1): the canvas variant stays — the smart-contract role is labelled «первоинвестор», the Academy audience «инвестор»; nothing is renamed, and the wording lives in PRDs 032 / 034. The model does not depend on the labels: the ledger subject is an account attached to a person or an organisation, and the smart-contract role is a **role assignment plus the postings that reference it**. The same organisation (or person) can therefore be the smart-contract subject («первоинвестор»), an Academy audience member («инвестор»), or both, with **no schema change** — only different role assignments and different postings.
 
 ### 7. Documents and consents under the PD lifecycle
 
@@ -134,19 +134,18 @@ The full table is in the companion design spec. The rule: every existing table i
 
 ## Open questions (deferred)
 
-Product decisions this ADR deliberately does **not** settle. Each stays with the Product Lead and blocks only the slice that needs it. The questions the finalisation session closed (Q-31 in its main part, Q-32, Q-33, Q-34 → REQ-114, Q-35, Q-38, Q-40) are **not** listed here — they are carried by the decision above.
+Product decisions this ADR deliberately does **not** settle. Each stays with the Product Lead and blocks only the slice that needs it. The questions the finalisation session closed (Q-31 in its main part, Q-32, Q-33, Q-34 → REQ-114, Q-35, Q-38, Q-40), and REQ-134 closed by the owner (§6), are **not** listed here — they are carried by the decision above.
 
-1. `TODO(Product Lead)` **REQ-134** — investor terminology fork: which label goes to the smart-contract role and which to the Academy audience. The model is fork-proof (§6); only the labels are open, and this ADR pre-commits to neither side.
-2. `TODO(Product Lead)` **REQ-105** — legal basis and consent re-confirmation for migrating the ~10k GetCourse doctors and the congress registration base; the migration design is a separate artifact (§9, OWD-7).
-3. `TODO(Product Lead)` **REQ-36/48/49** — accrual rules, point prices and bonus policy (two-way doors, referenced by id in §6 and out of scope here).
-4. `TODO(Product Lead)` **Q-31 residue only** — the main part is closed (Doctor.School is the licence holder and the issuer, §7); what remains is naming: what is promised to the doctor by a direction that has no place in the Minzdrav nomenclature (ortho-biology). Recorded by the owner as explicitly **not a blocker**; it changes reference-book copy, not the model.
-5. `TODO(Product Lead)` — whether account ↔ expert confirmation is a **mandatory** precondition of the first payout to an author (accruals accumulate on the expert but cannot be withdrawn until linked). This is a policy rule, not a model change.
+1. `TODO(Product Lead)` **REQ-105** — legal basis and consent re-confirmation for migrating the ~10k GetCourse doctors and the congress registration base; the migration design is a separate artifact (§9, OWD-7).
+2. `TODO(Product Lead)` **REQ-36/48/49** — accrual rules, point prices and bonus policy (two-way doors, referenced by id in §6 and out of scope here).
+3. `TODO(Product Lead)` **Q-31 residue only** — the main part is closed (Doctor.School is the licence holder and the issuer, §7); what remains is naming: what is promised to the doctor by a direction that has no place in the Minzdrav nomenclature (ortho-biology). Recorded by the owner as explicitly **not a blocker**; it changes reference-book copy, not the model.
+4. `TODO(Product Lead)` — whether account ↔ expert confirmation is a **mandatory** precondition of the first payout to an author (accruals accumulate on the expert but cannot be withdrawn until linked). This is a policy rule, not a model change.
 
 ---
 
 ## Consequences
 
-**Positive.** The one-way doors of the discovery package are closed in a single artifact, so every relaunch feature slice inherits the same entity shapes instead of inventing them. Features 012 and 014 keep shipping unchanged — the model absorbs them rather than superseding them. Roles-as-assignments and membership-as-a-link remove the two most expensive retrofits the register warned about. The ledger makes both the points balance and the investor-facing money chain derivable, and it survives the REQ-134 fork untouched.
+**Positive.** The one-way doors of the discovery package are closed in a single artifact, so every relaunch feature slice inherits the same entity shapes instead of inventing them. Features 012 and 014 keep shipping unchanged — the model absorbs them rather than superseding them. Roles-as-assignments and membership-as-a-link remove the two most expensive retrofits the register warned about. The ledger makes both the points balance and the investor-facing money chain derivable, and its shape does not depend on the REQ-134 labels.
 
 **Costs and risks.** Role assignments and organisation memberships are more machinery than a scalar column: authorization must consult the assignment context, and the policy layer (ADR-0003 §4) grows accordingly. The `topics` → directions rename touches shipped feature-012 surface and needs its own migration slice with the retained-row lifecycle preserved. The ledger forbids in-place balance updates, so every accrual path must be written as postings and every read as a fold — with a materialised balance cache once volumes demand it. Document records raise the platform's PD exposure (152-ФЗ), which is why §7 binds them to ADR-0009 and to the audit ledger from day one.
 

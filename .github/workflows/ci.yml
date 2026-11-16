@@ -1147,6 +1147,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # scenario-proof — every spec scenario is proven at some test level or is
+      # tracked debt (tech spec §6.1 + §6.4, Issue #4062): bound to step
+      # definitions, or tagged `@proof:<level>` with a spec-scoped test at that
+      # level citing each of its `@EARS-N` ids, or in a Draft spec; the rest is
+      # exactly `packages/e2e/scenario-proof-debt.txt`. POSTURE: BLOCK, a plain
+      # step. The list shrinks freely; a line absent at the merge base with
+      # `origin/main` (the full checkout above makes it computable) must name an
+      # OPEN Issue, not a pull request — GH_TOKEN lets that `gh issue view` run;
+      # under CI a lookup that cannot run blocks instead of passing unverified.
+      - name: scenario-proof
+        run: pnpm lint:scenario-proof
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # primitives-first — a raw `<button>`/`<a>`/`<input>`/`<select>`/`<textarea>`
       # (or a `next/link` default import under ANY alias), plus (#1103)
       # summary/details/role=button raw hosts and DS-primitive SHELLs whose

@@ -82,6 +82,13 @@ import fg from "fast-glob";
 import { ghViewJson } from "./lib/gh.js";
 import { touchedPaths } from "./lib/diff.js";
 import { parseRegistryRows } from "./lib/registry-rows.js";
+import { parseScenarios } from "./lib/feature-scenarios.js";
+
+export {
+  parseScenarios,
+  type ExamplesTags,
+  type ScenarioTags,
+} from "./lib/feature-scenarios.js";
 
 const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
   ? resolve(process.env.LINT_FIXTURE_ROOT)
@@ -97,11 +104,6 @@ const REQUIREMENTS_IGNORE = ["**/node_modules/**", "**/*-requirements-ru.md"];
 const HANDLER_RE = /^\s*[-*]\s+\*\*EARS-(\d+)\*\*/;
 /** A retired id keeps flat numbering but declares no handler. */
 const RETIRED_RE = /_Retired\._/i;
-/** A Gherkin tag line (only tag tokens on it). */
-const TAG_LINE_RE = /^\s*@\S+(\s+@\S+)*\s*$/;
-const SCENARIO_RE = /^\s*(Scenario|Scenario Outline|Example)\b/;
-const FEATURE_RE = /^\s*Feature\b/;
-const EXAMPLES_RE = /^\s*(Examples|Scenarios)\s*:/;
 const EARS_TAG_RE = /^@EARS-(\d+)$/;
 const QUARANTINE_RE = /^@quarantine(?:\((#?\d+)\))?$/i;
 
@@ -136,66 +138,6 @@ function info(msg: string): void {
 /** Repo-relative, POSIX-slashed path — the form the git diff set uses. */
 function relPath(file: string): string {
   return relative(REPO_ROOT, file).split(sep).join("/");
-}
-
-export interface ExamplesTags {
-  line: number;
-  /** The block's own tags only (the outline's are on the scenario). */
-  tags: string[];
-}
-
-export interface ScenarioTags {
-  line: number;
-  tags: string[];
-  /** A Scenario Outline's `Examples:` blocks, in file order (empty otherwise). */
-  examples: ExamplesTags[];
-}
-
-/**
- * Parse a `.feature` file into one entry per scenario, carrying the scenario's
- * own tags plus the feature-level tags (Gherkin tag inheritance), and each
- * `Examples:` block of an outline with the tags written above that block —
- * Gherkin tags a block's rows with them, so one outline can run its rows in
- * different places.
- */
-export function parseScenarios(text: string): ScenarioTags[] {
-  const lines = text.split(/\r?\n/);
-  const scenarios: ScenarioTags[] = [];
-  let pending: string[] = [];
-  let featureTags: string[] = [];
-  let seenFeature = false;
-  lines.forEach((raw, idx) => {
-    if (/^\s*#/.test(raw)) return;
-    if (TAG_LINE_RE.test(raw)) {
-      pending.push(...raw.trim().split(/\s+/).filter(Boolean));
-      return;
-    }
-    if (!seenFeature && FEATURE_RE.test(raw)) {
-      seenFeature = true;
-      featureTags = pending;
-      pending = [];
-      return;
-    }
-    if (SCENARIO_RE.test(raw)) {
-      scenarios.push({
-        line: idx + 1,
-        tags: [...featureTags, ...pending],
-        examples: [],
-      });
-      pending = [];
-      return;
-    }
-    const current = scenarios[scenarios.length - 1];
-    if (current && EXAMPLES_RE.test(raw)) {
-      current.examples.push({ line: idx + 1, tags: pending });
-      pending = [];
-      return;
-    }
-    if (raw.trim() === "") return;
-    // Any other content line ends a tag block that belongs to no scenario.
-    if (pending.length > 0) pending = [];
-  });
-  return scenarios;
 }
 
 /** The handler ids declared in a requirements file (retired ids excluded). */

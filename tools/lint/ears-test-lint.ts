@@ -99,6 +99,15 @@ import { readFile } from "node:fs/promises";
 import { resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  EARS_ID_RE,
+  TEST_FILE_GLOBS,
+  TEST_FILE_IGNORE,
+  matches,
+  parseTestTitles,
+  specFeature,
+} from "./lib/ears-tests.js";
+
 // TEST SEAM: `LINT_FIXTURE_ROOT` points the scan at a fixture tree
 // (tools/lint/guard-tests/fixtures/ears-test/<case>). Inert in production.
 const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
@@ -106,22 +115,6 @@ const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
   : resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TAG = "[ears-test]";
 
-// An EARS id is flat or arbitrarily-nested: EARS-N, EARS-N.M, EARS-N.M.K …
-const EARS_ID_RE = /\bEARS-\d+(?:\.\d+)*\b/g;
-// In a test TITLE an id may also appear in the compound `EARS-N/M` form (one test
-// covering two sibling requirements). We capture the whole token, then split `/`.
-const EARS_TOKEN_RE = /\bEARS-\d+(?:[./]\d+)*\b/g;
-// `it(` / `test(` / `describe(` title — the first string-literal argument.
-const TITLE_RE = /\b(?:it|test|describe)\s*\(\s*(['"`])([\s\S]*?)\1/g;
-// A test file's OWNING feature is declared by a title that STARTS with a
-// `NNN EARS-…` prefix (e.g. `describe.skipIf(cond)("007 EARS-4 publish …")`). The
-// leading-quote anchor (a) captures the title even under a chained `.skipIf(…)` /
-// `.each(…)` the generic TITLE_RE misses, and (b) ignores a mid-prose/comment
-// cross-reference like `(004 EARS-6)` which is not a title opener. See the
-// SPEC-SCOPED DEFERRALS header. Scanned over the whole file, not per-title.
-const FEATURE_SCOPE_RE = /['"`](\d{3})\s+EARS-\d/g;
-// The feature number `NNN` of a spec file lives in its `.../features/NNN-<slug>/…` path.
-const SPEC_FEATURE_RE = /specs\/features\/(\d+)-/;
 // In spec prose, a feature-qualified id run: `NNN EARS-a`, `NNN (EARS-a`,
 // `feature-NNN EARS-a`, continued by `/EARS-b`, `/b`, `, EARS-b` or ` / EARS-b`;
 // or the RU postfix form `EARS-a фичи NNN`. The `(?<![#\d])` lookbehind keeps an
@@ -165,43 +158,6 @@ function info(msg: string): void {
 }
 function warn(msg: string): void {
   process.stdout.write(`${TAG} WARN: ${msg}\n`);
-}
-
-/** Expand a title token into its component flat/nested ids (`EARS-25/16` → 25, 16). */
-function expandToken(token: string): string[] {
-  // token = `EARS-<part>(/<part>)*` where each part is `N` or `N.M…`.
-  const body = token.slice("EARS-".length);
-  return body.split("/").map((p) => `EARS-${p}`);
-}
-
-/** Numeric dotted components of an id: `EARS-18.1` → [18, 1]. */
-function components(id: string): number[] {
-  return id
-    .slice("EARS-".length)
-    .split(".")
-    .map((n) => Number.parseInt(n, 10));
-}
-
-/** True iff `a` is a component-wise prefix of `b` (equal length counts). */
-function isPrefix(a: number[], b: number[]): boolean {
-  if (a.length > b.length) return false;
-  return a.every((v, i) => v === b[i]);
-}
-
-/**
- * Fold-match: two ids trace to the same requirement iff one is a dotted-prefix
- * ancestor of the other (or they are equal). Component-wise, so `EARS-1` (=[1])
- * never matches `EARS-18` (=[18]).
- */
-function matches(idA: string, idB: string): boolean {
-  const a = components(idA);
-  const b = components(idB);
-  return isPrefix(a, b) || isPrefix(b, a);
-}
-
-/** The `NNN` feature number of a spec file, from its `.../features/NNN-<slug>/…` path. */
-function specFeature(relPath: string): string | null {
-  return relPath.replace(/\\/g, "/").match(SPEC_FEATURE_RE)?.[1] ?? null;
 }
 
 /** Parse a deferral allowlist key into `{ feature, id }` — bare `EARS-N` → agnostic. */
@@ -255,22 +211,14 @@ async function extractSpecIds(
 async function extractTest(
   file: string,
 ): Promise<{ ids: Set<string>; features: Set<string> }> {
-  const ids = new Set<string>();
-  const features = new Set<string>();
   try {
-    const text = await readFile(file, "utf8");
-    for (const title of text.matchAll(TITLE_RE)) {
-      for (const tok of title[2].matchAll(EARS_TOKEN_RE)) {
-        for (const id of expandToken(tok[0])) ids.add(id);
-      }
-    }
-    for (const fm of text.matchAll(FEATURE_SCOPE_RE)) features.add(fm[1]);
+    return parseTestTitles(await readFile(file, "utf8"));
   } catch (e) {
     warn(
       `could not read ${relative(REPO_ROOT, file)}: ${(e as Error).message.split("\n")[0]}`,
     );
   }
-  return { ids, features };
+  return { ids: new Set<string>(), features: new Set<string>() };
 }
 
 async function main(): Promise<void> {
@@ -329,25 +277,11 @@ async function main(): Promise<void> {
   // prior glob saw none of them and every requirement looked uncovered (#316).
   // The `*.spec.{ts,tsx}` arm also catches the portal Playwright `*.e2e.spec.ts`
   // files, so a `user-facing` requirement's E2E coverage (ADR-0006 §4) counts.
-  const testFiles = await fg(
-    [
-      "apps/**/*.test.{ts,tsx}",
-      "apps/**/*.spec.{ts,tsx}",
-      "apps/**/*.e2e-spec.{ts,tsx}",
-      "packages/**/*.test.{ts,tsx}",
-      "packages/**/*.spec.{ts,tsx}",
-    ],
-    {
-      cwd: REPO_ROOT,
-      absolute: true,
-      ignore: [
-        "**/node_modules/**",
-        "**/dist/**",
-        "**/.turbo/**",
-        "**/coverage/**",
-      ],
-    },
-  );
+  const testFiles = await fg(TEST_FILE_GLOBS, {
+    cwd: REPO_ROOT,
+    absolute: true,
+    ignore: TEST_FILE_IGNORE,
+  });
 
   // Per-file test entries: the ids cited in its titles + its validated feature
   // scope (the `NNN EARS-…` title prefixes that name a real feature-spec dir).

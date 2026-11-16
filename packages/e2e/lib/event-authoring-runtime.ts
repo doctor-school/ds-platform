@@ -107,6 +107,7 @@ export async function bootEventAuthoringRuntime() {
   );
   const api = await bootEventCountApi(4061);
   const children: ChildProcess[] = [];
+  const processes: Record<string, unknown>[] = [];
   const origins: Record<string, string> = {};
   const assets: Record<string, string> = {};
   const assetTrees: Record<string, unknown> = {};
@@ -168,7 +169,8 @@ export async function bootEventAuthoringRuntime() {
       const binding = {
         server: authoringTree(resolve(next, "server")),
         static: authoringTree(resolve(next, "static")),
-        buildId: authoringSha(readFileSync(resolve(next, "BUILD_ID"))),
+        buildId: readFileSync(resolve(next, "BUILD_ID"), "utf8").trim(),
+        buildIdSha256: authoringSha(readFileSync(resolve(next, "BUILD_ID"))),
       };
       assetTrees[host!] = binding;
       assets[host!] = authoringSha(JSON.stringify(binding));
@@ -187,6 +189,8 @@ export async function bootEventAuthoringRuntime() {
       countOperation("start owned production Next child", {
         host,
         appRoot,
+        entrypoint: cli,
+        entrypointSha256: authoringSha(readFileSync(cli)),
         port,
         apiOrigin: api.url,
         database: api.database,
@@ -213,6 +217,16 @@ export async function bootEventAuthoringRuntime() {
         },
       );
       children.push(child);
+      processes.push({
+        host,
+        pid: child.pid,
+        cwd: appRoot,
+        entrypoint: cli,
+        entrypointSha256: authoringSha(readFileSync(cli)),
+        argv: ["start", "-p", port, "-H", "127.0.0.1"],
+        apiTarget: api.url,
+        assetsSha256: assets[host!],
+      });
       countOperation("record exact owned production child", {
         host,
         pid: child.pid,
@@ -238,6 +252,11 @@ export async function bootEventAuthoringRuntime() {
         )
         .toBeGreaterThan(0);
     }
+    const schemaCatalog = (
+      await api.query(
+        "SELECT table_schema,table_name,column_name,ordinal_position,data_type,is_nullable,column_default FROM information_schema.columns WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY table_schema,table_name,ordinal_position",
+      )
+    ).rows;
     authoringCapture("runtime-provenance.json", {
       head: api.head,
       checkout: {
@@ -248,6 +267,13 @@ export async function bootEventAuthoringRuntime() {
         baseRef: process.env.GITHUB_BASE_REF ?? null,
       },
       sourceBlobs,
+      apiEntrypoint: resolve(countRoot, "apps/api/dist/api-application.js"),
+      apiEntrypointSha256: authoringSha(
+        readFileSync(resolve(countRoot, "apps/api/dist/api-application.js")),
+      ),
+      processes,
+      schemaCatalog,
+      schemaCatalogSha256: authoringSha(JSON.stringify(schemaCatalog)),
       root: countRoot,
       origins,
       assets,

@@ -1,22 +1,38 @@
 #!/usr/bin/env tsx
 /**
  * tools/lint/scenario-proof-lint.ts — the `scenario-proof` guard: every spec
- * scenario is proven at some test level, or is tracked debt (regression-contour
- * tech spec §6.1 + §6.4, Issue #4062).
+ * scenario is proven, or is tracked debt (regression-contour tech spec §6.1 +
+ * §6.4, Issues #4062, #4087).
  *
- * Why this exists: counting a scenario as covered only when every step of it is
- * bound to a step definition left most of the suite "uncovered" although a
- * spec-scoped test at another level (Vitest unit, Vitest API e2e, app-local
- * Playwright) already proves each of its EARS ids, and nothing stopped new
- * unproven scenarios from piling up. Every scenario is in exactly one state:
+ * Why this exists: nothing stopped unproven scenarios from piling up, and a
+ * release shipped regressions every code-level tier had passed (tech spec §1)
+ * — so a user journey counts as proven only in the browser on the real stack,
+ * and code-level tests count only for rule details.
  *
+ * Class. A scenario of a `surface: user-facing` spec is `@journey` (a path a
+ * real user walks end to end, with the refusals met on it) or `@rule` (a
+ * variant, wording, limit or boundary); with neither it is unclassified, and a
+ * scenario absent at the merge base with `origin/main` (same key as the debt
+ * list) that has no class in a non-Draft user-facing spec is a BLOCK finding —
+ * existing unclassified scenarios are legacy and only counted. Every scenario
+ * of any other spec is a rule; `@journey` there, and both tags on one
+ * scenario, are BLOCK findings.
+ *
+ * State, first match wins:
+ *
+ *   - pending — its spec's requirements `status:` is `Draft`;
  *   - bound — it has a step of its own and every step (Background steps
  *     included) matches a step definition from the `steps` globs of a
- *     `defineBddConfig` caller; an outline is bound only when that holds for
- *     every row of every `Examples` block, placeholders substituted;
- *   - proof:<level> — it carries `@proof:<level>` (`unit` | `api` | `app-e2e`)
- *     and is not bound; counted under the highest level it names;
- *   - pending — its spec's requirements `status:` is `Draft`;
+ *     `defineBddConfig` caller; an outline only when that holds for every row
+ *     of every `Examples` block, placeholders substituted. For a journey only
+ *     definitions under the real-stack tiers count — `packages/e2e/**` (the
+ *     staging suite, the production compose set) and `apps/admin/e2e/**` (the
+ *     admin tier on real api + database + IdP) — and a quarantined journey
+ *     (`@quarantine(#N)`, `@quarantine:login(#N)`) is never bound;
+ *   - proof:<level> — a rule carrying `@proof:<level>` (`unit` | `api` |
+ *     `app-e2e`); counted under the highest level it names. On a journey, or
+ *     on an unclassified scenario of a user-facing spec, the tag is a BLOCK
+ *     finding and proves nothing;
  *   - unproven — none of the above.
  *
  * A proof tag is a claim the guard verifies: for EVERY `@EARS-N` on the
@@ -40,17 +56,21 @@
  * not an OPEN Issue — no number, a closed Issue, a number that does not exist,
  * a pull request — are BLOCK findings; a line already present at the merge
  * base needs no Issue, and when the list did not exist there every line is
- * baseline. So the list shrinks freely and grows only as tracked debt. When
- * the lookup itself cannot run (no `gh`, no auth, network), the line blocks
+ * baseline. A new line for a journey of a `status: Shipped` spec blocks with or
+ * without an Issue: a shipped journey is bound before it ships. So the list
+ * shrinks freely and grows only as tracked debt. When the lookup itself (or
+ * the merge base) cannot run (no `gh`, no auth, network), the line blocks
  * under `CI` and is a WARN elsewhere — CI must not pass an unverified line.
  *
  * Modes: default = the guard; `--report` prints the per-spec inventory table
- * (`pnpm scenarios:inventory`, the one source of the coverage number);
- * `--write-debt` rewrites the debt list from the current state, keeping each
- * surviving line's Issue.
+ * (`pnpm scenarios:inventory`, the one source of the coverage number; the
+ * headline is journeys bound / journeys total); `--write-debt` rewrites the
+ * debt list from the current state, keeping each surviving line's Issue.
  *
  * Seams: `LINT_FIXTURE_ROOT` (repo tree), `LINT_PROOF_BASE_DEBT_FILE` (the debt
- * list at the merge base; a missing file = absent there), `LINT_GH_FIXTURE_DIR`
+ * list at the merge base; a missing file = absent there),
+ * `LINT_PROOF_BASE_ROOT` (a tree holding the spec `.feature` files at the
+ * merge base; a missing dir = no scenario existed there), `LINT_GH_FIXTURE_DIR`
  * (`issue-view-<n>.json` = the `gh issue view` answer, `issue-view-<n>.error` =
  * its stderr on a failed call, neither = the lookup could not run),
  * `LINT_DIFF_BASE` (merge-base ref, default `origin/main`). All inert in
@@ -91,19 +111,20 @@ const BDD_CONFIG_GLOBS = [
   "apps/*/playwright*.config.ts",
 ];
 
+/**
+ * Step-definition locations whose steps run on the real stack (tech spec
+ * §6.1): the staging suite and the admin tier. Any other tier — the portal's
+ * manual dev-stand tier among them — binds rules, never a journey.
+ */
+const REAL_STACK_STEP_DIRS = ["packages/e2e/", "apps/admin/e2e/"];
+
 export const LEVELS = ["unit", "api", "app-e2e"] as const;
 type Level = (typeof LEVELS)[number];
 type State = "bound" | `proof:${Level}` | "pending" | "unproven";
-const STATES: State[] = [
-  "bound",
-  "proof:unit",
-  "proof:api",
-  "proof:app-e2e",
-  "pending",
-  "unproven",
-];
+type Class = "journey" | "rule" | "unclassified";
 
 const PROOF_TAG_RE = /^@proof(?::(.*))?$/;
+const QUARANTINE_TAG_RE = /^@quarantine(?::login)?(?:\(|$)/i;
 const EARS_TAG_RE = /^@EARS-(\d+(?:\.\d+)*)$/;
 const STEP_RE = /^(?:Given|When|Then|And|But|\*)\s+(.*)$/;
 const SCENARIO_HEAD_RE =
@@ -195,7 +216,10 @@ export function stepPatterns(src: string): (string | RegExp)[] {
 async function loadStepMatcher(): Promise<{
   defs: number;
   files: number;
+  /** Some step definition of any tier matches the step. */
   bound: (text: string) => boolean;
+  /** Some step definition of a real-stack tier matches the step. */
+  boundRealStack: (text: string) => boolean;
 }> {
   const configs = await fg(BDD_CONFIG_GLOBS, {
     cwd: REPO_ROOT,
@@ -217,12 +241,14 @@ async function loadStepMatcher(): Promise<{
           ignore: ["**/node_modules/**"],
         });
   const factory = new ExpressionFactory(new ParameterTypeRegistry());
-  const expressions: Expression[] = [];
+  const expressions: { expr: Expression; realStack: boolean }[] = [];
   let unparsable = 0;
   for (const f of stepFiles) {
+    const rel = relPath(f);
+    const realStack = REAL_STACK_STEP_DIRS.some((d) => rel.startsWith(d));
     for (const p of stepPatterns(readFileSync(f, "utf8"))) {
       try {
-        expressions.push(factory.createExpression(p));
+        expressions.push({ expr: factory.createExpression(p), realStack });
       } catch {
         unparsable += 1;
       }
@@ -231,18 +257,24 @@ async function loadStepMatcher(): Promise<{
   if (unparsable > 0) {
     info(`${unparsable} step pattern(s) are not valid expressions; ignored.`);
   }
-  const cache = new Map<string, boolean>();
+  const cache = new Map<string, { any: boolean; realStack: boolean }>();
+  const lookup = (text: string): { any: boolean; realStack: boolean } => {
+    let hit = cache.get(text);
+    if (hit === undefined) {
+      const matching = expressions.filter((e) => e.expr.match(text) !== null);
+      hit = {
+        any: matching.length > 0,
+        realStack: matching.some((e) => e.realStack),
+      };
+      cache.set(text, hit);
+    }
+    return hit;
+  };
   return {
     defs: expressions.length,
     files: stepFiles.length,
-    bound: (text) => {
-      let hit = cache.get(text);
-      if (hit === undefined) {
-        hit = expressions.some((e) => e.match(text) !== null);
-        cache.set(text, hit);
-      }
-      return hit;
-    },
+    bound: (text) => lookup(text).any,
+    boundRealStack: (text) => lookup(text).realStack,
   };
 }
 
@@ -373,7 +405,18 @@ interface Scenario {
   where: string;
   title: string;
   key: string;
+  cls: Class;
   state: State;
+}
+
+/** The debt-list key of each title in file order (` [k]` on the k-th repeat). */
+function scenarioKeys(feature: string, titles: string[]): string[] {
+  const repeats = new Map<string, number>();
+  return titles.map((title) => {
+    const k = (repeats.get(title) ?? 0) + 1;
+    repeats.set(title, k);
+    return `${feature} | ${title}${k > 1 ? ` [${k}]` : ""}`;
+  });
 }
 
 // ── tests ───────────────────────────────────────────────────────────────────
@@ -436,6 +479,20 @@ type BaseDebt =
   | { status: "ok"; keys: Set<string> }
   | { status: "unknown"; reason: string };
 
+const errorReason = (e: unknown): string =>
+  (e as Error).message.split("\n")[0] ?? "git failed";
+
+let mergeBaseMemo: Promise<string> | null = null;
+/** The merge base with `origin/main` (`LINT_DIFF_BASE`); rejects when git cannot answer. */
+function mergeBase(): Promise<string> {
+  mergeBaseMemo ??= execa(
+    "git",
+    ["merge-base", process.env.LINT_DIFF_BASE ?? "origin/main", "HEAD"],
+    { cwd: REPO_ROOT },
+  ).then(({ stdout }) => stdout.trim());
+  return mergeBaseMemo;
+}
+
 /** The debt list as it stood at the merge base with `origin/main`. */
 async function baseDebt(): Promise<BaseDebt> {
   const keysOf = (text: string): Set<string> =>
@@ -446,32 +503,95 @@ async function baseDebt(): Promise<BaseDebt> {
       ? { status: "ok", keys: keysOf(readFileSync(seam, "utf8")) }
       : { status: "absent" };
   }
-  const base = process.env.LINT_DIFF_BASE ?? "origin/main";
   try {
-    const { stdout: mb } = await execa("git", ["merge-base", base, "HEAD"], {
-      cwd: REPO_ROOT,
-    });
+    const mb = await mergeBase();
     const { stdout: listed } = await execa(
       "git",
-      ["ls-tree", "--name-only", mb.trim(), "--", DEBT_REL],
+      ["ls-tree", "--name-only", mb, "--", DEBT_REL],
       { cwd: REPO_ROOT },
     );
     if (listed.trim() === "") return { status: "absent" };
-    const { stdout } = await execa(
-      "git",
-      ["show", `${mb.trim()}:${DEBT_REL}`],
-      {
-        cwd: REPO_ROOT,
-        stripFinalNewline: false,
-      },
-    );
+    const { stdout } = await execa("git", ["show", `${mb}:${DEBT_REL}`], {
+      cwd: REPO_ROOT,
+      stripFinalNewline: false,
+    });
     return { status: "ok", keys: keysOf(stdout) };
   } catch (e) {
-    return {
-      status: "unknown",
-      reason: (e as Error).message.split("\n")[0] ?? "git failed",
-    };
+    return { status: "unknown", reason: errorReason(e) };
   }
+}
+
+const FEATURE_PATH_RE =
+  /^apps\/docs\/content\/specs\/features\/[^/]+\/[^/]+-scenarios\.feature$/;
+
+/** The scenario keys of every spec `.feature` file at the merge base. */
+async function baseScenarioKeys(): Promise<
+  { status: "ok"; keys: Set<string> } | { status: "unknown"; reason: string }
+> {
+  const files: { rel: string; text: string }[] = [];
+  const seam = process.env.LINT_PROOF_BASE_ROOT;
+  if (seam) {
+    const root = resolve(seam);
+    if (existsSync(root)) {
+      for (const rel of await fg([FEATURE_GLOB], {
+        cwd: root,
+        ignore: ["**/node_modules/**"],
+      })) {
+        files.push({ rel, text: readFileSync(resolve(root, rel), "utf8") });
+      }
+    }
+  } else {
+    try {
+      const mb = await mergeBase();
+      const { stdout: listed } = await execa(
+        "git",
+        [
+          "ls-tree",
+          "-r",
+          "--name-only",
+          mb,
+          "--",
+          "apps/docs/content/specs/features",
+        ],
+        { cwd: REPO_ROOT },
+      );
+      const rels = listed.split("\n").filter((p) => FEATURE_PATH_RE.test(p));
+      if (rels.length > 0) {
+        // One `cat-file --batch` for every file: `<sha> blob <size>\n<bytes>\n`.
+        const { stdout } = await execa("git", ["cat-file", "--batch"], {
+          cwd: REPO_ROOT,
+          input: rels.map((p) => `${mb}:${p}`).join("\n") + "\n",
+          encoding: "buffer",
+          stripFinalNewline: false,
+        });
+        const buf = Buffer.from(stdout);
+        let pos = 0;
+        for (const rel of rels) {
+          const eol = buf.indexOf(0x0a, pos);
+          if (eol === -1) throw new Error("truncated git cat-file answer");
+          const header = buf.subarray(pos, eol).toString("utf8");
+          pos = eol + 1;
+          const size = Number(header.match(/ blob (\d+)$/)?.[1] ?? NaN);
+          if (Number.isNaN(size)) continue;
+          files.push({
+            rel,
+            text: buf.subarray(pos, pos + size).toString("utf8"),
+          });
+          pos += size + 1;
+        }
+      }
+    } catch (e) {
+      return { status: "unknown", reason: errorReason(e) };
+    }
+  }
+  const keys = new Set<string>();
+  for (const { rel, text } of files) {
+    const feature = specFeature(rel);
+    if (!feature) continue;
+    const titles = parseScenarioSteps(text).map((s) => s.title);
+    for (const k of scenarioKeys(feature, titles)) keys.add(k);
+  }
+  return { status: "ok", keys };
 }
 
 type IssueLookup =
@@ -554,10 +674,12 @@ async function lookupIssue(n: number): Promise<IssueLookup> {
 const DEBT_HEADER = [
   "# Unproven spec scenarios — the scenario-proof ratchet (tools/lint/scenario-proof-lint.ts,",
   "# regression-contour tech spec §6.4). One line per scenario of a non-Draft spec that is",
-  "# neither bound to a step definition nor carries a verified @proof:<level> tag:",
+  "# not proven: a @journey not bound to real-stack steps, a @rule neither bound nor carrying",
+  "# a verified @proof:<level> tag, an unclassified scenario not bound:",
   "#   NNN | <scenario title>[ [k]][ | #<issue>]   ([k] = the k-th scenario with that title)",
-  "# Delete a line once its scenario is bound or proof-tagged. A line added after the merge",
-  "# base names an OPEN Issue. Regenerate: pnpm lint:scenario-proof --write-debt",
+  "# Delete a line once its scenario is proven. A line added after the merge base names an",
+  "# OPEN Issue; a new line for a journey of a Shipped spec blocks.",
+  "# Regenerate: pnpm lint:scenario-proof --write-debt",
 ];
 
 // ── main ────────────────────────────────────────────────────────────────────
@@ -575,18 +697,24 @@ async function main(): Promise<void> {
     ignore: ["**/node_modules/**"],
   });
   const knownFeatures = new Set<string>();
-  const draft = new Set<string>();
+  const statusOf = new Map<string, string>();
+  const userFacing = new Set<string>();
   for (const f of reqFiles) {
     const rel = relPath(f);
     const feature = specFeature(rel);
     if (!feature) continue;
     knownFeatures.add(feature);
-    // The status lives in the EN/base requirements file; the RU twin mirrors it.
+    // Status and surface live in the EN/base requirements file; the RU twin
+    // mirrors them.
     if (rel.endsWith("-requirements-ru.md")) continue;
-    const fm = readFileSync(f, "utf8").match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    const status = fm?.[1].match(/^status:\s*(.+?)\s*$/m)?.[1];
-    if (status === "Draft") draft.add(feature);
+    const fm =
+      readFileSync(f, "utf8").match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? "";
+    const status = fm.match(/^status:\s*(.+?)\s*$/m)?.[1];
+    if (status) statusOf.set(feature, status);
+    if (/^surface:\s*user-facing\s*$/m.test(fm)) userFacing.add(feature);
   }
+  const isDraft = (feature: string): boolean =>
+    statusOf.get(feature) === "Draft";
 
   const tests: TestEntry[] = [];
   for (const f of await fg(TEST_FILE_GLOBS, {
@@ -615,6 +743,14 @@ async function main(): Promise<void> {
   const steps = await loadStepMatcher();
   const findings: string[] = [];
   const scenarios: Scenario[] = [];
+  const baseScenarios = mode === "check" ? await baseScenarioKeys() : null;
+  if (baseScenarios?.status === "unknown") {
+    const msg =
+      `the merge base was unavailable (${baseScenarios.reason}); ` +
+      `new scenarios are not checked for a class`;
+    if (inCi()) findings.push(`${msg}, and CI is set: BLOCK`);
+    else info(`WARN ${msg}; outside CI not blocked on a guess.`);
+  }
 
   const featureFiles = (
     await fg([FEATURE_GLOB], {
@@ -638,13 +774,45 @@ async function main(): Promise<void> {
         `${rel}: the tag parser and the step parser disagree on the scenarios`,
       );
     }
-    const repeats = new Map<string, number>();
+    const keys = scenarioKeys(
+      feature,
+      parsed.map((s) => s.title),
+    );
+    const specUserFacing = userFacing.has(feature);
     parsed.forEach((s, i) => {
       const tags = tagged[i].tags;
       const where = `${rel}:${s.line}`;
-      const k = (repeats.get(s.title) ?? 0) + 1;
-      repeats.set(s.title, k);
-      const key = `${feature} | ${s.title}${k > 1 ? ` [${k}]` : ""}`;
+      const key = keys[i];
+
+      const journeyTag = tags.includes("@journey");
+      const ruleTag = tags.includes("@rule");
+      let cls: Class;
+      if (!specUserFacing) {
+        if (journeyTag) {
+          findings.push(
+            `${where} "${s.title}" -> @journey in a backend-only spec; every scenario there is a rule`,
+          );
+        }
+        cls = "rule";
+      } else if (journeyTag && ruleTag) {
+        findings.push(
+          `${where} "${s.title}" -> carries both @journey and @rule; a scenario is one or the other`,
+        );
+        cls = "journey";
+      } else {
+        cls = journeyTag ? "journey" : ruleTag ? "rule" : "unclassified";
+      }
+      if (
+        cls === "unclassified" &&
+        !isDraft(feature) &&
+        baseScenarios?.status === "ok" &&
+        !baseScenarios.keys.has(key)
+      ) {
+        findings.push(
+          `${where} "${s.title}" -> new scenario (absent at the merge base) has no class; ` +
+            `tag it @journey or @rule`,
+        );
+      }
 
       const proofTags = tags
         .map((t) => t.match(PROOF_TAG_RE))
@@ -664,7 +832,18 @@ async function main(): Promise<void> {
         .map((t) => t.match(EARS_TAG_RE))
         .filter((m): m is RegExpMatchArray => m !== null)
         .map((m) => `EARS-${m[1]}`);
-      if (proofTags.length > 0 && ears.length === 0) {
+      const tagList = proofTags.map((m) => m[0]).join(" ");
+      if (proofTags.length > 0 && cls === "journey") {
+        findings.push(
+          `${where} "${s.title}" -> ${tagList} on a @journey: a journey is proven only by ` +
+            `binding its steps on the real stack (packages/e2e, apps/admin/e2e); remove the tag`,
+        );
+      } else if (proofTags.length > 0 && cls === "unclassified") {
+        findings.push(
+          `${where} "${s.title}" -> ${tagList} on an unclassified scenario of a user-facing ` +
+            `spec; classify it first (@journey or @rule)`,
+        );
+      } else if (proofTags.length > 0 && ears.length === 0) {
         findings.push(
           `${where} "${s.title}" -> ${proofTags.map((m) => m[0]).join(" ")} on a scenario with no @EARS-N tag`,
         );
@@ -685,36 +864,64 @@ async function main(): Promise<void> {
         }
       }
 
+      const boundBy = (match: (text: string) => boolean): boolean =>
+        s.ownSteps > 0 && s.runs.every((run) => run.every((t) => match(t)));
       const bound =
-        s.ownSteps > 0 &&
-        s.runs.every((run) => run.every((t) => steps.bound(t)));
-      const highest = [...LEVELS].reverse().find((l) => levels.includes(l));
-      const state: State = bound
-        ? "bound"
-        : highest
-          ? `proof:${highest}`
-          : draft.has(feature)
-            ? "pending"
+        cls === "journey"
+          ? !tags.some((t) => QUARANTINE_TAG_RE.test(t)) &&
+            boundBy(steps.boundRealStack)
+          : boundBy(steps.bound);
+      const highest =
+        cls === "rule"
+          ? [...LEVELS].reverse().find((l) => levels.includes(l))
+          : undefined;
+      const state: State = isDraft(feature)
+        ? "pending"
+        : bound
+          ? "bound"
+          : highest
+            ? `proof:${highest}`
             : "unproven";
-      scenarios.push({ feature, where, title: s.title, key, state });
+      scenarios.push({ feature, where, title: s.title, key, cls, state });
     });
   }
 
   const unproven = scenarios.filter((s) => s.state === "unproven");
+  const TALLY_COLUMNS = [
+    "journeys bound",
+    "journeys total",
+    "rules proven",
+    "rules total",
+    "unclassified bound",
+    "unclassified unbound",
+    "pending",
+  ];
+  /** The class split, in `TALLY_COLUMNS` order; it sums to `list.length`. */
+  const tally = (list: Scenario[]): number[] => {
+    const live = list.filter((s) => s.state !== "pending");
+    const of = (c: Class) => live.filter((s) => s.cls === c);
+    const proven = (l: Scenario[]) =>
+      l.filter((s) => s.state !== "unproven").length;
+    return [
+      proven(of("journey")),
+      of("journey").length,
+      proven(of("rule")),
+      of("rule").length,
+      proven(of("unclassified")),
+      of("unclassified").length - proven(of("unclassified")),
+      list.length - live.length,
+    ];
+  };
   const debtPath = resolve(REPO_ROOT, DEBT_REL);
   const debtText = existsSync(debtPath) ? readFileSync(debtPath, "utf8") : "";
 
   if (mode === "report") {
     const features = [...new Set(scenarios.map((s) => s.feature))].sort();
     const row = (label: string, list: Scenario[]): string =>
-      `| ${label} | ${list.length} | ` +
-      STATES.map((st) => list.filter((s) => s.state === st).length).join(
-        " | ",
-      ) +
-      " |";
+      `| ${label} | ${list.length} | ${tally(list).join(" | ")} |`;
     const lines = [
-      `| spec | total | ${STATES.join(" | ")} |`,
-      `|${" --- |".repeat(STATES.length + 2)}`,
+      `| spec | total | ${TALLY_COLUMNS.join(" | ")} |`,
+      `|${" --- |".repeat(TALLY_COLUMNS.length + 2)}`,
       ...features.map((f) =>
         row(
           f,
@@ -750,7 +957,11 @@ async function main(): Promise<void> {
     if (!listed.has(s.key)) {
       findings.push(
         `${s.key} -> unproven scenario missing from ${DEBT_REL} (${s.where}): ` +
-          `bind it, tag a verified @proof:<level>, or list it with an OPEN Issue`,
+          (s.cls === "rule"
+            ? `bind it, tag a verified @proof:<level>, or list it with an OPEN Issue`
+            : s.cls === "journey"
+              ? `bind it under packages/e2e or apps/admin/e2e, or list it with an OPEN Issue`
+              : `bind it, or classify it and prove it, or list it with an OPEN Issue`),
       );
     }
   }
@@ -783,6 +994,14 @@ async function main(): Promise<void> {
   } else if (base.status === "ok") {
     for (const e of debt) {
       if (base.keys.has(e.key)) continue;
+      const s = byKey.get(e.key);
+      if (s?.cls === "journey" && statusOf.get(s.feature) === "Shipped") {
+        findings.push(
+          `${e.key} -> new debt entry for a @journey of a Shipped spec; a shipped ` +
+            `journey is bound on the real stack, an Issue does not excuse it (${s.where})`,
+        );
+        continue;
+      }
       if (e.issue === null) {
         findings.push(
           `${e.key} -> new debt entry (absent at the merge base) names no #<issue>; ` +
@@ -813,29 +1032,32 @@ async function main(): Promise<void> {
     }
   }
 
-  const count = (st: State): number =>
-    scenarios.filter((s) => s.state === st).length;
+  const [jBound, jTotal, rProven, rTotal, uBound, uUnbound, pending] =
+    tally(scenarios);
+  info(
+    `journeys bound ${jBound}/${jTotal}; rules proven ${rProven}/${rTotal}; ` +
+      `unclassified bound ${uBound}, unbound ${uUnbound}; pending ${pending} ` +
+      `(${DEBT_REL}: ${debt.length} line(s)).`,
+  );
   info(
     `${scenarios.length} scenario(s) in ${featureFiles.length} feature file(s); ` +
       `${steps.defs} step definition(s) from ${steps.files} file(s).`,
   );
-  info(
-    STATES.map((st) => `${st} ${count(st)}`).join(", ") +
-      ` (${DEBT_REL}: ${debt.length} line(s)).`,
-  );
   if (findings.length === 0) {
     info(
-      "PASS — every scenario is bound, carries a verified @proof:<level> tag, " +
-        "belongs to a Draft spec, or is listed as debt; the list is exact and " +
-        "every new line names an OPEN Issue.",
+      "PASS — every journey is bound on the real stack, every rule is bound or " +
+        "carries a verified @proof:<level> tag, every unclassified scenario is " +
+        "bound, or the scenario belongs to a Draft spec or is listed as debt; the " +
+        "list is exact and every new line names an OPEN Issue.",
     );
     process.exit(0);
   }
   for (const f of findings) process.stderr.write(`${TAG} ${f}\n`);
   process.stderr.write(
     `${TAG} FAIL — ${findings.length} finding(s) (tech spec §6.4). Prove a ` +
-      `scenario by binding its steps or by a @proof:<level> tag a spec-scoped ` +
-      `test backs; otherwise list it in ${DEBT_REL} with an OPEN Issue.\n`,
+      `journey by binding its steps under packages/e2e or apps/admin/e2e; a ` +
+      `rule by binding it or by a @proof:<level> tag a spec-scoped test backs; ` +
+      `otherwise list it in ${DEBT_REL} with an OPEN Issue.\n`,
   );
   process.exit(1);
 }

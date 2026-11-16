@@ -410,13 +410,16 @@ policies `playwright-bdd` 9.2 offers:
   dropped. That is what lets the §6.4 coverage lint tell «not written yet» from
   «gone».
 
-A skipped scenario is not necessarily unproven: a scenario counts as proven
-when it is bound here or carries a verified `@proof:<level>` tag (tech spec
-§6.1), and `pnpm scenarios:inventory` — not the skipped count — is the coverage
-number (`tools/lint/scenario-proof-lint.ts`, §6.4). The scenarios proven neither
-way are exactly `scenario-proof-debt.txt` in this package: a backfill PR that
-tags or binds scenarios deletes their lines here, and a new line names an OPEN
-Issue.
+A skipped scenario is not necessarily unproven. By class (tech spec §6.1): a
+`@journey` is proven only when bound to steps here or in `apps/admin/e2e`, and
+not quarantined — no lower-level test proves a journey; a `@rule` when bound in
+any tier or tagged with a verified `@proof:<level>`; a legacy unclassified
+scenario only when bound. `pnpm scenarios:inventory` — not the skipped count —
+is the coverage number, headlined journeys bound / journeys total
+(`tools/lint/scenario-proof-lint.ts`, §6.4). The unproven scenarios are exactly
+`scenario-proof-debt.txt` in this package: a backfill PR that classifies, tags
+or binds scenarios deletes their lines here, a new line names an OPEN Issue,
+and a new line for a journey of a `Shipped` spec is refused.
 
 `retries: 0` (§6.5): a retry turns a flake into a pass and a regression into a
 slow pass.

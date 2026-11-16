@@ -1203,13 +1203,20 @@ def stop(reason):
 
 members, seen = {}, set()
 try:
-    with tarfile.open(archive, mode="r:") as tar:
+    with tarfile.open(archive, mode="r:") as tar, open(archive, "rb") as raw:
         for m in tar:
-            # One reading for python and docker alike: one plain ustar header per member
-            # (no pax / GNU long-name header, no ustar prefix), regular files and
-            # directories only, every name already in normal form, no name twice.
-            if m.offset_data - m.offset != 512 or m.pax_headers or tar.pax_headers or len(m.name.encode()) > 100:
-                stop("the image archive refused: a pax or long-name header")
+            # One reading for python and docker alike: one plain POSIX ustar header per
+            # member (magic "ustar\0" version "00", as Go's archive/tar writes for
+            # `docker image save`; no pax / GNU header, an all-NUL prefix field, the raw
+            # name field being the name), regular files and directories only, every name
+            # already in normal form, no name twice.
+            raw.seek(m.offset)
+            header = raw.read(512)
+            field = header[0:100].split(b"\0", 1)[0].decode("utf-8", "strict")
+            if (m.offset_data - m.offset != 512 or m.pax_headers or tar.pax_headers
+                    or header[257:265] != b"ustar\x0000" or any(header[345:500])
+                    or (field[:-1] if m.isdir() and field.endswith("/") else field) != m.name):
+                stop("the image archive refused: not a plain ustar header")
             if not (m.isreg() or m.isdir()):
                 stop("the image archive refused: a link or special member")
             name = m.name

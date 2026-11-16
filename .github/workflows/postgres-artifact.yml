@@ -76,8 +76,24 @@ jobs:
           echo "source-hash=$hash" >> "$GITHUB_OUTPUT"
           echo "data source hash $hash at $SHA"
 
-      # The image store decides which id `docker load` yields on ds-data-prod; the
-      # preparation refuses an archive whose config digests are not the certified ids.
+      # The image store decides the id an image gets: the classic store gives the config
+      # digest, the containerd store (the runner's Docker 29 default) the manifest
+      # digest. ds-data-prod `docker load`s into the classic store and its guard inspects
+      # those ids, so the build host measures in the same store; the preparation refuses
+      # an archive whose config digests are not the certified ids.
+      - name: Classic image store, as on ds-data-prod
+        run: |
+          cfg=/etc/docker/daemon.json
+          if sudo test -s "$cfg"; then
+            sudo jq '.features["containerd-snapshotter"] = false' "$cfg" > "$RUNNER_TEMP/daemon.json"
+          else
+            echo '{"features":{"containerd-snapshotter":false}}' > "$RUNNER_TEMP/daemon.json"
+          fi
+          sudo install -m 0644 "$RUNNER_TEMP/daemon.json" "$cfg"
+          sudo systemctl restart docker
+          driver=$(docker info --format '{{.Driver}}')
+          [ "$driver" = overlay2 ] || { echo "::error::image store is $driver, not the classic overlay2"; exit 1; }
+
       - name: Build host facts
         run: docker version --format 'docker {{.Server.Version}}' && docker info --format 'storage {{.Driver}} {{.DriverStatus}}'
 

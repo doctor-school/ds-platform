@@ -781,7 +781,11 @@ key and no workstation-held artifact:
    `.github/workflows/postgres-artifact.yml`; `gh workflow run postgres-artifact.yml
 --ref main` runs it again (the artifact expires after 90 days). The GitHub-hosted
    runner is the build host, as for every image (release-pipeline spec §3 item 1: no box
-   builds an image). `postgres-artifact-prepare.mjs --local` builds only the committed
+   builds an image). The workflow first switches the runner's dockerd to the classic
+   overlay2 image store (Docker 29 defaults to the containerd store, where an image id
+   is its manifest digest, not its config digest), so the build host measures the ids
+   that ds-data-prod's classic store gives on `docker load`.
+   `postgres-artifact-prepare.mjs --local` builds only the committed
    contexts on the runner's Docker, labels the images, executes their real PostgreSQL
    version, UID/GID and pgBackRest version commands without a cluster, checks image
    PGDATA and matching ownership, exports the exact built images and refuses an archive
@@ -811,7 +815,8 @@ key and no workstation-held artifact:
    `postgres-load <sha> <postgres-id> <pgbackrest-id>` verb (bare hex ids) and runs the
    guard with that certificate. The
    box reads the archive in place before loading it and refuses (exit 3) one with a
-   member that docker could read differently (a pax or long-name header, a link, a name
+   member that docker could read differently (anything but a plain POSIX ustar header with an all-NUL
+   prefix, a link, a name
    out of normal form or given twice), or whose `manifest.json` lists other or more than those two images, or that names an image (a
    RepoTag, a `repositories` entry, an index.json name: the images are saved by id, and a
    name would retarget it on the box); after `docker load` it checks that both ids are

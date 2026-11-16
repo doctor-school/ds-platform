@@ -166,7 +166,7 @@ test("3313, 3646: the data box installs the DATA_BOX_ENTRYPOINTS of remote.mjs, 
 const TAR_DATA_TYPES = new Set(["0", "x", "g", "L", "K"]);
 function tarArchive(entries) {
   const blocks = [];
-  for (const { name, type = "0", link = "", body = "", uname = "" } of entries) {
+  for (const { name, type = "0", link = "", body = "", uname = "", prefix = "", magic = "ustar\0" } of entries) {
     const data = Buffer.from(body);
     const header = Buffer.alloc(512, 0);
     header.write(name, 0, 100, "utf8");
@@ -178,9 +178,10 @@ function tarArchive(entries) {
     header.write("        ", 148, 8, "ascii");
     header.write(type, 156, 1, "ascii");
     header.write(link, 157, 100, "utf8");
-    header.write("ustar\0", 257, 6, "ascii");
+    header.write(magic, 257, 6, "ascii");
     header.write("00", 263, 2, "ascii");
     header.write(uname, 265, 32, "utf8");
+    header.write(prefix, 345, 155, "utf8");
     let sum = 0;
     for (const b of header) sum += b;
     header.write(`${sum.toString(8).padStart(6, "0")}\0 `, 148, 8, "ascii");
@@ -1672,9 +1673,11 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       [imageArchive({ extra: [{ name: "./manifest.json", body: "[]" }] }), /a member name not in normal form/],
       [imageArchive({ extra: [{ name: "a/../manifest.json", body: "[]" }] }), /a member name not in normal form/],
       [imageArchive({ extra: [{ name: "../escape", body: "x" }] }), /a member name not in normal form/],
-      [imageArchive({ extra: [{ name: "././@LongLink", type: "L", body: "manifest.json\0" }, { name: "decoy", body: "[]" }] }), /a pax or long-name header/],
-      [imageArchive({ extra: [{ name: "pax", type: "x", body: "22 path=manifest.json\n" }, { name: "decoy", body: "[]" }] }), /a pax or long-name header/],
+      [imageArchive({ extra: [{ name: "././@LongLink", type: "L", body: "manifest.json\0" }, { name: "decoy", body: "[]" }] }), /not a plain ustar header/],
+      [imageArchive({ extra: [{ name: "pax", type: "x", body: "22 path=manifest.json\n" }, { name: "decoy", body: "[]" }] }), /not a plain ustar header/],
       [imageArchive({ extra: [{ name: "manifest.json", type: "2", link: "index.json" }] }), /a link or special member/],
+      [imageArchive({ extra: [{ name: "manifest.json", prefix: "x", body: "[]" }] }), /not a plain ustar header/],
+      [imageArchive({ extra: [{ name: "gnu", magic: "ustar ", body: "x" }] }), /not a plain ustar header/],
     ];
     for (const [input, why] of cases) {
       const r = load(input);

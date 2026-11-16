@@ -47,7 +47,7 @@ export const postgresArtifactName = (sourceHash) => {
  * The bytes of the regular file `name` at the top of the tar archive `path`, or null.
  * Read in place (a `docker image save` archive is 300+ MB) and refused unless every
  * member has one reading for this reader, the box's `postgres-load` and docker alike:
- * one plain ustar header (no pax or GNU long-name header, no ustar prefix), a regular
+ * one plain POSIX ustar header (no pax or GNU header, an all-NUL prefix), a regular
  * file or directory, a name already in normal form, no name twice. `docker image save`
  * writes nothing else.
  */
@@ -74,8 +74,14 @@ export function readTarMember(
       if (!Number.isFinite(size) || size < 0)
         throw new Error(`${path} is not a tar archive`);
       const type = field(156, 1) || "0";
-      if (["x", "g", "L", "K"].includes(type) || field(345, 155))
-        throw new Error(`${path} refused: a pax or long-name header`);
+      // POSIX ustar only (magic "ustar\0" version "00", as Go's archive/tar writes for
+      // `docker image save`), an all-NUL prefix field: no GNU or pax variant to resolve.
+      if (
+        ["x", "g", "L", "K"].includes(type) ||
+        header.toString("latin1", 257, 265) !== "ustar\u000000" ||
+        header.subarray(345, 500).some((b) => b !== 0)
+      )
+        throw new Error(`${path} refused: not a plain ustar header`);
       if (!["0", "5"].includes(type))
         throw new Error(`${path} refused: a link or special member`);
       const raw = field(0, 100);

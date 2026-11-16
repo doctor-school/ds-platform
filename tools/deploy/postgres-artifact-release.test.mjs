@@ -27,7 +27,12 @@ const REPO = "doctor-school/ds-platform";
  */
 function tar(entries) {
   const blocks = [];
-  for (const [name, body, type = "0"] of entries) {
+  for (const [
+    name,
+    body,
+    type = "0",
+    { prefix = "", magic = "ustar\0" } = {},
+  ] of entries) {
     const data = Buffer.from(body);
     const header = Buffer.alloc(512, 0);
     header.write(name, 0, 100, "utf8");
@@ -43,7 +48,8 @@ function tar(entries) {
     header.write("00000000000\0", 136, 12, "ascii");
     header.write("        ", 148, 8, "ascii");
     header.write(type, 156, 1, "ascii");
-    header.write("ustar\0", 257, 6, "ascii");
+    header.write(magic, 257, 6, "ascii");
+    header.write(prefix, 345, 155, "utf8");
     header.write("00", 263, 2, "ascii");
     let sum = 0;
     for (const b of header) sum += b;
@@ -173,10 +179,12 @@ test("4089: the archive reader reads one name one way: a member name out of norm
     [["../escape", "x"], /a member name not in normal form/],
     [["/abs", "x"], /a member name not in normal form/],
     [["manifest.json", "[]"], /holds more than one manifest\.json/],
-    [["././@LongLink", "manifest.json\0", "L"], /a pax or long-name header/],
-    [["pax", "22 path=manifest.json\n", "x"], /a pax or long-name header/],
-    [["gpax", "22 path=manifest.json\n", "g"], /a pax or long-name header/],
+    [["././@LongLink", "manifest.json\0", "L"], /not a plain ustar header/],
+    [["pax", "22 path=manifest.json\n", "x"], /not a plain ustar header/],
+    [["gpax", "22 path=manifest.json\n", "g"], /not a plain ustar header/],
     [["link", "", "2"], /a link or special member/],
+    [["manifest.json", "[]", "0", { prefix: "x" }], /not a plain ustar header/],
+    [["gnu", "x", "0", { magic: "ustar " }], /not a plain ustar header/],
   ];
   for (const [entry, why] of cases) {
     withArchive([...base, entry], (path) =>

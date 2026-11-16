@@ -30,6 +30,13 @@ import { Given, Then, When } from "./support/fixtures.js";
  */
 
 const SESSION_COOKIE = "__Host-ds_session";
+/** The doctor door's register command (021 EARS-4/5/7 stamping). */
+const DOCTOR_REGISTER = "/v1/storefront/doctor/register";
+/** Every register command a door on the sign-in host can send. */
+const REGISTER_COMMANDS = [
+  signInHostApiPath(DOCTOR_REGISTER),
+  signInHostApiPath("/v1/auth/register"),
+];
 const EVENT = golden.events.upcoming;
 
 const base = (id: HostId) => baseUrlFor(HOSTS[id]);
@@ -62,8 +69,7 @@ function journeyOf(page: Page): Journey {
     page.on("request", (request) => {
       if (
         request.method() === "POST" &&
-        new URL(request.url()).pathname ===
-          signInHostApiPath("/v1/auth/register")
+        REGISTER_COMMANDS.includes(new URL(request.url()).pathname)
       ) {
         journey!.registerCommands += 1;
       }
@@ -252,7 +258,10 @@ Then("the optional marketing opt-in states nothing", async ({ page }) => {
     .filter(Boolean);
   for (const id of ids) {
     // Only its own help line may describe it — never an unmet-condition report.
-    await expect(page.locator(`[id="${id}"]`)).not.toContainText("Отметьте");
+    // An id with no element is the primitive's idle message slot: it says nothing.
+    const described = page.locator(`[id="${id}"]`);
+    if ((await described.count()) === 0) continue;
+    await expect(described).not.toContainText("Отметьте");
   }
   await expect(
     page.getByTestId("registration-consent-marketing"),
@@ -348,10 +357,13 @@ When(
       email: `doctor-reg-021-${randomUUID()}@example.test`,
       password: `Reg-${randomUUID()}-aA1!`,
     };
+    // The stand's one Mailpit is addressed from the Academy slot URL
+    // (`lib/mailpit.ts`); the mail is the same whichever storefront sent it.
     const { code } = await submitOwnedRegistration(
       page,
-      base("doctor"),
+      base("academy"),
       account,
+      DOCTOR_REGISTER,
     );
     markDocuments(page);
     await inputSecret(

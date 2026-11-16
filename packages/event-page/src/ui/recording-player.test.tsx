@@ -184,6 +184,14 @@ describe("024 EARS-10 — the recording player reports the provider clock", () =
     expect(onClock).toHaveBeenCalledWith(9.5);
   });
 
+  it("024 EARS-16: a player mounted by the doctor's explicit tap (`autoplay`) asks the provider to start playing", () => {
+    renderPlayer({ provider: "youtube", embedRef: "dQw4w9WgXcQ", onClock: vi.fn(), autoplay: true });
+    expect(screen.getByTestId("recording-player-youtube")).toHaveAttribute(
+      "src",
+      "https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1&autoplay=1",
+    );
+  });
+
   it("EARS-10: without onClock the YouTube src stays as the 014 recording plays it", () => {
     renderPlayer({ provider: "youtube", embedRef: "dQw4w9WgXcQ" });
     expect(screen.getByTestId("recording-player-youtube")).toHaveAttribute(

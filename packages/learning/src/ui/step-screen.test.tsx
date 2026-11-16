@@ -209,6 +209,12 @@ describe("024 EARS-15…18 — the step screen", () => {
     ]);
   });
 
+  it("EARS-16: one tap on «Смотреть видео» mounts the player already playing — no second tap on the provider's play", () => {
+    renderStep(videoStep());
+    fireEvent.click(screen.getByRole("button", { name: "Смотреть видео" }));
+    expect(screen.getByTestId("recording-player-rutube").getAttribute("src")).toMatch(/[?&]autoplay=true(&|$)/);
+  });
+
   it("EARS-10: the watched bar shows what the server accepted after its clamp, and reporting goes on from there", async () => {
     const answers = [
       { positionSec: 40, watchedPercent: 33 },

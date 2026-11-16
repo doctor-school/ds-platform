@@ -89,12 +89,19 @@ async function axeClean(page: Page) {
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
 }
 
-/** A YouTube embed stand-in on the provider origin: ready, then the clock at 2× real time. */
+/**
+ * A YouTube embed stand-in on the provider origin: ready, then — only when the
+ * embed asked to start playing (`autoplay=1`, EARS-16) — the clock at 2× real
+ * time. Without it the stand-in sits cued at 0, as the real player waits for a
+ * second tap on its own play button.
+ */
 const YOUTUBE_FIXTURE = `<!doctype html><html><body style="margin:0;background:#000"><script>
   const post = (m) => parent.postMessage(JSON.stringify(m), "*");
   post({ event: "onReady" });
+  const autoplay = new URLSearchParams(location.search).get("autoplay") === "1";
   const t0 = Date.now();
   setInterval(() => {
+    if (!autoplay) return post({ event: "infoDelivery", info: { playerState: 5, currentTime: 0 } });
     const currentTime = Math.min(60, ((Date.now() - t0) / 1000) * 2);
     post({ event: "infoDelivery", info: { playerState: 1, currentTime } });
   }, 500);
@@ -238,6 +245,10 @@ test.describe("024 — the doctor's course path and step screens", () => {
     // Enabled only once hydrated — the click is never swallowed by a server-rendered button.
     await expect(page.getByRole("button", { name: "Смотреть видео" })).toBeEnabled();
     await page.getByRole("button", { name: "Смотреть видео" }).click();
+    // EARS-16 — one tap: the frame is asked to play, and its clock starts
+    // advancing (the first position fact) with no tap on the provider's button.
+    await expect(page.getByTestId("recording-player-youtube")).toHaveAttribute("src", /[?&]autoplay=1(&|$)/);
+    await expect.poll(() => facts.length, { timeout: 15_000 }).toBeGreaterThan(0);
     await expect(page.getByText("Просмотрено 100 %", { exact: true })).toBeVisible({ timeout: 90_000 });
     expect(facts.length).toBeGreaterThanOrEqual(2);
     // EARS-17 — the completing fact updates the screen in place, no reload:

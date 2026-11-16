@@ -84,6 +84,13 @@ export interface RecordingPlayerProps {
    * provider with no clock (cdnvideo) never calls it.
    */
   onClock?: (positionSec: number) => void;
+  /**
+   * 024 EARS-16 (#4011) — the frame is mounted by the viewer's explicit tap
+   * (the step's «Смотреть видео»), so the provider starts playing at once
+   * (`resolveEmbed` `autoplay`). Opt-in: 014's event page mounts its player
+   * without a tap and keeps the provider's own start.
+   */
+  autoplay?: boolean;
 }
 
 export function RecordingPlayer({
@@ -95,6 +102,7 @@ export function RecordingPlayer({
   unavailableBody,
   retryLabel,
   onClock,
+  autoplay = false,
 }: RecordingPlayerProps) {
   // `attempt` doubles as the iframe `key`: bumping it unmounts the failed frame
   // and mounts a genuinely fresh one, so a retry re-requests the embed instead of
@@ -173,7 +181,7 @@ export function RecordingPlayer({
   // src and has no opinion about an absent provider.
   const embed =
     provider && embedRef
-      ? resolveEmbed({ provider, embedRef }, { playerApi: listening })
+      ? resolveEmbed({ provider, embedRef }, { playerApi: listening, autoplay })
       : null;
 
   // A provider whose src cannot be composed is the SAME honest failure, reached

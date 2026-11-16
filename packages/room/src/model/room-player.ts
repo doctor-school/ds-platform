@@ -70,13 +70,33 @@ const EMBED_SRC: Record<StreamProvider, (embedRef: string) => string> = {
 };
 
 /**
+ * 024 EARS-16 (#4011) — each provider's own documented «start playing on load»
+ * embed parameter: YouTube `autoplay=1`, Rutube `autoplay=true` (rutube.ru/info/embed),
+ * VK `autoplay=1`. cdnvideo's provisioned URL is embedded verbatim and gets none.
+ */
+const AUTOPLAY_PARAM: Partial<Record<StreamProvider, string>> = {
+  youtube: "autoplay=1",
+  rutube: "autoplay=true",
+  vk: "autoplay=1",
+};
+
+function withParam(src: string, param: string): string {
+  return `${src}${src.includes("?") ? "&" : "?"}${param}`;
+}
+
+/**
  * `playerApi` (024 EARS-10, #4011): the caller listens to the provider's clock,
  * so the YouTube src asks for its IFrame Player API (`enablejsapi=1`). rutube and
  * vk speak by default (vk always carries `js_api=1`); cdnvideo cannot.
+ *
+ * `autoplay` (024 EARS-16): the frame is mounted by the viewer's explicit tap
+ * (a user activation, and the frame is `allow="autoplay"`), so the provider is
+ * asked to start playing at once instead of waiting for a second tap on its own
+ * play button.
  */
 export function resolveEmbed(
   stream: StreamConfig | null | undefined,
-  options: { playerApi?: boolean } = {},
+  options: { playerApi?: boolean; autoplay?: boolean } = {},
 ): ResolvedEmbed {
   // Absent / unknown stream → the truthful "stream unavailable" room state
   // (the server already fails closed on an unknown provider, EARS-2). The portal
@@ -84,12 +104,11 @@ export function resolveEmbed(
   if (!stream) return { kind: "unavailable" };
   const build = EMBED_SRC[stream.provider];
   if (!build) return { kind: "unavailable" };
-  const src = build(stream.embedRef);
-  return {
-    kind: stream.provider,
-    src:
-      options.playerApi && stream.provider === "youtube" && src
-        ? `${src}?enablejsapi=1`
-        : src,
-  };
+  let src = build(stream.embedRef);
+  if (src && options.playerApi && stream.provider === "youtube") {
+    src = withParam(src, "enablejsapi=1");
+  }
+  const autoplay = AUTOPLAY_PARAM[stream.provider];
+  if (src && options.autoplay && autoplay) src = withParam(src, autoplay);
+  return { kind: stream.provider, src };
 }

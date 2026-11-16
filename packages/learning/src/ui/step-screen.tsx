@@ -372,6 +372,9 @@ function VideoBody({
           unavailableBody={C.videoUnavailable.body}
           retryLabel={C.videoUnavailable.retry}
           onClock={onClock}
+          // EARS-16 — the tap that mounted the player is the doctor's intent to
+          // watch: it starts playing, no second tap on the provider's button.
+          autoplay
         />
       ) : (
         <div className="relative flex aspect-video items-center justify-center border-2 border-border bg-primary-surface text-primary-surface-foreground">

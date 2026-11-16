@@ -117,3 +117,30 @@ describe("024 EARS-10 resolveEmbed with the player API", () => {
     });
   });
 });
+
+describe("024 EARS-16 resolveEmbed autoplay — the doctor's tap starts playback", () => {
+  it("EARS-16: asks each provider that supports it to start playing on mount, beside the player API", () => {
+    expect(resolveEmbed({ provider: "youtube", embedRef: "dQw4w9WgXcQ" }, { playerApi: true, autoplay: true })).toEqual({
+      kind: "youtube",
+      src: "https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1&autoplay=1",
+    });
+    expect(resolveEmbed({ provider: "youtube", embedRef: "dQw4w9WgXcQ" }, { autoplay: true })).toEqual({
+      kind: "youtube",
+      src: "https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1",
+    });
+    expect(resolveEmbed({ provider: "rutube", embedRef: "abc" }, { autoplay: true })).toEqual({
+      kind: "rutube",
+      src: "https://rutube.ru/play/embed/abc?autoplay=true",
+    });
+    expect(resolveEmbed({ provider: "vk", embedRef: "-1_2_h" }, { autoplay: true })).toEqual({
+      kind: "vk",
+      src: "https://vk.com/video_ext.php?oid=-1&id=2&hash=h&js_api=1&autoplay=1",
+    });
+  });
+
+  it("EARS-16: cdnvideo's provisioned URL is embedded verbatim, and without autoplay nothing changes", () => {
+    const url = "https://player.example.cdnvideo.ru/aloha/abc";
+    expect(resolveEmbed({ provider: "cdnvideo", embedRef: url }, { autoplay: true })).toEqual({ kind: "cdnvideo", src: url });
+    expect(resolveEmbed({ provider: "rutube", embedRef: "abc" })).toEqual({ kind: "rutube", src: "https://rutube.ru/play/embed/abc" });
+  });
+});

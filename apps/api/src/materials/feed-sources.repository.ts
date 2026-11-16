@@ -1,0 +1,183 @@
+import { Inject, Injectable } from "@nestjs/common";
+import { and, asc, count, eq, ne, sql } from "drizzle-orm";
+import type { DrizzleHandle, FeedSource } from "@ds/db";
+import { feedEntries, feedSources } from "@ds/db";
+import type { FeedSourceNetwork } from "@ds/schemas";
+import { DRIZZLE_DB } from "../database/database.tokens.js";
+import {
+  type AuditedTransaction,
+  withRequestAuditContext,
+} from "../audit/audit-context.tx.js";
+
+// 048 slice 2 (#3993) — Drizzle access to `feed_sources` and the two
+// write-side marks its admin commands put on the source's `feed_entries`
+// (048-design §Data model (slice 2), Lead decision 11): the `href` rewrite of
+// an address change (EARS-21) and the `source_off` mirror of «Выключить» /
+// «Включить» (EARS-22). Every mutating path runs inside
+// `withRequestAuditContext`, so feature 010's capture trigger attributes the
+// `data.feed_sources.*` ledger row to the acting administrator (EARS-23).
+
+type Db = DrizzleHandle["db"];
+export type FeedSourcesTx = AuditedTransaction;
+
+/** A source with the number of its posts in the feed (EARS-20). */
+export interface FeedSourceListRow {
+  source: FeedSource;
+  entryCount: number;
+}
+
+@Injectable()
+export class FeedSourcesRepository {
+  constructor(@Inject(DRIZZLE_DB) private readonly handle: Db) {}
+
+  /** Run `fn` in one audit-attributed transaction. */
+  transaction<T>(fn: (tx: FeedSourcesTx) => Promise<T>): Promise<T> {
+    return withRequestAuditContext(this.handle, fn);
+  }
+
+  /** EARS-20 — every source, by platform then address. */
+  async list(): Promise<FeedSourceListRow[]> {
+    const counts = this.handle
+      .select({
+        feedSourceId: feedEntries.feedSourceId,
+        n: count().as("n"),
+      })
+      .from(feedEntries)
+      .groupBy(feedEntries.feedSourceId)
+      .as("counts");
+    const rows = await this.handle
+      .select({ source: feedSources, n: counts.n })
+      .from(feedSources)
+      .leftJoin(counts, eq(counts.feedSourceId, feedSources.id))
+      .orderBy(asc(feedSources.platform), asc(feedSources.address));
+    return rows.map((r) => ({ source: r.source, entryCount: r.n ?? 0 }));
+  }
+
+  async findById(id: string): Promise<FeedSource | undefined> {
+    const [row] = await this.handle
+      .select()
+      .from(feedSources)
+      .where(eq(feedSources.id, id));
+    return row;
+  }
+
+  async lockById(
+    tx: FeedSourcesTx,
+    id: string,
+  ): Promise<FeedSource | undefined> {
+    const [row] = await tx
+      .select()
+      .from(feedSources)
+      .where(eq(feedSources.id, id))
+      .for("update");
+    return row;
+  }
+
+  /** Serialize the uniqueness check of one `(platform, address)`. */
+  async lockAddress(
+    tx: FeedSourcesTx,
+    platform: FeedSourceNetwork,
+    address: string,
+  ): Promise<void> {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`feed-source:${platform}:${address}`}, 0))`,
+    );
+  }
+
+  /** Whether another source of the platform already holds the address. */
+  async addressTaken(
+    tx: FeedSourcesTx,
+    platform: FeedSourceNetwork,
+    address: string,
+    exceptId: string | null,
+  ): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: feedSources.id })
+      .from(feedSources)
+      .where(
+        and(
+          eq(feedSources.platform, platform),
+          eq(feedSources.address, address),
+          exceptId ? ne(feedSources.id, exceptId) : undefined,
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /** EARS-21 — a new source: switched on, «Не проверен». */
+  async insert(
+    tx: FeedSourcesTx,
+    values: { platform: FeedSourceNetwork; address: string },
+  ): Promise<FeedSource> {
+    const [row] = await tx.insert(feedSources).values(values).returning();
+    return row!;
+  }
+
+  /** Write `patch` when the row is still at `expectedVersion`; bumps it. */
+  async updateVersioned(
+    tx: FeedSourcesTx,
+    id: string,
+    expectedVersion: number,
+    patch: Partial<
+      Pick<
+        FeedSource,
+        "address" | "enabled" | "status" | "statusReason" | "checkedAt"
+      >
+    >,
+  ): Promise<FeedSource | undefined> {
+    const [row] = await tx
+      .update(feedSources)
+      .set({
+        ...patch,
+        version: sql`${feedSources.version} + 1`,
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(eq(feedSources.id, id), eq(feedSources.version, expectedVersion)),
+      )
+      .returning();
+    return row;
+  }
+
+  /** The number of the source's entries (EARS-20). */
+  async entryCount(tx: FeedSourcesTx, id: string): Promise<number> {
+    const [row] = await tx
+      .select({ n: count() })
+      .from(feedEntries)
+      .where(eq(feedEntries.feedSourceId, id));
+    return row?.n ?? 0;
+  }
+
+  /**
+   * EARS-21 — point every entry of the source at its new address. The
+   * permalink is `https://t.me/<address>/<smallest message id>` and
+   * `source_ref` is `<feed_source_id>:<smallest message id>` (048-design §Data
+   * model (slice 2)), so the message id is read back from `source_ref`.
+   */
+  async rewriteHrefs(
+    tx: FeedSourcesTx,
+    id: string,
+    address: string,
+  ): Promise<void> {
+    await tx
+      .update(feedEntries)
+      .set({
+        href: sql`'https://t.me/' || ${address}::text || '/' || split_part(${feedEntries.sourceRef}, ':', 2)`,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(feedEntries.feedSourceId, id));
+  }
+
+  /** EARS-22 — mirror the source's switched-off state onto each of its entries. */
+  async markEntries(
+    tx: FeedSourcesTx,
+    id: string,
+    sourceOff: boolean,
+  ): Promise<void> {
+    await tx
+      .update(feedEntries)
+      .set({ sourceOff, updatedAt: sql`now()` })
+      .where(eq(feedEntries.feedSourceId, id));
+  }
+}

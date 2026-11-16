@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, isNull, not, or, sql, type SQL } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
 import { experts, feedEntries, organisations } from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
@@ -55,14 +55,21 @@ export const expertPubliclyVisible: SQL = and(
  * name parts, judged now — a column is absent while its expert is not public)
  * and its 032 partner through the shared display predicate (the partner never
  * hides an entry, so it is a LEFT JOIN on the predicate). `materials` is never
- * read (V-6). A pure builder so the unit suite can inspect its SQL.
+ * read (V-6). Slice 2 (#3993, EARS-22, EARS-32): a hidden entry and an entry
+ * of a switched-off source are excluded by their row-local marks, so the read
+ * never reads `feed_sources`. A pure builder so the unit suite can inspect its
+ * SQL.
  */
 export function publicFeedPageQuery(
   db: Db,
   limit: number,
   before: FeedCursorPosition | null,
 ) {
-  const visible = or(isNull(feedEntries.authorExpertId), expertPubliclyVisible);
+  const visible = and(
+    isNull(feedEntries.hiddenAt),
+    not(feedEntries.sourceOff),
+    or(isNull(feedEntries.authorExpertId), expertPubliclyVisible),
+  );
   return db
     .select({
       id: feedEntries.id,

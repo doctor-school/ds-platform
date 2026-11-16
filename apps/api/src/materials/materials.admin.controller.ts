@@ -14,27 +14,29 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   AdminMaterialListQuerySchema,
-  CANONICAL_UUID_REGEX,
   CreateMaterialRequestSchema,
   IDEMPOTENCY_KEY_HEADER,
-  IF_MATCH_HEADER,
   MAX_IMAGE_BYTES,
   type MaterialAdminList,
-  parseIfMatchVersion,
   UpdateMaterialRequestSchema,
 } from "@ds/schemas";
-import type { ZodError } from "zod";
 import { Authz } from "../authz/index.js";
 import {
   IdempotencyService,
   TaxonomyError,
   TaxonomyProblemFilter,
 } from "../taxonomy/index.js";
-import type { IdempotencyOutcome } from "../taxonomy/idempotency.service.js";
 import {
   sha256,
   type UploadedImage,
 } from "../taxonomy/media/still-image-normalizer.js";
+import {
+  actorSub,
+  invalid,
+  replayed,
+  requireId,
+  requireVersion,
+} from "./admin-write.http.js";
 import { MaterialsService } from "./materials.service.js";
 
 // 048 EARS-8 (#3512) — the «Материалы» admin surface (048-design §Endpoints).
@@ -274,12 +276,6 @@ export class MaterialsAdminController {
   }
 }
 
-/** The admin surface is id-only; a non-UUID token addresses nothing. */
-function requireId(id: string): void {
-  if (!CANONICAL_UUID_REGEX.test(id))
-    throw new TaxonomyError("RESOURCE_NOT_FOUND");
-}
-
 /**
  * The 012 §5.1 request shape, as the project / partner controllers read it.
  * JSON → the parsed body, no file. Multipart → exactly one `payload` JSON part
@@ -363,51 +359,4 @@ async function readAuthoringRequest(
       { path: "payload", message: "must be valid JSON" },
     ]);
   }
-}
-
-/** Absent `If-Match` is 428; one this API did not issue is 412. */
-function requireVersion(
-  req: FastifyRequest,
-  what: string,
-): { raw: string; version: number } {
-  const raw = req.headers[IF_MATCH_HEADER] as string | undefined;
-  if (!raw || raw.trim().length === 0) {
-    throw new TaxonomyError(
-      "PRECONDITION_REQUIRED",
-      `${what} must carry the If-Match of the version it was read at`,
-    );
-  }
-  const version = parseIfMatchVersion(raw);
-  if (version === null) {
-    throw new TaxonomyError(
-      "PRECONDITION_FAILED",
-      "the If-Match validator is not one this API issued",
-    );
-  }
-  return { raw, version };
-}
-
-function invalid(message: string, error: ZodError): TaxonomyError {
-  return new TaxonomyError(
-    "VALIDATION_FAILED",
-    message,
-    error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
-  );
-}
-
-/** Replay a completed record's stored outcome verbatim. */
-function replayed(
-  outcome: IdempotencyOutcome,
-  reply: FastifyReply,
-): outcome is Extract<IdempotencyOutcome, { kind: "replay" }> {
-  if (outcome.kind !== "replay") return false;
-  void reply.status(outcome.replay.status);
-  if (outcome.replay.etag) void reply.header("etag", outcome.replay.etag);
-  if (outcome.replay.location)
-    void reply.header("location", outcome.replay.location);
-  return true;
-}
-
-function actorSub(req: FastifyRequest): string | null {
-  return (req as { user?: { sub?: string } }).user?.sub ?? null;
 }

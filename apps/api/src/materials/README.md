@@ -2,7 +2,8 @@
 
 Spec: `apps/docs/content/specs/features/048-materials-feed/`. #3512 opens the
 module with the «Материалы» admin authoring surface (EARS-1, EARS-4…EARS-8,
-EARS-19); #3513 adds the public feed and material reads.
+EARS-19); #3513 adds the public feed and material reads; #3993 opens slice 2
+with the «Источники» source list (EARS-20…EARS-23).
 
 ## What it owns
 
@@ -16,6 +17,16 @@ EARS-19); #3513 adds the public feed and material reads.
   unpublish. No admin endpoint writes the table directly. The card image is
   the cover's durable media key (`image_ref`, a registered media slot), signed
   at the public read — never a stored signed URL, which expires.
+- `feed_sources` (slice 2, #3993) — the official network accounts the feed
+  takes posts from (`telegram` in slice 2): the lowercase public username, on /
+  off, the EARS-31 status. `FeedSourcesAdminController` serves
+  `GET/POST /v1/admin/feed-sources`, `PATCH …/{id}` (address edit) and
+  `POST …/{id}/disable|enable`. Never deleted. Its two marks on the source's
+  `feed_entries` — the `href` rewrite of an address change and the
+  `source_off` mirror of «Выключить» / «Включить» — are written by
+  `FeedSourcesRepository` in the command's transaction. The source check that
+  binds the channel id and sets the status is the Telegram connector's
+  (#3994); until it lands a source stays «Не проверен».
 
 ## Properties worth stating
 
@@ -43,3 +54,8 @@ EARS-19); #3513 adds the public feed and material reads.
    `404` for draft, unknown and non-public. Both project `partner` through the
    032 `organisationPubliclyDisplayed` predicate, which never hides a material
    (EARS-9, EARS-10, EARS-11, EARS-19).
+6. **Row-local marks, no join (slice 2).** The feed read excludes
+   `hidden_at IS NOT NULL` and `source_off` entries on the entry row itself, so
+   it never reads `feed_sources` (EARS-22, Lead decision 11). The admin
+   controllers share `admin-write.http.ts` (id shape, `If-Match`, field errors,
+   idempotent replay).

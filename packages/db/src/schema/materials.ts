@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
+  boolean,
   check,
   index,
   integer,
@@ -47,7 +49,82 @@ export const materialStatus = pgEnum("material_status", ["draft", "published"]);
 export const feedEntryKind = pgEnum("feed_entry_kind", ["news", "column"]);
 
 /** Where a feed entry comes from; each network slice adds one value. */
-export const feedSourcePlatform = pgEnum("feed_source_platform", ["academy"]);
+export const feedSourcePlatform = pgEnum("feed_source_platform", [
+  "academy",
+  "telegram",
+]);
+
+/** 048 EARS-31 — «Не проверен» / «Работает» / «Ошибка». */
+export const feedSourceStatus = pgEnum("feed_source_status", [
+  "unchecked",
+  "ok",
+  "failing",
+]);
+
+/** 048 EARS-29 — the copy of a network post's preview into our storage. */
+export const feedEntryPreviewState = pgEnum("feed_entry_preview_state", [
+  "pending",
+  "done",
+  "failed",
+]);
+
+/** 048 EARS-21 — the stored address: a lowercase public username. */
+export const FEED_SOURCE_ADDRESS_PATTERN = "^[a-z][a-z0-9_]{4,31}$";
+
+/**
+ * 048 slice 2 (#3993) — one official account of a connected network the feed
+ * takes posts from (048-design §Data model (slice 2); EARS-20…EARS-23). Never
+ * deleted: a source is switched off, keeping what it brought in (US-3,
+ * §Retention (slice 2)). Its `enabled = false` is mirrored onto every entry as
+ * `feed_entries.source_off` in the same transaction, so the public read never
+ * reads this table (Lead decision 11).
+ */
+export const feedSources = pgTable(
+  "feed_sources",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** A connected network — never `academy`, the own-materials source. */
+    platform: feedSourcePlatform("platform").notNull(),
+    /** The lowercase public username (EARS-21). */
+    address: text("address").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    /** Bound by the source check or the first matching update (EARS-31). */
+    telegramChatId: bigint("telegram_chat_id", { mode: "bigint" }),
+    status: feedSourceStatus("status").notNull().default("unchecked"),
+    /** One of the fixed EARS-31 reasons while `failing`. */
+    statusReason: text("status_reason"),
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the admin ETag. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("feed_sources_platform_address_key").on(t.platform, t.address),
+    uniqueIndex("feed_sources_telegram_chat_id_key").on(t.telegramChatId),
+    check("feed_sources_network_platform", sql`${t.platform} <> 'academy'`),
+    check(
+      "feed_sources_address_pattern",
+      sql`${t.address} ~ ${sql.raw(`'${FEED_SOURCE_ADDRESS_PATTERN}'`)}`,
+    ),
+    check(
+      "feed_sources_reason_iff_failing",
+      sql`(${t.status} = 'failing') = (${t.statusReason} IS NOT NULL)`,
+    ),
+    check(
+      "feed_sources_checked_has_time",
+      sql`${t.status} = 'unchecked' OR ${t.checkedAt} IS NOT NULL`,
+    ),
+    check("feed_sources_version_positive", sql`${t.version} >= 1`),
+  ],
+);
+
+export type FeedSource = typeof feedSources.$inferSelect;
+export type NewFeedSource = typeof feedSources.$inferInsert;
 
 export const materials = pgTable(
   "materials",
@@ -165,6 +242,24 @@ export const feedEntries = pgTable(
     href: text("href").notNull(),
     /** The card date — the source's first publication instant. */
     publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
+    /** Slice 2 — the source of a network entry; null for an `academy` entry. */
+    feedSourceId: uuid("feed_source_id").references(() => feedSources.id, {
+      onDelete: "restrict",
+    }),
+    /** Slice 2 — a Telegram album's group id; one entry per album (EARS-27). */
+    mediaGroupId: text("media_group_id"),
+    /** Slice 2 — a video post's length (EARS-26). */
+    durationSeconds: integer("duration_seconds"),
+    /** Slice 2 — the Telegram `file_id` of a preview awaiting its copy (EARS-29). */
+    previewFileId: text("preview_file_id"),
+    /** Slice 2 — detects a changed medium on edit (EARS-28). */
+    previewFileUniqueId: text("preview_file_unique_id"),
+    previewState: feedEntryPreviewState("preview_state"),
+    previewAttempts: integer("preview_attempts").notNull().default(0),
+    /** Slice 2 — mirror of the source's `enabled = false` (EARS-22). */
+    sourceOff: boolean("source_off").notNull().default(false),
+    /** Slice 2 — set while an administrator hides the entry (EARS-32). */
+    hiddenAt: timestamp("hidden_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -183,6 +278,14 @@ export const feedEntries = pgTable(
       t.partnerOrganisationId,
     ),
     index("feed_entries_material_id_idx").on(t.materialId),
+    index("feed_entries_feed_source_id_published_at_idx").on(
+      t.feedSourceId,
+      t.publishedAt.desc(),
+    ),
+    uniqueIndex("feed_entries_source_media_group_key").on(
+      t.feedSourceId,
+      t.mediaGroupId,
+    ),
     check(
       "feed_entries_title_bounds",
       sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(FEED_ENTRY_TITLE_MAX))}`,
@@ -202,6 +305,26 @@ export const feedEntries = pgTable(
     check(
       "feed_entries_academy_image_is_ref",
       sql`${t.sourcePlatform} <> 'academy' OR ${t.imageUrl} IS NULL`,
+    ),
+    // Slice 2 — a network entry belongs to its source; an own one to none.
+    check(
+      "feed_entries_network_has_source",
+      sql`(${t.sourcePlatform} = 'academy') = (${t.feedSourceId} IS NULL)`,
+    ),
+    // Slice 2 — a «network post» card comes only from a network platform. The
+    // `post` kind value lands with its writer (the Telegram connector), so the
+    // CHECK compares the text form and holds from the moment it exists.
+    check(
+      "feed_entries_post_is_network",
+      sql`${t.kind}::text <> 'post' OR ${t.sourcePlatform} <> 'academy'`,
+    ),
+    check(
+      "feed_entries_duration_non_negative",
+      sql`${t.durationSeconds} IS NULL OR ${t.durationSeconds} >= 0`,
+    ),
+    check(
+      "feed_entries_preview_attempts_non_negative",
+      sql`${t.previewAttempts} >= 0`,
     ),
   ],
 );

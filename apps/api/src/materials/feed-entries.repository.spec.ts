@@ -38,4 +38,16 @@ describe("048 public feed read (V-6)", () => {
     );
     expect(unique?.config.unique).toBe(true);
   });
+
+  it("048 EARS-22: the feed read keeps only entries that are neither hidden nor of a switched-off source, row-locally — never reading feed_sources", () => {
+    for (const after of [
+      null,
+      { instant: "2026-10-30T10:00:00.123456Z", id: crypto.randomUUID() },
+    ]) {
+      const { sql } = publicFeedPageQuery(db, 13, after).toSQL();
+      expect(sql).toMatch(/"feed_entries"\."hidden_at" is null/);
+      expect(sql).toMatch(/not "feed_entries"\."source_off"/);
+      expect(sql).not.toMatch(/"feed_sources"/);
+    }
+  });
 });

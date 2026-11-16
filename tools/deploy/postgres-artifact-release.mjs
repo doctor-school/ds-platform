@@ -16,6 +16,7 @@ import {
   readSync,
   realpathSync,
 } from "node:fs";
+import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { readPostgresTarget } from "./postgres-guard.mjs";
@@ -44,8 +45,11 @@ export const postgresArtifactName = (sourceHash) => {
 
 /**
  * The bytes of the regular file `name` at the top of the tar archive `path`, or null.
- * ustar headers only, read in place (a `docker image save` archive is 300+ MB): pax and
- * GNU long-name headers are skipped as entries of their own.
+ * Read in place (a `docker image save` archive is 300+ MB) and refused unless every
+ * member has one reading for this reader, the box's `postgres-load` and docker alike:
+ * one plain ustar header (no pax or GNU long-name header, no ustar prefix), a regular
+ * file or directory, a name already in normal form, no name twice. `docker image save`
+ * writes nothing else.
  */
 export function readTarMember(
   path,
@@ -55,10 +59,12 @@ export function readTarMember(
   const fd = open(path, "r");
   try {
     const header = Buffer.alloc(512);
+    const seen = new Set();
+    let found = null;
     let offset = 0;
     for (;;) {
-      if (read(fd, header, 0, 512, offset) !== 512) return null;
-      if (header.every((b) => b === 0)) return null;
+      if (read(fd, header, 0, 512, offset) !== 512) return found;
+      if (header.every((b) => b === 0)) return found;
       const field = (start, length) =>
         header
           .subarray(start, start + length)
@@ -67,17 +73,26 @@ export function readTarMember(
       const size = parseInt(field(124, 12).trim() || "0", 8);
       if (!Number.isFinite(size) || size < 0)
         throw new Error(`${path} is not a tar archive`);
-      const prefix = field(345, 155);
-      const member = (prefix ? `${prefix}/` : "") + field(0, 100);
       const type = field(156, 1) || "0";
+      if (["x", "g", "L", "K"].includes(type) || field(345, 155))
+        throw new Error(`${path} refused: a pax or long-name header`);
+      if (!["0", "5"].includes(type))
+        throw new Error(`${path} refused: a link or special member`);
+      const raw = field(0, 100);
+      const member = type === "5" ? raw.replace(/\/$/, "") : raw;
       if (
-        (type === "0" || type === "") &&
-        member.replace(/^\.\//, "") === name
-      ) {
-        const data = Buffer.alloc(size);
-        if (read(fd, data, 0, size, offset + 512) !== size)
+        member !== posix.normalize(member) ||
+        member.startsWith("/") ||
+        ["", ".", ".."].includes(member.split("/")[0])
+      )
+        throw new Error(`${path} refused: a member name not in normal form`);
+      if (seen.has(member))
+        throw new Error(`${path} holds more than one ${member}`);
+      seen.add(member);
+      if (type === "0" && member === name) {
+        found = Buffer.alloc(size);
+        if (read(fd, found, 0, size, offset + 512) !== size)
           throw new Error(`${path}: ${name} is truncated`);
-        return data;
       }
       offset += 512 + Math.ceil(size / 512) * 512;
     }
@@ -91,8 +106,7 @@ export function readTarMember(
  * its `manifest.json` (`blobs/sha256/<hex>` since Docker 25, `<hex>.json` before). An
  * image with a RepoTag is refused: the certified images are saved by id, and a load that
  * names an image — a RepoTag, a `repositories` entry or an index.json name — would
- * retarget that name on ds-data-prod (the box's
- * `postgres-load` refuses the same).
+ * retarget that name on ds-data-prod (the box's `postgres-load` refuses the same).
  */
 export function imageArchiveConfigIds(path, io) {
   const raw = readTarMember(path, "manifest.json", io);

@@ -810,8 +810,9 @@ key and no workstation-held artifact:
    certified untagged ids, streams it to ds-data-prod's
    `postgres-load <sha> <postgres-id> <pgbackrest-id>` verb (bare hex ids) and runs the
    guard with that certificate. The
-   box reads the archive in place before loading it and refuses (exit 3) one whose
-   `manifest.json` lists other or more than those two images, or that names an image (a
+   box reads the archive in place before loading it and refuses (exit 3) one with a
+   member that docker could read differently (a pax or long-name header, a link, a name
+   out of normal form or given twice), or whose `manifest.json` lists other or more than those two images, or that names an image (a
    RepoTag, a `repositories` entry, an index.json name: the images are saved by id, and a
    name would retarget it on the box); after `docker load` it checks that both ids are
    present. No container starts and the upload is removed.

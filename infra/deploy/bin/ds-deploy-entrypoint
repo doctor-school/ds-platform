@@ -1185,14 +1185,15 @@ release_lock_verb() {
 }
 
 # The archive postgres-load may hand `docker load`, read in place with python3 `tarfile`
-# (nothing extracted): exactly one manifest.json listing exactly the two certified
-# config ids (argv 2-3, sha256:<hex>), every image untagged, and no `repositories` or
-# index.json name. The release saves the images by id (postgres-artifact-prepare.mjs),
+# (nothing extracted): every member a plain ustar header with a name in normal form,
+# none twice (python and docker then read the same members), exactly one manifest.json
+# listing exactly the two certified config ids (argv 2-3, sha256:<hex>), every image
+# untagged, and no `repositories` or index.json name. The release saves the images by id (postgres-artifact-prepare.mjs),
 # so a tag or name can only be an archive that would retarget a name on this box — the
 # compose override runs the images by id, and no load needs to name one. Exit 0 ok ·
 # 3 refused (the reason on stdout).
 read -r -d '' PG_LOAD_PY <<'PY' || true
-import json, re, sys, tarfile
+import json, posixpath, re, sys, tarfile
 archive, want = sys.argv[1], sys.argv[2:4]
 NAMES = ("io.containerd.image.name", "org.opencontainers.image.ref.name")
 
@@ -1200,14 +1201,24 @@ def stop(reason):
     print(reason)
     sys.exit(3)
 
-members = {}
+members, seen = {}, set()
 try:
     with tarfile.open(archive, mode="r:") as tar:
         for m in tar:
-            name = m.name[2:] if m.name.startswith("./") else m.name
+            # One reading for python and docker alike: one plain ustar header per member
+            # (no pax / GNU long-name header, no ustar prefix), regular files and
+            # directories only, every name already in normal form, no name twice.
+            if m.offset_data - m.offset != 512 or m.pax_headers or tar.pax_headers or len(m.name.encode()) > 100:
+                stop("the image archive refused: a pax or long-name header")
+            if not (m.isreg() or m.isdir()):
+                stop("the image archive refused: a link or special member")
+            name = m.name
+            if name != posixpath.normpath(name) or name.startswith("/") or name.split("/")[0] in ("", ".", ".."):
+                stop("the image archive refused: a member name not in normal form")
+            if name in seen:
+                stop(f"the image archive holds more than one {name}")
+            seen.add(name)
             if name in ("manifest.json", "repositories", "index.json"):
-                if name in members:
-                    stop(f"the image archive holds more than one {name}")
                 if not m.isreg() or m.size > 1024 * 1024:
                     stop(f"the image archive's {name} is not a small regular file")
                 members[name] = json.loads(tar.extractfile(m).read().decode("utf-8"))

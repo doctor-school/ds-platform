@@ -21,10 +21,13 @@ const PG = `sha256:${"1".repeat(64)}`;
 const BR = `sha256:${"2".repeat(64)}`;
 const REPO = "doctor-school/ds-platform";
 
-/** A ustar archive of `entries` ([name, string | Buffer]), as `docker image save` writes one. */
+/**
+ * A ustar archive of `entries` ([name, string | Buffer, type = "0"]), as `docker image
+ * save` writes one — or, with a pax / long-name / link type, as it never does.
+ */
 function tar(entries) {
   const blocks = [];
-  for (const [name, body] of entries) {
+  for (const [name, body, type = "0"] of entries) {
     const data = Buffer.from(body);
     const header = Buffer.alloc(512, 0);
     header.write(name, 0, 100, "utf8");
@@ -39,7 +42,7 @@ function tar(entries) {
     );
     header.write("00000000000\0", 136, 12, "ascii");
     header.write("        ", 148, 8, "ascii");
-    header.write("0", 156, 1, "ascii");
+    header.write(type, 156, 1, "ascii");
     header.write("ustar\0", 257, 6, "ascii");
     header.write("00", 263, 2, "ascii");
     let sum = 0;
@@ -146,6 +149,40 @@ test("4089: an archive whose repositories file or index.json names an image is r
     ],
     (path) => assert.deepEqual(imageArchiveConfigIds(path), [PG, BR]),
   );
+});
+
+test("4089: the archive reader reads one name one way: a member name out of normal form, a repeated name, a pax or long-name header or a link is refused", () => {
+  const manifest = JSON.stringify(
+    [PG, BR].map((id) => ({
+      Config: `blobs/sha256/${id.slice(7)}`,
+      RepoTags: null,
+    })),
+  );
+  const base = [
+    ["blobs/", "", "5"],
+    [`blobs/sha256/${"9".repeat(64)}`, "layer"],
+    ["manifest.json", manifest],
+  ];
+  withArchive(base, (path) =>
+    assert.deepEqual(imageArchiveConfigIds(path), [PG, BR]),
+  );
+  const cases = [
+    [[".//manifest.json", "[]"], /a member name not in normal form/],
+    [["./manifest.json", "[]"], /a member name not in normal form/],
+    [["a/../manifest.json", "[]"], /a member name not in normal form/],
+    [["../escape", "x"], /a member name not in normal form/],
+    [["/abs", "x"], /a member name not in normal form/],
+    [["manifest.json", "[]"], /holds more than one manifest\.json/],
+    [["././@LongLink", "manifest.json\0", "L"], /a pax or long-name header/],
+    [["pax", "22 path=manifest.json\n", "x"], /a pax or long-name header/],
+    [["gpax", "22 path=manifest.json\n", "g"], /a pax or long-name header/],
+    [["link", "", "2"], /a link or special member/],
+  ];
+  for (const [entry, why] of cases) {
+    withArchive([...base, entry], (path) =>
+      assert.throws(() => imageArchiveConfigIds(path), why, String(entry[0])),
+    );
+  }
 });
 
 test("4089: an archive whose image carries a tag is refused: a load must name nothing on the box", () => {

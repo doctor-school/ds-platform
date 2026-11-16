@@ -161,7 +161,9 @@ test("3313, 3646: the data box installs the DATA_BOX_ENTRYPOINTS of remote.mjs, 
 });
 
 // A minimal ustar writer: the archives below carry links and paths that a
-// well-behaved `tar -c` would refuse or normalise, which is the point.
+// well-behaved `tar -c` would refuse or normalise, which is the point. Regular files,
+// pax ("x", "g") and GNU long-name ("L", "K") headers carry a body.
+const TAR_DATA_TYPES = new Set(["0", "x", "g", "L", "K"]);
 function tarArchive(entries) {
   const blocks = [];
   for (const { name, type = "0", link = "", body = "", uname = "" } of entries) {
@@ -171,7 +173,7 @@ function tarArchive(entries) {
     header.write(type === "5" ? "0000755\0" : "0000644\0", 100, 8, "ascii");
     header.write("0000000\0", 108, 8, "ascii");
     header.write("0000000\0", 116, 8, "ascii");
-    header.write(`${(type === "0" ? data.length : 0).toString(8).padStart(11, "0")}\0`, 124, 12, "ascii");
+    header.write(`${(TAR_DATA_TYPES.has(type) ? data.length : 0).toString(8).padStart(11, "0")}\0`, 124, 12, "ascii");
     header.write(`${Math.floor(Date.now() / 1000).toString(8).padStart(11, "0")}\0`, 136, 12, "ascii");
     header.write("        ", 148, 8, "ascii");
     header.write(type, 156, 1, "ascii");
@@ -183,7 +185,7 @@ function tarArchive(entries) {
     for (const b of header) sum += b;
     header.write(`${sum.toString(8).padStart(6, "0")}\0 `, 148, 8, "ascii");
     blocks.push(header);
-    if (type === "0" && data.length > 0) {
+    if (TAR_DATA_TYPES.has(type) && data.length > 0) {
       blocks.push(data, Buffer.alloc((512 - (data.length % 512)) % 512, 0));
     }
   }
@@ -1666,6 +1668,13 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         /more than one manifest\.json/,
       ],
       [Buffer.from("not a tar archive at all"), /not a docker image archive/],
+      [imageArchive({ extra: [{ name: ".//manifest.json", body: "[]" }] }), /a member name not in normal form/],
+      [imageArchive({ extra: [{ name: "./manifest.json", body: "[]" }] }), /a member name not in normal form/],
+      [imageArchive({ extra: [{ name: "a/../manifest.json", body: "[]" }] }), /a member name not in normal form/],
+      [imageArchive({ extra: [{ name: "../escape", body: "x" }] }), /a member name not in normal form/],
+      [imageArchive({ extra: [{ name: "././@LongLink", type: "L", body: "manifest.json\0" }, { name: "decoy", body: "[]" }] }), /a pax or long-name header/],
+      [imageArchive({ extra: [{ name: "pax", type: "x", body: "22 path=manifest.json\n" }, { name: "decoy", body: "[]" }] }), /a pax or long-name header/],
+      [imageArchive({ extra: [{ name: "manifest.json", type: "2", link: "index.json" }] }), /a link or special member/],
     ];
     for (const [input, why] of cases) {
       const r = load(input);

@@ -15,7 +15,7 @@ import {
   Skeleton,
   cn,
 } from "@ds/design-system";
-import { EmptyState, EventSpeakerCard } from "@ds/design-system/blocks";
+import { EmptyState, EventSpeakerCard, PointsPlate, type PointsPlateBalances } from "@ds/design-system/blocks";
 
 import { createLearningClient } from "../client/index";
 import {
@@ -75,9 +75,14 @@ export interface CoursePathProps {
   config: LearningHostConfig;
   /** The server read; null when it failed (the block then offers «Повторить»). */
   initial: LearningCoursePath | null;
+  /**
+   * The 025 balances (`GET /v1/me/points`) for the plate; null for a guest
+   * (dashes); absent when the read failed — no plate rather than a number.
+   */
+  points?: PointsPlateBalances | null;
 }
 
-export function CoursePath({ courseSlug, config, initial }: CoursePathProps) {
+export function CoursePath({ courseSlug, config, initial, points }: CoursePathProps) {
   const [path, setPath] = useState(initial);
   const [state, setState] = useState<"ready" | "loading" | "error">(
     initial ? "ready" : "error",
@@ -339,6 +344,14 @@ export function CoursePath({ courseSlug, config, initial }: CoursePathProps) {
               {...(path.author.photoUrl ? { photoUrl: path.author.photoUrl } : {})}
               initials={expertInitials(path.author.name)}
             />
+          </div>
+        </section>
+      ) : null}
+
+      {points !== undefined ? (
+        <section className="px-gutter pt-section">
+          <div className="mx-auto max-w-content">
+            <PointsPlate balances={points} />
           </div>
         </section>
       ) : null}

@@ -173,6 +173,8 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "EventSectionHeading", section: "blocks" },
   { id: "EventSignupCard", section: "blocks" },
   { id: "EventSpeakerCard", section: "blocks" },
+  // 025 / 024 EARS-14 — the «Очки внимания» plate (doctor-lesson.dc.html §4).
+  { id: "PointsPlate", section: "blocks" },
   { id: "EventFormatBlock", section: "blocks" },
   // 019 EARS-6 — the «Идёт сейчас» strip above the doctor events feed
   // (doctor-events.dc.html L164-175, вариант А), #1521.

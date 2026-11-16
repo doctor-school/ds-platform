@@ -121,3 +121,24 @@ describe("024 EARS-14 — summaryAction", () => {
     expect(summaryAction(byId("document"), true, hrefs)).toBeNull();
   });
 });
+
+describe("024 EARS-14 — the points plate on the course path", () => {
+  beforeEach(() => stubMatchMedia(false));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("EARS-14: shows the doctor's three balances from the 025 read", () => {
+    render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath()} points={{ pul: 120, bre: 34, con: 12 }} />);
+    const plate = screen.getByTestId("points-plate");
+    expect(within(plate).getAllByTestId("points-plate-value").map((v) => v.textContent)).toEqual(["120 Pul", "34 Bre", "12 Con"]);
+  });
+
+  it("EARS-14: a guest sees the plate with a dash for each balance", () => {
+    render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath({ signedIn: false })} points={null} />);
+    expect(screen.getAllByTestId("points-plate-value").map((v) => v.textContent)).toEqual(["— Pul", "— Bre", "— Con"]);
+  });
+
+  it("EARS-14: a failed points read shows no plate rather than a made-up number", () => {
+    render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath()} />);
+    expect(screen.queryByTestId("points-plate")).toBeNull();
+  });
+});

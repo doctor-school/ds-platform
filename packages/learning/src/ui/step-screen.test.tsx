@@ -391,3 +391,12 @@ describe("024 EARS-15…18 — the step screen", () => {
     });
   });
 });
+
+describe("024 design §8 — the points plate on the step screen", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("shows the doctor's balances under the step", () => {
+    render(<StepScreen courseSlug="kardio" config={CONFIG} lesson={lessonRead()} stepId={ID.s2} step={videoStep()} points={{ pul: 1250, bre: 3, con: 0 }} />);
+    expect(screen.getAllByTestId("points-plate-value").map((v) => v.textContent?.replace(/\s/g, " "))).toEqual(["1 250 Pul", "3 Bre", "0 Con"]);
+  });
+});

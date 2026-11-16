@@ -107,8 +107,10 @@ describe("024 learning model", () => {
     expect(LEARNING_ELEMENT_CATALOG.test.media).toBeNull();
     // «viewed» defaults: video to the setting's 100 %, download opened once, test at its threshold.
     expect(LEARNING_PLATFORM_SEED["viewed.video.percent"]).toBe(100);
-    const watched = run([{ kind: "position", stepId: S_VIDEO, positionSec: 599 }]);
+    // 100 % within the VIDEO_END_WINDOW_SEC (2 s) clock granularity of the end.
+    const watched = run([{ kind: "position", stepId: S_VIDEO, positionSec: 597 }]);
     expect(watched.evaluation.states.get(S_VIDEO)?.status).not.toBe("done");
+    expect(run([{ kind: "position", stepId: S_VIDEO, positionSec: 598 }]).evaluation.states.get(S_VIDEO)?.status).toBe("done");
     expect(run([{ kind: "position", stepId: S_VIDEO, positionSec: 600 }]).evaluation.states.get(S_VIDEO)?.status).toBe("done");
   });
 

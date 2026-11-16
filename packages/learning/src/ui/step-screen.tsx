@@ -8,6 +8,7 @@ import type {
   LearningStepRead,
 } from "@ds/schemas";
 import { Alert, Badge, Button, Link, Radio, cn } from "@ds/design-system";
+import { PointsPlate, type PointsPlateBalances } from "@ds/design-system/blocks";
 import { RecordingPlayer } from "@ds/event-page/recording-player";
 
 import {
@@ -44,6 +45,8 @@ export interface StepScreenProps {
   stepId: string;
   /** The step read; null for a guest or a locked step. */
   step: LearningStepRead | null;
+  /** The 025 balances for the plate (024 design §8); see `CoursePath`. */
+  points?: PointsPlateBalances | null;
 }
 
 const STRIP_TONE = {
@@ -69,7 +72,7 @@ function StripLine({ kind }: { kind: Connector }) {
   );
 }
 
-export function StepScreen({ courseSlug, config, lesson, stepId, step }: StepScreenProps) {
+export function StepScreen({ courseSlug, config, lesson, stepId, step, points }: StepScreenProps) {
   const l = lesson.lesson;
   const current = lesson.steps.find((s) => s.id === stepId) ?? null;
   const index = lesson.steps.findIndex((s) => s.id === stepId);
@@ -203,6 +206,14 @@ export function StepScreen({ courseSlug, config, lesson, stepId, step }: StepScr
           )}
         </div>
       </section>
+
+      {points !== undefined ? (
+        <section className="px-gutter pt-section">
+          <div className="mx-auto max-w-4xl">
+            <PointsPlate balances={points} />
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

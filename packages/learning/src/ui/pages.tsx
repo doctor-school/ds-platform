@@ -6,7 +6,12 @@ import {
   forwardedSessionFrom,
 } from "@ds/schemas";
 
-import { LearningClientError, createLearningClient } from "../client/index";
+import {
+  LearningClientError,
+  createLearningClient,
+  pointsPlateBalances,
+  type LearningClient,
+} from "../client/index";
 import { CoursePath } from "./course-path";
 import type { LearningHostConfig } from "./host-config";
 import { StepScreen } from "./step-screen";
@@ -15,7 +20,9 @@ import { StepScreen } from "./step-screen";
 // screen: the reads ride the doctor's forwarded session (ADR-0001 §6), an
 // unknown course, lesson or step is the storefront's not-found page.
 
-const API_BASE = (process.env.API_PROXY_TARGET ?? "http://localhost:3000").replace(/\/$/, "");
+const API_BASE = (
+  process.env.API_PROXY_TARGET ?? "http://localhost:3000"
+).replace(/\/$/, "");
 
 async function serverClient() {
   const session = forwardedSessionFrom(await headers());
@@ -27,6 +34,18 @@ async function serverClient() {
 
 const isNotFound = (e: unknown) =>
   e instanceof LearningClientError && e.status === 404;
+
+/**
+ * EARS-14 — the 025 balances for the plate: null for a guest (dashes),
+ * undefined when the read fails (no plate rather than a made-up number).
+ */
+async function plateBalances(client: LearningClient, signedIn: boolean) {
+  if (!signedIn) return null;
+  return client
+    .myPoints()
+    .then(pointsPlateBalances)
+    .catch(() => undefined);
+}
 
 export async function CoursePathPage({
   config,
@@ -43,7 +62,15 @@ export async function CoursePathPage({
   } catch (e) {
     if (isNotFound(e)) notFound();
   }
-  return <CoursePath courseSlug={courseSlug} config={config} initial={path} />;
+  const points = path ? await plateBalances(client, path.signedIn) : undefined;
+  return (
+    <CoursePath
+      courseSlug={courseSlug}
+      config={config}
+      initial={path}
+      {...(points !== undefined ? { points } : {})}
+    />
+  );
 }
 
 export async function StepPage({
@@ -72,6 +99,7 @@ export async function StepPage({
     lesson.signedIn && node && node.state.status !== "locked"
       ? await client.step(stepId)
       : null;
+  const points = await plateBalances(client, lesson.signedIn);
   return (
     <StepScreen
       courseSlug={courseSlug}
@@ -79,6 +107,7 @@ export async function StepPage({
       lesson={lesson}
       stepId={stepId}
       step={step}
+      {...(points !== undefined ? { points } : {})}
     />
   );
 }

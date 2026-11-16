@@ -32,6 +32,7 @@ import {
   EventPageStateFrame,
   EventSignupCard,
   EventSpeakerCard,
+  PointsPlate,
   LiveEventStrip,
   EventAboutSection,
   EventProgrammeSection,
@@ -4962,6 +4963,60 @@ function FeedRailSection() {
   );
 }
 
+const POINTS_PLATE_PROPS: PropRow[] = [
+  {
+    name: "balances",
+    type: "{ pul, bre, con } | null",
+    required: true,
+    description:
+      "The person's balances from GET /v1/me/points (Pul = pul.available); null for a guest shows a dash for each.",
+  },
+  {
+    name: "historyHref · footnote",
+    type: "string · ReactNode",
+    required: false,
+    description:
+      "The footer row (posting history link, footnote) — rendered only for what the host supplies.",
+  },
+];
+
+function PointsPlateSection() {
+  return (
+    <BlockSection
+      title="Очки внимания"
+      exportsLine="PointsPlate · POINTS_PLATE_KINDS — props: balances, heading, kinds, historyHref, footnote"
+    >
+      <p className="text-sm text-muted-foreground">
+        The ONE points plate over the 025 ledger (capability registry «Points
+        plate (025)»), unit anatomy of doctor-lesson.dc.html §4; mounted by the
+        024 course path and step screen.
+      </p>
+      <SubRow label="Signed in">
+        <WideCanvas>
+          <PointsPlate balances={{ pul: 120, bre: 34, con: 12 }} />
+        </WideCanvas>
+      </SubRow>
+      <SubRow label="Guest — no account">
+        <WideCanvas>
+          <PointsPlate balances={null} />
+        </WideCanvas>
+      </SubRow>
+      <SubRow label="With the footer">
+        <WideCanvas>
+          <PointsPlate
+            balances={{ pul: 1250, bre: 340, con: 40 }}
+            historyHref="#"
+            footnote="Сноска хоста"
+          />
+        </WideCanvas>
+      </SubRow>
+      <SubRow label="Slots / props">
+        <PropsTable rows={POINTS_PLATE_PROPS} />
+      </SubRow>
+    </BlockSection>
+  );
+}
+
 export function BlocksView({ legalDocument, legalOthers }: BlocksViewProps) {
   return (
     <div className="flex flex-col gap-2">
@@ -4970,6 +5025,7 @@ export function BlocksView({ legalDocument, legalOthers }: BlocksViewProps) {
         legalOthers={legalOthers}
       />
       <RichTextContentSection />
+      <PointsPlateSection />
       <FeedCardSection />
       <FeedRailSection />
       <AccountProfileCardSection />

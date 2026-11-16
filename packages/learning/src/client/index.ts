@@ -4,6 +4,7 @@ import type {
   LearningCoursePath,
   LearningLessonRead,
   LearningStepRead,
+  PointsAccount,
   RecordLearningFactRequest,
   RecordLearningFactResponse,
   SubmitLearningAttemptRequest,
@@ -39,12 +40,16 @@ export interface LearningClient {
   coursePath(courseSlug: string): Promise<LearningCoursePath>;
   lesson(lessonId: string): Promise<LearningLessonRead>;
   step(stepId: string): Promise<LearningStepRead>;
-  recordFact(fact: RecordLearningFactRequest): Promise<RecordLearningFactResponse>;
+  recordFact(
+    fact: RecordLearningFactRequest,
+  ): Promise<RecordLearningFactResponse>;
   startAttempt(testId: string): Promise<LearningAttempt>;
   submitAttempt(
     attemptId: string,
     body: SubmitLearningAttemptRequest,
   ): Promise<LearningAttemptResult>;
+  /** 025 EARS-2 — the caller's own points account, for the plate (EARS-14). */
+  myPoints(): Promise<PointsAccount>;
 }
 
 export function createLearningClient(
@@ -96,7 +101,17 @@ export function createLearningClient(
       call("POST", `/v1/me/learning/tests/${seg(testId)}/attempts`, {}),
     submitAttempt: (attemptId, body) =>
       call("POST", `/v1/me/learning/attempts/${seg(attemptId)}/submit`, body),
+    myPoints: () => call("GET", "/v1/me/points"),
   };
+}
+
+/** The plate's three balances: the Pul the person may spend, Bre and Con. */
+export function pointsPlateBalances(account: PointsAccount): {
+  pul: number;
+  bre: number;
+  con: number;
+} {
+  return { pul: account.pul.available, bre: account.bre, con: account.con };
 }
 
 /** A fresh client event id for a progress fact (EARS-10: never the `learning:` prefix). */

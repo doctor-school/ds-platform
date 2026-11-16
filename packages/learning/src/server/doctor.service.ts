@@ -21,7 +21,7 @@ import {
   RecordLearningFactRequestSchema,
   expertDisplayName,
 } from "@ds/schemas";
-import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import {
   clampReportedPosition,
   elementType,
@@ -416,7 +416,8 @@ export class LearningDoctorService {
         : {};
       if (fact.kind === "position") {
         const step = before.evaluator.index.steps.get(fact.stepId)!.step;
-        const [previous] = await tx
+        // The allowance is anchored on the step's first accepted report.
+        const [first] = await tx
           .select({ at: learningFacts.occurredAt })
           .from(learningFacts)
           .where(
@@ -426,15 +427,15 @@ export class LearningDoctorService {
               eq(learningFacts.kind, "position"),
             ),
           )
-          .orderBy(desc(learningFacts.occurredAt))
+          .orderBy(asc(learningFacts.occurredAt))
           .limit(1);
         data["reportedSec"] = fact.data.positionSec;
         data["positionSec"] = clampReportedPosition({
           reportedSec: fact.data.positionSec,
           durationSec: videoDurationSec(step),
           previousMaxSec: before.evaluator.facts.maxPosition(fact.stepId),
-          elapsedSec: previous
-            ? (occurredAt.getTime() - previous.at.getTime()) / 1000
+          sinceFirstSec: first
+            ? (occurredAt.getTime() - first.at.getTime()) / 1000
             : null,
           maxPlaybackRate: before.evaluator.setting(
             "progress.maxPlaybackRate",

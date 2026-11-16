@@ -26,6 +26,8 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { seedTaxonomy, type LearningFixture } from "./fixtures.js";
+import { LEARNING_DEPS } from "../../src/learning/learning.module.js";
+import type { LearningServerDeps } from "@ds/learning/server";
 
 // 024 (#4011) — the learning e2e harness: the real AppModule behind real 003
 // doctor sessions and 011 admin sessions (fake IdP), the dev-stand Postgres and
@@ -48,6 +50,12 @@ export interface Harness {
   pool: pg.Pool;
   fake: FakeIdpClient;
   adminSid: string;
+  /**
+   * Let `sec` seconds of real time pass on the learning server's clock (the
+   * time it stamps on every fact) — e.g. a doctor's playback between two
+   * position reports, which the EARS-10 clamp measures.
+   */
+  advanceClock(sec: number): void;
   close(): Promise<void>;
 }
 
@@ -71,6 +79,9 @@ export async function bootHarness(): Promise<Harness> {
   );
   await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
+  let clockOffsetMs = 0;
+  moduleRef.get<LearningServerDeps>(LEARNING_DEPS).now = () =>
+    new Date(Date.now() + clockOffsetMs);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
   const pool = app.get<pg.Pool>(DRIZZLE_POOL);
@@ -88,7 +99,16 @@ export async function bootHarness(): Promise<Harness> {
     password: PASSWORD,
     device: DEVICE,
   });
-  return { app, pool, fake, adminSid: sid, close: () => app.close() };
+  return {
+    app,
+    pool,
+    fake,
+    adminSid: sid,
+    advanceClock: (sec) => {
+      clockOffsetMs += sec * 1000;
+    },
+    close: () => app.close(),
+  };
 }
 
 /** Register + sign in a doctor: the session cookie header and `users.id`. */
@@ -241,7 +261,7 @@ export interface BuiltCourse {
  */
 export async function buildCourse(
   h: Harness,
-  opts: { publish?: boolean } = {},
+  opts: { publish?: boolean; durationSec?: number } = {},
 ): Promise<BuiltCourse> {
   const f = await seedTaxonomy(h.pool);
   const ok = <T>(r: Reply<T>, status: number): T => {
@@ -290,7 +310,7 @@ export async function buildCourse(
       type: "video",
       title: "Видео",
       durationMin: 1,
-      payload: { durationSec: VIDEO_SEC },
+      payload: { durationSec: opts.durationSec ?? VIDEO_SEC },
     },
   });
   ok(video, 201);

@@ -71,8 +71,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).rows;
 
     /** Watch the video to the end (two honest reports), open the download. */
-    async function doContentSteps(headers: Record<string, string>) {
+    async function doContentSteps(d: {
+      headers: Record<string, string>;
+      personId: string;
+    }) {
+      const { headers } = d;
       expect((await position(headers, VIDEO_SEC / 2)).status).toBe(200);
+      h.advanceClock(VIDEO_SEC / 2);
       expect((await position(headers, VIDEO_SEC)).status).toBe(200);
       const opened = await fact(headers, {
         eventId: eventId(),
@@ -426,6 +431,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("EARS-10: a last clock tick within the end window of the media length counts as watched to the end", async () => {
       const d = await doctor(h);
       expect((await position(d.headers, VIDEO_SEC / 2)).status).toBe(200);
+      h.advanceClock(VIDEO_SEC / 2);
       const res = await position(d.headers, VIDEO_SEC - 2);
       expect(res.body.progress).toEqual({
         positionSec: VIDEO_SEC - 2,
@@ -440,11 +446,36 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(read.body.step.state.status).toBe("done");
     });
 
+    it("EARS-10: rapid reports after a seek cannot reach the end before real time allows — the slack is granted once", async () => {
+      const d = await doctor(h);
+      const long = await buildCourse(h, { durationSec: 456 });
+      const at = (s: number) =>
+        fact(d.headers, {
+          eventId: eventId(),
+          stepId: long.videoId,
+          source: "web",
+          kind: "position",
+          data: { positionSec: s },
+        });
+      // ~30 s of honest viewing, then a seek to 440 s and a burst of reports.
+      expect((await at(0)).status).toBe(200);
+      h.advanceClock(30);
+      let last = await at(30);
+      for (let i = 0; i < 12; i++) last = await at(440);
+      // 30 s since the first report × 2 (seeded rate) + 30 s slack, once.
+      expect(last.body.progress!.positionSec).toBeLessThanOrEqual(30 * 2 + 30 + 2);
+      expect(last.body.progress!.watchedPercent).toBeLessThan(100);
+      // Once real time covers the seek, the same report is accepted whole.
+      h.advanceClock(200);
+      last = await at(440);
+      expect(last.body.progress).toEqual({ positionSec: 440, watchedPercent: 96 });
+    });
+
     // ── The cascade and 025 (EARS-11, EARS-12, EARS-18) ───────────────────
 
     it("EARS-11/12:content steps → test passed → lesson done records one 025 lesson.completed fact", async () => {
       const d = await doctor(h);
-      await doContentSteps(d.headers);
+      await doContentSteps(d);
       const attempt = await start(d.headers);
       expect(attempt.status).toBe(201);
       expect(JSON.stringify(attempt.body)).not.toContain("correct");
@@ -476,6 +507,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           .status,
       ).toBe(200);
       await at(VIDEO_SEC / 2);
+      h.advanceClock(VIDEO_SEC / 2);
       await at(VIDEO_SEC);
       await fact(d.headers, {
         eventId: eventId(),
@@ -558,6 +590,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         kind: "position",
         data: { positionSec: 30 },
       });
+      h.advanceClock(30);
       await call(h, "POST", "/me/learning/facts", d.headers, {
         eventId: eventId(),
         stepId: course.videoId,
@@ -604,6 +637,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           kind,
           data: kind === "position" ? { positionSec: s } : {},
         });
+        if (s === 30) h.advanceClock(30);
       }
       const a = await start(d.headers, course);
       await submit(d.headers, a.body, false, course);

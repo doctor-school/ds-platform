@@ -50,24 +50,28 @@ export function videoDurationSec(step: LearningStepModel): number {
 
 /**
  * EARS-10 — the position the server accepts from a client report: never past
- * the real media length, and never further than the previous accepted maximum
- * plus the server wall-clock time since the previous fact at the fastest
- * credited playback rate, plus the slack (both settings). A first report
- * (`elapsedSec` null) gets the slack only. A clamped report is accepted with
- * the clamped value, so an honest client on a bad network never fails.
+ * the real media length, and never further than the server wall-clock time
+ * since the doctor's first accepted position report on the step at the
+ * fastest credited playback rate, plus the slack (both settings). The
+ * allowance is anchored on that first report, so the slack is granted once —
+ * back-to-back reports cannot add it again — and a first report
+ * (`sinceFirstSec` null) gets the slack only. The allowance never takes back
+ * an already accepted maximum. A clamped report is accepted with the clamped
+ * value, so an honest client on a bad network never fails.
  */
 export function clampReportedPosition(input: {
   reportedSec: number;
   durationSec: number;
   previousMaxSec: number;
-  elapsedSec: number | null;
+  sinceFirstSec: number | null;
   maxPlaybackRate: number;
   slackSec: number;
 }): number {
-  const allowance =
-    input.previousMaxSec +
-    Math.max(0, input.elapsedSec ?? 0) * input.maxPlaybackRate +
-    input.slackSec;
+  const allowance = Math.max(
+    input.previousMaxSec,
+    Math.max(0, input.sinceFirstSec ?? 0) * input.maxPlaybackRate +
+      input.slackSec,
+  );
   const cap =
     input.durationSec > 0 ? Math.min(input.durationSec, allowance) : allowance;
   return Math.max(0, Math.min(Math.floor(input.reportedSec), Math.floor(cap)));

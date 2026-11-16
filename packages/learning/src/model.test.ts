@@ -285,19 +285,38 @@ describe("024 learning model", () => {
     expect(publishRequirements(lesson, entry, path, stored, withMedia, withMedia).map((i) => i.path)).toEqual(["entryTest"]);
   });
 
-  it("EARS-10: a reported position is clamped to the media length and to what the server clock allows since the last accepted one", async () => {
+  it("EARS-10: a reported position is clamped to the media length and to what the server clock allows since the step's first accepted report", async () => {
     const { clampReportedPosition } = await import("./catalog/element-types.js");
     expect(LEARNING_PLATFORM_SEED["progress.maxPlaybackRate"]).toBeGreaterThan(1);
     expect(LEARNING_PLATFORM_SEED["progress.slackSec"]).toBeGreaterThanOrEqual(0);
     const rule = { maxPlaybackRate: 2, slackSec: 10 };
-    // A forged jump to the end right after the first report is clamped, not refused.
-    expect(clampReportedPosition({ reportedSec: 600, durationSec: 600, previousMaxSec: 0, elapsedSec: 30, ...rule })).toBe(70);
+    // A forged jump to the end 30 s after the first report is clamped, not refused.
+    expect(clampReportedPosition({ reportedSec: 600, durationSec: 600, previousMaxSec: 0, sinceFirstSec: 30, ...rule })).toBe(70);
     // Honest playback inside the allowance passes unchanged.
-    expect(clampReportedPosition({ reportedSec: 50, durationSec: 600, previousMaxSec: 0, elapsedSec: 30, ...rule })).toBe(50);
+    expect(clampReportedPosition({ reportedSec: 50, durationSec: 600, previousMaxSec: 0, sinceFirstSec: 30, ...rule })).toBe(50);
     // Never past the real media length, never below zero.
-    expect(clampReportedPosition({ reportedSec: 9999, durationSec: 600, previousMaxSec: 590, elapsedSec: 3600, ...rule })).toBe(600);
-    // A first report has no previous fact: only the slack is allowed.
-    expect(clampReportedPosition({ reportedSec: 600, durationSec: 600, previousMaxSec: 0, elapsedSec: null, ...rule })).toBe(10);
+    expect(clampReportedPosition({ reportedSec: 9999, durationSec: 600, previousMaxSec: 590, sinceFirstSec: 3600, ...rule })).toBe(600);
+    expect(clampReportedPosition({ reportedSec: -5, durationSec: 600, previousMaxSec: 0, sinceFirstSec: 30, ...rule })).toBe(0);
+    // A first report has no earlier fact: only the slack is allowed.
+    expect(clampReportedPosition({ reportedSec: 600, durationSec: 600, previousMaxSec: 0, sinceFirstSec: null, ...rule })).toBe(10);
+    // A rewind is accepted as reported (the maximum is kept by the facts).
+    expect(clampReportedPosition({ reportedSec: 5, durationSec: 600, previousMaxSec: 70, sinceFirstSec: 30, ...rule })).toBe(5);
+    // The allowance never takes back an already accepted maximum.
+    expect(clampReportedPosition({ reportedSec: 600, durationSec: 600, previousMaxSec: 80, sinceFirstSec: 30, ...rule })).toBe(80);
+  });
+
+  it("EARS-10: back-to-back reports cannot add the slack each time — the whole gain stays within elapsed × rate + slack", async () => {
+    const { clampReportedPosition } = await import("./catalog/element-types.js");
+    const rule = { maxPlaybackRate: 2, slackSec: 30 };
+    const durationSec = 456;
+    // A seek to 440 s, then a report every half second for 15 s of server time.
+    let max = 0;
+    for (let i = 0; i <= 30; i++) {
+      const sinceFirstSec = i === 0 ? null : i * 0.5;
+      const accepted = clampReportedPosition({ reportedSec: 440, durationSec, previousMaxSec: max, sinceFirstSec, ...rule });
+      max = Math.max(max, accepted);
+    }
+    expect(max).toBe(15 * 2 + 30);
   });
 
   it("EARS-26: the rule sentences and lock reasons carry no money or «бесплатно» wording", async () => {

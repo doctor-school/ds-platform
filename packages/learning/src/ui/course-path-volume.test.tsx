@@ -57,6 +57,9 @@ describe("024 EARS-14 — node labels wrap at word and separator boundaries", ()
     const title = document.querySelector(`[title="${long}"]`);
     expect(title).not.toBeNull();
     expect(title).toHaveClass("line-clamp-2");
+    // The label column never squeezes the title below its lines (a wrapped
+    // kicker + a reason must not clip the clamp's second line).
+    for (const part of title!.parentElement!.children) expect(part).toHaveClass("shrink-0");
     vi.unstubAllGlobals();
   });
 });
@@ -192,6 +195,33 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
     expect(outline().getByRole("link", { name: /^Урок 60\. / })).toHaveAttribute("aria-current", "true");
     scrollFrame("scrollend", "scroll");
     expect(outline().getByRole("link", { name: /^Урок 61\. / })).toHaveAttribute("aria-current", "true");
+  });
+
+  it("EARS-14: at 26 modules the outline column scrolls the open module into its view (summary stays when it fits)", () => {
+    vi.useFakeTimers();
+    try {
+      // The column shows 0…800; module 15 (lesson 60 → «Вы здесь») sits far below the fold.
+      vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+        const box = (top: number, height: number) =>
+          ({ top, bottom: top + height, left: 0, right: 0, width: 0, height, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+        if (this.tagName === "ASIDE") return box(0, 800);
+        // The open module's block (its row + 4 lessons + club row): module 15 of 26.
+        if (this instanceof HTMLElement && this.dataset.outlineModule === "open") return box(916, 228);
+        return box(0, 0);
+      });
+      render(<CoursePath courseSlug="k" config={CONFIG} initial={multiModulePath(26, 4, 60)} />);
+      const aside = document.querySelector("aside")!;
+      const scrollTo = vi.fn();
+      aside.scrollTo = scrollTo as unknown as typeof aside.scrollTo;
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      // Its block ends at 916 + 228 = 1144: the column scrolls by 1144 − 800 = 344
+      // so the whole open module shows and the summary above keeps what fits.
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 344, behavior: "smooth" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("EARS-14: the progress band names the module of «Вы здесь» on a multi-module course only", () => {

@@ -138,6 +138,28 @@ function useScrollSpy(
   return hold;
 }
 
+/**
+ * At volume (26 modules) the outline column is taller than the viewport: once
+ * the open module's height transition ends, the column scrolls (by itself, never
+ * the page) the least distance that shows the whole open module — so the
+ * outline visibly follows the reader and the summary stays while it fits.
+ */
+function useOutlineFollow(aside: React.RefObject<HTMLElement | null>, openModule: number) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const column = aside.current;
+      const block = column?.querySelector<HTMLElement>('[data-outline-module="open"]');
+      if (!column || !block) return;
+      const c = column.getBoundingClientRect();
+      const b = block.getBoundingClientRect();
+      const delta =
+        b.top < c.top ? b.top - c.top : b.bottom > c.bottom ? Math.min(b.bottom - c.bottom, b.top - c.top) : 0;
+      if (delta) column.scrollTo({ top: column.scrollTop + delta, behavior: "smooth" });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [aside, openModule]);
+}
+
 /** The canvas switches the path to its narrow axis below the desktop grid. */
 function useNarrow(): boolean {
   const [narrow, setNarrow] = useState(false);
@@ -201,6 +223,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
   const [navN, setNavN] = useState<number | null>(null);
   const [flash, setFlash] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const asideRef = useRef<HTMLElement | null>(null);
   useEffect(
     () => () => {
       if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -215,6 +238,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
   };
   const inView = navN ?? selected?.lessonNumber ?? view?.current?.lessonNumber ?? 1;
   const openModule = view ? openModuleIndex(view, inView) : 0;
+  useOutlineFollow(asideRef, openModule);
 
   const select = (n: PathNode) => {
     setSelectedId(n.id);
@@ -400,6 +424,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
 
               {narrow ? null : (
                 <aside
+                  ref={asideRef}
                   aria-label={C.outlineLabel}
                   className="sticky top-6 hidden min-w-0 flex-col self-start overflow-y-auto border-2 border-border bg-card shadow-lg lg:flex"
                   style={{ maxHeight: "calc(100vh - 2 * var(--space-6))" }}
@@ -419,7 +444,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
                     {view.outline.map((m, mi) => {
                       const open = view.single || mi === openModule;
                       return (
-                        <div key={m.id} className="flex flex-col">
+                        <div key={m.id} className="flex flex-col" data-outline-module={open ? "open" : undefined}>
                           {view.single ? null : (
                             // The canvas module row (`nm.go`), a bespoke outline control:
                             // opens the module and brings its plate into view.
@@ -627,8 +652,9 @@ function SnakeNode({
       >
         {/* The label column is narrow (canvas geometry): the kicker breaks only
             after «·», a short hyphenated token never splits, and the title
-            clamps to two lines so the label stays inside its 96 px row. */}
-        <span className="text-xs font-bold tabular-nums text-faint">
+            clamps to two lines; no part shrinks, so a wrapped kicker plus a
+            reason never clips the title's second line. */}
+        <span className="shrink-0 text-xs font-bold tabular-nums text-faint">
           {(narrow && node.firstOfLesson && node.lessonNumber
             ? [C.lessonLabel(node.lessonNumber), ...node.kickerParts]
             : node.kickerParts
@@ -642,7 +668,7 @@ function SnakeNode({
         <span
           title={node.title}
           className={cn(
-            "line-clamp-2 text-body-compact font-extrabold leading-tight",
+            "line-clamp-2 shrink-0 text-body-compact font-extrabold leading-tight",
             node.tone === "closed" ? "text-muted-foreground" : "text-foreground",
           )}
           style={TITLE_TRACKING}
@@ -657,9 +683,13 @@ function SnakeNode({
             ),
           )}
         </span>
-        {node.here ? <Badge>{C.here}</Badge> : null}
+        {node.here ? (
+          <span className="flex shrink-0">
+            <Badge>{C.here}</Badge>
+          </span>
+        ) : null}
         {node.reason ? (
-          <span className="text-xs font-semibold text-muted-foreground">{node.reason}</span>
+          <span className="shrink-0 text-xs font-semibold text-muted-foreground">{node.reason}</span>
         ) : null}
       </div>
     </div>

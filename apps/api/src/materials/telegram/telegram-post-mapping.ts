@@ -22,14 +22,50 @@ export interface TelegramPreviewCandidate {
   fileUniqueId: string;
 }
 
-export interface TelegramCard {
+/**
+ * The card data of one post, over the medium its preview comes from: a Bot
+ * API file (webhook) or an exported file (the one-off import, EARS-30).
+ */
+export interface TelegramCardOf<P> {
   messageId: number;
   /** Plain text, possibly empty (a captionless photo or album part). */
   text: string;
   publishedAt: Date;
   mediaGroupId: string | null;
   durationSeconds: number | null;
-  preview: TelegramPreviewCandidate | null;
+  preview: P | null;
+}
+
+export type TelegramCard = TelegramCardOf<TelegramPreviewCandidate>;
+
+/** The raw content of a post that passed the drop rules of EARS-26. */
+export interface TelegramPostContent<P> {
+  messageId: number;
+  rawText: string;
+  publishedAt: Date;
+  mediaGroupId: string | null;
+  durationSeconds: number | null;
+  preview: P | null;
+}
+
+/**
+ * EARS-26 — the card fields of a post's content: the text cut, and `null`
+ * (dropped as `empty`) when the post has neither text nor an image. Shared
+ * by the webhook mapping and the export mapping of EARS-30.
+ */
+export function cardFromContent<P>(
+  content: TelegramPostContent<P>,
+): TelegramCardOf<P> | null {
+  const text = cutPostText(content.rawText);
+  if (text === "" && content.preview === null) return null;
+  return {
+    messageId: content.messageId,
+    text,
+    publishedAt: content.publishedAt,
+    mediaGroupId: content.mediaGroupId,
+    durationSeconds: content.durationSeconds,
+    preview: content.preview,
+  };
 }
 
 export type MappedPost =
@@ -122,7 +158,6 @@ export function mapChannelPost(message: TelegramMessage): MappedPost {
   if (UNSUPPORTED_CONTENT.some((k) => has(message, k))) {
     return { kind: "drop", reason: "unsupported_content" };
   }
-  const text = cutPostText(message.text ?? message.caption ?? "");
   let preview: TelegramPreviewCandidate | null = null;
   let durationSeconds: number | null = null;
   if (message.photo) {
@@ -134,16 +169,14 @@ export function mapChannelPost(message: TelegramMessage): MappedPost {
     if (thumb)
       preview = { fileId: thumb.file_id, fileUniqueId: thumb.file_unique_id };
   }
-  if (text === "" && preview === null) return { kind: "drop", reason: "empty" };
-  return {
-    kind: "card",
-    card: {
-      messageId: message.message_id,
-      text,
-      publishedAt: new Date(message.date * 1000),
-      mediaGroupId: message.media_group_id ?? null,
-      durationSeconds,
-      preview,
-    },
-  };
+  const card = cardFromContent({
+    messageId: message.message_id,
+    rawText: message.text ?? message.caption ?? "",
+    publishedAt: new Date(message.date * 1000),
+    mediaGroupId: message.media_group_id ?? null,
+    durationSeconds,
+    preview,
+  });
+  if (card === null) return { kind: "drop", reason: "empty" };
+  return { kind: "card", card };
 }

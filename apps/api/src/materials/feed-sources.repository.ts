@@ -110,6 +110,22 @@ export class FeedSourcesRepository {
     return byName;
   }
 
+  /** EARS-30 — the Telegram source of a normalized address, if listed. */
+  async findTelegramByAddress(
+    address: string,
+  ): Promise<FeedSource | undefined> {
+    const [row] = await this.handle
+      .select()
+      .from(feedSources)
+      .where(
+        and(
+          eq(feedSources.platform, "telegram"),
+          eq(feedSources.address, address),
+        ),
+      );
+    return row;
+  }
+
   /**
    * EARS-25 — bind the channel's Telegram id on its first matching update.
    * Not an administrator edit, so the admin ETag (`version`) is not bumped.

@@ -140,6 +140,20 @@ describe("CourseCompositionScreen", () => {
     ).toBeInTheDocument();
   });
 
+  it("EARS-29: the picker starts on the preset the course has applied, not on the first one", async () => {
+    mount(
+      fakeTransport({
+        rules: async () =>
+          rules({ appliedPreset: PRESETS[1]!.name, layerVersion: 3 }),
+      }),
+    );
+    const panel = await screen.findByTestId("preset-panel");
+    const applied = await within(panel).findByLabelText(PRESETS[1]!.name);
+    await waitFor(() => expect(applied).toBeChecked());
+    for (const other of PRESETS.filter((_, i) => i !== 1))
+      expect(within(panel).getByLabelText(other.name)).not.toBeChecked();
+  });
+
   it("EARS-29: a refused apply changes nothing and names its field errors", async () => {
     mount(
       fakeTransport({

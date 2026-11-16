@@ -51,6 +51,9 @@ export function PresetPanel({
         if (!live) return;
         setPresets(p);
         setRules(r);
+        // The picker starts on the preset the course has applied (the read
+        // names it), so the choice on screen is the one in force.
+        setChosen(p.find((x) => x.name === r.appliedPreset)?.id ?? null);
       })
       .catch(() => live && setRefused([C.loadFailed]));
     return () => {

@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, it, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
-import { SECRET_KEYS, SECRET_VALUE } from "./data-secret.mjs";
+import { SECRET_KEYS, SECRET_MAX_AGE_SEC, SECRET_VALUE } from "./data-secret.mjs";
 import { DATA_READ_VERBS, DATA_SECRET_VERBS, DATA_VERBS } from "./lib/data-prod.mjs";
 import { BOX_ENTRYPOINTS, DATA_BOX_ENTRYPOINTS, DS_READ_ENTRYPOINT_BIN } from "./lib/remote.mjs";
 
@@ -140,6 +140,9 @@ test("4068: the box accepts exactly the names and value shape `pnpm prod:data-se
   const value = text.match(/^SECRET_VALUE = re\.compile\("(.*)"\)$/m);
   assert.ok(value, "DATA_PY defines SECRET_VALUE");
   assert.equal(`^${value[1]}$`, SECRET_VALUE.source);
+  const age = text.match(/^SECRET_MAX_AGE = (\d+) \* 3600$/m);
+  assert.ok(age, "DATA_PY defines SECRET_MAX_AGE");
+  assert.equal(Number(age[1]) * 3600, SECRET_MAX_AGE_SEC);
 });
 
 test("3313, 3646: the data box installs the DATA_BOX_ENTRYPOINTS of remote.mjs, in order — no ds-read-entrypoint", () => {
@@ -1239,6 +1242,8 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
   const intakeCert = () => join(root, "etc/ds-platform/secret-intake/cert.pem");
   const staged = () => join(root, "etc/ds-platform/.data.env.next");
   const previous = () => join(root, "etc/ds-platform/.data.env.previous");
+  const applied = () => join(root, "etc/ds-platform/secret-intake/applied.json");
+  const pending = () => join(root, "etc/ds-platform/secret-intake/pending.json");
   const OLD_ENV =
     "PGBACKREST_REPO1_CIPHER_PASS=cipher-pass-value\nPGBACKREST_REPO1_S3_KEY=OLDKEYID0001\n" +
     "PGBACKREST_REPO1_S3_KEY_SECRET=old/secret+value=\n";
@@ -1264,9 +1269,9 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     const r = run("secret-recipient");
     assert.equal(r.status, 0, r.stderr);
   };
-  const cipher = async (values, now = new Date(), cert = intakeCert()) => {
+  const cipher = async (values, now = new Date(), cert = intakeCert(), sha = SHA) => {
     const { encryptSecret, secretPlaintext } = await import("./data-secret.mjs");
-    return JSON.stringify({ ciphertext: encryptSecret(secretPlaintext(values, now), cert) });
+    return JSON.stringify({ ciphertext: encryptSecret(secretPlaintext(values, { sha, now }), cert) });
   };
 
   it("4068: secret-recipient generates the intake key once, root-only, and prints only the certificate", () => {
@@ -1316,6 +1321,9 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         "PGBACKREST_REPO1_S3_KEY_SECRET=new/secret+value=\n",
     );
     assert.equal(statSync(staged()).mode & 0o777, 0o600);
+    assert.deepEqual(Object.keys(JSON.parse(readFileSync(pending(), "utf8"))), ["createdAt", "nonce"]);
+    assert.equal(statSync(pending()).mode & 0o777, 0o600);
+    assert.ok(!existsSync(applied()), "recorded only once the unit's verdict stands");
     assert.equal(readFileSync(dataEnv(), "utf8"), OLD_ENV, "data.env changes only inside the unit");
     assert.match(log("ds-release"), new RegExp(`^ds-release-called check prod\nds-release-called release prod ${SHA} data-secret \\S+\n$`));
     const script = log("step");
@@ -1336,7 +1344,8 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     );
     assert.equal(made.status, 0, made.stderr);
     const cases = [
-      [await cipher(NEW, new Date(Date.now() - 25 * 3600 * 1000)), /encrypted more than 24 h ago/],
+      [await cipher(NEW, new Date(Date.now() - 7 * 3600 * 1000)), /encrypted more than 6 h ago/],
+      [await cipher(NEW, new Date(), intakeCert(), "f".repeat(40)), /encrypted for another prod SHA/],
       [await cipher({ PGBACKREST_REPO1_CIPHER_PASS: "abcdefgh12" }), /bad payload for secret-stage/],
       [await cipher({ PGBACKREST_REPO1_S3_KEY: "has a space" }), /is not 8-256 characters/],
       [await cipher(NEW, new Date(), other), /does not decrypt with this box's intake key/],
@@ -1347,7 +1356,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       const r = run(`secret-apply ${SHA}`, { input });
       assert.equal(r.status, 2, r.stderr);
       assert.match(r.stderr, reason);
-      assert.ok(!existsSync(staged()), "nothing staged");
+      assert.ok(!existsSync(staged()) && !existsSync(pending()), "nothing staged");
     }
     assert.doesNotMatch(log("ds-release"), /release prod/, "no unit started");
   });
@@ -1376,14 +1385,16 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     );
     const r = run(`secret-apply ${SHA}`, { input: await cipher(NEW) });
     assert.equal(r.status, 0, r.stderr);
-    assert.ok(!existsSync(staged()));
+    assert.ok(!existsSync(staged()) && !existsSync(pending()));
   });
 
   // The unit's script, run for real: docker answers `check` with a failure while
   // data.env holds `failKey`, so both the success and the restore branch run.
-  const runUnit = async (failKey) => {
+  let unitInput;
+  const runUnit = async (failKey, now = new Date()) => {
     secretBox();
-    assert.equal(run(`secret-apply ${SHA}`, { input: await cipher(NEW) }).status, 0);
+    unitInput = await cipher(NEW, now);
+    assert.equal(run(`secret-apply ${SHA}`, { input: unitInput }).status, 0);
     writeFileSync(
       join(stubs, "docker"),
       [
@@ -1426,6 +1437,40 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(statSync(dataEnv()).mode & 0o777, 0o600);
     assert.ok(!existsSync(previous()));
     assert.equal(log("docker").trim().split("\n").filter((l) => l.includes(" up -d ")).length, 2, "recreated twice");
+    assert.ok(existsSync(applied()) && !existsSync(pending()), "a rolled-back ciphertext is spent too");
+  });
+
+  it("4068: an applied ciphertext is spent: a replay starts nothing, an older one is refused, a newer one is staged", async () => {
+    const before = new Date(Date.now() - 600 * 1000);
+    const r = await runUnit("NO-SUCH-KEY");
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.ok(existsSync(applied()) && !existsSync(pending()), "recorded once the verdict stands");
+    assert.equal(statSync(applied()).mode & 0o777, 0o600);
+    rmSync(join(dir, "ds-release.log"), { force: true });
+
+    const replay = run(`secret-apply ${SHA}`, { input: unitInput });
+    assert.equal(replay.status, 0, replay.stderr);
+    assert.match(replay.stdout, /already applied/);
+    assert.ok(!existsSync(staged()) && !existsSync(pending()), "nothing staged by a replay");
+
+    const older = run(`secret-apply ${SHA}`, { input: await cipher({ PGBACKREST_REPO1_S3_KEY: "OLDKEYID0001" }, before) });
+    assert.equal(older.status, 2, older.stderr);
+    assert.match(older.stderr, /not newer than the last applied one/);
+    assert.ok(!existsSync(staged()) && !existsSync(pending()));
+    assert.doesNotMatch(log("ds-release"), /release prod/, "neither starts a unit");
+
+    const newer = run(`secret-apply ${SHA}`, { input: await cipher(NEW, new Date(Date.now() + 2000)) });
+    assert.equal(newer.status, 0, newer.stderr);
+    assert.match(newer.stdout, /-data-secret started/);
+  });
+
+  it("4068: an unreadable applied record refuses the rotation", async () => {
+    secretBox();
+    writeFileSync(applied(), "not json\n", { mode: 0o600 });
+    const r = run(`secret-apply ${SHA}`, { input: await cipher(NEW) });
+    assert.equal(r.status, 3, r.stderr);
+    assert.match(r.stderr, /applied-secret record could not be read/);
+    assert.ok(!existsSync(staged()));
   });
 
   // --- 4068: the relay on ds-api-prod --------------------------------------------------

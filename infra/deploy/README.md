@@ -806,7 +806,10 @@ create-access-key` on the operator's workstation, as above. The values never ent
    GitHub: the workstation encrypts them to ds-data-prod's intake certificate, and only
    the box holds the key that decrypts them.
 
-   1. **Once per box: the intake certificate.** Dispatch
+   1. **Once per box: the intake certificate.** Until it is committed,
+      `pnpm prod:data-secret` refuses. The box can make it only once a release that
+      carries the data-secret verbs (#4068) is live, because that release installs them.
+      Then dispatch
       `gh workflow run data-secret.yml --ref main -f action=recipient`. ds-data-prod
       generates its intake key pair on the first call (root 0600 under
       `/etc/ds-platform/secret-intake/`, never printed, never leaves the box) and the run
@@ -817,11 +820,15 @@ create-access-key` on the operator's workstation, as above. The values never ent
       lines to replace (no other `data.env` name is accepted):
 
       ```bash
-      pnpm prod:data-secret < new-key.txt   # PGBACKREST_REPO1_S3_KEY=… / PGBACKREST_REPO1_S3_KEY_SECRET=…
+      pnpm prod:data-secret <live sha> < new-key.txt   # PGBACKREST_REPO1_S3_KEY=… / PGBACKREST_REPO1_S3_KEY_SECRET=…
       ```
 
-      It prints one base64 line (valid for 24 h) and the dispatch command; the stderr
-      fingerprint must equal the one of step 1. Delete `new-key.txt` afterwards.
+      It prints one base64 line and the dispatch command. The line is good once, for
+      that SHA, for 6 h: the box refuses another SHA, and keeps the `createdAt` + nonce
+      of the last rotation whose verdict stands (applied or rolled back), refusing any
+      ciphertext not newer than it — a captured line cannot put a revoked key back.
+      The stderr fingerprint must equal the one of step 1. Delete `new-key.txt`
+      afterwards.
 
    3. **Apply it on the owner's word**, with the live prod SHA:
       `gh workflow run data-secret.yml --ref main -f action=apply -f sha=<live sha> -f owner_quote="<the owner's words>" -f ciphertext=<the line>`.
@@ -833,8 +840,9 @@ create-access-key` on the operator's workstation, as above. The values never ent
       reads the recorded images and the next release passes `postgres-verify`), then
       `pgbackrest --stanza=ds check`. A failed check puts the backup back, recreates
       again and fails the run: the old key keeps working. The backup is removed either
-      way. A run whose job died is re-dispatched with the same inputs: it reads the
-      unit's recorded verdict and closes the attempt.
+      way. A run whose job died is re-dispatched with the same inputs (within the 6 h):
+      the box answers «already applied» for the last applied line, starts nothing, and
+      the run reads the unit's recorded verdict and closes the attempt.
    4. Dispatch `recovery-custody.yml` with `recovery-bundle`, then `recovery-check`:
       the bundle fingerprints `data.env`.
 

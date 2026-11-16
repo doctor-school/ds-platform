@@ -5,9 +5,13 @@
 // → «Rotating the box's pgBackRest S3 key»).
 //
 // Operator (workstation):
-//   pnpm prod:data-secret < values.txt   NAME=value lines on stdin (SECRET_KEYS only) →
+//   pnpm prod:data-secret <live sha> < values.txt
+//                                        NAME=value lines on stdin (SECRET_KEYS only) →
 //                                        the base64 ciphertext for data-secret.yml on
-//                                        stdout; the dispatch command on stderr
+//                                        stdout; the dispatch command on stderr. One use:
+//                                        it names the live SHA, carries a fresh nonce,
+//                                        and the box refuses it after 6 h or once a newer
+//                                        or the same one has been applied
 // Runner (data-secret.yml, node builtins only):
 //   node tools/deploy/data-secret.mjs verdict <sha>   stdin one `status prod <sha>`
 //                                        answer of ds-data-prod → one status line on
@@ -19,7 +23,7 @@
 // the ciphertext, and its log carries names and status lines only.
 
 import { execFileSync } from "node:child_process";
-import { createHash, X509Certificate } from "node:crypto";
+import { createHash, randomBytes, X509Certificate } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -30,8 +34,8 @@ export const SECRET_KEYS = Object.freeze([
 ]);
 /** The value shape the box accepts; pinned equal to the entrypoint's SECRET_VALUE. */
 export const SECRET_VALUE = /^[A-Za-z0-9+/=_.-]{8,256}$/;
-/** The box refuses a ciphertext whose plaintext is older than this (24 h). */
-export const SECRET_MAX_AGE_SEC = 24 * 3600;
+/** The box refuses a ciphertext whose plaintext is older than this (6 h); pinned equal to the entrypoint's SECRET_MAX_AGE. */
+export const SECRET_MAX_AGE_SEC = 6 * 3600;
 /** The step ds-data-prod runs the rotation in: unit ds-prod-<sha12>-data-secret. */
 export const SECRET_STEP = "data-secret";
 
@@ -74,10 +78,36 @@ export function parseSecretLines(text) {
   return values;
 }
 
-/** The plaintext the box's DATA_PY secret-stage reads. */
-export function secretPlaintext(values, now = new Date()) {
+/**
+ * The plaintext the box's DATA_PY secret-stage reads. `sha` binds it to the live prod
+ * SHA the apply names; `nonce` and `createdAt` let the box refuse a replay (it keeps
+ * the last applied pair and accepts only a newer `createdAt`).
+ */
+export function secretPlaintext(
+  values,
+  { sha, now = new Date(), nonce = randomBytes(16).toString("hex") },
+) {
+  if (!/^[0-9a-f]{40}$/.test(String(sha)))
+    throw new SecretError("the live prod SHA must be the full 40-hex id");
   const createdAt = now.toISOString().replace(/\.\d{3}Z$/, "Z");
-  return JSON.stringify({ schema: 1, createdAt, values });
+  return JSON.stringify({ schema: 1, createdAt, sha, nonce, values });
+}
+
+/**
+ * Refuses while ds-data-prod's intake certificate is not in the tree. The box
+ * generates its key pair only once a release carrying the data-secret verbs has
+ * installed them; the certificate is then committed from the recipient run's log.
+ */
+export function requireRecipient(certPath = RECIPIENT_PATH) {
+  if (existsSync(certPath)) return;
+  throw new SecretError(
+    [
+      `${certPath} is not committed yet, so there is nothing to encrypt to.`,
+      "After a release carrying the data-secret verbs is live, dispatch",
+      "`gh workflow run data-secret.yml --ref main -f action=recipient` and commit the",
+      "certificate it prints (infra/deploy/README.md → «Rotating the box's pgBackRest S3 key», step 1).",
+    ].join(" "),
+  );
 }
 
 /** The ciphertext (base64 of CMS AuthEnvelopedData, DER) of `plaintext` to `certPath`. */
@@ -86,11 +116,7 @@ export function encryptSecret(
   certPath = RECIPIENT_PATH,
   run = execFileSync,
 ) {
-  if (!existsSync(certPath)) {
-    throw new SecretError(
-      `${certPath} is absent: bootstrap it first (infra/deploy/README.md → «Rotating the box's pgBackRest S3 key», step 1)`,
-    );
-  }
+  requireRecipient(certPath);
   const der = run(
     "openssl",
     ["cms", "-encrypt", "-binary", "-aes-256-gcm", "-outform", "DER", certPath],
@@ -172,19 +198,23 @@ function main(argv) {
     process.stdout.write(`${state}\n`);
     return 0;
   }
-  if (cmd !== undefined) {
-    process.stderr.write("usage: pnpm prod:data-secret < NAME=value lines\n");
+  if (rest.length !== 0 || !/^[0-9a-f]{40}$/.test(cmd ?? "")) {
+    process.stderr.write(
+      "usage: pnpm prod:data-secret <live sha> < NAME=value lines\n",
+    );
     return 2;
   }
+  const sha = cmd;
   try {
+    requireRecipient();
     const values = parseSecretLines(readFileSync(0, "utf8"));
-    const ciphertext = encryptSecret(secretPlaintext(values));
+    const ciphertext = encryptSecret(secretPlaintext(values, { sha }));
     process.stdout.write(`${ciphertext}\n`);
     process.stderr.write(
       [
         `data-secret: ${Object.keys(values).join(", ")} encrypted to ${certFingerprint(readFileSync(RECIPIENT_PATH, "utf8"))}`,
-        "data-secret: valid for 24 h. On the owner's word, with <live sha>:",
-        '  gh workflow run data-secret.yml --ref main -f action=apply -f sha=<live sha> -f owner_quote="<the owner\'s words>" -f ciphertext=<the line above>',
+        `data-secret: valid for 6 h, once, for ${sha.slice(0, 12)} only. On the owner's word:`,
+        `  gh workflow run data-secret.yml --ref main -f action=apply -f sha=${sha} -f owner_quote="<the owner's words>" -f ciphertext=<the line above>`,
         "",
       ].join("\n"),
     );

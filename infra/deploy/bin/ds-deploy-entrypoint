@@ -570,6 +570,10 @@ SECRET_INTAKE_KEY=$SECRET_INTAKE_DIR/key.pem
 SECRET_INTAKE_CERT=$SECRET_INTAKE_DIR/cert.pem
 SECRET_STAGED=$ROOT/etc/ds-platform/.data.env.next
 SECRET_BACKUP=$ROOT/etc/ds-platform/.data.env.previous
+# One use per ciphertext: the {createdAt, nonce} of the last rotation whose verdict
+# stands, and the one a staged rotation will record (root 0600, in the 0700 dir).
+SECRET_APPLIED=$SECRET_INTAKE_DIR/applied.json
+SECRET_PENDING=$SECRET_INTAKE_DIR/pending.json
 POSTGRES_PROBE=$ROOT/usr/local/lib/ds-platform/postgres-artifact-probe.py
 HARDEN_SSH=$ROOT/usr/local/lib/ds-platform/harden-ssh.sh
 # #3662: the key custody's box side and the custodians of the shipped tree.
@@ -622,7 +626,9 @@ ROLES = ("postgres", "pgbackrest")
 # #4068: the data.env names secret-apply may replace, and the shape of their values.
 SECRET_KEYS = ("PGBACKREST_REPO1_S3_KEY", "PGBACKREST_REPO1_S3_KEY_SECRET")
 SECRET_VALUE = re.compile("[A-Za-z0-9+/=_.-]{8,256}")
-SECRET_MAX_AGE = 24 * 3600
+SECRET_MAX_AGE = 6 * 3600
+SHA40 = re.compile("[0-9a-f]{40}")
+NONCE = re.compile("[0-9a-f]{32}")
 # The data-env outputs, as paths in the tree; ship_tree's DATA_COMPOSE_GENERATED.
 GENERATED_COMPOSE = ("infra/deploy/compose/data-prod/.env",
                      "infra/deploy/compose/data-prod/.postgres-artifacts.json")
@@ -744,10 +750,14 @@ if action == "secret-cipher":
 
 if action == "secret-stage":
     # #4068: stdin the decrypted plaintext, {"schema": 1, "createdAt": "<UTC>Z",
-    # "values": {NAME: value}}; argv: data.env, the staged copy. Only the names of
-    # SECRET_KEYS, each replacing the one NAME= line data.env already holds. Neither
-    # a value nor a line of data.env is ever printed: the names only.
-    data_env, staged = sys.argv[2], sys.argv[3]
+    # "sha": <live sha>, "nonce": <32 hex>, "values": {NAME: value}}; argv: data.env,
+    # the staged copy, the sha secret-apply was called with, the applied record, the
+    # pending record. Only the names of SECRET_KEYS, each replacing the one NAME= line
+    # data.env already holds. Neither a value nor a line of data.env is ever printed.
+    # One use per ciphertext: it names the SHA it is for, and its createdAt must be
+    # newer than the one the last rotation unit recorded once its verdict stood. The
+    # last applied ciphertext itself exits 4: secret-apply attaches to its verdict.
+    data_env, staged, sha, applied, pending = sys.argv[2:7]
     raw = sys.stdin.buffer.read(8193)
     # openssl writes nothing when the ciphertext is not for this box's key.
     if not raw:
@@ -758,8 +768,10 @@ if action == "secret-stage":
         req = json.loads(raw.decode("utf-8"))
     except ValueError:
         stop(2, "the secret is not one JSON object")
-    check(isinstance(req, dict) and set(req) == {"schema", "createdAt", "values"})
+    check(isinstance(req, dict) and set(req) == {"schema", "createdAt", "sha", "nonce", "values"})
     check(type(req["schema"]) is int and req["schema"] == 1)
+    check(isinstance(req["sha"], str) and SHA40.fullmatch(req["sha"]) is not None)
+    check(isinstance(req["nonce"], str) and NONCE.fullmatch(req["nonce"]) is not None)
     check(isinstance(req["createdAt"], str) and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", req["createdAt"]) is not None)
     try:
         created = datetime.datetime.strptime(req["createdAt"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
@@ -767,7 +779,23 @@ if action == "secret-stage":
         check(False)
     age = (datetime.datetime.now(datetime.timezone.utc) - created).total_seconds()
     if age > SECRET_MAX_AGE or age < -300:
-        stop(2, "the secret was encrypted more than 24 h ago or in the future: encrypt it again")
+        stop(2, "the secret was encrypted more than 6 h ago or in the future: encrypt it again")
+    if req["sha"] != sha:
+        stop(2, "the secret was encrypted for another prod SHA: encrypt it again for the live one")
+    last = None
+    if os.path.exists(applied):
+        try:
+            with open(applied, encoding="utf-8") as f:
+                last = json.load(f)
+            ok = isinstance(last, dict) and set(last) == {"createdAt", "nonce"} and all(isinstance(last[k], str) for k in last)
+        except (OSError, ValueError):
+            ok = False
+        if not ok:
+            stop(3, "the applied-secret record could not be read")
+    if last is not None and req["nonce"] == last["nonce"]:
+        stop(4, "already applied: this ciphertext's rotation has its verdict")
+    if last is not None and req["createdAt"] <= last["createdAt"]:
+        stop(2, "the secret is not newer than the last applied one (a replay): encrypt it again")
     values = req["values"]
     check(isinstance(values, dict) and values and set(values) <= set(SECRET_KEYS))
     for name, value in values.items():
@@ -786,6 +814,9 @@ if action == "secret-stage":
     for line in lines:
         name = line.split("=", 1)[0]
         new.append(name + "=" + values[name] if "=" in line and name in values else line)
+    # The rotation unit moves it onto the applied record once its verdict stands;
+    # written first, so a staged copy never lacks it.
+    write(pending, json.dumps({"createdAt": req["createdAt"], "nonce": req["nonce"]}) + "\n")
     write(staged, "\n".join(new))  # mkstemp: 0600, owned by root (the caller)
     names = ", ".join(sorted(values))
     sys.stdout.write(("staged: " if new != lines else "unchanged: ") + names + "\n")
@@ -1017,6 +1048,7 @@ echo 'data-secret: data.env changed; recreating postgres + pgbackrest on the rec
 if $DATA_UP_PERSISTENCE && $DATA_PGBACKREST_CHECK; then
   rm -f -- '$SECRET_BACKUP'
   echo 'data-secret: pgbackrest check passed with the new values'
+  mv -f -- '$SECRET_PENDING' '$SECRET_APPLIED'
   exit 0
 fi
 echo 'data-secret: the new values failed; restoring the previous data.env'
@@ -1024,6 +1056,8 @@ install -m 0600 -o root -g root -- '$SECRET_BACKUP' '$DATA_ENV'
 rm -f -- '$SECRET_BACKUP'
 $DATA_UP_PERSISTENCE
 $DATA_PGBACKREST_CHECK || echo 'data-secret: WARNING: pgbackrest check fails with the previous values too'
+# The previous data.env stands again: this ciphertext is spent too.
+mv -f -- '$SECRET_PENDING' '$SECRET_APPLIED'
 exit 1
 SH
 }
@@ -1047,9 +1081,13 @@ secret_apply() {
   data_py secret-cipher "$secret_work/secret.cms" >/dev/null
   out=$(sudo openssl cms -decrypt -binary -inform DER -in "$secret_work/secret.cms" \
     -inkey "$SECRET_INTAKE_KEY" -recip "$SECRET_INTAKE_CERT" 2>/dev/null |
-    sudo python3 -I -X utf8 -c "$DATA_PY" secret-stage "$DATA_ENV" "$SECRET_STAGED") || rc=$?
+    sudo python3 -I -X utf8 -c "$DATA_PY" secret-stage "$DATA_ENV" "$SECRET_STAGED" "$sha" \
+      "$SECRET_APPLIED" "$SECRET_PENDING") || rc=$?
   case $rc in
     0) printf '%s: %s\n' "$TAG" "$out" ;;
+    # The last applied ciphertext again (a re-run): nothing is staged or started;
+    # the caller reads the recorded verdict with status.
+    4) printf '%s: %s\n' "$TAG" "$out"; exit 0 ;;
     2) reject "${out:-the secret was refused}" ;;
     *) refuse "${out:-the secret could not be staged}" ;;
   esac
@@ -1059,7 +1097,7 @@ secret_apply() {
   out=$(sudo "$DS_RELEASE" release prod "$sha" data-secret "$step_file" </dev/null) || rc=$?
   [[ -z $out ]] || printf '%s\n' "$out"
   # No unit started (a recorded verdict, a refusal): nothing will consume the staged copy.
-  [[ $rc == 0 && $out == *" started"* ]] || sudo rm -f -- "$SECRET_STAGED"
+  [[ $rc == 0 && $out == *" started"* ]] || sudo rm -f -- "$SECRET_STAGED" "$SECRET_PENDING"
   exit "$rc"
 }
 

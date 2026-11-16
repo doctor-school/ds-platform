@@ -11,8 +11,10 @@ import {
   certFingerprint,
   encryptSecret,
   parseSecretLines,
+  requireRecipient,
   rotationVerdict,
   SECRET_KEYS,
+  SECRET_MAX_AGE_SEC,
   SecretError,
   secretPlaintext,
 } from "./data-secret.mjs";
@@ -66,14 +68,32 @@ describe("4068: parseSecretLines", () => {
   });
 });
 
-it("4068: secretPlaintext carries the schema, a second-precision UTC stamp and the values", () => {
+it("4068: secretPlaintext carries the schema, a second-precision UTC stamp, the target SHA, a nonce and the values", () => {
+  const sha = "0123456789abcdef0123456789abcdef01234567";
   assert.equal(
     secretPlaintext(
       { PGBACKREST_REPO1_S3_KEY: "ABCDEFGH1234" },
-      new Date("2026-11-16T10:20:30.456Z"),
+      {
+        sha,
+        now: new Date("2026-11-16T10:20:30.456Z"),
+        nonce: "ab".repeat(16),
+      },
     ),
-    '{"schema":1,"createdAt":"2026-11-16T10:20:30Z","values":{"PGBACKREST_REPO1_S3_KEY":"ABCDEFGH1234"}}',
+    `{"schema":1,"createdAt":"2026-11-16T10:20:30Z","sha":"${sha}","nonce":"${"ab".repeat(16)}","values":{"PGBACKREST_REPO1_S3_KEY":"ABCDEFGH1234"}}`,
   );
+  const a = JSON.parse(
+    secretPlaintext({ PGBACKREST_REPO1_S3_KEY: "ABCDEFGH1234" }, { sha }),
+  );
+  const b = JSON.parse(
+    secretPlaintext({ PGBACKREST_REPO1_S3_KEY: "ABCDEFGH1234" }, { sha }),
+  );
+  assert.match(a.nonce, /^[0-9a-f]{32}$/);
+  assert.notEqual(a.nonce, b.nonce, "a fresh nonce per ciphertext");
+  assert.throws(() => secretPlaintext({}, { sha: "abc" }), SecretError);
+});
+
+it("4068: a ciphertext is valid for 6 h", () => {
+  assert.equal(SECRET_MAX_AGE_SEC, 6 * 3600);
 });
 
 describe(
@@ -105,9 +125,10 @@ describe(
           { encoding: "utf8" },
         );
         assert.equal(made.status, 0, made.stderr);
-        const plain = secretPlaintext({
-          PGBACKREST_REPO1_S3_KEY: "ABCDEFGH1234",
-        });
+        const plain = secretPlaintext(
+          { PGBACKREST_REPO1_S3_KEY: "ABCDEFGH1234" },
+          { sha: "0123456789abcdef0123456789abcdef01234567" },
+        );
         const b64 = encryptSecret(plain, cert);
         assert.match(b64, /^[A-Za-z0-9+/]+={0,2}$/);
         assert.ok(
@@ -147,10 +168,15 @@ describe(
     });
 
     it("refuses without the committed certificate, pointing at the bootstrap step", () => {
-      assert.throws(
+      for (const call of [
         () => encryptSecret("{}", join(tmpdir(), "no-such-recipient.pem")),
-        /bootstrap it first/,
-      );
+        () => requireRecipient(join(tmpdir(), "no-such-recipient.pem")),
+      ]) {
+        assert.throws(
+          call,
+          /is not committed yet.*data-secret\.yml.*action=recipient.*step 1/s,
+        );
+      }
     });
   },
 );

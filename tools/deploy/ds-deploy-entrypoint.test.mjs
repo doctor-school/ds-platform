@@ -27,7 +27,8 @@ import { afterEach, beforeEach, describe, it, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
-import { DATA_READ_VERBS, DATA_VERBS } from "./lib/data-prod.mjs";
+import { SECRET_KEYS, SECRET_VALUE } from "./data-secret.mjs";
+import { DATA_READ_VERBS, DATA_SECRET_VERBS, DATA_VERBS } from "./lib/data-prod.mjs";
 import { BOX_ENTRYPOINTS, DATA_BOX_ENTRYPOINTS, DS_READ_ENTRYPOINT_BIN } from "./lib/remote.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -101,17 +102,44 @@ test("2984: the entrypoint checks env and sha with ds-release's own regexes", ()
   }
 });
 
-test("3313, 3646: the data verbs are one list: DATA_VERBS, the case arm, the client's release and read verbs", () => {
+test("3313, 3646, 4068: the data verbs are one list: DATA_VERBS, the case arm, the client's release, read and secret verbs", () => {
   const lines = readFileSync(ENTRYPOINT, "utf8").split("\n");
   const line = lines.find((l) => l.startsWith("DATA_VERBS="));
   assert.ok(line, "the entrypoint defines DATA_VERBS");
-  const all = [...DATA_VERBS, ...DATA_READ_VERBS];
+  const all = [...DATA_VERBS, ...DATA_READ_VERBS, ...DATA_SECRET_VERBS];
   assert.deepEqual(line.slice("DATA_VERBS='".length, -1).split(" "), all);
   const start = lines.indexOf("  capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \\");
   assert.ok(start > 0, "one case arm dispatches the data verbs");
   const arm = `${lines[start].slice(0, -1)}${lines[start + 1]}`.trim().replace(/\)$/, "");
   assert.deepEqual(arm.split(/\s*\|\s*/), all);
   assert.equal(lines[start + 2], "    data_verb");
+});
+
+test("4068: the secret relay takes the read path's hop and the release driver's live-image pattern", () => {
+  const pick = (file, name) => {
+    const line = readFileSync(file, "utf8")
+      .split("\n")
+      .find((l) => l.startsWith(`${name}=`));
+    assert.ok(line, `${file} defines ${name}`);
+    return line;
+  };
+  for (const name of ["DATA_PROD_HOP_KEY", "DATA_PROD_HOP_KNOWN_HOSTS", "DATA_PROD_ADDRESS"]) {
+    assert.equal(pick(ENTRYPOINT, name), pick(READ_ENTRYPOINT, name), `${name} is one definition`);
+  }
+  assert.equal(
+    pick(ENTRYPOINT, "LIVE_IMAGE_RE"),
+    pick(resolve(here, "../../infra/deploy/bin/release-driver"), "LIVE_IMAGE_RE"),
+  );
+});
+
+test("4068: the box accepts exactly the names and value shape `pnpm prod:data-secret` encrypts", () => {
+  const text = readFileSync(ENTRYPOINT, "utf8");
+  const keys = text.match(/^SECRET_KEYS = \((.*)\)$/m);
+  assert.ok(keys, "DATA_PY defines SECRET_KEYS");
+  assert.deepEqual(JSON.parse(`[${keys[1]}]`), [...SECRET_KEYS]);
+  const value = text.match(/^SECRET_VALUE = re\.compile\("(.*)"\)$/m);
+  assert.ok(value, "DATA_PY defines SECRET_VALUE");
+  assert.equal(`^${value[1]}$`, SECRET_VALUE.source);
 });
 
 test("3313, 3646: the data box installs the DATA_BOX_ENTRYPOINTS of remote.mjs, in order — no ds-read-entrypoint", () => {
@@ -1204,6 +1232,265 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         `ds-release-called release --retry-failed prod ${SHA} backup\ncd '${compose}'\n` +
         "docker compose exec -T pgbackrest /usr/local/bin/backup.sh incr\n",
     );
+  });
+
+  // --- 4068: the data-box secret rotation ----------------------------------------------
+  const dataEnv = () => join(root, "etc/ds-platform/data.env");
+  const intakeCert = () => join(root, "etc/ds-platform/secret-intake/cert.pem");
+  const staged = () => join(root, "etc/ds-platform/.data.env.next");
+  const previous = () => join(root, "etc/ds-platform/.data.env.previous");
+  const OLD_ENV =
+    "PGBACKREST_REPO1_CIPHER_PASS=cipher-pass-value\nPGBACKREST_REPO1_S3_KEY=OLDKEYID0001\n" +
+    "PGBACKREST_REPO1_S3_KEY_SECRET=old/secret+value=\n";
+  const NEW = { PGBACKREST_REPO1_S3_KEY: "NEWKEYID0002", PGBACKREST_REPO1_S3_KEY_SECRET: "new/secret+value=" };
+  // A ds-release that records its calls, keeps the step script and starts nothing.
+  const secretRelease = () =>
+    writeFileSync(
+      join(root, "usr/local/bin/ds-release"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "ds-release-called $*" >> "$STUB_DIR/ds-release.log"',
+        '[[ $1 == check ]] && exit "${STUB_CHECK_RC:-0}"',
+        '[[ $1 == release ]] && { cp -- "${@: -1}" "$STUB_DIR/step.sh"; echo "ds-release: ds-prod-${3:0:12}-$4 started"; }',
+        "exit 0",
+      ].join("\n") + "\n",
+    );
+  const secretBox = () => {
+    setRole("data");
+    secretRelease();
+    writeFileSync(dataEnv(), OLD_ENV, { mode: 0o600 });
+    mkdirSync(join(tree(), "infra/deploy/compose/data-prod"), { recursive: true });
+    writeFileSync(join(tree(), "infra/deploy/compose/data-prod/.postgres-artifacts.json"), "{}\n");
+    const r = run("secret-recipient");
+    assert.equal(r.status, 0, r.stderr);
+  };
+  const cipher = async (values, now = new Date(), cert = intakeCert()) => {
+    const { encryptSecret, secretPlaintext } = await import("./data-secret.mjs");
+    return JSON.stringify({ ciphertext: encryptSecret(secretPlaintext(values, now), cert) });
+  };
+
+  it("4068: secret-recipient generates the intake key once, root-only, and prints only the certificate", () => {
+    setRole("data");
+    const first = run("secret-recipient");
+    assert.equal(first.status, 0, first.stderr);
+    assert.match(first.stderr, /intake key generated/);
+    assert.match(
+      first.stdout,
+      /^-----BEGIN CERTIFICATE-----\n[\s\S]*-----END CERTIFICATE-----\n(sha256|SHA256) Fingerprint=[0-9A-F:]{95}\n$/,
+    );
+    assert.doesNotMatch(first.stdout, /PRIVATE KEY/);
+    const key = join(root, "etc/ds-platform/secret-intake/key.pem");
+    assert.equal(statSync(key).mode & 0o777, 0o600);
+    assert.equal(statSync(dirname(key)).mode & 0o777, 0o700);
+    const again = run("secret-recipient");
+    assert.equal(again.status, 0, again.stderr);
+    assert.equal(again.stdout, first.stdout, "the same key pair, not a new one");
+    assert.doesNotMatch(again.stderr, /generated/);
+  });
+
+  it("4068: secret-recipient and secret-apply are data-box verbs with exact arity", () => {
+    setRole("data");
+    for (const command of ["secret-recipient now", "secret-apply", `secret-apply ${SHA.slice(0, 12)}`, `secret-apply ${SHA} x`]) {
+      assert.equal(run(command, { input: "" }).status, 2, command);
+    }
+    setRole("prod");
+    for (const command of ["secret-recipient", `secret-apply ${SHA}`]) {
+      const r = run(command, { input: "" });
+      assert.equal(r.status, 3, command);
+      assert.match(r.stderr, /is served by the data box only/);
+    }
+  });
+
+  it("4068: secret-apply decrypts, stages only the allowlisted lines and starts the data-secret unit — no value printed", async () => {
+    secretBox();
+    const r = run(`secret-apply ${SHA}`, { input: await cipher(NEW) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /staged: PGBACKREST_REPO1_S3_KEY, PGBACKREST_REPO1_S3_KEY_SECRET\n/);
+    assert.match(r.stdout, /-data-secret started/);
+    for (const v of [...Object.values(NEW), "OLDKEYID0001", "cipher-pass-value"]) {
+      assert.ok(!(r.stdout + r.stderr).includes(v), "no value in the output");
+    }
+    assert.equal(
+      readFileSync(staged(), "utf8"),
+      "PGBACKREST_REPO1_CIPHER_PASS=cipher-pass-value\nPGBACKREST_REPO1_S3_KEY=NEWKEYID0002\n" +
+        "PGBACKREST_REPO1_S3_KEY_SECRET=new/secret+value=\n",
+    );
+    assert.equal(statSync(staged()).mode & 0o777, 0o600);
+    assert.equal(readFileSync(dataEnv(), "utf8"), OLD_ENV, "data.env changes only inside the unit");
+    assert.match(log("ds-release"), new RegExp(`^ds-release-called check prod\nds-release-called release prod ${SHA} data-secret \\S+\n$`));
+    const script = log("step");
+    assert.match(
+      script,
+      /\ndocker compose -f compose\.yml -f \.postgres-artifacts\.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest/,
+    );
+    assert.match(script, /docker compose exec -T -u postgres pgbackrest pgbackrest --stanza=ds check/);
+  });
+
+  it("4068: secret-apply refuses a stale, foreign, off-list or malformed secret and stages nothing", async () => {
+    secretBox();
+    const other = join(dir, "other.pem");
+    const made = spawnSync(
+      "openssl",
+      ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", join(dir, "other.key"), "-out", other, "-subj", "/CN=other", "-days", "1"],
+      { encoding: "utf8" },
+    );
+    assert.equal(made.status, 0, made.stderr);
+    const cases = [
+      [await cipher(NEW, new Date(Date.now() - 25 * 3600 * 1000)), /encrypted more than 24 h ago/],
+      [await cipher({ PGBACKREST_REPO1_CIPHER_PASS: "abcdefgh12" }), /bad payload for secret-stage/],
+      [await cipher({ PGBACKREST_REPO1_S3_KEY: "has a space" }), /is not 8-256 characters/],
+      [await cipher(NEW, new Date(), other), /does not decrypt with this box's intake key/],
+      ['{"ciphertext":"not base64!"}', /bad payload for secret-cipher/],
+      [JSON.stringify({ ciphertext: Buffer.from("not cms").toString("base64") }), /does not decrypt with this box's intake key/],
+    ];
+    for (const [input, reason] of cases) {
+      const r = run(`secret-apply ${SHA}`, { input });
+      assert.equal(r.status, 2, r.stderr);
+      assert.match(r.stderr, reason);
+      assert.ok(!existsSync(staged()), "nothing staged");
+    }
+    assert.doesNotMatch(log("ds-release"), /release prod/, "no unit started");
+  });
+
+  it("4068: secret-apply refuses before decrypting without an intake key, a recorded overlay, or while a ds-prod-* unit runs", async () => {
+    secretBox();
+    const input = await cipher(NEW);
+    assert.equal(run(`secret-apply ${SHA}`, { input, env: { STUB_CHECK_RC: "3" } }).status, 3);
+    rmSync(join(tree(), "infra/deploy/compose/data-prod/.postgres-artifacts.json"));
+    const r2 = run(`secret-apply ${SHA}`, { input });
+    assert.equal(r2.status, 3);
+    assert.match(r2.stderr, /no recorded image overlay/);
+    rmSync(join(root, "etc/ds-platform/secret-intake"), { recursive: true });
+    const r3 = run(`secret-apply ${SHA}`, { input });
+    assert.equal(r3.status, 3);
+    assert.match(r3.stderr, /no intake key on this box/);
+    assert.ok(!existsSync(staged()));
+    assert.doesNotMatch(log("ds-release"), /release prod/);
+  });
+
+  it("4068: secret-apply leaves no staged copy when ds-release starts no unit (a recorded verdict)", async () => {
+    secretBox();
+    writeFileSync(
+      join(root, "usr/local/bin/ds-release"),
+      '#!/usr/bin/env bash\n[[ $1 == release ]] && echo "ds-release: ds-prod-x-data-secret succeeded (recorded verdict; not re-run)"\nexit 0\n',
+    );
+    const r = run(`secret-apply ${SHA}`, { input: await cipher(NEW) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(!existsSync(staged()));
+  });
+
+  // The unit's script, run for real: docker answers `check` with a failure while
+  // data.env holds `failKey`, so both the success and the restore branch run.
+  const runUnit = async (failKey) => {
+    secretBox();
+    assert.equal(run(`secret-apply ${SHA}`, { input: await cipher(NEW) }).status, 0);
+    writeFileSync(
+      join(stubs, "docker"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "docker $*" >> "$STUB_DIR/docker.log"',
+        `[[ " $* " == *" check "* ]] && grep -q '${failKey}' '${dataEnv()}' && exit 1`,
+        "exit 0",
+      ].join("\n") + "\n",
+    );
+    // `install -o root -g root` needs root; the owner is not what is tested here.
+    writeFileSync(
+      join(stubs, "install"),
+      '#!/usr/bin/env bash\nargs=(); skip=0\nfor a in "$@"; do\n  if [[ $skip == 1 ]]; then skip=0; continue; fi\n  case $a in -o|-g) skip=1 ;; *) args+=("$a") ;; esac\ndone\nexec /usr/bin/install "${args[@]}"\n',
+    );
+    chmodSync(join(stubs, "docker"), 0o755);
+    chmodSync(join(stubs, "install"), 0o755);
+    return spawnSync("bash", ["--norc", "-euo", "pipefail", join(dir, "step.sh")], {
+      env: { ...process.env, PATH: `${stubs}${delimiter}${process.env.PATH}`, STUB_DIR: dir },
+      encoding: "utf8",
+    });
+  };
+
+  it("4068: the data-secret unit swaps data.env, recreates on the overlay and passes the check", async () => {
+    const r = await runUnit("NO-SUCH-KEY");
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(readFileSync(dataEnv(), "utf8"), /^PGBACKREST_REPO1_S3_KEY=NEWKEYID0002$/m);
+    assert.equal(statSync(dataEnv()).mode & 0o777, 0o600);
+    assert.ok(!existsSync(staged()) && !existsSync(previous()), "no copy left");
+    assert.deepEqual(log("docker").trim().split("\n"), [
+      "docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest",
+      "docker compose exec -T -u postgres pgbackrest pgbackrest --stanza=ds check",
+    ]);
+  });
+
+  it("4068: a failed check puts the previous data.env back, recreates again and fails the unit", async () => {
+    const r = await runUnit("NEWKEYID0002");
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /restoring the previous data\.env/);
+    assert.equal(readFileSync(dataEnv(), "utf8"), OLD_ENV);
+    assert.equal(statSync(dataEnv()).mode & 0o777, 0o600);
+    assert.ok(!existsSync(previous()));
+    assert.equal(log("docker").trim().split("\n").filter((l) => l.includes(" up -d ")).length, 2, "recreated twice");
+  });
+
+  // --- 4068: the relay on ds-api-prod --------------------------------------------------
+  const relayBox = (image = `ds-api:${SHA}`) => {
+    setRole("prod");
+    secretRelease();
+    writeFileSync(
+      join(stubs, "docker"),
+      `#!/usr/bin/env bash\n[[ $1 == inspect ]] && { printf '%s\\n' '${image}'; exit 0; }\nexit 1\n`,
+    );
+    chmodSync(join(stubs, "docker"), 0o755);
+    writeFileSync(
+      join(stubs, "ssh"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "$*" >> "$STUB_DIR/ssh.log"',
+        '[[ $1 == -n ]] || cat > "$STUB_DIR/hop-stdin.log"',
+        'echo "hop answered: ${*: -1}"',
+      ].join("\n") + "\n",
+    );
+    chmodSync(join(stubs, "ssh"), 0o755);
+  };
+
+  it("4068: the relay hands each data-secret verb to its data verb over the hop, on the prod box only", () => {
+    relayBox();
+    const cases = [
+      ["data-secret-recipient prod", "secret-recipient"],
+      [`data-secret-status prod ${SHA}`, `status prod ${SHA}`],
+      [`data-secret-finish prod ${SHA} failed`, `finish ${SHA} failed`],
+      [`data-secret-apply prod ${SHA}`, `secret-apply ${SHA}`],
+    ];
+    for (const [command, hop] of cases) {
+      const r = run(command, { input: '{"ciphertext":"QUJD"}' });
+      assert.equal(r.status, 0, `${command}: ${r.stderr}`);
+      assert.equal(r.stdout, `hop answered: ${hop}\n`);
+    }
+    assert.equal(log("hop-stdin"), '{"ciphertext":"QUJD"}', "only apply forwards stdin");
+    assert.match(log("ssh"), /-i \S+\/home\/deploy\/\.ssh\/data-prod-hop .*StrictHostKeyChecking=yes .*deploy@192\.168\.0\.10/);
+    assert.equal(log("ds-release"), "ds-release-called check prod\n");
+    for (const role of ["data", "stage"]) {
+      setRole(role);
+      const r = run("data-secret-recipient prod");
+      assert.equal(r.status, 3);
+      assert.match(r.stderr, /is served by the prod box only/);
+    }
+  });
+
+  it("4068: data-secret-apply refuses a SHA that is not live, an unknown live SHA, a running release step, and bad words", () => {
+    relayBox(`ds-api:${"f".repeat(40)}`);
+    const r1 = run(`data-secret-apply prod ${SHA}`, { input: "{}" });
+    assert.equal(r1.status, 3);
+    assert.match(r1.stderr, /is not the live prod SHA ffffffffffff/);
+    relayBox("nginx:latest");
+    assert.match(run(`data-secret-apply prod ${SHA}`, { input: "{}" }).stderr, /the live prod SHA is unknown/);
+    relayBox();
+    assert.equal(run(`data-secret-apply prod ${SHA}`, { input: "{}", env: { STUB_CHECK_RC: "3" } }).status, 3);
+    assert.equal(log("ssh"), "", "no hop");
+    for (const command of [
+      "data-secret-recipient",
+      "data-secret-apply prod",
+      `data-secret-finish prod ${SHA} maybe`,
+      `data-secret-status stage-main ${SHA}`,
+    ]) {
+      assert.equal(run(command).status, 2, command);
+    }
   });
 
   it("3395: data-up refuses before any unit starts when /etc/ds-platform/glitchtip.env is absent", () => {

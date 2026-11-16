@@ -71,6 +71,11 @@ async function shoot(page: Page, name: string) {
 }
 
 async function axeClean(page: Page) {
+  // Contrast is read on settled colours: a hydrated action leaving its disabled
+  // state, or a footer action swapped in place by the re-read, runs the
+  // primitives' 150 ms colour transition, and a mid-transition sample is no
+  // colour the reader is left with.
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))));
   const { violations } = await new AxeBuilder({ page })
     .options({ rules: MAIN_LANDMARK_RULES })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
@@ -175,22 +180,42 @@ test.describe("024 — the doctor's course path and step screens", () => {
 
     // Video: the provider clock → position facts → 100 %.
     await page.getByRole("link", { name: /Продолжить — урок 1/ }).click();
-    await expect(page.getByRole("button", { name: "Смотреть видео" })).toBeVisible();
+    // Hydrated: the action is armed (it ships disabled from the server render).
+    await expect(page.getByRole("button", { name: "Смотреть видео" })).toBeEnabled();
     // 024-design §8 — the step screen carries the same plate.
     await expect(page.getByTestId("points-plate").getByTestId("points-plate-value").first()).toHaveText(/^\d/);
     await axeClean(page);
     await shoot(page, "step-video-1280");
+    const strip = page.getByRole("list", { name: "Шаги урока" });
     const facts: string[] = [];
+    const pointsReads: string[] = [];
     page.on("request", (r) => {
       if (r.method() === "POST" && r.url().endsWith("/v1/me/learning/facts")) facts.push(r.postData() ?? "");
+      if (r.method() === "GET" && r.url().endsWith("/v1/me/points")) pointsReads.push(r.url());
     });
+    // Before the completing fact the order holds the next step: no «Дальше», step 2 closed.
+    await expect(page.getByRole("link", { name: "Дальше" })).toHaveCount(0);
+    await expect(strip.getByRole("img", { name: /^Шаг 2\. .*Закрыт$/ })).toBeVisible();
+    // Enabled only once hydrated — the click is never swallowed by a server-rendered button.
+    await expect(page.getByRole("button", { name: "Смотреть видео" })).toBeEnabled();
     await page.getByRole("button", { name: "Смотреть видео" }).click();
     await expect(page.getByText("Просмотрено 100 %", { exact: true })).toBeVisible({ timeout: 90_000 });
     expect(facts.length).toBeGreaterThanOrEqual(2);
+    // EARS-17 — the completing fact updates the screen in place, no reload:
+    // «Дальше», the strip (step 2 reachable, one «Вы здесь») and the plate.
+    await expect(page.getByRole("link", { name: "Дальше" })).toBeVisible();
+    await expect(strip.getByRole("link", { name: /^Шаг 2\. .*Открыт$/ })).toBeVisible();
+    await expect(strip.getByRole("link", { name: /Вы здесь$/ })).toHaveCount(1);
+    // The plate re-read its balances from 025 after the completing fact.
+    await expect.poll(() => pointsReads.length).toBeGreaterThan(0);
+    await expect(page.getByTestId("points-plate").getByTestId("points-plate-value").first()).toHaveText(/^\d/);
     await shoot(page, "step-video-watched-1280");
+    // After a reload the strip still marks exactly one step «Вы здесь».
+    await page.reload();
+    await expect(strip.getByRole("link", { name: /Вы здесь$/ })).toHaveCount(1);
+    await expect(strip.getByRole("link", { name: /^Шаг 1\. .*Вы здесь$/ })).toHaveAttribute("aria-current", "step");
 
     // Download: `opened`.
-    await page.reload();
     await page.getByRole("link", { name: "Дальше" }).click();
     const download = page.getByRole("link", { name: "Скачать" });
     await expect(download).toBeVisible();
@@ -198,11 +223,13 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await download.click();
     await (await popup)?.close();
     await expect(page.getByText("Материал открыт", { exact: true })).toBeVisible();
+    // The `opened` fact completes the step: «Дальше» to the test appears in place.
+    await expect(page.getByRole("link", { name: "Дальше" })).toBeVisible();
+    await expect(strip.getByRole("link", { name: /Вы здесь$/ })).toHaveCount(1);
     await axeClean(page);
     await shoot(page, "step-download-opened-1280");
 
     // Exit test: reject below the threshold, then accept.
-    await page.reload();
     await page.getByRole("link", { name: "Дальше" }).click();
     await page.getByRole("button", { name: "Начать тест" }).click();
     for (let i = 0; i < 2; i++) {
@@ -232,7 +259,8 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await axeClean(page);
     await shoot(page, "doctor-path-next-lesson-390");
     await page.getByRole("link", { name: /Продолжить — урок 2/ }).click();
-    await expect(page.getByRole("button", { name: "Смотреть видео" })).toBeVisible();
+    // Hydrated: the action is armed (it ships disabled from the server render).
+    await expect(page.getByRole("button", { name: "Смотреть видео" })).toBeEnabled();
     await axeClean(page);
     await shoot(page, "step-video-390");
     await context.close();

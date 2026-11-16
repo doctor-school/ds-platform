@@ -322,4 +322,10 @@ test("024 EARS-28 / EARS-29 — a staff member composes a lesson, publishes it a
   );
   await expect(panel.getByText("Применён: Путь (Duolingo)")).toBeVisible();
   await shots(page, "course-preset-applied");
+
+  // Reopened, the picker starts on the applied preset, not on the first one.
+  await page.reload();
+  await expect(panel.getByText("Применён: Путь (Duolingo)")).toBeVisible();
+  await expect(panel.getByLabel("Путь (Duolingo)")).toBeChecked();
+  await expect(panel.getByLabel("ДПО / аккредитация")).not.toBeChecked();
 });

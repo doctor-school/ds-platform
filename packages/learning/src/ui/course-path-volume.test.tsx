@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoursePath } from "./course-path";
@@ -166,12 +167,55 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
     expect(moduleRow(21)).toHaveAttribute("aria-expanded", "true");
   });
 
+  it("EARS-14: after «Продолжить» the outline keeps «Вы здесь» marked while the jump scrolls; the spy resumes once it settles", () => {
+    // Short lessons: once lesson 60 sits at the top, lesson 61's first step is
+    // already above the spy line — the jump must not hand the mark to 61.
+    const path = multiModulePath(26, 4, 60);
+    const view = buildPathView(path);
+    const firstStep = new Map(view.outline.flatMap((m) => m.lessons).map((l) => [`node-${l.firstStepId}`, l.number]));
+    stubLayout((id) => {
+      const n = firstStep.get(id);
+      return n === undefined ? 0 : n <= 60 ? 64 - (60 - n) * 160 : n === 61 ? 224 : 2_000;
+    });
+    vi.stubGlobal("innerHeight", 900);
+    // Frames run when the test flushes them, as in a browser (one per frame).
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
+    const scrollFrame = (...events: string[]) =>
+      act(() => {
+        for (const type of events) window.dispatchEvent(new Event(type));
+        frames.splice(0).forEach((cb) => cb(0));
+      });
+    render(<CoursePath courseSlug="k" config={CONFIG} initial={path} />);
+    fireEvent.click(screen.getByRole("link", { name: "Продолжить — урок 60" }));
+    scrollFrame("scroll");
+    expect(outline().getByRole("link", { name: /^Урок 60\. / })).toHaveAttribute("aria-current", "true");
+    scrollFrame("scrollend", "scroll");
+    expect(outline().getByRole("link", { name: /^Урок 61\. / })).toHaveAttribute("aria-current", "true");
+  });
+
   it("EARS-14: the progress band names the module of «Вы здесь» on a multi-module course only", () => {
     const { unmount } = render(<CoursePath courseSlug="k" config={CONFIG} initial={multiModulePath(6, 3, 8)} />);
     expect(screen.getAllByText("Пройдено 7 уроков из 18 · модуль 3").length).toBeGreaterThan(0);
     unmount();
     render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath()} />);
     expect(screen.getAllByText("Пройдено 1 урок из 3").length).toBeGreaterThan(0);
+  });
+});
+
+describe("024 EARS-14 — the server HTML on a phone before the narrow switch", () => {
+  it("EARS-14: the outline column and the desktop grid apply only from the desktop width, so a phone never scrolls sideways before hydration", () => {
+    stubFetch({});
+    const html = renderToString(<CoursePath courseSlug="k" config={CONFIG} initial={multiModulePath(26, 4, 60)} />);
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    const aside = host.querySelector("aside")!;
+    expect(aside.classList).toContain("hidden");
+    expect(aside.classList).toContain("lg:flex");
+    const grid = aside.parentElement!;
+    expect(grid.classList).toContain("block");
+    expect(grid.classList).toContain("lg:grid");
+    vi.unstubAllGlobals();
   });
 });
 

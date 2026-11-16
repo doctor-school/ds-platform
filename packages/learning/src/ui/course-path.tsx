@@ -82,16 +82,42 @@ function openModuleIndex(view: PathView, n: number): number {
  * The canvas `spy()`: on scroll (one read per animation frame) the lesson whose
  * first step has passed the middle of the viewport becomes the lesson in view.
  * Desktop only — the narrow axis has no outline.
+ *
+ * A jump the reader asked for («Продолжить», an outline row, a module row) has
+ * already named the lesson in view, so the spy holds until that smooth scroll
+ * settles (`scrollend`, or a 1 s fallback): with short lessons the next
+ * lesson's first step already sits above the line when the target lands at
+ * the top, and the spy would otherwise hand the mark past «Вы здесь».
+ * Returns `hold`, called before each such jump.
  */
-function useScrollSpy(view: PathView | null, enabled: boolean, onLesson: (n: number) => void) {
+function useScrollSpy(
+  view: PathView | null,
+  enabled: boolean,
+  onLesson: (n: number) => void,
+): () => void {
   const latest = useRef(onLesson);
   latest.current = onLesson;
+  const held = useRef<(() => void) | null>(null);
+  const hold = useCallback(() => {
+    held.current?.();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const release = () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("scrollend", release, true);
+      if (held.current === release) held.current = null;
+    };
+    held.current = release;
+    window.addEventListener("scrollend", release, true);
+    timer = setTimeout(release, 1000);
+  }, []);
+  useEffect(() => () => held.current?.(), []);
   useEffect(() => {
     if (!enabled || !view) return;
     const lessons = view.outline.flatMap((m) => m.lessons);
     let frame = 0;
     const spy = () => {
       frame = 0;
+      if (held.current) return;
       const tops = lessons.map((l) => {
         const el = l.firstStepId ? document.getElementById(`node-${l.firstStepId}`) : null;
         return el ? el.getBoundingClientRect().top : null;
@@ -109,6 +135,7 @@ function useScrollSpy(view: PathView | null, enabled: boolean, onLesson: (n: num
       if (frame) window.cancelAnimationFrame?.(frame);
     };
   }, [view, enabled]);
+  return hold;
 }
 
 /** The canvas switches the path to its narrow axis below the desktop grid. */
@@ -180,7 +207,12 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
     },
     [],
   );
-  useScrollSpy(view, !narrow, (n) => setNavN((prev) => (prev === n ? prev : n)));
+  const holdSpy = useScrollSpy(view, !narrow, (n) => setNavN((prev) => (prev === n ? prev : n)));
+  /** A jump the reader asked for: the spy waits until it lands. */
+  const jumpTo = (id: string) => {
+    holdSpy();
+    scrollToId(id);
+  };
   const inView = navN ?? selected?.lessonNumber ?? view?.current?.lessonNumber ?? 1;
   const openModule = view ? openModuleIndex(view, inView) : 0;
 
@@ -194,7 +226,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
     e.preventDefault();
     setSelectedId(nodeId);
     if (lessonNumber) setNavN(lessonNumber);
-    scrollToId(`node-${nodeId}`);
+    jumpTo(`node-${nodeId}`);
   };
   /** «Продолжить — урок N»: the «Вы здесь» step, selected and flashed, in view. */
   const goHere = (e: React.MouseEvent) => {
@@ -203,7 +235,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
     setSelectedId(view.current.stepId);
     setNavN(view.current.lessonNumber);
     setFlash(true);
-    scrollToId(`node-${view.current.stepId}`);
+    jumpTo(`node-${view.current.stepId}`);
     if (flashTimer.current) clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setFlash(false), 1600);
   };
@@ -304,7 +336,10 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
             <EmptyState variant="no-records" title={C.emptyPath.title} description={C.emptyPath.description} />
           ) : view ? (
             <div
-              className={narrow ? "block" : "grid items-start gap-10"}
+              // Server HTML does not know the width yet: the desktop grid and the
+              // outline column apply from the desktop breakpoint by CSS, so a phone
+              // never scrolls sideways before the narrow switch hydrates.
+              className={narrow ? "block" : "block items-start gap-10 lg:grid"}
               style={narrow ? undefined : { gridTemplateColumns: "minmax(0, 1fr) 22.5rem" }}
             >
               <div className="relative mx-auto flex w-full max-w-160 flex-col">
@@ -366,7 +401,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
               {narrow ? null : (
                 <aside
                   aria-label={C.outlineLabel}
-                  className="sticky top-6 flex min-w-0 flex-col self-start overflow-y-auto border-2 border-border bg-card shadow-lg"
+                  className="sticky top-6 hidden min-w-0 flex-col self-start overflow-y-auto border-2 border-border bg-card shadow-lg lg:flex"
                   style={{ maxHeight: "calc(100vh - 2 * var(--space-6))" }}
                 >
                   {selected ? (
@@ -393,7 +428,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
                               aria-expanded={open}
                               onClick={() => {
                                 setNavN(m.lessons[0]?.number ?? null);
-                                scrollToId(`module-${m.id}`);
+                                jumpTo(`module-${m.id}`);
                               }}
                               className="w-full text-left"
                             >

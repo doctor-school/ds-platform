@@ -266,10 +266,18 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await expect(strip.getByRole("link", { name: /Вы здесь$/ })).toHaveCount(1);
     await expect(strip.getByRole("link", { name: /^Шаг 1\. .*Вы здесь$/ })).toHaveAttribute("aria-current", "step");
 
-    // Download: `opened`.
+    // Download: `opened`. EARS-15 — «Дальше» is a client-side move through the
+    // app's router: the document is not reloaded, so a window marker survives.
+    await page.evaluate(() => {
+      (window as unknown as { __stepMarker?: string }).__stepMarker = "kept";
+    });
     await page.getByRole("link", { name: "Дальше" }).click();
     const download = page.getByRole("link", { name: "Скачать" });
     await expect(download).toBeVisible();
+    await expect(page).toHaveURL(/\/courses\/[^/]+\/steps\//);
+    expect(
+      await page.evaluate(() => (window as unknown as { __stepMarker?: string }).__stepMarker),
+    ).toBe("kept");
     const popup = context.waitForEvent("page", { timeout: 5_000 }).catch(() => null);
     await download.click();
     await (await popup)?.close();

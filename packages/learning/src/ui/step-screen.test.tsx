@@ -23,6 +23,16 @@ import {
 // v18: the locked reason, the guest gate, the video clock as position facts, the
 // download fact, the exit test pass and fail, the sentences from the read.
 
+// `next/link` wants the App-Router context this tier does not mount; the marker
+// shows which links go through the host's router (a client-side move, EARS-15).
+vi.mock("next/link", () => ({
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a data-router-link="" href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
 const FACTS = "POST /v1/me/learning/facts";
 const START = `POST /v1/me/learning/tests/${ID.test}/attempts`;
 const SUBMIT = `POST /v1/me/learning/attempts/${ID.attempt}/submit`;
@@ -156,6 +166,14 @@ describe("024 EARS-15…18 — the step screen", () => {
     );
   });
 
+  it("EARS-15: «Дальше» and «К пути» move through the host's router, not a full page load", () => {
+    stubFetch({});
+    renderStep(videoStep());
+    expect(screen.getByRole("link", { name: "Дальше" })).toHaveAttribute("data-router-link");
+    renderStep(videoStep({ nextStepId: null }));
+    expect(screen.getByRole("link", { name: "К пути курса" })).toHaveAttribute("data-router-link");
+  });
+
   it("EARS-16/10: the video reports the provider player's own clock as position facts, every 10 s and at the end", async () => {
     const answers = [
       { positionSec: 12, watchedPercent: 10 },
@@ -256,6 +274,70 @@ describe("024 EARS-15…18 — the step screen", () => {
     );
     const facts = bodiesOf(fetch, FACTS) as { data: { positionSec: number } }[];
     expect(facts.map((f) => f.data.positionSec)).toEqual([120, 52]);
+  });
+
+  describe("EARS-10: the report cadence follows the player's own clock, not the server's clamped answer", () => {
+    // The server holds a forward seek back (`progress.maxPlaybackRate`); its
+    // answer stays far below the player's clock until the playback catches up.
+    function clampedPlayer(answer: (sent: number) => number) {
+      const fetch = stubFetch({
+        [FACTS]: () => {
+          const sent = (bodiesOf(fetch, FACTS).at(-1) as { data: { positionSec: number } }).data.positionSec;
+          const positionSec = answer(sent);
+          return {
+            outcome: "recorded",
+            changed: [],
+            progress: { positionSec, watchedPercent: Math.round((positionSec / 120) * 100) },
+          };
+        },
+      });
+      renderStep(videoStep());
+      fireEvent.click(screen.getByRole("button", { name: "Смотреть видео" }));
+      const iframe = screen.getByTestId("recording-player-rutube") as HTMLIFrameElement;
+      // One provider tick, then every pending report settles before the next.
+      const tick = async (time: number) => {
+        await act(async () => {
+          window.dispatchEvent(
+            new MessageEvent("message", {
+              origin: "https://rutube.ru",
+              data: JSON.stringify({ type: "player:currentTime", data: { time } }),
+              source: iframe.contentWindow,
+            }),
+          );
+          await new Promise((r) => setTimeout(r, 0));
+        });
+      };
+      const sent = () =>
+        (bodiesOf(fetch, FACTS) as { data: { positionSec: number } }[]).map((f) => f.data.positionSec);
+      return { tick, sent };
+    }
+
+    it("EARS-10: after a forward seek the server clamps, and the player's ticks send only one report per 10 s of its clock", async () => {
+      const { tick, sent } = clampedPlayer((s) => Math.min(s, 20));
+      await tick(12.4);
+      await tick(80);
+      for (let t = 80.3; t < 90; t += 0.3) await tick(t);
+      expect(sent()).toEqual([12, 80]);
+      await tick(90.2);
+      expect(sent()).toEqual([12, 80, 90]);
+    });
+
+    it("EARS-10: the end of the media is still reported once, and a lagging server allowance is not polled for", async () => {
+      const { tick, sent } = clampedPlayer((s) => Math.min(s, 20));
+      await tick(12.4);
+      await tick(118.3);
+      for (let t = 118.6; t <= 120; t += 0.3) await tick(t);
+      await tick(120);
+      expect(sent()).toEqual([12, 120]);
+    });
+
+    it("EARS-10: a replay after the end reports again, so a completion the server allows only later is reachable", async () => {
+      const { tick, sent } = clampedPlayer((s) => Math.min(s, 20));
+      await tick(118.3);
+      await tick(0.5);
+      await tick(118.4);
+      expect(sent()).toEqual([120, 0, 120]);
+    });
   });
 
   it("EARS-16/10: opening the download records the `opened` fact and marks the material opened", async () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import NextLink from "next/link";
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import type {
   LearningAttempt,
@@ -243,13 +244,15 @@ export function StepScreen({ courseSlug, config, stepId, ...initial }: StepScree
                     {step.lessonCompletionSentence}
                   </p>
                 </div>
+                {/* The move to the next step or the path is the host's router
+                    navigation: the doctor app stays loaded (no full page load). */}
                 {step.nextStepId ? (
                   <Button asChild>
-                    <a href={stepHref(config, courseSlug, step.nextStepId)}>{C.next}</a>
+                    <NextLink href={stepHref(config, courseSlug, step.nextStepId)}>{C.next}</NextLink>
                   </Button>
                 ) : (
                   <Button asChild variant="outline">
-                    <a href={coursePathHref(config, courseSlug)}>{C.toPath}</a>
+                    <NextLink href={coursePathHref(config, courseSlug)}>{C.toPath}</NextLink>
                   </Button>
                 )}
               </footer>
@@ -324,7 +327,10 @@ function VideoBody({
   const hydrated = useHydrated();
   const [playing, setPlaying] = useState(false);
   const [watched, setWatched] = useState(body.watchedPercent);
-  const reported = useRef(body.positionSec);
+  // The player position last sent. The cadence is measured on the player's own
+  // clock, never on the server's clamped answer: after a forward seek that
+  // answer stays below the clock, and measuring from it would send on every tick.
+  const sent = useRef(body.positionSec);
   const sending = useRef(false);
 
   const onClock = useCallback(
@@ -332,7 +338,14 @@ function VideoBody({
       const position = Math.min(Math.floor(sec), body.durationSec);
       const atEnd = position >= body.durationSec - VIDEO_END_WINDOW_SEC;
       if (sending.current) return;
-      if (position - reported.current < VIDEO_REPORT_EVERY_SEC && !(atEnd && position > reported.current)) return;
+      // A report per VIDEO_REPORT_EVERY_SEC of the clock moved since the last
+      // one (a seek back included), and the end once. A completion the server
+      // allows only later is not polled for: a replay reports it again.
+      const moved = Math.abs(position - sent.current) >= VIDEO_REPORT_EVERY_SEC;
+      if (!moved && !(atEnd && position > sent.current)) return;
+      const positionSec = atEnd ? body.durationSec : position;
+      const previous = sent.current;
+      sent.current = positionSec;
       sending.current = true;
       createLearningClient()
         .recordFact({
@@ -341,18 +354,17 @@ function VideoBody({
           source: "web",
           kind: "position",
           clientOccurredAt: new Date().toISOString(),
-          data: { positionSec: atEnd ? body.durationSec : position },
+          data: { positionSec },
         })
-        // The bar shows what the server accepted after its clamp; the next
-        // report is measured from there.
+        // The bar shows what the server accepted after its clamp.
         .then((res) => {
           onChanged(res.changed);
-          if (!res.progress) return;
-          reported.current = res.progress.positionSec;
-          setWatched(res.progress.watchedPercent);
+          if (res.progress) setWatched(res.progress.watchedPercent);
         })
-        // A refused report changes nothing on screen; the next tick retries.
-        .catch(() => undefined)
+        // A refused report changes nothing on screen; the next tick retries it.
+        .catch(() => {
+          sent.current = previous;
+        })
         .finally(() => {
           sending.current = false;
         });

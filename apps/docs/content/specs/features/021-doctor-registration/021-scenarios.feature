@@ -37,16 +37,14 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And the form makes no points promise and renders no placeholder in its place
     And the medical-worker declaration and the partner-data consent are framed together above the submit button
     # Amended 2026-11-10 (#2534): the help line reads «Без этого согласия часть материалов недоступна.» and names no condition of free education. Read under 021 «Amendment — 2026-11-10».
-    And the partner-data consent carries the shared wording «Согласие на передачу данных партнёрам платформы» with its help line naming the condition of free-for-the-doctor education
+    And the partner-data consent carries the shared wording «Согласие на передачу данных партнёрам платформы» with its help line «Без этого согласия часть материалов недоступна.»
+    And no rendered string names a condition of free education
     And it does not enumerate the composition of the shared data
     And the marketing opt-in stands separately below the submit button and is not pre-ticked
     When the doctor fills a valid email and an eight-character password
     And ticks both access-condition consents
     And submits the form
     Then the screen states that a letter was sent
-    And one versioned dated consent record exists for medical-worker-declaration
-    And one versioned dated consent record exists for partner-data-sharing
-    And no consent record exists for marketing-communications
     When the doctor confirms the email with the code from the letter
     # Amended 2026-09-17 (see 021-requirements-en.md → Amendment — 2026-09-17): a confirmation that
     # yields a session navigates straight to the honoured destination; there is no success state
@@ -95,6 +93,14 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And confirms the email
     Then registration completes
     And the doctor lands on the remembered specialty's 018 feed rather than the account page
+
+  # The stored consent rows of the two registrations above are not observable on a screen or a
+  # public surface, so they are stated and proven here at the API tier (#4073).
+  @EARS-5 @EARS-6 @EARS-7 @happy @rule @proof:api
+  Scenario: A registration with both access conditions and no marketing opt-in stores exactly the two granted consents
+    Given a doctor registration is accepted with both access-condition consents and the marketing opt-in unticked
+    Then one versioned dated consent record exists for medical-worker-declaration
+    And one versioned dated consent record exists for partner-data-sharing
     And no consent record exists for marketing-communications
 
   @EARS-8 @EARS-17 @happy @journey

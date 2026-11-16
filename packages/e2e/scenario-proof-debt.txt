@@ -492,10 +492,8 @@
 020 | With no shared session the other storefront's event page is the guest page, with no form
 020 | «К записи ↓» also leads to the plaque while the recording is in preparation
 020 | «К записи ↓» is absent before the event has ended
-021 | A doctor arriving directly registers without the marketing opt-in and lands on their feed
 021 | A doctor arriving from an эфир sees its card on the sign-in host's registration form
-021 | A doctor arriving on a representative's link is attributed and handed to the mailing base
-021 | A doctor registers from a gate and returns to the эфир
+021 | A doctor arriving on a representative's link is attributed and handed to the mailing base | #1544
 021 | A failed submission preserves everything the doctor typed
 021 | A registration whose эфир vanished before the code lands per LD-4
 021 | A stale return target degrades honestly instead of dead-ending

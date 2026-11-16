@@ -1,7 +1,11 @@
 "use client";
 
 import { Badge } from "@ds/design-system";
-import type { RelationshipStatus, TaxonomyStatus } from "@ds/schemas";
+import type {
+  FeedSourceStatus,
+  RelationshipStatus,
+  TaxonomyStatus,
+} from "@ds/schemas";
 
 /**
  * The list/record status chip (017 EARS-18; `constitution.md` → DataTable «Token /
@@ -27,14 +31,34 @@ const RELATIONSHIP_TONE: Record<RelationshipStatus, string> = {
   retired: "bg-destructive-tint text-destructive-text",
 };
 
-const TONE: Record<string, string> = { ...TAXONOMY_TONE, ...RELATIONSHIP_TONE };
+/**
+ * 048 EARS-20 / EARS-31 — a feed source's check status, and its switched-on
+ * state. «Не проверен» rides the `draft` pair: not yet known, not an error.
+ */
+const FEED_SOURCE_TONE: Record<FeedSourceStatus | FeedSourceState, string> = {
+  unchecked: "bg-warning-tint text-foreground",
+  ok: "bg-success-tint text-success-text",
+  failing: "bg-destructive-tint text-destructive-text",
+  enabled: "bg-success-tint text-success-text",
+  disabled: "bg-destructive-tint text-destructive-text",
+};
+
+/** «Включён» / «Выключен» of a feed source. */
+export type FeedSourceState = "enabled" | "disabled";
+
+const TONE: Record<string, string> = {
+  ...TAXONOMY_TONE,
+  ...RELATIONSHIP_TONE,
+  ...FEED_SOURCE_TONE,
+};
 
 export function StatusChip({
   status,
   label,
   testId,
 }: {
-  status: TaxonomyStatus | RelationshipStatus;
+  status:
+    TaxonomyStatus | RelationshipStatus | FeedSourceStatus | FeedSourceState;
   label: string;
   /**
    * Overrides the default `status-<value>` handle. Record pages carry a

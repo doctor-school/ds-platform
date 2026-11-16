@@ -108,6 +108,8 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   onQueryChange,
   rowHref,
   onRowClick,
+  actions,
+  actionsHeader,
   sortSelect,
   defaultSort,
   sortActionLabel,
@@ -190,6 +192,13 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
    * its participant card in the side panel over the list (EARS-36).
    */
   onRowClick?: (row: Row) => void;
+  /**
+   * A trailing actions column — `DataTable` draws it ONLY for rows with ≥2
+   * actions (048 «Источники»: «Изменить адрес» + «Выключить» / «Включить»).
+   */
+  actions?: (row: Row) => ReactNode;
+  /** The (visually hidden) header of that actions column. */
+  actionsHeader?: string;
   /** The below-`md` «Сортировка» select copy, for a list that passes `query.sort`. */
   sortSelect?: DataTableSortSelect;
   /** The list's own order — a descending header's next click returns to it. */
@@ -388,6 +397,8 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
           getRowKey={getRowKey}
           rowHref={rowHref}
           onRowClick={onRowClick}
+          actions={actions}
+          actionsHeader={actionsHeader}
           sort={query.sort}
           onSortChange={
             query.sort

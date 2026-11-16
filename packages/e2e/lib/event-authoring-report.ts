@@ -250,7 +250,8 @@ function providerProof(proof: Row, resource: Row, provider: string) {
   for (const frame of frames)
     requireEvidence(
       frame.provider === provider &&
-        frame.src === `${expected}${proof.embedRef}` &&
+        frame.src ===
+          `${expected}${proof.embedRef}${provider === "youtube" ? `?enablejsapi=1&origin=${encodeURIComponent(String(frame.browserOrigin))}` : ""}` &&
         frame.nativeProvider === provider &&
         frame.nativeEmbedRef === proof.embedRef &&
         frame.ssrStatus === 200 &&
@@ -298,23 +299,39 @@ export function assertEventAuthoringEvidence(value: {
     eventAuthoringCases.map((item) => item.title),
     "admin",
   );
-  const reportOrder: unknown[] = [];
+  const execution: { title: string; start: number }[] = [];
   function visitReport(suite: Row) {
     for (const spec of rows(suite.specs ?? [])) {
-      reportOrder.push(String(spec.title).replace(/ @host:admin$/, ""));
       for (const test of rows(spec.tests)) {
-        for (const result of rows(test.results))
+        for (const result of rows(test.results)) {
+          const start = Date.parse(String(result.startTime));
+          requireEvidence(
+            Number.isFinite(start),
+            "actual execution start time",
+          );
+          execution.push({
+            title: String(spec.title).replace(/ @host:admin$/, ""),
+            start,
+          });
           requireEvidence(
             result.error == null &&
               (result.errors === undefined ||
                 (Array.isArray(result.errors) && result.errors.length === 0)),
             "no errors attached to a passed result",
           );
+        }
       }
     }
     rows(suite.suites ?? []).forEach(visitReport);
   }
   rows(row(value.report).suites).forEach(visitReport);
+  requireEvidence(
+    new Set(execution.map((item) => item.start)).size === 4,
+    "unique actual case execution timestamps",
+  );
+  const reportOrder = execution
+    .sort((a, b) => a.start - b.start)
+    .map((item) => item.title);
   requireEvidence(
     same(
       reportOrder,

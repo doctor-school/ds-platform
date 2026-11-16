@@ -47,7 +47,7 @@ interface Suite {
           status: string;
           projectName: string;
           projectId: string;
-          results: { status: string; retry: number }[];
+          results: { status: string; retry: number; startTime: string }[];
         }[];
       }[]
     | undefined;
@@ -65,6 +65,7 @@ function counters(suite: Suite): Suite {
         results: test.results.map((result) => ({
           status: result.status,
           retry: result.retry,
+          startTime: result.startTime,
         })),
       })),
     })),

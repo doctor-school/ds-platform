@@ -201,12 +201,16 @@ export class EventAuthoringWorld extends EventCountWorld {
         expect(response?.status()).toBe(200);
         const player = page.getByTestId(`room-player-${this.provider}`);
         await expect(player).toBeVisible();
-        const src = await player.getAttribute("src");
         const expected =
           (this.provider === "rutube"
             ? "https://rutube.ru/play/embed/"
-            : "https://www.youtube.com/embed/") + this.embedRef;
-        expect(src).toBe(expected);
+            : "https://www.youtube.com/embed/") +
+          this.embedRef +
+          (this.provider === "youtube"
+            ? `?enablejsapi=1&origin=${encodeURIComponent(origin)}`
+            : "");
+        await expect(player).toHaveAttribute("src", expected);
+        const src = await player.getAttribute("src");
         const request = this.runtime.ssr
           .slice(before)
           .find(
@@ -217,6 +221,7 @@ export class EventAuthoringWorld extends EventCountWorld {
         expect(request, "actual normal SSR reaches owned API").toBeDefined();
         frames.push({
           host,
+          browserOrigin: origin,
           provider: this.provider,
           src,
           nativeProvider: (native.body.stream as AuthoringRow).provider,

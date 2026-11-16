@@ -73,7 +73,8 @@ function proof() {
                 host,
                 provider,
                 eventId,
-                src: `${provider === "rutube" ? "https://rutube.ru/play/embed/" : "https://www.youtube.com/embed/"}${embedRef}`,
+                src: `${provider === "rutube" ? "https://rutube.ru/play/embed/" : "https://www.youtube.com/embed/"}${embedRef}${provider === "youtube" ? "?enablejsapi=1&origin=http%3A%2F%2Flocalhost%3A4001" : ""}`,
+                browserOrigin: "http://localhost:4001",
                 nativeProvider: provider,
                 nativeEmbedRef: embedRef,
                 ssrStatus: 200,
@@ -154,14 +155,22 @@ function proof() {
     errors: [],
     suites: [
       {
-        specs: eventAuthoringCases.map(({ title }) => ({
+        specs: eventAuthoringCases.map(({ title }, index) => ({
           title,
           tests: [
             {
               projectId: "admin",
               projectName: "admin",
               status: "expected",
-              results: [{ status: "passed", retry: 0 }],
+              results: [
+                {
+                  status: "passed",
+                  retry: 0,
+                  startTime: new Date(
+                    1794798000000 + index * 1000,
+                  ).toISOString(),
+                },
+              ],
             },
           ],
         })),
@@ -172,6 +181,10 @@ function proof() {
 }
 
 describe("4061 original-owned evidence", () => {
+  it("accepts the actual YouTube browser API iframe parameter", () => {
+    const p = proof();
+    expect(() => assertEventAuthoringEvidence(p)).not.toThrow();
+  });
   it("rejects a non-404 draft detail even with a negative boolean and successful controls", () => {
     const p = proof();
     p.resources[0]!.proof.projections![0]!.negativeStatus = 200;
@@ -179,8 +192,20 @@ describe("4061 original-owned evidence", () => {
   });
   it("rejects reordered report execution despite four passing counters", () => {
     const p = proof();
-    p.report.suites[0]!.specs.reverse();
+    p.report.suites[0]!.specs.forEach((spec, index) => {
+      spec.tests[0]!.results[0]!.startTime = new Date(
+        1794798000000 + (3 - index) * 1000,
+      ).toISOString();
+    });
     expect(() => assertEventAuthoringEvidence(p)).toThrow();
+  });
+  it("accepts actual chronological execution through the nested provider outline", () => {
+    const p = proof(),
+      suite = p.report.suites[0]!,
+      specs = [...suite.specs];
+    suite.specs = [specs[0]!, specs[3]!];
+    Object.assign(suite, { suites: [{ specs: specs.slice(1, 3) }] });
+    expect(() => assertEventAuthoringEvidence(p)).not.toThrow();
   });
   it("rejects errors attached to an otherwise passed result", () => {
     const p = proof();

@@ -63,6 +63,8 @@ interface Journey {
   mailCheckpoint?: Awaited<ReturnType<typeof captureAddressedMailCheckpoint>>;
   /** The code of the specialty the guest chose on the storefront (017 LD-2). */
   specialtyCode?: string;
+  /** The эфир whose gate the guest pressed, by its rendered title. */
+  eventTitle?: string;
 }
 const journeys = new WeakMap<Page, Journey>();
 
@@ -527,6 +529,7 @@ Given(
       waitUntil: "load",
     });
     await expect(page.getByRole("main")).toContainText(title);
+    journeyOf(page).eventTitle = title;
     markDocuments(page);
     await page
       .getByRole("main")
@@ -626,7 +629,7 @@ Then(
       await expect(unit).toHaveCount(1);
       await expect(unit).toBeVisible();
       await expect(unit).toHaveAttribute("data-testid", "return-context-card");
-      await expect(unit).toContainText(EVENT.title);
+      await expect(unit).toContainText(journeyOf(page).eventTitle!);
     });
   },
 );

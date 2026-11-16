@@ -4,7 +4,8 @@
 // «Prod read verbs.» → «Workflow `prod-observe.yml`.», «Local commands.»; §10).
 //
 // Operator (workstation):
-//   pnpm prod:read <run-id>               download + decrypt one run's artifact
+//   pnpm prod:read <run-id>               download + decrypt one run's artifact (a
+//                                         release-journal answer is also printed, #4067)
 //   pnpm prod:schema-drift <run-id>       drift of a `schema` answer or a rehearsal report's
 //                                         catalogueAfter vs the tree (exit 0 / 1 drift / 2 usage)
 //   pnpm prod:read-key                    the owner's step: the read ssh key pair
@@ -34,6 +35,7 @@ import {
   readKey,
   ReadError,
   readRun,
+  releaseJournalLines,
   resultKey,
   stateWord,
   statusLine,
@@ -102,6 +104,9 @@ function main(argv) {
       console.log(
         `prod:read: ${answer.verb ?? "answer"} of run ${rest[0]} decrypted to ${path}`,
       );
+      // #4067: a release's journal is read here, on the operator's terminal.
+      if (answer.verb === "release-journal")
+        for (const line of releaseJournalLines(answer)) console.log(line);
       return 0;
     }
     case "schema-drift": {

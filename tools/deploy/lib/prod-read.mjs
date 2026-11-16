@@ -30,6 +30,7 @@ export const READ_VERBS = [
   "rehearse",
   "rehearse-restore",
   "rehearsal-status",
+  "release-journal",
 ];
 /** #3648: the verbs whose answer carries a rehearsal state word. */
 export const REHEARSAL_VERBS = [
@@ -308,6 +309,38 @@ export function readRun({ runId, home, repoRoot, run = defaultRun }) {
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
+}
+
+/**
+ * #4067: the operator's view of a decrypted `release-journal` answer — the failure note,
+ * then each unit's journal tail under its name, control characters dropped. Printed on
+ * the operator's terminal only, never in a job log.
+ * @returns {string[]}
+ */
+export function releaseJournalLines(answer) {
+  if (answer?.verb !== "release-journal" || !Array.isArray(answer.units))
+    throw new ReadError("the answer is not a release-journal answer");
+  const out = [`release ${answer.sha} journal, taken ${answer.takenAt ?? "?"}`];
+  const f = answer.failure;
+  out.push(
+    f && typeof f === "object"
+      ? `failure: phase ${f.phase ?? "none"} — ${f.reason ?? "no reason"}`
+      : "failure: no note recorded",
+  );
+  for (const unit of answer.units) {
+    const lines = Array.isArray(unit?.lines) ? unit.lines : [];
+    out.push(
+      "",
+      `== ${unit?.unit} (${lines.length} lines${unit?.truncated ? ", the tail only" : ""})`,
+      // control characters (an escape sequence in a box log) never reach the terminal
+      ...lines.map((l) =>
+        [...String(l)]
+          .filter((ch) => ch.charCodeAt(0) > 0x1f && ch.charCodeAt(0) !== 0x7f)
+          .join(""),
+      ),
+    );
+  }
+  return out;
 }
 
 /** An already-decrypted answer of the run, or a fresh `readRun`. */

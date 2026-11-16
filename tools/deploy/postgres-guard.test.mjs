@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
+import ts from "typescript";
 import {
   postgresContract,
   assertPostgresEvidence,
   guardedPostgresStep,
+  postgresGuardRefusal,
   readPostgresTarget,
 } from "./postgres-guard.mjs";
-import { preparePostgresDeployment } from "./prod.mjs";
+import {
+  UNEXPECTED_FAILURE_REASON,
+  preparePostgresDeployment,
+  releaseFailureNote,
+  uncaughtFailure,
+} from "./prod.mjs";
 import {
   artifactBuildPlan,
   certifyImage,
@@ -451,4 +458,125 @@ test("3157: a compose contract that is not JSON refuses — the bare-tree releas
     () => postgresContract({ ...files, "compose.yml": "name: ds-data-prod\n" }),
     /compose contract is not JSON/,
   );
+});
+
+// #4067: what the catch-all of prod.mjs leaves as the release's public failure note.
+const noteOf = (error) => {
+  const { message, authored } = uncaughtFailure(error);
+  return releaseFailureNote("postgres-verify", message, { authored });
+};
+
+test("4067: a guard refusal reaches the failure note as its authored text", async () => {
+  const f = fixture();
+  f.live.backupSystemId = "7544271560000000009";
+  const error = await preparePostgresDeployment("test", {
+    readTarget: () => ({ ...f, files }),
+    client: { call: async () => JSON.stringify(f.live) },
+  }).catch((e) => e);
+  assert.match(
+    error.message,
+    /^PostgreSQL guard: .+; ordinary deployment refused \(migration: #2101\)$/,
+  );
+  assert.equal(postgresGuardRefusal(error), error.message);
+  assert.deepEqual(noteOf(error), {
+    phase: "postgres-verify",
+    reason:
+      error.message.length > 160
+        ? `${error.message.slice(0, 159)}…`
+        : error.message,
+  });
+  assert.notEqual(noteOf(error).reason, UNEXPECTED_FAILURE_REASON);
+});
+
+test("4067: a probe failure, a forged or wrapped guard text and any other error stay unexpected", async () => {
+  const f = fixture();
+  const probeError = await preparePostgresDeployment("test", {
+    readTarget: () => ({ ...f, files }),
+    client: {
+      call: async () => {
+        throw new Error(
+          "PostgreSQL evidence unavailable: PostgreSQL evidence command failed: sudo PASSWORD=x",
+        );
+      },
+    },
+  }).catch((e) => e);
+  assert.match(probeError.message, /PostgreSQL evidence unavailable/);
+  f.live.backupSystemId = "7544271560000000009";
+  const refusal = await preparePostgresDeployment("test", {
+    readTarget: () => ({ ...f, files }),
+    client: { call: async () => JSON.stringify(f.live) },
+  }).catch((e) => e);
+  const edited = await preparePostgresDeployment("test", {
+    readTarget: () => ({ ...f, files }),
+    client: { call: async () => JSON.stringify(f.live) },
+  }).catch((e) => e);
+  edited.message += " postgres://u:p@h/db";
+  for (const error of [
+    probeError,
+    // the same text, not raised by the guard
+    new Error(refusal.message),
+    // a refusal wrapped with foreign text
+    new Error(`checkpoint failed: ${refusal.message} PASSWORD=x`, {
+      cause: refusal,
+    }),
+    // a refusal whose text changed after it was raised
+    edited,
+    new TypeError("fetch failed"),
+    "a thrown string",
+  ]) {
+    assert.equal(postgresGuardRefusal(error), null);
+    assert.deepEqual(noteOf(error), {
+      phase: "postgres-verify",
+      reason: UNEXPECTED_FAILURE_REASON,
+    });
+  }
+});
+
+test("4067: every guard refusal message is authored in the guard's source", () => {
+  const file = "postgres-guard.mjs";
+  const src = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
+  const ast = ts.createSourceFile(
+    file,
+    src,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  // a fixed string, or a template interpolating only the literal `key` / `role` of its loop
+  const authored = (node) =>
+    ts.isStringLiteral(node) ||
+    ts.isNoSubstitutionTemplateLiteral(node) ||
+    (ts.isTemplateExpression(node) &&
+      node.templateSpans.every(
+        (span) =>
+          ts.isIdentifier(span.expression) &&
+          ["key", "role"].includes(span.expression.text),
+      ));
+  const calls = [];
+  const visit = (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      ["fail", "requireFact"].includes(node.expression.text)
+    ) {
+      calls.push(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(ast);
+  // the one interpolating call site is `fail`'s own forward inside `requireFact`
+  const refusals = calls.filter(
+    (c) =>
+      !(
+        c.expression.text === "fail" && c.arguments[0]?.getText() === "message"
+      ),
+  );
+  assert.ok(refusals.length >= 45, `found ${refusals.length} guard refusals`);
+  for (const call of refusals) {
+    const message = call.arguments.at(-1);
+    assert.ok(
+      message && authored(message),
+      `${call.getText().slice(0, 80)}… refuses with a message that is not a fixed authored string`,
+    );
+  }
 });

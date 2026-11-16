@@ -1146,7 +1146,9 @@ test("3439: no authored refusal interpolates an Error message or box output on i
       call,
     );
   }
-  assert.match(src, /die\(err\.stack \|\| err\.message\);/);
+  // #4067: the catch-all marks only a PostgreSQL guard refusal authored (uncaughtFailure)
+  assert.match(src, /const \{ message, authored \} = uncaughtFailure\(err\);\s+die\(message, \{ authored \}\);/);
+  assert.match(src, /return \{ message: err\?\.stack \|\| err\?\.message \|\| String\(err\), authored: false \};/);
 });
 
 test("3439: a red smoke names its failing probe labels", () => {

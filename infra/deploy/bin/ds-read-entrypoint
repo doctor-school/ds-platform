@@ -15,11 +15,12 @@
 # box programs it runs are `ds-release check prod` (fixed words) and, over the hop key,
 # the data entrypoint's `check`, `read-schema`, `read-observe`, `rehearse`, `rehearse-restore`,
 # `rehearsal-status` and the
-# recovery verbs (an older data entrypoint rejects them: fail-closed), and ds-recovery
-# (#3662).
+# recovery verbs (an older data entrypoint rejects them: fail-closed), ds-recovery
+# (#3662) and, for `release-journal` (#4067), `journalctl` on fixed unit names.
 #
 # It serves READ_VERBS below on the prod box only and rejects every other verb with
-# exit 2. `schema`, `observe`, `rehearse`, `rehearse-restore` and `rehearsal-status` leave as CMS ciphertext to the recipient certificate installed
+# exit 2. `schema`, `observe`, `rehearse`, `rehearse-restore`, `rehearsal-status` and
+# `release-journal` leave as CMS ciphertext to the recipient certificate installed
 # with the tooling tree (READ_RECIPIENT), never plaintext: the client's stdout is a
 # public Actions artifact. `capabilities` answers its verb list; `recovery-bundle` and
 # `recovery-check` (#3662) answer status lines only (RECOVERY_LINE_RE): no value, no
@@ -28,7 +29,10 @@
 # stderr, the state word (REHEARSAL_STATE_RE) prod-observe.yml prints; everything else
 # stays encrypted. `rehearse-restore <sha>` takes the input of `rehearse <sha>` and
 # restores prod onto the throw-away copy with no migration applied: the restore path
-# and its measured headroom, on demand, with nothing pending.
+# and its measured headroom, on demand, with nothing pending. `release-journal <sha>`
+# (#4067) answers the bounded journal tail of the release's driver unit and of every
+# step unit this box's status file records as not succeeded, with the failure note: a
+# failed release is read without the break-glass key.
 #
 # Installed as /usr/local/bin/ds-read-entrypoint beside ds-release and
 # ds-deploy-entrypoint, by the same install step (tools/deploy/lib/remote.mjs).
@@ -72,7 +76,7 @@ accepted() { logger -t "$TAG" -p auth.info "accepted: $(sanitised)" || true; }
 # The verbs it serves (spec §8 (g): S1 serves `capabilities` and `schema`; #3662 adds
 # the key custody); prod-observe.yml / recovery-custody.yml refuse a verb
 # `capabilities` does not name.
-READ_VERBS='capabilities schema observe rehearse rehearse-restore rehearsal-status recovery-bundle recovery-check'
+READ_VERBS='capabilities schema observe rehearse rehearse-restore rehearsal-status release-journal recovery-bundle recovery-check'
 # #3647: `observe <name>` — the name of a PROD_OBSERVATIONS entry (the data entrypoint's
 # catalogue checks it and every parameter again), the parameters one JSON object of at
 # most MAX_OBSERVE_PARAMS_BYTES on stdin. The data box's rejections of a name or a
@@ -121,6 +125,14 @@ GITHUB_API=$(override DS_ENTRYPOINT_GITHUB_API https://api.github.com/repos/doct
 MAX_REHEARSE_BYTES=$((16 * 1024 * 1024))
 # The state words of the rehearsal answers, the one plaintext a rehearsal prints.
 REHEARSAL_STATE_RE='^(started|running|no pending migrations|succeeded|failed|absent)$'
+# #4067: a release's journal — this box's step status files (ds-release STATE_ROOT) and
+# the driver's failure notes (release-driver MANIFEST_DIR); each unit's tail is bounded.
+JOURNALCTL=$(override DS_ENTRYPOINT_JOURNALCTL journalctl)
+RELEASE_STATUS_DIR=$ROOT/var/lib/ds-platform/release/prod
+RELEASE_FAILURE_DIR=$ROOT/var/lib/ds-platform/release-driver
+JOURNAL_LINES=400
+JOURNAL_MAX_BYTES=$((256 * 1024))
+JOURNAL_MAX_STEP_UNITS=8
 
 read_fail() {
   printf '%s: %s\n' "$TAG" "$1" >&2
@@ -199,6 +211,12 @@ read_encrypted() {
   [[ -s $read_work/answer.json ]] || read_fail "the read failed"
   [[ $data_verb != rehearse && $data_verb != rehearse-restore && $data_verb != rehearsal-status ]] ||
     rehearsal_state "$read_work/answer.json"
+  encrypt_answer
+}
+
+# The answer in read_work/answer.json, encrypted to READ_RECIPIENT: only the ciphertext
+# reaches stdout.
+encrypt_answer() {
   openssl cms -encrypt -binary -aes-256-gcm -outform DER -in "$read_work/answer.json" \
     -out "$read_work/result.cms" "$READ_RECIPIENT" >/dev/null 2>&1 ||
     refuse "openssl cannot encrypt to the recipient certificate"
@@ -298,6 +316,79 @@ rehearse_archive() {
   rm -f -- "$read_work/tree.tar.gz"
 }
 
+# --- a release's journal (Issue #4067; spec §5 «Prod read verbs.») ------------------
+# The step units of <sha12> this box's status file records with an exit code other than
+# 0 (a failed step, or one that never ended), unit names checked, at most
+# JOURNAL_MAX_STEP_UNITS; nothing for an absent or unreadable file.
+read -r -d '' FAILED_STEP_UNITS_PY <<'PY' || true
+import json, re, sys
+sha12, cap = sys.argv[1], int(sys.argv[2])
+unit_re = re.compile(r"ds-prod-%s-[a-z0-9-]{1,40}" % re.escape(sha12))
+try:
+    doc = json.load(sys.stdin)
+    steps = doc.get("steps") if isinstance(doc, dict) else None
+except (ValueError, UnicodeDecodeError):
+    steps = None
+seen = []
+for item in steps if isinstance(steps, list) else []:
+    unit = item.get("unit") if isinstance(item, dict) else None
+    if isinstance(unit, str) and unit_re.fullmatch(unit) and item.get("rc") != 0 and unit not in seen:
+        seen.append(unit)
+print("\n".join(seen[-cap:]))
+PY
+
+# The answer (argv: sha, the work dir, the line and byte bounds, the units): each unit's
+# tail, and the failure note as the driver recorded it (null when absent or not JSON).
+read -r -d '' RELEASE_JOURNAL_PY <<'PY' || true
+import datetime, json, os, sys
+sha, work, max_lines, max_bytes = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
+units = []
+for i, unit in enumerate(sys.argv[5:]):
+    try:
+        raw = open(os.path.join(work, "unit-%d.log" % i), "rb").read()
+    except OSError:
+        raw = b""
+    cut = len(raw) >= max_bytes
+    lines = raw.decode("utf-8", "replace").splitlines()
+    if cut and lines:
+        lines = lines[1:]  # the byte bound cut the first line
+    units.append({"unit": unit, "lines": lines, "truncated": cut or len(lines) >= max_lines})
+try:
+    with open(os.path.join(work, "failure"), "rb") as f:
+        failure = json.load(f)
+except (OSError, ValueError, UnicodeDecodeError):
+    failure = None
+json.dump({
+    "verb": "release-journal",
+    "sha": sha,
+    "takenAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "failure": failure,
+    "units": units,
+}, sys.stdout, separators=(",", ":"))
+PY
+
+release_journal() {
+  local sha=$1 i=0 unit
+  local -a units steps
+  read_workdir
+  mapfile -t steps < <({ sudo cat "$RELEASE_STATUS_DIR/$sha.json" 2>/dev/null || true; } |
+    python3 -I -c "$FAILED_STEP_UNITS_PY" "${sha:0:12}" "$JOURNAL_MAX_STEP_UNITS" 2>/dev/null || true)
+  units=("ds-prod-${sha:0:12}-driver")
+  for unit in "${steps[@]}"; do
+    if [[ -n $unit ]]; then units+=("$unit"); fi
+  done
+  for unit in "${units[@]}"; do
+    { sudo "$JOURNALCTL" -u "$unit" -n "$JOURNAL_LINES" -o short-iso -q --no-pager </dev/null 2>/dev/null || true; } |
+      tail -c "$JOURNAL_MAX_BYTES" >"$read_work/unit-$i.log"
+    i=$((i + 1))
+  done
+  { sudo cat "$RELEASE_FAILURE_DIR/$sha.failure" 2>/dev/null || true; } | head -c 4096 >"$read_work/failure"
+  python3 -I -X utf8 -c "$RELEASE_JOURNAL_PY" "$sha" "$read_work" "$JOURNAL_LINES" "$JOURNAL_MAX_BYTES" \
+    "${units[@]}" >"$read_work/answer.json" 2>/dev/null || read_fail "the read failed"
+  [[ -s $read_work/answer.json ]] || read_fail "the read failed"
+  encrypt_answer
+}
+
 # --- the key custody (Issue #3662; spec §5 «Prod read verbs.») ----------------------
 recovery_lines() { grep -E "$RECOVERY_LINE_RE" "$1" || true; }
 # The last ds-recovery reason of a file, or the fallback.
@@ -394,7 +485,7 @@ case "$verb" in
   capabilities | schema | recovery-bundle | recovery-check) [[ ${#words[@]} -eq 1 ]] || reject "usage: $verb" ;;
   observe)
     [[ ${#words[@]} -eq 2 && ${words[1]} =~ $OBSERVE_NAME_RE ]] || reject "usage: observe <name>" ;;
-  rehearse | rehearse-restore | rehearsal-status)
+  rehearse | rehearse-restore | rehearsal-status | release-journal)
     [[ ${#words[@]} -eq 2 && ${words[1]} =~ $SHA_RE ]] || reject "usage: $verb <sha> (the full 40-hex commit id)" ;;
   *) reject "unknown read command (allowed: ${READ_VERBS// /, })" ;;
 esac
@@ -423,6 +514,10 @@ case "$verb" in
     # Reads no database: no release check; it always answers.
     sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
     read_encrypted "rehearsal-status ${words[1]}" </dev/null ;;
+  release-journal)
+    # Reads no database: no release check; a running release's journal is read too.
+    sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
+    release_journal "${words[1]}" </dev/null ;;
   recovery-bundle | recovery-check)
     read_release_check
     recovery_verb "${verb#recovery-}" </dev/null ;;

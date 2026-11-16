@@ -63,6 +63,7 @@ export async function bootEventAuthoringRuntime() {
   const children: ChildProcess[] = [];
   const origins: Record<string, string> = {};
   const assets: Record<string, string> = {};
+  const assetTrees: Record<string, unknown> = {};
   const ssr: {
     path: string;
     status: number;
@@ -117,7 +118,10 @@ export async function bootEventAuthoringRuntime() {
     ]) {
       const port = await freePort();
       origins[host!] = `http://localhost:${port}`;
-      assets[host!] = authoringTree(resolve(countRoot, `apps/${app}/.next`));
+      const next=resolve(countRoot,`apps/${app}/.next`);
+      const binding={server:authoringTree(resolve(next,"server")),static:authoringTree(resolve(next,"static")),buildId:authoringSha(readFileSync(resolve(next,"BUILD_ID")))};
+      assetTrees[host!]=binding;
+      assets[host!]=authoringSha(JSON.stringify(binding));
     }
     process.env.E2E_ADMIN_URL = origins.admin;
     for (const [host, app] of [
@@ -189,6 +193,7 @@ export async function bootEventAuthoringRuntime() {
       root: countRoot,
       origins,
       assets,
+      assetTrees,
       children: children.map((child) => child.pid),
       apiOrigin: api.url,
       database: api.database,

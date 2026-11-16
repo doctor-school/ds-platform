@@ -211,7 +211,7 @@ export class EventAuthoringWorld extends EventCountWorld {
           .slice(before)
           .find(
             (row) =>
-              row.path === `/v1/events/${this.eventId}/room` &&
+              row.path === `/v1/events/${detail.slug}/room` &&
               row.status === 200,
           );
         expect(request, "actual normal SSR reaches owned API").toBeDefined();

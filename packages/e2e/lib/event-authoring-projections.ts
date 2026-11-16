@@ -368,7 +368,7 @@ export async function proveDraftProjections(world: EventAuthoringWorld) {
     monthCountBefore: 0,
     monthCountAfter: 1,
     projectScaleDelta: scaleDelta,
-    statistics: oracle,
+    statistics: (positive.statistics.body as AuthoringRow).eventsPerYear,
     statisticsOracle: oracle,
     today: horizon.horizon.today,
   };

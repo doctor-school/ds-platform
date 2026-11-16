@@ -136,7 +136,7 @@ const secrets = new Set(
 );
 for (const row of jsonLines("dynamic-secrets.private.jsonl")) {
   for (const [key, value] of Object.entries(row)) {
-    if (!/email|password|cookie|token|secret/i.test(key)) continue;
+    if (!/email|password|cookie|token|secret|pepper/i.test(key)) continue;
     for (const text of Array.isArray(value) ? value : [value])
       if (typeof text === "string" && text.length >= 6) {
         secrets.add(text);

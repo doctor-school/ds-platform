@@ -151,6 +151,11 @@ export async function bootEventCountApi(issue: 4035 | 4061 = 4035) {
     if (!process.env.REDIS_URL)
       throw new Error("4061 requires the native Redis rate store");
     set("AUDIT_IDENTIFIER_PEPPER", randomBytes(32).toString("hex"));
+    appendFileSync(
+      resolve(countDirectory(), "dynamic-secrets.private.jsonl"),
+      JSON.stringify({ auditPepper: process.env.AUDIT_IDENTIFIER_PEPPER }) +
+        "\n",
+    );
   }
   for (const key of [
     "S3_ENDPOINT",

@@ -4,6 +4,7 @@ export * from "./schema/index.js";
 export * from "./seed/index.js";
 export * from "./audit.js";
 export { withAuditContext } from "./audit-context.js";
+export { expertPubliclyVisible } from "./public-visibility.js";
 export type {
   AuditContext,
   AuditSource,

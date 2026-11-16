@@ -109,6 +109,10 @@ export async function project(
         },
       });
     if (state.status !== "done") continue;
+    // `module.completed` goes to 025 on every first done: EARS-12 sends it
+    // only WHILE the module's resolved `module.reward` includes points, and
+    // that setting's platform seed is `points` (023-design §3); the setting
+    // and the condition land with 023 (#4018 registers it, #4020 reads it).
     if (itemKind === "lesson" || itemKind === "module") {
       const type =
         itemKind === "lesson" ? "lesson.completed" : "module.completed";

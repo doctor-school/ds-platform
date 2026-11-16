@@ -1,7 +1,12 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
-import { experts, feedEntries, organisations } from "@ds/db";
+import {
+  experts,
+  expertPubliclyVisible,
+  feedEntries,
+  organisations,
+} from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import {
   beforeKeysetCursor,
@@ -41,12 +46,8 @@ export interface FeedCursorPosition {
   id: string;
 }
 
-/** 012 public expert: published, not retired, not editorially removed. */
-export const expertPubliclyVisible: SQL = and(
-  eq(experts.status, "published"),
-  isNull(experts.deletedAt),
-  isNull(experts.contentRemovedAt),
-)!;
+/** 012 public expert — the one predicate, owned by `@ds/db`. */
+export { expertPubliclyVisible };
 
 /**
  * 048 EARS-9, EARS-10, EARS-19 (#3513) — one page of the public feed, newest

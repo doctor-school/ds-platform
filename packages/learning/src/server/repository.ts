@@ -11,6 +11,7 @@ import {
   learningRuleLayers,
   learningSchools,
   learningSteps,
+  expertPubliclyVisible,
   type LearningCourseRow,
   type LearningLessonRow,
   type LearningModuleRow,
@@ -340,12 +341,7 @@ export async function coursePlaces(db: Handle, schoolId: string) {
     )
     .leftJoin(
       experts,
-      and(
-        eq(experts.id, learningSchools.leadExpertId),
-        eq(experts.status, "published"),
-        isNull(experts.deletedAt),
-        isNull(experts.contentRemovedAt),
-      ),
+      and(eq(experts.id, learningSchools.leadExpertId), expertPubliclyVisible),
     )
     .where(eq(learningSchools.id, schoolId));
   return row;

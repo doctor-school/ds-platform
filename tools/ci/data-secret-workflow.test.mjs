@@ -15,8 +15,9 @@ const wf = parse(read("data-secret.yml"));
 const job = wf.jobs["data-secret"];
 const step = (name) => job.steps.find((s) => s.name === name);
 
-it("4068: holds the release's concurrency group and Environment, never cancelled", () => {
-  assert.deepEqual(wf.concurrency, parse(read("deploy-prod.yml")).concurrency);
+it("4068: one rotation at a time in a group of its own — never the release's, whose one pending run it could cancel — in Environment production", () => {
+  assert.deepEqual(wf.concurrency, { group: "data-secret", "cancel-in-progress": false });
+  assert.notEqual(wf.concurrency.group, parse(read("deploy-prod.yml")).concurrency.group);
   assert.deepEqual(job.environment, { name: "production", deployment: false });
   assert.deepEqual(wf.permissions, { contents: "read" });
 });

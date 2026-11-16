@@ -1391,7 +1391,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
   // The unit's script, run for real: docker answers `check` with a failure while
   // data.env holds `failKey`, so both the success and the restore branch run.
   let unitInput;
-  const runUnit = async (failKey, now = new Date()) => {
+  const runUnit = async (failKey, now = new Date(), upFailKey = "NO-SUCH-KEY") => {
     secretBox();
     unitInput = await cipher(NEW, now);
     assert.equal(run(`secret-apply ${SHA}`, { input: unitInput }).status, 0);
@@ -1401,6 +1401,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         "#!/usr/bin/env bash",
         'echo "docker $*" >> "$STUB_DIR/docker.log"',
         `[[ " $* " == *" check "* ]] && grep -q '${failKey}' '${dataEnv()}' && exit 1`,
+        `[[ " $* " == *" up "* ]] && grep -q '${upFailKey}' '${dataEnv()}' && exit 1`,
         "exit 0",
       ].join("\n") + "\n",
     );
@@ -1438,6 +1439,32 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.ok(!existsSync(previous()));
     assert.equal(log("docker").trim().split("\n").filter((l) => l.includes(" up -d ")).length, 2, "recreated twice");
     assert.ok(existsSync(applied()) && !existsSync(pending()), "a rolled-back ciphertext is spent too");
+  });
+
+  it("4068: a restore whose recreate fails still checks, records the ciphertext spent and fails the unit", async () => {
+    const r = await runUnit("NEWKEYID0002", new Date(), "OLDKEYID0001");
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /WARNING: recreating postgres \+ pgbackrest with the previous values failed/);
+    assert.equal(readFileSync(dataEnv(), "utf8"), OLD_ENV, "the previous data.env is back");
+    assert.ok(!existsSync(previous()));
+    assert.ok(existsSync(applied()) && !existsSync(pending()), "spent although the recreate failed");
+    assert.equal(log("docker").trim().split("\n").filter((l) => l.includes(" check")).length, 2, "checked after the failed recreate too");
+  });
+
+  it("4068: a stage refused after it wrote leaves no staged copy and no pending record", async () => {
+    secretBox();
+    const input = await cipher(NEW);
+    // openssl decrypts (so secret-stage writes both files), then exits non-zero.
+    const real = spawnSync("bash", ["-c", "command -v openssl"], { encoding: "utf8" }).stdout.trim();
+    writeFileSync(
+      join(stubs, "openssl"),
+      `#!/usr/bin/env bash\n'${real}' "$@"; rc=$?\n[[ $1 == cms && $2 == -decrypt ]] && exit 1\nexit $rc\n`,
+    );
+    chmodSync(join(stubs, "openssl"), 0o755);
+    const r = run(`secret-apply ${SHA}`, { input });
+    assert.equal(r.status, 3, r.stderr);
+    assert.ok(!existsSync(staged()) && !existsSync(pending()), "nothing left behind");
+    assert.doesNotMatch(log("ds-release"), /release prod/);
   });
 
   it("4068: an applied ciphertext is spent: a replay starts nothing, an older one is refused, a newer one is staged", async () => {

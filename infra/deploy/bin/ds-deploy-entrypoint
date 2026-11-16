@@ -1051,13 +1051,18 @@ if $DATA_UP_PERSISTENCE && $DATA_PGBACKREST_CHECK; then
   mv -f -- '$SECRET_PENDING' '$SECRET_APPLIED'
   exit 0
 fi
+# The restore runs every step whatever the one before it did (the unit's bash is
+# -e): put the backup back, recreate, check, record the ciphertext spent, exit 1.
 echo 'data-secret: the new values failed; restoring the previous data.env'
-install -m 0600 -o root -g root -- '$SECRET_BACKUP' '$DATA_ENV'
-rm -f -- '$SECRET_BACKUP'
-$DATA_UP_PERSISTENCE
+if install -m 0600 -o root -g root -- '$SECRET_BACKUP' '$DATA_ENV'; then
+  rm -f -- '$SECRET_BACKUP'
+else
+  echo 'data-secret: ERROR: the previous data.env could not be put back; it is kept at $SECRET_BACKUP'
+fi
+$DATA_UP_PERSISTENCE || echo 'data-secret: WARNING: recreating postgres + pgbackrest with the previous values failed'
 $DATA_PGBACKREST_CHECK || echo 'data-secret: WARNING: pgbackrest check fails with the previous values too'
-# The previous data.env stands again: this ciphertext is spent too.
-mv -f -- '$SECRET_PENDING' '$SECRET_APPLIED'
+# The new values were tried and refused: this ciphertext is spent too.
+mv -f -- '$SECRET_PENDING' '$SECRET_APPLIED' || echo 'data-secret: WARNING: the ciphertext could not be recorded spent'
 exit 1
 SH
 }
@@ -1088,8 +1093,9 @@ secret_apply() {
     # The last applied ciphertext again (a re-run): nothing is staged or started;
     # the caller reads the recorded verdict with status.
     4) printf '%s: %s\n' "$TAG" "$out"; exit 0 ;;
-    2) reject "${out:-the secret was refused}" ;;
-    *) refuse "${out:-the secret could not be staged}" ;;
+    # Any refusal leaves neither a staged data.env nor a pending record behind.
+    2) sudo rm -f -- "$SECRET_STAGED" "$SECRET_PENDING"; reject "${out:-the secret was refused}" ;;
+    *) sudo rm -f -- "$SECRET_STAGED" "$SECRET_PENDING"; refuse "${out:-the secret could not be staged}" ;;
   esac
   step_file=$(sudo mktemp)
   secret_script | sudo tee -- "$step_file" >/dev/null

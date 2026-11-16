@@ -120,7 +120,8 @@ images of <sha12>: admin, portal (…)`. Pick a SHA whose images the registry
   digest as usual.
 - **Secrets.** `PROD_SSH_KEY` + `PROD_SSH_KNOWN_HOSTS` live in Environment
   `production` (deployment branches `main`, no required reviewer) and reach only
-  the `deploy` job.
+  the `deploy` job and `data-secret.yml`'s one `data-secret` job (#4068), pinned by
+  `tools/ci/deploy-prod-workflow.test.mjs`.
 
 ### Redeploy mode (#3354)
 

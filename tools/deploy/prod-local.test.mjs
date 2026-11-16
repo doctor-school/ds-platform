@@ -1222,3 +1222,17 @@ test("3648: --skip-rehearsal is validated at start-up and never reaches the Acti
   const workflow = readFileSync(new URL("../../.github/workflows/deploy-prod.yml", import.meta.url), "utf8");
   assert.doesNotMatch(workflow, /skip[-_]rehearsal/);
 });
+
+test("4068: a forward release refuses while any ds-prod-* unit runs on ds-data-prod (a data-secret rotation), before its first state change", () => {
+  const body = deployBody.slice(deployBody.indexOf('walk.phase("previous-sha")'));
+  const check = body.indexOf('await dataProd().call(["check"])');
+  assert.match(body, /if \(!redeploy\) \{\s*try \{\s*await dataProd\(\)\.call\(\["check"\]\)/);
+  const backup = body.indexOf('walk.phase("runtime-config-backup")');
+  const ship = body.indexOf('walk.phase("ship")');
+  assert.ok(check > 0, "a read-only data-box live-unit check");
+  assert.ok(check < backup && backup < ship, "before the config backup and the ship");
+  assert.ok(
+    body.indexOf("if (!descent.ok) die(descent.reason") < check,
+    "after the descent guard",
+  );
+});

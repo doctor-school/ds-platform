@@ -832,7 +832,8 @@ create-access-key` on the operator's workstation, as above. The values never ent
 
    3. **Apply it on the owner's word**, with the live prod SHA:
       `gh workflow run data-secret.yml --ref main -f action=apply -f sha=<live sha> -f owner_quote="<the owner's words>" -f ciphertext=<the line>`.
-      In the release's concurrency group and Environment, refused while any `ds-prod-*`
+      In Environment `production` and a concurrency group of its own (never the
+      release's, whose one pending run it could cancel), refused while any `ds-prod-*`
       unit runs, ds-data-prod decrypts, checks the names and value shapes, and runs the
       durable unit `ds-prod-<sha12>-data-secret`: `data.env` backed up, exactly those
       lines replaced (root:root 0600), postgres + pgbackrest recreated with data-up's
@@ -840,7 +841,8 @@ create-access-key` on the operator's workstation, as above. The values never ent
       reads the recorded images and the next release passes `postgres-verify`), then
       `pgbackrest --stanza=ds check`. A failed check puts the backup back, recreates
       again and fails the run: the old key keeps working. The backup is removed either
-      way. A run whose job died is re-dispatched with the same inputs (within the 6 h):
+      way. A run whose job died is re-dispatched with the same inputs once the unit has
+      ended (while it runs, the apply is refused) and within the 6 h:
       the box answers «already applied» for the last applied line, starts nothing, and
       the run reads the unit's recorded verdict and closes the attempt.
    4. Dispatch `recovery-custody.yml` with `recovery-bundle`, then `recovery-check`:

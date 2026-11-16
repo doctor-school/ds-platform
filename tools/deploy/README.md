@@ -681,6 +681,13 @@ stay on the operator path above.
   `release-driver record-previous prod <sha> <prev|none>` (the first basis recorded for
   a SHA is kept); `status prod <sha>` reports it as `driver.previousSha`, the
   basis of the Deployment-record notes the runner writes (spec §5).
+- **`storageDriver`** (#4100). After `data-prod up` the run reduces the checkpoint's
+  `storage driver:` line to one `[a-z0-9-]{1,32}` word (`unavailable` for anything else)
+  and records it through `release-driver record-storage-driver prod <sha> <word>`;
+  `status prod <sha>` reports it as `driver.storageDriver`, and the deploy job prints it
+  once as the status line `data-box storage driver: <word>` — ds-data-prod's store,
+  readable in the public Actions log with no break-glass key. Evidence only: a failed
+  record is a warning, and a redeploy (no `up`) records none.
 
 The unit's whole output stays in its journal (`journalctl -u ds-prod-<sha12>-driver`);
 the runner sees status lines only. The operator reads it with no break-glass key (#4067):
@@ -831,7 +838,9 @@ key and no workstation-held artifact:
    record. On every release that checkpoint also prints one
    `↳ ds-data-prod: storage driver: <driver>` line (evidence only, `unavailable — <reason>`
    on a docker error): the certified ids are classic-store (`overlay2`) config digests,
-   and a box on the containerd store fails closed at the post-load inspect.
+   and a box on the containerd store fails closed at the post-load inspect. The deploy
+   job's log carries the same value as `data-box storage driver: <word>` (#4100,
+   `storageDriver` above).
 
 The Actions path adds evidence, never acceptance: the guard alone decides, with the same
 checks as the break-glass path — a missing, stale (other source hash) or foreign

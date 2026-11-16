@@ -67,7 +67,7 @@ describe("LessonCompositionScreen", () => {
     );
   });
 
-  it("EARS-2 / EARS-28: the new step offers exactly the catalog's element types", async () => {
+  it("EARS-2/28: the new step offers exactly the catalog's element types", async () => {
     mount();
     const select = await screen.findByLabelText("Тип шага");
     const values = within(select)
@@ -366,7 +366,7 @@ describe("LessonCompositionScreen", () => {
     );
   });
 
-  it("EARS-10 / EARS-28: the video provider picker offers only providers that report a playback position", async () => {
+  it("EARS-10/28: the video provider picker offers only providers that report a playback position", async () => {
     mount();
     await screen.findByTestId("step-row-1");
     const values = within(within(row(1)).getByLabelText("Площадка"))

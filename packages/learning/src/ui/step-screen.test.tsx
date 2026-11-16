@@ -156,7 +156,7 @@ describe("024 EARS-15…18 — the step screen", () => {
     );
   });
 
-  it("EARS-16 / EARS-10: the video reports the provider player's own clock as position facts, every 10 s and at the end", async () => {
+  it("EARS-16/10: the video reports the provider player's own clock as position facts, every 10 s and at the end", async () => {
     const answers = [
       { positionSec: 12, watchedPercent: 10 },
       { positionSec: 120, watchedPercent: 100 },
@@ -252,7 +252,7 @@ describe("024 EARS-15…18 — the step screen", () => {
     expect(facts.map((f) => f.data.positionSec)).toEqual([120, 52]);
   });
 
-  it("EARS-16 / EARS-10: opening the download records the `opened` fact and marks the material opened", async () => {
+  it("EARS-16/10: opening the download records the `opened` fact and marks the material opened", async () => {
     const fetch = stubFetch({ [FACTS]: { outcome: "recorded", changed: [] } });
     renderStep(
       videoStep({

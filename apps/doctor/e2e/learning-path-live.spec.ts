@@ -104,7 +104,7 @@ test.describe("024 — the doctor's course path and step screens", () => {
     if (DARK) await context.addInitScript(DARK_INIT);
   });
 
-  test("EARS-14 / EARS-15: a guest sees the path with its states and meets the registration gate on a step", async ({ page }) => {
+  test("EARS-14/15: a guest sees the path with its states and meets the registration gate on a step", async ({ page }) => {
     for (const [size, tag] of [[DESKTOP, "1280"], [PHONE, "390"]] as const) {
       await page.setViewportSize(size);
       const res = await page.goto(`${DOCTOR_URL}/courses/${SLUG}`);
@@ -132,7 +132,7 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await shoot(page, "academy-courses-not-found");
   });
 
-  test("EARS-14…18: a doctor watches, downloads, fails the exit test below the threshold, passes it, and the next lesson opens", async ({ browser }) => {
+  test("EARS-14/15/16/17/18: a doctor watches, downloads, fails the exit test below the threshold, passes it, and the next lesson opens", async ({ browser }) => {
     test.setTimeout(240_000);
     const doctor = { email: newEmail(), password: livePassword() };
     await provisionConfirmedAccount(browser, "doctor", DOCTOR_URL, doctor);

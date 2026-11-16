@@ -1,6 +1,7 @@
 import {
   TelegramBotApiError,
   type BotUser,
+  type TelegramCallOutcome,
   type ChatInfo,
   type ChatMemberInfo,
   type SetWebhookParams,
@@ -25,8 +26,15 @@ export class FakeTelegramBotApi implements TelegramBotApi {
   readonly downloads = new Map<string, Buffer>();
   me: BotUser = { id: 7_000_000_001, is_bot: true, username: "ds_test_bot" };
   webhook: WebhookInfo = { url: "", pending_update_count: 0 };
+  /**
+   * While set, every call fails with this transport outcome after being
+   * recorded — "Telegram is unreachable" (EARS-31).
+   */
+  outage: Extract<TelegramCallOutcome, "timeout" | "network_error"> | null =
+    null;
 
   reset(): void {
+    this.outage = null;
     this.calls.length = 0;
     this.chats.clear();
     this.members.clear();
@@ -37,6 +45,7 @@ export class FakeTelegramBotApi implements TelegramBotApi {
 
   async setWebhook(params: SetWebhookParams): Promise<void> {
     this.calls.push({ method: "setWebhook", args: [params] });
+    this.down("setWebhook");
     this.webhook = {
       url: params.url,
       pending_update_count: 0,
@@ -46,16 +55,19 @@ export class FakeTelegramBotApi implements TelegramBotApi {
 
   async getWebhookInfo(): Promise<WebhookInfo> {
     this.calls.push({ method: "getWebhookInfo", args: [] });
+    this.down("getWebhookInfo");
     return this.webhook;
   }
 
   async getMe(): Promise<BotUser> {
     this.calls.push({ method: "getMe", args: [] });
+    this.down("getMe");
     return this.me;
   }
 
   async getChat(chat: TelegramChatRef): Promise<ChatInfo> {
     this.calls.push({ method: "getChat", args: [chat] });
+    this.down("getChat");
     const found = this.chats.get(String(chat));
     if (!found) {
       throw new TelegramBotApiError(
@@ -73,6 +85,7 @@ export class FakeTelegramBotApi implements TelegramBotApi {
     userId: number,
   ): Promise<ChatMemberInfo> {
     this.calls.push({ method: "getChatMember", args: [chat, userId] });
+    this.down("getChatMember");
     const found = this.members.get(`${String(chat)}:${userId}`);
     if (!found) {
       throw new TelegramBotApiError(
@@ -87,6 +100,7 @@ export class FakeTelegramBotApi implements TelegramBotApi {
 
   async getFile(fileId: string): Promise<TelegramFile> {
     this.calls.push({ method: "getFile", args: [fileId] });
+    this.down("getFile");
     const found = this.files.get(fileId);
     if (!found) {
       throw new TelegramBotApiError(
@@ -101,6 +115,7 @@ export class FakeTelegramBotApi implements TelegramBotApi {
 
   async downloadFile(filePath: string, maxBytes?: number): Promise<Buffer> {
     this.calls.push({ method: "downloadFile", args: [filePath, maxBytes] });
+    this.down("downloadFile");
     const found = this.downloads.get(filePath);
     if (!found) {
       throw new TelegramBotApiError("downloadFile", "http_error", 404, null);
@@ -109,5 +124,11 @@ export class FakeTelegramBotApi implements TelegramBotApi {
       throw new TelegramBotApiError("downloadFile", "too_large", 200, null);
     }
     return found;
+  }
+
+  private down(method: string): void {
+    if (this.outage) {
+      throw new TelegramBotApiError(method, this.outage, null, null);
+    }
   }
 }

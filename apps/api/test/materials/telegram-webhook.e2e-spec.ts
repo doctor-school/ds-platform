@@ -36,8 +36,10 @@ import {
 // read and the 404 kill switch (EARS-24); matching, drops and idempotent
 // re-delivery, 500 with nothing written on our own failure (EARS-25); the
 // mapping (EARS-26), albums (EARS-27), edits (EARS-28) and the EARS-36
-// hygiene of every log line and stored row. Phase 1 calls no Bot API method
-// from the webhook: the double records that nothing reached Telegram.
+// hygiene of every log line and stored row. The webhook's only Bot API calls
+// are the preview copy's `getFile` / download after the commit (EARS-29,
+// `telegram-preview-check.e2e-spec.ts`); the double holds no file here, so
+// each copy attempt fails, is counted and leaves the card imageless.
 describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
   const TOKEN = "123456:E2E-bot_token-value";
   const SECRET = "e2e_webhook-secret_0123";
@@ -230,8 +232,12 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
     expect(all).not.toContain(TOKEN);
     expect(all).not.toContain(SECRET);
     expect(all).not.toContain(SIGNATURE);
-    // Phase 1: the webhook itself never calls the Bot API.
-    expect(telegram.calls).toEqual([]);
+    // The webhook calls the Bot API only for the preview copy (EARS-29).
+    expect(
+      telegram.calls.filter(
+        (c) => c.method !== "getFile" && c.method !== "downloadFile",
+      ),
+    ).toEqual([]);
     vi.restoreAllMocks();
     for (const id of sourceIds.splice(0)) {
       await pool.query(
@@ -556,11 +562,15 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
       edit(message(src, 50, { caption: "Стало", photo: photo("e50b") })),
     );
     [after] = await entries(src);
+    // The count restarts for the new medium; its immediate copy attempt
+    // found no file in the double, so it is counted once and the old copy
+    // stays on the card until a new one replaces it (EARS-29).
     expect(after).toMatchObject({
       preview_file_id: "e50b-1280",
       preview_file_unique_id: "u-e50b-1280",
       preview_state: "pending",
-      preview_attempts: 0,
+      preview_attempts: 1,
+      image_ref: "materials/feed/x.webp",
     });
     expect(after!.published_at).toEqual(before!.published_at);
     expect(await entries(src)).toHaveLength(1);

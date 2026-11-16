@@ -21,21 +21,25 @@ import { visible } from "./support/visible";
  * sub-navigation, «Добавить источник» with an address of another form and a
  * private invite link refused at the field (input kept, nothing stored), the
  * official channel `t.me/bbmacademy` added from its full link and listed
- * «Включён» / «Не проверен» with no posts, the same channel refused as already
+ * «Включён» with no posts and already checked (EARS-21 runs the EARS-31 check
+ * at once — the stand's API has no Telegram connector configured, so it reads
+ * «Ошибка: Telegram не подключён на сервере»), the same channel refused as already
  * listed, «Изменить адрес» (a refusal at the field, then the change),
  * «Выключить» behind its confirmation and «Включить»; the narrow screen keeps
  * the page from side-scrolling. A congress registrar has no «Материалы»
  * section, so no «Источники»: the route renders the refusal and the server
  * answers 403. The axe half is `e2e/a11y/a11y-axe.e2e.spec.ts` («048 EARS-20»).
  *
- * The EARS-31 check that turns «Не проверен» into «Работает» is the Telegram
- * connector's (#3994); «Публикации» is #3996 — neither is driven here.
+ * The «Работает» verdict against a live bot is proven by the API e2e against
+ * the Telegram double (#3994); «Публикации» is #3996 — not driven here.
  *
  * Dev-stand-gated like every `apps/admin/e2e` flow spec; run against a booted
  * admin + api with `--config=playwright.flows.config.ts`. `E2E_SHOT_DIR` opts
  * into the desktop/mobile × light/dark captures the PR body cites.
  */
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
+/** The at-once check's verdict on a stand with no Telegram connector. */
+const NOT_CONNECTED = "Ошибка: Telegram не подключён на сервере";
 const WIDE = { width: 1440, height: 900 };
 const NARROW = { width: 390, height: 844 };
 const OFFICIAL = "bbmacademy";
@@ -226,7 +230,7 @@ test.describe("048 EARS-20…EARS-23 — «Источники»", () => {
     expect(await storedAddresses(admin)).toEqual(before);
   });
 
-  test("EARS-21: t.me/bbmacademy is added switched on and «Не проверен»; the same channel again is refused as listed", async () => {
+  test("EARS-21: t.me/bbmacademy is added switched on and checked at once; the same channel again is refused as listed", async () => {
     await admin.goto("/materials/sources/create");
     await submitAddress(admin, "https://t.me/BBMAcademy");
     await admin.waitForURL(/\/materials\/sources$/);
@@ -240,9 +244,9 @@ test.describe("048 EARS-20…EARS-23 — «Источники»", () => {
       "Включён",
     );
     await expect(cell(admin, `feed-source-status-${OFFICIAL}`)).toHaveText(
-      "Не проверен",
+      NOT_CONNECTED,
     );
-    await expect(cell(admin, `feed-source-checked-${OFFICIAL}`)).toHaveText(
+    await expect(cell(admin, `feed-source-checked-${OFFICIAL}`)).not.toHaveText(
       "Ещё не проверялся",
     );
     await expect(cell(admin, `feed-source-count-${OFFICIAL}`)).toHaveText("0");
@@ -294,9 +298,9 @@ test.describe("048 EARS-20…EARS-23 — «Источники»", () => {
       `t.me/${moved}`,
     );
     await expect(cell(admin, `feed-source-row-${OFFICIAL}`)).toHaveCount(0);
-    // The edit resets the check: the new address is not yet verified.
+    // The edit runs the check again, at once, for the new address.
     await expect(cell(admin, `feed-source-status-${moved}`)).toHaveText(
-      "Не проверен",
+      NOT_CONNECTED,
     );
   });
 

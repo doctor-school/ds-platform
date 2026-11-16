@@ -72,6 +72,56 @@ export type TelegramEntryRow = {
   previewFileUniqueId: string | null;
 };
 
+/** The preview columns of a Telegram entry (EARS-29). */
+const telegramPreviewColumns = {
+  id: feedEntries.id,
+  imageRef: feedEntries.imageRef,
+  previewFileId: feedEntries.previewFileId,
+  previewFileUniqueId: feedEntries.previewFileUniqueId,
+  previewState: feedEntries.previewState,
+  previewAttempts: feedEntries.previewAttempts,
+};
+export type TelegramPreviewRow = {
+  id: string;
+  imageRef: string | null;
+  previewFileId: string | null;
+  previewFileUniqueId: string | null;
+  previewState: "pending" | "done" | "failed" | null;
+  previewAttempts: number;
+};
+
+/**
+ * EARS-29 — the preview retry backoff: the wait before attempt `n + 1` after
+ * `n` failed attempts is `min(10 · 2^(n-1), 240)` minutes, so the scheduled
+ * retries (every 10 minutes) span {@link PREVIEW_RETRY_WINDOW_MINUTES}.
+ */
+export const PREVIEW_RETRY_BASE_MINUTES = 10;
+export const PREVIEW_RETRY_CAP_MINUTES = 240;
+export const PREVIEW_RETRY_WINDOW_MINUTES = 24 * 60;
+
+export function previewRetryDelayMinutes(failedAttempts: number): number {
+  if (failedAttempts <= 0) return 0;
+  return Math.min(
+    PREVIEW_RETRY_BASE_MINUTES * 2 ** (failedAttempts - 1),
+    PREVIEW_RETRY_CAP_MINUTES,
+  );
+}
+
+/**
+ * The attempt count after which a preview is `failed`: the smallest `N` whose
+ * waits before attempts 2…N cover the 24-hour window (EARS-29 «at least 24
+ * hours»).
+ */
+export const PREVIEW_MAX_ATTEMPTS = ((): number => {
+  let waited = 0;
+  let attempts = 1;
+  while (waited < PREVIEW_RETRY_WINDOW_MINUTES) {
+    waited += previewRetryDelayMinutes(attempts);
+    attempts += 1;
+  }
+  return attempts;
+})();
+
 /** A Telegram `post` entry as the connector writes it (048-design §Data model (slice 2)). */
 export interface TelegramEntryInsert {
   feedSourceId: string;
@@ -315,6 +365,87 @@ export class FeedEntriesRepository {
     await tx
       .insert(feedEntryMessages)
       .values({ feedSourceId, messageId, feedEntryId });
+  }
+
+  // ── 048 slice 2 — Telegram preview copy (#3994, EARS-29) ───────────────
+  // Written only by `telegram/telegram-preview.service.ts`, after the webhook
+  // transaction has committed. Each settle is conditional on the medium the
+  // copy started from, so an edit that changed the medium meanwhile is never
+  // overwritten by a stale copy.
+
+  /** The preview state of a Telegram entry, or undefined when there is none. */
+  async telegramPreview(
+    id: string,
+    tx?: MaterialsTx,
+  ): Promise<TelegramPreviewRow | undefined> {
+    const [row] = await (tx ?? this.handle)
+      .select(telegramPreviewColumns)
+      .from(feedEntries)
+      .where(
+        and(eq(feedEntries.id, id), eq(feedEntries.sourcePlatform, "telegram")),
+      );
+    return row;
+  }
+
+  /**
+   * The pending previews whose next attempt is due: attempt `n` (1-based,
+   * counted in `preview_attempts`) waits {@link previewRetryDelayMinutes}
+   * after the last write of the row, which is the last attempt's write.
+   */
+  async duePreviewIds(limit: number): Promise<string[]> {
+    const rows = await this.handle
+      .select({ id: feedEntries.id })
+      .from(feedEntries)
+      .where(
+        and(
+          eq(feedEntries.sourcePlatform, "telegram"),
+          eq(feedEntries.previewState, "pending"),
+          sql`${feedEntries.updatedAt} <= now() - make_interval(mins => CASE WHEN ${feedEntries.previewAttempts} = 0 THEN 0 ELSE least(${sql.raw(String(PREVIEW_RETRY_BASE_MINUTES))} * power(2, ${feedEntries.previewAttempts} - 1), ${sql.raw(String(PREVIEW_RETRY_CAP_MINUTES))})::int END)`,
+        ),
+      )
+      .orderBy(feedEntries.updatedAt)
+      .limit(limit);
+    return rows.map((r) => r.id);
+  }
+
+  /**
+   * Lock a pending preview still on the medium `fileUniqueId` — the guard of
+   * every settle; undefined when an edit moved it on or it is settled.
+   */
+  async lockPendingPreview(
+    tx: MaterialsTx,
+    id: string,
+    fileUniqueId: string,
+  ): Promise<TelegramPreviewRow | undefined> {
+    const [row] = await tx
+      .select(telegramPreviewColumns)
+      .from(feedEntries)
+      .where(
+        and(
+          eq(feedEntries.id, id),
+          eq(feedEntries.sourcePlatform, "telegram"),
+          eq(feedEntries.previewState, "pending"),
+          eq(feedEntries.previewFileUniqueId, fileUniqueId),
+        ),
+      )
+      .for("update");
+    return row;
+  }
+
+  /** Settle a locked preview: the copy is set, or the attempt is counted. */
+  async settlePreview(
+    tx: MaterialsTx,
+    id: string,
+    patch:
+      | { imageRef: string; previewState: "done" }
+      | { previewAttempts: number; previewState: "pending" | "failed" },
+  ): Promise<void> {
+    await tx
+      .update(feedEntries)
+      .set({ ...patch, updatedAt: sql`now()` })
+      .where(
+        and(eq(feedEntries.id, id), eq(feedEntries.sourcePlatform, "telegram")),
+      );
   }
 
   /** Remove the source record's card (EARS-6: an unpublished material leaves the feed). */

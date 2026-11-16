@@ -12,6 +12,10 @@ import {
   FEED_SOURCE_ADDRESS_TAKEN_ERROR,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
+import { FakeTelegramBotApi } from "../../src/materials/telegram/telegram-bot-api.fake.js";
+import { TELEGRAM_BOT_API } from "../../src/materials/telegram/telegram-bot-api.types.js";
+import { TELEGRAM_CONFIG } from "../../src/materials/telegram/telegram-config.js";
+import { SOURCE_CHECK_REASONS } from "../../src/materials/telegram/telegram-source-check.service.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
@@ -31,13 +35,24 @@ import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js"
 // duplicate refused, address edit with the `href` rewrite, switch off and on
 // with the entry marks in one transaction (EARS-20…EARS-22), and the EARS-23
 // floor — `platform_admin` in the MFA admin session, idempotency key,
-// `If-Match`, one 010 audit row per write. The source check (EARS-31) is the
-// Telegram connector's (#3994): here a new source stays «Не проверен».
+// `If-Match`, the 010 audit of every write. Add, address edit and switch-on
+// run the source check (EARS-31) at once against the Telegram double
+// (EARS-21): a channel the double does not know reads «Ошибка» with «Канал не
+// найден или бот не добавлен в канал»; a known one reads «Работает», bound.
 // Mirrors the materials admin suite. Skips when the stand is absent.
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
   "048 feed sources admin API (e2e)",
   () => {
     let app: NestFastifyApplication;
+    const HOOK = "https://api.example.test/v1/integrations/telegram/webhook";
+    /** The Telegram double: the webhook registered, no channel known. */
+    const telegram = new FakeTelegramBotApi();
+    const resetTelegram = () => {
+      telegram.reset();
+      telegram.webhook = { url: HOOK, pending_update_count: 0 };
+    };
+    resetTelegram();
+    const NOT_FOUND = SOURCE_CHECK_REASONS.channelNotFound;
     let pool: pg.Pool;
     const fake = new FakeIdpClient();
     const password = "Aa1!ufficiently-long-pw";
@@ -293,7 +308,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           .overrideProvider(IDP_CLIENT)
           .useValue(fake)
           .overrideProvider(RATE_LIMIT_THRESHOLDS)
-          .useValue(RELAXED_RATE_LIMIT),
+          .useValue(RELAXED_RATE_LIMIT)
+          .overrideProvider(TELEGRAM_CONFIG)
+          .useValue({
+            botToken: "123456:E2E-sources_token",
+            webhookSecret: "e2e_sources-secret",
+            webhookUrl: HOOK,
+          })
+          .overrideProvider(TELEGRAM_BOT_API)
+          .useValue(telegram),
       ).compile();
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
@@ -306,6 +329,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     afterEach(async () => {
+      resetTelegram();
       for (const id of sourceIds.splice(0)) {
         await pool.query("DELETE FROM feed_entries WHERE feed_source_id = $1", [
           id,
@@ -345,18 +369,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         platform: "telegram",
         address: a.address,
         enabled: true,
-        status: "unchecked",
-        statusReason: null,
-        checkedAt: null,
+        status: "failing",
+        statusReason: NOT_FOUND,
         entryCount: 2,
         version: 1,
       });
+      expect(byId.get(a.id)!.checkedAt).not.toBeNull();
+      expect(byId.get(a.id)).toMatchObject({});
       expect(byId.get(b.id)).toMatchObject({ entryCount: 0 });
     });
 
     // ── EARS-21: add and edit the address ────────────────────────────────
 
-    it("048 EARS-21: when a platform administrator adds a source, the system shall store the lowercase username switched on and «Не проверен» for each accepted address form", async () => {
+    it("048 EARS-21: when a platform administrator adds a source, the system shall store the lowercase username switched on for each accepted address form and check it at once", async () => {
       for (const form of [
         (n: string) => `https://t.me/${n.toUpperCase()}`,
         (n: string) => `t.me/${n}`,
@@ -373,7 +398,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(body).toMatchObject({
           address: name,
           enabled: true,
-          status: "unchecked",
+          status: "failing",
+          statusReason: NOT_FOUND,
           version: 1,
         });
         expect(res.headers.etag).toBe('W/"1"');
@@ -381,7 +407,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(await sourceRow(body.id)).toMatchObject({
           address: name,
           enabled: true,
-          status: "unchecked",
+          status: "failing",
         });
       }
     });
@@ -439,7 +465,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(body).toMatchObject({
         address: renamed,
         version: 2,
-        status: "unchecked",
+        status: "failing",
+        statusReason: NOT_FOUND,
         entryCount: 2,
       });
       expect(res.headers.etag).toBe('W/"2"');
@@ -719,18 +746,100 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await sourcesAt(name)).toBe(1);
     });
 
-    it("048 EARS-23: when a source is added, edited, switched off and on, each write shall leave exactly one 010 audit row under the acting administrator", async () => {
+    // ── EARS-21: the at-once source check (EARS-31) ──────────────────────
+
+    /** A channel the double knows, the bot its administrator. */
+    function knownChannel(address: string, chatId: number) {
+      const info = { id: chatId, type: "channel", username: address };
+      telegram.chats.set(`@${address}`, info);
+      telegram.chats.set(String(chatId), info);
+      telegram.members.set(`${chatId}:${telegram.me.id}`, {
+        status: "administrator",
+      });
+    }
+    const boundId = async (id: string) =>
+      (
+        await pool.query<{ telegram_chat_id: string | null }>(
+          "SELECT telegram_chat_id FROM feed_sources WHERE id = $1",
+          [id],
+        )
+      ).rows[0]!.telegram_chat_id;
+
+    it("048 EARS-21: when a source is added, the system shall run the source check at once, so the response carries «Работает» and the Telegram id is bound before any import", async () => {
+      const name = username();
+      const chatId = -1_000_000_000_000 - Math.floor(Math.random() * 1e9);
+      knownChannel(name, chatId);
+      const res = await call("POST", "/v1/admin/feed-sources", {
+        payload: { platform: "telegram", address: `https://t.me/${name}` },
+      });
+      expect(res.statusCode, res.payload).toBe(201);
+      const body = json(res) as Source;
+      sourceIds.push(body.id);
+      expect(body).toMatchObject({
+        status: "ok",
+        statusReason: null,
+        version: 1,
+      });
+      expect(body.checkedAt).not.toBeNull();
+      // The check is not an administrator edit: the ETag stays the write's.
+      expect(res.headers.etag).toBe('W/"1"');
+      expect(await boundId(body.id)).toBe(String(chatId));
+      expect(telegram.calls.map((c) => c.method)).toEqual([
+        "getWebhookInfo",
+        "getChat",
+        "getMe",
+        "getChatMember",
+      ]);
+    });
+
+    it("048 EARS-21: when an address is edited or a source switched on, the system shall run the source check at once; a failed or unreachable check never fails the write", async () => {
+      const s = await add(username());
+      expect(s).toMatchObject({ status: "failing", statusReason: NOT_FOUND });
+      const renamed = username();
+      const chatId = -1_000_000_000_000 - Math.floor(Math.random() * 1e9);
+      knownChannel(renamed, chatId);
+      const edited = await edit(s, renamed);
+      expect(edited.statusCode, edited.payload).toBe(200);
+      expect(json(edited)).toMatchObject({
+        address: renamed,
+        status: "ok",
+        version: 2,
+      });
+      expect(await boundId(s.id)).toBe(String(chatId));
+      // «Выключить» runs no check.
+      telegram.calls.length = 0;
+      const off = json(
+        await write(json(edited) as Source, "disable"),
+      ) as Source;
+      expect(off).toMatchObject({ enabled: false, status: "ok" });
+      expect(telegram.calls).toEqual([]);
+      telegram.outage = "timeout";
+      const on = await write(off, "enable");
+      expect(on.statusCode, on.payload).toBe(200);
+      expect(json(on)).toMatchObject({
+        enabled: true,
+        status: "failing",
+        statusReason: SOURCE_CHECK_REASONS.unreachable,
+        version: 4,
+      });
+    });
+
+    it("048 EARS-23: when a source is added, edited, switched off and on, each write shall leave its 010 audit row under the acting administrator, and the at-once check its own", async () => {
       const s = await add(username());
       await entry(s, 1);
-      expect(await sourceAudit(s.id)).toHaveLength(1);
-      const edited = json(await edit(s, username())) as Source;
+      // The add and its at-once check.
       expect(await sourceAudit(s.id)).toHaveLength(2);
+      const edited = json(await edit(s, username())) as Source;
+      expect(await sourceAudit(s.id)).toHaveLength(4);
       const off = json(await write(edited, "disable")) as Source;
-      expect(await sourceAudit(s.id)).toHaveLength(3);
+      expect(await sourceAudit(s.id)).toHaveLength(5);
       await write(off, "enable");
       const rows = await sourceAudit(s.id);
       expect(rows.map((r) => r.event_type)).toEqual([
         "data.feed_sources.insert",
+        "data.feed_sources.update",
+        "data.feed_sources.update",
+        "data.feed_sources.update",
         "data.feed_sources.update",
         "data.feed_sources.update",
         "data.feed_sources.update",

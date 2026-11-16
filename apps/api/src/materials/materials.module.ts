@@ -30,6 +30,8 @@ import {
   type TelegramConfig,
 } from "./telegram/telegram-config.js";
 import { TelegramFeedSource } from "./telegram/telegram.feed-source.js";
+import { TelegramPreviewService } from "./telegram/telegram-preview.service.js";
+import { TelegramSourceCheck } from "./telegram/telegram-source-check.service.js";
 import { TelegramWebhookController } from "./telegram/telegram-webhook.controller.js";
 import { TelegramWebhookMiddleware } from "./telegram/telegram-webhook.middleware.js";
 
@@ -70,6 +72,8 @@ import { TelegramWebhookMiddleware } from "./telegram/telegram-webhook.middlewar
         new TelegramBotApiClient(config?.botToken ?? null),
     },
     TelegramFeedSource,
+    TelegramPreviewService,
+    TelegramSourceCheck,
   ],
 })
 export class MaterialsModule implements OnModuleInit, NestModule {

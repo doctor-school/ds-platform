@@ -43,9 +43,9 @@ export type TelegramReceiveOutcome =
       kind: "written";
       entryId: string;
       /**
-       * EARS-29 seam — the entry holds `preview_state = 'pending'` and the
-       * `preview_file_id` to copy; the preview service (#3994 phase 2) copies
-       * it after the commit.
+       * EARS-29 — the entry holds `preview_state = 'pending'` and the
+       * `preview_file_id` to copy; `TelegramPreviewService` copies it after
+       * the commit.
        */
       previewPending: boolean;
     };

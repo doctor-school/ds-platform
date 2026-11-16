@@ -125,6 +125,63 @@ export class FeedSourcesRepository {
       .where(and(eq(feedSources.id, id), isNull(feedSources.telegramChatId)));
   }
 
+  /** EARS-31 — the ids of every switched-on Telegram source (hourly check). */
+  async enabledTelegramSourceIds(): Promise<string[]> {
+    const rows = await this.handle
+      .select({ id: feedSources.id })
+      .from(feedSources)
+      .where(
+        and(
+          eq(feedSources.platform, "telegram"),
+          eq(feedSources.enabled, true),
+        ),
+      )
+      .orderBy(asc(feedSources.address));
+    return rows.map((r) => r.id);
+  }
+
+  /**
+   * EARS-31 — write a check's verdict: `status`, `status_reason`,
+   * `checked_at` and, while unbound, the Telegram id (in the same write).
+   * Applied only while the source is still switched on at the address the
+   * check judged, so an «Изменить адрес» or «Выключить» that raced it wins.
+   * Not an administrator edit, so the admin ETag (`version`) is not bumped.
+   */
+  async writeCheck(
+    tx: FeedSourcesTx,
+    id: string,
+    address: string,
+    verdict: {
+      status: "ok" | "failing";
+      statusReason: string | null;
+      checkedAt: Date;
+      bindChatId: number | null;
+    },
+  ): Promise<FeedSource | undefined> {
+    const [row] = await tx
+      .update(feedSources)
+      .set({
+        status: verdict.status,
+        statusReason: verdict.statusReason,
+        checkedAt: verdict.checkedAt,
+        ...(verdict.bindChatId === null
+          ? {}
+          : {
+              telegramChatId: sql`coalesce(${feedSources.telegramChatId}, ${String(verdict.bindChatId)}::bigint)`,
+            }),
+      })
+      .where(
+        and(
+          eq(feedSources.id, id),
+          eq(feedSources.platform, "telegram"),
+          eq(feedSources.enabled, true),
+          eq(feedSources.address, address),
+        ),
+      )
+      .returning();
+    return row;
+  }
+
   /** Serialize the uniqueness check of one `(platform, address)`. */
   async lockAddress(
     tx: FeedSourcesTx,

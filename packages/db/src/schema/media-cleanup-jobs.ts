@@ -44,13 +44,15 @@ export const mediaCleanupKind = pgEnum("media_cleanup_kind", [
 
 /**
  * Which entity kind owned the released reference: the taxonomy kinds, plus the
- * 048 material whose cover rides the same media pipeline.
+ * 048 material whose cover rides the same media pipeline and the 048 feed
+ * entry whose network-post preview copy is replaced (EARS-29, #3994).
  */
 export const mediaEntityKind = pgEnum("media_entity_kind", [
   "project",
   "expert",
   "partner",
   "material",
+  "feed_entry",
 ]);
 
 /** The kind-specific media slot the reference occupied. */

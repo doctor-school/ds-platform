@@ -410,6 +410,11 @@ policies `playwright-bdd` 9.2 offers:
   dropped. That is what lets the §6.4 coverage lint tell «not written yet» from
   «gone».
 
+A skipped scenario is not necessarily unproven: a scenario counts as proven
+when it is bound here or carries a verified `@proof:<level>` tag (tech spec
+§6.1), and `pnpm scenarios:inventory` — not the skipped count — is the coverage
+number (`tools/lint/scenario-proof-lint.ts`, §6.4).
+
 `retries: 0` (§6.5): a retry turns a flake into a pass and a regression into a
 slow pass.
 

@@ -69,6 +69,8 @@
     "lint:route-targets": "tsx tools/lint/route-target-lint.ts",
     "lint:scenario-coverage": "tsx tools/lint/scenario-coverage-lint.ts",
     "lint:scenario-step": "tsx tools/lint/scenario-step-lint.ts",
+    "lint:scenario-proof": "tsx tools/lint/scenario-proof-lint.ts",
+    "scenarios:inventory": "tsx tools/lint/scenario-proof-lint.ts --report",
     "lint:showcase-coverage": "tsx tools/lint/showcase-coverage-lint.ts",
     "lint:showcase-snippet": "tsx tools/lint/showcase-snippet-lint.ts",
     "lint:catalog-deletion": "tsx tools/lint/catalog-deletion-lint.ts",
@@ -143,6 +145,7 @@
   "devDependencies": {
     "@changesets/changelog-github": "^1.0.1",
     "@changesets/cli": "^3.0.2",
+    "@cucumber/cucumber-expressions": "19.0.0",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",

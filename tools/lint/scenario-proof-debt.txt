@@ -1,0 +1,644 @@
+# Unproven spec scenarios — the scenario-proof ratchet (tools/lint/scenario-proof-lint.ts,
+# regression-contour tech spec §6.4). One line per scenario of a non-Draft spec that is
+# neither bound to a step definition nor carries a verified @proof:<level> tag:
+#   NNN | <scenario title>[ [k]][ | #<issue>]   ([k] = the k-th scenario with that title)
+# Delete a line once its scenario is bound or proof-tagged. A line added after the merge
+# base names an OPEN Issue. Regenerate: pnpm lint:scenario-proof --write-debt
+002 | Readiness endpoint reports down when Postgres is unreachable
+002 | The object-storage state is cached, refreshed every 60 seconds and logged on transitions only
+003 | A code finalised by any other login UI yields no storefront session
+003 | A cold registration code step on the sign-in host signs in while the auth request lives and returns to the storefront when it is stale
+003 | A congress participant sees the form's number prefilled
+003 | A controlled rollback uses the retained mail.ru identity
+003 | A credential created under the previous four-class policy still signs in
+003 | A definitive Postbox failure is delivered through mail.ru
+003 | A disabled mail.ru reserve is skipped and not counted as reserve
+003 | A failure before the message body was committed is definitive
+003 | A form_post or foreign-state callback yields no session
+003 | A guest from an event page keeps that event's card while switching between the sign-in and registration forms
+003 | A guest signing in from an event page sees that event's card on the sign-in form
+003 | A guest who opened password recovery from an event returns to the sign-in form with that event's card
+003 | A guest whose entry hits the per-address limit waits out the countdown on the refusal page
+003 | A guest whose entry the API cannot answer can retry at once
+003 | A hand-off link opened while signed in as another account signs in the reference's account
+003 | A hand-off link opened while signed in as its own account goes straight to the target
+003 | A hand-off met by a live sign-in-host record sends no code and keeps the page in the link
+003 | A hostile return path or redirect URI never leaves the storefront
+003 | A lost acknowledgement after the end-of-data sequence stops the chain
+003 | A mirror that still confirms a number the IdP no longer holds verified sends nothing
+003 | A number confirmed on another account gets the ordinary answer and no SMS
+003 | A password reset ends every session of the person on both storefronts
+003 | A password set before verification does not survive the owner's first code
+003 | A permanently refused recipient stops at the first channel
+003 | A rate-limited redemption is refused like any code request
+003 | A refusal that is not a recipient-address status moves to the next channel
+003 | A refused entry on the sign-in host is the refusal page with both storefronts as the way out
+003 | A registration on the sign-in host ends signed in on both storefronts
+003 | A sign-in finished after the 60-minute transaction ends signed in by the landing rules
+003 | A sign-in from the Academy entry runs on the sign-in host and ends signed in on the stored page
+003 | A signed-in user confirms a phone from the profile
+003 | A stale auth request returns to its storefront and a direct visit goes to the doctor storefront
+003 | A stalled transport terminates and cannot report late success
+003 | A successful login forgives the per-user rate-limit window
+003 | A successful native SMTP write without converged readback cannot activate a release
+003 | A verified password holder who re-registers is signed in by the code and keeps the password
+003 | A wrong, expired or reused phone code confirms nothing
+003 | Already-registered email receives a code mail and nothing is written before the code
+003 | An abandoned change leaves the account with no confirmed phone
+003 | An authenticated user reads their own profile
+003 | An enabled mail.ru reserve with incomplete credentials is a startup error
+003 | An expired hand-off in a browser holding a colleague's session opens the code form, never the colleague's cabinet
+003 | An expired, unknown or exhausted reference falls back to the plain code entry
+003 | An orphaned session self-heals its mirror on the next authenticated read
+003 | An unauthenticated profile read gets the generic auth outcome
+003 | An unauthenticated read heals nothing and stays generic
+003 | An unknown SMTP phase is treated as ambiguous
+003 | An unknown, spent or foreign entry-intent id opens the plain sign-in form
+003 | Changing a confirmed phone leaves no confirmed phone until the new one is confirmed
+003 | Channels have independent credentials and only verified channels are reserve
+003 | Every channel failing is recorded and never leaks into the API response
+003 | Every session and check cookie is host-only and never shared across hosts
+003 | Invalid real configuration cannot fall through to another sender
+003 | Login OTP uses the existing BFF mailer and shared code-only layout
+003 | Login with an SMS OTP code within the toll-fraud budget
+003 | Mirror reconciliation closes a webhook-miss divergence
+003 | No eight-cell code step exists on either storefront
+003 | Only a valid back-channel logout token revokes sessions
+003 | Postbox acceptance stops the chain
+003 | Postbox and mail.ru provider failures are delivered through Resend
+003 | Provider acceptance does not trigger resend when mailbox placement is poor
+003 | Refresh rotation issues a new access token
+003 | Registration with an already-registered email is enumeration-resistant
+003 | Repeated wrong passwords are throttled, never locked
+003 | Replaying a consumed refresh token invalidates the chain
+003 | Requesting a code for the already-confirmed number is a no-op
+003 | Resending a code is enumeration-resistant and fits the account state
+003 | Reset by an unconfirmed or unknown phone is indistinguishable and sends nothing
+003 | Reset by email is unchanged for an account that also has a confirmed phone
+003 | Rollback is configuration only and explicit intercept remains deliberate
+003 | Runtime reconciliation selects the configured real provider after deployment
+003 | SMS send refused when the daily budget circuit-breaker is open
+003 | Sign-in under the SMS switch shows the hint and counts a request for an unconfirmed number
+003 | Signing out on one storefront signs out on both
+003 | The code method and the congress hand-off survive the redirect to the sign-in host
+003 | The one-time code never reaches the logs
+003 | The password-reset code email is BFF-sent and link-free
+003 | The re-registration mail is a code mail on the shared layout
+003 | The reset step and the hint tell the truth about the SMS
+003 | The shared session is not reused from another fingerprint or when a fresh credential is asked
+003 | The sign-in host refuses an admin or unknown client and renders no form
+003 | Total chain budget expiry cancels the in-flight attempt
+003 | Unverified-account sign-in receives the sign-in code mail
+003 | With the suppression toggle off, the seam is inert for every recipient
+003 | With the suppression toggle on, a synthetic-tagged send is dropped before the relay
+003 | With the suppression toggle on, an untagged send proceeds normally
+004 | A guest opens a sponsor-distributed link and reads the full page without logging in
+004 | A live event routes toward the room
+004 | The listing shows an empty-state when nothing is upcoming
+004 | The month read rejects an unknown timezone
+004 | The page and card render to the vendored canvas at both breakpoints and themes
+004 | The page offers exactly one «Участвовать» CTA that enters registration
+004 | Times render in МСК regardless of the viewer's timezone
+004 | Webinar surfaces use Russian copy from the typed message catalogue
+005 | A doctor cannot read another doctor's registration state or the roster
+005 | A guest completes registration through auth without losing the event context
+005 | A just-registered event appears in «мои события» immediately
+005 | A logged-in doctor registers in one tap and the page reflects it immediately
+005 | A registration is durably recorded as the basis for admission and the roster
+005 | Add to calendar is not offered outside the registered upcoming state
+005 | Register-during-live is a normal path
+005 | Registering twice yields a single registration
+005 | Registration is not offered for ended or archived events
+005 | The .ics file carries one event with the start, the duration and the page link
+005 | The event page never shows the register CTA to an already-registered doctor
+005 | The public event page stays identical for guest and principal
+005 | The registered event page keeps offering add to calendar until the start
+005 | The registered event page signposts how and when to join
+005 | The registered surfaces render to the vendored canvas at both breakpoints and themes
+005 | The registration-intent rejects an unsafe return target
+005 | «Вы записаны» offers add to calendar right after sign-up
+005 | «Мои события» lists the doctor's registered upcoming events, nearest first
+005 | «Мои события» shows an empty-state when nothing is registered
+005 | «Мои события» times render in МСК regardless of the viewer's timezone
+006 | A YouTube embed whose handshake never arrives is treated as suspected, not a false confirmed failure
+006 | A YouTube error is a confirmed failure that distinguishes embedding-disabled from unavailable
+006 | A backgrounded tab pauses the heartbeat and resumes when visible again
+006 | A chat message carries the poster's own display name to every participant
+006 | A client cannot publish to the room channel without the gated command
+006 | A confirmed failure covers the frame with a truthful status, not a black frame
+006 | A doctor cannot read another doctor's room data or the roster
+006 | A doctor whose beats stop ages out after the two-cadence freshness window
+006 | A player failure does not interrupt presence capture
+006 | A posted chat message reaches other participants in real time
+006 | A poster with no display name falls back to the non-PII participant tag
+006 | A registered doctor enters a live room and sees the player and chat
+006 | A staff account sees the count whatever the setting
+006 | A still-visible foreground tab keeps beating when the person physically walks away
+006 | A structurally silent cdnvideo stream is never graded and the room shows nothing of its own
+006 | A viewer sees no participant count while the event's setting is off
+006 | A viewer sees the live count while the event's setting is on
+006 | A vk embed is parent-observable through its js_api handshake
+006 | A vk embed whose handshake never arrives is treated as suspected, not a false confirmed failure
+006 | Absolute room times render in МСК regardless of the viewer's timezone
+006 | An empty or whitespace-only name is rejected
+006 | An unadmissible caller is routed truthfully, never shown a soft wall
+006 | An unknown or absent provider yields a truthful stream-unavailable state
+006 | Changing the heartbeat cadence changes config, not spec or code
+006 | Closing the room stops heartbeat and chat acceptance
+006 | Concurrent tabs do not inflate a doctor's presence minutes
+006 | On a confirmed failure the room retries in-room and offers a restart, never a page reload or off-platform link
+006 | Presence is captured immediately on entry or visible resume, then every N seconds while visible
+006 | Recovery clears the truthful status
+006 | The captured data yields per-doctor minutes sufficient for the manual sponsor export
+006 | The counter degrades to the heartbeat-ack cadence when the realtime channel is down
+006 | The ended room shows the end card and keeps the chat history readable
+006 | The first room entry asks once for the doctor's name
+006 | The header toggle switches the theme and the choice persists across reloads
+006 | The in-room counter reflects another doctor's accepted join beat in realtime
+006 | The player is instantiated from the explicit provider enum
+006 | The portal accessibility sweep covers both themes
+006 | The presence data is never exposed on a public surface
+006 | The room embeds the stream as a frame only
+006 | The room header avatar shows the initials of the real saved name
+006 | The room renders to the vendored canvas at both breakpoints and themes
+006 | The self-profile display-name read is served only to its owner
+006 | Turning the setting off during the broadcast removes the count from an open room
+006 | Turning the setting on during the broadcast shows the count in an open room at once
+006 | With no stored choice the theme follows the system preference, and an explicit choice wins
+007 | A caller who may not edit the event cannot change the option
+007 | A caller who may not edit the event cannot change the option [2]
+007 | A created event starts in draft and stores one canonical instant for a МСК time
+007 | A failed superseded-object delete never fails the edit (best-effort GC)
+007 | A legacy broadcast is born hidden and enters the shown archive by an explicit command
+007 | A non-admin caller cannot author or transition an event
+007 | A wrong stream URL is correctable while the event is published
+007 | Absolute admin times render in МСК regardless of the operator's timezone
+007 | Admin state is exactly what the portal surfaces reflect
+007 | An event that existed before the default changed reads hidden
+007 | An event that existed before the option reads it as off
+007 | An invalid lifecycle jump is refused server-side and never offered in the UI
+007 | An unknown stream provider is rejected at configuration time
+007 | Archiving is a manual operator action with no scheduler
+007 | One operator runs a webinar end to end, from creation to archive
+007 | Opening and closing the room are the live and ended transitions
+007 | Publish is refused unless the event is in draft
+007 | Replacing the program PDF after publish serves the current file on the public page
+007 | Speakers are stored as an ordered list of free-text entries in wave 1
+007 | The admin surface is built on stock Refine with no canvas-fidelity gate
+007 | The produced public projection stays publicly readable
+007 | The stream is configured from an explicit provider enum
+007 | The two lifecycles are disjoint - a command of the other machine is refused
+007 | There is no unpublish transition
+008 | A doctor logs in, lands on the discovery front-door, and navigates the shell
+008 | A guest sees «Войти / Регистрация» and the same public discovery front-door
+008 | On mobile the nav collapses into a ≡ dropdown
+008 | The Academy footer renders per the shared shell on every route
+008 | The account affordance is an icon, not a dropdown, and carries no sign-out
+008 | The discovery front-door does not branch on auth state
+008 | The rendered shell matches the vendored canvas across breakpoints and themes
+010 | A PD-column change is recorded as masked, never in plaintext
+010 | An authenticated admin edit lands a fully attributed field-level trail row
+010 | An authenticated mutation can never surface as db-direct
+011 | A TOTP code cannot be replayed inside its validity window
+011 | A doctor and an anonymous caller are refused on every admin route
+011 | A freshly provisioned stand is MFA-capable with no manual console step
+011 | A platform_admin enrols on first login and is challenged on every login thereafter
+011 | A state-changing admin request without CSRF double-submit is refused
+011 | A stolen admin cookie replayed from another client is invalidated
+011 | A wrong code, an unregistered factor and a locked account are indistinguishable
+011 | A wrong first code leaves the factor unregistered and the enrollment offer unrepeatable
+011 | An admin pending enrollment cannot bypass the gate by typing a URL
+011 | An operator cannot strip their own last factor, and a doctor cannot strip anyone's
+011 | An operator removes a locked-out admin's factor and that admin re-enrols
+011 | Crossing the lockout threshold soft-locks the account, and a correct code does not rescue it
+011 | Factor removal without the caller's own current code is refused
+011 | The admin session and MFA lifecycle is auditable and secret-free
+011 | The admin session cannot reach a portal route, and logout does not cross the two tiers
+011 | The doctor portal session cannot reach an admin route
+011 | The enrollment and challenge screens are localized and accessible
+011 | The pending-auth reference is not a session
+011 | The platform_admin role alone is not enough
+011 | With a single operator the break-glass path keeps the audit trail complete
+012 | A committed media replacement or clear retains its old-reference cleanup obligation
+012 | A complete entity publishes through a publish-safe allow-list
+012 | A dependency change invalidates lifecycle impact without advancing the target version
+012 | A live idempotency owner gives concurrent waiters a bounded response
+012 | A non-public endpoint or retired join cannot leak through traversal
+012 | A pre-normalization crash cannot let takeover change media input
+012 | A project without one eligible curator cannot publish
+012 | A published entity cannot be edited into an incomplete projection
+012 | A published project's curator is replaced atomically
+012 | A published project's sole eligible curator cannot be invalidated directly
+012 | A removal that cannot resolve a sole-curator project changes nothing
+012 | A removed expert keeps its slug so the old public URL cannot resolve to someone else
+012 | A retained entity and relation restore under the same stable identities
+012 | A signed lifecycle token cannot cross its exact authority boundary
+012 | A stale lifecycle preview cannot authorize a transition
+012 | Admin lists search and page while excluding retained rows by default
+012 | An Expert may exist without a User
+012 | An idempotency key cannot authorize different semantic input
+012 | An indeterminate provider or database fault remains takeover eligible
+012 | Authoring controls expose the server contract without masks
+012 | Authorization and protocol failures are exact Problem Details
+012 | Base project and expert DTOs carry the exact reusable card fields
+012 | Base taxonomy routes remain executable without future surface aggregates
+012 | Conditional mutation methods require the exact relevant ETag
+012 | Curator replacement and candidate-expert retirement preserve eligibility under a race
+012 | Each entity kind is authored as its own retained draft resource
+012 | Editorial removal clears an expert without deleting the row and cannot be undone
+012 | Editorial removal resolves every published sole-curator project atomically
+012 | Event topics are curated and independent from specialties
+012 | Every cross-link direction uses one idempotent command and row
+012 | Every deterministic post-record refusal is fenced and replayed exactly
+012 | Every public relationship direction uses the canonical cursor envelope
+012 | Every public relationship route returns its exact item DTO
+012 | Every public taxonomy image crosses one shared normalizer
+012 | Every speaker-visibility mutation shares the event serialization boundary
+012 | Every taxonomy slug is system-owned
+012 | Existing Expert names are never inferred during structured-name migration
+012 | Expert authoring reads only eligible User options
+012 | Expert-name search is trigram indexed rather than a full-roster scan
+012 | Idempotency expiry retains the row but minimizes cached content
+012 | Malformed authoring input is rejected before mutation or upload
+012 | Media-capable entities use one exact request shape
+012 | Missing kind-specific fields prevent publication with field errors
+012 | Object-storage failure has an exact replayable outcome
+012 | One idempotency UUID is globally reserved across actors routes and expiry
+012 | Optional fields and empty relationship collections do not block publication
+012 | Orphan cleanup uses a separate fenced lease and never enters the domain handler
+012 | Project and partner are linked without leaking commercial data
+012 | Project experts carry curator or member roles in both directions
+012 | Project publication restarts when its optimistically discovered curator changes
+012 | Request takeover fences a paused media owner from domain commit
+012 | Retirement is previewed and changes no related lifecycle state
+012 | Speaker authoring and projection use only event_experts
+012 | Structured Expert and speaker link values are audited
+012 | Structured names and system-owned public links
+012 | The Tech Lead re-creates a legacy row by hand and it appears in the public projection
+012 | The approved Refine composition is implemented and re-confirmed live
+012 | The cutover release removes the withdrawn machinery and the legacy speaker path in one migration
+012 | The dictionary starts with the five seed kinds
+012 | The forward migration aborts on an unmapped row
+012 | The forward migration applies the reviewed row-by-row mapping
+012 | The free-text speakers field is absent from the event contract after the cutover
+012 | The platform_admin guard precedes every mutation side effect
+013 | A doctor returns to the page they were consuming
+013 | A failing listing read degrades the section, not the page
+013 | A guest opens the academy front door
+013 | A missing section route is never faked
+013 | A notification failure never costs a lead
+013 | A request that bypasses the browser is rejected identically
+013 | A second request from the same visitor is accepted
+013 | An accepted lead is persisted once with its consent evidence
+013 | An authenticated visitor is not intercepted by the landing
+013 | An empty feed states the truth
+013 | Both audiences are addressed in the first screen
+013 | Copy is content, not structure
+013 | Every partner path leads to the one form
+013 | Flooding the public endpoint is refused politely
+013 | Invalid input is refused with an actionable message and nothing is lost
+013 | Personal data never leaves through a log or a trace
+013 | The argument screens render from the canvas and the content module
+013 | The commercial team is notified and the visitor is told
+013 | The design gate runs before and after the build
+013 | The ecosystem screen carries projects as content while 015 is unshipped
+013 | The feed shows real эфиры and opens them
+013 | The form asks for exactly the approved fields
+013 | The home page does not fork the list unit
+013 | The landing default is re-pointed in code and in the spec
+013 | The landing lives inside the app shell
+013 | The lead resource exposes no read surface
+013 | The people screen shows real published experts
+013 | The podcast block is content, and its control is honest
+013 | The stub's copy is never inherited
+013 | The whole page works on a phone and passes the accessibility bar
+013 | With no return target the default is /webinars
+013 | Without expert data the grid is absent, never stubbed
+014 | /webinars gains a past tab with counts
+014 | A guest reads the chapters but no source
+014 | A hidden registered event appears in neither tab
+014 | A hostile return target is dropped rather than followed
+014 | A past registered event with no recording is still listed
+014 | A player that cannot load fails honestly in the browser
+014 | A stale chapter save is refused
+014 | A surface-local list implementation is refused
+014 | An archival broadcast is created with «Это архивный эфир» checked and is born hidden
+014 | An archived pre-platform broadcast is indistinguishable in the archive
+014 | An ineligible facet id is indistinguishable from an unknown one
+014 | An invalid chapter list is refused with no mutation
+014 | Any account may watch any published recording
+014 | Canvas defaults are treated as decisions
+014 | Each tab shows the full history in its canvas order
+014 | Every 014 surface works at both breakpoints
+014 | Facets compose with AND
+014 | No playable source reaches an unauthenticated caller
+014 | Poster and program file are reversible while duration is derived
+014 | Projects and topics join the page when the taxonomy lands
+014 | Publishing the edited cut later promotes it with no page edit
+014 | Recording filters share the instant list contract
+014 | Signing in from the gate returns the visitor to the same recording
+014 | Stage B precedes merge for every user-facing surface
+014 | The backfill attaches and publishes recordings for platform-born events
+014 | The broadcast terminal state reads «Скрыто» on every surface
+014 | The filter capability lands inside the shared unit
+014 | The guest gate is an honest invitation, not a paywall
+014 | The list unit is controlled and fetch-free
+014 | The listing selection is linkable and survives navigation
+014 | The mutation protocol floor holds on every recording endpoint
+014 | The operator enters chapters per recording kind and the page shows the main player's list
+014 | The plaque clears and returns by itself
+014 | The rename changes no behaviour of the hidden state
+014 | The three facets render as the canvas draws them
+014 | Upcoming discovery is refined, not redesigned
+014 | «Мои события» renders exactly the two canvas tabs
+017 | A guest's choice is adopted by a profile that has none
+017 | A route defining its own header is a defect
+017 | A signed-in doctor without consent is told calmly, not shown a fabricated row
+017 | A single-action list has no actions column and opens on the row
+017 | Adjacency is never inferred from name similarity
+017 | An existing profile specialty is never overwritten by a session choice
+017 | An owner-facing stand carries production-representative data
+017 | Derived and internal fields never reach the operator interface
+017 | Every admin section reads as one application
+017 | Every storefront surface meets the accessibility bar
+017 | Every surface works at the mobile breakpoint
+017 | Filters apply instantly and state what is applied
+017 | Marketing routes move only after their inventory is confirmed
+017 | No route is dropped or invented in the move
+017 | Reference-book lists render as records, never as a scrolled table
+017 | Retrying a failed events read recovers the block still capped
+017 | Status chips stay readable over the row hover state
+017 | Targeting follows the managed books and labels adjacency honestly
+017 | The admin design gate derives from the block tier and the owner confirms the render
+017 | The choice is remembered where the actor lives
+017 | The events block is general before a choice and targeted after
+017 | The events block is the events feed block capped, in every data state
+017 | The header states sign-in status with exactly one action cluster
+017 | The hero states the offer without stating who pays
+017 | The leaderboard is its own section and lists only consenting doctors
+017 | The page address is derived on create and frozen on first publish
+017 | The storefront design gate runs before implementation and the owner confirms the render
+017 | «Другое» gets the general selection and is told so
+018 | A counter with no source is omitted rather than zeroed
+018 | A course is presented as a series and a preparing school stays visible
+018 | A doctor without consent is told calmly instead of losing the block
+018 | A failing block is contained and retries only itself
+018 | A feed route defining its own header is a defect
+018 | A guest reads the release-1 feed in full
+018 | A guest reads the whole feed and sees honest gates
+018 | A screen-local re-implementation of the card is a defect
+018 | A specialty with nothing at all never renders as a blank page
+018 | Academy vocabulary and commerce never reach the feed
+018 | Adjacency is never derived from name similarity
+018 | Adjacent areas are their own labelled block resolved from the managed table
+018 | An unavailable counter leaves its neighbours in place
+018 | Communities are listed read-only with a link out
+018 | Each block renders exactly one honest state
+018 | Every connected block takes its F-018-1 position
+018 | No rendered state ever names who pays
+018 | Started and completed content shows its own state
+018 | The design-system gate runs before a 018 surface is implemented
+018 | The doctor content card renders every state from one unit
+018 | The feed renders inside 017's shell with the blocks of the connected types, events first
+018 | The feed works at the mobile breakpoint and passes axe
+018 | The full seven-block feed works at the mobile breakpoint and passes axe
+018 | The gated payload never reaches an anonymous reader
+018 | The leaderboard is filtered to the specialty and contains only consented doctors
+018 | The lessons block states that the app shares the same lessons and the same points account
+018 | The nearest events stand first with the sign-up counter always visible
+018 | The schools and lessons counters join once their types are connected
+018 | The statistics line is scoped to the chosen specialty
+018 | Two doctors of the same specialty see the same order
+018 | «Зачем это мне» states the exchange in four items and nothing else
+019 | A gated payload is never delivered to an anonymous reader and hidden
+019 | A lesson is not an event of this feed
+019 | A parallel Doctor capability fails the reuse gate
+019 | A podcast broadcast is an event of this feed rather than Academy noise
+019 | A registered doctor enters the live room from the block above the feed [2]
+019 | A screen-local re-implementation of the event card is a defect
+019 | A second calendar unit or a second read contract is a defect
+019 | A signed-in doctor sees the short «Мои события» cut [2]
+019 | Adjacency is never derived from name similarity
+019 | An event with the option on shows no registrant count anywhere public
+019 | An events route defining its own header is a defect
+019 | An offline meet-up carries its city and remaining seats everywhere it is rendered
+019 | An uncited storefront difference is a defect
+019 | An unregistered reader is sent to the event page, never into the room
+019 | Cross-front ownership is recorded before a Doctor events slice is implemented
+019 | Every format renders through the one shared card unit
+019 | Feed state held only in client memory is a defect
+019 | The doctor storefront reads every doctors-audience event of any kind
+019 | The events route passes the accessibility bar in its feed and month views
+019 | The events screen renders inside 017's shell in the canvas composition order
+019 | The facet panel is the shared unit carrying the full REQ-138 set as a sidebar
+019 | The feed contains events and only events
+019 | The feed groups by day and is targeted by the specialty and its adjacency
+019 | The hidden count is absent from the response, not hidden in the client
+019 | The live block shows no participant count while the event's setting is off
+019 | The live block shows the participant count while the event's setting is on
+019 | The month is a view of the same page
+019 | The shared panel renders the facet set its host supplies
+019 | With nothing live the block is absent rather than empty
+020 | A doctor signed in on one storefront opens the event on the other signed in, with no guest flash
+020 | A doctor signed in on the doctor storefront opens the Academy page already signed in
+020 | A guest bounced from the doctor room signs in and lands back in the room
+020 | A guest reads the whole event, participates, returns to the same page and enters the room on the doctor host
+020 | A guest's chapter press leads to the sign-in gate and seeks nothing
+020 | A guest's chapter press on a provider without a seek adapter still leads to the sign-in gate
+020 | A hybrid event whose offline seats are gone moves the doctor to online participation
+020 | A provider without a seek adapter shows the chapters as a plain list
+020 | A pure offline event with no seats left states «мест нет» and offers no control
+020 | A registration started on the Academy event page returns to that page from the sign-in host
+020 | A rendered block with neither content, a skeleton, an honest statement nor an error fails review
+020 | A signed-in doctor jumps to a chapter of the recording on either storefront
+020 | An ended event with no recorded end instant states the date only
+020 | An event with the hide option on shows no sign-up proof
+020 | An online event's open part and conditions line read in the viewer's zone, an offline event's in МСК
+020 | An unregistered reader on a live event gets the participation path and never a room URL
+020 | Both routes are accessible at both breakpoints in both themes
+020 | Closing the room stamps the end instant once
+020 | Every lifecycle state renders from the one machine on both hosts
+020 | No chapters, no block
+020 | No feedback block ships in release 3
+020 | No live-эфир interaction ships in release 3
+020 | No next event of the school on this storefront leaves only the guest sign-in band
+020 | No partner attribution element ships in release 3
+020 | No points economy beyond the cost parameter ships in release 3
+020 | No ticket, QR or door scan ships in release 3
+020 | No НМО check-in surface ships in release 3
+020 | Only the format block differs between formats
+020 | Sign-out on one storefront signs the doctor out of the other
+020 | The bottom CTA band follows the recording state and the session
+020 | The cancelled state carries no points statement in release 3
+020 | The hybrid tab is URL state that survives sharing, reload and the back button
+020 | The list follows the main-player recording's kind
+020 | The medical-status gate closes only the gated material and explains itself
+020 | The ownership matrix and the canvas gate precede implementation
+020 | The page is pure — no financing statement, no commerce, no НМО headline
+020 | The page lays out to F-020-1 А with exactly one CTA
+020 | The post-live hero leads to the recording, states the actual end and shows no sign-up count
+020 | The registered card offers add to calendar and promises no cancel, reminder or «Мои события» link
+020 | The registered card promises no cancel, calendar, reminder or «Мои события» link in release 3
+020 | The room-entry CTA shows no participant count while the event's setting is off
+020 | The room-entry CTA shows the participant count while the event's setting is on
+020 | The sign-up proof is the same for a guest and a signed-in doctor and absent when there are none
+020 | With no shared session the other storefront's event page is the guest page, with no form
+020 | «К записи ↓» also leads to the plaque while the recording is in preparation
+020 | «К записи ↓» is absent before the event has ended
+021 | A doctor arriving directly registers without the marketing opt-in and lands on their feed
+021 | A doctor arriving from an эфир sees its card on the sign-in host's registration form
+021 | A doctor arriving on a representative's link is attributed and handed to the mailing base
+021 | A doctor registers from a gate and returns to the эфир
+021 | A failed submission preserves everything the doctor typed
+021 | A fresh registrant from a doctor-storefront gate ends signed in on both storefronts
+021 | A missing consent is reported on its own row after the press, and errors say what to do
+021 | A registration whose эфир vanished before the code lands per LD-4
+021 | A stale return target degrades honestly instead of dead-ending
+021 | An already-registered email is never disclosed as already registered
+021 | Every public form carries the bot-protection challenge of 003 EARS-17
+021 | No ledger fact is ever derived from the points configuration
+021 | One account, one sign-up, operable at both breakpoints
+021 | The interface offers no self-service consent withdrawal
+021 | The surface is composed from the auth canvas and the design system, never hand-assembled
+021 | The verification code field does not fight the code that was actually sent
+021 | Wave 2 — the form promises the registration points before submission
+025 | A course is priced in Pul and its access debits the price
+025 | A doctor reads only their own posting history
+025 | A lesson and an НМО-accredited event cannot be priced
+025 | A wrong accrual is corrected by a compensating posting
+025 | Attention aggregates carry no person identifier
+025 | Engagement is capped per event and nothing is ever taken away
+025 | Only an admin reads the catalog, the rules and the journal
+025 | The catalog refuses an attribute that names a sponsor
+025 | The engine migration refuses a ledger that already holds postings
+025 | The monthly leaderboard ranks consenting doctors only
+028 | A republished document shows the "обновлено" chip, never a version number
+028 | Consent link from the 021 registration form
+028 | No link ever reaches the legacy site
+030 | A congress registrar cannot change projects
+030 | A project from the old taxonomy keeps its links and waits for its results
+030 | A project with a sought specialty names it in the expert entry
+030 | A project with no investor offers the free place
+030 | A project with no sought specialty names none
+030 | A retired project leaves the Academy at once
+030 | A visitor browses the catalog in the operator's order
+030 | A visitor opens a project page
+030 | An administrator describes a project and publishes it
+030 | An investor that may not be named is shown nowhere
+030 | The catalog and the page work on a phone
+030 | The home shows the first three projects of the catalog
+030 | The results block fails alone and retries
+030 | The scale line is computed from the platform
+030 | With no public project the catalog says so and the home hides its block
+032 | A congress registrar cannot reach the registry
+032 | A look-alike organization is flagged but not blocked
+032 | A retired organization leaves the site and comes back only after a new publish
+032 | An organization with no role cannot be published
+032 | The administrator extends the role list and cannot retire a role still held
+032 | The partners already entered appear as investor organizations
+032 | The registry list is searched and filtered on a narrow screen
+044 | A registration with no answers payload is never marked
+044 | A signed-in doctor registers from the platform feed
+044 | An email the platform already knows is attached, not rewritten and not disclosed
+044 | Another account's shared session on a clinic PC is replaced on both storefronts
+044 | Failure branch — the captcha challenge is not satisfied
+044 | Failure branch — the desk entry without paper consent is refused
+044 | Failure branch — the registrar is bound to one event
+044 | Failure branch — the registrar is refused everywhere else
+044 | First platform entry by one email code proves the address and signs in
+044 | Registrar works the roster
+044 | Specialty is chosen, never typed
+044 | The accepted sign-up carries a sign-in reference of one shape for every address
+044 | The hand-off reference is redeemed once on the sign-in host and never travels in a URL
+044 | The registrar enters a walk-in participant at the desk
+044 | The registrar filters the duplicates
+044 | The registrar marks attendance per congress day
+044 | The registrar reads the reduced roster and opens a card
+044 | Two registrations sharing a phone are accepted and marked
+044 | «Войти в кабинет» on a browser already signed in to another account signs in the registrant
+045 | anonymous visitor sees the partner cabinet
+045 | anonymous visitor sees the public leaderboard
+045 | routes are removed once 032 and 035 ship
+046 | A draft whose kind is closed cannot be sent
+046 | A guest enters the section from the congress site by an emailed code
+046 | A kind whose opening date is not announced yet
+046 | A withdrawn committee grant stops the status change
+046 | Abstract limit counts every sent abstract of the submitting account
+046 | Abstracts from an existing talk
+046 | Abstracts with the total counter and the statements
+046 | An account without a congress registration
+046 | An expired revision waits for the committee, and the platform administrator extends another
+046 | Author revises and resends before the deadline
+046 | Committee asks for a revision
+046 | Committee member works the registry of the bound event only
+046 | First-author rule when the organisers turn it on
+046 | Oral talk draft is prefilled and saved as the author types
+046 | Platform administrator sets the intake without a release
+046 | Poster eligibility by birth date
+046 | Reminder before the abstract deadline
+046 | Sending the first oral talk
+046 | Take a sent talk back for correction and delete a draft
+046 | The filling guide opens beside the draft
+046 | The revision term skips the weekend
+046 | Withdraw after review started keeps the place in the limit
+047 | A congress registrar does not reach «Доступы»
+047 | A new staff member gets an account and a temporary password
+047 | A registrar cannot be bound to a second event
+047 | A revocation the IdP cannot apply ends the sessions and is finished by repeating it
+047 | A stale second factor asks for a code in the same session and the grant goes through
+047 | An account someone registered with the email but never confirmed is taken back
+047 | An existing account gets the role added
+047 | Revocation closes access at once
+047 | The platform administrator opens «Доступы»
+048 | A Callback event with a wrong secret is refused
+048 | A VK import for a source with no bound community id is refused with its reason
+048 | A body with a forbidden link is refused
+048 | A column whose expert is no longer published leaves the site
+048 | A congress registrar cannot change materials
+048 | A congress registrar cannot manage sources
+048 | A failed preview download keeps the card without an image
+048 | A forwarded post and a poll are not cards
+048 | A new VK Видео video becomes a video card that plays nothing
+048 | A new channel post becomes a Telegram card that links to the original
+048 | A new wall post becomes a VK card that links to the original
+048 | A post deleted from the VK wall leaves the rail and returns if restored
+048 | A post edited in VK is updated by the hourly reconcile
+048 | A post from a channel that is not in the source list is dropped
+048 | A published column stays editable while its expert is not published
+048 | A renamed channel shows as failing until its address is edited
+048 | A repost is not a card
+048 | A silent Callback shows as failing
+048 | A switched-off VK source leaves the rail and keeps its posts
+048 | A switched-off source leaves the rail and keeps its posts
+048 | A video post shows its preview and duration and plays nothing
+048 | A video that is later attached to a wall post shows once, as the post
+048 | A wall post link is not a community address
+048 | A webhook call with a wrong secret token is refused
+048 | Adding a source binds its channel id through the source check
+048 | An address that is not a public channel is refused
+048 | An administrator adds the Telegram channel to the source list
+048 | An administrator adds the VK community to the source list
+048 | An administrator hides one VK video
+048 | An administrator hides one post
+048 | An album is one card
+048 | An edited post updates its card in place
+048 | An event of a community that is not in the source list is dropped
+048 | An export of another channel is refused
+048 | An import for a source with no bound channel id is refused with its reason
+048 | An unreachable Telegram marks the source failing and leaves the rail working
+048 | An unreachable VK marks the source failing and leaves the rail working
+048 | No VK secret or post author is stored or logged
+048 | No secret or post author is stored or logged
+048 | The VK source pages and VK cards work on a phone
+048 | The doctor storefront shows no VK card
+048 | The one-off VK import brings in earlier posts and a re-run duplicates nothing
+048 | The one-off import brings in earlier posts and a re-run duplicates nothing
+048 | The source pages work on a phone
+048 | VK confirms the Callback server of the listed community
+049 | A broadcast director creates an event and runs its broadcast
+049 | A broadcast director signs in with an authenticator code and is not a participant
+049 | Everything outside events is closed to the broadcast director
+049 | Only the superadministrator reaches «Доступы»
+049 | The operator makes the first superadministrator, and the last one cannot be removed
+049 | The platform administrator role of a superadministrator cannot be revoked in «Доступы»
+049 | The superadministrator grants the broadcast director role and cannot grant or revoke their own role

@@ -1,0 +1,4 @@
+# fixture debt list at the merge base
+001 | listed debt
+001 | repeated title
+001 | repeated title [2]

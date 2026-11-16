@@ -1,0 +1,5 @@
+# fixture debt list
+001 | listed debt
+001 | new tracked debt | #9100
+001 | repeated title
+001 | repeated title [2]

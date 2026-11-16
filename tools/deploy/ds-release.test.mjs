@@ -845,16 +845,20 @@ describe(
       writeFileSync(join(dir, "images.tar"), "tar");
       return dir;
     };
-    const pgEnv = {
+    // `root` exists once `setup` ran.
+    const pgEnv = () => ({
       DS_RELEASE_PG_ARTIFACT_DIR: join(root, "postgres-artifact"),
-    };
+    });
 
     it("4089: `finish prod <sha> failed` keeps that SHA's delivery", () => {
       const own = deliver(SHA_A);
       const noop = scriptFile("noop-a", "true\n");
-      assert.equal(ds(["release", "prod", SHA_A, "pull", noop], pgEnv).code, 0);
+      assert.equal(
+        ds(["release", "prod", SHA_A, "pull", noop], pgEnv()).code,
+        0,
+      );
       waitStep("prod", SHA_A, "pull");
-      assert.equal(ds(["finish", "prod", SHA_A, "failed"], pgEnv).code, 0);
+      assert.equal(ds(["finish", "prod", SHA_A, "failed"], pgEnv()).code, 0);
       assert.ok(existsSync(join(own, "images.tar")));
     });
 
@@ -862,9 +866,12 @@ describe(
       const own = deliver(SHA_B);
       const other = deliver(SHA_C);
       const noop = scriptFile("noop-b", "true\n");
-      assert.equal(ds(["release", "prod", SHA_B, "pull", noop], pgEnv).code, 0);
+      assert.equal(
+        ds(["release", "prod", SHA_B, "pull", noop], pgEnv()).code,
+        0,
+      );
       waitStep("prod", SHA_B, "pull");
-      const r = ds(["finish", "prod", SHA_B, "succeeded"], pgEnv);
+      const r = ds(["finish", "prod", SHA_B, "succeeded"], pgEnv());
       assert.equal(r.code, 0, r.err);
       assert.equal(existsSync(own), false);
       assert.ok(existsSync(join(other, "images.tar")));

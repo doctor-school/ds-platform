@@ -36,6 +36,8 @@ import {
   prodScriptOptions,
   prodShipOptions,
   recordPreviousShaScript,
+  recordStorageDriverScript,
+  storageDriverWord,
   recreateScript,
   releaseFailureNote,
   smokeFailureReason,
@@ -310,6 +312,36 @@ test("3157: --local takes only --images-file, and no operator flag", () => {
       extra.join(" "),
     );
   }
+});
+
+test("4100: the data box's storage driver is one fixed word, or unavailable — no other box text", () => {
+  for (const [answer, word] of [
+    ["PostgreSQL checkpoint written\nstorage driver: overlay2\nlog bound: /pg\n", "overlay2"],
+    ["storage driver: overlayfs\n", "overlayfs"],
+    ["storage driver: unavailable — permission denied\n", "unavailable"],
+    ["storage driver: Overlay2\n", "unavailable"],
+    ["storage driver: overlay2 extra\n", "unavailable"],
+    ["storage driver: overlay2; rm -rf /\n", "unavailable"],
+    [`storage driver: ${"a".repeat(33)}\n`, "unavailable"],
+    ["storage driver: \n", "unavailable"],
+    ["record: hashVersion 2\n", "unavailable"],
+    [undefined, "unavailable"],
+  ]) {
+    assert.equal(storageDriverWord(answer), word, JSON.stringify(answer));
+  }
+});
+
+test("4100: the box-local run records the storage driver for status through the installed driver", () => {
+  assert.equal(
+    recordStorageDriverScript(SHA, "overlay2"),
+    `${RELEASE_DRIVER_BIN} record-storage-driver prod ${SHA} overlay2\n`,
+  );
+  assert.throws(() => recordStorageDriverScript(SHA, "overlay2; id"), /storage driver/);
+  const up = deployBody.slice(deployBody.indexOf('walk.releasePhase("data-prod-up")'));
+  assert.match(
+    up.slice(0, up.indexOf('walk.releasePhase("backup")')),
+    /if \(local\) \{[\s\S]*recordStorageDriverScript\(sha, storageDriverWord\(checkpoint\)\)/,
+  );
 });
 
 test("3157: the box-local run records the previous SHA for status through the installed driver", () => {

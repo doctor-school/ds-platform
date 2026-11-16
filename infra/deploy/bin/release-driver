@@ -30,7 +30,8 @@
 #       As `_run prod <sha>`, with prod.mjs --local --redeploy (recreates every
 #       container of the api compose).
 #   release-driver unit-state <env> <sha>
-#       One JSON object {"unit", "active", "rc", "previousSha", "failure"} — the
+#       One JSON object {"unit", "active", "rc", "previousSha", "failure",
+#       "storageDriver"} — the
 #       entrypoint's `status` adds it to the ds-release status line as `driver`.
 #       `failure` (#3439) is null, or {"phase", "reason"}: the phase a failed run of the
 #       unit stopped in and the one-line reason it gave, recorded by the unit itself.
@@ -38,6 +39,10 @@
 #       (called by the unit) Saves the SHA production ran before <sha> — the
 #       release-notes basis `unit-state` reports as `previousSha`. The first SHA
 #       recorded for <sha> is kept: a re-run after the swap reads <sha> itself.
+#   release-driver record-storage-driver <env> <sha> <word>
+#       (called by the unit, #4100) Saves ds-data-prod's docker storage driver, one
+#       [a-z0-9-]{1,32} word (`unavailable` when the box gave none), that `unit-state`
+#       reports as `storageDriver` (null until recorded); the latest record wins.
 #   release-driver _run <env> <sha>   (the unit's own process, as the deploy user)
 #       Downloads the codeload tarball of exactly <sha>, extracts it and runs
 #         stage-main: node <tree>/tools/staging/slot.mjs up main --ref <sha> --local --images-file -
@@ -215,6 +220,15 @@ previous_sha() {
   if [[ $value =~ $SHA_RE ]]; then printf '"%s"' "$value"; else printf 'null'; fi
 }
 
+# #4100: the recorded storage driver of <sha>'s release as a JSON value: "<word>" or
+# null. The word crosses into a public Actions log, so only STORAGE_DRIVER_RE passes.
+STORAGE_DRIVER_RE='^[a-z0-9-]{1,32}$'
+storage_driver() {
+  local value
+  value=$(sudo cat "$MANIFEST_DIR/$1.storage-driver" 2>/dev/null | tr -d '[:space:]' || true)
+  if [[ $value =~ $STORAGE_DRIVER_RE ]]; then printf '"%s"' "$value"; else printf 'null'; fi
+}
+
 # #3439: a failure note as the one JSON value `status` carries — {"phase", "reason"},
 # the phase a strict id or null, the reason one control-free line of at most
 # FAILURE_REASON_MAX characters — or null when the note is absent or unreadable. The
@@ -263,8 +277,18 @@ cmd_unit_state() {
   local unit state rc
   unit=$(unit_name "$1" "$2")
   read -r state rc < <(unit_state "$unit")
-  printf '{"unit":"%s","active":"%s","rc":%s,"previousSha":%s,"failure":%s}\n' \
-    "$unit" "$state" "$rc" "$(previous_sha "$2")" "$(recorded_failure "$2")"
+  printf '{"unit":"%s","active":"%s","rc":%s,"previousSha":%s,"failure":%s,"storageDriver":%s}\n' \
+    "$unit" "$state" "$rc" "$(previous_sha "$2")" "$(recorded_failure "$2")" "$(storage_driver "$2")"
+}
+
+cmd_record_storage_driver() {
+  [[ $# -eq 3 ]] || usage "usage: release-driver record-storage-driver <env> <sha> <word>"
+  check_args "$1" "$2"
+  local sha=$2 word=$3
+  [[ $word =~ $STORAGE_DRIVER_RE ]] || usage "bad storage driver (want one [a-z0-9-]{1,32} word)"
+  sudo install -d -m 0700 -o root -g root "$MANIFEST_DIR"
+  printf '%s\n' "$word" | sudo tee "$MANIFEST_DIR/$sha.storage-driver" >/dev/null
+  sudo chmod 0600 "$MANIFEST_DIR/$sha.storage-driver"
 }
 
 cmd_record_previous() {
@@ -583,11 +607,12 @@ release_unit() {
   sudo install -d -m 0700 -o root -g root "$MANIFEST_DIR"
   # Only this SHA's manifest is kept: systemd opened every other unit's stdin when it
   # started, and a restart of another SHA saves that SHA's manifest again. Another
-  # SHA's recorded previous SHA and failure note go with it: only a leased release asks
-  # for its own.
+  # SHA's recorded previous SHA, failure note and storage driver go with it: only a
+  # leased release asks for its own.
   sudo find "$MANIFEST_DIR" -maxdepth 1 -type f \
     \( -name '*.json' ! -name "$sha.json" -o -name '*.previous' ! -name "$sha.previous" \
-    -o -name '*.failure' ! -name "$sha.failure" \) -delete
+    -o -name '*.failure' ! -name "$sha.failure" \
+    -o -name '*.storage-driver' ! -name "$sha.storage-driver" \) -delete
   sudo install -m 0600 -o root -g root "$manifest" "$MANIFEST_DIR/$sha.json"
   # systemd opens the root-only manifest as the unit's stdin before it drops to the
   # deploy user; the journal takes the unit's output.
@@ -897,6 +922,7 @@ main() {
   case ${1:-} in
     unit-state) shift; cmd_unit_state "$@" ;;
     record-previous) shift; cmd_record_previous "$@" ;;
+    record-storage-driver) shift; cmd_record_storage_driver "$@" ;;
     rollback) shift; cmd_rollback "$@" ;;
     rollback-status) shift; cmd_rollback_status "$@" ;;
     redeploy) shift; cmd_redeploy "$@" ;;

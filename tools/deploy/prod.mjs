@@ -629,6 +629,29 @@ export function recordPreviousShaScript(sha, prevSha) {
   return `${RELEASE_DRIVER_BIN} record-previous prod ${sha} ${prevSha ?? "none"}\n`;
 }
 
+/** #4100: the one shape a storage driver word may take on its way to a public status line. */
+export const STORAGE_DRIVER_RE = /^[a-z0-9-]{1,32}$/;
+
+/**
+ * #4100: the docker storage driver of ds-data-prod from its `postgres-checkpoint`
+ * answer, reduced to one word for `status prod <sha>` (a public Actions log): the
+ * `storage driver:` value when it is exactly one STORAGE_DRIVER_RE word, otherwise
+ * `unavailable` — the box's reason text never leaves the journal.
+ */
+export function storageDriverWord(answer) {
+  const line = String(answer ?? "")
+    .split(/\r?\n/)
+    .find((l) => l.startsWith("storage driver:"));
+  const value = line === undefined ? "" : line.slice("storage driver:".length).trim();
+  return STORAGE_DRIVER_RE.test(value) ? value : "unavailable";
+}
+
+/** #4100: records the storage driver word for `status prod <sha>` through the installed release driver. */
+export function recordStorageDriverScript(sha, word) {
+  if (!STORAGE_DRIVER_RE.test(String(word))) throw new Error(`bad storage driver word: ${word}`);
+  return `${RELEASE_DRIVER_BIN} record-storage-driver prod ${sha} ${word}\n`;
+}
+
 // A release moves production forward: a SHA that does not descend from the live one
 // is a downgrade — a rollback, which goes through `--rollback` and its migration floor
 // (`assertRollbackAllowed`), never through a release. The release driver refuses it
@@ -2571,6 +2594,17 @@ async function deploy(hotfixRef = null, local = null) {
       dataProd().call(["postgres-checkpoint"], { input: postgresStateRecord(live, sourceHash) }),
     );
     for (const line of checkpointJournalLines(checkpoint)) console.log(line);
+    // #4100: and the box-local run records the driver as one word for `status prod <sha>`,
+    // which the Actions deploy job prints; evidence only, so never fatal.
+    if (local) {
+      try {
+        await sshScript(API_PROD, recordStorageDriverScript(sha, storageDriverWord(checkpoint)), {
+          label: "record the storage driver",
+        });
+      } catch (e) {
+        console.log(`  ⚠ could not record the storage driver for status (${e.message})`);
+      }
+    }
     ok("postgres + redis + pgbackrest + glitchtip up", t);
   }
 

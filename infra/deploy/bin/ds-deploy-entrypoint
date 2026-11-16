@@ -478,11 +478,12 @@ upload_report() {
 
 # status: ds-release's one JSON line with the release driver's unit added as
 # `driver` (#2985): {"release", "unitAlive", "driver": {"unit", "active", "rc",
-# "previousSha", "failure"}} — `previousSha` (#3157) is the SHA prod ran before <sha>,
-# the release-notes basis, or null; `failure` (#3439) is null or the {"phase",
-# "reason"} note of a failed unit run, and may be absent (an older driver; the no-driver
-# fallback below), which reads as none. Without an installed driver there is no driver
-# unit: `absent`.
+# "previousSha", "failure", "storageDriver"}} — `previousSha` (#3157) is the SHA prod
+# ran before <sha>, the release-notes basis, or null; `failure` (#3439) is null or the
+# {"phase", "reason"} note of a failed unit run; `storageDriver` (#4100) is null or
+# ds-data-prod's docker storage driver word. `failure` and `storageDriver` may be absent
+# (an older driver; the no-driver fallback below), which reads as none. Without an
+# installed driver there is no driver unit: `absent`.
 release_status() {
   local env=$1 sha=$2 line driver
   line=$(sudo "$DS_RELEASE" status "$env" "$sha")

@@ -1097,6 +1097,7 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         rc: null,
         previousSha: null,
         failure: null,
+        storageDriver: null,
       });
     });
 
@@ -1777,6 +1778,64 @@ describe("2985: release-driver", { skip: SKIP }, () => {
     });
   });
 
+  describe("4100: record-storage-driver and storageDriver", () => {
+    const dirOf = () => join(root, "var/lib/ds-platform/release-driver");
+    const saved = () => join(dirOf(), `${SHA}.storage-driver`);
+    const driverOf = () => {
+      const r = run(["unit-state", "prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      return JSON.parse(r.stdout).storageDriver;
+    };
+
+    it("reports no storage driver until one is recorded", () => {
+      assert.equal(driverOf(), null);
+    });
+
+    it("records the one word root-only and reports it as storageDriver; a later record replaces it", () => {
+      const r = run(["record-storage-driver", "prod", SHA, "overlay2"]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(readFileSync(saved(), "utf8"), "overlay2\n");
+      assert.equal(statSync(saved()).mode & 0o777, 0o600);
+      assert.equal(driverOf(), "overlay2");
+      assert.equal(run(["record-storage-driver", "prod", SHA, "unavailable"]).status, 0);
+      assert.equal(driverOf(), "unavailable");
+    });
+
+    it("rejects anything but one [a-z0-9-]{1,32} word as usage and records nothing", () => {
+      for (const args of [
+        ["record-storage-driver", "prod", SHA, "Overlay2"],
+        ["record-storage-driver", "prod", SHA, "overlay2 x"],
+        ["record-storage-driver", "prod", SHA, "a".repeat(33)],
+        ["record-storage-driver", "prod", SHA, ""],
+        ["record-storage-driver", "prod", SHA],
+        ["record-storage-driver", "prod", "abc", "overlay2"],
+      ]) {
+        assert.equal(run(args).status, 2, args.join(" "));
+      }
+      assert.equal(existsSync(saved()), false);
+    });
+
+    it("reads back only a valid word: anything else on disk is null", () => {
+      mkdirSync(dirOf(), { recursive: true });
+      writeFileSync(saved(), "overlay2; rm -rf /\n");
+      assert.equal(driverOf(), null);
+    });
+
+    it("drops another SHA's recorded driver when a release starts", () => {
+      setRole("prod");
+      writeFileSync(join(dir, "live-image"), `ds-api:${"c".repeat(40)}\n`);
+      writeFileSync(join(dir, "compare-live.json"), JSON.stringify({ status: "ahead" }));
+      mkdirSync(dirOf(), { recursive: true });
+      writeFileSync(join(dirOf(), `${OTHER}.storage-driver`), "overlay2\n");
+      run(["record-storage-driver", "prod", SHA, "overlay2"]);
+      assert.equal(run(["prod", SHA]).status, 0);
+      assert.deepEqual(readdirSync(dirOf()).sort(), [
+        `${SHA}.json`,
+        `${SHA}.storage-driver`,
+      ]);
+    });
+  });
+
   it("refuses on a box without a role", () => {
     rmSync(join(root, "etc/ds-platform/box-role"));
     const r = run(["stage-main", SHA]);
@@ -1967,6 +2026,7 @@ describe("2985: release-driver", { skip: SKIP }, () => {
           rc,
           previousSha: null,
           failure: null,
+          storageDriver: null,
         });
       });
     }

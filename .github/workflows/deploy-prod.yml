@@ -397,6 +397,13 @@ jobs:
             else
               echo "status: $line"
               last_json=$json
+              # #4100: ds-data-prod's docker storage driver, one word the box driver
+              # recorded after data-prod up — printed once, and only in that shape.
+              drv=$(jq -r '.driver.storageDriver // ""' <<<"$json")
+              if [[ "$drv" =~ ^[a-z0-9-]{1,32}$ && -z "${drv_seen:-}" ]]; then
+                echo "data-box storage driver: $drv"
+                drv_seen=1
+              fi
               active=$(jq -r '.driver.active // ""' <<<"$json")
               rc=$(jq -r '.driver.rc // ""' <<<"$json")
               state=$(jq -r '.release.state // ""' <<<"$json")

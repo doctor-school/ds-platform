@@ -699,6 +699,53 @@ describe("3439: the release poll names the failing phase and reason, run against
     assert.equal(r.outputs["failed-reason"], reason);
   });
 
+  it("4100: prints the data box's storage driver once, and only as one [a-z0-9-]{1,32} word", () => {
+    const withDriver = (active, rc, release, storageDriver) =>
+      JSON.stringify({
+        release,
+        unitAlive: active === "active",
+        driver: {
+          unit: "u",
+          active,
+          rc,
+          previousSha: null,
+          failure: null,
+          storageDriver,
+        },
+      });
+    const r = runPoll([
+      withDriver("active", null, { step: "up", state: "running" }, null),
+      withDriver(
+        "active",
+        null,
+        { step: "backup", state: "running" },
+        "overlay2",
+      ),
+      withDriver(
+        "inactive",
+        0,
+        { step: "finish", state: "succeeded" },
+        "overlay2",
+      ),
+    ]);
+    assert.equal(r.status, 0);
+    assert.equal(
+      r.stdout.match(/^data-box storage driver: overlay2$/gm)?.length,
+      1,
+      r.stdout,
+    );
+    const bad = runPoll([
+      withDriver(
+        "inactive",
+        0,
+        { step: "finish", state: "succeeded" },
+        "overlay2; id",
+      ),
+    ]);
+    assert.equal(bad.status, 0);
+    assert.doesNotMatch(bad.stdout, /storage driver/);
+  });
+
   it("a success carries no failure outputs", () => {
     const r = runPoll([
       reply("inactive", 0, { step: "finish", state: "succeeded" }),

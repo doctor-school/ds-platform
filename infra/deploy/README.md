@@ -806,16 +806,15 @@ create-access-key` on the operator's workstation, as above. The values never ent
    GitHub: the workstation encrypts them to ds-data-prod's intake certificate, and only
    the box holds the key that decrypts them.
 
-   1. **Once per box: the intake certificate.** Until it is committed,
-      `pnpm prod:data-secret` refuses. The box can make it only once a release that
-      carries the data-secret verbs (#4068) is live, because that release installs them.
-      Then dispatch
-      `gh workflow run data-secret.yml --ref main -f action=recipient`. ds-data-prod
-      generates its intake key pair on the first call (root 0600 under
+   1. **Once per box: the intake certificate.** ds-data-prod's certificate is committed
+      as `infra/deploy/keys/data-secret-recipient.pem` (SHA-256
+      `D4:56:5D:BE:30:52:CE:88:3D:8E:1E:C0:B5:1A:61:94:2D:1A:45:DF:82:17:A8:9E:F8:20:58:79:AB:9F:D7:4C`,
+      pinned in `tools/deploy/data-secret.test.mjs`); without it `pnpm prod:data-secret`
+      refuses. `gh workflow run data-secret.yml --ref main -f action=recipient` prints
+      it: ds-data-prod generates its intake key pair on the first call (root 0600 under
       `/etc/ds-platform/secret-intake/`, never printed, never leaves the box) and the run
-      log prints the certificate and its SHA-256 fingerprint. Commit the certificate as
-      `infra/deploy/keys/data-secret-recipient.pem`. A rebuilt box generates a new pair:
-      commit its certificate again.
+      log prints the certificate and its SHA-256 fingerprint. A rebuilt box generates a
+      new pair: dispatch it again and commit the new certificate and its fingerprint.
    2. **Encrypt the new values** on the workstation, from a file that holds exactly the
       lines to replace (no other `data.env` name is accepted):
 

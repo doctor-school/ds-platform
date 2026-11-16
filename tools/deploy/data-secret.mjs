@@ -94,16 +94,15 @@ export function secretPlaintext(
 }
 
 /**
- * Refuses while ds-data-prod's intake certificate is not in the tree. The box
- * generates its key pair only once a release carrying the data-secret verbs has
- * installed them; the certificate is then committed from the recipient run's log.
+ * Refuses when the intake certificate is not in the tree, so a ciphertext is never
+ * made to anything but the certificate committed from ds-data-prod's recipient run.
  */
 export function requireRecipient(certPath = RECIPIENT_PATH) {
   if (existsSync(certPath)) return;
   throw new SecretError(
     [
-      `${certPath} is not committed yet, so there is nothing to encrypt to.`,
-      "After a release carrying the data-secret verbs is live, dispatch",
+      `${certPath} is missing, so there is nothing to encrypt to.`,
+      "Restore it from main; for a rebuilt ds-data-prod dispatch",
       "`gh workflow run data-secret.yml --ref main -f action=recipient` and commit the",
       "certificate it prints (infra/deploy/README.md → «Rotating the box's pgBackRest S3 key», step 1).",
     ].join(" "),

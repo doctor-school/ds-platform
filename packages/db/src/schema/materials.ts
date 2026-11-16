@@ -364,7 +364,7 @@ export const feedEntryMessages = pgTable(
     messageId: bigint("message_id", { mode: "number" }).notNull(),
     feedEntryId: uuid("feed_entry_id")
       .notNull()
-      .references(() => feedEntries.id, { onDelete: "cascade" }),
+      .references(() => feedEntries.id, { onDelete: "cascade" }), // retained-data-ok: the rows are the entry's own Telegram message ids (EARS-27), meaningless without the entry; deleting the entry deletes them
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

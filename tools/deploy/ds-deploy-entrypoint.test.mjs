@@ -1326,7 +1326,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.ok(!existsSync(applied()), "recorded only once the unit's verdict stands");
     assert.equal(readFileSync(dataEnv(), "utf8"), OLD_ENV, "data.env changes only inside the unit");
     assert.match(log("ds-release"), new RegExp(`^ds-release-called check prod\nds-release-called release prod ${SHA} data-secret \\S+\n$`));
-    const script = log("step");
+    const script = readFileSync(join(dir, "step.sh"), "utf8");
     assert.match(
       script,
       /\ndocker compose -f compose\.yml -f \.postgres-artifacts\.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest/,

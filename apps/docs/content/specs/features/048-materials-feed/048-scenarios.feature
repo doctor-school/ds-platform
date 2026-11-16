@@ -348,7 +348,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the Telegram file download works again and the preview retry runs
     Then the card "Новый набор в программу" shows the post's preview
 
-  @EARS-30
+  @EARS-30 @proof:api
   Scenario: The one-off import brings in earlier posts and a re-run duplicates nothing
     Given the Telegram source "t.me/bbmacademy" has the card of post 1201 delivered by the webhook
     And a Telegram Desktop JSON export of "bbmacademy" holds the text posts 900, 901 and 1201 and a service message 902
@@ -359,13 +359,13 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the import reports 0 written
     And the feed has exactly one card each of posts 900, 901 and 1201
 
-  @EARS-30
+  @EARS-30 @proof:api
   Scenario: An export of another channel is refused
     Given the Telegram source "t.me/bbmacademy" bound to its Telegram channel id
     When the operator runs the history import for "t.me/bbmacademy" with an export of another channel
     Then the import exits with an error and writes nothing
 
-  @EARS-30
+  @EARS-30 @proof:api
   Scenario: An import for a source with no bound channel id is refused with its reason
     Given the Telegram source "t.me/bbmacademy" was added while Telegram was unreachable, so its Telegram channel id is not bound
     And a Telegram Desktop JSON export of "bbmacademy" holds the text posts 900 and 901

@@ -623,15 +623,12 @@
 048 | An administrator hides one VK video
 048 | An administrator hides one post
 048 | An event of a community that is not in the source list is dropped
-048 | An export of another channel is refused
-048 | An import for a source with no bound channel id is refused with its reason
 048 | An unreachable Telegram marks the source failing and leaves the rail working
 048 | An unreachable VK marks the source failing and leaves the rail working
 048 | No VK secret or post author is stored or logged
 048 | The VK source pages and VK cards work on a phone
 048 | The doctor storefront shows no VK card
 048 | The one-off VK import brings in earlier posts and a re-run duplicates nothing
-048 | The one-off import brings in earlier posts and a re-run duplicates nothing
 048 | The source pages work on a phone
 048 | VK confirms the Callback server of the listed community
 049 | A broadcast director creates an event and runs its broadcast

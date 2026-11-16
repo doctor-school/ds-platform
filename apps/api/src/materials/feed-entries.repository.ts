@@ -137,6 +137,11 @@ export interface TelegramEntryInsert {
   previewFileUniqueId: string | null;
   /** `pending` while a preview awaits its copy (EARS-29); null with none. */
   previewState: "pending" | null;
+  /**
+   * The source's switched-off mark (EARS-22). Only the history import writes
+   * into a switched-off source (EARS-30); the webhook drops its posts.
+   */
+  sourceOff?: boolean;
 }
 
 export type TelegramEntryPatch = Partial<

@@ -4,7 +4,8 @@ Spec: `apps/docs/content/specs/features/048-materials-feed/`. #3512 opens the
 module with the «Материалы» admin authoring surface (EARS-1, EARS-4…EARS-8,
 EARS-19); #3513 adds the public feed and material reads; #3993 opens slice 2
 with the «Источники» source list (EARS-20…EARS-23); #3994 adds the Telegram
-connector in `telegram/` (EARS-24…EARS-29, EARS-31, EARS-36).
+connector in `telegram/` (EARS-24…EARS-29, EARS-31, EARS-36); #3995 adds the
+one-off history import (EARS-30).
 
 ## What it owns
 
@@ -66,6 +67,24 @@ connector in `telegram/` (EARS-24…EARS-29, EARS-31, EARS-36).
     `done` — guarded on the medium the copy started from, so a racing edit
     wins. A replaced or superseded copy is a 012 cleanup job (entity kind
     `feed_entry`). It never throws and never touches the source's status.
+  - `telegram-history-export.ts` + `telegram-history-import.command.ts` +
+    `scripts/telegram-import-history.ts` (`pnpm --filter @ds/api
+telegram:import-history -- --source t.me/<address> --export
+<folder>/result.json`) — the EARS-30 one-off import of a Telegram Desktop
+    JSON export: the whole file validated first (Zod over the fields used; a
+    single-channel export `{ type: public_channel | private_channel, id,
+messages }`, `id` bare and compared as `-(10^12 + id)` with the bound
+    Bot API id), refused with nothing written and exit 1 for an unparsable
+    file, a non-channel export, another channel or an unbound source; each
+    message mapped through the shared `cardFromContent` of
+    `telegram-post-mapping.ts` and written in its own transaction under the
+    webhook's source lock, a message id already in `feed_entry_messages`
+    skipped (re-run / webhook overlap / hidden entry untouched); the preview
+    from the exported photo / video thumbnail file through the preview
+    service's `storeExported` (normalize + PUT, no Bot API call, no retry —
+    a failure leaves the entry imageless and is counted). Prints read /
+    written / skipped as existing / skipped as media with no text / dropped
+    by reason / previews failed.
   - `telegram-source-check.service.ts` — the EARS-31 check: hourly
     (`@Cron`) for every switched-on Telegram source and at once on add / edit
     / switch-on. `getWebhookInfo`, `getChat` (bound id, else `@<address>`),

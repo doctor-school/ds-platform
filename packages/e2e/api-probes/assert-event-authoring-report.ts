@@ -12,6 +12,7 @@ import {
   assertEventAuthoringEvidence,
   assertAuthoringTerminal,
   assertAuthoringRateIsolation,
+  redactAuthoringPublicEvidence,
 } from "../lib/event-authoring-report.js";
 
 const directory = process.argv[2];
@@ -93,10 +94,33 @@ const files: Record<string, string> = {
 };
 const projectionRaw = jsonLines("public-projections.private.jsonl");
 projectionRaw.forEach((item) => assertAuthoringTerminal(item.body));
-files["public-projections.jsonl"] = read("public-projections.private.jsonl");
+files["public-projections.jsonl"] =
+  projectionRaw
+    .map((item) => {
+      const safe = redactAuthoringPublicEvidence(item.body);
+      return JSON.stringify({
+        ...item,
+        body: safe.value,
+        rawBodySha256: digest(JSON.stringify(item.body)),
+        redactions: safe.redactions,
+      });
+    })
+    .join("\n") + "\n";
 const draft = JSON.parse(read("draft-projections.private.json"));
 files["draft-projections.json"] = JSON.stringify(
-  { raw: draft.raw, proof: draft.proof, projectFigures: draft.projectFigures },
+  {
+    raw: draft.raw.map((item: Record<string, unknown>) => {
+      const safe = redactAuthoringPublicEvidence(item.body);
+      return {
+        ...item,
+        body: safe.value,
+        rawBodySha256: digest(JSON.stringify(item.body)),
+        redactions: safe.redactions,
+      };
+    }),
+    proof: draft.proof,
+    projectFigures: draft.projectFigures,
+  },
   null,
   2,
 );

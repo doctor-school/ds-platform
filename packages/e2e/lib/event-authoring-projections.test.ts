@@ -2,7 +2,39 @@ import { expect, it } from "vitest";
 import {
   assertAuthoringTerminal,
   assertAuthoringRateIsolation,
+  redactAuthoringPublicEvidence,
 } from "./event-authoring-report.js";
+it("removes signed public PDF query credentials and URL userinfo with explicit digest mapping", () => {
+  const source = {
+    items: [
+      {
+        id: "public-event",
+        programPdfUrl:
+          "https://fixture-user:fixture-password@storage.test/bucket/program.pdf?X-Amz-Credential=fixture-access-key&X-Amz-Signature=fixture-signature",
+      },
+    ],
+  };
+  const safe = redactAuthoringPublicEvidence(source);
+  expect(safe.value).toEqual({
+    items: [
+      {
+        id: "public-event",
+        programPdfUrl: "https://storage.test/bucket/program.pdf",
+      },
+    ],
+  });
+  expect(source.items[0]!.programPdfUrl).toContain("fixture-signature");
+  expect(safe.redactions).toEqual([
+    {
+      path: "$.items.0.programPdfUrl",
+      rawUrlSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      querySha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+    },
+  ]);
+  expect(JSON.stringify(safe)).not.toMatch(
+    /fixture-user|fixture-password|fixture-access-key|fixture-signature/,
+  );
+});
 
 it("rejects every outstanding nested public projection pagination marker", () => {
   for (const [key, value] of Object.entries({

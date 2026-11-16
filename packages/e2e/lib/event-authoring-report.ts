@@ -1,4 +1,5 @@
 import { assertOperationalReport } from "../api-probes/operational-report.js";
+import { createHash } from "node:crypto";
 import { eventCountBackgrounds } from "./event-count-report.js";
 
 export const eventAuthoringCases = [
@@ -49,6 +50,41 @@ export const eventAuthoringProjections = [
 ] as const;
 
 type Row = Record<string, unknown>;
+export function redactAuthoringPublicEvidence(value: unknown) {
+  const redactions: {
+    path: string;
+    rawUrlSha256: string;
+    querySha256: string;
+  }[] = [];
+  const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+  function visit(child: unknown, path: string): unknown {
+    if (typeof child === "string" && /^https?:\/\//.test(child)) {
+      const url = new URL(child);
+      if (url.search || url.username || url.password) {
+        redactions.push({
+          path,
+          rawUrlSha256: sha(child),
+          querySha256: sha(url.search),
+        });
+        url.username = "";
+        url.password = "";
+        url.search = "";
+        return url.href;
+      }
+    }
+    if (Array.isArray(child))
+      return child.map((entry, index) => visit(entry, `${path}.${index}`));
+    if (child && typeof child === "object")
+      return Object.fromEntries(
+        Object.entries(child).map(([key, entry]) => [
+          key,
+          visit(entry, `${path}.${key}`),
+        ]),
+      );
+    return child;
+  }
+  return { value: visit(value, "$"), redactions };
+}
 export function assertAuthoringRateIsolation(ops: unknown) {
   const witnesses = rows(ops).filter(
     (item) => item.command === "native rate namespace witness",

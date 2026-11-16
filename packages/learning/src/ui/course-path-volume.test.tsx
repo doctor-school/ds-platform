@@ -193,6 +193,12 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
     fireEvent.click(screen.getByRole("link", { name: "Продолжить — урок 60" }));
     scrollFrame("scroll");
     expect(outline().getByRole("link", { name: /^Урок 60\. / })).toHaveAttribute("aria-current", "true");
+    // The outline column settling its own scroll is not the page's jump landing.
+    act(() => {
+      document.querySelector("aside")!.dispatchEvent(new Event("scrollend", { bubbles: true }));
+    });
+    scrollFrame("scroll");
+    expect(outline().getByRole("link", { name: /^Урок 60\. / })).toHaveAttribute("aria-current", "true");
     scrollFrame("scrollend", "scroll");
     expect(outline().getByRole("link", { name: /^Урок 61\. / })).toHaveAttribute("aria-current", "true");
   });

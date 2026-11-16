@@ -85,7 +85,7 @@ function openModuleIndex(view: PathView, n: number): number {
  *
  * A jump the reader asked for («Продолжить», an outline row, a module row) has
  * already named the lesson in view, so the spy holds until that smooth scroll
- * settles (`scrollend`, or a 1 s fallback): with short lessons the next
+ * settles (the page's `scrollend`, or a 1.5 s fallback): with short lessons the next
  * lesson's first step already sits above the line when the target lands at
  * the top, and the spy would otherwise hand the mark past «Вы здесь».
  * Returns `hold`, called before each such jump.
@@ -103,12 +103,17 @@ function useScrollSpy(
     let timer: ReturnType<typeof setTimeout> | null = null;
     const release = () => {
       if (timer) clearTimeout(timer);
-      window.removeEventListener("scrollend", release, true);
+      window.removeEventListener("scrollend", onEnd, true);
       if (held.current === release) held.current = null;
     };
+    // Only the page landing ends the jump — the outline column settling its
+    // own follow-scroll fires `scrollend` too.
+    const onEnd = (e: Event) => {
+      if (!(e.target instanceof Element)) release();
+    };
     held.current = release;
-    window.addEventListener("scrollend", release, true);
-    timer = setTimeout(release, 1000);
+    window.addEventListener("scrollend", onEnd, true);
+    timer = setTimeout(release, 1500);
   }, []);
   useEffect(() => () => held.current?.(), []);
   useEffect(() => {

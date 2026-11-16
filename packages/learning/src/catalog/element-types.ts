@@ -6,6 +6,7 @@ import {
 } from "@ds/schemas";
 import type { z } from "zod";
 import { LEARNING_COPY_RU } from "../copy/learning-copy-ru.js";
+import { VIDEO_END_WINDOW_SEC } from "./video-end-window.js";
 import type { LearningStepModel } from "../model.js";
 import type { LearningEvalContext } from "../evaluator/context.js";
 
@@ -72,13 +73,7 @@ export function clampReportedPosition(input: {
   return Math.max(0, Math.min(Math.floor(input.reportedSec), Math.floor(cap)));
 }
 
-/**
- * EARS-10 — the end window: a provider clock ticks about once a second and
- * the last tick before the player stops can fall short of the media length,
- * so a position this close to the end counts as the end. It absorbs clock
- * granularity only, never skipped content.
- */
-export const VIDEO_END_WINDOW_SEC = 2;
+export { VIDEO_END_WINDOW_SEC } from "./video-end-window.js";
 
 /** EARS-10 — the watched share, positions capped at the real media duration. */
 export function watchedShare(duration: number, maxPosition: number): number {

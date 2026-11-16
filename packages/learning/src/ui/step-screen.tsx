@@ -16,7 +16,7 @@ import {
   createLearningClient,
   newLearningEventId,
 } from "../client/index";
-import { VIDEO_END_WINDOW_SEC } from "../catalog/element-types";
+import { VIDEO_END_WINDOW_SEC } from "../catalog/video-end-window";
 import {
   type LearningHostConfig,
   coursePathHref,

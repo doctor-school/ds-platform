@@ -181,6 +181,18 @@ describe("4067: release-journal — the job prints status lines only, the operat
       "== ds-prod-aaaaaaaaaaaa-migrate (0 lines)",
     ]);
     assert.equal(releaseJournalLines({ ...answer, failure: null, units: [] })[1], "failure: no note recorded");
+    // C1 controls (U+009B is a one-byte CSI) are dropped too, in the note and the unit name alike
+    const c1 = releaseJournalLines({
+      ...answer,
+      failure: { phase: "postgres\u009b2J-verify", reason: "refused\u001b]0;x\u0007\u0085" },
+      units: [{ unit: "ds-prod-aaaaaaaaaaaa-\u009bdriver", lines: ["b\u009b31m\u0090q\u009f"], truncated: false }],
+    });
+    assert.deepEqual(c1.slice(1), [
+      "failure: phase postgres2J-verify — refused]0;x",
+      "",
+      "== ds-prod-aaaaaaaaaaaa-driver (1 lines)",
+      "b31mq",
+    ]);
     assert.throws(() => releaseJournalLines({ verb: "schema" }), /not a release-journal answer/);
   });
 });

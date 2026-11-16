@@ -145,12 +145,19 @@ export function checkCapabilities(text, verb) {
   return { ok: true };
 }
 
+/** The text with every control character dropped: C0, DEL and C1 (U+009B is a one-byte CSI). */
+export function printable(text) {
+  return [...String(text)]
+    .filter((ch) => {
+      const c = ch.charCodeAt(0);
+      return c > 0x1f && (c < 0x7f || c > 0x9f);
+    })
+    .join("");
+}
+
 /** One line, control characters stripped, at most MAX_REASON characters. */
 export function bound(text) {
-  return [...String(text)]
-    .filter((ch) => ch.charCodeAt(0) > 0x1f && ch.charCodeAt(0) !== 0x7f)
-    .join("")
-    .slice(0, MAX_REASON);
+  return printable(text).slice(0, MAX_REASON);
 }
 
 /**
@@ -332,15 +339,11 @@ export function releaseJournalLines(answer) {
     out.push(
       "",
       `== ${unit?.unit} (${lines.length} lines${unit?.truncated ? ", the tail only" : ""})`,
-      // control characters (an escape sequence in a box log) never reach the terminal
-      ...lines.map((l) =>
-        [...String(l)]
-          .filter((ch) => ch.charCodeAt(0) > 0x1f && ch.charCodeAt(0) !== 0x7f)
-          .join(""),
-      ),
+      ...lines,
     );
   }
-  return out;
+  // every box-sourced text passes one filter: an escape sequence never reaches the terminal
+  return out.map(printable);
 }
 
 /** An already-decrypted answer of the run, or a fresh `readRun`. */

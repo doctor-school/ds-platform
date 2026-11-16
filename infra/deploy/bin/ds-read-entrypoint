@@ -337,6 +337,20 @@ for item in steps if isinstance(steps, list) else []:
 print("\n".join(seen[-cap:]))
 PY
 
+# The last <max> bytes of stdin (argv: max), read in chunks so memory stays bounded. Not
+# `tail -c`: uutils coreutils' tail (the default on Ubuntu 26.04) keeps whole pipe reads
+# and answers past the bound when the writer's output arrives in small writes.
+read -r -d '' TAIL_BYTES_PY <<'PY' || true
+import sys
+limit, kept = int(sys.argv[1]), b""
+while True:
+    chunk = sys.stdin.buffer.read(65536)
+    if not chunk:
+        break
+    kept = (kept + chunk)[-limit:]
+sys.stdout.buffer.write(kept)
+PY
+
 # The answer (argv: sha, the work dir, the line and byte bounds, the units): each unit's
 # tail, and the failure note as the driver recorded it (null when absent or not JSON).
 read -r -d '' RELEASE_JOURNAL_PY <<'PY' || true
@@ -379,7 +393,7 @@ release_journal() {
   done
   for unit in "${units[@]}"; do
     { sudo "$JOURNALCTL" -u "$unit" -n "$JOURNAL_LINES" -o short-iso -q --no-pager </dev/null 2>/dev/null || true; } |
-      tail -c "$JOURNAL_MAX_BYTES" >"$read_work/unit-$i.log"
+      python3 -I -c "$TAIL_BYTES_PY" "$JOURNAL_MAX_BYTES" >"$read_work/unit-$i.log"
     i=$((i + 1))
   done
   { sudo cat "$RELEASE_FAILURE_DIR/$sha.failure" 2>/dev/null || true; } | head -c 4096 >"$read_work/failure"

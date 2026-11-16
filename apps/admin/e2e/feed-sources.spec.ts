@@ -49,6 +49,26 @@ async function expectNoPageSideScroll(page: Page): Promise<void> {
   expect(overflow, `${page.url()} side-scrolls by ${overflow}px`).toBe(0);
 }
 
+/**
+ * Dark = the design-system `.dark` token block on the document root (the admin
+ * ships no theme toggle and follows no media query — the `congress-roster.spec.ts`
+ * recipe); waits until the body background has actually turned.
+ */
+async function setPalette(page: Page, palette: "light" | "dark") {
+  await page.evaluate((mode) => {
+    document.documentElement.classList.toggle("dark", mode === "dark");
+  }, palette);
+  await page.waitForFunction((mode) => {
+    const channels = getComputedStyle(document.body).backgroundColor.match(
+      /[\d.]+/g,
+    );
+    if (!channels || channels.length < 3) return false;
+    const [r, g, b] = channels.map(Number);
+    const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+    return mode === "dark" ? luminance < 128 : luminance >= 128;
+  }, palette);
+}
+
 /** The responsive-web evidence: the screen at both widths, in both schemes. */
 async function shot(page: Page, name: string): Promise<void> {
   for (const [width, size] of [
@@ -60,13 +80,13 @@ async function shot(page: Page, name: string): Promise<void> {
     if (!SHOT_DIR) continue;
     await mkdir(SHOT_DIR, { recursive: true });
     for (const colorScheme of ["light", "dark"] as const) {
-      await page.emulateMedia({ colorScheme });
+      await setPalette(page, colorScheme);
       await page.screenshot({
         path: path.join(SHOT_DIR, `${name}-${width}-${colorScheme}.png`),
         fullPage: true,
       });
     }
-    await page.emulateMedia({ colorScheme: "light" });
+    await setPalette(page, "light");
   }
   await page.setViewportSize(WIDE);
 }

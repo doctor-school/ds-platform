@@ -26,8 +26,7 @@ export const FEED_SOURCE_ADDRESS_ERROR =
   "Укажите адрес публичного канала в виде t.me/имя";
 
 /** EARS-21 — the «Адрес канала» field error of an address already listed. */
-export const FEED_SOURCE_ADDRESS_TAKEN_ERROR =
-  "Этот канал уже есть в списке источников";
+export const FEED_SOURCE_ADDRESS_TAKEN_ERROR = "Этот канал уже есть в списке";
 
 /**
  * EARS-21 — `https://t.me/<имя>`, `t.me/<имя>`, `@<имя>` or `<имя>` → the

@@ -60,6 +60,14 @@ export const DATA_READ_VERBS = [
 ];
 
 /**
+ * The data-box secret rotation (#4068; spec §5 «Data-prod verbs.» → secret-apply):
+ * served on the data box beside DATA_VERBS (the entrypoint's DATA_VERBS ends with them,
+ * pinned), reached by ds-api-prod's `data-secret-*` relay only, never by a release, so
+ * the `capabilities` probe does not require them.
+ */
+export const DATA_SECRET_VERBS = Object.freeze(["secret-recipient", "secret-apply"]);
+
+/**
  * The read-path verbs the release itself calls: its `rehearse` phase (#3648; spec §5
  * «Migration rehearsal.» → «Release gate.»). They run after this release's own install
  * and converge of ds-data-prod, so the `capabilities` probe still does not require them.

@@ -241,15 +241,21 @@ describe("deploy-prod.yml", () => {
     assert.deepEqual(withProduction, ["deploy"]);
   });
 
-  it("the prod ssh key is read only by the deploy job", () => {
+  it("the prod ssh key is read only by the deploy job and the data-secret job", () => {
     for (const [name, job] of Object.entries(wf.jobs)) {
       if (name === "deploy") continue;
       assert.equal(JSON.stringify(job).includes("PROD_SSH_KEY"), false, name);
     }
+    // #4068: data-secret.yml applies a box-encrypted data.env change over the
+    // same deploy hop; it shares Environment production and the deploy-prod
+    // concurrency group, and only its one `data-secret` job may hold the key.
+    const dataSecret = parse(read("data-secret.yml"));
+    assert.deepEqual(Object.keys(dataSecret.jobs), ["data-secret"]);
+    assert.equal(environmentOf(dataSecret.jobs["data-secret"]), "production");
     for (const file of readdirSync(WORKFLOWS).filter((f) =>
       /\.ya?ml$/.test(f),
     )) {
-      if (file === "deploy-prod.yml") continue;
+      if (file === "deploy-prod.yml" || file === "data-secret.yml") continue;
       assert.equal(read(file).includes("secrets.PROD_SSH_KEY"), false, file);
     }
   });

@@ -56,6 +56,9 @@ with the «Источники» source list (EARS-20…EARS-23).
    (EARS-9, EARS-10, EARS-11, EARS-19).
 6. **Row-local marks, no join (slice 2).** The feed read excludes
    `hidden_at IS NOT NULL` and `source_off` entries on the entry row itself, so
-   it never reads `feed_sources` (EARS-22, Lead decision 11). The admin
+   it never reads `feed_sources` (EARS-22, Lead decision 11). It serves only
+   the platforms in `FEED_CARD_PLATFORMS` — those the card contract has a
+   member for — so a stored network entry is never served before its card
+   (048-design §Delivery slices (slice 2)). The admin
    controllers share `admin-write.http.ts` (id shape, `If-Match`, field errors,
    idempotent replay).

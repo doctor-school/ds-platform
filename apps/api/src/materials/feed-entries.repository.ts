@@ -1,5 +1,15 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, isNull, not, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  not,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
 import { experts, feedEntries, organisations } from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
@@ -16,6 +26,16 @@ import type { MaterialsTx } from "./materials.repository.js";
 // directly. Slice 1 has one source, `academy` (own-materials.feed-source.ts).
 
 type Db = DrizzleHandle["db"];
+
+/**
+ * The platforms whose entries the public feed read serves: those the card
+ * contract has a member for (048-design §Delivery slices (slice 2)). A network
+ * platform joins this list in the same change that ships its card member
+ * (#3997), so a stored network entry is never served before it can render.
+ */
+export const FEED_CARD_PLATFORMS = [
+  "academy",
+] as const satisfies readonly (typeof feedEntries.sourcePlatform.enumValues)[number][];
 
 /** One card as a source writes it; the card date is kept on a rewrite. */
 export interface FeedEntryWrite {
@@ -66,6 +86,7 @@ export function publicFeedPageQuery(
   before: FeedCursorPosition | null,
 ) {
   const visible = and(
+    inArray(feedEntries.sourcePlatform, [...FEED_CARD_PLATFORMS]),
     isNull(feedEntries.hiddenAt),
     not(feedEntries.sourceOff),
     or(isNull(feedEntries.authorExpertId), expertPubliclyVisible),

@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { type DrizzleHandle, feedEntries } from "@ds/db";
-import { publicFeedPageQuery } from "./feed-entries.repository.js";
+import {
+  FEED_CARD_PLATFORMS,
+  publicFeedPageQuery,
+} from "./feed-entries.repository.js";
 
 // 048 V-6 (#3513) — the feed read is served from the feed-entry store joined
 // only to the directory rows an entry references, never to `materials`.
@@ -48,6 +51,19 @@ describe("048 public feed read (V-6)", () => {
       expect(sql).toMatch(/"feed_entries"\."hidden_at" is null/);
       expect(sql).toMatch(/not "feed_entries"\."source_off"/);
       expect(sql).not.toMatch(/"feed_sources"/);
+    }
+  });
+
+  it("048 EARS-10: the feed read serves only entries of a platform the card contract renders — today the own materials alone", () => {
+    expect(FEED_CARD_PLATFORMS).toEqual(["academy"]);
+    for (const after of [
+      null,
+      { instant: "2026-10-30T10:00:00.123456Z", id: crypto.randomUUID() },
+    ]) {
+      const { sql, params } = publicFeedPageQuery(db, 13, after).toSQL();
+      expect(sql).toMatch(/"feed_entries"\."source_platform" in \(\$\d+\)/);
+      expect(params).toContain("academy");
+      expect(params).not.toContain("telegram");
     }
   });
 });

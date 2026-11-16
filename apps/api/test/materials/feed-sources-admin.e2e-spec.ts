@@ -49,6 +49,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const createdEmails: string[] = [];
     const sourceIds: string[] = [];
     const usedKeys: string[] = [];
+    const materialIds: string[] = [];
     let adminSid: string;
     let adminSub: string;
 
@@ -189,7 +190,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     /**
      * A network entry of the source as the Telegram connector writes it —
      * permalink of its smallest message id, `source_ref` `<source>:<id>` —
-     * dated in the far future so it heads the public feed's first page. The
+     * dated in the far future (past every other suite's window) so it heads the public feed's first page. The
      * `post` kind lands with the connector (#3994), so the fixture is a `news`
      * card; the marks under test are row-local and kind-blind.
      */
@@ -201,7 +202,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         `INSERT INTO feed_entries
            (source_platform, source_ref, feed_source_id, kind, title, source_name, href, published_at)
          VALUES ('telegram', $1, $2, 'news', $3, 'BBM Academy · Telegram', $4,
-                 '2099-01-01T00:00:00Z'::timestamptz + ($5 || ' seconds')::interval)
+                 '2999-01-01T00:00:00Z'::timestamptz + ($5 || ' seconds')::interval)
          RETURNING id`,
         [
           `${source.id}:${messageId}`,
@@ -210,6 +211,42 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           `https://t.me/${source.address}/${messageId}`,
           String(messageId),
         ],
+      );
+      return rows[0]!.id;
+    }
+
+    /**
+     * An own-material entry (`academy`, no source) dated in the far future so
+     * it heads the public feed's first page — the platform the card contract
+     * renders, so each row-local mark is proven on a row the read would
+     * otherwise serve.
+     */
+    async function academyEntry(n: number): Promise<string> {
+      const slug = `e2e-feed-sources-${randomUUID().slice(0, 8)}`;
+      const material = await pool.query<{ id: string }>(
+        `INSERT INTO materials (slug, kind, title, author_line, body, status, first_published_at)
+         VALUES ($1, 'news', $2, '', $3::jsonb, 'published', '2999-06-01T00:00:00Z')
+         RETURNING id`,
+        [
+          slug,
+          `Материал ${n}`,
+          JSON.stringify({
+            type: "doc",
+            content: [
+              { type: "paragraph", content: [{ type: "text", text: slug }] },
+            ],
+          }),
+        ],
+      );
+      const materialId = material.rows[0]!.id;
+      materialIds.push(materialId);
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO feed_entries
+           (source_platform, source_ref, material_id, kind, title, source_name, href, published_at)
+         VALUES ('academy', $1::text, $1::text::uuid, 'news', $2, 'Академия', $3,
+                 '2999-06-01T00:00:00Z'::timestamptz + ($4 || ' seconds')::interval)
+         RETURNING id`,
+        [materialId, `Материал ${n}`, `/materials/${slug}`, String(n)],
       );
       return rows[0]!.id;
     }
@@ -277,6 +314,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }
       for (const k of usedKeys.splice(0)) {
         await pool.query("DELETE FROM idempotency_keys WHERE key = $1", [k]);
+      }
+      for (const id of materialIds.splice(0)) {
+        await pool.query("DELETE FROM feed_entries WHERE material_id = $1", [
+          id,
+        ]);
+        await pool.query("DELETE FROM materials WHERE id = $1", [id]);
       }
     });
 
@@ -470,22 +513,61 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(again.statusCode).toBe(409);
     });
 
-    it("048 EARS-22: an entry hidden by an administrator is absent from the public feed while its source is on", async () => {
-      const s = await add(username());
-      const shown = await entry(s, 1);
+    it("048 EARS-22: an entry that is only hidden (its source on) is absent from the public feed on its own, while a sibling entry is served", async () => {
+      const shown = await academyEntry(1);
+      const hidden = await academyEntry(2);
       await pool.query(
-        "UPDATE feed_entries SET source_off = true WHERE id = $1",
-        [shown],
-      );
-      const hidden = await entry(s, 2);
-      await pool.query(
-        "UPDATE feed_entries SET hidden_at = now(), source_off = true WHERE id = $1",
+        "UPDATE feed_entries SET hidden_at = now() WHERE id = $1",
         [hidden],
       );
-      // Both rows are row-locally excluded; the read never reads feed_sources.
+      expect(
+        (
+          await pool.query<{ source_off: boolean }>(
+            "SELECT source_off FROM feed_entries WHERE id = $1",
+            [hidden],
+          )
+        ).rows[0],
+      ).toEqual({ source_off: false });
       const ids = await publicFeedIds();
-      expect(ids).not.toContain(shown);
+      expect(ids).toContain(shown);
       expect(ids).not.toContain(hidden);
+    });
+
+    it("048 EARS-22: an entry that only carries the switched-off-source mark (not hidden) is absent from the public feed on its own, while a sibling entry is served", async () => {
+      const shown = await academyEntry(3);
+      const off = await academyEntry(4);
+      await pool.query(
+        "UPDATE feed_entries SET source_off = true WHERE id = $1",
+        [off],
+      );
+      expect(
+        (
+          await pool.query<{ hidden_at: Date | null }>(
+            "SELECT hidden_at FROM feed_entries WHERE id = $1",
+            [off],
+          )
+        ).rows[0],
+      ).toEqual({ hidden_at: null });
+      const ids = await publicFeedIds();
+      expect(ids).toContain(shown);
+      expect(ids).not.toContain(off);
+    });
+
+    it("048 EARS-10: the feed read serves no entry of a platform the card contract has no member for — a visible telegram entry is not served and the read stays 200", async () => {
+      const s = await add(username());
+      const post = await entry(s, 9);
+      expect(
+        (
+          await pool.query<{ hidden_at: Date | null; source_off: boolean }>(
+            "SELECT hidden_at, source_off FROM feed_entries WHERE id = $1",
+            [post],
+          )
+        ).rows[0],
+      ).toEqual({ hidden_at: null, source_off: false });
+      const shown = await academyEntry(5);
+      const ids = await publicFeedIds();
+      expect(ids).toContain(shown);
+      expect(ids).not.toContain(post);
     });
 
     // ── EARS-23: authz, idempotency, If-Match, audit ─────────────────────

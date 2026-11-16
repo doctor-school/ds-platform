@@ -400,3 +400,158 @@ describe("024 design §8 — the points plate on the step screen", () => {
     expect(screen.getAllByTestId("points-plate-value").map((v) => v.textContent?.replace(/\s/g, " "))).toEqual(["1 250 Pul", "3 Bre", "0 Con"]);
   });
 });
+
+describe("024 EARS-15/17 — the step screen follows the evaluated state in place", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const LESSON = `GET /v1/learning/lessons/${ID.l2}`;
+  const STEP = `GET /v1/me/learning/steps/${ID.s2}`;
+  const POINTS = "GET /v1/me/points";
+  const before = () =>
+    lessonRead({
+      steps: [
+        { id: ID.s2, type: "video", title: "Чтение ЭКГ", durationMin: 15, state: { status: "current" }, completionSentence: "Досмотрите видео до конца." },
+        { id: ID.s3, type: "download", title: "Памятка по ЭКГ", durationMin: 5, state: { status: "locked", reason: { kind: "previous" } }, completionSentence: "Откройте материал." },
+      ],
+    });
+  const after = () =>
+    lessonRead({
+      steps: [
+        { id: ID.s2, type: "video", title: "Чтение ЭКГ", durationMin: 15, state: { status: "done" }, completionSentence: "Досмотрите видео до конца." },
+        { id: ID.s3, type: "download", title: "Памятка по ЭКГ", durationMin: 5, state: { status: "current" }, completionSentence: "Откройте материал." },
+      ],
+    });
+  const account = (pul: number) => ({
+    personId: ID.course,
+    pul: { unit: "pul", available: pul, reserved: 0 },
+    bre: 1,
+    con: 0,
+    advance: { open: 0, owed: 0 },
+  });
+  const stripWords = () =>
+    screen
+      .getByRole("list", { name: "Шаги урока" })
+      .querySelectorAll("[aria-label]");
+  const hereCount = () =>
+    [...stripWords()].filter((n) => n.getAttribute("aria-label")!.endsWith("Вы здесь")).length;
+
+  it("EARS-17: the fact that completes the step re-reads the step, the strip and the plate — «Дальше» appears without a reload", async () => {
+    const fetch = stubFetch({
+      [FACTS]: () => ({
+        outcome: "recorded",
+        changed: [{ itemKind: "step", itemId: ID.s2, status: "done" }],
+        progress: { positionSec: 120, watchedPercent: 100 },
+      }),
+      [LESSON]: after,
+      [STEP]: () => videoStep({ step: { ...videoStep().step, state: { status: "done" } }, nextStepId: ID.s3 }),
+      [POINTS]: () => account(1300),
+    });
+    render(
+      <StepScreen
+        courseSlug="kardio"
+        config={CONFIG}
+        lesson={before()}
+        stepId={ID.s2}
+        step={videoStep({ nextStepId: null })}
+        points={{ pul: 1250, bre: 1, con: 0 }}
+      />,
+    );
+    expect(screen.queryByRole("link", { name: "Дальше" })).toBeNull();
+    expect(screen.getByRole("img", { name: /Шаг 2\. Памятка по ЭКГ\. Закрыт/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Смотреть видео" }));
+    const iframe = screen.getByTestId("recording-player-rutube") as HTMLIFrameElement;
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: "https://rutube.ru",
+          data: JSON.stringify({ type: "player:currentTime", data: { time: 120 } }),
+          source: iframe.contentWindow,
+        }),
+      );
+    });
+    expect(await screen.findByRole("link", { name: "Дальше" })).toHaveAttribute(
+      "href",
+      `/courses/kardio/steps/${ID.s3}`,
+    );
+    expect(screen.getByRole("link", { name: /Шаг 2\. Памятка по ЭКГ\. Открыт/ })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("points-plate-value")[0]!.textContent?.replace(/\s/g, " ")).toBe("1 300 Pul"),
+    );
+    expect(hereCount()).toBe(1);
+    // The player keeps playing: the re-read does not remount the step body.
+    expect(screen.getByTestId("recording-player-rutube")).toBe(iframe);
+    expect(fetch.mock.calls.map(([u, i]) => `${i?.method ?? "GET"} ${u}`)).toEqual(
+      expect.arrayContaining([LESSON, STEP, POINTS]),
+    );
+  });
+
+  it("EARS-10: a fact that changes no state re-reads nothing", async () => {
+    const fetch = stubFetch({
+      [FACTS]: () => ({ outcome: "recorded", changed: [], progress: { positionSec: 12, watchedPercent: 10 } }),
+    });
+    renderStep(videoStep());
+    fireEvent.click(screen.getByRole("button", { name: "Смотреть видео" }));
+    const iframe = screen.getByTestId("recording-player-rutube") as HTMLIFrameElement;
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: "https://rutube.ru",
+          data: JSON.stringify({ type: "player:currentTime", data: { time: 12 } }),
+          source: iframe.contentWindow,
+        }),
+      );
+    });
+    await waitFor(() => expect(screen.getAllByText("Просмотрено 10 %").length).toBeGreaterThan(0));
+    expect(fetch.mock.calls.map(([u, i]) => `${i?.method ?? "GET"} ${u}`)).toEqual([FACTS]);
+  });
+
+  it("EARS-15: exactly one step is «Вы здесь» — the viewed one; the evaluated next step reads «Открыт»", () => {
+    stubFetch({});
+    renderStep(videoStep({ step: { ...videoStep().step, state: { status: "done" } } }), ID.s2, after());
+    expect(hereCount()).toBe(1);
+    expect(screen.getByRole("link", { name: /Шаг 1\. Чтение ЭКГ\. Вы здесь/ })).toHaveAttribute("aria-current", "step");
+    expect(screen.getByRole("link", { name: /Шаг 2\. Памятка по ЭКГ\. Открыт/ })).not.toHaveAttribute("aria-current");
+  });
+
+  it("EARS-18: a passed exit test that completes the lesson re-reads the strip", async () => {
+    const STEP4 = `GET /v1/me/learning/steps/${ID.s4}`;
+    const fetch = stubFetch({
+      [START]: ATTEMPT,
+      [SUBMIT]: { ...result(true, 1), changed: [{ itemKind: "lesson", itemId: ID.l2, status: "done" }] },
+      [LESSON]: () =>
+        lessonRead({
+          steps: [{ ...testLesson().steps[0]!, state: { status: "done" } }] as ReturnType<typeof lessonRead>["steps"],
+        }),
+      [STEP4]: () => testStep(0),
+    });
+    renderStep(testStep(), ID.s4, testLesson());
+    await answerAndSubmit();
+    expect(await screen.findByText("Тест сдан: 100 % при пороге 70 %")).toBeInTheDocument();
+    // The viewed step stays «Вы здесь»; the read behind it is done now.
+    await waitFor(() =>
+      expect(fetch.mock.calls.map(([u, i]) => `${i?.method ?? "GET"} ${u}`)).toEqual(
+        expect.arrayContaining([LESSON, STEP4]),
+      ),
+    );
+    expect(screen.getByRole("link", { name: /Шаг 1\. Итоговый тест\. Вы здесь/ })).toBeInTheDocument();
+    // The result stays on screen through the re-read.
+    expect(screen.getByText("Урок пройден")).toBeInTheDocument();
+  });
+});
+
+describe("024 EARS-16 — the step's actions are live only once the page is interactive", () => {
+  it("the server render ships «Смотреть видео» disabled; the hydrated screen enables it", async () => {
+    const { renderToString } = await import("react-dom/server");
+    const html = renderToString(
+      <StepScreen courseSlug="kardio" config={CONFIG} lesson={lessonRead()} stepId={ID.s2} step={videoStep()} />,
+    );
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const watch = [...doc.querySelectorAll("button")].find((b) => b.textContent?.includes("Смотреть видео"));
+    expect(watch).toBeDefined();
+    expect(watch!.disabled).toBe(true);
+    stubFetch({});
+    renderStep(videoStep());
+    expect(screen.getByRole("button", { name: "Смотреть видео" })).toBeEnabled();
+    vi.unstubAllGlobals();
+  });
+});

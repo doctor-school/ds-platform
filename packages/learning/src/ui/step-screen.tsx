@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import type {
   LearningAttempt,
   LearningAttemptResult,
@@ -15,6 +15,7 @@ import {
   LearningClientError,
   createLearningClient,
   newLearningEventId,
+  pointsPlateBalances,
 } from "../client/index";
 import { VIDEO_END_WINDOW_SEC } from "../catalog/video-end-window";
 import {
@@ -72,7 +73,53 @@ function StripLine({ kind }: { kind: Connector }) {
   );
 }
 
-export function StepScreen({ courseSlug, config, lesson, stepId, step, points }: StepScreenProps) {
+const noSubscribe = () => () => undefined;
+
+/**
+ * False in the server render and until hydration, true after: an action whose
+ * handler is client-only is disabled until it can run, so a click before
+ * hydration is not swallowed by a button with no handler attached yet.
+ */
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    noSubscribe,
+    () => true,
+    () => false,
+  );
+}
+
+/** Called after a fact or a submitted attempt that the server says changed a status. */
+type OnChanged = (changed: readonly unknown[]) => void;
+
+export function StepScreen({ courseSlug, config, stepId, ...initial }: StepScreenProps) {
+  // EARS-15 / EARS-17 — the screen shows the evaluated state: a fact or an
+  // attempt that changes a status (the response's `changed`) re-reads the
+  // lesson (the strip), the step («Дальше», the sentences) and the plate in
+  // place; the step body keeps its own state (the player keeps playing). A
+  // failed re-read keeps what is on screen.
+  const [lesson, setLesson] = useState(initial.lesson);
+  const [step, setStep] = useState(initial.step);
+  const [points, setPoints] = useState(initial.points);
+  const lessonId = initial.lesson.lesson.id;
+  const hasPlate = initial.points != null;
+  const onChanged = useCallback<OnChanged>(
+    (changed) => {
+      if (changed.length === 0) return;
+      const client = createLearningClient();
+      void Promise.all([client.lesson(lessonId), client.step(stepId)])
+        .then(([l, s]) => {
+          setLesson(l);
+          setStep(s);
+        })
+        .catch(() => undefined);
+      if (hasPlate)
+        void client
+          .myPoints()
+          .then((a) => setPoints(pointsPlateBalances(a)))
+          .catch(() => undefined);
+    },
+    [lessonId, stepId, hasPlate],
+  );
   const l = lesson.lesson;
   const current = lesson.steps.find((s) => s.id === stepId) ?? null;
   const index = lesson.steps.findIndex((s) => s.id === stepId);
@@ -108,7 +155,11 @@ export function StepScreen({ courseSlug, config, lesson, stepId, step, points }:
                   : s.state.status === "locked"
                     ? "closed"
                     : "open";
-              const word = C.statusWord[here ? "current" : s.state.status];
+              // Exactly one «Вы здесь»: the step on screen (canvas v18). The
+              // evaluated current step elsewhere in the strip is reachable — «Открыт».
+              const word = here
+                ? C.statusWord.current
+                : C.statusWord[s.state.status === "current" ? "open" : s.state.status];
               const label = `Шаг ${i + 1}. ${s.title}. ${word}`;
               const box = cn(
                 "inline-flex size-11 flex-none items-center justify-center border-2 no-underline md:size-14",
@@ -181,7 +232,7 @@ export function StepScreen({ courseSlug, config, lesson, stepId, step, points }:
                 <h2 className="m-0 text-xl font-extrabold leading-tight">{step.step.title}</h2>
               </header>
               <div className="flex flex-col gap-4 p-6">
-                <StepBody step={step} />
+                <StepBody step={step} onChanged={onChanged} />
               </div>
               <footer className="flex flex-wrap items-center gap-4 border-t-2 border-border px-6 py-4">
                 <div className="flex min-w-0 flex-1 basis-64 flex-col gap-1">
@@ -240,14 +291,14 @@ function GuestGate({ href, lesson }: { href: string; lesson: LearningLessonRead 
   );
 }
 
-function StepBody({ step }: { step: LearningStepRead }) {
+function StepBody({ step, onChanged }: { step: LearningStepRead; onChanged: OnChanged }) {
   switch (step.body.type) {
     case "video":
-      return <VideoBody step={step} body={step.body} />;
+      return <VideoBody step={step} body={step.body} onChanged={onChanged} />;
     case "download":
-      return <DownloadBody step={step} body={step.body} />;
+      return <DownloadBody step={step} body={step.body} onChanged={onChanged} />;
     case "test":
-      return <TestBody body={step.body} />;
+      return <TestBody body={step.body} onChanged={onChanged} />;
   }
 }
 
@@ -261,7 +312,16 @@ type Body<T extends LearningStepRead["body"]["type"]> = Extract<LearningStepRead
  * `progress.maxPlaybackRate` / `progress.slackSec`. A provider with no clock
  * (cdnvideo, #4055) plays but reports nothing.
  */
-function VideoBody({ step, body }: { step: LearningStepRead; body: Body<"video"> }) {
+function VideoBody({
+  step,
+  body,
+  onChanged,
+}: {
+  step: LearningStepRead;
+  body: Body<"video">;
+  onChanged: OnChanged;
+}) {
+  const hydrated = useHydrated();
   const [playing, setPlaying] = useState(false);
   const [watched, setWatched] = useState(body.watchedPercent);
   const reported = useRef(body.positionSec);
@@ -286,6 +346,7 @@ function VideoBody({ step, body }: { step: LearningStepRead; body: Body<"video">
         // The bar shows what the server accepted after its clamp; the next
         // report is measured from there.
         .then((res) => {
+          onChanged(res.changed);
           if (!res.progress) return;
           reported.current = res.progress.positionSec;
           setWatched(res.progress.watchedPercent);
@@ -296,7 +357,7 @@ function VideoBody({ step, body }: { step: LearningStepRead; body: Body<"video">
           sending.current = false;
         });
     },
-    [body.durationSec, step.step.id],
+    [body.durationSec, step.step.id, onChanged],
   );
 
   return (
@@ -314,7 +375,7 @@ function VideoBody({ step, body }: { step: LearningStepRead; body: Body<"video">
         />
       ) : (
         <div className="relative flex aspect-video items-center justify-center border-2 border-border bg-primary-surface text-primary-surface-foreground">
-          <Button size="lg" onClick={() => setPlaying(true)}>
+          <Button size="lg" disabled={!hydrated} onClick={() => setPlaying(true)}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M8 5l12 7-12 7z" />
             </svg>
@@ -333,7 +394,16 @@ function VideoBody({ step, body }: { step: LearningStepRead; body: Body<"video">
 }
 
 /** EARS-16 — «Скачать»: the signed read; opening it records `opened` (EARS-10). */
-function DownloadBody({ step, body }: { step: LearningStepRead; body: Body<"download"> }) {
+function DownloadBody({
+  step,
+  body,
+  onChanged,
+}: {
+  step: LearningStepRead;
+  body: Body<"download">;
+  onChanged: OnChanged;
+}) {
+  const hydrated = useHydrated();
   const [opened, setOpened] = useState(body.opened);
   const open = () => {
     void createLearningClient()
@@ -345,7 +415,10 @@ function DownloadBody({ step, body }: { step: LearningStepRead; body: Body<"down
         clientOccurredAt: new Date().toISOString(),
         data: {},
       })
-      .then(() => setOpened(true))
+      .then((res) => {
+        setOpened(true);
+        onChanged(res.changed);
+      })
       .catch(() => undefined);
   };
   return (
@@ -358,17 +431,23 @@ function DownloadBody({ step, body }: { step: LearningStepRead; body: Body<"down
         <span className="text-sm font-semibold text-muted-foreground">{C.fileMeta(body.fileSizeBytes)}</span>
         {opened ? <Badge variant="success">{C.opened}</Badge> : null}
       </div>
-      <Button asChild>
-        <a href={body.mediaUrl} target="_blank" rel="noopener noreferrer" download={body.fileName} onClick={open}>
-          {C.download}
-        </a>
-      </Button>
+      {hydrated ? (
+        <Button asChild>
+          <a href={body.mediaUrl} target="_blank" rel="noopener noreferrer" download={body.fileName} onClick={open}>
+            {C.download}
+          </a>
+        </Button>
+      ) : (
+        // Before hydration the link would open the file without recording `opened`.
+        <Button disabled>{C.download}</Button>
+      )}
     </div>
   );
 }
 
 /** EARS-18 — the exit test: start (an open attempt comes back), one question at a time, submit, the result against the threshold. */
-function TestBody({ body }: { body: Body<"test"> }) {
+function TestBody({ body, onChanged }: { body: Body<"test">; onChanged: OnChanged }) {
+  const hydrated = useHydrated();
   const [attempt, setAttempt] = useState<LearningAttempt | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [q, setQ] = useState(0);
@@ -405,6 +484,7 @@ function TestBody({ body }: { body: Body<"test"> }) {
       });
       setResult(r);
       setAttempt(null);
+      onChanged(r.changed);
     } catch {
       setError(C.actionFailed);
     } finally {
@@ -444,7 +524,7 @@ function TestBody({ body }: { body: Body<"test"> }) {
         ) : null}
         {error ? <Alert variant="danger">{error}</Alert> : null}
         <div>
-          <Button disabled={busy || body.attemptsLeft === 0} onClick={() => void start()}>
+          <Button disabled={!hydrated || busy || body.attemptsLeft === 0} onClick={() => void start()}>
             {C.startTest}
           </Button>
         </div>

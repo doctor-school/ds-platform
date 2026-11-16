@@ -46,6 +46,7 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
   # --- Event authoring (US-1) ---
 
   @EARS-1 @happy
+  @event-authoring-originals
   Scenario: A created event starts in draft and stores one canonical instant for a МСК time
     Given a platform_admin operator in the admin app
     When the operator creates an event with a date and time entered as МСК
@@ -83,6 +84,7 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
   # --- Stream configuration (US-3) ---
 
   @EARS-3 @happy
+  @event-authoring-originals
   Scenario Outline: The stream is configured from an explicit provider enum
     Given a platform_admin operator configuring the stream of an event
     When the operator selects provider "<provider>" and sets an embed reference
@@ -102,6 +104,7 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
     And no stream config is recorded for the unknown provider
 
   @EARS-3 @happy
+  @event-authoring-originals
   Scenario: A wrong stream URL is correctable while the event is published
     Given a published event whose stream config has the wrong embed reference
     When the operator corrects the embed reference before opening the room

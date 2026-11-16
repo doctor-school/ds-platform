@@ -2164,7 +2164,7 @@ jobs:
       - name: Build the api, admin and recording-proof storefront setup
         env:
           API_PROXY_TARGET: http://localhost:3000
-        run: pnpm exec turbo run build --filter=@ds/api --filter=@ds/admin --filter=@ds/portal --filter=@ds/login
+        run: pnpm exec turbo run build --filter=@ds/api --filter=@ds/admin --filter=@ds/portal --filter=@ds/login --filter=@ds/doctor
       # The legacy эфир the 014 lifecycle flow drives (`seed-006-legacy-archived`,
       # plus `seed-005-hidden`) cannot be authored through any admin or API path —
       # `EventAdminCreate.origin` is `z.never()` — until 014 slice 3, so this tier
@@ -2378,6 +2378,106 @@ jobs:
         with:
           name: event-count-visibility-originals-4035
           path: ${{ runner.temp }}/event-count-4035/safe
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Prepare real isolated storage and database for 4061
+        id: authoring-setup
+        if: ${{ !cancelled() && steps.count-minio.outcome == 'success' }}
+        env:
+          DATABASE_URL: postgres://ds:ds@localhost:5432/ds_probe_4061
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/event-authoring-4061"
+          build="$RUNNER_TEMP/event-authoring-4061-minio"
+          binary="$RUNNER_TEMP/event-count-4035-minio/bin/minio"
+          ops="$RUNNER_TEMP/event-authoring-4061-ops.jsonl"
+          mkdir "$dir" "$build"
+          printf '%s\n' '{"phase":"pre","command":"verify existing pinned official-source MinIO binary; allocate new owned 4061 listener/data"}' >> "$ops"
+          export AUTHORING_BINARY="$binary" AUTHORING_DIR="$dir"
+          node --input-type=module <<'NODE'
+          import {readFileSync,writeFileSync} from 'node:fs'; import {createHash} from 'node:crypto';
+          const source=JSON.parse(readFileSync(process.env.RUNNER_TEMP+'/event-count-4035/s3-provider.json','utf8'));
+          if(source.source!=='7aac2a2c5b7c882e68c1ce017d8256be2feea27f'||createHash('sha256').update(readFileSync(process.env.AUTHORING_BINARY)).digest('hex')!==source.binarySha256)throw Error('Pinned MinIO binary mismatch');
+          delete source.listenerReleased; writeFileSync(process.env.AUTHORING_DIR+'/s3-provider.json',JSON.stringify(source));
+          NODE
+          port="$(node --input-type=module <<'NODE'
+          import {createServer} from 'node:net'; const server=createServer(); await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve)});console.log(server.address().port);await new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+          NODE
+          )"
+          export MINIO_ROOT_USER="authoring4061$(openssl rand -hex 8)" MINIO_ROOT_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$MINIO_ROOT_USER"
+          echo "::add-mask::$MINIO_ROOT_PASSWORD"
+          "$binary" server "$build/data" --address "127.0.0.1:$port" --console-address 127.0.0.1:0 > "$dir/minio.private.log" 2>&1 &
+          echo $! > "$build/minio.pid"
+          export E2E_EVENT_AUTHORING_S3_ENDPOINT="http://127.0.0.1:$port" E2E_EVENT_AUTHORING_S3_ACCESS_KEY="$MINIO_ROOT_USER" E2E_EVENT_AUTHORING_S3_SECRET_KEY="$MINIO_ROOT_PASSWORD" E2E_EVENT_AUTHORING_S3_BUCKET_UPLOADS=ds-event-authoring-4061
+          ready=false
+          for i in $(seq 1 30); do if curl -fsS "$E2E_EVENT_AUTHORING_S3_ENDPOINT/minio/health/live" >/dev/null; then ready=true; break; fi; sleep 1; done
+          test "$ready" = true
+          printf '%s\n' '{"phase":"pre","command":"create exact own 4061 bucket; create and migrate job-owned ds_probe_4061"}' >> "$ops"
+          node --input-type=module <<'NODE'
+          import {createRequire} from 'node:module'; import {readFileSync,writeFileSync} from 'node:fs';
+          const require=createRequire(process.cwd()+'/apps/api/package.json'),{S3Client,CreateBucketCommand}=require('@aws-sdk/client-s3');
+          const client=new S3Client({endpoint:process.env.E2E_EVENT_AUTHORING_S3_ENDPOINT,region:'us-east-1',forcePathStyle:true,credentials:{accessKeyId:process.env.E2E_EVENT_AUTHORING_S3_ACCESS_KEY,secretAccessKey:process.env.E2E_EVENT_AUTHORING_S3_SECRET_KEY}});await client.send(new CreateBucketCommand({Bucket:process.env.E2E_EVENT_AUTHORING_S3_BUCKET_UPLOADS}));client.destroy();
+          const file=process.env.AUTHORING_DIR+'/s3-provider.json',source=JSON.parse(readFileSync(file,'utf8'));source.endpoint=process.env.E2E_EVENT_AUTHORING_S3_ENDPOINT;source.bucket=process.env.E2E_EVENT_AUTHORING_S3_BUCKET_UPLOADS;writeFileSync(file,JSON.stringify(source));
+          NODE
+          for key in E2E_EVENT_AUTHORING_S3_ENDPOINT E2E_EVENT_AUTHORING_S3_ACCESS_KEY E2E_EVENT_AUTHORING_S3_SECRET_KEY E2E_EVENT_AUTHORING_S3_BUCKET_UPLOADS; do printf '%s=%s\n' "$key" "${!key}" >> "$GITHUB_ENV"; done
+          docker exec ds-postgres psql -U ds -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ds_probe_4061 OWNER ds'
+          pnpm --filter @ds/api drizzle:migrate:ci > "$dir/migrate.private.log" 2>&1
+          cp "$ops" "$dir/ops.jsonl"
+      - name: Run exact event authoring originals on owned native consumers
+        id: authoring-originals
+        if: ${{ !cancelled() && steps.authoring-setup.outcome == 'success' }}
+        env:
+          IDP_REDIRECT_URI: http://localhost:3000/auth/callback
+          E2E_EVENT_COUNT_DATABASE_URL: postgres://ds:ds@localhost:5432/ds_probe_4061
+          E2E_EVENT_COUNT_DIR: ${{ runner.temp }}/event-authoring-4061
+          E2E_EVENT_COUNT_OPS_LOG: ${{ runner.temp }}/event-authoring-4061-ops.jsonl
+        run: |
+          set -euo pipefail
+          for key in ENDPOINT ACCESS_KEY SECRET_KEY BUCKET_UPLOADS; do export "E2E_EVENT_COUNT_S3_$key=$(printenv "E2E_EVENT_AUTHORING_S3_$key")"; done
+          printf '%s\n' '{"phase":"pre","command":"4061 bddgen and committed Playwright one worker retries0; three owned Next processes and native API"}' >> "$E2E_EVENT_COUNT_OPS_LOG"
+          pnpm --filter @ds/e2e exec bddgen --config event-authoring-originals.config.ts
+          if pnpm --filter @ds/e2e exec playwright test --config event-authoring-originals.config.ts > "$E2E_EVENT_COUNT_DIR/console.private.log" 2>&1; then
+            exit 0
+          else
+            original_status=$?
+            pnpm --filter @ds/e2e exec tsx api-probes/export-event-authoring-failure.ts "$E2E_EVENT_COUNT_DIR"
+            exit "$original_status"
+          fi
+      - name: Upload safe 4061 failure diagnostics
+        if: ${{ !cancelled() && steps.authoring-originals.outcome == 'failure' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: event-authoring-originals-4061-failure
+          path: ${{ runner.temp }}/event-authoring-4061/failure-safe
+          if-no-files-found: error
+          retention-days: 7
+      - name: Stop exact 4061 MinIO and verify listener release
+        if: ${{ !cancelled() && steps.count-minio.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          build="$RUNNER_TEMP/event-authoring-4061-minio"
+          if [ ! -f "$build/minio.pid" ]; then exit 0; fi
+          pid="$(cat "$build/minio.pid")"
+          test "$(readlink "/proc/$pid/exe")" = "$RUNNER_TEMP/event-count-4035-minio/bin/minio"
+          printf '%s\n' '{"phase":"pre","command":"stop verified exact own 4061 MinIO PID and verify released loopback listener"}' | tee -a "$RUNNER_TEMP/event-authoring-4061/ops.jsonl" >> "$RUNNER_TEMP/event-authoring-4061-ops.jsonl"
+          kill "$pid"
+          node --input-type=module - "$RUNNER_TEMP/event-authoring-4061/s3-provider.json" <<'NODE'
+          import {readFileSync,writeFileSync} from 'node:fs'; import {createServer} from 'node:net';
+          const file=process.argv[2],provider=JSON.parse(readFileSync(file,'utf8'));let released=false;
+          for(let attempt=0;attempt<30&&!released;attempt++){const server=createServer();try{await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(Number(new URL(provider.endpoint).port),'127.0.0.1',resolve)});await new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve()));released=true;}catch{await new Promise(resolve=>setTimeout(resolve,100));}}
+          if(!released)throw Error('4061 MinIO listener not released');provider.listenerReleased=true;writeFileSync(file,JSON.stringify(provider));
+          NODE
+      - name: Certify and export safe 4061 original receipts
+        if: ${{ !cancelled() && steps.authoring-originals.outcome == 'success' }}
+        run: pnpm --filter @ds/e2e exec tsx api-probes/assert-event-authoring-report.ts "$RUNNER_TEMP/event-authoring-4061"
+      - name: Upload safe event authoring original evidence
+        if: ${{ !cancelled() && steps.authoring-originals.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: event-authoring-originals-4061
+          path: ${{ runner.temp }}/event-authoring-4061/safe
           if-no-files-found: error
           retention-days: 7
 

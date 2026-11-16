@@ -9,7 +9,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LearningStepRead } from "@ds/schemas";
 
-import { StepScreen } from "./step-screen";
+import { REPORT_RETRY_FIRST_MS, REPORT_RETRY_MAX_MS, StepScreen } from "./step-screen";
 import {
   CONFIG,
   ID,
@@ -337,6 +337,93 @@ describe("024 EARS-15…18 — the step screen", () => {
       await tick(0.5);
       await tick(118.4);
       expect(sent()).toEqual([120, 0, 120]);
+    });
+  });
+
+  describe("EARS-10: a refused report is retried on the cadence or a bounded backoff, never on every tick", () => {
+    afterEach(() => vi.useRealTimers());
+
+    // Every POST answers 503 while `down`; the backoff timer is fake, the
+    // network settles on real macrotasks.
+    function outagePlayer() {
+      const state = { down: true };
+      const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+        void init;
+        return state.down
+          ? new Response("{}", { status: 503 })
+          : new Response(
+              JSON.stringify({ outcome: "recorded", changed: [], progress: { positionSec: 120, watchedPercent: 100 } }),
+              { status: 200 },
+            );
+      });
+      vi.stubGlobal("fetch", fetch);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const view = renderStep(videoStep());
+      fireEvent.click(screen.getByRole("button", { name: "Смотреть видео" }));
+      const iframe = screen.getByTestId("recording-player-rutube") as HTMLIFrameElement;
+      const settle = () => new Promise((r) => setImmediate(r));
+      const flush = async () => {
+        for (let i = 0; i < 5; i++) await settle();
+      };
+      const tick = async (time: number) => {
+        await act(async () => {
+          window.dispatchEvent(
+            new MessageEvent("message", {
+              origin: "https://rutube.ru",
+              data: JSON.stringify({ type: "player:currentTime", data: { time } }),
+              source: iframe.contentWindow,
+            }),
+          );
+          await flush();
+        });
+      };
+      const wait = async (ms: number) => {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(ms);
+          await flush();
+        });
+      };
+      const sent = () =>
+        (bodiesOf(fetch as never, FACTS) as { data: { positionSec: number } }[]).map((f) => f.data.positionSec);
+      return { state, tick, wait, sent, view };
+    }
+
+    it("EARS-10: while every report fails, the player's ticks attempt one report per 10 s of its clock", async () => {
+      const { tick, sent } = outagePlayer();
+      for (let t = 10.2; t < 45; t += 0.3) await tick(t);
+      expect(sent()).toEqual([10, 20, 30, 40]);
+    });
+
+    it("EARS-10: a refused end report is retried on a doubling backoff with the player stopped, and sent once after recovery", async () => {
+      const { state, tick, wait, sent } = outagePlayer();
+      await tick(118.3);
+      expect(sent()).toEqual([120]);
+      await wait(REPORT_RETRY_FIRST_MS - 1);
+      expect(sent()).toEqual([120]);
+      await wait(1);
+      expect(sent()).toEqual([120, 120]);
+      await wait(REPORT_RETRY_FIRST_MS * 2 - 1);
+      expect(sent()).toHaveLength(2);
+      state.down = false;
+      await wait(1);
+      expect(sent()).toEqual([120, 120, 120]);
+      expect(screen.getAllByText("Просмотрено 100 %").length).toBeGreaterThan(0);
+      await wait(REPORT_RETRY_MAX_MS * 4);
+      expect(sent()).toHaveLength(3);
+    });
+
+    it("EARS-10: the backoff stops at its cap, and a pending retry is cleared when the screen goes away", async () => {
+      const { tick, wait, sent, view } = outagePlayer();
+      await tick(118.3);
+      await wait(REPORT_RETRY_FIRST_MS); // 2nd
+      await wait(REPORT_RETRY_FIRST_MS * 2); // 3rd
+      await wait(REPORT_RETRY_FIRST_MS * 4); // 4th
+      await wait(REPORT_RETRY_MAX_MS); // 5th, capped
+      await wait(REPORT_RETRY_MAX_MS); // 6th
+      expect(sent()).toHaveLength(6);
+      view.unmount();
+      await wait(REPORT_RETRY_MAX_MS * 3);
+      expect(sent()).toHaveLength(6);
     });
   });
 

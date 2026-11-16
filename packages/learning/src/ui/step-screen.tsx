@@ -1,7 +1,7 @@
 "use client";
 
 import NextLink from "next/link";
-import { useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
   LearningAttempt,
   LearningAttemptResult,
@@ -39,6 +39,14 @@ import { StepIcon } from "./step-icon";
  * the end of the media is always reported, so 100 % (D15) is reachable.
  */
 export const VIDEO_REPORT_EVERY_SEC = 10;
+
+/**
+ * A refused position fact is retried after this wall time, doubling up to
+ * {@link REPORT_RETRY_MAX_MS} and back to the start on an accepted one — an API
+ * outage meets a bounded trickle of reports, not one per player tick.
+ */
+export const REPORT_RETRY_FIRST_MS = 10_000;
+export const REPORT_RETRY_MAX_MS = 60_000;
 
 export interface StepScreenProps {
   courseSlug: string;
@@ -327,49 +335,83 @@ function VideoBody({
   const hydrated = useHydrated();
   const [playing, setPlaying] = useState(false);
   const [watched, setWatched] = useState(body.watchedPercent);
-  // The player position last sent. The cadence is measured on the player's own
-  // clock, never on the server's clamped answer: after a forward seek that
-  // answer stays below the clock, and measuring from it would send on every tick.
+  // The player position last attempted. The cadence is measured on the
+  // player's own clock, never on the server's clamped answer: after a forward
+  // seek that answer stays below the clock, and measuring from it would send on
+  // every tick. A refused attempt does not reset it either.
   const sent = useRef(body.positionSec);
+  // The newest position the player reported: what a retry sends.
+  const latest = useRef(body.positionSec);
   const sending = useRef(false);
+  const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backoff = useRef(REPORT_RETRY_FIRST_MS);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      if (retry.current) clearTimeout(retry.current);
+      retry.current = null;
+    };
+  }, []);
+
+  const report = useCallback(
+    (first: number) => {
+      const attempt = (positionSec: number) => {
+        if (retry.current) clearTimeout(retry.current);
+        retry.current = null;
+        sent.current = positionSec;
+        sending.current = true;
+        createLearningClient()
+          .recordFact({
+            eventId: newLearningEventId(step.step.id),
+            stepId: step.step.id,
+            source: "web",
+            kind: "position",
+            clientOccurredAt: new Date().toISOString(),
+            data: { positionSec },
+          })
+          // The bar shows what the server accepted after its clamp.
+          .then((res) => {
+            backoff.current = REPORT_RETRY_FIRST_MS;
+            onChanged(res.changed);
+            if (res.progress) setWatched(res.progress.watchedPercent);
+          })
+          // A refused report changes nothing on screen. The newest position is
+          // retried after the backoff, so the end still goes out once the API
+          // is back with the player stopped; a tick report meanwhile replaces it.
+          .catch(() => {
+            if (!alive.current) return;
+            const wait = backoff.current;
+            backoff.current = Math.min(wait * 2, REPORT_RETRY_MAX_MS);
+            retry.current = setTimeout(() => {
+              retry.current = null;
+              if (alive.current && !sending.current) attempt(latest.current);
+            }, wait);
+          })
+          .finally(() => {
+            sending.current = false;
+          });
+      };
+      attempt(first);
+    },
+    [step.step.id, onChanged],
+  );
 
   const onClock = useCallback(
     (sec: number) => {
       const position = Math.min(Math.floor(sec), body.durationSec);
       const atEnd = position >= body.durationSec - VIDEO_END_WINDOW_SEC;
+      latest.current = atEnd ? body.durationSec : position;
       if (sending.current) return;
       // A report per VIDEO_REPORT_EVERY_SEC of the clock moved since the last
-      // one (a seek back included), and the end once. A completion the server
-      // allows only later is not polled for: a replay reports it again.
+      // attempt (a seek back included), and the end once. A completion the
+      // server allows only later is not polled for: a replay reports it again.
       const moved = Math.abs(position - sent.current) >= VIDEO_REPORT_EVERY_SEC;
       if (!moved && !(atEnd && position > sent.current)) return;
-      const positionSec = atEnd ? body.durationSec : position;
-      const previous = sent.current;
-      sent.current = positionSec;
-      sending.current = true;
-      createLearningClient()
-        .recordFact({
-          eventId: newLearningEventId(step.step.id),
-          stepId: step.step.id,
-          source: "web",
-          kind: "position",
-          clientOccurredAt: new Date().toISOString(),
-          data: { positionSec },
-        })
-        // The bar shows what the server accepted after its clamp.
-        .then((res) => {
-          onChanged(res.changed);
-          if (res.progress) setWatched(res.progress.watchedPercent);
-        })
-        // A refused report changes nothing on screen; the next tick retries it.
-        .catch(() => {
-          sent.current = previous;
-        })
-        .finally(() => {
-          sending.current = false;
-        });
+      report(latest.current);
     },
-    [body.durationSec, step.step.id, onChanged],
+    [body.durationSec, report],
   );
 
   return (

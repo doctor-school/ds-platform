@@ -2286,11 +2286,15 @@ export function deliveredPostgresArtifact(sha, { dir = POSTGRES_ARTIFACT_DIR } =
   return { certificate, imagesFile };
 }
 
-/** `docker load` of the delivered images on ds-data-prod (its `postgres-load` verb). */
+/**
+ * `docker load` of the delivered images on ds-data-prod (its `postgres-load` verb), named
+ * by their certified ids as bare hex (the request grammar has no `:`): the box loads an
+ * archive holding exactly those untagged images and checks the loaded ids.
+ */
 export async function loadPostgresArtifact(sha, { certificate, imagesFile }, { client, log = (l) => console.log(l) } = {}) {
-  const ids = ["postgres", "pgbackrest"].map((role) => certificate.images[role].id.slice(7, 19));
-  const answer = await (client ?? dataProd()).call(["postgres-load", sha], { inputFile: imagesFile });
-  log(`  ↳ ${DATA_PROD}: certified PostgreSQL images ${ids.join(" / ")} delivered: ${String(answer).trim()}`);
+  const ids = ["postgres", "pgbackrest"].map((role) => certificate.images[role].id.slice(7));
+  const answer = await (client ?? dataProd()).call(["postgres-load", sha, ...ids], { inputFile: imagesFile });
+  log(`  ↳ ${DATA_PROD}: certified PostgreSQL images ${ids.map((id) => id.slice(0, 12)).join(" / ")} delivered: ${String(answer).trim()}`);
 }
 
 /** The delivered artifact's certificate once its images are on ds-data-prod, else undefined. */

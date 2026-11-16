@@ -102,6 +102,69 @@ test("4089: an archive with no manifest.json or no config digest is refused", ()
   );
 });
 
+test("4089: an archive whose repositories file or index.json names an image is refused", () => {
+  const manifest = JSON.stringify(
+    [PG, BR].map((id) => ({
+      Config: `blobs/sha256/${id.slice(7)}`,
+      RepoTags: null,
+    })),
+  );
+  withArchive(
+    [
+      ["repositories", JSON.stringify({ postgres: { 17: "x" } })],
+      ["manifest.json", manifest],
+    ],
+    (path) =>
+      assert.throws(
+        () => imageArchiveConfigIds(path),
+        /repositories file names an image/,
+      ),
+  );
+  withArchive(
+    [
+      [
+        "index.json",
+        JSON.stringify({
+          manifests: [
+            { annotations: { "org.opencontainers.image.ref.name": "17" } },
+          ],
+        }),
+      ],
+      ["manifest.json", manifest],
+    ],
+    (path) =>
+      assert.throws(
+        () => imageArchiveConfigIds(path),
+        /index\.json names an image/,
+      ),
+  );
+  withArchive(
+    [
+      ["repositories", "{}"],
+      ["index.json", JSON.stringify({ manifests: [{}, {}] })],
+      ["manifest.json", manifest],
+    ],
+    (path) => assert.deepEqual(imageArchiveConfigIds(path), [PG, BR]),
+  );
+});
+
+test("4089: an archive whose image carries a tag is refused: a load must name nothing on the box", () => {
+  const manifest = JSON.stringify([
+    { Config: `blobs/sha256/${"1".repeat(64)}`, RepoTags: [], Layers: [] },
+    {
+      Config: `blobs/sha256/${"2".repeat(64)}`,
+      RepoTags: ["postgres:17"],
+      Layers: [],
+    },
+  ]);
+  withArchive([["manifest.json", manifest]], (path) =>
+    assert.throws(
+      () => imageArchiveConfigIds(path),
+      /an image of manifest\.json carries the tag postgres:17/,
+    ),
+  );
+});
+
 test("4089: the archive must hold exactly the certified images", () => {
   assert.doesNotThrow(() =>
     assertArchiveMatchesCertificate([BR, PG], certificate),
@@ -117,6 +180,10 @@ test("4089: the archive must hold exactly the certified images", () => {
         certificate,
       ),
     /the image archive holds/,
+  );
+  assert.throws(
+    () => assertArchiveMatchesCertificate([PG, BR, PG], certificate),
+    /the image archive holds 3 images/,
   );
   assert.throws(
     () =>
@@ -163,10 +230,21 @@ const artifact = (runId, over = {}) => ({
   ...over,
 });
 
-test("4089: a release delivers the newest successful main or hotfix certification of its source hash", () => {
-  const chosen = selectPostgresArtifact({
+const TARGET = "f".repeat(40);
+// The release target's history: "c…" and "e…" are ancestors of TARGET, "b…" is not.
+const ANCESTORS = new Set(["c".repeat(40), "e".repeat(40)]);
+const isAncestor = (sha, target) => target === TARGET && ANCESTORS.has(sha);
+const select = (over) =>
+  selectPostgresArtifact({
     sourceHash: HASH,
+    targetSha: TARGET,
     repo: REPO,
+    isAncestor,
+    ...over,
+  });
+
+test("4089: a release delivers the newest main certification of its source hash within its own history", () => {
+  const chosen = select({
     artifacts: [
       artifact(11),
       artifact(12),
@@ -174,19 +252,48 @@ test("4089: a release delivers the newest successful main or hotfix certificatio
     ],
     runs: [
       run({ id: 11 }),
-      run({
-        id: 12,
-        event: "workflow_dispatch",
-        head_branch: "hotfix/4057-pgbackrest",
-      }),
+      run({ id: 12, event: "workflow_dispatch", head_sha: "e".repeat(40) }),
       run({ id: 13 }),
     ],
   });
   assert.equal(chosen.runId, 12);
   assert.equal(chosen.artifactId, 1200);
+  // The run of the target SHA itself counts.
+  assert.equal(
+    select({
+      artifacts: [artifact(14)],
+      runs: [run({ id: 14, head_sha: TARGET })],
+    }).runId,
+    14,
+  );
 });
 
-test("4089: a pull_request, foreign, failed, expired or off-branch certification is never delivered", () => {
+test("4089: a newer certification outside the release's history never wins over one inside it", () => {
+  const chosen = select({
+    artifacts: [artifact(11), artifact(19)],
+    runs: [run({ id: 11 }), run({ id: 19, head_sha: "b".repeat(40) })],
+  });
+  assert.equal(chosen.runId, 11);
+  assert.throws(
+    () =>
+      select({
+        artifacts: [artifact(19)],
+        runs: [run({ id: 19, head_sha: "b".repeat(40) })],
+      }),
+    /run 19: its commit bbbbbbbbbbbb is not in the history of the release ffffffffffff/,
+  );
+});
+
+test("4089: the selection refuses without the release target and its ancestry check", () => {
+  for (const over of [{ targetSha: undefined }, { isAncestor: undefined }]) {
+    assert.throws(
+      () => select({ artifacts: [artifact(10)], runs: [run()], ...over }),
+      /the release target SHA and its history are required/,
+    );
+  }
+});
+
+test("4089: a pull_request, foreign, failed, expired, hotfix or off-branch certification is never delivered", () => {
   const cases = [
     [run({ event: "pull_request" }), /a pull_request run/],
     [
@@ -199,7 +306,10 @@ test("4089: a pull_request, foreign, failed, expired or off-branch certification
       /its run is in_progress/,
     ],
     [run({ head_branch: "tooling/4089-x" }), /branch tooling\/4089-x/],
-    [run({ head_branch: "hotfix/nope" }), /branch hotfix\/nope/],
+    [
+      run({ head_branch: "hotfix/4057-pgbackrest" }),
+      /branch hotfix\/4057-pgbackrest/,
+    ],
     [
       run({ path: ".github/workflows/runtime-images.yml" }),
       /comes from \.github\/workflows\/runtime-images\.yml/,
@@ -207,34 +317,17 @@ test("4089: a pull_request, foreign, failed, expired or off-branch certification
   ];
   for (const [bad, why] of cases) {
     assert.throws(
-      () =>
-        selectPostgresArtifact({
-          sourceHash: HASH,
-          repo: REPO,
-          artifacts: [artifact(10)],
-          runs: [bad],
-        }),
+      () => select({ artifacts: [artifact(10)], runs: [bad] }),
       why,
     );
   }
   assert.throws(
     () =>
-      selectPostgresArtifact({
-        sourceHash: HASH,
-        repo: REPO,
-        artifacts: [artifact(10, { expired: true })],
-        runs: [run()],
-      }),
+      select({ artifacts: [artifact(10, { expired: true })], runs: [run()] }),
     /it expired/,
   );
   assert.throws(
-    () =>
-      selectPostgresArtifact({
-        sourceHash: HASH,
-        repo: REPO,
-        artifacts: [],
-        runs: [],
-      }),
+    () => select({ artifacts: [], runs: [] }),
     /no certified PostgreSQL artifact .*gh workflow run postgres-artifact\.yml/,
   );
 });
@@ -329,8 +422,11 @@ test("4089: postgres-load is a data verb the release may call but the capabiliti
   } = await import("./lib/data-prod.mjs");
   assert.deepEqual(POSTGRES_ARTIFACT_VERBS, ["postgres-load"]);
   assert.equal(
-    dataVerbCommand(`postgres-load ${"c".repeat(40)}`, "forced"),
-    `postgres-load ${"c".repeat(40)}`,
+    dataVerbCommand(
+      `postgres-load ${"c".repeat(40)} ${PG.slice(7)} ${BR.slice(7)}`,
+      "forced",
+    ),
+    `postgres-load ${"c".repeat(40)} ${PG.slice(7)} ${BR.slice(7)}`,
   );
   assert.equal(
     servesDataVerbs(JSON.stringify({ role: "data", verbs: DATA_VERBS })),
@@ -389,7 +485,10 @@ test("4089: a box-local release reads the delivered artifact of its own SHA, loa
       log: (l) => lines.push(l),
     });
     assert.deepEqual(calls, [
-      [["postgres-load", sha], { inputFile: join(own, "images.tar") }],
+      [
+        ["postgres-load", sha, PG.slice(7), BR.slice(7)],
+        { inputFile: join(own, "images.tar") },
+      ],
     ]);
     assert.match(
       lines.join("\n"),

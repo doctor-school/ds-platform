@@ -776,8 +776,8 @@ after `data-up` echoes the box's own answer for the record it wrote
 A changed data input ships through Actions like any release, with no break-glass
 key and no workstation-held artifact:
 
-1. **Certify.** Merging the change (a push to `main` or a `hotfix/<N>-<slug>` branch
-   touching the data compose, a postgres/pgbackrest build context or this tooling) runs
+1. **Certify.** Merging the change (a push to `main` touching the data compose, a
+   postgres/pgbackrest build context or this tooling) runs
    `.github/workflows/postgres-artifact.yml`; `gh workflow run postgres-artifact.yml
 --ref main` runs it again (the artifact expires after 90 days). The GitHub-hosted
    runner is the build host, as for every image (release-pipeline spec §3 item 1: no box
@@ -795,17 +795,26 @@ key and no workstation-held artifact:
 2. **Deliver.** `deploy-prod.yml`'s pre-flight compares the target's source hash with
    the live SHA's (`postgres-artifact-release.mjs`). Equal: nothing is delivered and the
    release runs as before. Different: it takes the newest successful push/dispatch run of
-   `postgres-artifact.yml` on `main` or a `hotfix/` branch whose artifact carries that
-   hash and is not expired — a pull_request run, another workflow, a failed run or no
-   run is a refusal before any box step, naming the dispatch to run. The deploy job hands
+   `postgres-artifact.yml` on `main` whose commit is the release target or an ancestor
+   of it (`git merge-base --is-ancestor` on the full checkout) and whose artifact carries
+   that hash and is not expired — a pull_request run, another branch (a hotfix included:
+   the Actions release has no hotfix ref), a run outside the target's history, another
+   workflow, a failed run or no qualifying run is a refusal before any box step, naming
+   the dispatch to run. The deploy job hands
    ds-api-prod `certificate.json`, then `images.tar`, through its forced command
    `postgres-artifact prod <sha> certificate|images` (refused while a release step runs;
    kept root:deploy 0750 under `/var/lib/ds-platform/postgres-artifact/<sha>/`, one SHA
    at a time).
 3. **Load and guard.** The release driver (`prod.mjs --local`) finds that delivery for
    its own SHA in `postgres-verify`, re-checks that the archive holds exactly the
-   certified ids, streams it to ds-data-prod's `postgres-load <sha>` verb (`docker load`,
-   no container started, the upload removed), and runs the guard with that certificate.
+   certified untagged ids, streams it to ds-data-prod's
+   `postgres-load <sha> <postgres-id> <pgbackrest-id>` verb (bare hex ids) and runs the
+   guard with that certificate. The
+   box reads the archive in place before loading it and refuses (exit 3) one whose
+   `manifest.json` lists other or more than those two images, or that names an image (a
+   RepoTag, a `repositories` entry, an index.json name: the images are saved by id, and a
+   name would retarget it on the box); after `docker load` it checks that both ids are
+   present. No container starts and the upload is removed.
    Everything after is the ordinary guarded release: `data-env` records the certified
    ids, `data-up` recreates postgres + pgbackrest on them, the checkpoint advances the
    record.

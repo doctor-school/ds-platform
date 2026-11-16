@@ -30,7 +30,11 @@ export const ARTIFACT_IMAGES = "images.tar";
 const HASH_RE = /^[a-f0-9]{64}$/;
 const SHA_RE = /^[a-f0-9]{40}$/;
 const IMAGE_ID_RE = /^sha256:[a-f0-9]{64}$/;
-const HOTFIX_REF_RE = /^hotfix\/[0-9]+-[a-z0-9-]+$/;
+// The names `docker load` would give an image of an OCI-layout archive.
+const IMAGE_NAME_ANNOTATIONS = [
+  "io.containerd.image.name",
+  "org.opencontainers.image.ref.name",
+];
 
 export const postgresArtifactName = (sourceHash) => {
   if (!HASH_RE.test(sourceHash ?? ""))
@@ -84,7 +88,11 @@ export function readTarMember(
 
 /**
  * The image ids a `docker load` of the archive yields: the config digest of each image of
- * its `manifest.json` (`blobs/sha256/<hex>` since Docker 25, `<hex>.json` before).
+ * its `manifest.json` (`blobs/sha256/<hex>` since Docker 25, `<hex>.json` before). An
+ * image with a RepoTag is refused: the certified images are saved by id, and a load that
+ * names an image — a RepoTag, a `repositories` entry or an index.json name — would
+ * retarget that name on ds-data-prod (the box's
+ * `postgres-load` refuses the same).
  */
 export function imageArchiveConfigIds(path, io) {
   const raw = readTarMember(path, "manifest.json", io);
@@ -100,7 +108,30 @@ export function imageArchiveConfigIds(path, io) {
   }
   if (!Array.isArray(manifest) || manifest.length === 0)
     throw new Error(`${path}: manifest.json lists no image`);
+  const json = (name) => {
+    const bytes = readTarMember(path, name, io);
+    try {
+      return bytes && JSON.parse(bytes.toString("utf8"));
+    } catch {
+      throw new Error(`${path}: ${name} is not JSON`);
+    }
+  };
+  const repositories = json("repositories");
+  if (repositories && Object.keys(repositories).length)
+    throw new Error(`${path}: its repositories file names an image`);
+  const index = json("index.json");
+  if (
+    (index?.manifests ?? []).some((entry) =>
+      IMAGE_NAME_ANNOTATIONS.some((key) => entry?.annotations?.[key]),
+    )
+  )
+    throw new Error(`${path}: its index.json names an image`);
   return manifest.map((entry) => {
+    const tags = entry?.RepoTags ?? [];
+    if (!Array.isArray(tags) || tags.length)
+      throw new Error(
+        `${path}: an image of manifest.json carries the tag ${[].concat(tags).join(", ")}`,
+      );
     const match = String(entry?.Config ?? "").match(
       /^(?:blobs\/sha256\/([a-f0-9]{64})|([a-f0-9]{64})\.json)$/,
     );
@@ -124,6 +155,10 @@ export function assertArchiveMatchesCertificate(archiveIds, certificate) {
     throw new Error(
       "the certificate names no immutable image id for postgres and pgbackrest",
     );
+  if (archiveIds.length !== certified.length)
+    throw new Error(
+      `the image archive holds ${archiveIds.length} images, the certificate ${certified.length}`,
+    );
   const archived = [...new Set(archiveIds)].sort();
   const wanted = [...new Set(certified)].sort();
   if (JSON.stringify(archived) !== JSON.stringify(wanted))
@@ -143,13 +178,28 @@ export function postgresInputChanged({ targetHash, liveHash }) {
 
 /**
  * The run whose `postgres-artifact-<sourceHash>` the release delivers — or a refusal.
- * Only a successful `push` / `workflow_dispatch` run of POSTGRES_ARTIFACT_WORKFLOW on
- * `main` or a `hotfix/<N>-<slug>` branch of this repository counts (a pull_request run
- * builds from a head nobody reviewed into production); an expired artifact never does.
- * The newest qualifying run wins.
+ * Provenance is bound to the release: only a successful `push` / `workflow_dispatch` run
+ * of POSTGRES_ARTIFACT_WORKFLOW on `main` of this repository whose commit is the release
+ * target `targetSha` or an ancestor of it (`isAncestor(sha, targetSha)`) counts — a
+ * pull_request or any other branch builds from a head nobody reviewed into production,
+ * and a run outside the target's history certified a tree the release does not ship. The
+ * Actions release has no hotfix ref (deploy-prod.yml: hotfixes stay break-glass), so no
+ * hotfix run qualifies. An expired artifact never does. Among the qualifying runs the
+ * newest wins; none qualifying is a refusal. The certificate's own sourceHash is checked
+ * against the target's by the guard (postgres-guard.mjs, `missing/stale artifact
+ * certification`).
  */
-export function selectPostgresArtifact({ sourceHash, artifacts, runs, repo }) {
+export function selectPostgresArtifact({
+  sourceHash,
+  targetSha,
+  artifacts,
+  runs,
+  repo,
+  isAncestor,
+}) {
   const name = postgresArtifactName(sourceHash);
+  if (!SHA_RE.test(targetSha ?? "") || typeof isAncestor !== "function")
+    throw new Error("the release target SHA and its history are required");
   const byId = new Map(
     (Array.isArray(runs) ? runs : []).map((run) => [run?.id, run]),
   );
@@ -168,14 +218,16 @@ export function selectPostgresArtifact({ sourceHash, artifacts, runs, repo }) {
             ? `it comes from a ${run.event} run`
             : run.head_repository?.full_name !== repo
               ? "it comes from another repository"
-              : run.head_branch !== "main" &&
-                  !HOTFIX_REF_RE.test(run.head_branch ?? "")
+              : run.head_branch !== "main"
                 ? `it comes from branch ${run.head_branch}`
                 : run.status !== "completed" || run.conclusion !== "success"
                   ? `its run is ${run.conclusion ?? run.status}`
                   : !SHA_RE.test(run.head_sha ?? "")
                     ? "its run names no commit"
-                    : null;
+                    : run.head_sha !== targetSha &&
+                        !isAncestor(run.head_sha, targetSha)
+                      ? `its commit ${run.head_sha.slice(0, 12)} is not in the history of the release ${targetSha.slice(0, 12)}`
+                      : null;
     if (why) rejected.push(`run ${artifact.workflow_run?.id}: ${why}`);
     else
       candidates.push({
@@ -259,11 +311,19 @@ async function main() {
   const runs = runIds.map((id) =>
     JSON.parse(gh(["api", `repos/${repo}/actions/runs/${id}`])),
   );
+  // The checkout is the full history of `main` (fetch-depth 0); a commit it lacks is no
+  // ancestor of the target.
+  const isAncestor = (ancestor, target) =>
+    spawnSync("git", ["cat-file", "-e", `${ancestor}^{commit}`]).status === 0 &&
+    spawnSync("git", ["merge-base", "--is-ancestor", ancestor, target])
+      .status === 0;
   const chosen = selectPostgresArtifact({
     sourceHash: targetHash,
+    targetSha: sha,
     artifacts,
     runs,
     repo,
+    isAncestor,
   });
   output(`run-id=${chosen.runId}`);
   output(`source-hash=${targetHash}`);

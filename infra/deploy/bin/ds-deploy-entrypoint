@@ -1184,19 +1184,78 @@ release_lock_verb() {
   fi
 }
 
-# postgres-load <sha> (#4089): the certified images a release delivered, `docker load`ed
-# before its guard inspects them by id. The archive is root-only beside the release
-# state (never /tmp) and removed after the load; loading starts no container.
+# The archive postgres-load may hand `docker load`, read in place with python3 `tarfile`
+# (nothing extracted): exactly one manifest.json listing exactly the two certified
+# config ids (argv 2-3, sha256:<hex>), every image untagged, and no `repositories` or
+# index.json name. The release saves the images by id (postgres-artifact-prepare.mjs),
+# so a tag or name can only be an archive that would retarget a name on this box — the
+# compose override runs the images by id, and no load needs to name one. Exit 0 ok ·
+# 3 refused (the reason on stdout).
+read -r -d '' PG_LOAD_PY <<'PY' || true
+import json, re, sys, tarfile
+archive, want = sys.argv[1], sys.argv[2:4]
+NAMES = ("io.containerd.image.name", "org.opencontainers.image.ref.name")
+
+def stop(reason):
+    print(reason)
+    sys.exit(3)
+
+members = {}
+try:
+    with tarfile.open(archive, mode="r:") as tar:
+        for m in tar:
+            name = m.name[2:] if m.name.startswith("./") else m.name
+            if name in ("manifest.json", "repositories", "index.json"):
+                if name in members:
+                    stop(f"the image archive holds more than one {name}")
+                if not m.isreg() or m.size > 1024 * 1024:
+                    stop(f"the image archive's {name} is not a small regular file")
+                members[name] = json.loads(tar.extractfile(m).read().decode("utf-8"))
+except (tarfile.TarError, OSError, ValueError, UnicodeDecodeError):
+    stop("not a docker image archive (an uncompressed tar with a JSON manifest.json)")
+manifest = members.get("manifest.json")
+if not isinstance(manifest, list) or not all(isinstance(e, dict) for e in manifest):
+    stop("not a docker image archive (no manifest.json image list)")
+if len(manifest) != 2:
+    stop(f"the image archive holds {len(manifest)} images, not the 2 certified")
+ids = []
+for e in manifest:
+    if e.get("RepoTags") not in (None, []):
+        stop("the image archive refused: an image carries a tag")
+    m = re.fullmatch(r"(?:blobs/sha256/([a-f0-9]{64})|([a-f0-9]{64})\.json)", str(e.get("Config", "")))
+    ids.append(f"sha256:{m.group(1) or m.group(2)}" if m else "")
+if sorted(ids) != sorted(want) or len(set(ids)) != 2:
+    stop(f"the image archive's images are not the certified {want[0][:19]}… / {want[1][:19]}…")
+if members.get("repositories") not in (None, {}):
+    stop("the image archive refused: its repositories file names an image")
+index = members.get("index.json")
+for entry in (index.get("manifests") or []) if isinstance(index, dict) else []:
+    if isinstance(entry, dict) and any(k in (entry.get("annotations") or {}) for k in NAMES):
+        stop("the image archive refused: its index.json names an image")
+PY
+
+# postgres-load <sha> <postgres-id-hex> <pgbackrest-id-hex> (#4089): the certified images
+# a release delivered, `docker load`ed before its guard inspects them by id. The ids come
+# as bare hex (the request grammar has no `:`). The archive is root-only beside the
+# release state (never /tmp), checked against the ids before the load (PG_LOAD_PY), and
+# removed after it; the loaded ids are checked; loading starts no container.
 postgres_load() {
-  local sha=$1 size rc=0
+  local sha=$1 pg=sha256:$2 br=sha256:$3 size rc=0 out id
   sudo mkdir -p -- "$ROOT/var/lib/ds-platform"
   load_work=$(sudo mktemp -p "$ROOT/var/lib/ds-platform" .postgres-load.XXXXXX) # global: the EXIT trap outlives this function
   trap 'sudo rm -f -- "${load_work:-}"' EXIT
   head -c "$((MAX_PG_ARTIFACT_BYTES + 1))" | sudo tee -- "$load_work" >/dev/null
   size=$(sudo stat -c %s -- "$load_work")
   ((size <= MAX_PG_ARTIFACT_BYTES)) || reject "the image archive exceeds $MAX_PG_ARTIFACT_BYTES bytes"
+  out=$(sudo python3 -I -X utf8 -c "$PG_LOAD_PY" "$load_work" "$pg" "$br") || rc=$?
+  ((rc == 0)) || refuse "${out:-the image archive of ${sha:0:12} could not be read}"
   sudo docker load -i "$load_work" </dev/null || rc=$?
   ((rc == 0)) || refuse "docker load of the certified images of ${sha:0:12} failed"
+  for id in "$pg" "$br"; do
+    [[ $(sudo docker image inspect --format '{{.Id}}' "$id" </dev/null 2>/dev/null) == "$id" ]] ||
+      refuse "docker load of ${sha:0:12} did not yield the certified image ${id:0:19}…"
+  done
+  printf '%s: certified images %s / %s of %s loaded\n' "$TAG" "${2:0:12}" "${3:0:12}" "${sha:0:12}"
 }
 
 data_verb() {
@@ -1214,7 +1273,9 @@ data_verb() {
     secret-recipient) ((n == 1)) || reject "usage: $verb" ;;
     secret-apply) ((n == 2)) || reject "usage: secret-apply <sha>"
       check_sha "${words[1]}" ;;
-    postgres-load) ((n == 2)) || reject "usage: postgres-load <sha>"
+    postgres-load)
+      [[ $n == 4 && ${words[2]} =~ ^[0-9a-f]{64}$ && ${words[3]} =~ ^[0-9a-f]{64}$ && ${words[2]} != "${words[3]}" ]] ||
+        reject "usage: postgres-load <sha> <postgres-id-hex> <pgbackrest-id-hex>"
       check_sha "${words[1]}" ;;
     ship | install | converge | rehearse | rehearse-restore | rehearsal-status)
       ((n == 2)) || reject "usage: $verb <sha>"
@@ -1279,7 +1340,7 @@ data_verb() {
     recovery-latest) recovery_latest </dev/null ;;
     secret-recipient) secret_recipient </dev/null ;;
     secret-apply) secret_apply "${words[1]}" ;;
-    postgres-load) postgres_load "${words[1]}" ;;
+    postgres-load) postgres_load "${words[1]}" "${words[2]}" "${words[3]}" ;;
   esac
 }
 

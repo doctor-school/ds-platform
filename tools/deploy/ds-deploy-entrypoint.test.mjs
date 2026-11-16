@@ -1620,34 +1620,98 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         "#!/usr/bin/env bash",
         'echo "docker $*" >> "$STUB_DIR/docker.log"',
         '[[ $1 == load && $2 == -i ]] && { cp -- "$3" "$STUB_DIR/loaded.tar"; echo "Loaded image ID: sha256:1111"; exit "${STUB_LOAD_RC:-0}"; }',
+        '[[ $1 == image && $2 == inspect ]] && { echo "${STUB_INSPECT_ID:-${@: -1}}"; exit 0; }',
         "exit 1",
       ].join("\n") + "\n",
     );
     chmodSync(join(stubs, "docker"), 0o755);
   };
+  // A `docker image save <id> <id>` archive: untagged images, config digests as ids.
+  const imageArchive = ({ ids = [PG_ID, BR_ID], tags = {}, extra = [] } = {}) =>
+    tarArchive([
+      { name: "blobs/", type: "5" },
+      { name: `blobs/sha256/${"9".repeat(64)}`, body: "layer" },
+      { name: "index.json", body: JSON.stringify({ schemaVersion: 2, manifests: [] }) },
+      {
+        name: "manifest.json",
+        body: JSON.stringify(ids.map((id) => ({ Config: `blobs/sha256/${id.slice(7)}`, RepoTags: tags[id] ?? null, Layers: [] }))),
+      },
+      ...extra,
+    ]);
+  const load = (input, env) => run(`postgres-load ${SHA} ${PG_ID.slice(7)} ${BR_ID.slice(7)}`, { input, env });
 
-  it("4089: postgres-load docker-loads the delivered archive on the data box and keeps no copy", () => {
+  it("4089: postgres-load docker-loads exactly the certified untagged images, checks their ids and keeps no copy", () => {
     loadBox();
-    const r = run(`postgres-load ${SHA}`, { input: Buffer.from("image archive bytes") });
+    const archive = imageArchive();
+    const r = load(archive);
     assert.equal(r.status, 0, String(r.stderr));
-    assert.equal(readFileSync(join(dir, "loaded.tar"), "utf8"), "image archive bytes");
-    assert.match(String(r.stdout), /Loaded image ID: sha256:1111/);
-    assert.match(log("docker"), /^docker load -i \S+\n$/);
+    assert.deepEqual(readFileSync(join(dir, "loaded.tar")), archive);
+    assert.match(String(r.stdout), /certified images 111111111111 \/ 222222222222 of 0123456789ab loaded/);
+    assert.match(log("docker"), /^docker load -i \S+\ndocker image inspect --format \{\{\.Id\}\} sha256:1{64}\ndocker image inspect --format \{\{\.Id\}\} sha256:2{64}\n$/);
     const work = join(root, "var/lib/ds-platform");
     assert.deepEqual(existsSync(work) ? readdirSync(work).filter((n) => n.includes("postgres-load")) : [], [], "the upload is removed");
   });
 
+  it("4089: postgres-load refuses an archive with an extra image, a wrong id, a tag or a name before loading it", () => {
+    loadBox();
+    const OTHER = `sha256:${"3".repeat(64)}`;
+    const cases = [
+      [imageArchive({ ids: [PG_ID, BR_ID, OTHER] }), /holds 3 images, not the 2 certified/],
+      [imageArchive({ ids: [PG_ID, OTHER] }), /are not the certified sha256:1{12}… \/ sha256:2{12}…/],
+      [imageArchive({ ids: [PG_ID, PG_ID] }), /are not the certified/],
+      [imageArchive({ tags: { [BR_ID]: ["postgres:17"] } }), /an image carries a tag/],
+      [imageArchive({ extra: [{ name: "repositories", body: JSON.stringify({ postgres: { 17: BR_ID.slice(7) } }) }] }), /names an image/],
+      [
+        imageArchive({ extra: [{ name: "manifest.json", body: "[]" }] }),
+        /more than one manifest\.json/,
+      ],
+      [Buffer.from("not a tar archive at all"), /not a docker image archive/],
+    ];
+    for (const [input, why] of cases) {
+      const r = load(input);
+      assert.equal(r.status, 3, String(why));
+      assert.match(String(r.stderr), why);
+      assert.equal(String(r.stderr).trim().split("\n").length, 1, "a status line only");
+    }
+    assert.equal(log("docker"), "", "nothing loaded");
+    const named = tarArchive([
+      { name: "index.json", body: JSON.stringify({ manifests: [{ annotations: { "io.containerd.image.name": "docker.io/library/postgres:17" } }] }) },
+      { name: "manifest.json", body: JSON.stringify([PG_ID, BR_ID].map((id) => ({ Config: `blobs/sha256/${id.slice(7)}`, RepoTags: null }))) },
+    ]);
+    const r = load(named);
+    assert.equal(r.status, 3);
+    assert.match(String(r.stderr), /names an image/);
+    assert.equal(log("docker"), "", "nothing loaded");
+  });
+
+  it("4089: postgres-load refuses when the loaded ids are not the certified ones", () => {
+    loadBox();
+    const r = load(imageArchive(), { STUB_INSPECT_ID: `sha256:${"4".repeat(64)}` });
+    assert.equal(r.status, 3);
+    assert.match(String(r.stderr), /docker load of 0123456789ab did not yield the certified image sha256:1{12}/);
+  });
+
   it("4089: postgres-load refuses an oversized stream, a failed load, another box and bad words", () => {
     loadBox();
-    const big = run(`postgres-load ${SHA}`, { input: Buffer.alloc(64, 1), env: { DS_ENTRYPOINT_MAX_PG_ARTIFACT_BYTES: "32" } });
+    const big = load(Buffer.alloc(64, 1), { DS_ENTRYPOINT_MAX_PG_ARTIFACT_BYTES: "32" });
     assert.equal(big.status, 2);
     assert.equal(log("docker"), "", "nothing loaded");
-    assert.equal(run(`postgres-load ${SHA}`, { input: Buffer.from("x"), env: { STUB_LOAD_RC: "1" } }).status, 3);
-    for (const command of ["postgres-load", `postgres-load ${SHA} x`, "postgres-load abc"]) {
+    assert.equal(load(imageArchive(), { STUB_LOAD_RC: "1" }).status, 3);
+    const pg = PG_ID.slice(7);
+    const br = BR_ID.slice(7);
+    for (const command of [
+      "postgres-load",
+      `postgres-load ${SHA}`,
+      `postgres-load ${SHA} ${pg}`,
+      `postgres-load ${SHA} ${pg} ${br} x`,
+      `postgres-load abc ${pg} ${br}`,
+      `postgres-load ${SHA} ${pg.slice(1)} ${br}`,
+      `postgres-load ${SHA} ${pg} ${pg}`,
+    ]) {
       assert.equal(run(command, { input: "" }).status, 2, command);
     }
     setRole("prod");
-    const r = run(`postgres-load ${SHA}`, { input: Buffer.from("x") });
+    const r = load(imageArchive());
     assert.equal(r.status, 3);
     assert.match(r.stderr, /is served by the data box only/);
   });

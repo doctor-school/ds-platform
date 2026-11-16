@@ -186,7 +186,7 @@ jobs:
         run: node tools/deploy/release-runner.mjs preflight --sha "$SHA"
 
       # #4089: a release whose data source hash differs from the live SHA's delivers the
-      # certified artifact of that hash (postgres-artifact.yml, a main/hotfix run); none
+      # certified artifact of that hash (postgres-artifact.yml, a main run in the target's history); none
       # found is a refusal here, before any box step. The guard on ds-data-prod decides.
       - name: Certified PostgreSQL artifact of a changed data input
         id: postgres-artifact

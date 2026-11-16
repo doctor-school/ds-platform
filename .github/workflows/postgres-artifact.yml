@@ -10,8 +10,8 @@ name: PostgreSQL artifact
 # `postgres-artifact-<sourceHash>` is the release evidence: certificate.json, the audit
 # log of every command, the preparation log and images.tar. `deploy-prod.yml` delivers
 # it when a release changes the data input (tools/deploy/postgres-artifact-release.mjs),
-# and only from a successful push / dispatch run on `main` or a `hotfix/<N>-<slug>`
-# branch; the guard on ds-data-prod still decides.
+# and only from a successful push / dispatch run on `main` whose commit is the release
+# target or its ancestor; the guard on ds-data-prod still decides.
 #
 # No secret and no Environment: the inputs are committed files and public base images,
 # the outputs public packages. The repository is public, so the artifact is too; it
@@ -24,7 +24,7 @@ run-name: PostgreSQL artifact ${{ github.sha }}
 
 on:
   push:
-    branches: [main, "hotfix/**"]
+    branches: [main]
     paths:
       - "infra/deploy/compose/data-prod/compose.yml"
       - "infra/deploy/compose/data-prod/postgres/**"

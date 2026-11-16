@@ -279,21 +279,21 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the card "PRP при гонартрозе — фрагмент эфира" shows a play mark and «1:12»
     And no video plays on the Academy home
 
-  @EARS-27 @proof:api
+  @EARS-27 @rule @proof:api
   Scenario: An album is one card
     Given the switched-on Telegram source "t.me/bbmacademy"
     When Telegram delivers with the right secret three photo parts 1203, 1204 and 1205 of one album of "bbmacademy", the part 1204 captioned "Кадры со съёмок подкаста"
     Then the feed has exactly one card reading "Кадры со съёмок подкаста"
     And that card is a link to "https://t.me/bbmacademy/1203"
 
-  @EARS-24 @proof:api
+  @EARS-24 @rule @proof:api
   Scenario: A webhook call with a wrong secret token is refused
     Given the switched-on Telegram source "t.me/bbmacademy"
     When a request carrying the header X-Telegram-Bot-Api-Secret-Token "wrong" posts a channel post of "bbmacademy" to the Telegram webhook
     Then the webhook answers 401
     And the feed has no new card
 
-  @EARS-25 @proof:api
+  @EARS-25 @rule @proof:api
   Scenario: A post from a channel that is not in the source list is dropped
     Given the switched-on Telegram source "t.me/bbmacademy"
     When Telegram delivers with the right secret a text post 77 of the channel "somebodyelse"
@@ -301,13 +301,13 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     And the feed has no new card
     And the log records the update as dropped for an unlisted channel without its text
 
-  @EARS-26 @proof:api
+  @EARS-26 @rule @proof:api
   Scenario: A forwarded post and a poll are not cards
     Given the switched-on Telegram source "t.me/bbmacademy"
     When Telegram delivers with the right secret a forwarded post 1206 and a poll 1207 of "bbmacademy"
     Then the feed has no new card
 
-  @EARS-28 @proof:api
+  @EARS-28 @rule @proof:api
   Scenario: An edited post updates its card in place
     Given the switched-on Telegram source "t.me/bbmacademy" has the card of post 1201 dated 12 November
     When Telegram delivers with the right secret an edit of post 1201 captioned "Эфир переносится на 20:00 МСК"
@@ -373,7 +373,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the import exits with an error stating that the source has no bound Telegram channel id
     And the feed has no card of posts 900 and 901
 
-  @EARS-21 @EARS-31 @proof:api
+  @EARS-21 @EARS-31 @rule @proof:api
   Scenario: Adding a source binds its channel id through the source check
     Given a platform administrator is signed in to the admin with a second factor
     And the Telegram connector is configured and the bot is a member of the channel "bbmacademy"
@@ -391,7 +391,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When a visitor opens the Academy home
     Then the rail shows the card of post 1201 and the other cards with no error state
 
-  @EARS-31 @proof:api
+  @EARS-31 @rule @proof:api
   Scenario: A renamed channel shows as failing until its address is edited
     Given the Telegram source "t.me/bbmacademy" bound to its Telegram channel id
     And the channel is renamed to "bbm_academy"
@@ -404,7 +404,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the admin navigation has no «Источники»
     And a request to add a feed source is refused
 
-  @EARS-36 @proof:api
+  @EARS-36 @rule @proof:api
   Scenario: No secret or post author is stored or logged
     Given the switched-on Telegram source "t.me/bbmacademy"
     When Telegram delivers with the right secret a text post 1212 of "bbmacademy" signed by its author

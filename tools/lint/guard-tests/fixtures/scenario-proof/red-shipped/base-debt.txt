@@ -1,0 +1,2 @@
+# fixture debt list at the merge base
+001 | baseline journey debt

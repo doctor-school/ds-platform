@@ -1,0 +1,5 @@
+# fixture debt list
+001 | flipped journey debt
+001 | flipped rule debt
+002 | legacy shipped journey debt
+003 | born shipped journey debt | #9100

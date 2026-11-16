@@ -8,6 +8,7 @@
 const TAG_LINE_RE = /^\s*@\S+(\s+@\S+)*\s*$/;
 const SCENARIO_RE = /^\s*(Scenario|Scenario Outline|Example)\b/;
 const FEATURE_RE = /^\s*Feature\b/;
+const RULE_RE = /^\s*Rule\b/;
 const EXAMPLES_RE = /^\s*(Examples|Scenarios)\s*:/;
 
 export interface ExamplesTags {
@@ -19,6 +20,12 @@ export interface ExamplesTags {
 export interface ScenarioTags {
   line: number;
   tags: string[];
+  /**
+   * The tags of the `Rule:` the scenario sits in, kept apart from `tags` so
+   * the coverage guard's reading of `tags` is unchanged; a tag filter sees
+   * both (Gherkin inherits them).
+   */
+  ruleTags: string[];
   /** A Scenario Outline's `Examples:` blocks, in file order (empty otherwise). */
   examples: ExamplesTags[];
 }
@@ -35,6 +42,7 @@ export function parseScenarios(text: string): ScenarioTags[] {
   const scenarios: ScenarioTags[] = [];
   let pending: string[] = [];
   let featureTags: string[] = [];
+  let ruleTags: string[] = [];
   let seenFeature = false;
   lines.forEach((raw, idx) => {
     if (/^\s*#/.test(raw)) return;
@@ -48,10 +56,16 @@ export function parseScenarios(text: string): ScenarioTags[] {
       pending = [];
       return;
     }
+    if (RULE_RE.test(raw)) {
+      ruleTags = pending;
+      pending = [];
+      return;
+    }
     if (SCENARIO_RE.test(raw)) {
       scenarios.push({
         line: idx + 1,
         tags: [...featureTags, ...pending],
+        ruleTags,
         examples: [],
       });
       pending = [];

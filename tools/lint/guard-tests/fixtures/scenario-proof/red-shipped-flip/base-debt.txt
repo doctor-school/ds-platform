@@ -1,0 +1,4 @@
+# fixture debt list at the merge base
+001 | flipped journey debt
+001 | flipped rule debt
+002 | legacy shipped journey debt

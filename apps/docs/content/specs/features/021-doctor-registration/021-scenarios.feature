@@ -17,14 +17,14 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     Given feature 017's storefront shell is in place
     And feature 020's event page is in place
     And feature 003's authentication engine is running
-    And an эфир «Артроскопия коленного сустава» exists with a public event page
+    And an эфир «Предстоящий эфир (эталон)» exists with a public event page
 
   # Amendment 2026-10-21 (#3006): /register on doctor.school is an entry that redirects with
   # prompt=create; the form and its /verify step render on the sign-in host with
   # DOCTOR_AUTH_FLOW, and the return is the callback's 303 to the stored return path.
   @EARS-1 @EARS-2 @EARS-4 @EARS-5 @EARS-7 @EARS-10 @happy @journey
   Scenario: A doctor registers from a gate and returns to the эфир
-    Given a guest doctor pressed «Участвовать» on «Артроскопия коленного сустава»
+    Given a guest doctor pressed «Участвовать» on «Предстоящий эфир (эталон)»
     When the registration screen opens
     Then it renders the auth canvas split composition with no storefront header, navigation or footer
     And exactly one wordmark renders for the viewport — pinned to the top of the brand panel on the wide layout, above the card on the narrow one where the panel does not render
@@ -50,7 +50,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     When the doctor confirms the email with the code from the letter
     # Amended 2026-09-17 (see 021-requirements-en.md → Amendment — 2026-09-17): a confirmation that
     # yields a session navigates straight to the honoured destination; there is no success state
-    Then the doctor lands on the page of «Артроскопия коленного сустава» with no screen in between
+    Then the doctor lands on the page of «Предстоящий эфир (эталон)» with no screen in between
     And no success card, no «в личный кабинет» action and no points line is rendered after confirmation
     And the confirmation screen is gone from the document
 
@@ -60,7 +60,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
   @EARS-9 @happy @rule
   Scenario: Wave 2 — the form promises the registration points before submission
     Given the wave-2 points surface of #1545 is in place
-    And a guest doctor pressed «Участвовать» on «Артроскопия коленного сустава»
+    And a guest doctor pressed «Участвовать» on «Предстоящий эфир (эталон)»
     When the registration screen opens
     Then the form promises «+20 Pul за регистрацию»
     And that promised value is read from the one points configuration source
@@ -206,7 +206,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
   @EARS-20 @EARS-10 @happy @journey
   Scenario: A fresh registrant from a doctor-storefront gate ends signed in on both storefronts
     Given a guest on the doctor storefront in a browser with no session on either storefront
-    When the guest follows the gate of the эфир «Артроскопия коленного сустава» to registration
+    When the guest follows the gate of the эфир «Предстоящий эфир (эталон)» to registration
     Then the doctor storefront renders no form and the browser reaches the sign-in host's registration form with the promo field and the two-tier consents
     When the guest registers there and enters the code sent to their address
     Then the browser lands on the эфир page on the doctor storefront, signed in, with no interstitial
@@ -222,9 +222,9 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
 
   @EARS-2 @EARS-3 @happy @rule
   Scenario: A doctor arriving from an эфир sees its card on the sign-in host's registration form
-    Given a guest on the doctor storefront pressed «Участвовать» on «Артроскопия коленного сустава»
+    Given a guest on the doctor storefront pressed «Участвовать» on «Предстоящий эфир (эталон)»
     When the gate sends the guest to the doctor storefront's registration entry
     Then the authorize request carries only an opaque entry-intent id and no event data
-    And the sign-in host's registration form shows the card of «Артроскопия коленного сустава» with no back-navigation control
+    And the sign-in host's registration form shows the card of «Предстоящий эфир (эталон)» with no back-navigation control
     When the same entry-intent id is presented again
     Then the registration form renders without the card and with no error

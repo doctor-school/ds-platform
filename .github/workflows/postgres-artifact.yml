@@ -1,0 +1,124 @@
+name: PostgreSQL artifact
+
+# Certifies the data-prod images of one data source hash (#4089; tools/deploy/README.md
+# → PostgreSQL deployment guard; spec
+# apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md §5
+# «Certified PostgreSQL artifacts.»). The GitHub-hosted runner is the build host (spec §3
+# item 1: no box builds an image): postgres-artifact-prepare.mjs --local builds the two
+# committed contexts, runs their real postgres / id / pgbackrest commands with no
+# network, no cluster and no mount, and exports the exact images. The run artifact
+# `postgres-artifact-<sourceHash>` is the release evidence: certificate.json, the audit
+# log of every command, the preparation log and images.tar. `deploy-prod.yml` delivers
+# it when a release changes the data input (tools/deploy/postgres-artifact-release.mjs),
+# and only from a successful push / dispatch run on `main` or a `hotfix/<N>-<slug>`
+# branch; the guard on ds-data-prod still decides.
+#
+# No secret and no Environment: the inputs are committed files and public base images,
+# the outputs public packages. The repository is public, so the artifact is too; it
+# holds no credential, host name or personal datum (commands, image ids, versions).
+#
+# Re-certify (the artifact expires after 90 days, or a release needs a fresh one):
+#   gh workflow run postgres-artifact.yml --ref main
+
+run-name: PostgreSQL artifact ${{ github.sha }}
+
+on:
+  push:
+    branches: [main, "hotfix/**"]
+    paths:
+      - "infra/deploy/compose/data-prod/compose.yml"
+      - "infra/deploy/compose/data-prod/postgres/**"
+      - "infra/deploy/compose/data-prod/pgbackrest/**"
+      - "tools/deploy/postgres-guard.mjs"
+      - "tools/deploy/postgres-artifact-prepare.mjs"
+      - "tools/deploy/postgres-artifact-release.mjs"
+      - ".github/workflows/postgres-artifact.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/deploy/compose/data-prod/compose.yml"
+      - "infra/deploy/compose/data-prod/postgres/**"
+      - "infra/deploy/compose/data-prod/pgbackrest/**"
+      - "tools/deploy/postgres-guard.mjs"
+      - "tools/deploy/postgres-artifact-prepare.mjs"
+      - "tools/deploy/postgres-artifact-release.mjs"
+      - ".github/workflows/postgres-artifact.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: postgres-artifact-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Data source hash of this commit
+        id: hash
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          hash=$(node --input-type=module -e '
+            import { readPostgresTarget } from "./tools/deploy/postgres-guard.mjs";
+            console.log(readPostgresTarget(process.env.SHA).sourceHash);')
+          [[ $hash =~ ^[a-f0-9]{64}$ ]] || { echo "::error::no data source hash for $SHA"; exit 1; }
+          echo "source-hash=$hash" >> "$GITHUB_OUTPUT"
+          echo "data source hash $hash at $SHA"
+
+      # The image store decides which id `docker load` yields on ds-data-prod; the
+      # preparation refuses an archive whose config digests are not the certified ids.
+      - name: Build host facts
+        run: docker version --format 'docker {{.Server.Version}}' && docker info --format 'storage {{.Driver}} {{.DriverStatus}}'
+
+      - name: Prepare and certify
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          mkdir -p out
+          node tools/deploy/postgres-artifact-prepare.mjs --local --ref "$SHA" \
+            --output out/certificate.json --audit-log out/audit.jsonl --export out/images.tar \
+            2>&1 | tee out/prepare.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Check the certificate against the commit
+        env:
+          SHA: ${{ github.sha }}
+          HASH: ${{ steps.hash.outputs.source-hash }}
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { assertArchiveMatchesCertificate, imageArchiveConfigIds } from "./tools/deploy/postgres-artifact-release.mjs";
+            const c = JSON.parse(readFileSync("out/certificate.json", "utf8"));
+            if (c.schema !== 1 || c.sourceHash !== process.env.HASH) throw new Error("certificate is not of this source hash");
+            assertArchiveMatchesCertificate(imageArchiveConfigIds("out/images.tar"), c);
+            for (const [role, image] of Object.entries(c.images))
+              console.log(`${role}: ${image.id} ${image.version} ${image.pgbackrestVersion} uid ${image.uid}:${image.gid}`);'
+          sha256sum out/certificate.json out/images.tar
+
+      - name: Keep the certificate, the audit log and the images
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: postgres-artifact-${{ steps.hash.outputs.source-hash }}
+          path: |
+            out/certificate.json
+            out/audit.jsonl
+            out/prepare.log
+            out/images.tar
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 90 }}
+          if-no-files-found: error
+          compression-level: 6
+
+      - name: Remove the preparation images
+        if: always()
+        run: docker image ls -q --filter label=org.doctor-school.task=2141 | sort -u | xargs -r docker image rm -f

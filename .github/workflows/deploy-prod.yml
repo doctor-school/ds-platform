@@ -134,6 +134,9 @@ jobs:
       statuses: read
     outputs:
       images-run-id: ${{ steps.preflight.outputs.images-run-id || steps.rollback-preflight.outputs.images-run-id || steps.redeploy-preflight.outputs.images-run-id }}
+      # #4089: set only for a release that changes the data input (postgres-artifact.yml).
+      postgres-artifact-run-id: ${{ steps.postgres-artifact.outputs.run-id }}
+      postgres-source-hash: ${{ steps.postgres-artifact.outputs.source-hash }}
     steps:
       - name: Refuse an empty owner quote or rollback reason
         env:
@@ -181,6 +184,16 @@ jobs:
           GH_REPO: ${{ github.repository }}
           REGISTRY_PULL_TOKEN: ${{ secrets.REGISTRY_PULL_TOKEN }}
         run: node tools/deploy/release-runner.mjs preflight --sha "$SHA"
+
+      # #4089: a release whose data source hash differs from the live SHA's delivers the
+      # certified artifact of that hash (postgres-artifact.yml, a main/hotfix run); none
+      # found is a refusal here, before any box step. The guard on ds-data-prod decides.
+      - name: Certified PostgreSQL artifact of a changed data input
+        id: postgres-artifact
+        if: inputs.mode == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/deploy/postgres-artifact-release.mjs --sha "$SHA"
 
       - name: Rollback pre-flight
         id: rollback-preflight
@@ -240,6 +253,15 @@ jobs:
           github-token: ${{ github.token }}
           path: manifest
 
+      - name: Download the certified PostgreSQL artifact
+        if: needs.preflight.outputs.postgres-artifact-run-id != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: postgres-artifact-${{ needs.preflight.outputs.postgres-source-hash }}
+          run-id: ${{ needs.preflight.outputs.postgres-artifact-run-id }}
+          github-token: ${{ github.token }}
+          path: postgres-artifact
+
       - name: Write the ssh key
         env:
           PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
@@ -251,6 +273,23 @@ jobs:
           printf '%s\n' "$PROD_SSH_KEY" > "$dir/key"
           printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > "$dir/known_hosts"
           chmod 600 "$dir/key" "$dir/known_hosts"
+
+      # #4089: ds-api-prod keeps it for this SHA's driver, which docker-loads the images
+      # on ds-data-prod (postgres-load) before the guard. The certificate first: it
+      # starts this SHA's delivery afresh.
+      - name: Deliver the certified PostgreSQL artifact to ds-api-prod
+        if: inputs.mode == 'release' && needs.preflight.outputs.postgres-artifact-run-id != ''
+        run: |
+          sha256sum postgres-artifact/certificate.json postgres-artifact/images.tar
+          for part in certificate images; do
+            file=postgres-artifact/certificate.json
+            [ "$part" = images ] && file=postgres-artifact/images.tar
+            ssh -i "$RUNNER_TEMP/prod-ssh/key" \
+              -o UserKnownHostsFile="$RUNNER_TEMP/prod-ssh/known_hosts" \
+              -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+              -o ServerAliveInterval=15 -o ServerAliveCountMax=8 \
+              "$PROD_SSH_USER@$PROD_SSH_HOST" "postgres-artifact prod $SHA $part" < "$file"
+          done
 
       - name: Start the release driver
         id: release

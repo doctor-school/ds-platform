@@ -35,6 +35,11 @@
 #                          -> the data-box secret rotation (prod box only; #4068):
 #                             relayed over the hop to the data verbs secret-recipient,
 #                             secret-apply, status and finish (see DATA_SECRET below)
+#   postgres-artifact prod <sha> certificate|images
+#                          -> the certified PostgreSQL artifact of a release whose data
+#                             input changed, on stdin, kept for its release driver
+#                             under /var/lib/ds-platform/postgres-artifact/<sha>/
+#                             (prod box only; #4089, see PG_ARTIFACT_DIR below)
 #
 #   the data-prod verbs     -> served on the data box only (Issue #3313; spec §5
 #                             «Data-prod verbs.»), the forced command of the hop key
@@ -545,13 +550,75 @@ data_secret_relay() {
   esac
 }
 
+# --- the certified PostgreSQL artifact (#4089; spec §5 «Certified PostgreSQL artifacts.») ---
+# deploy-prod.yml hands ds-api-prod the postgres-artifact.yml evidence of a release whose
+# data input changed; its release driver (prod.mjs --local, as deploy) reads it from here
+# and streams images.tar to ds-data-prod's postgres-load before the guard. One SHA's
+# delivery at a time: the certificate upload removes every other. The images are public
+# packages, so the cap guards the disk, not a secret.
+PG_ARTIFACT_DIR=$ROOT/var/lib/ds-platform/postgres-artifact
+MAX_PG_ARTIFACT_BYTES=$(override DS_ENTRYPOINT_MAX_PG_ARTIFACT_BYTES $((1024 * 1024 * 1024))) # 1 GiB image archive
+
+# The certificate's shape only (postgres-artifact-prepare.mjs writes it); the guard
+# compares its facts with the inspected images.
+read -r -d '' PG_CERT_PY <<'PY' || true
+import json, re, sys
+try:
+    c = json.loads(open(sys.argv[1], encoding="utf-8").read())
+    ok = (isinstance(c, dict) and c.get("schema") == 1
+          and re.fullmatch(r"[a-f0-9]{64}", str(c.get("sourceHash", "")))
+          and isinstance(c.get("images"), dict)
+          and all(isinstance(c["images"].get(r), dict)
+                  and re.fullmatch(r"sha256:[a-f0-9]{64}", str(c["images"][r].get("id", "")))
+                  for r in ("postgres", "pgbackrest")))
+except Exception:
+    ok = False
+if not ok:
+    print("not a PostgreSQL artifact certificate (schema 1, sourceHash, postgres + pgbackrest ids)")
+    sys.exit(2)
+PY
+
+postgres_artifact() {
+  local sha=${words[2]-} part=${words[3]-} role cap upload size rc out dest
+  [[ ${#words[@]} == 4 && ${words[1]} == prod && $part =~ ^(certificate|images)$ ]] ||
+    reject "usage: postgres-artifact prod <sha> certificate|images"
+  check_sha "$sha"
+  accepted
+  role=$(sudo cat "$BOX_ROLE_FILE" 2>/dev/null || true)
+  [[ $role == prod ]] || refuse "postgres-artifact is served by the prod box only"
+  # Never beside a release step: the driver reads this directory.
+  sudo "$DS_RELEASE" check prod </dev/null >/dev/null
+  sudo mkdir -p -- "$(dirname "$PG_ARTIFACT_DIR")"
+  sudo install -d -m 0750 -o root -g deploy "$PG_ARTIFACT_DIR" "$PG_ARTIFACT_DIR/$sha"
+  cap=$MAX_PG_ARTIFACT_BYTES
+  [[ $part == certificate ]] && cap=$MAX_DATA_PAYLOAD_BYTES
+  upload=$(sudo mktemp -p "$PG_ARTIFACT_DIR" .upload.XXXXXX) # global: the EXIT trap outlives this function
+  trap 'sudo rm -f -- "${upload:-}"' EXIT
+  head -c "$((cap + 1))" | sudo tee -- "$upload" >/dev/null
+  size=$(sudo stat -c %s -- "$upload")
+  ((size <= cap)) || reject "the $part stream exceeds $cap bytes"
+  if [[ $part == certificate ]]; then
+    rc=0
+    out=$(sudo python3 -I -X utf8 -c "$PG_CERT_PY" "$upload") || rc=$?
+    ((rc == 0)) || reject "${out:-not a PostgreSQL artifact certificate}"
+    # A new certificate starts this SHA's delivery afresh and ends every other one.
+    sudo find "$PG_ARTIFACT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name "$sha" -exec rm -rf -- {} +
+    sudo rm -f -- "$PG_ARTIFACT_DIR/$sha/images.tar"
+    dest=$PG_ARTIFACT_DIR/$sha/certificate.json
+  else
+    dest=$PG_ARTIFACT_DIR/$sha/images.tar
+  fi
+  sudo install -m 0640 -o root -g deploy -- "$upload" "$dest"
+  printf '%s: postgres-artifact %s of %s stored\n' "$TAG" "$part" "${sha:0:12}"
+}
+
 # --- data-prod verbs (Issue #3313; spec §5 «Data-prod verbs.») ---------------------
 # The hop key from ds-api-prod reaches these on the box whose role is `data` only.
 # Every script is fixed here or in an installed root-owned file; a payload is one
 # JSON object checked field by field by DATA_PY below, or the tree archive.
 # infra/deploy/bin/harden-ssh.sh --role data refuses an installed entrypoint without
 # this line; tools/deploy/lib/data-prod.mjs and the tests pin the list.
-DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema read-observe rehearse rehearse-restore rehearsal-status recovery-bundle recovery-check recovery-put recovery-latest secret-recipient secret-apply'
+DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge read-schema read-observe rehearse rehearse-restore rehearsal-status recovery-bundle recovery-check recovery-put recovery-latest secret-recipient secret-apply postgres-load'
 DATA_LIVE_TREE=$ROOT/home/deploy/ds-platform
 DATA_COMPOSE=$DATA_LIVE_TREE/infra/deploy/compose/data-prod
 # What data-env writes there (DATA_PY GENERATED_COMPOSE); a ship carries them (#3822).
@@ -1117,6 +1184,21 @@ release_lock_verb() {
   fi
 }
 
+# postgres-load <sha> (#4089): the certified images a release delivered, `docker load`ed
+# before its guard inspects them by id. The archive is root-only beside the release
+# state (never /tmp) and removed after the load; loading starts no container.
+postgres_load() {
+  local sha=$1 size rc=0
+  sudo mkdir -p -- "$ROOT/var/lib/ds-platform"
+  load_work=$(sudo mktemp -p "$ROOT/var/lib/ds-platform" .postgres-load.XXXXXX) # global: the EXIT trap outlives this function
+  trap 'sudo rm -f -- "${load_work:-}"' EXIT
+  head -c "$((MAX_PG_ARTIFACT_BYTES + 1))" | sudo tee -- "$load_work" >/dev/null
+  size=$(sudo stat -c %s -- "$load_work")
+  ((size <= MAX_PG_ARTIFACT_BYTES)) || reject "the image archive exceeds $MAX_PG_ARTIFACT_BYTES bytes"
+  sudo docker load -i "$load_work" </dev/null || rc=$?
+  ((rc == 0)) || refuse "docker load of the certified images of ${sha:0:12} failed"
+}
+
 data_verb() {
   local n=${#words[@]}
   case "$verb" in
@@ -1131,6 +1213,8 @@ data_verb() {
       [[ $n == 2 && ${words[1]} =~ ^[a-z][a-z0-9-]{0,39}$ ]] || reject "usage: read-observe <name>" ;;
     secret-recipient) ((n == 1)) || reject "usage: $verb" ;;
     secret-apply) ((n == 2)) || reject "usage: secret-apply <sha>"
+      check_sha "${words[1]}" ;;
+    postgres-load) ((n == 2)) || reject "usage: postgres-load <sha>"
       check_sha "${words[1]}" ;;
     ship | install | converge | rehearse | rehearse-restore | rehearsal-status)
       ((n == 2)) || reject "usage: $verb <sha>"
@@ -1195,6 +1279,7 @@ data_verb() {
     recovery-latest) recovery_latest </dev/null ;;
     secret-recipient) secret_recipient </dev/null ;;
     secret-apply) secret_apply "${words[1]}" ;;
+    postgres-load) postgres_load "${words[1]}" ;;
   esac
 }
 
@@ -1710,6 +1795,9 @@ case "$verb" in
   data-secret-recipient | data-secret-apply | data-secret-status | data-secret-finish)
     data_secret_relay
     ;;
+  postgres-artifact)
+    postgres_artifact
+    ;;
   upload-report)
     [[ ${#words[@]} -eq 2 ]] || reject "usage: upload-report <sha>"
     check_sha "${words[1]}"
@@ -1727,10 +1815,10 @@ case "$verb" in
     observe "${words[1]}"
     ;;
   capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \
-    backup-info | rollback-floor | finish | check | supersede | converge | read-schema | read-observe | rehearse | rehearse-restore | rehearsal-status | recovery-bundle | recovery-check | recovery-put | recovery-latest | secret-recipient | secret-apply)
+    backup-info | rollback-floor | finish | check | supersede | converge | read-schema | read-observe | rehearse | rehearse-restore | rehearsal-status | recovery-bundle | recovery-check | recovery-put | recovery-latest | secret-recipient | secret-apply | postgres-load)
     data_verb
     ;;
   *)
-    reject "unknown command (allowed: status, release, rollback, rollback-status, redeploy, data-secret-recipient, data-secret-apply, data-secret-status, data-secret-finish, upload-report, observe; on the data box also: ${DATA_VERBS// /, })"
+    reject "unknown command (allowed: status, release, rollback, rollback-status, redeploy, data-secret-recipient, data-secret-apply, data-secret-status, data-secret-finish, postgres-artifact, upload-report, observe; on the data box also: ${DATA_VERBS// /, })"
     ;;
 esac

@@ -75,6 +75,15 @@ export const DATA_SECRET_VERBS = Object.freeze(["secret-recipient", "secret-appl
 export const RELEASE_GATE_VERBS = Object.freeze(["rehearse", "rehearsal-status"]);
 
 // The entrypoint's own COMMAND_RE / COMMAND_MAX: what it admits as a request.
+/**
+ * #4089: the certified PostgreSQL artifact verb (spec §5 «Data-prod verbs.» →
+ * postgres-load): served on the data box after DATA_SECRET_VERBS (pinned), called by a
+ * release whose data input changed, before its guard. A box whose entrypoint predates it
+ * takes the release that installs it (that release changes no data input), so the
+ * `capabilities` probe does not require it.
+ */
+export const POSTGRES_ARTIFACT_VERBS = Object.freeze(["postgres-load"]);
+
 const REQUEST_RE = /^[a-z0-9-]+( [a-z0-9-]+)*$/;
 const REQUEST_MAX = 200;
 
@@ -89,7 +98,12 @@ export function dataVerbCommand(request, form) {
     throw new Error(`not a data-prod request: ${JSON.stringify(request)}`);
   }
   const verb = request.split(" ")[0];
-  if (verb !== "status" && !DATA_VERBS.includes(verb) && !RELEASE_GATE_VERBS.includes(verb)) {
+  if (
+    verb !== "status" &&
+    !DATA_VERBS.includes(verb) &&
+    !RELEASE_GATE_VERBS.includes(verb) &&
+    !POSTGRES_ARTIFACT_VERBS.includes(verb)
+  ) {
     throw new Error(`ds-data-prod serves no ${verb} verb`);
   }
   if (form === "forced") return request;

@@ -707,3 +707,70 @@ test("4067: every guard refusal message is authored in the guard's source", () =
     );
   }
 });
+
+test("4089: a changed data input is refused without, or with a stale or foreign, certificate — the Actions delivery weakens nothing", () => {
+  const f = fixture();
+  const target = {
+    id: "sha256:" + "c".repeat(64),
+    major: 17,
+    pgdata: "/var/lib/postgresql/data",
+    sourceHash: f.sourceHash,
+  };
+  f.live.sourceHash = "d".repeat(64); // the box record: the live input
+  f.live.targetImages = { postgres: target, pgbackrest: { ...target } };
+  const measured = {
+    id: target.id,
+    major: 17,
+    pgdata: target.pgdata,
+    version: "PostgreSQL 17.11",
+    uid: 999,
+    gid: 999,
+    pgbackrestVersion: "pgBackRest 2.60.0",
+  };
+  const certificate = {
+    schema: 1,
+    sourceHash: f.sourceHash,
+    images: { postgres: measured, pgbackrest: { ...measured } },
+  };
+  assert.throws(
+    () => assertPostgresEvidence(f),
+    /missing\/stale artifact certification/,
+  );
+  assert.throws(
+    () =>
+      assertPostgresEvidence({
+        ...f,
+        certificate: { ...certificate, sourceHash: "e".repeat(64) },
+      }),
+    /missing\/stale artifact certification/,
+  );
+  const foreign = { ...measured, id: "sha256:" + "f".repeat(64) };
+  assert.throws(
+    () =>
+      assertPostgresEvidence({
+        ...f,
+        certificate: {
+          ...certificate,
+          images: { postgres: foreign, pgbackrest: foreign },
+        },
+      }),
+    /artifact certificate does not match inspected target image/,
+  );
+  const unlabelled = { ...target, sourceHash: "e".repeat(64) };
+  assert.throws(
+    () =>
+      assertPostgresEvidence({
+        ...f,
+        live: {
+          ...f.live,
+          targetImages: { postgres: unlabelled, pgbackrest: { ...unlabelled } },
+        },
+        certificate,
+      }),
+    /artifact certificate does not match inspected target image/,
+  );
+  assert.equal(
+    assertPostgresEvidence({ ...f, certificate }).systemId,
+    f.live.source.systemId,
+  );
+});

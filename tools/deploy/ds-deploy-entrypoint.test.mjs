@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 import { SECRET_KEYS, SECRET_MAX_AGE_SEC, SECRET_VALUE } from "./data-secret.mjs";
-import { DATA_READ_VERBS, DATA_SECRET_VERBS, DATA_VERBS } from "./lib/data-prod.mjs";
+import { DATA_READ_VERBS, DATA_SECRET_VERBS, DATA_VERBS, POSTGRES_ARTIFACT_VERBS } from "./lib/data-prod.mjs";
 import { BOX_ENTRYPOINTS, DATA_BOX_ENTRYPOINTS, DS_READ_ENTRYPOINT_BIN } from "./lib/remote.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -102,11 +102,11 @@ test("2984: the entrypoint checks env and sha with ds-release's own regexes", ()
   }
 });
 
-test("3313, 3646, 4068: the data verbs are one list: DATA_VERBS, the case arm, the client's release, read and secret verbs", () => {
+test("3313, 3646, 4068, 4089: the data verbs are one list: DATA_VERBS, the case arm, the client's release, read, secret and artifact verbs", () => {
   const lines = readFileSync(ENTRYPOINT, "utf8").split("\n");
   const line = lines.find((l) => l.startsWith("DATA_VERBS="));
   assert.ok(line, "the entrypoint defines DATA_VERBS");
-  const all = [...DATA_VERBS, ...DATA_READ_VERBS, ...DATA_SECRET_VERBS];
+  const all = [...DATA_VERBS, ...DATA_READ_VERBS, ...DATA_SECRET_VERBS, ...POSTGRES_ARTIFACT_VERBS];
   assert.deepEqual(line.slice("DATA_VERBS='".length, -1).split(" "), all);
   const start = lines.indexOf("  capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \\");
   assert.ok(start > 0, "one case arm dispatches the data verbs");
@@ -1563,6 +1563,93 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     ]) {
       assert.equal(run(command).status, 2, command);
     }
+  });
+
+  // --- 4089: the certified PostgreSQL artifact, delivered by the Actions release -------
+  const PG_ID = `sha256:${"1".repeat(64)}`;
+  const BR_ID = `sha256:${"2".repeat(64)}`;
+  const pgCertificate = (over = {}) =>
+    JSON.stringify({ schema: 1, sourceHash: "a".repeat(64), images: { postgres: { id: PG_ID }, pgbackrest: { id: BR_ID } }, ...over });
+  const artifactDir = (sha = SHA) => join(root, "var/lib/ds-platform/postgres-artifact", sha);
+
+  it("4089: postgres-artifact keeps a release's certificate and images on the prod box, one SHA at a time", () => {
+    relayBox();
+    const stale = artifactDir("f".repeat(40));
+    mkdirSync(stale, { recursive: true });
+    writeFileSync(join(stale, "images.tar"), "old");
+    const c = run(`postgres-artifact prod ${SHA} certificate`, { input: pgCertificate() });
+    assert.equal(c.status, 0, String(c.stderr));
+    assert.equal(readFileSync(join(artifactDir(), "certificate.json"), "utf8"), pgCertificate());
+    assert.ok(!existsSync(stale), "an earlier SHA's delivery is removed");
+    const i = run(`postgres-artifact prod ${SHA} images`, { input: Buffer.from("docker image archive") });
+    assert.equal(i.status, 0, String(i.stderr));
+    assert.equal(readFileSync(join(artifactDir(), "images.tar"), "utf8"), "docker image archive");
+    assert.deepEqual(readdirSync(artifactDir()).sort(), ["certificate.json", "images.tar"], "no temp file left");
+    assert.match(String(i.stdout), /postgres-artifact images of 0123456789ab stored/);
+    assert.equal(log("ssh"), "", "the prod box keeps it; the release driver loads it into ds-data-prod");
+  });
+
+  it("4089: postgres-artifact refuses a malformed certificate, an oversized archive, a running release step, another box and bad words", () => {
+    relayBox();
+    for (const bad of ["not json", pgCertificate({ schema: 2 }), pgCertificate({ sourceHash: "x" }), pgCertificate({ images: { postgres: { id: PG_ID } } })]) {
+      const r = run(`postgres-artifact prod ${SHA} certificate`, { input: bad });
+      assert.equal(r.status, 2, bad);
+      assert.ok(!existsSync(join(artifactDir(), "certificate.json")), bad);
+    }
+    const big = run(`postgres-artifact prod ${SHA} images`, { input: Buffer.alloc(64, 1), env: { DS_ENTRYPOINT_MAX_PG_ARTIFACT_BYTES: "32" } });
+    assert.equal(big.status, 2);
+    assert.match(String(big.stderr), /exceeds 32 bytes/);
+    assert.ok(!existsSync(join(artifactDir(), "images.tar")));
+    assert.equal(run(`postgres-artifact prod ${SHA} certificate`, { input: pgCertificate(), env: { STUB_CHECK_RC: "3" } }).status, 3);
+    for (const role of ["data", "stage"]) {
+      setRole(role);
+      const r = run(`postgres-artifact prod ${SHA} certificate`, { input: pgCertificate() });
+      assert.equal(r.status, 3, role);
+      assert.match(r.stderr, /is served by the prod box only/);
+    }
+    for (const command of [`postgres-artifact prod ${SHA}`, `postgres-artifact stage-main ${SHA} images`, `postgres-artifact prod ${SHA} tree`, "postgres-artifact prod abc images"]) {
+      assert.equal(run(command, { input: "" }).status, 2, command);
+    }
+  });
+
+  const loadBox = () => {
+    setRole("data");
+    writeFileSync(
+      join(stubs, "docker"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "docker $*" >> "$STUB_DIR/docker.log"',
+        '[[ $1 == load && $2 == -i ]] && { cp -- "$3" "$STUB_DIR/loaded.tar"; echo "Loaded image ID: sha256:1111"; exit "${STUB_LOAD_RC:-0}"; }',
+        "exit 1",
+      ].join("\n") + "\n",
+    );
+    chmodSync(join(stubs, "docker"), 0o755);
+  };
+
+  it("4089: postgres-load docker-loads the delivered archive on the data box and keeps no copy", () => {
+    loadBox();
+    const r = run(`postgres-load ${SHA}`, { input: Buffer.from("image archive bytes") });
+    assert.equal(r.status, 0, String(r.stderr));
+    assert.equal(readFileSync(join(dir, "loaded.tar"), "utf8"), "image archive bytes");
+    assert.match(String(r.stdout), /Loaded image ID: sha256:1111/);
+    assert.match(log("docker"), /^docker load -i \S+\n$/);
+    const work = join(root, "var/lib/ds-platform");
+    assert.deepEqual(existsSync(work) ? readdirSync(work).filter((n) => n.includes("postgres-load")) : [], [], "the upload is removed");
+  });
+
+  it("4089: postgres-load refuses an oversized stream, a failed load, another box and bad words", () => {
+    loadBox();
+    const big = run(`postgres-load ${SHA}`, { input: Buffer.alloc(64, 1), env: { DS_ENTRYPOINT_MAX_PG_ARTIFACT_BYTES: "32" } });
+    assert.equal(big.status, 2);
+    assert.equal(log("docker"), "", "nothing loaded");
+    assert.equal(run(`postgres-load ${SHA}`, { input: Buffer.from("x"), env: { STUB_LOAD_RC: "1" } }).status, 3);
+    for (const command of ["postgres-load", `postgres-load ${SHA} x`, "postgres-load abc"]) {
+      assert.equal(run(command, { input: "" }).status, 2, command);
+    }
+    setRole("prod");
+    const r = run(`postgres-load ${SHA}`, { input: Buffer.from("x") });
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /is served by the data box only/);
   });
 
   it("3395: data-up refuses before any unit starts when /etc/ds-platform/glitchtip.env is absent", () => {

@@ -77,7 +77,7 @@
 // `drizzle-kit migrate` are all no-ops when already current.
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -191,6 +191,13 @@ import {
 } from "./lib/remote.mjs";
 import { OPTIONAL_VHOST_PROBES } from "./smoke-prod.mjs";
 import { createDataProdClient } from "./lib/data-prod.mjs";
+import {
+  ARTIFACT_CERTIFICATE,
+  ARTIFACT_IMAGES,
+  POSTGRES_ARTIFACT_DIR,
+  assertArchiveMatchesCertificate,
+  imageArchiveConfigIds,
+} from "./postgres-artifact-release.mjs";
 import {
   SKIP_REHEARSAL_FLAG,
   migrationArchive,
@@ -2261,6 +2268,39 @@ async function verifyImagesBoot(sha, services) {
 
 // --- deploy ---------------------------------------------------------------
 
+/**
+ * #4089: the certified artifact deploy-prod.yml delivered to this box for `sha`
+ * (`postgres-artifact prod <sha> certificate|images`), or null when none was: the
+ * release did not change the data input. A delivery whose archive does not hold exactly
+ * the certified images is a refusal before anything reaches ds-data-prod.
+ */
+export function deliveredPostgresArtifact(sha, { dir = POSTGRES_ARTIFACT_DIR } = {}) {
+  const own = join(dir, sha);
+  const certificateFile = join(own, ARTIFACT_CERTIFICATE);
+  if (!existsSync(certificateFile)) return null;
+  const certificate = JSON.parse(readFileSync(certificateFile, "utf8"));
+  const imagesFile = join(own, ARTIFACT_IMAGES);
+  if (!existsSync(imagesFile))
+    throw new Error(`the delivered PostgreSQL artifact of ${sha.slice(0, 12)} has no images.tar`);
+  assertArchiveMatchesCertificate(imageArchiveConfigIds(imagesFile), certificate);
+  return { certificate, imagesFile };
+}
+
+/** `docker load` of the delivered images on ds-data-prod (its `postgres-load` verb). */
+export async function loadPostgresArtifact(sha, { certificate, imagesFile }, { client, log = (l) => console.log(l) } = {}) {
+  const ids = ["postgres", "pgbackrest"].map((role) => certificate.images[role].id.slice(7, 19));
+  const answer = await (client ?? dataProd()).call(["postgres-load", sha], { inputFile: imagesFile });
+  log(`  ↳ ${DATA_PROD}: certified PostgreSQL images ${ids.join(" / ")} delivered: ${String(answer).trim()}`);
+}
+
+/** The delivered artifact's certificate once its images are on ds-data-prod, else undefined. */
+async function takeDeliveredPostgresArtifact(sha) {
+  const delivered = deliveredPostgresArtifact(sha);
+  if (!delivered) return undefined;
+  await loadPostgresArtifact(sha, delivered);
+  return delivered.certificate;
+}
+
 // Read-only preflight; each subsequent guarded callback re-reads the cluster.
 export async function preparePostgresDeployment(
   sha,
@@ -2351,9 +2391,11 @@ async function deploy(hotfixRef = null, local = null) {
     certIndex < 0
       ? undefined
       : JSON.parse(readFileSync(process.argv[certIndex + 1], "utf8"));
+  // #4089: a box-local release takes the artifact deploy-prod.yml delivered for this SHA
+  // (no break-glass `--postgres-artifacts`); the guard still decides.
   const postgres = walk.releasePhase("postgres-verify")
     ? await preparePostgresDeployment(sha, {
-        certificate,
+        certificate: certificate ?? (local ? await takeDeliveredPostgresArtifact(sha) : undefined),
         ...(LOCAL_TREE
           ? { readTarget: (target) => readPostgresTargetFromTree(target, LOCAL_TREE) }
           : {}),

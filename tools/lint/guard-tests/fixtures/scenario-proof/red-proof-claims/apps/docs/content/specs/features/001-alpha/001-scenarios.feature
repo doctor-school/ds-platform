@@ -24,3 +24,7 @@ Feature: Alpha
   @EARS-5 @proof:unit
   Scenario: harness only
     When something unbound happens
+
+  @EARS-6 @proof:unit
+  Scenario: two-spec file
+    When something unbound happens

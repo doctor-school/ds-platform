@@ -19,7 +19,8 @@ import { caseDir, ghDir, runGuard } from "./run-guard";
  * state plus the discriminators that must not fire: a nested test id proving a
  * flat EARS tag, a multi-level tag satisfied at one of its levels, a scenario
  * both bound and tagged, a repeated title keyed `[2]`, a new entry tracked by an
- * OPEN Issue, and an outline bound through its first `Examples` row.
+ * OPEN Issue, an outline bound through its `Examples` row, and an API proof
+ * named by an explicit `001 EARS-3` title in a file that also cites spec 002.
  */
 const GUARD = "scenario-proof-lint.ts";
 const dir = (name: string) => caseDir("scenario-proof", name);
@@ -86,12 +87,10 @@ describe("scenario-proof-lint", () => {
     );
   });
 
-  it("red: a new debt entry without an Issue, or with a CLOSED one → exit 1", () => {
-    const { code, stderr } = runGuard(
-      GUARD,
-      dir("red-new-entry"),
-      seams("red-new-entry"),
-    );
+  it("red: a new debt entry without an Issue, a CLOSED, missing or PR number → exit 1", () => {
+    const { code, stdout, stderr } = runGuard(GUARD, dir("red-new-entry"), {
+      env: { ...seams("red-new-entry").env, CI: "" },
+    });
     expect(code).toBe(1);
     expect(stderr).toContain(
       "001 | untracked new debt -> new debt entry (absent at the merge base) names no #<issue>",
@@ -99,7 +98,45 @@ describe("scenario-proof-lint", () => {
     expect(stderr).toContain(
       "001 | closed issue debt -> new debt entry tracks Issue #9001, which is CLOSED",
     );
+    expect(stderr).toContain(
+      "001 | missing issue debt -> new debt entry names #9002, which is no Issue in this repository",
+    );
+    expect(stderr).toContain(
+      "001 | pull request debt -> new debt entry names #9003, which is a pull request, not an Issue",
+    );
     expect(stderr).not.toContain("001 | baseline debt");
+    // Outside CI an unavailable lookup warns instead of blocking.
+    expect(stderr).not.toContain("001 | unreachable lookup debt");
+    expect(stdout).toContain(
+      "WARN 001 | unreachable lookup debt -> could not look up #9004",
+    );
+  });
+
+  it("red: under CI an Issue lookup that cannot run blocks → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-new-entry"), {
+      env: { ...seams("red-new-entry").env, CI: "true" },
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain(
+      "001 | unreachable lookup debt -> could not look up #9004",
+    );
+    expect(stderr).toContain("CI is set");
+  });
+
+  it("red: an outline with one unbound Examples row, a scenario with only Background steps → unproven", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-bound-rules"),
+      seams("red-bound-rules"),
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain(
+      "001 | a later row unbound -> unproven scenario missing from",
+    );
+    expect(stderr).toContain(
+      "001 | background only -> unproven scenario missing from",
+    );
+    expect(stderr).not.toContain("001 | every row bound");
   });
 
   it("red: unknown level, no EARS tag and every unverifiable claim → exit 1", () => {
@@ -127,6 +164,11 @@ describe("scenario-proof-lint", () => {
     expect(stderr).toContain(
       `"other spec" -> @proof:unit claims EARS-4, but no 001-scoped test at level unit cites it`,
     );
+    // In a file citing two specs a bare id belongs to neither; another spec's
+    // explicitly prefixed id never proves this spec's.
+    expect(stderr).toContain(
+      `"two-spec file" -> @proof:unit claims EARS-6, but no 001-scoped test at level unit cites it`,
+    );
     // packages/e2e is the binding harness, not a proof level.
     expect(stderr).toContain(
       `"harness only" -> @proof:unit claims EARS-5, but no 001-scoped test at level unit cites it`,
@@ -146,7 +188,7 @@ describe("scenario-proof-lint", () => {
       });
       expect(written.code).toBe(0);
       const list = readFileSync(
-        join(work, "tools", "lint", "scenario-proof-debt.txt"),
+        join(work, "packages", "e2e", "scenario-proof-debt.txt"),
         "utf8",
       );
       expect(list).toContain(

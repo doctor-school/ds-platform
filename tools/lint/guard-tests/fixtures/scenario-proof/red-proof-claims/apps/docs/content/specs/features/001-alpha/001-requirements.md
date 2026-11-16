@@ -9,3 +9,4 @@ surface: user-facing
 - **EARS-3** The API shall answer.
 - **EARS-4** The system shall do a fourth thing.
 - **EARS-5** The system shall do a fifth thing.
+- **EARS-6** The system shall do a sixth thing.

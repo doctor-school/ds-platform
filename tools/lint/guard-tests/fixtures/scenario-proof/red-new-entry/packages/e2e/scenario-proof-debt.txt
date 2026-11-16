@@ -1,0 +1,6 @@
+001 | baseline debt
+001 | closed issue debt | #9001
+001 | missing issue debt | #9002
+001 | pull request debt | #9003
+001 | unreachable lookup debt | #9004
+001 | untracked new debt

@@ -74,22 +74,42 @@ export function specFeature(relPath: string): string | null {
   return relPath.replace(/\\/g, "/").match(SPEC_FEATURE_RE)?.[1] ?? null;
 }
 
+/** A title token, with the `NNN ` written directly before it when there is one. */
+const PREFIXED_TOKEN_RE = /(?:\b(\d{3})\s+)?\bEARS-\d+(?:[./]\d+)*\b/g;
+
+/** One EARS id cited in one test title; `feature` = its own `NNN ` prefix, if any. */
+export interface EarsOccurrence {
+  id: string;
+  feature: string | null;
+}
+
 /**
  * EARS ids cited in a test file's `it`/`test`/`describe` TITLES, plus the raw
  * feature scope — every `NNN` whose title opens with `NNN EARS-…` (empty =
  * feature-agnostic). The caller keeps only the numbers of real feature dirs.
+ * `occurrences` lists every id per title with its own prefix, for a caller that
+ * must not let one spec's title stand in for another's (`ids`/`features` pool
+ * the whole file, the `ears-test-lint` semantics).
  */
 export function parseTestTitles(text: string): {
   ids: Set<string>;
   features: Set<string>;
+  occurrences: EarsOccurrence[];
 } {
   const ids = new Set<string>();
   const features = new Set<string>();
+  const occurrences: EarsOccurrence[] = [];
   for (const title of text.matchAll(TITLE_RE)) {
     for (const tok of title[2].matchAll(EARS_TOKEN_RE)) {
       for (const id of expandToken(tok[0])) ids.add(id);
     }
+    for (const tok of title[2].matchAll(PREFIXED_TOKEN_RE)) {
+      const token = tok[0].slice(tok[0].indexOf("EARS-"));
+      for (const id of expandToken(token)) {
+        occurrences.push({ id, feature: tok[1] ?? null });
+      }
+    }
   }
   for (const fm of text.matchAll(FEATURE_SCOPE_RE)) features.add(fm[1]);
-  return { ids, features };
+  return { ids, features, occurrences };
 }

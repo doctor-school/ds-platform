@@ -10,32 +10,39 @@
  * Playwright) already proves each of its EARS ids, and nothing stopped new
  * unproven scenarios from piling up. Every scenario is in exactly one state:
  *
- *   - bound — it has a step and every step (Background steps included, outline
- *     placeholders substituted from the first `Examples` row) matches a step
- *     definition from the `steps` globs of a `defineBddConfig` caller;
+ *   - bound — it has a step of its own and every step (Background steps
+ *     included) matches a step definition from the `steps` globs of a
+ *     `defineBddConfig` caller; an outline is bound only when that holds for
+ *     every row of every `Examples` block, placeholders substituted;
  *   - proof:<level> — it carries `@proof:<level>` (`unit` | `api` | `app-e2e`)
  *     and is not bound; counted under the highest level it names;
  *   - pending — its spec's requirements `status:` is `Draft`;
  *   - unproven — none of the above.
  *
  * A proof tag is a claim the guard verifies: for EVERY `@EARS-N` on the
- * scenario some test title cites that id (dotted-prefix ancestry, the
- * `ears-test-lint` semantics in lib/ears-tests.ts) in a file feature-scoped to
- * the scenario's spec, at one of the tagged levels. Level by path: `app-e2e` =
- * `apps/<app>/e2e/**`, `api` = `apps/api/test/**`, `unit` = any other test file;
- * `packages/e2e/**` is the binding harness itself and proves nothing here. A
- * feature-agnostic test file never satisfies a claim — an unscoped `EARS-4`
- * cannot tell which spec's `EARS-4` it tests.
+ * scenario some test title at one of the tagged levels cites that id
+ * (dotted-prefix ancestry, lib/ears-tests.ts) AS the scenario's spec's id. An
+ * id in a title belongs to spec `NNN` only when that occurrence is written
+ * `NNN EARS-k`, or when it is bare and the whole file cites exactly one spec,
+ * `NNN`. In a file citing two or more specs a bare id proves nothing, and no
+ * ownership is inherited from an enclosing `describe` — a pooled file scope
+ * would let one spec's `EARS-k` prove another's. A file citing no spec proves
+ * nothing either. Level by path: `app-e2e` = `apps/<app>/e2e/**`, `api` =
+ * `apps/api/test/**`, `unit` = any other test file; `packages/e2e/**` is the
+ * binding harness itself and proves nothing here.
  *
- * The ratchet. `tools/lint/scenario-proof-debt.txt` lists exactly the unproven
- * scenarios, key `NNN | <title>` (` [k]` for the k-th repeat of a title in a
- * spec), optionally ` | #<issue>`. An unlisted unproven scenario, a stale line
- * (its scenario is proven, Draft or gone) and a line absent at the merge base
- * with `origin/main` that names no OPEN Issue are BLOCK findings; a line already
- * present at the merge base needs no Issue, and when the list did not exist
- * there every line is baseline. So the list shrinks freely and grows only as
- * tracked debt. When `gh` cannot answer, an Issue's state is reported
- * unverified (WARN), as the quarantine check of `scenario-coverage-lint.ts` does.
+ * The ratchet. `packages/e2e/scenario-proof-debt.txt` lists exactly the
+ * unproven scenarios, key `NNN | <title>` (` [k]` for the k-th repeat of a
+ * title in a spec), optionally ` | #<issue>`. It lives with the harness so a
+ * backfill PR that only tags scenarios and deletes lines stays test-only. An
+ * unlisted unproven scenario, a stale line (its scenario is proven, Draft or
+ * gone) and a line absent at the merge base with `origin/main` whose number is
+ * not an OPEN Issue — no number, a closed Issue, a number that does not exist,
+ * a pull request — are BLOCK findings; a line already present at the merge
+ * base needs no Issue, and when the list did not exist there every line is
+ * baseline. So the list shrinks freely and grows only as tracked debt. When
+ * the lookup itself cannot run (no `gh`, no auth, network), the line blocks
+ * under `CI` and is a WARN elsewhere — CI must not pass an unverified line.
  *
  * Modes: default = the guard; `--report` prints the per-spec inventory table
  * (`pnpm scenarios:inventory`, the one source of the coverage number);
@@ -44,8 +51,10 @@
  *
  * Seams: `LINT_FIXTURE_ROOT` (repo tree), `LINT_PROOF_BASE_DEBT_FILE` (the debt
  * list at the merge base; a missing file = absent there), `LINT_GH_FIXTURE_DIR`
- * (lib/gh.ts), `LINT_DIFF_BASE` (merge-base ref, default `origin/main`). All
- * inert in production.
+ * (`issue-view-<n>.json` = the `gh issue view` answer, `issue-view-<n>.error` =
+ * its stderr on a failed call, neither = the lookup could not run),
+ * `LINT_DIFF_BASE` (merge-base ref, default `origin/main`). All inert in
+ * production.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, posix, relative, resolve, sep } from "node:path";
@@ -67,13 +76,12 @@ import {
   specFeature,
 } from "./lib/ears-tests.js";
 import { parseScenarios } from "./lib/feature-scenarios.js";
-import { ghViewJson } from "./lib/gh.js";
 
 const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
   ? resolve(process.env.LINT_FIXTURE_ROOT)
   : resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TAG = "[scenario-proof]";
-const DEBT_REL = "tools/lint/scenario-proof-debt.txt";
+const DEBT_REL = "packages/e2e/scenario-proof-debt.txt";
 const FEATURE_GLOB = "apps/docs/content/specs/features/*/*-scenarios.feature";
 const REQUIREMENTS_GLOB =
   "apps/docs/content/specs/features/*/*-requirements*.md";
@@ -243,20 +251,33 @@ async function loadStepMatcher(): Promise<{
 export interface ParsedScenario {
   line: number;
   title: string;
-  /** Background steps first, then its own; placeholders already substituted. */
-  steps: string[];
+  /** Steps the scenario writes itself — a Background-only scenario has none. */
+  ownSteps: number;
+  /**
+   * Background steps first, then its own: one list for a plain scenario, one
+   * per `Examples` row (every block) for an outline, placeholders substituted.
+   */
+  runs: string[][];
+}
+
+interface ExamplesBlock {
+  header: string[] | null;
+  rows: string[][];
 }
 
 /**
  * The title and the steps of every scenario of a `.feature` file, in file
  * order: Feature- and Rule-level Background steps prefix each scenario in their
- * scope, and an outline's `<name>` placeholders take the first `Examples` row.
+ * scope, and an outline runs once per row of each of its `Examples` blocks.
  */
 export function parseScenarioSteps(text: string): ParsedScenario[] {
-  const out: (ParsedScenario & {
-    header: string[] | null;
-    row: string[] | null;
-  })[] = [];
+  const out: {
+    line: number;
+    title: string;
+    background: string[];
+    own: string[];
+    examples: ExamplesBlock[];
+  }[] = [];
   let section: "feature-bg" | "rule-bg" | "scenario" | "examples" | null = null;
   let inRule = false;
   const featureBg: string[] = [];
@@ -290,6 +311,7 @@ export function parseScenarioSteps(text: string): ParsedScenario[] {
     }
     if (/^(?:Examples|Scenarios)\s*:/.test(t)) {
       section = "examples";
+      current?.examples.push({ header: null, rows: [] });
       return;
     }
     const head = t.match(SCENARIO_HEAD_RE);
@@ -297,9 +319,9 @@ export function parseScenarioSteps(text: string): ParsedScenario[] {
       out.push({
         line: idx + 1,
         title: head[1].trim(),
-        steps: [...featureBg, ...ruleBg],
-        header: null,
-        row: null,
+        background: [...featureBg, ...ruleBg],
+        own: [],
+        examples: [],
       });
       section = "scenario";
       return;
@@ -308,37 +330,42 @@ export function parseScenarioSteps(text: string): ParsedScenario[] {
     if (step) {
       if (section === "feature-bg") featureBg.push(step[1]);
       else if (section === "rule-bg") ruleBg.push(step[1]);
-      else if (section === "scenario" && current) current.steps.push(step[1]);
+      else if (section === "scenario" && current) current.own.push(step[1]);
       return;
     }
-    if (
-      t.startsWith("|") &&
-      section === "examples" &&
-      current &&
-      !current.row
-    ) {
+    const block = current?.examples[current.examples.length - 1];
+    if (t.startsWith("|") && section === "examples" && block) {
       const cells = t
         .replace(/^\|/, "")
         .replace(/\|$/, "")
         .split("|")
         .map((c) => c.trim());
-      if (!current.header) current.header = cells;
-      else current.row = cells;
+      if (!block.header) block.header = cells;
+      else block.rows.push(cells);
     }
   });
-  return out.map(({ line, title, steps, header, row }) => ({
-    line,
-    title,
-    steps:
-      header && row
-        ? steps.map((s) =>
-            s.replace(/<([^<>]+)>/g, (all, name: string) => {
-              const i = header.indexOf(name);
-              return i === -1 ? all : (row[i] ?? all);
-            }),
-          )
-        : steps,
-  }));
+  return out.map(({ line, title, background, own, examples }) => {
+    const steps = [...background, ...own];
+    const rows = examples.flatMap(({ header, rows: r }) =>
+      header ? r.map((row) => ({ header, row })) : [],
+    );
+    return {
+      line,
+      title,
+      ownSteps: own.length,
+      runs:
+        rows.length === 0
+          ? [steps]
+          : rows.map(({ header, row }) =>
+              steps.map((s) =>
+                s.replace(/<([^<>]+)>/g, (all, name: string) => {
+                  const i = header.indexOf(name);
+                  return i === -1 ? all : (row[i] ?? all);
+                }),
+              ),
+            ),
+    };
+  });
 }
 
 interface Scenario {
@@ -353,8 +380,8 @@ interface Scenario {
 
 interface TestEntry {
   level: Level;
-  ids: Set<string>;
-  features: Set<string>;
+  /** The ids this file proves, each for the one spec that owns it. */
+  proofs: { feature: string; id: string }[];
 }
 
 /** The proof level of a test file by its path; `null` = proves no tag. */
@@ -447,6 +474,83 @@ async function baseDebt(): Promise<BaseDebt> {
   }
 }
 
+type IssueLookup =
+  | { kind: "issue"; state: string }
+  | { kind: "pull" }
+  | { kind: "missing" }
+  | { kind: "unavailable"; reason: string };
+
+/** `gh`'s answer for a number that is neither an Issue nor a pull request. */
+const GH_NOT_FOUND_RE = /Could not resolve to an? (?:issue|pull request)/i;
+
+/** True when `CI` is set to anything but an explicit off value. */
+function inCi(): boolean {
+  const ci = (process.env.CI ?? "").trim().toLowerCase();
+  return ci !== "" && ci !== "false" && ci !== "0";
+}
+
+/**
+ * What a debt line's `#<n>` names. `gh issue view` also answers for a pull
+ * request (same number space), so the URL decides: `/issues/` is an Issue,
+ * `/pull/` is not. A failed call is "missing" only on gh's not-found answer;
+ * anything else (no binary, no auth, network) means the lookup did not run.
+ */
+async function lookupIssue(n: number): Promise<IssueLookup> {
+  const classify = (raw: string): IssueLookup => {
+    let data: { state?: unknown; url?: unknown };
+    try {
+      data = JSON.parse(raw) as typeof data;
+    } catch {
+      return { kind: "unavailable", reason: "unparsable gh answer" };
+    }
+    const url = typeof data.url === "string" ? data.url : "";
+    if (/\/pull\/\d+$/.test(url)) return { kind: "pull" };
+    if (!/\/issues\/\d+$/.test(url) || typeof data.state !== "string") {
+      return {
+        kind: "unavailable",
+        reason: "gh answer has no Issue url/state",
+      };
+    }
+    return { kind: "issue", state: data.state.toUpperCase() };
+  };
+  const failed = (stderr: string): IssueLookup =>
+    GH_NOT_FOUND_RE.test(stderr)
+      ? { kind: "missing" }
+      : {
+          kind: "unavailable",
+          reason: stderr.trim().split("\n")[0] || "gh failed",
+        };
+  const fixtureDir = process.env.LINT_GH_FIXTURE_DIR;
+  if (fixtureDir) {
+    const answer = resolve(fixtureDir, `issue-view-${n}.json`);
+    const error = resolve(fixtureDir, `issue-view-${n}.error`);
+    if (existsSync(answer)) return classify(readFileSync(answer, "utf8"));
+    if (existsSync(error)) return failed(readFileSync(error, "utf8"));
+    return { kind: "unavailable", reason: `no gh fixture for #${n}` };
+  }
+  try {
+    const res = await execa(
+      "gh",
+      ["issue", "view", String(n), "--json", "state,url"],
+      { cwd: REPO_ROOT, reject: false },
+    );
+    if (res.failed && res.exitCode === undefined) {
+      return {
+        kind: "unavailable",
+        reason: (res.shortMessage ?? "gh did not run").split("\n")[0],
+      };
+    }
+    return res.exitCode === 0
+      ? classify(String(res.stdout))
+      : failed(String(res.stderr));
+  } catch (e) {
+    return {
+      kind: "unavailable",
+      reason: (e as Error).message.split("\n")[0] ?? "gh did not run",
+    };
+  }
+}
+
 const DEBT_HEADER = [
   "# Unproven spec scenarios — the scenario-proof ratchet (tools/lint/scenario-proof-lint.ts,",
   "# regression-contour tech spec §6.4). One line per scenario of a non-Draft spec that is",
@@ -492,11 +596,20 @@ async function main(): Promise<void> {
   })) {
     const level = levelOf(relPath(f));
     if (level === null) continue;
-    const { ids, features } = parseTestTitles(readFileSync(f, "utf8"));
-    if (ids.size === 0) continue;
-    const scoped = new Set([...features].filter((n) => knownFeatures.has(n)));
-    if (scoped.size === 0) continue; // feature-agnostic: proves no claim
-    tests.push({ level, ids, features: scoped });
+    const { features, occurrences } = parseTestTitles(readFileSync(f, "utf8"));
+    const cited = new Set(
+      [...features, ...occurrences.map((o) => o.feature ?? "")].filter((n) =>
+        knownFeatures.has(n),
+      ),
+    );
+    const sole = cited.size === 1 ? [...cited][0] : null;
+    const proofs = occurrences.flatMap(({ id, feature }) => {
+      const owner = feature !== null ? feature : sole;
+      return owner !== null && knownFeatures.has(owner)
+        ? [{ feature: owner, id }]
+        : [];
+    });
+    if (proofs.length > 0) tests.push({ level, proofs });
   }
 
   const steps = await loadStepMatcher();
@@ -559,9 +672,8 @@ async function main(): Promise<void> {
         for (const id of [...new Set(ears)]) {
           const proven = tests.some(
             (t) =>
-              t.features.has(feature) &&
               levels.includes(t.level) &&
-              [...t.ids].some((tid) => matches(id, tid)),
+              t.proofs.some((p) => p.feature === feature && matches(id, p.id)),
           );
           if (!proven) {
             findings.push(
@@ -573,7 +685,9 @@ async function main(): Promise<void> {
         }
       }
 
-      const bound = s.steps.length > 0 && s.steps.every((t) => steps.bound(t));
+      const bound =
+        s.ownSteps > 0 &&
+        s.runs.every((run) => run.every((t) => steps.bound(t)));
       const highest = [...LEVELS].reverse().find((l) => levels.includes(l));
       const state: State = bound
         ? "bound"
@@ -675,20 +789,24 @@ async function main(): Promise<void> {
         );
         continue;
       }
-      const res = await ghViewJson<{ state?: string }>(
-        "issue",
-        e.issue,
-        "state",
-        REPO_ROOT,
-      );
-      if (!res.ok) {
-        info(
-          `WARN ${e.key} -> could not read Issue #${e.issue} (${res.error}); ` +
-            `debt tracking unverified, not blocked on a guess.`,
-        );
-      } else if ((res.data.state ?? "").toUpperCase() !== "OPEN") {
+      const res = await lookupIssue(e.issue);
+      if (res.kind === "unavailable") {
+        const msg =
+          `${e.key} -> could not look up #${e.issue} (${res.reason}); ` +
+          `the new debt entry's Issue is unverified`;
+        if (inCi()) findings.push(`${msg}, and CI is set: BLOCK`);
+        else info(`WARN ${msg}; outside CI not blocked on a guess.`);
+      } else if (res.kind === "missing") {
         findings.push(
-          `${e.key} -> new debt entry tracks Issue #${e.issue}, which is ${res.data.state}`,
+          `${e.key} -> new debt entry names #${e.issue}, which is no Issue in this repository`,
+        );
+      } else if (res.kind === "pull") {
+        findings.push(
+          `${e.key} -> new debt entry names #${e.issue}, which is a pull request, not an Issue`,
+        );
+      } else if (res.state !== "OPEN") {
+        findings.push(
+          `${e.key} -> new debt entry tracks Issue #${e.issue}, which is ${res.state}`,
         );
       }
     }

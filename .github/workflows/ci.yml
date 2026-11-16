@@ -1151,11 +1151,11 @@ jobs:
       # tracked debt (tech spec §6.1 + §6.4, Issue #4062): bound to step
       # definitions, or tagged `@proof:<level>` with a spec-scoped test at that
       # level citing each of its `@EARS-N` ids, or in a Draft spec; the rest is
-      # exactly `tools/lint/scenario-proof-debt.txt`. POSTURE: BLOCK, a plain
+      # exactly `packages/e2e/scenario-proof-debt.txt`. POSTURE: BLOCK, a plain
       # step. The list shrinks freely; a line absent at the merge base with
       # `origin/main` (the full checkout above makes it computable) must name an
-      # OPEN Issue — GH_TOKEN lets that `gh issue view` run; without it the
-      # Issue state is reported unverified instead of guessed.
+      # OPEN Issue, not a pull request — GH_TOKEN lets that `gh issue view` run;
+      # under CI a lookup that cannot run blocks instead of passing unverified.
       - name: scenario-proof
         run: pnpm lint:scenario-proof
         env:

@@ -1,14 +1,20 @@
 import { randomUUID } from "node:crypto";
+import { appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect } from "@playwright/test";
-import { countOperation, countRoot } from "./event-count-fixture.js";
+import {
+  countDirectory,
+  countOperation,
+  countRoot,
+} from "./event-count-fixture.js";
 import { authoringCapture, authoringSha } from "./event-authoring-runtime.js";
 import {
   type AuthoringRow,
   type EventAuthoringWorld,
 } from "./event-authoring-world.js";
 import { openEventLive } from "../admin/events.js";
+import { assertAuthoringTerminal } from "./event-authoring-report.js";
 
 interface Read {
   path: string;
@@ -26,6 +32,11 @@ export async function proveDraftProjections(world: EventAuthoringWorld) {
     });
     const response = await fetch(world.api.url + path);
     const body: unknown = await response.json();
+    appendFileSync(
+      resolve(countDirectory(), "public-projections.private.jsonl"),
+      JSON.stringify({ path, status: response.status, body }) + "\n",
+    );
+    assertAuthoringTerminal(body);
     expect(response.status, path).toBe(status);
     if (body && typeof body === "object" && !Array.isArray(body)) {
       const row = body as AuthoringRow;
@@ -206,7 +217,8 @@ export async function proveDraftProjections(world: EventAuthoringWorld) {
       path,
       /(?:detail|participation)$|^event-/.test(key) ? 404 : 200,
     );
-    absent(negative[key]!, [draft, doctorDraft]);
+    if (negative[key]!.status === 200)
+      absent(negative[key]!, [draft, doctorDraft]);
   }
   for (const path of [
     "/v1/public/events?timeframe=upcoming",

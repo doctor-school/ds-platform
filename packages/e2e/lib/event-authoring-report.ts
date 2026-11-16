@@ -49,6 +49,26 @@ export const eventAuthoringProjections = [
 ] as const;
 
 type Row = Record<string, unknown>;
+export function assertAuthoringTerminal(value: unknown) {
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    if (
+      [
+        "nextCursor",
+        "hasMore",
+        "hasNextPage",
+        "remaining",
+        "nextCount",
+        "nextFrom",
+      ].includes(key) &&
+      child !== null &&
+      child !== false &&
+      child !== 0
+    )
+      throw new Error(`4061 nonterminal public projection: ${key}`);
+    assertAuthoringTerminal(child);
+  }
+}
 function requireEvidence(ok: unknown, name: string): asserts ok {
   if (!ok) throw new Error(`4061 evidence: ${name}`);
 }

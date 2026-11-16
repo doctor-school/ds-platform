@@ -49,7 +49,7 @@ export async function bootEventAuthoringRuntime() {
   const vitestPackage = createRequire(
     resolve(countRoot, "packages/e2e/package.json"),
   ).resolve("vitest/package.json");
-  const vitest=resolve(dirname(vitestPackage),"vitest.mjs");
+  const vitest = resolve(dirname(vitestPackage), "vitest.mjs");
   const unit = execFileSync(
     process.execPath,
     [vitest, "run", "src/model/room-player.test.ts"],
@@ -118,10 +118,14 @@ export async function bootEventAuthoringRuntime() {
     ]) {
       const port = await freePort();
       origins[host!] = `http://localhost:${port}`;
-      const next=resolve(countRoot,`apps/${app}/.next`);
-      const binding={server:authoringTree(resolve(next,"server")),static:authoringTree(resolve(next,"static")),buildId:authoringSha(readFileSync(resolve(next,"BUILD_ID")))};
-      assetTrees[host!]=binding;
-      assets[host!]=authoringSha(JSON.stringify(binding));
+      const next = resolve(countRoot, `apps/${app}/.next`);
+      const binding = {
+        server: authoringTree(resolve(next, "server")),
+        static: authoringTree(resolve(next, "static")),
+        buildId: authoringSha(readFileSync(resolve(next, "BUILD_ID"))),
+      };
+      assetTrees[host!] = binding;
+      assets[host!] = authoringSha(JSON.stringify(binding));
     }
     process.env.E2E_ADMIN_URL = origins.admin;
     for (const [host, app] of [

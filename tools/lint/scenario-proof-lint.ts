@@ -21,21 +21,27 @@
  * State, first match wins:
  *
  *   - pending — its spec's requirements `status:` is `Draft`;
- *   - bound — bound BY ONE runner config (a `defineBddConfig` call): its
- *     `features` globs take the scenario's file in, the scenario has a step of
- *     its own, and every step (Background steps included) matches a step
- *     definition from that same config's `steps` globs; an outline only when
- *     that holds for every row of every `Examples` block, placeholders
- *     substituted. Definitions are never pooled across configs — playwright-bdd
- *     binds a feature only to the steps of the config that runs it. Tag
- *     filters inside a config are not modelled. For a journey only a
- *     real-stack config counts — one under `packages/e2e/` (the staging suite,
- *     the production compose set) or `apps/admin/` (the admin tier on real
- *     api + database + IdP) — and a journey quarantined on the scenario or on
- *     any of its `Examples` blocks (`@quarantine(#N)`, `@quarantine:login(#N)`)
- *     is never bound. A config whose `features` / `steps` are not string
- *     literals, an array of them, a same-file const or a ternary of those is a
- *     BLOCK finding;
+ *   - bound — bound BY ONE runner config (a `defineBddConfig` call, or one
+ *     call of a same-file wrapper `const f = (…) => defineBddConfig({ … })`):
+ *     its `features` globs take the scenario's file in, its `tags` filter
+ *     (evaluated with `@cucumber/tag-expressions` over the feature, Rule,
+ *     scenario and `Examples`-block tags; no `tags` selects everything)
+ *     selects at least one run, the scenario has a step of its own, and every
+ *     step (Background steps included) of every selected run matches a step
+ *     definition from that same config's `steps` globs; for an outline a run
+ *     is one row, placeholders substituted. Definitions are never pooled
+ *     across configs — playwright-bdd binds a feature only to the steps of the
+ *     config that runs it. For a journey only a real-stack config counts —
+ *     one under `packages/e2e/` (the staging suite, the production compose
+ *     set) or `apps/admin/` (the admin tier on real api + database + IdP) —
+ *     and a journey quarantined on the scenario or on any of its `Examples`
+ *     blocks (`@quarantine(#N)`, `@quarantine:login(#N)`) is never bound.
+ *     `features` / `steps` / `tags` are read without running the config: a
+ *     string or template literal, an array, a ternary (either branch), a
+ *     same-file const, a wrapper parameter, or a call to a pure tag helper of
+ *     `TAG_HELPERS`, run from the real module with `process.env` passed as
+ *     `{}` — the default contour a run gets with no tier variable set.
+ *     Anything else is a BLOCK finding naming the file and the expression;
  *   - proof:<level> — a rule carrying `@proof:<level>` (`unit` | `api` |
  *     `app-e2e`); counted under the highest level it names. On a journey, or
  *     on an unclassified scenario of a user-facing spec, the tag is a BLOCK
@@ -76,7 +82,9 @@
  * Modes: default = the guard; `--report` prints the per-spec inventory table
  * (`pnpm scenarios:inventory`, the one source of the coverage number; the
  * headline is journeys bound / journeys total); `--write-debt` rewrites the
- * debt list from the current state, keeping each surviving line's Issue.
+ * debt list from the current state, keeping each surviving line's Issue;
+ * with `--issues NNN:<n>[,…]` a line absent at the merge base that has no
+ * Issue of its own gets its spec's.
  *
  * Seams: `LINT_FIXTURE_ROOT` (repo tree), `LINT_PROOF_BASE_DEBT_FILE` (the debt
  * list at the merge base; a missing file = absent there),
@@ -89,13 +97,14 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, posix, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   ExpressionFactory,
   ParameterTypeRegistry,
   type Expression,
 } from "@cucumber/cucumber-expressions";
+import { parse as parseTagExpression } from "@cucumber/tag-expressions";
 import { execa } from "execa";
 import fg from "fast-glob";
 
@@ -252,28 +261,101 @@ const IDENT_RE = /^[A-Za-z_$][\w$]*$/;
 const isTernaryMark = (s: string, i: number): boolean =>
   s[i] === "?" && s[i + 1] !== "." && s[i + 1] !== "?" && s[i - 1] !== "?";
 
+/** `process.env` as a config passes it; a helper receives `{}` for it. */
+const ENV = Symbol("process.env");
+type Value = string | typeof ENV;
+
 /**
- * The strings a config value can take, read statically: a string literal, an
- * array of them, a same-file `const`/`let` naming one, or a ternary of those
- * (both branches, the condition unread — a config that picks a file by
- * environment runs either). `null` = not statically readable.
+ * The pure tag-expression builders a config may call, by module: the guard
+ * imports the real module and runs them, so the filter it judges is the one
+ * the runner builds. Any other call is unreadable.
  */
-function staticStrings(
+const TAG_HELPERS: Record<string, string[]> = {
+  "packages/e2e/lib/host-tags.ts": [
+    "tagExpressionFor",
+    "signInHostTags",
+    "prCiDoorTags",
+    "ordinaryStorefrontTagsFor",
+  ],
+  "packages/e2e/lib/default-auth-limits.ts": ["authLimitTagsFor"],
+};
+
+type Helper = (...args: unknown[]) => unknown;
+
+/** What a config value is read against: its file, wrapper arguments, helpers. */
+interface EvalCtx {
+  src: string;
+  /** A wrapper's parameters at one call site; `null` = an unreadable argument. */
+  scope: Map<string, Value[] | null>;
+  helpers: Map<string, Helper>;
+}
+
+/** Every combination of one value per list. */
+function combinations(lists: Value[][]): Value[][] {
+  return lists.reduce<Value[][]>(
+    (acc, list) => acc.flatMap((pre) => list.map((v) => [...pre, v])),
+    [[]],
+  );
+}
+
+/** A template literal's values, its `${…}` parts read like any expression. */
+function templateValues(
+  e: string,
+  ctx: EvalCtx,
+  seen: Set<string>,
+): Value[] | null {
+  const body = e.slice(1, -1);
+  const parts: Value[][] = [];
+  let text = "";
+  for (let i = 0; i < body.length;) {
+    if (body[i] === "\\") {
+      text += body[i + 1] ?? "";
+      i += 2;
+    } else if (body[i] === "$" && body[i + 1] === "{") {
+      const close = closingBracket(body, i + 1);
+      if (close === -1) return null;
+      const vals = evalExpr(body.slice(i + 2, close), ctx, seen);
+      if (vals === null || vals.some((v) => v === ENV)) return null;
+      parts.push([text], vals);
+      text = "";
+      i = close + 1;
+    } else {
+      text += body[i];
+      i += 1;
+    }
+  }
+  parts.push([text]);
+  return combinations(parts).map((c) => c.join(""));
+}
+
+/**
+ * The values a config expression can take, read without running the config:
+ * a string literal, a template literal of readable parts, an array (its
+ * values pooled), a ternary (both branches, the condition unread — a config
+ * that picks by environment runs either), `process.env`, a wrapper parameter,
+ * a same-file `const`/`let`, or a call to a `TAG_HELPERS` function with
+ * readable arguments (run for real, `process.env` passed as `{}`). Nothing
+ * else is interpreted; `null` = not readable.
+ */
+function evalExpr(
   expr: string,
-  src: string,
+  ctx: EvalCtx,
   seen: Set<string> = new Set(),
-): string[] | null {
+): Value[] | null {
+  const { src } = ctx;
   const e = stripComments(expr).trim();
   if (e === "") return null;
   if (`"'\``.includes(e[0]) && skipNonCode(e, 0) === e.length) {
+    if (e[0] === "`" && e.includes("${")) return templateValues(e, ctx, seen);
     const lit = decodeLiteral(e);
     return lit === null ? null : [lit];
   }
+  if (e === "process.env") return [ENV];
   if (e[0] === "[" && closingBracket(e, 0) === e.length - 1) {
-    const out: string[] = [];
+    const out: Value[] = [];
     for (const part of splitTopCommas(e.slice(1, -1))) {
       if (stripComments(part).trim() === "") continue;
-      const vals = staticStrings(part, src, seen);
+      const vals = evalExpr(part, ctx, seen);
       if (vals === null) return null;
       out.push(...vals);
     }
@@ -301,10 +383,35 @@ function staticStrings(
       return false;
     });
     if (colon === -1) return null;
-    const a = staticStrings(e.slice(q + 1, colon), src, seen);
-    const b = staticStrings(e.slice(colon + 1), src, seen);
+    const a = evalExpr(e.slice(q + 1, colon), ctx, seen);
+    const b = evalExpr(e.slice(colon + 1), ctx, seen);
     return a === null || b === null ? null : [...a, ...b];
   }
+  const call = e.match(/^([A-Za-z_$][\w$]*)\s*\(/);
+  if (call && closingBracket(e, call[0].length - 1) === e.length - 1) {
+    const fn = ctx.helpers.get(call[1]);
+    if (!fn) return null;
+    const args: Value[][] = [];
+    for (const part of splitTopCommas(e.slice(call[0].length, -1))) {
+      if (stripComments(part).trim() === "") continue;
+      const vals = evalExpr(part, ctx, seen);
+      if (vals === null) return null;
+      args.push(vals);
+    }
+    const out: Value[] = [];
+    for (const combo of combinations(args)) {
+      let res: unknown;
+      try {
+        res = fn(...combo.map((v) => (v === ENV ? {} : v)));
+      } catch {
+        return null;
+      }
+      if (typeof res !== "string") return null;
+      out.push(res);
+    }
+    return out;
+  }
+  if (IDENT_RE.test(e) && ctx.scope.has(e)) return ctx.scope.get(e) ?? null;
   if (IDENT_RE.test(e) && !seen.has(e)) {
     const decl = new RegExp(`\\b(?:const|let)\\s+${e}\\s*=`).exec(src);
     if (!decl) return null;
@@ -316,35 +423,152 @@ function staticStrings(
       return true;
     });
     if (end === -1) return null;
-    return staticStrings(rest.slice(0, end), src, new Set([...seen, e]));
+    // A const is read at file scope: a wrapper's parameters do not reach it.
+    return evalExpr(
+      rest.slice(0, end),
+      { ...ctx, scope: new Map() },
+      new Set([...seen, e]),
+    );
   }
   return null;
 }
 
-/** One `defineBddConfig` call: its `features` / `steps` globs, as written. */
+/** Only strings: `process.env` where a glob belongs is unreadable. */
+const stringsOnly = (vals: Value[] | null): string[] | null =>
+  vals === null || vals.some((v) => v === ENV) ? null : (vals as string[]);
+
+/**
+ * One runner config of a `defineBddConfig` call: its `features` / `steps`
+ * globs and its `tags` filter alternatives, as written (`null` = not
+ * readable; `tags` `undefined` = no filter). A call inside a same-file wrapper
+ * (`const f = (…) => defineBddConfig({ … })`) yields one config per call of
+ * the wrapper, its parameters bound to that call's arguments.
+ */
 export interface BddConfigCall {
   features: string[] | null;
   steps: string[] | null;
+  tags: string[] | null | undefined;
+  /** The unreadable properties, as written. */
+  unread: string[];
+}
+
+/** A wrapper parameter: its name and its default, as written. */
+function wrapperParams(list: string): { name: string; dflt: string | null }[] {
+  return splitTopCommas(list)
+    .map((p) => stripComments(p).trim())
+    .filter((p) => p !== "")
+    .map((p) => {
+      let eq = -1;
+      scanTop(p, (i) => {
+        if (p[i] !== "=" || "=>".includes(p[i + 1] ?? "")) return false;
+        if ("=!<>".includes(p[i - 1] ?? "")) return false;
+        eq = i;
+        return true;
+      });
+      return {
+        name: p.match(/^[A-Za-z_$][\w$]*/)?.[0] ?? "",
+        dflt: eq === -1 ? null : p.slice(eq + 1),
+      };
+    });
 }
 
 /**
- * Every `defineBddConfig({ … })` call of a config source, with the
- * `features` and `steps` values read statically (`null` = not readable).
+ * Every runner config of a config source, with `features`, `steps` and `tags`
+ * read by `evalExpr`.
  */
-export function bddConfigCalls(src: string): BddConfigCall[] {
-  const calls: BddConfigCall[] = [];
-  for (const m of src.matchAll(/\bdefineBddConfig\s*\(\s*/g)) {
-    const open = m.index + m[0].length;
-    const call: BddConfigCall = { features: null, steps: null };
-    calls.push(call);
-    if (src[open] !== "{") continue;
+export function bddConfigCalls(
+  src: string,
+  helpers: Map<string, Helper> = new Map(),
+): BddConfigCall[] {
+  // `const name = (params) => defineBddConfig(` — the call's index → wrapper.
+  const wrappers = new Map<number, { name: string; params: string }>();
+  for (const d of src.matchAll(
+    /\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*\(/g,
+  )) {
+    const open = d.index + d[0].length - 1;
     const close = closingBracket(src, open);
     if (close === -1) continue;
-    for (const prop of splitTopCommas(src.slice(open + 1, close))) {
-      const p = stripComments(prop).trim();
-      const kv = p.match(/^([A-Za-z_$][\w$]*)\s*(?::([\s\S]*))?$/);
-      if (!kv || (kv[1] !== "features" && kv[1] !== "steps")) continue;
-      call[kv[1]] = staticStrings(kv[2] ?? kv[1], src);
+    const arrow = /^\s*=>\s*/.exec(src.slice(close + 1));
+    if (
+      !arrow ||
+      !/^defineBddConfig\s*\(/.test(src.slice(close + 1 + arrow[0].length))
+    ) {
+      continue;
+    }
+    wrappers.set(close + 1 + arrow[0].length, {
+      name: d[1],
+      params: src.slice(open + 1, close),
+    });
+  }
+  const fileCtx: EvalCtx = { src, scope: new Map(), helpers };
+  const calls: BddConfigCall[] = [];
+  for (const m of src.matchAll(/\bdefineBddConfig\s*\(\s*/g)) {
+    const scopes: Map<string, Value[] | null>[] = [];
+    const wrapper = wrappers.get(m.index);
+    if (wrapper) {
+      const params = wrapperParams(wrapper.params);
+      const site = new RegExp(`(?<![\\w$.])${wrapper.name}\\s*\\(`, "g");
+      for (const c of src.matchAll(site)) {
+        const open = c.index + c[0].length - 1;
+        const close = closingBracket(src, open);
+        if (close === -1) continue;
+        const args = splitTopCommas(src.slice(open + 1, close)).filter(
+          (a) => stripComments(a).trim() !== "",
+        );
+        scopes.push(
+          new Map(
+            params.map(({ name, dflt }, i) => {
+              const arg = args[i] ?? dflt;
+              return [name, arg === null ? null : evalExpr(arg, fileCtx)];
+            }),
+          ),
+        );
+      }
+    } else {
+      scopes.push(new Map());
+    }
+    const open = m.index + m[0].length;
+    const close = src[open] === "{" ? closingBracket(src, open) : -1;
+    for (const scope of scopes) {
+      const ctx: EvalCtx = { src, scope, helpers };
+      const call: BddConfigCall = {
+        features: null,
+        steps: null,
+        tags: undefined,
+        unread: [],
+      };
+      calls.push(call);
+      if (close === -1) {
+        call.unread.push("features", "steps");
+        continue;
+      }
+      const written = new Map<string, string>();
+      for (const prop of splitTopCommas(src.slice(open + 1, close))) {
+        const p = stripComments(prop).trim();
+        const kv = p.match(/^([A-Za-z_$][\w$]*)\s*(?::([\s\S]*))?$/);
+        if (kv) written.set(kv[1], (kv[2] ?? kv[1]).trim());
+      }
+      const read = (name: string): Value[] | null => {
+        const expr = written.get(name);
+        const vals = expr === undefined ? null : evalExpr(expr, ctx);
+        if (vals === null || (name !== "tags" && stringsOnly(vals) === null)) {
+          call.unread.push(
+            `${name}: ${(expr ?? "(missing)").replace(/\s+/g, " ")}`,
+          );
+        }
+        return vals;
+      };
+      call.features = stringsOnly(read("features"));
+      call.steps = stringsOnly(read("steps"));
+      if (written.has("tags")) {
+        const tags = stringsOnly(read("tags"));
+        if (tags === null && !call.unread.some((u) => u.startsWith("tags:"))) {
+          call.unread.push(
+            `tags: ${written.get("tags")!.replace(/\s+/g, " ")}`,
+          );
+        }
+        call.tags = tags;
+      }
     }
   }
   return calls;
@@ -387,22 +611,72 @@ export function stepPatterns(src: string): (string | RegExp)[] {
 
 /**
  * One runner config as playwright-bdd sees it: the spec feature files its
- * `features` globs take in, and a matcher over the step definitions of its
- * own `steps` globs only — a feature binds to nothing else in that run.
+ * `features` globs take in, its `tags` filter (one predicate per value the
+ * expression can take; no `tags` = one that selects everything), and a
+ * matcher over the step definitions of its own `steps` globs only — a feature
+ * binds to nothing else in that run.
  */
 interface RunnerConfig {
   where: string;
   realStack: boolean;
   features: Set<string>;
+  filters: ((tags: string[]) => boolean)[];
   matches: (text: string) => boolean;
 }
 
 /**
- * Every `defineBddConfig` call on disk as a runner config. Tag filters
- * (`tags`, a `grep`) are not modelled: a config binds every scenario of the
- * files it takes in whose steps it matches, the way `missingSteps` would
- * judge it. A call whose `features` or `steps` cannot be read statically is a
- * finding — binding it by guess could pass a journey no runner executes.
+ * The `TAG_HELPERS` functions a config source imports, by local name, run
+ * from the real module under `REPO_ROOT` (`@ds/e2e/<sub>` through the e2e
+ * package's `exports`). Other imports are not loaded, so calling them is
+ * unreadable.
+ */
+async function tagHelpersOf(
+  src: string,
+  dir: string,
+): Promise<Map<string, Helper>> {
+  const helpers = new Map<string, Helper>();
+  for (const m of src.matchAll(
+    /\bimport\s*\{([^}]*)\}\s*from\s*["']([^"']+)["']/g,
+  )) {
+    let target: string | null = null;
+    if (m[2].startsWith(".")) {
+      target = posix.normalize(posix.join(dir, m[2])).replace(/\.js$/, ".ts");
+    } else if (m[2].startsWith("@ds/e2e/")) {
+      const pkg = resolve(REPO_ROOT, "packages/e2e/package.json");
+      const exp = existsSync(pkg)
+        ? (
+            JSON.parse(readFileSync(pkg, "utf8")) as {
+              exports?: Record<string, unknown>;
+            }
+          ).exports?.[`./${m[2].slice("@ds/e2e/".length)}`]
+        : undefined;
+      if (typeof exp === "string") target = posix.join("packages/e2e", exp);
+    }
+    const allowed = target === null ? undefined : TAG_HELPERS[target];
+    if (!allowed) continue;
+    const mod = (await import(
+      pathToFileURL(resolve(REPO_ROOT, target!)).href
+    )) as Record<string, unknown>;
+    for (const spec of m[1].split(",")) {
+      const [name, local] = spec
+        .trim()
+        .replace(/^type\s+/, "")
+        .split(/\s+as\s+/);
+      const fn = mod[name];
+      if (allowed.includes(name) && typeof fn === "function") {
+        helpers.set(local ?? name, fn as Helper);
+      }
+    }
+  }
+  return helpers;
+}
+
+/**
+ * Every runner config on disk (`bddConfigCalls`). A config binds a scenario
+ * of a file it takes in when its tag filter selects it and its steps match,
+ * the way `missingSteps` would judge it; a title `grep` is not modelled. A
+ * call whose `features`, `steps` or `tags` cannot be read is a finding —
+ * binding it by guess could pass a journey no runner executes.
  */
 async function loadRunnerConfigs(findings: string[]): Promise<{
   configs: RunnerConfig[];
@@ -446,17 +720,31 @@ async function loadRunnerConfigs(findings: string[]): Promise<{
     const rel = relPath(file);
     const dir = posix.dirname(rel);
     const realStack = REAL_STACK_CONFIG_DIRS.some((d) => rel.startsWith(d));
-    const calls = bddConfigCalls(readFileSync(file, "utf8"));
+    const src = readFileSync(file, "utf8");
+    const calls = bddConfigCalls(src, await tagHelpersOf(src, dir));
     for (const [n, call] of calls.entries()) {
       const where = calls.length > 1 ? `${rel} (call ${n + 1})` : rel;
-      const unread = [
-        call.features === null ? "features" : null,
-        call.steps === null ? "steps" : null,
-      ].filter((x): x is string => x !== null);
-      if (call.features === null || call.steps === null) {
+      const filters: ((tags: string[]) => boolean)[] = [];
+      for (const t of call.tags ?? []) {
+        try {
+          const node = parseTagExpression(t);
+          filters.push((tags) => node.evaluate(tags));
+        } catch {
+          call.unread.push(`tags: ${t} (not a tag expression)`);
+        }
+      }
+      if (call.tags === undefined) filters.push(() => true);
+      if (
+        call.unread.length > 0 ||
+        call.features === null ||
+        call.steps === null
+      ) {
+        const names = [...new Set(call.unread.map((u) => u.split(":")[0]))];
         findings.push(
-          `${where} -> a defineBddConfig call whose ${unread.join(" and ")} cannot be read ` +
-            `statically; write string literals, an array of them, or a same-file const`,
+          `${where} -> a defineBddConfig call whose ${names.join(" and ")} cannot be read ` +
+            `statically (${call.unread.join("; ")}); write string literals, an array of ` +
+            `them, a same-file const, a parameter of a same-file wrapper, or a call to a ` +
+            `tag helper of ${Object.keys(TAG_HELPERS).join(" / ")}`,
         );
         continue;
       }
@@ -471,6 +759,7 @@ async function loadRunnerConfigs(findings: string[]): Promise<{
         where,
         realStack,
         features,
+        filters,
         matches: (text) => {
           let hit = cache.get(text);
           if (hit === undefined) {
@@ -504,6 +793,8 @@ export interface ParsedScenario {
    * per `Examples` row (every block) for an outline, placeholders substituted.
    */
   runs: string[][];
+  /** Per run, the index of its `Examples` block (-1 for a plain scenario). */
+  runBlocks: number[];
 }
 
 interface ExamplesBlock {
@@ -592,13 +883,14 @@ export function parseScenarioSteps(text: string): ParsedScenario[] {
   });
   return out.map(({ line, title, background, own, examples }) => {
     const steps = [...background, ...own];
-    const rows = examples.flatMap(({ header, rows: r }) =>
-      header ? r.map((row) => ({ header, row })) : [],
+    const rows = examples.flatMap(({ header, rows: r }, block) =>
+      header ? r.map((row) => ({ header, row, block })) : [],
     );
     return {
       line,
       title,
       ownSteps: own.length,
+      runBlocks: rows.length === 0 ? [-1] : rows.map((r) => r.block),
       runs:
         rows.length === 0
           ? [steps]
@@ -1106,12 +1398,26 @@ async function main(): Promise<void> {
         }
       }
 
-      // Bound BY ONE config: it takes this file in and its own steps match
-      // every step of every run — a split across tiers runs nowhere.
+      // Bound BY ONE config: it takes this file in, one value of its tag
+      // filter selects at least one run (feature + Rule + scenario tags, plus
+      // the run's `Examples` block's), and its own steps match every step of
+      // every run so selected — a split across tiers runs nowhere, and a run
+      // the filter leaves out is not run there.
+      const tagsOf = (block: number): string[] => [
+        ...tags,
+        ...tagged[i].ruleTags,
+        ...(block >= 0 ? (tagged[i].examples[block]?.tags ?? []) : []),
+      ];
       const boundBy = (c: RunnerConfig): boolean =>
         c.features.has(rel) &&
         s.ownSteps > 0 &&
-        s.runs.every((run) => run.every((t) => c.matches(t)));
+        c.filters.some((selects) => {
+          const runs = s.runs.filter((_, k) => selects(tagsOf(s.runBlocks[k])));
+          return (
+            runs.length > 0 &&
+            runs.every((run) => run.every((t) => c.matches(t)))
+          );
+        });
       // A quarantine on any `Examples` block leaves those rows unrun.
       const quarantined = [
         ...tags,
@@ -1189,11 +1495,39 @@ async function main(): Promise<void> {
     const issues = new Map(
       parseDebt(debtText, [], DEBT_REL).map((e) => [e.key, e.issue]),
     );
+    // `--issues NNN:N,…`: the Issue a line of spec NNN absent at the merge
+    // base gets when it has none of its own — such a line needs an OPEN one,
+    // and a recount can add many. Baseline lines are left as they are.
+    const flag = process.argv.indexOf("--issues");
+    const specIssue = new Map<string, number>();
+    const base = flag === -1 ? null : await baseDebt();
+    if (base?.status === "unknown") {
+      process.stderr.write(
+        `${TAG} --issues needs the merge base (${base.reason})\n`,
+      );
+      process.exit(1);
+    }
+    const isNew = (key: string): boolean =>
+      base?.status === "ok" && !base.keys.has(key);
+    if (flag !== -1) {
+      for (const pair of (process.argv[flag + 1] ?? "").split(",")) {
+        const m = pair.trim().match(/^(\d{3}):#?(\d+)$/);
+        if (!m) {
+          process.stderr.write(
+            `${TAG} --issues takes NNN:<issue>[,NNN:<issue>…]; got "${pair}"\n`,
+          );
+          process.exit(1);
+        }
+        specIssue.set(m[1], Number(m[2]));
+      }
+    }
     const lines = unproven
       .map((s) => s.key)
       .sort()
       .map((key) => {
-        const issue = issues.get(key);
+        const issue =
+          issues.get(key) ??
+          (isNew(key) ? specIssue.get(key.slice(0, 3)) : undefined);
         return issue ? `${key} | #${issue}` : key;
       });
     writeFileSync(debtPath, [...DEBT_HEADER, ...lines].join("\n") + "\n");
@@ -1211,7 +1545,8 @@ async function main(): Promise<void> {
           (s.cls === "rule"
             ? `bind it, tag a verified @proof:<level>, or list it with an OPEN Issue`
             : s.cls === "journey"
-              ? `bind it under packages/e2e or apps/admin/e2e, or list it with an OPEN Issue`
+              ? `bind it in one real-stack config (packages/e2e, apps/admin) that runs its file, ` +
+                `selects it by its tags and matches every step, or list it with an OPEN Issue`
               : `bind it, or classify it and prove it, or list it with an OPEN Issue`),
       );
     }
@@ -1247,7 +1582,8 @@ async function main(): Promise<void> {
       findings.push(
         `${s.key} -> the spec moves to Shipped (${was ?? "absent"} at the merge base) ` +
           `with this @journey unproven (${s.where}); a spec does not move to Shipped ` +
-          `while one of its journeys is unproven — bind it under packages/e2e or apps/admin/e2e`,
+          `while one of its journeys is unproven — bind it in one real-stack config that ` +
+          `runs its file, selects it by its tags and matches every step`,
       );
     }
   }
@@ -1325,7 +1661,8 @@ async function main(): Promise<void> {
   for (const f of findings) process.stderr.write(`${TAG} ${f}\n`);
   process.stderr.write(
     `${TAG} FAIL — ${findings.length} finding(s) (tech spec §6.4). Prove a ` +
-      `journey by binding its steps under packages/e2e or apps/admin/e2e; a ` +
+      `journey by binding it in one real-stack config (packages/e2e, apps/admin) ` +
+      `that runs its file, selects it by its tags and matches every step; a ` +
       `rule by binding it or by a @proof:<level> tag a spec-scoped test backs; ` +
       `otherwise list it in ${DEBT_REL} with an OPEN Issue.\n`,
   );

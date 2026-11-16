@@ -1,4 +1,11 @@
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -93,6 +100,10 @@ describe("scenario-proof-lint", () => {
       "001 | portal-only journey -> unproven scenario missing from",
     );
     expect(stderr).toContain(
+      "bind it in one real-stack config (packages/e2e, apps/admin) that runs its file, " +
+        "selects it by its tags and matches every step, or list it with an OPEN Issue",
+    );
+    expect(stderr).toContain(
       "001 | quarantined journey -> unproven scenario missing from",
     );
     expect(stderr).toContain(
@@ -185,6 +196,59 @@ describe("scenario-proof-lint", () => {
     expect(stderr).not.toContain("apps/admin/playwright.config.ts ->");
   });
 
+  it("red: a config binds only what its tag filter selects — a journey whose steps all match but no config's tags select it → unproven", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-tag-filter"),
+      seams("red-tag-filter"),
+    );
+    expect(code).toBe(1);
+    // @host:admin: the storefront calls exclude it, the wave config wants @wave-x.
+    expect(stderr).toContain(
+      "001 | excluded journey -> unproven scenario missing from",
+    );
+    // `process.env` reads as `{}`, so the academy call excludes @default-auth-limits.
+    expect(stderr).toContain(
+      "003 | limits journey -> unproven scenario missing from",
+    );
+    // A literal filter, a Rule-level tag, an outline whose one selected
+    // Examples block binds (the unselected one does not run).
+    expect(stderr).not.toContain("001 | wave journey");
+    expect(stderr).not.toContain("001 | rule-tagged journey");
+    expect(stderr).not.toContain("001 | outline partly selected");
+  });
+
+  it("green forms: helper calls through a wrapper, a zero-argument helper, a template literal of a wrapper parameter → resolved", () => {
+    const { stderr } = runGuard(
+      GUARD,
+      dir("red-tag-filter"),
+      seams("red-tag-filter"),
+    );
+    expect(stderr).not.toContain("002 | storefront journey");
+    expect(stderr).not.toContain("002 | sign-in journey");
+    expect(stderr).not.toContain("004 | doctor journey");
+    expect(stderr).not.toContain("004 | doctor-only step journey");
+    expect(stderr).not.toContain("packages/e2e/playwright.config.ts");
+    expect(stderr).not.toContain("packages/e2e/feed.config.ts");
+    expect(stderr).not.toContain("packages/e2e/wave.config.ts");
+  });
+
+  it("red: a defineBddConfig call whose tags cannot be resolved → exit 1, naming the file and the expression", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-tag-filter"),
+      seams("red-tag-filter"),
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain(
+      "apps/admin/playwright.config.ts (call 1) -> a defineBddConfig call whose tags cannot be read statically (tags: process.env.ADMIN_TAGS)",
+    );
+    // A helper outside the allowlist is never executed.
+    expect(stderr).toContain(
+      "apps/admin/playwright.config.ts (call 2) -> a defineBddConfig call whose tags cannot be read statically (tags: otherTags())",
+    );
+  });
+
   it("red: a spec moving to Shipped with an unproven journey blocks, its debt line already at the merge base → exit 1", () => {
     const { code, stderr } = runGuard(
       GUARD,
@@ -199,7 +263,8 @@ describe("scenario-proof-lint", () => {
       "003 | born shipped journey debt -> the spec moves to Shipped (absent at the merge base) with this @journey unproven",
     );
     expect(stderr).toContain(
-      "a spec does not move to Shipped while one of its journeys is unproven",
+      "a spec does not move to Shipped while one of its journeys is unproven — bind it in " +
+        "one real-stack config that runs its file, selects it by its tags and matches every step",
     );
     // A rule, a bound journey, a legacy Shipped spec and a flip with every
     // journey bound pass.
@@ -395,6 +460,46 @@ describe("scenario-proof-lint", () => {
       const checked = runGuard(GUARD, work, env);
       expect(checked.stderr).toBe("");
       expect(checked.code).toBe(0);
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
+  });
+
+  it("--write-debt --issues gives a line absent at the merge base its spec's Issue; baseline lines and a line's own Issue stay", () => {
+    const work = mkdtempSync(join(tmpdir(), "scenario-proof-"));
+    try {
+      cpSync(dir("red-unlisted"), work, { recursive: true });
+      const debt = join(work, "packages", "e2e", "scenario-proof-debt.txt");
+      const baseDebtFile = join(work, "base-debt.txt");
+      writeFileSync(baseDebtFile, "001 | listed scenario\n");
+      writeFileSync(debt, "001 | listed scenario\n");
+      const env = {
+        LINT_PROOF_BASE_ROOT: work,
+        LINT_PROOF_BASE_DEBT_FILE: baseDebtFile,
+      };
+      const written = runGuard(GUARD, work, {
+        env,
+        extraArgs: ["--write-debt", "--issues", "001:9100,002:9200"],
+      });
+      expect(written.code).toBe(0);
+      expect(readFileSync(debt, "utf8")).toContain(
+        "001 | forgotten scenario | #9100\n001 | listed scenario\n",
+      );
+      // A line's own Issue wins over the spec's.
+      writeFileSync(debt, "001 | forgotten scenario | #77\n");
+      runGuard(GUARD, work, {
+        env,
+        extraArgs: ["--write-debt", "--issues", "001:9100"],
+      });
+      expect(readFileSync(debt, "utf8")).toContain(
+        "001 | forgotten scenario | #77\n",
+      );
+      const bad = runGuard(GUARD, work, {
+        env,
+        extraArgs: ["--write-debt", "--issues", "1:x"],
+      });
+      expect(bad.code).toBe(1);
+      expect(bad.stderr).toContain("--issues");
     } finally {
       rmSync(work, { recursive: true, force: true });
     }

@@ -411,9 +411,10 @@ policies `playwright-bdd` 9.2 offers:
   «gone».
 
 A skipped scenario is not necessarily unproven. By class (tech spec §6.1): a
-`@journey` is proven only when ONE runner config here or in `apps/admin` both
-runs its feature file and binds every step of it, Background included (step
-definitions are never pooled across configs), and it is not quarantined — no
+`@journey` is proven only when ONE runner config here or in `apps/admin` runs
+its feature file, selects it by its `tags` filter and binds every step of it,
+Background included (step definitions are never pooled across configs), and it
+is not quarantined — no
 lower-level test proves a journey; a `@rule` when bound by any one config or
 tagged with a verified `@proof:<level>`; a legacy unclassified scenario only
 when bound. `pnpm scenarios:inventory` — not the skipped count —

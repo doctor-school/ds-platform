@@ -485,8 +485,9 @@ vocabulary, every scenario reports as **skipped** — `missingSteps: "skip-scena
 deliberate choice `packages/e2e/playwright.config.ts` records. The verdict block prints
 the skipped count rather than hiding it, so «0 passed / N skipped» is a truthful reading
 of what this run executed, not a defect of this command. The suite's coverage number is
-`pnpm scenarios:inventory`, which also counts scenarios proven by a verified
-`@proof:<level>` tag (regression-contour tech spec §6.1/§6.4).
+`pnpm scenarios:inventory`, headlined journeys bound / journeys total; a `@rule` may
+also count by a verified `@proof:<level>` tag, a `@journey` only by binding here or in
+`apps/admin/e2e` (regression-contour tech spec §6.1/§6.4).
 
 ## `slot.mjs` in one paragraph
 

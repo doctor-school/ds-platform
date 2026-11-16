@@ -1,0 +1,5 @@
+# fixture debt list
+001 | baseline journey debt
+001 | shipped journey debt | #9100
+001 | shipped rule debt | #9100
+003 | in-dev journey debt | #9100

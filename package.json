@@ -147,6 +147,7 @@
     "@changesets/changelog-github": "^1.0.1",
     "@changesets/cli": "^3.0.2",
     "@cucumber/cucumber-expressions": "19.0.0",
+    "@cucumber/tag-expressions": "9.1.0",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",

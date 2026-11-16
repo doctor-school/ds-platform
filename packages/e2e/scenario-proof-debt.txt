@@ -1,9 +1,12 @@
 # Unproven spec scenarios — the scenario-proof ratchet (tools/lint/scenario-proof-lint.ts,
 # regression-contour tech spec §6.4). One line per scenario of a non-Draft spec that is
-# neither bound to a step definition nor carries a verified @proof:<level> tag:
+# not proven: a @journey not bound by one real-stack runner config, a @rule neither bound
+# by one runner config nor carrying a verified @proof:<level> tag, an unclassified
+# scenario not bound:
 #   NNN | <scenario title>[ [k]][ | #<issue>]   ([k] = the k-th scenario with that title)
-# Delete a line once its scenario is bound or proof-tagged. A line added after the merge
-# base names an OPEN Issue. Regenerate: pnpm lint:scenario-proof --write-debt
+# Delete a line once its scenario is proven. A line added after the merge base names an
+# OPEN Issue; a spec does not move to Shipped while one of its journeys is unproven.
+# Regenerate: pnpm lint:scenario-proof --write-debt
 002 | Readiness endpoint reports down when Postgres is unreachable
 002 | The object-storage state is cached, refreshed every 60 seconds and logged on transitions only
 003 | A code finalised by any other login UI yields no storefront session
@@ -41,8 +44,13 @@
 003 | A stalled transport terminates and cannot report late success
 003 | A successful login forgives the per-user rate-limit window
 003 | A successful native SMTP write without converged readback cannot activate a release
+003 | A tripped silent-check limit answers the guest page without a redirect | #4073
 003 | A verified password holder who re-registers is signed in by the code and keeps the password
 003 | A wrong, expired or reused phone code confirms nothing
+003 | Academy password reset completion clears the same identifier rate window | #4073
+003 | Academy refuses a live handoff with the ordinary generic account throttle | #4073
+003 | Academy staff own-profile access preserves registrar confinement | #4073
+003 | Academy successful password login clears the same identifier's real rate window | #4073
 003 | Already-registered email receives a code mail and nothing is written before the code
 003 | An abandoned change leaves the account with no confirmed phone
 003 | An authenticated user reads their own profile
@@ -54,6 +62,7 @@
 003 | An unauthenticated read heals nothing and stays generic
 003 | An unknown SMTP phase is treated as ambiguous
 003 | An unknown, spent or foreign entry-intent id opens the plain sign-in form
+003 | CAPTCHA failure is truthful, terminal, theme-aware, and non-destructive | #4073
 003 | Changing a confirmed phone leaves no confirmed phone until the new one is confirmed
 003 | Channels have independent credentials and only verified channels are reserve
 003 | Every channel failing is recorded and never leaks into the API response
@@ -64,6 +73,7 @@
 003 | Mirror reconciliation closes a webhook-miss divergence
 003 | No eight-cell code step exists on either storefront
 003 | Only a valid back-channel logout token revokes sessions
+003 | Password login challenges only after the backend threshold | #4073
 003 | Postbox acceptance stops the chain
 003 | Postbox and mail.ru provider failures are delivered through Resend
 003 | Provider acceptance does not trigger resend when mailbox placement is poor

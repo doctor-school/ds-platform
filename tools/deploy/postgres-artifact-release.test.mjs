@@ -269,6 +269,7 @@ const run = (over = {}) => ({
 const artifact = (runId, over = {}) => ({
   id: runId * 100,
   name: postgresArtifactName(HASH),
+  digest: `sha256:${String(runId).repeat(32).slice(0, 64)}`,
   expired: false,
   created_at: `2026-11-1${runId % 10}T00:00:00Z`,
   workflow_run: { id: runId },
@@ -303,6 +304,8 @@ test("4089: a release delivers the newest main certification of its source hash 
   });
   assert.equal(chosen.runId, 12);
   assert.equal(chosen.artifactId, 1200);
+  // The API digest of that artifact travels with its id: the deploy job prints it.
+  assert.equal(chosen.digest, `sha256:${"12".repeat(32)}`);
   // The run of the target SHA itself counts.
   assert.equal(
     select({
@@ -542,4 +545,15 @@ test("4089: a box-local release reads the delivered artifact of its own SHA, loa
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("4089: an artifact the API names without an id is never delivered — the download takes the id", () => {
+  assert.throws(
+    () =>
+      select({
+        artifacts: [artifact(11, { id: undefined })],
+        runs: [run({ id: 11 })],
+      }),
+    /run 11: it names no artifact id/,
+  );
 });

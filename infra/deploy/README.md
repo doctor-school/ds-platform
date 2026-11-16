@@ -1962,8 +1962,9 @@ line per container of both compose projects (evidence only: a docker error print
 
 `data-prod/compose.yml` is an input of the PostgreSQL source hash, but the hash
 leaves `logging` out (v2, #3419: `tools/deploy/README.md` → PostgreSQL deployment
-guard), so the bound of the persistence plane needs no artifact certification —
-the Actions release (`prod.mjs --local`) cannot take one (#3418). Recreating
+guard), so the bound of the persistence plane needs no artifact certification; a
+changed hash is certified by `postgres-artifact.yml` and delivered by the Actions
+release (`tools/deploy/README.md` → PostgreSQL deployment guard). Recreating
 `postgres` for a logging change restarts the server once: the API reconnects to the
 database during that release window. `tools/deploy/compose-logging.test.mjs` fails
 on any service without the bound, with no exemption.

@@ -60,6 +60,9 @@ lock_file_problem() {
 STATE_ROOT=${DS_RELEASE_STATE_ROOT:-/var/lib/ds-platform/release}
 LOCK_DIR=${DS_RELEASE_LOCK_DIR:-$(default_lock_dir)}
 SELF=${DS_RELEASE_SELF:-/usr/local/bin/ds-release}
+# ds-deploy-entrypoint's PG_ARTIFACT_DIR and postgres-artifact-release.mjs's
+# POSTGRES_ARTIFACT_DIR (tools/deploy/ds-release.test.mjs pins them equal).
+PG_ARTIFACT_DIR=${DS_RELEASE_PG_ARTIFACT_DIR:-/var/lib/ds-platform/postgres-artifact}
 
 ENV_RE='^(prod|stage-main|stage-pr-[1-9][0-9]*)$'
 SHA_RE='^[0-9a-f]{40}$'
@@ -435,6 +438,12 @@ cmd_finish() {
   [[ -f $file ]] || { say "no release $1 ${2:0:12} recorded; nothing to finish"; return 0; }
   settle_running "$file"
   js finish "$file" "$3"
+  # #4089: the certified PostgreSQL artifact deploy-prod.yml delivered to ds-api-prod for
+  # this SHA (≤ 1 GiB, ds-deploy-entrypoint `postgres-artifact`) is spent once the release
+  # succeeded; a failed one keeps it for the re-run of the same SHA.
+  if [[ $1 == prod && $3 == succeeded ]]; then
+    rm -rf -- "$PG_ARTIFACT_DIR/$2"
+  fi
   say "release $1 ${2:0:12} finished: $3"
 }
 

@@ -22,6 +22,8 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { POSTGRES_ARTIFACT_DIR } from "./postgres-artifact-release.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const DS_RELEASE = resolve(here, "../../infra/deploy/bin/ds-release");
 const SHA_A = "a".repeat(40);
@@ -827,3 +829,59 @@ describe(
     });
   },
 );
+
+// #4089: a delivered PostgreSQL artifact (≤ 1 GiB on ds-api-prod) lives until its
+// release succeeds — a failed release keeps it for the re-run of the same SHA.
+describe(
+  "ds-release finish and the delivered PostgreSQL artifact",
+  { skip: !toolsPresent && "needs bash + flock + python3 + getent" },
+  () => {
+    before(setup);
+    after(() => rmSync(root, { recursive: true, force: true }));
+
+    const deliver = (sha) => {
+      const dir = join(root, "postgres-artifact", sha);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "images.tar"), "tar");
+      return dir;
+    };
+    const pgEnv = {
+      DS_RELEASE_PG_ARTIFACT_DIR: join(root, "postgres-artifact"),
+    };
+
+    it("4089: `finish prod <sha> failed` keeps that SHA's delivery", () => {
+      const own = deliver(SHA_A);
+      const noop = scriptFile("noop-a", "true\n");
+      assert.equal(ds(["release", "prod", SHA_A, "pull", noop], pgEnv).code, 0);
+      waitStep("prod", SHA_A, "pull");
+      assert.equal(ds(["finish", "prod", SHA_A, "failed"], pgEnv).code, 0);
+      assert.ok(existsSync(join(own, "images.tar")));
+    });
+
+    it("4089: `finish prod <sha> succeeded` removes that SHA's delivery and nothing else", () => {
+      const own = deliver(SHA_B);
+      const other = deliver(SHA_C);
+      const noop = scriptFile("noop-b", "true\n");
+      assert.equal(ds(["release", "prod", SHA_B, "pull", noop], pgEnv).code, 0);
+      waitStep("prod", SHA_B, "pull");
+      const r = ds(["finish", "prod", SHA_B, "succeeded"], pgEnv);
+      assert.equal(r.code, 0, r.err);
+      assert.equal(existsSync(own), false);
+      assert.ok(existsSync(join(other, "images.tar")));
+    });
+  },
+);
+
+it("4089: ds-release removes the delivery from the directory the entrypoint writes and the driver reads", () => {
+  const text = (file) => readFileSync(resolve(here, file), "utf8");
+  assert.ok(
+    text("../../infra/deploy/bin/ds-release").includes(
+      `PG_ARTIFACT_DIR=\${DS_RELEASE_PG_ARTIFACT_DIR:-${POSTGRES_ARTIFACT_DIR}}`,
+    ),
+  );
+  assert.ok(
+    text("../../infra/deploy/bin/ds-deploy-entrypoint").includes(
+      `PG_ARTIFACT_DIR=$ROOT${POSTGRES_ARTIFACT_DIR}\n`,
+    ),
+  );
+});

@@ -804,11 +804,16 @@ key and no workstation-held artifact:
    that hash and is not expired — a pull_request run, another branch (a hotfix included:
    the Actions release has no hotfix ref), a run outside the target's history, another
    workflow, a failed run or no qualifying run is a refusal before any box step, naming
-   the dispatch to run. The deploy job hands
-   ds-api-prod `certificate.json`, then `images.tar`, through its forced command
-   `postgres-artifact prod <sha> certificate|images` (refused while a release step runs;
-   kept root:deploy 0750 under `/var/lib/ds-platform/postgres-artifact/<sha>/`, one SHA
-   at a time).
+   the dispatch to run. The deploy job downloads exactly that artifact by the id the
+   pre-flight checked (`artifact-ids:`, never by name), prints its API digest beside the
+   sha256 sums of the two files, and hands ds-api-prod `certificate.json`, then
+   `images.tar`, through its forced command `postgres-artifact prod <sha> certificate|images`
+   (refused while a release step runs; kept root:deploy 0750 under
+   `/var/lib/ds-platform/postgres-artifact/<sha>/`, one SHA at a time, removed by
+   `ds-release finish prod <sha> succeeded`; a failed release keeps it for the re-run). A
+   re-run of the deploy job while this SHA's driver unit still runs (`status prod <sha>`
+   answers `driver.active` `active`/`activating`, e.g. after the 60-min poll limit)
+   delivers nothing and the start answers `attached`.
 3. **Load and guard.** The release driver (`prod.mjs --local`) finds that delivery for
    its own SHA in `postgres-verify`, re-checks that the archive holds exactly the
    certified untagged ids, streams it to ds-data-prod's
@@ -823,7 +828,10 @@ key and no workstation-held artifact:
    present. No container starts and the upload is removed.
    Everything after is the ordinary guarded release: `data-env` records the certified
    ids, `data-up` recreates postgres + pgbackrest on them, the checkpoint advances the
-   record.
+   record. On every release that checkpoint also prints one
+   `↳ ds-data-prod: storage driver: <driver>` line (evidence only, `unavailable — <reason>`
+   on a docker error): the certified ids are classic-store (`overlay2`) config digests,
+   and a box on the containerd store fails closed at the post-load inspect.
 
 The Actions path adds evidence, never acceptance: the guard alone decides, with the same
 checks as the break-glass path — a missing, stale (other source hash) or foreign

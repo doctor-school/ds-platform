@@ -230,29 +230,35 @@ export function selectPostgresArtifact({
     const run = byId.get(artifact.workflow_run?.id);
     const why = !run
       ? "its run is unreadable"
-      : artifact.expired
-        ? "it expired"
-        : run.path !== POSTGRES_ARTIFACT_WORKFLOW
-          ? `it comes from ${run.path}`
-          : !["push", "workflow_dispatch"].includes(run.event)
-            ? `it comes from a ${run.event} run`
-            : run.head_repository?.full_name !== repo
-              ? "it comes from another repository"
-              : run.head_branch !== "main"
-                ? `it comes from branch ${run.head_branch}`
-                : run.status !== "completed" || run.conclusion !== "success"
-                  ? `its run is ${run.conclusion ?? run.status}`
-                  : !SHA_RE.test(run.head_sha ?? "")
-                    ? "its run names no commit"
-                    : run.head_sha !== targetSha &&
-                        !isAncestor(run.head_sha, targetSha)
-                      ? `its commit ${run.head_sha.slice(0, 12)} is not in the history of the release ${targetSha.slice(0, 12)}`
-                      : null;
+      : !Number.isInteger(artifact.id)
+        ? "it names no artifact id"
+        : artifact.expired
+          ? "it expired"
+          : run.path !== POSTGRES_ARTIFACT_WORKFLOW
+            ? `it comes from ${run.path}`
+            : !["push", "workflow_dispatch"].includes(run.event)
+              ? `it comes from a ${run.event} run`
+              : run.head_repository?.full_name !== repo
+                ? "it comes from another repository"
+                : run.head_branch !== "main"
+                  ? `it comes from branch ${run.head_branch}`
+                  : run.status !== "completed" || run.conclusion !== "success"
+                    ? `its run is ${run.conclusion ?? run.status}`
+                    : !SHA_RE.test(run.head_sha ?? "")
+                      ? "its run names no commit"
+                      : run.head_sha !== targetSha &&
+                          !isAncestor(run.head_sha, targetSha)
+                        ? `its commit ${run.head_sha.slice(0, 12)} is not in the history of the release ${targetSha.slice(0, 12)}`
+                        : null;
     if (why) rejected.push(`run ${artifact.workflow_run?.id}: ${why}`);
     else
       candidates.push({
         runId: run.id,
         artifactId: artifact.id,
+        // The API's digest of the artifact zip; printed beside the delivered sums.
+        digest: /^sha256:[0-9a-f]{64}$/.test(artifact.digest ?? "")
+          ? artifact.digest
+          : "",
         headSha: run.head_sha,
         createdAt: artifact.created_at,
       });
@@ -314,6 +320,7 @@ async function main() {
     appendFileSync(process.env.GITHUB_OUTPUT, `${line}\n`);
   if (!postgresInputChanged({ targetHash, liveHash })) {
     output("run-id=");
+    output("artifact-id=");
     console.log(
       `data input unchanged since the live ${liveSha.slice(0, 12)} (${targetHash.slice(0, 12)}…): no PostgreSQL artifact`,
     );
@@ -345,10 +352,12 @@ async function main() {
     repo,
     isAncestor,
   });
+  // The deploy job downloads this artifact by its id: the one checked here.
   output(`run-id=${chosen.runId}`);
-  output(`source-hash=${targetHash}`);
+  output(`artifact-id=${chosen.artifactId}`);
+  output(`digest=${chosen.digest || "unknown"}`);
   console.log(
-    `data input changed ${liveHash.slice(0, 12)}… → ${targetHash.slice(0, 12)}…: delivering the certified artifact of run ${chosen.runId} (${chosen.headSha.slice(0, 12)})`,
+    `data input changed ${liveHash.slice(0, 12)}… → ${targetHash.slice(0, 12)}…: delivering the certified artifact ${chosen.artifactId} of run ${chosen.runId} (${chosen.headSha.slice(0, 12)}, ${chosen.digest || "no digest"})`,
   );
 }
 

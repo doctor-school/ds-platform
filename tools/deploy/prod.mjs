@@ -2360,11 +2360,17 @@ export async function preparePostgresDeployment(
 }
 
 // #3395/#3466: of the checkpoint verb's answer only the box's own evidence is echoed —
-// the record it wrote (`record:`) and its log bounds (`log bound…`).
+// the record it wrote (`record:`), its log bounds (`log bound…`) and (#4089) the docker
+// storage driver the certified image ids assume (`storage driver:`).
 export function checkpointJournalLines(answer) {
   return String(answer ?? "")
     .split("\n")
-    .filter((line) => line.startsWith("record:") || line.startsWith("log bound"))
+    .filter(
+      (line) =>
+        line.startsWith("record:") ||
+        line.startsWith("log bound") ||
+        line.startsWith("storage driver:"),
+    )
     .map((line) => `  ↳ ${DATA_PROD}: ${line.trim()}`);
 }
 

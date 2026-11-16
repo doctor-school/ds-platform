@@ -848,6 +848,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         '  "ps -aq --filter label=com.docker.compose.project=ds-data-prod") echo pg; echo redis ;;',
         '  "ps -aq --filter label=com.docker.compose.project=ds-glitchtip") echo web ;;',
         '  inspect*) for id in "${@: -3}"; do echo "/$id log=json-file max-size=50m max-file=3"; done ;;',
+        "  info*) echo overlay2 ;;",
         "esac",
         "",
       ].join("\n"),
@@ -921,8 +922,11 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         "record: v1 (no hashVersion)\n" +
         "log bound: /pg log=json-file max-size=50m max-file=3\n" +
         "log bound: /redis log=json-file max-size=50m max-file=3\n" +
-        "log bound: /web log=json-file max-size=50m max-file=3\n",
+        "log bound: /web log=json-file max-size=50m max-file=3\n" +
+        // #4089: the image store the certified ids assume (classic overlay2).
+        "storage driver: overlay2\n",
     );
+    assert.ok(log("docker").split("\n").includes("info --format {{.Driver}}"), log("docker"));
     const calls = log("docker").split("\n");
     assert.ok(calls.includes("ps -aq --filter label=com.docker.compose.project=ds-data-prod"), log("docker"));
     assert.ok(calls.includes("ps -aq --filter label=com.docker.compose.project=ds-glitchtip"), log("docker"));
@@ -932,9 +936,18 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
 
   // #3395: the log-bound report is evidence only — it never fails the checkpoint, and
   // it reads no compose file or .env (the pre-ship checkpoint runs on any tree).
-  for (const [label, fail] of [
-    ["docker inspect fails", "inspect"],
-    ["docker ps fails", "ps"],
+  for (const [label, fail, evidence] of [
+    ["docker inspect fails", "inspect", "log bounds: unavailable — Error: inspect broke\nstorage driver: overlay2\n"],
+    ["docker ps fails", "ps", "log bounds: unavailable — Error: ps broke\nstorage driver: overlay2\n"],
+    // #4089: the storage driver line is evidence only too.
+    [
+      "docker info fails",
+      "info",
+      "log bound: /pg log=json-file max-size=50m max-file=3\n" +
+        "log bound: /redis log=json-file max-size=50m max-file=3\n" +
+        "log bound: /web log=json-file max-size=50m max-file=3\n" +
+        "storage driver: unavailable — Error: info broke\n",
+    ],
   ]) {
     it(`3395: postgres-checkpoint still exits 0 with no .env when ${label}, naming the report unavailable`, () => {
       setRole("data");
@@ -951,7 +964,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       assert.equal(existsSync(join(tree(), "infra/deploy/compose/data-prod/.env")), false);
       assert.equal(
         r.stdout,
-        `PostgreSQL checkpoint written\nrecord: v1 (no hashVersion)\nlog bounds: unavailable — Error: ${fail} broke\n`,
+        `PostgreSQL checkpoint written\nrecord: v1 (no hashVersion)\n${evidence}`,
       );
       const calls = log("docker").split("\n");
       assert.ok(!calls.some((l) => l.startsWith("compose")), log("docker"));

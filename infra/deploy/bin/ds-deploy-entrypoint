@@ -1037,9 +1037,22 @@ data_log_bounds() {
 }
 # The first line of the error, printable and capped.
 bounds_unavailable() {
+  printf 'log bounds: unavailable — %s\n' "$(first_line "$1")"
+}
+first_line() {
   local reason=${1%%$'\n'*}
   reason=${reason//[^[:print:]]/}
-  printf 'log bounds: unavailable — %s\n' "${reason:0:200}"
+  printf '%s' "${reason:0:200}"
+}
+# #4089: the docker storage driver of this box, one evidence line: the certified image
+# ids (postgres-artifact.yml) are config digests of the classic store (`overlay2`).
+data_storage_driver() {
+  local out
+  if ! out=$(sudo docker info --format '{{.Driver}}' 2>&1); then
+    printf 'storage driver: unavailable — %s\n' "$(first_line "$out")"
+    return 0
+  fi
+  printf 'storage driver: %s\n' "$(first_line "$out")"
 }
 
 # The persistence plane's recreate on the recorded image ids (.postgres-artifacts.json,
@@ -1321,7 +1334,8 @@ data_verb() {
       exec sudo env HOME="$ROOT/home/deploy" python3 -I "$POSTGRES_PROBE" "$request" </dev/null ;;
     postgres-checkpoint)
       data_py postgres-checkpoint "$DATA_STATE_FILE"
-      data_log_bounds </dev/null ;;
+      data_log_bounds </dev/null
+      data_storage_driver </dev/null ;;
     data-env) data_py data-env "$DATA_COMPOSE" ;;
     ship) ship_tree "${words[1]}" ;;
     install) install_entrypoints "${words[1]}"; exit 0 ;;

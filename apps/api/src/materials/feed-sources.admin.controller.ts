@@ -73,7 +73,7 @@ export class FeedSourcesAdminController {
     check: "fast-path",
     revalidate: "live",
     audit: "low-stakes",
-    tests: ["EARS-21", "EARS-23"],
+    tests: ["EARS-21", "EARS-23", "EARS-31"],
   })
   async create(
     @Req() req: FastifyRequest,
@@ -117,7 +117,7 @@ export class FeedSourcesAdminController {
     check: "fast-path",
     revalidate: "live",
     audit: "low-stakes",
-    tests: ["EARS-21", "EARS-23"],
+    tests: ["EARS-21", "EARS-23", "EARS-31"],
   })
   async update(
     @Param("id") id: string,
@@ -184,7 +184,7 @@ export class FeedSourcesAdminController {
     check: "fast-path",
     revalidate: "live",
     audit: "low-stakes",
-    tests: ["EARS-22", "EARS-23"],
+    tests: ["EARS-21", "EARS-22", "EARS-23", "EARS-31"],
   })
   enable(
     @Param("id") id: string,

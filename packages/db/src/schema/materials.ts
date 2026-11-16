@@ -8,6 +8,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -45,8 +46,23 @@ export const materialKind = pgEnum("material_kind", ["news", "column"]);
 /** Lead decision 5 — two states only; unpublish returns to `draft`. */
 export const materialStatus = pgEnum("material_status", ["draft", "published"]);
 
-/** The card kinds of the feed; slice 1 knows only the own-material kinds. */
-export const feedEntryKind = pgEnum("feed_entry_kind", ["news", "column"]);
+/**
+ * The card kinds of the feed: the own-material kinds and the «network post»
+ * of a connected network (048 slice 2, EARS-26).
+ */
+export const feedEntryKind = pgEnum("feed_entry_kind", [
+  "news",
+  "column",
+  "post",
+]);
+
+/**
+ * 048 EARS-26 — a network post's text is cut at a word boundary within this
+ * many characters, plus «…»; the stored `title` of a `post` is at most one
+ * longer. A post may carry no text (a captionless photo, an album whose
+ * captioned part has not arrived), so its title may be empty.
+ */
+export const FEED_POST_TEXT_MAX = 500;
 
 /** Where a feed entry comes from; each network slice adds one value. */
 export const feedSourcePlatform = pgEnum("feed_source_platform", [
@@ -286,9 +302,10 @@ export const feedEntries = pgTable(
       t.feedSourceId,
       t.mediaGroupId,
     ),
+    // An own card's title is 1–160; a network post's text 0–500 plus «…».
     check(
       "feed_entries_title_bounds",
-      sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(FEED_ENTRY_TITLE_MAX))}`,
+      sql`CASE WHEN ${t.kind}::text = 'post' THEN char_length(${t.title}) <= ${sql.raw(String(FEED_POST_TEXT_MAX + 1))} ELSE char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(FEED_ENTRY_TITLE_MAX))} END`,
     ),
     check(
       "feed_entries_href_bounds",
@@ -311,9 +328,7 @@ export const feedEntries = pgTable(
       "feed_entries_network_has_source",
       sql`(${t.sourcePlatform} = 'academy') = (${t.feedSourceId} IS NULL)`,
     ),
-    // Slice 2 — a «network post» card comes only from a network platform. The
-    // `post` kind value lands with its writer (the Telegram connector), so the
-    // CHECK compares the text form and holds from the moment it exists.
+    // Slice 2 — a «network post» card comes only from a network platform.
     check(
       "feed_entries_post_is_network",
       sql`${t.kind}::text <> 'post' OR ${t.sourcePlatform} <> 'academy'`,
@@ -331,3 +346,34 @@ export const feedEntries = pgTable(
 
 export type FeedEntry = typeof feedEntries.$inferSelect;
 export type NewFeedEntry = typeof feedEntries.$inferInsert;
+
+/**
+ * 048 slice 2 (#3994) — the dedup key of network posts (048-design §Data
+ * model (slice 2)): every Telegram message id that went into an entry — one
+ * for a single post, each part of an album — keyed `(feed_source_id,
+ * message_id)`. The webhook upserts through it, an edit finds its entry
+ * through it, and the import skips any id it already holds, so no delivery,
+ * edit or re-run makes a second entry (EARS-25, EARS-27, EARS-28, EARS-30).
+ */
+export const feedEntryMessages = pgTable(
+  "feed_entry_messages",
+  {
+    feedSourceId: uuid("feed_source_id")
+      .notNull()
+      .references(() => feedSources.id, { onDelete: "restrict" }),
+    messageId: bigint("message_id", { mode: "number" }).notNull(),
+    feedEntryId: uuid("feed_entry_id")
+      .notNull()
+      .references(() => feedEntries.id, { onDelete: "cascade" }), // retained-data-ok: the rows are the entry's own Telegram message ids (EARS-27), meaningless without the entry; deleting the entry deletes them
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.feedSourceId, t.messageId] }),
+    index("feed_entry_messages_feed_entry_id_idx").on(t.feedEntryId),
+    check("feed_entry_messages_message_id_positive", sql`${t.messageId} > 0`),
+  ],
+);
+
+export type FeedEntryMessage = typeof feedEntryMessages.$inferSelect;

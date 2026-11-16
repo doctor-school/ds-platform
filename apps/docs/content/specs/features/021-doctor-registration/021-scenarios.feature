@@ -22,7 +22,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
   # Amendment 2026-10-21 (#3006): /register on doctor.school is an entry that redirects with
   # prompt=create; the form and its /verify step render on the sign-in host with
   # DOCTOR_AUTH_FLOW, and the return is the callback's 303 to the stored return path.
-  @EARS-1 @EARS-2 @EARS-4 @EARS-5 @EARS-7 @EARS-10 @happy
+  @EARS-1 @EARS-2 @EARS-4 @EARS-5 @EARS-7 @EARS-10 @happy @journey
   Scenario: A doctor registers from a gate and returns to the эфир
     Given a guest doctor pressed «Участвовать» on «Артроскопия коленного сустава»
     When the registration screen opens
@@ -57,7 +57,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
   # Amended 2026-09-17: the SUCCESS-STATE half of EARS-9 is withdrawn with the success card — this host
   # renders no post-confirmation surface, so the credited-as-fact statement needs a surface named by
   # feature 025 rather than by 021. Nothing shipped it (025 has no spec). The form promise stands below.
-  @EARS-9 @happy
+  @EARS-9 @happy @rule
   Scenario: Wave 2 — the form promises the registration points before submission
     Given the wave-2 points surface of #1545 is in place
     And a guest doctor pressed «Участвовать» on «Артроскопия коленного сустава»
@@ -65,7 +65,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     Then the form promises «+20 Pul за регистрацию»
     And that promised value is read from the one points configuration source
 
-  @EARS-9 @failure
+  @EARS-9 @failure @rule
   Scenario: No ledger fact is ever derived from the points configuration
     Given the wave-2 points surface of #1545 is in place
     And feature 025 has emitted no PointsCredited for the account
@@ -73,7 +73,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     Then no credited amount is stated as a fact anywhere in the flow
     And no credited amount is derived from the points configuration
 
-  @EARS-19 @failure
+  @EARS-19 @failure @rule
   Scenario: Every public form carries the bot-protection challenge of 003 EARS-17
     Given the registration screen is open on «doctor.school»
     Then the bot-protection challenge of the 003 EARS-17 contract is rendered on the form
@@ -87,7 +87,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     When the challenge fails to load
     Then the failure is stated in Russian with a working retry
 
-  @EARS-3 @EARS-6 @happy
+  @EARS-3 @EARS-6 @happy @journey
   Scenario: A doctor arriving directly registers without the marketing opt-in and lands on their feed
     Given a guest doctor opens the registration route with no return target
     Then the return-context element is absent from the DOM rather than rendered empty
@@ -97,7 +97,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And the doctor lands on the remembered specialty's 018 feed rather than the account page
     And no consent record exists for marketing-communications
 
-  @EARS-8 @EARS-17 @happy
+  @EARS-8 @EARS-17 @happy @journey
   Scenario: A doctor arriving on a representative's link is attributed and handed to the mailing base
     Given a guest doctor follows a medical representative's personal link to the registration screen
     Then the screen names who brought them in plain words
@@ -109,7 +109,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And a marketing consent record is emitted with the doctor's segmentation attributes
     And feature 021 exposes no mailing transport, list membership or unsubscribe surface
 
-  @EARS-13 @failure
+  @EARS-13 @failure @rule
   Scenario: An already-registered email is never disclosed as already registered
     Given an account already exists for «doctor@example.test»
     When a visitor submits the registration form with that email
@@ -121,7 +121,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
   # Amended 2026-09-22 (see 021-requirements-en.md → Amendment — 2026-09-22): the canvas is the
   # decision — the submit is live in every state and an unmet mandatory condition is stated on the
   # row it belongs to, after the press. The «no silently dead button» property holds structurally.
-  @EARS-12 @EARS-11 @failure
+  @EARS-12 @EARS-11 @failure @journey
   Scenario: A missing consent is reported on its own row after the press, and errors say what to do
     Given a guest doctor on the registration screen
     When the doctor enters «not-an-email» in the email field
@@ -137,7 +137,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     When the doctor ticks the medical-worker declaration
     Then only that row's statement is cleared
 
-  @EARS-14 @failure
+  @EARS-14 @failure @rule
   Scenario: A failed submission preserves everything the doctor typed
     Given a guest doctor filled the form completely on a representative's link
     When the submission fails on the network
@@ -146,7 +146,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And the retry submits without re-filling anything
     And the password appears in no URL, storage entry or cookie
 
-  @EARS-10 @failure
+  @EARS-10 @failure @rule
   Scenario: A stale return target degrades honestly instead of dead-ending
     Given a doctor registered from an эфир and confirms their email after the эфир was unpublished
     When the code from the letter is entered on the code-entry screen that carries the return target
@@ -161,7 +161,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     # is no longer available, on both storefronts
     And no dead link and no silent redirect occurs
 
-  @EARS-15 @EARS-16 @happy
+  @EARS-15 @EARS-16 @happy @rule
   Scenario: One account, one sign-up, operable at both breakpoints
     Given a doctor registered on «doctor.school»
     Then no account-type control («врач / эксперт») exists on the registration screen
@@ -174,7 +174,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And the disabled-submit reason is readable by a screen reader
     And the two consent tiers are distinguishable to assistive technology
 
-  @EARS-11 @failure
+  @EARS-11 @failure @rule
   Scenario: The verification code field does not fight the code that was actually sent
     Given a doctor on a mobile viewport reached the «письмо отправлено» state
     Then the verification-code field admits letters as well as digits
@@ -182,14 +182,14 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     When the doctor types the issued code exactly as it arrived, in lower case
     Then verification succeeds
 
-  @EARS-7 @failure
+  @EARS-7 @failure @rule
   Scenario: The interface offers no self-service consent withdrawal
     Given a doctor completed registration
     When any state of the registration surface is scanned
     Then no withdrawal toggle or «отозвать согласие» control exists
     And no withdrawal sentence is rendered
 
-  @EARS-18 @process
+  @EARS-18 @process @rule
   Scenario: The surface is composed from the auth canvas and the design system, never hand-assembled
     Given the vendored «design-source/auth.dc.html» canvas is the composition source of truth for this surface
     And the return context reuses «unit-event-card.dc.html» and the design system's field, checkbox and button primitives
@@ -203,7 +203,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
 
   # --- Amendment 2026-10-21 (#3006): registration on the sign-in host; signed in on both storefronts ---
 
-  @EARS-20 @EARS-10 @happy
+  @EARS-20 @EARS-10 @happy @journey
   Scenario: A fresh registrant from a doctor-storefront gate ends signed in on both storefronts
     Given a guest on the doctor storefront in a browser with no session on either storefront
     When the guest follows the gate of the эфир «Артроскопия коленного сустава» to registration
@@ -213,14 +213,14 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     When the same browser requests an Academy page as a document
     Then the Academy page renders signed in with no form and no guest render first
 
-  @EARS-10 @failure
+  @EARS-10 @failure @rule
   Scenario: A registration whose эфир vanished before the code lands per LD-4
     Given a guest started registration from the gate of an эфир on the doctor storefront
     And the эфир no longer exists when the registration code is accepted on the sign-in host
     When the storefront callback answers
     Then the doctor lands on the LD-4 landing, signed in
 
-  @EARS-2 @EARS-3 @happy
+  @EARS-2 @EARS-3 @happy @rule
   Scenario: A doctor arriving from an эфир sees its card on the sign-in host's registration form
     Given a guest on the doctor storefront pressed «Участвовать» on «Артроскопия коленного сустава»
     When the gate sends the guest to the doctor storefront's registration entry

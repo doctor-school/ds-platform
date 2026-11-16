@@ -12,13 +12,13 @@ lang: en
 
 > **EN (this)** · **RU:** [`033-product-ru.md`](./033-product-ru.md)
 
-> Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · Functional-map registry row 033 and §E (`apps/docs/content/specs/product/two-site-ia/functional-map-ru.md`). Owner decisions of 2026-10-28 on [#1799](https://github.com/doctor-school/ds-platform/issues/1799) «Discovery decisions», cascade item 4: «first slices of the real pages 033 «Подать заявку» and 034 «Как это работает» with one shared application queue in admin (admin review is the processing route; producer routing, draft, clinical case — later 033 slices)». Lead decisions are marked _(lead decision 2026-10-28; owner sees it at Stage A)_; anything else beyond recorded decisions is marked `agent-proposed — UNCONFIRMED`.
+> Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · Functional-map registry row 033 and §E (`apps/docs/content/specs/product/two-site-ia/functional-map-ru.md`). Owner decisions of 2026-10-28 on [#1799](https://github.com/doctor-school/ds-platform/issues/1799) «Discovery decisions», cascade item 4, approved by the owner on 2026-10-28 and summarised there in English by the agent lead (not an owner quote): first slices of the real pages 033 «Подать заявку» and 034 «Как это работает» with one shared application queue in admin (admin review is the processing route; producer routing, draft, clinical case — later 033 slices). Decisions of the agent lead (the AI session that orchestrates the work, AGENTS.md §7 — not the owner) are marked _(lead decision 2026-10-28; owner sees it at Stage A)_ or _(lead decision; owner sees it at Stage A)_; anything the owner-drawn R4 canvas already carries cites it; open owner questions are listed under «Open questions»; anything else beyond recorded decisions is marked `agent-proposed — UNCONFIRMED`.
 
 ## Feature summary
 
 The Academy home (029) sends experts to **«Подать заявку»** («Экспертам → Подать заявку»). Today there is no page behind it. Slice 1 makes it real: an Academy page that explains what an expert can do with the Academy and how an application is handled, and a form with which a signed-in expert applies — under the **same account** a doctor uses (REQ-42; ADR-0016 §1: one person — one account, roles are attributes).
 
-Every application lands in **one shared application queue in the admin**. The same queue receives the investor requests «Обсудить проект» of feature 034 (slice 1), and it is where the partner-request stories of the frozen 013 PRD (US-5…US-9) now live (functional map §E): the queue is the place requests are stored, and notifying the team of a new request is a behaviour of the queue (the channel is chosen at spec time). In slice 1 the processing route is **review by a platform administrator** under feature 047 access (role `platform_admin`, admin session with TOTP per 011).
+Every application lands in **one shared application queue in the admin**. The same queue receives the investor requests «Обсудить проект» of feature 034 (slice 1), and it is where the partner-request stories of the frozen 013 PRD (US-5…US-9) now live (functional map §E): the queue is the place requests are stored, and notifying the team of a new request is a behaviour of the queue (the channel is chosen at spec time). _(The 013 stories moving into this queue — lead decision, functional map §E, PR #3415; owner sees it at Stage A.)_ In slice 1 the processing route is **review by a platform administrator** (owner, cascade item 4) under feature 047 access (role `platform_admin`, admin session with TOTP per 011). _(The 047 role and TOTP — lead decision, functional map, PR #3415; owner sees it at Stage A.)_
 
 This PRD owns the queue as a capability; 034 adds its own kind of request to it. Capability owner: a new row in [`capability-ownership.md`](../../product/two-site-ia/capability-ownership.md), registered with the design spec (ADR-0013 §A1). Storefront affiliation (ADR-0016 §8): the page — `академия`; applications and the queue — `только админка`.
 
@@ -26,54 +26,54 @@ This PRD owns the queue as a capability; 034 adds its own kind of request to it.
 
 **Page and form (expert):**
 
-- **US-1** — As an **expert**, I open «Подать заявку» from the Academy home or menu and understand from the page what I can do with the Academy (a course, a lesson, a podcast, a talk), how my application will be handled and who will contact me — before I fill anything in.
+- **US-1** — As an **expert**, I open «Подать заявку» from the Academy home or menu and understand from the page what I can do with the Academy (a course, a lesson, a podcast, a talk), how my application will be handled and who will contact me — before I fill anything in. _(The menu entry — lead decision; the canvas navigation has no «Подать заявку» item; owner sees it at Stage A.)_
 - **US-2** — As an **expert who is not signed in**, the page tells me that the application goes under my Doctor.School account — no separate «expert registration» — and lets me sign in or register, returning me to the form afterwards. _(Sign-in before the form, because the draft that would carry my input across sign-in is a later slice — agent-proposed — UNCONFIRMED.)_
 - **US-3** — As a **signed-in expert**, I see which account I am applying under, fill in the form — topic, specialty (official Ministry of Health list, «Другое» if mine is missing), format (course-series, single lesson, podcast, talk), about me — and submit it. The field set is the canvas `academy-apply.dc.html` set minus the clinical case, per the owner-approved cascade; it is confirmed at Stage A with the canvas. _(lead decision 2026-10-28; owner sees it at Stage A)_
 - **US-4** — As an **expert**, if I leave something required empty or invalid, the form tells me what to fix next to the field and keeps everything else I typed.
 - **US-5** — As an **expert**, if the submission fails (network, server), I am told plainly, my input stays on the page and I can retry.
 - **US-6** — As an **expert**, after submitting I see a clear confirmation: the application is received, an Academy administrator will review it and contact me, plus where to look while I wait (the Academy projects); I also receive a «заявка получена» email, whose text is shown at Stage A. _(lead decision 2026-10-28; owner sees it at Stage A)_
-- **US-7** — As an **expert who already has an application in review**, I see that it is in work and can still send another one about a different project. _(agent-proposed — UNCONFIRMED.)_
+- **US-7** — As an **expert who already has an application in review**, I see that it is in work and can still send another one about a different project. _(Owner-drawn R4 canvas `academy-apply.dc.html`, vendored in #1451: the repeat-application banner and «Отправить ещё одну заявку — про другой проект».)_
 - **US-8** — As an **expert**, I give explicit consent to the processing of the personal data in my application for this purpose, with a link to the policy, before I can send it (152-ФЗ; ADR-0016 §7 — consents are separate per purpose). _(Lead-asserted legal constraint, as in 013 — UNCONFIRMED by the owner.)_
 
 **Queue (team):**
 
-- **US-9** — As a **platform administrator**, I see all applications in one admin list — author applications (033) and investor requests (034) together — newest first, and filter it by kind and by status.
-- **US-10** — As a **platform administrator**, I open an application and see everything the applicant sent, who they are and how to reach them (for an author application — the account it came from).
-- **US-11** — As a **platform administrator**, I move an application through its review: new → in review → closed with an outcome (accepted / declined), and leave an internal note for the rest of the team; the applicant never sees the note. _(Statuses and note — agent-proposed — UNCONFIRMED.)_
-- **US-12** — As a **member of the Academy team**, I am notified of every new application as it arrives, so nobody has to watch the admin; a failed notification never loses the application — the queue is the record of truth. _(Inherits 013 US-8/US-9; channel chosen at spec time.)_
+- **US-9** — As a **platform administrator**, I see all applications in one admin list — author applications (033) and investor requests (034) together — newest first, and filter it by kind and by status. _(Order and filters — lead decision, admin screens; owner sees it at Stage A.)_
+- **US-10** — As a **platform administrator**, I open an application and see everything the applicant sent, who they are and how to reach them (for an author application — the account it came from, with the email and phone of that account). _(The contacts shown — lead decision; the form collects no phone; owner sees it at Stage A.)_
+- **US-11** — As a **platform administrator**, I move an application through its review: new → in review → closed with an outcome (accepted / declined), and leave an internal note for the rest of the team; the applicant never sees the note. _(Statuses and note — agent-proposed — UNCONFIRMED. Who accepts or declines an application is an open owner question — see «Open questions»: owner REQ-110 gives the «берём проект в работу» decision to the producer after the talk with the expert; the administrator closing with the outcome is agent-proposed — UNCONFIRMED.)_
+- **US-12** — As a **platform administrator** (`platform_admin` staff), I am notified of every new application as it arrives, so nobody has to watch the admin; a failed notification never loses the application — the queue is the record of truth. _(Inherits 013 US-8/US-9; the recipients narrowed to `platform_admin` staff — lead decision, `033-design.md` decision 8; channel chosen at spec time.)_
 - **US-13** — As a **platform administrator**, the partnership requests already collected by the interim home-page form are in the same queue, so the team has one place for every request: they are migrated into the queue, and the interim form's storage is retired. _(lead decision 2026-10-28; owner sees it at Stage A)_
 
 **Owner:**
 
-- **US-14** — As a **product owner**, applications holding personal data are kept only under the platform's personal-data policy. The application record gets its row in the retention matrix of [ADR-0009](../../../adr/0009-pd-lifecycle-and-consent-en.md) §2.6 at design time (new storage ⇒ retention at design); the applicant's personal data is erased per ADR-0009 §2.3 on the subject's request — a design obligation of the spec, not an owner question. _(lead decision 2026-10-28; owner sees it at Stage A)_
+- **US-14** — As a **product owner**, applications holding personal data are kept only under the platform's personal-data policy. The application record gets its row in the retention matrix of [ADR-0009](../../../adr/0009-pd-lifecycle-and-consent-en.md) §2.6 at design time (new storage ⇒ retention at design); the applicant's personal data is erased per ADR-0009 §2.3 on the subject's request — a design obligation of the spec, not an owner question. _(lead decision 2026-10-28; owner sees it at Stage A)_ The terms of that row: an application with no status change for a year closes by itself as «expired», and an application is erased one year after it closes; the same terms cover the investor requests of 034. _(agent-proposed — UNCONFIRMED; `033-design.md` decision 16.)_
 
 ## Flows
 
 **Expert applies (US-1…US-8):**
 
-1. Visitor taps «Подать заявку» on the home → lands on the «Подать заявку» page: the form, the path of the application («Что будет дальше»: an Academy administrator reviews the application and contacts the expert, then programme, production, medical expertise, publication), the author terms as text, and «Пока не готовы?» with a link to the projects (030) and a project card. The slice-1 page names no producer, shows no growth path and links to no expert page: the expert links and the expert card of «Пока ждёте — посмотрите» and «Пока не готовы?» are a later slice that ships after the expert pages of 031. _(lead decision 2026-10-28; owner sees it at Stage A)_
+1. Visitor taps «Подать заявку» on the home → lands on the «Подать заявку» page: the form, the path of the application («Что будет дальше»: an Academy administrator reviews the application and contacts the expert, then programme, production, medical expertise, publication — the administrator first is the lead's slice-1 canvas edit, see «Open questions»), the author terms as text, and «Пока не готовы?» with a link to the projects (030) and a project card. The slice-1 page names no producer, shows no growth path and links to no expert page: the expert links and the expert card of «Пока ждёте — посмотрите» and «Пока не готовы?» are a later slice that ships after the expert pages of 031. _(lead decision 2026-10-28; owner sees it at Stage A)_
 2. Not signed in → the form area shows the account gate («Заявка отправляется под той же учётной записью, что у врача») with «Войти / Регистрация»; after sign-in or registration (003 / 021) the visitor returns to this page with the form open.
 3. Signed in → the form shows «Отправите как <name · email>»; the expert fills topic, specialty, format, about, ticks the consent and taps «Отправить заявку».
 4. The application is stored in the queue, the team is notified and the applicant receives the «заявка получена» email; the page shows the confirmation state with «Пока ждёте — посмотрите» linking to the projects (030) and «Отправить ещё одну заявку — про другой проект».
 
-**Branches:** a required field empty → inline message, nothing sent, input kept; server unavailable → «Не удалось отправить — сервер недоступен. Введённое сохранено. Попробовать ещё раз»; a repeat submission of the same form (double tap) does not create a second application. _(agent-proposed — UNCONFIRMED.)_
+**Branches:** a required field empty → inline message, nothing sent, input kept; server unavailable → «Не удалось отправить — сервер недоступен. Введённое сохранено. Попробовать ещё раз»; a repeat submission of the same form (double tap) does not create a second application. _(The field and server-failure states — owner-drawn R4 canvas, formState; one application per double tap — lead decision, `033-design.md` decision 3; owner sees it at Stage A.)_
 
 **Administrator reviews (US-9…US-11):**
 
 1. The team gets the notification of a new application.
 2. An administrator opens the queue in the admin, filters «Заявки авторов» or «Заявки инвесторов», opens the application.
-3. The administrator contacts the applicant outside the platform (email / phone), moves the status, leaves a note; closing records the outcome.
+3. The administrator contacts the applicant outside the platform (email / phone), moves the status, leaves a note; closing records the outcome. _(Phone contact and the administrator recording the outcome — lead decision and the open owner question of «Open questions».)_
 
 ## Product acceptance criteria
 
 - `academy.doctor.school` serves a real «Подать заявку» page; the home «Экспертам → Подать заявку» entries lead to it. No placeholder text, no dead form.
 - An application is sent only under a signed-in Doctor.School account; a guest is led through sign-in or registration and back to the form; there is no separate expert account.
 - The form carries topic, specialty from the official list, format and about-me, with the required fields marked; validation messages say what to fix and never wipe other input; a server failure keeps the input and offers retry.
-- The applicant cannot send without the explicit personal-data consent; the consent is recorded with the application.
-- Every submitted application appears in the one admin queue together with 034 requests, with its kind, time, applicant and content; a double submission creates one application.
-- The team is notified of each new application, and the applicant receives a «заявка получена» email; a failure of either notification neither loses the application nor shows an error to the applicant.
-- Every public intake into the queue — including the no-account investor form of 034 — is protected against bots and floods with the platform's existing bot-protection posture, as other public forms are.
-- Only an administrator with the 047 `platform_admin` role sees and works the queue; the applicant never sees internal notes or statuses beyond «received».
+- The applicant cannot send without the explicit personal-data consent; the consent is recorded with the application. _(Lead-asserted legal constraint, as US-8 — UNCONFIRMED by the owner.)_
+- Every submitted application appears in the one admin queue together with 034 requests, with its kind, time, applicant and content; a double submission creates one application. _(One application per double submission — lead decision, `033-design.md` decision 3.)_
+- The team is notified of each new application, and the applicant receives a «заявка получена» email; a failure of either notification neither loses the application nor shows an error to the applicant. _(No error shown to the applicant — lead decision; owner sees it at Stage A.)_
+- Every public intake into the queue — including the no-account investor form of 034 — is protected against bots and floods with the platform's existing bot-protection posture, as other public forms are. _(lead decision, security posture; `033-design.md` decision 10 extends it to the signed-in author intake.)_
+- Only an administrator with the 047 `platform_admin` role sees and works the queue; the applicant never sees internal notes or statuses beyond «received». _(What the applicant sees — lead decision; owner sees it at Stage A.)_
 - Every status change in the queue is attributed to the administrator who made it and timed. _(agent-proposed — UNCONFIRMED.)_
 - Application records have their row in the ADR-0009 §2.6 retention matrix, set at design time; the applicant's personal data is erased per ADR-0009 §2.3 on the subject's request; nothing is kept outside that policy.
 - Page, form and queue are usable on a phone and pass the platform accessibility bar (`playwright-axe`).
@@ -94,7 +94,9 @@ Later slices of 033, each with its technical dependency:
 
 ## Open questions
 
-_None for slice 1._ Retention, the confirmation email, the slice-1 field set and the interim partnership requests are recorded lead decisions above; the owner sees them at Stage A.
+- **Who accepts an application** — `TODO(owner)`. Owner REQ-110 (`specs/product/two-site-ia/requirements-ru.md`): the decision «берём проект в работу» is taken by the producer after the talk with the expert, not by the administrator. Slice 1 has no producer route (`blocked_by` **040**), and this PRD and the slice-1 canvas edit let the administrator close an application as accepted / declined (US-11, «Что будет дальше») — agent-proposed — UNCONFIRMED. The owner decides whether the slice-1 administrator records the outcome or only moves the application to the producer route once it exists.
+
+Retention, the confirmation email, the slice-1 field set and the interim partnership requests are recorded lead decisions above; the owner sees them at Stage A.
 
 ## Approved-mockup reference
 

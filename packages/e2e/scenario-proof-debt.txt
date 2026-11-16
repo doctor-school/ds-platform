@@ -604,15 +604,12 @@
 048 | A congress registrar cannot change materials
 048 | A congress registrar cannot manage sources
 048 | A failed preview download keeps the card without an image
-048 | A forwarded post and a poll are not cards
 048 | A new VK Видео video becomes a video card that plays nothing
 048 | A new channel post becomes a Telegram card that links to the original
 048 | A new wall post becomes a VK card that links to the original
 048 | A post deleted from the VK wall leaves the rail and returns if restored
 048 | A post edited in VK is updated by the hourly reconcile
-048 | A post from a channel that is not in the source list is dropped
 048 | A published column stays editable while its expert is not published
-048 | A renamed channel shows as failing until its address is edited
 048 | A repost is not a card
 048 | A silent Callback shows as failing
 048 | A switched-off VK source leaves the rail and keeps its posts
@@ -620,22 +617,17 @@
 048 | A video post shows its preview and duration and plays nothing
 048 | A video that is later attached to a wall post shows once, as the post
 048 | A wall post link is not a community address
-048 | A webhook call with a wrong secret token is refused
-048 | Adding a source binds its channel id through the source check
 048 | An address that is not a public channel is refused
 048 | An administrator adds the Telegram channel to the source list
 048 | An administrator adds the VK community to the source list
 048 | An administrator hides one VK video
 048 | An administrator hides one post
-048 | An album is one card
-048 | An edited post updates its card in place
 048 | An event of a community that is not in the source list is dropped
 048 | An export of another channel is refused
 048 | An import for a source with no bound channel id is refused with its reason
 048 | An unreachable Telegram marks the source failing and leaves the rail working
 048 | An unreachable VK marks the source failing and leaves the rail working
 048 | No VK secret or post author is stored or logged
-048 | No secret or post author is stored or logged
 048 | The VK source pages and VK cards work on a phone
 048 | The doctor storefront shows no VK card
 048 | The one-off VK import brings in earlier posts and a re-run duplicates nothing

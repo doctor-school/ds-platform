@@ -10290,6 +10290,18 @@
         "tags": ["Health"]
       }
     },
+    "/v1/integrations/telegram/webhook": {
+      "post": {
+        "operationId": "TelegramWebhookController_webhook",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["TelegramWebhook"]
+      }
+    },
     "/v1/me/birth-date": {
       "put": {
         "operationId": "CongressBirthDateMeController_set",

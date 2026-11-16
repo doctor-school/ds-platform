@@ -19,6 +19,10 @@ import {
   FeedSourcesRepository,
   type FeedSourcesTx,
 } from "./feed-sources.repository.js";
+import { TelegramSourceCheck } from "./telegram/telegram-source-check.service.js";
+
+/** How long an admin write's response waits for the at-once check (EARS-21). */
+export const AT_ONCE_CHECK_BUDGET_MS = 15_000;
 
 // 048 slice 2 (#3993) — the «Источники» commands (EARS-20…EARS-23). Same
 // failure ORDER and shared services as the material commands: guard → key
@@ -26,9 +30,15 @@ import {
 // precondition → validation → write → entry marks → fenced record
 // completion). A refused write changes nothing.
 //
-// The source check of EARS-31 — which EARS-21 runs at once on add, edit and
-// switch-on — is delivered with the Telegram connector (#3994), which carries
-// the egress client; until then a new or re-addressed source is «Не проверен».
+// EARS-21 — add, address edit and switch-on run the source check of EARS-31
+// at once (#3994): AFTER the command's transaction commits — a Bot API call
+// never holds the row lock, and a failed or unreachable check never fails the
+// administrator's write (the stored source shows the check's reason). The
+// response waits for the check up to `AT_ONCE_CHECK_BUDGET_MS`, so it already
+// carries the checked status; past that bound it carries the committed state
+// and the check still writes its verdict when Telegram answers. An exact
+// idempotent replay returns the response recorded at commit (before the
+// check); the list read is always current.
 
 export interface CreateFeedSourceInput {
   payload: CreateFeedSourceRequest;
@@ -64,6 +74,8 @@ export class FeedSourcesService {
     private readonly repo: FeedSourcesRepository,
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
+    @Inject(TelegramSourceCheck)
+    private readonly sourceCheck: TelegramSourceCheck,
   ) {}
 
   /** EARS-20 — `GET /v1/admin/feed-sources`. */
@@ -74,8 +86,8 @@ export class FeedSourcesService {
     };
   }
 
-  create(input: CreateFeedSourceInput): Promise<FeedSourceCommandResult> {
-    return this.fenced(input.lease, () =>
+  async create(input: CreateFeedSourceInput): Promise<FeedSourceCommandResult> {
+    const result = await this.fenced(input.lease, () =>
       this.repo.transaction(async (tx) => {
         const { platform, address } = input.payload;
         await this.assertAddressFree(tx, platform, address, null);
@@ -83,6 +95,7 @@ export class FeedSourcesService {
         return this.complete(tx, input.lease, created, 201);
       }),
     );
+    return this.checkAtOnce(result);
   }
 
   /**
@@ -90,8 +103,8 @@ export class FeedSourcesService {
    * entry in the same transaction and returns the source to «Не проверен»:
    * the last check judged the old address.
    */
-  update(input: UpdateFeedSourceInput): Promise<FeedSourceCommandResult> {
-    return this.fenced(input.lease, () =>
+  async update(input: UpdateFeedSourceInput): Promise<FeedSourceCommandResult> {
+    const result = await this.fenced(input.lease, () =>
       this.repo.transaction(async (tx) => {
         const current = await this.lockVersion(
           tx,
@@ -122,6 +135,7 @@ export class FeedSourcesService {
         return this.complete(tx, input.lease, moved, 200);
       }),
     );
+    return this.checkAtOnce(result);
   }
 
   /** EARS-22 — «Выключить»: the source and each of its entries, one transaction. */
@@ -130,8 +144,36 @@ export class FeedSourcesService {
   }
 
   /** EARS-22 — «Включить»: the marks cleared, kept entries return at their dates. */
-  enable(input: FeedSourceSwitchInput): Promise<FeedSourceCommandResult> {
-    return this.switchTo(input, true);
+  async enable(input: FeedSourceSwitchInput): Promise<FeedSourceCommandResult> {
+    return this.checkAtOnce(await this.switchTo(input, true));
+  }
+
+  /**
+   * EARS-21 — the at-once EARS-31 check of a committed write, bounded by
+   * {@link AT_ONCE_CHECK_BUDGET_MS}. The check writes no `version`, so the
+   * ETag of the committed write stays valid.
+   */
+  private async checkAtOnce(
+    result: FeedSourceCommandResult,
+  ): Promise<FeedSourceCommandResult> {
+    let timer: NodeJS.Timeout | undefined;
+    const bound = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), AT_ONCE_CHECK_BUDGET_MS);
+    });
+    const checked = await Promise.race([
+      this.sourceCheck.check(result.detail.id),
+      bound,
+    ]).finally(() => clearTimeout(timer));
+    if (!checked) return result;
+    return {
+      etag: result.etag,
+      detail: {
+        ...result.detail,
+        status: checked.status,
+        statusReason: checked.statusReason,
+        checkedAt: checked.checkedAt?.toISOString() ?? null,
+      },
+    };
   }
 
   private switchTo(

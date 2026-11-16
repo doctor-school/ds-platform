@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, count, eq, ne, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, ne, sql } from "drizzle-orm";
 import type { DrizzleHandle, FeedSource } from "@ds/db";
 import { feedEntries, feedSources } from "@ds/db";
 import type { FeedSourceNetwork } from "@ds/schemas";
@@ -70,6 +70,115 @@ export class FeedSourcesRepository {
       .from(feedSources)
       .where(eq(feedSources.id, id))
       .for("update");
+    return row;
+  }
+
+  /**
+   * 048 EARS-25 (#3994) — the Telegram source a channel update belongs to,
+   * locked for the update's transaction (so a «Выключить» and a webhook write
+   * never interleave): by the bound Telegram id once bound, else by the
+   * channel username equal to the address, ignoring case, of a source with no
+   * id bound yet. A source bound to another id never matches by name.
+   */
+  async lockTelegramSourceForChat(
+    tx: FeedSourcesTx,
+    chatId: number,
+    username: string | null,
+  ): Promise<FeedSource | undefined> {
+    const [byId] = await tx
+      .select()
+      .from(feedSources)
+      .where(
+        and(
+          eq(feedSources.platform, "telegram"),
+          eq(feedSources.telegramChatId, BigInt(chatId)),
+        ),
+      )
+      .for("update");
+    if (byId || !username) return byId;
+    const [byName] = await tx
+      .select()
+      .from(feedSources)
+      .where(
+        and(
+          eq(feedSources.platform, "telegram"),
+          eq(feedSources.address, username.toLowerCase()),
+          isNull(feedSources.telegramChatId),
+        ),
+      )
+      .for("update");
+    return byName;
+  }
+
+  /**
+   * EARS-25 — bind the channel's Telegram id on its first matching update.
+   * Not an administrator edit, so the admin ETag (`version`) is not bumped.
+   */
+  async bindTelegramChatId(
+    tx: FeedSourcesTx,
+    id: string,
+    chatId: number,
+  ): Promise<void> {
+    await tx
+      .update(feedSources)
+      .set({ telegramChatId: BigInt(chatId), updatedAt: sql`now()` })
+      .where(and(eq(feedSources.id, id), isNull(feedSources.telegramChatId)));
+  }
+
+  /** EARS-31 — the ids of every switched-on Telegram source (hourly check). */
+  async enabledTelegramSourceIds(): Promise<string[]> {
+    const rows = await this.handle
+      .select({ id: feedSources.id })
+      .from(feedSources)
+      .where(
+        and(
+          eq(feedSources.platform, "telegram"),
+          eq(feedSources.enabled, true),
+        ),
+      )
+      .orderBy(asc(feedSources.address));
+    return rows.map((r) => r.id);
+  }
+
+  /**
+   * EARS-31 — write a check's verdict: `status`, `status_reason`,
+   * `checked_at` and, while unbound, the Telegram id (in the same write).
+   * Applied only while the source is still switched on at the address the
+   * check judged, so an «Изменить адрес» or «Выключить» that raced it wins.
+   * Not an administrator edit, so the admin ETag (`version`) is not bumped.
+   */
+  async writeCheck(
+    tx: FeedSourcesTx,
+    id: string,
+    address: string,
+    verdict: {
+      status: "ok" | "failing";
+      statusReason: string | null;
+      checkedAt: Date;
+      bindChatId: number | null;
+    },
+  ): Promise<FeedSource | undefined> {
+    const [row] = await tx
+      .update(feedSources)
+      .set({
+        status: verdict.status,
+        statusReason: verdict.statusReason,
+        checkedAt: verdict.checkedAt,
+        ...(verdict.bindChatId === null
+          ? {}
+          : {
+              telegramChatId: sql`coalesce(${feedSources.telegramChatId}, ${String(verdict.bindChatId)}::bigint)`,
+            }),
+      })
+      .where(
+        and(
+          eq(feedSources.id, id),
+          eq(feedSources.platform, "telegram"),
+          eq(feedSources.enabled, true),
+          eq(feedSources.address, address),
+        ),
+      )
+      .returning();
     return row;
   }
 

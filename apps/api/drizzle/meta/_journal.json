@@ -442,6 +442,20 @@
       "when": 1794795032696,
       "tag": "0062_feed_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1794810725724,
+      "tag": "0063_telegram_connector",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1794812065698,
+      "tag": "0064_telegram_preview_cleanup",
+      "breakpoints": true
     }
   ]
 }

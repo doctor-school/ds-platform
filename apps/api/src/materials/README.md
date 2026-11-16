@@ -3,7 +3,8 @@
 Spec: `apps/docs/content/specs/features/048-materials-feed/`. #3512 opens the
 module with the «Материалы» admin authoring surface (EARS-1, EARS-4…EARS-8,
 EARS-19); #3513 adds the public feed and material reads; #3993 opens slice 2
-with the «Источники» source list (EARS-20…EARS-23).
+with the «Источники» source list (EARS-20…EARS-23); #3994 adds the Telegram
+connector in `telegram/` (EARS-24…EARS-29, EARS-31, EARS-36).
 
 ## What it owns
 
@@ -26,7 +27,33 @@ with the «Источники» source list (EARS-20…EARS-23).
   `source_off` mirror of «Выключить» / «Включить» — are written by
   `FeedSourcesRepository` in the command's transaction. The source check that
   binds the channel id and sets the status is the Telegram connector's
-  (#3994); until it lands a source stays «Не проверен».
+  (#3994); until it runs a source stays «Не проверен». A source with no
+  bound id is bound by the first webhook update whose `chat.username`
+  equals its address.
+- `feed_entry_messages` (slice 2, #3994) — the dedup key of Telegram
+  entries: every message id that went into an entry (one per post, each part
+  of an album), keyed `(feed_source_id, message_id)`.
+- `telegram/` (slice 2, #3994) — the Telegram connector:
+  - `telegram-bot-api.client.ts` — the ONLY caller of `api.telegram.org`
+    (ADR-0011 §2.2 channel #10): `setWebhook`, `getWebhookInfo`, `getMe`,
+    `getChat`, `getChatMember`, `getFile` and the file download, Zod-checked
+    parameters and responses, the token never in a logged or thrown string,
+    one log line per call (method, HTTP status, duration, outcome).
+    `telegram-bot-api.fake.ts` is its test double (`TELEGRAM_BOT_API`).
+  - `telegram-config.ts` — `TELEGRAM_BOT_TOKEN` / `TELEGRAM_WEBHOOK_SECRET` /
+    `TELEGRAM_WEBHOOK_URL`; `null` (connector off) unless token and secret
+    are both set.
+  - `telegram-webhook.middleware.ts` + `telegram-webhook.controller.ts` —
+    `POST /v1/integrations/telegram/webhook`: 404 while off, 401 on an absent
+    or wrong secret (constant time, in Fastify's `onRequest` phase, before the
+    body is read), 200 for every processed or dropped update, 500 on our own
+    failure so Telegram redelivers.
+  - `telegram-post-mapping.ts` — the pure EARS-26 mapping (text cut, preview
+    size, drop reasons); `telegram.feed-source.ts` — the only writer of
+    Telegram entries: one transaction per update (source matched and locked,
+    id bound, entry written with the album and edit rules, EARS-27/28). A new
+    preview candidate is written `preview_state = pending` with its
+    `preview_file_id`, no `image_ref`; the copy is the preview service's.
 
 ## Properties worth stating
 

@@ -135,6 +135,30 @@ export const ApiEnvSchema = z.looseObject({
       })
       .optional(),
   ),
+  // 048 slice 2 (ADR-0011 §2.2 channel #10, EARS-24, EARS-36) — the Telegram
+  // connector's server-side secrets. Optional at boot: with the bot token or
+  // the webhook secret unset the connector is off (the webhook route answers
+  // 404 and nothing calls the Bot API). Never logged, returned or stored.
+  TELEGRAM_BOT_TOKEN: blankIsUnset(
+    z
+      .string()
+      .regex(/^\d+:[A-Za-z0-9_-]+$/, {
+        message: "TELEGRAM_BOT_TOKEN must be a Bot API token <id>:<secret>",
+      })
+      .optional(),
+  ),
+  // The `setWebhook` `secret_token` rule: 1–256 characters `A-Za-z0-9_-`.
+  TELEGRAM_WEBHOOK_SECRET: blankIsUnset(
+    z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,256}$/, {
+        message: "TELEGRAM_WEBHOOK_SECRET must be 1–256 characters A-Za-z0-9_-",
+      })
+      .optional(),
+  ),
+  // The environment's public webhook URL the registration command passes to
+  // `setWebhook` (HTTPS on the API host).
+  TELEGRAM_WEBHOOK_URL: blankIsUnset(z.url({ protocol: /^https$/ }).optional()),
   IDP_ACADEMY_CLIENT_KEY: blankIsUnset(
     z
       .string()

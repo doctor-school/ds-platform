@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, count, eq, ne, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, ne, sql } from "drizzle-orm";
 import type { DrizzleHandle, FeedSource } from "@ds/db";
 import { feedEntries, feedSources } from "@ds/db";
 import type { FeedSourceNetwork } from "@ds/schemas";
@@ -71,6 +71,58 @@ export class FeedSourcesRepository {
       .where(eq(feedSources.id, id))
       .for("update");
     return row;
+  }
+
+  /**
+   * 048 EARS-25 (#3994) — the Telegram source a channel update belongs to,
+   * locked for the update's transaction (so a «Выключить» and a webhook write
+   * never interleave): by the bound Telegram id once bound, else by the
+   * channel username equal to the address, ignoring case, of a source with no
+   * id bound yet. A source bound to another id never matches by name.
+   */
+  async lockTelegramSourceForChat(
+    tx: FeedSourcesTx,
+    chatId: number,
+    username: string | null,
+  ): Promise<FeedSource | undefined> {
+    const [byId] = await tx
+      .select()
+      .from(feedSources)
+      .where(
+        and(
+          eq(feedSources.platform, "telegram"),
+          eq(feedSources.telegramChatId, BigInt(chatId)),
+        ),
+      )
+      .for("update");
+    if (byId || !username) return byId;
+    const [byName] = await tx
+      .select()
+      .from(feedSources)
+      .where(
+        and(
+          eq(feedSources.platform, "telegram"),
+          eq(feedSources.address, username.toLowerCase()),
+          isNull(feedSources.telegramChatId),
+        ),
+      )
+      .for("update");
+    return byName;
+  }
+
+  /**
+   * EARS-25 — bind the channel's Telegram id on its first matching update.
+   * Not an administrator edit, so the admin ETag (`version`) is not bumped.
+   */
+  async bindTelegramChatId(
+    tx: FeedSourcesTx,
+    id: string,
+    chatId: number,
+  ): Promise<void> {
+    await tx
+      .update(feedSources)
+      .set({ telegramChatId: BigInt(chatId), updatedAt: sql`now()` })
+      .where(and(eq(feedSources.id, id), isNull(feedSources.telegramChatId)));
   }
 
   /** Serialize the uniqueness check of one `(platform, address)`. */

@@ -5,13 +5,14 @@ import {
   eq,
   inArray,
   isNull,
+  min,
   not,
   or,
   sql,
   type SQL,
 } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
-import { experts, feedEntries, organisations } from "@ds/db";
+import { experts, feedEntries, feedEntryMessages, organisations } from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import {
   beforeKeysetCursor,
@@ -23,7 +24,9 @@ import type { MaterialsTx } from "./materials.repository.js";
 // 048 EARS-10 (#3512) — the ONLY reader and writer of `feed_entries` (Lead
 // decision 8). A source writes its rows through here inside the transaction
 // of the change that caused them; no admin endpoint touches the table
-// directly. Slice 1 has one source, `academy` (own-materials.feed-source.ts).
+// directly. Two sources write here: `academy` (own-materials.feed-source.ts)
+// and `telegram` (telegram/telegram.feed-source.ts, with its dedup table
+// `feed_entry_messages`).
 
 type Db = DrizzleHandle["db"];
 
@@ -54,6 +57,51 @@ export interface FeedEntryWrite {
   href: string;
   publishedAt: Date;
 }
+
+/** The columns the Telegram writer reads back from an entry (#3994). */
+const telegramEntryColumns = {
+  id: feedEntries.id,
+  title: feedEntries.title,
+  publishedAt: feedEntries.publishedAt,
+  previewFileUniqueId: feedEntries.previewFileUniqueId,
+};
+export type TelegramEntryRow = {
+  id: string;
+  title: string;
+  publishedAt: Date;
+  previewFileUniqueId: string | null;
+};
+
+/** A Telegram `post` entry as the connector writes it (048-design §Data model (slice 2)). */
+export interface TelegramEntryInsert {
+  feedSourceId: string;
+  /** `<feed_source_id>:<smallest message id>`. */
+  sourceRef: string;
+  title: string;
+  sourceName: string;
+  href: string;
+  publishedAt: Date;
+  mediaGroupId: string | null;
+  durationSeconds: number | null;
+  previewFileId: string | null;
+  previewFileUniqueId: string | null;
+  /** `pending` while a preview awaits its copy (EARS-29); null with none. */
+  previewState: "pending" | null;
+}
+
+export type TelegramEntryPatch = Partial<
+  Pick<
+    TelegramEntryInsert,
+    | "sourceRef"
+    | "title"
+    | "href"
+    | "publishedAt"
+    | "durationSeconds"
+    | "previewFileId"
+    | "previewFileUniqueId"
+    | "previewState"
+  >
+> & { previewAttempts?: number };
 
 /** The `(published_at, id)` position a feed cursor carries. */
 export interface FeedCursorPosition {
@@ -159,6 +207,114 @@ export class FeedEntriesRepository {
         target: [feedEntries.sourcePlatform, feedEntries.sourceRef],
         set: { ...card, updatedAt: sql`now()` },
       });
+  }
+
+  // ── 048 slice 2 — Telegram entries (#3994, EARS-25…EARS-28) ─────────────
+  // Written only by `telegram/telegram.feed-source.ts`, inside the webhook
+  // update's transaction. `feed_entry_messages` is the dedup key: every
+  // message id that went into an entry is a row of it (048-design §Data model
+  // (slice 2)).
+
+  /** The entry a source's message id already went into (EARS-25, EARS-28). */
+  async telegramEntryByMessage(
+    tx: MaterialsTx,
+    feedSourceId: string,
+    messageId: number,
+  ): Promise<TelegramEntryRow | undefined> {
+    const [row] = await tx
+      .select(telegramEntryColumns)
+      .from(feedEntryMessages)
+      .innerJoin(feedEntries, eq(feedEntries.id, feedEntryMessages.feedEntryId))
+      .where(
+        and(
+          eq(feedEntryMessages.feedSourceId, feedSourceId),
+          eq(feedEntryMessages.messageId, messageId),
+        ),
+      )
+      .for("update", { of: feedEntries });
+    return row;
+  }
+
+  /** The album entry of `(feed_source_id, media_group_id)` (EARS-27). */
+  async telegramEntryByMediaGroup(
+    tx: MaterialsTx,
+    feedSourceId: string,
+    mediaGroupId: string,
+  ): Promise<TelegramEntryRow | undefined> {
+    const [row] = await tx
+      .select(telegramEntryColumns)
+      .from(feedEntries)
+      .where(
+        and(
+          eq(feedEntries.feedSourceId, feedSourceId),
+          eq(feedEntries.mediaGroupId, mediaGroupId),
+        ),
+      )
+      .for("update");
+    return row;
+  }
+
+  /** The smallest message id of an entry — its permalink and preview part. */
+  async smallestTelegramMessageId(
+    tx: MaterialsTx,
+    feedEntryId: string,
+  ): Promise<number | null> {
+    const [row] = await tx
+      .select({ id: min(feedEntryMessages.messageId) })
+      .from(feedEntryMessages)
+      .where(eq(feedEntryMessages.feedEntryId, feedEntryId));
+    return row?.id === undefined || row.id === null ? null : Number(row.id);
+  }
+
+  /** A new Telegram `post` entry; returns its id. */
+  async insertTelegramEntry(
+    tx: MaterialsTx,
+    entry: TelegramEntryInsert,
+  ): Promise<string> {
+    const [row] = await tx
+      .insert(feedEntries)
+      .values({
+        sourcePlatform: "telegram",
+        kind: "post",
+        materialId: null,
+        imageRef: null,
+        imageUrl: null,
+        authorExpertId: null,
+        partnerOrganisationId: null,
+        ...entry,
+      })
+      .returning({ id: feedEntries.id });
+    return row!.id;
+  }
+
+  /**
+   * Rewrite card fields of a Telegram entry in place. `hidden_at` and
+   * `source_off` are never in the patch (EARS-28); `published_at` moves only
+   * to an earlier album part's date, never by an edit (EARS-27).
+   */
+  async updateTelegramEntry(
+    tx: MaterialsTx,
+    id: string,
+    patch: TelegramEntryPatch,
+  ): Promise<void> {
+    await tx
+      .update(feedEntries)
+      .set({ ...patch, updatedAt: sql`now()` })
+      .where(
+        and(eq(feedEntries.id, id), eq(feedEntries.sourcePlatform, "telegram")),
+      );
+  }
+
+  /** Attach a message id to its entry (EARS-25, EARS-27). */
+  async attachTelegramMessage(
+    tx: MaterialsTx,
+    feedSourceId: string,
+    messageId: number,
+    feedEntryId: string,
+  ): Promise<void> {
+    await tx
+      .insert(feedEntryMessages)
+      .values({ feedSourceId, messageId, feedEntryId });
   }
 
   /** Remove the source record's card (EARS-6: an unpublished material leaves the feed). */

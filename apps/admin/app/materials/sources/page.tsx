@@ -29,9 +29,8 @@ import { feedSourcesUrl } from "@/providers/data-provider";
  *
  * The API answers the list WHOLE (no page, no `q`), so the page asks for no
  * search or facet the route would refuse, and the pager slices what it holds.
- * The Telegram connector (#3994) checks a source at once on add, address
- * change and enable, setting «Работает» / «Ошибка»; «Не проверен» shows only
- * before that first check completes. «Публикации» — the
+ * The check that sets «Работает» / «Ошибка» belongs to the Telegram connector
+ * (#3994): until it runs, a source reads «Не проверен». «Публикации» — the
  * row's posts — is #3996, so the rows are inert here.
  */
 export default function FeedSourcesListPage() {

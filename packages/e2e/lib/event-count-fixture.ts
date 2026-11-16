@@ -15,6 +15,7 @@ import type { DrizzleHandle } from "@ds/db";
 import { chooseEventClassification } from "../admin/event-classification.js";
 import { openEventLive } from "../admin/events.js";
 import { seedStorefrontSession } from "./storefront-session-seed.js";
+import { observeAuthoringRateStore } from "./event-authoring-isolation.js";
 import {
   eventCountBackgrounds,
   countBrowserRoute,
@@ -129,13 +130,15 @@ function digestTree(directory: string): string {
   );
 }
 
-export async function bootEventCountApi() {
+export async function bootEventCountApi(issue: 4035 | 4061 = 4035) {
   const databaseUrl = process.env.E2E_EVENT_COUNT_DATABASE_URL;
   if (
     !databaseUrl ||
-    !/^\/ds_(dev|probe)_4035$/.test(new URL(databaseUrl).pathname)
+    !new RegExp(`^/ds_(dev|probe)_${issue}$`).test(
+      new URL(databaseUrl).pathname,
+    )
   )
-    throw new Error("4035 requires its exact owned database");
+    throw new Error(`${issue} requires its exact owned database`);
   const previous = new Map<string, string | undefined>();
   const set = (key: string, value: string) => {
     previous.set(key, process.env[key]);
@@ -143,6 +146,12 @@ export async function bootEventCountApi() {
   };
   set("DATABASE_URL", databaseUrl);
   set("RECONCILE_SWEEP_INTERVAL_MS", "0");
+  const sharedPepper = process.env.AUDIT_IDENTIFIER_PEPPER;
+  if (issue === 4061) {
+    if (!process.env.REDIS_URL)
+      throw new Error("4061 requires the native Redis rate store");
+    set("AUDIT_IDENTIFIER_PEPPER", randomBytes(32).toString("hex"));
+  }
   for (const key of [
     "S3_ENDPOINT",
     "S3_ACCESS_KEY",
@@ -205,7 +214,27 @@ export async function bootEventCountApi() {
   const app = (await createApiApplication({
     logger: ["error", "warn"],
   })) as App;
+  let isolation: ReturnType<typeof observeAuthoringRateStore> | undefined;
   try {
+    if (issue === 4061) {
+      const { RATE_LIMIT_STORE } = await load(
+        "auth/rate-limit/rate-limit.store",
+      );
+      const store =
+        app.get<Parameters<typeof observeAuthoringRateStore>[0]>(
+          RATE_LIMIT_STORE,
+        );
+      const { RedisRateLimitStore } = await load(
+        "auth/rate-limit/rate-limit.store.redis",
+      );
+      expect(store).toBeInstanceOf(RedisRateLimitStore);
+      isolation = observeAuthoringRateStore(
+        store,
+        process.env.AUDIT_IDENTIFIER_PEPPER!,
+        sharedPepper,
+        (evidence) => countOperation("native rate namespace witness", evidence),
+      );
+    }
     await app.listen({ port: 0, host: "127.0.0.1" });
     const url = await app.getUrl();
     set("INTERNAL_API_URL", url);
@@ -259,20 +288,34 @@ export async function bootEventCountApi() {
       sessions: app.get<Sessions>(SessionService),
       storage: app.get<Storage>(OBJECT_STORAGE),
       computeFingerprint,
+      provenance,
+      isolation,
       async close() {
         countOperation(
           "CLOSE exact owned compiled API and restore worker environment",
           { pid: process.pid, url },
         );
-        await app.close();
-        for (const [key, value] of previous) {
-          if (value === undefined) delete process.env[key];
-          else process.env[key] = value;
+        try {
+          await isolation?.cleanup();
+        } finally {
+          await app.close();
+          for (const [key, value] of previous) {
+            if (value === undefined) delete process.env[key];
+            else process.env[key] = value;
+          }
         }
       },
     };
   } catch (error) {
-    await app.close();
+    try {
+      await isolation?.cleanup();
+    } finally {
+      await app.close();
+      for (const [key, value] of previous) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
     throw error;
   }
 }
@@ -659,7 +702,9 @@ export class EventCountWorld {
         nodeVersion: process.version,
         platform: process.platform,
       };
-      const loader: { stage: "resolve" | "native-import" } = { stage: "resolve" };
+      const loader: { stage: "resolve" | "native-import" } = {
+        stage: "resolve",
+      };
       let lifecycle: CountLifecycleModule;
       try {
         lifecycle = await loadCountLifecycleModule((stage) => {

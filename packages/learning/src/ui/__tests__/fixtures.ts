@@ -167,3 +167,59 @@ export function stubMatchMedia(narrow: boolean) {
     })),
   );
 }
+
+/**
+ * A course of `modules` modules × `lessonsPer` lessons (video → download →
+ * test), lessons before `hereLesson` done, its first step «Вы здесь», the rest
+ * locked behind the previous — the volume the canvas is built for (3 / 6 / 26).
+ */
+export function multiModulePath(modules: number, lessonsPer: number, hereLesson: number): LearningCoursePath {
+  const uuid = (n: number) => `00000000-0000-4000-9000-${n.toString(16).padStart(12, "0")}`;
+  let lessonNo = 0;
+  let hereStep = "";
+  let hereLessonId = "";
+  const mods: LearningCoursePath["modules"] = [];
+  for (let m = 1; m <= modules; m++) {
+    const lessons: LearningCoursePath["modules"][number]["lessons"] = [];
+    for (let k = 1; k <= lessonsPer; k++) {
+      lessonNo += 1;
+      const n = lessonNo;
+      const done = n < hereLesson;
+      const here = n === hereLesson;
+      const locked = { status: "locked", reason: { kind: "previous" } } as const;
+      const lessonId = uuid(1_000 + n);
+      const steps = (["video", "download", "test"] as const).map((type, si) => {
+        const id = uuid(10_000 + n * 10 + si);
+        if (here && si === 0) hereStep = id;
+        const state = done
+          ? ({ status: "done" } as const)
+          : here && si === 0
+            ? ({ status: "current" } as const)
+            : locked;
+        return { id, type, title: `${type === "video" ? "Серия" : type === "download" ? "Памятка" : "Тест"} урока ${n}`, durationMin: 5, state };
+      });
+      if (here) hereLessonId = lessonId;
+      lessons.push({
+        id: lessonId,
+        number: n,
+        title: `Урок о клиническом случае ${n}`,
+        durationMin: 15,
+        stepCount: 3,
+        state: done ? { status: "done" } : here ? { status: "current" } : locked,
+        steps,
+      });
+    }
+    mods.push({
+      id: uuid(100 + m),
+      title: `Раздел ${m}`,
+      position: m,
+      state: { status: "current" },
+      club: { state: { status: "locked", reason: { kind: "previous" } } },
+      lessons,
+    });
+  }
+  return coursePath({
+    modules: mods,
+    current: hereStep ? { stepId: hereStep, lessonId: hereLessonId } : null,
+  });
+}

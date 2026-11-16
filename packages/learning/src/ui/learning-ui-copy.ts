@@ -86,8 +86,9 @@ export const LEARNING_UI_COPY = {
     `${lessonCountText(lessons)} · ${durationText(min)}`,
   courseEyebrow: (modules: number, lessons: number) =>
     `Курс · ${modules} ${plural(modules, "модуль", "модуля", "модулей")} · ${lessonCountText(lessons)}`,
-  progress: (done: number, total: number) =>
-    `Пройдено ${done} ${plural(done, "урок", "урока", "уроков")} из ${total}`,
+  progress: (done: number, total: number, modulePosition?: number) =>
+    `Пройдено ${done} ${plural(done, "урок", "урока", "уроков")} из ${total}` +
+    (modulePosition ? ` · модуль ${modulePosition}` : ""),
   moduleProgress: (done: number, total: number) => `${done} из ${total}`,
   statusWord: {
     done: "Пройден",
@@ -96,7 +97,7 @@ export const LEARNING_UI_COPY = {
     locked: "Закрыт",
     "test-out-reachable": "Открыт",
   },
-  club: { kicker: "Клуб модуля", title: "Живой эфир" },
+  club: { kicker: "Клуб модуля", title: "Живой эфир", outline: "Клуб модуля · живой эфир" },
   document: {
     kicker: "Документ",
     title: "Документ по итогам",

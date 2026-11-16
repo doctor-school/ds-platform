@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { expertInitials, type LearningCoursePath } from "@ds/schemas";
 import {
   Badge,
@@ -28,9 +28,13 @@ import { NodeSummary, summaryAction } from "./node-summary";
 import { LEARNING_UI_COPY as C } from "./learning-ui-copy";
 import {
   type NodeTone,
+  type OutlineLesson,
   type PathNode,
+  type PathView,
   SNAKE,
   buildPathView,
+  keepTokensWhole,
+  lessonInView,
   sectionCurves,
   snakeGeometry,
 } from "./path-view";
@@ -38,8 +42,11 @@ import { StepIcon } from "./step-icon";
 
 // 024 EARS-14 — the course path block per `design-source/doctor-course.dc.html`
 // v16: the «snake» of step nodes in module sections, the «Вы здесь» step with
-// «Продолжить», a locked node's reason, the «Модули и уроки» outline, and the
-// loading / empty / error states. No game layer (streaks, hearts, XP).
+// «Продолжить», a locked node's reason, the «Модули и уроки» outline (one
+// module open — the one in view — and the lesson in view marked, by the
+// canvas scroll-spy), and the loading / empty / error states. Multi-module is
+// the canvas default; one module drops the module plates and rows. No game
+// layer (streaks, hearts, XP).
 
 const NODE_TONE: Record<NodeTone, string> = {
   done: "bg-primary-action text-primary-foreground border-primary-action",
@@ -50,12 +57,59 @@ const NODE_TONE: Record<NodeTone, string> = {
   doc: "bg-background text-faint border-dashed border-faint",
 };
 
-const MARK_TONE: Record<"done" | "here" | "open" | "closed", string> = {
+/** The canvas title letter-spacing token (no utility class carries it). */
+const TITLE_TRACKING = { letterSpacing: "var(--font-letter-spacing-title)" } as const;
+
+const MARK_TONE: Record<OutlineLesson["tone"], string> = {
   done: "bg-primary-action border-primary-action",
   here: "bg-tint border-border",
   open: "bg-card border-primary",
   closed: "bg-muted border-hairline",
 };
+
+/** The canvas's smooth jump to a plate or a node (`scrollTo`). */
+function scrollToId(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/** The index of the outline module holding lesson `n` (the one open). */
+function openModuleIndex(view: PathView, n: number): number {
+  const i = view.outline.findIndex((m) => m.lessons.some((l) => l.number === n));
+  return i < 0 ? 0 : i;
+}
+
+/**
+ * The canvas `spy()`: on scroll (one read per animation frame) the lesson whose
+ * first step has passed the middle of the viewport becomes the lesson in view.
+ * Desktop only — the narrow axis has no outline.
+ */
+function useScrollSpy(view: PathView | null, enabled: boolean, onLesson: (n: number) => void) {
+  const latest = useRef(onLesson);
+  latest.current = onLesson;
+  useEffect(() => {
+    if (!enabled || !view) return;
+    const lessons = view.outline.flatMap((m) => m.lessons);
+    let frame = 0;
+    const spy = () => {
+      frame = 0;
+      const tops = lessons.map((l) => {
+        const el = l.firstStepId ? document.getElementById(`node-${l.firstStepId}`) : null;
+        return el ? el.getBoundingClientRect().top : null;
+      });
+      const cur = lessonInView(tops, (window.innerHeight || 0) * 0.5);
+      if (cur) latest.current(lessons[cur - 1]!.number);
+    };
+    const onScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(spy);
+    };
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      if (frame) window.cancelAnimationFrame?.(frame);
+    };
+  }, [view, enabled]);
+}
 
 /** The canvas switches the path to its narrow axis below the desktop grid. */
 function useNarrow(): boolean {
@@ -99,7 +153,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
     }
   }, [courseSlug]);
 
-  const view = path ? buildPathView(path) : null;
+  const view = useMemo(() => (path ? buildPathView(path) : null), [path]);
   const g = snakeGeometry(narrow);
   const href = (id: string) => stepHref(config, courseSlug, id);
   const nodes = view ? view.sections.flatMap((sec) => sec.nodes) : [];
@@ -116,9 +170,42 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
         register: registerHref(config, coursePathHref(config, courseSlug)),
       })
     : null;
-  const select = (id: string) => {
-    setSelectedId(id);
+  // The lesson in view (canvas `navN`): the scroll-spy moves it; a pick sets it.
+  const [navN, setNavN] = useState<number | null>(null);
+  const [flash, setFlash] = useState(false);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+    },
+    [],
+  );
+  useScrollSpy(view, !narrow, (n) => setNavN((prev) => (prev === n ? prev : n)));
+  const inView = navN ?? selected?.lessonNumber ?? view?.current?.lessonNumber ?? 1;
+  const openModule = view ? openModuleIndex(view, inView) : 0;
+
+  const select = (n: PathNode) => {
+    setSelectedId(n.id);
+    if (n.lessonNumber) setNavN(n.lessonNumber);
     if (narrow) setSheetOpen(true);
+  };
+  /** An outline row: select the node and bring it into view (no Sheet — desktop). */
+  const navPick = (nodeId: string, lessonNumber: number | null) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    setSelectedId(nodeId);
+    if (lessonNumber) setNavN(lessonNumber);
+    scrollToId(`node-${nodeId}`);
+  };
+  /** «Продолжить — урок N»: the «Вы здесь» step, selected and flashed, in view. */
+  const goHere = (e: React.MouseEvent) => {
+    if (!view?.current) return;
+    e.preventDefault();
+    setSelectedId(view.current.stepId);
+    setNavN(view.current.lessonNumber);
+    setFlash(true);
+    scrollToId(`node-${view.current.stepId}`);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(false), 1600);
   };
 
   return (
@@ -157,11 +244,11 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
           <div className="mx-auto flex max-w-content flex-wrap items-center gap-x-6 gap-y-4 border-2 border-border bg-card px-6 py-4 shadow-lg">
             <div className="flex min-w-0 flex-1 basis-64 flex-col gap-2">
               <div className="text-base font-extrabold">
-                {C.progress(view.doneLessons, view.lessonCount)}
+                {C.progress(view.doneLessons, view.lessonCount, view.single ? undefined : view.current.modulePosition)}
               </div>
               <div
                 role="img"
-                aria-label={C.progress(view.doneLessons, view.lessonCount)}
+                aria-label={C.progress(view.doneLessons, view.lessonCount, view.single ? undefined : view.current.modulePosition)}
                 className="h-2 border border-border bg-muted"
               >
                 <div
@@ -173,7 +260,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
               </div>
             </div>
             <Button asChild>
-              <a href={href(view.current.stepId)}>
+              <a href={`#node-${view.current.stepId}`} onClick={goHere}>
                 {C.continueTo(view.current.lessonNumber)}
               </a>
             </Button>
@@ -230,12 +317,13 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
                   const curves = sectionCurves(sec.nodes, start, g, prev, next);
                   return (
                     <div key={sec.id}>
+                      {view.single ? null : (
                       <div
                         id={`module-${sec.id}`}
-                        className="relative flex flex-wrap items-center gap-x-4 gap-y-2 border-2 border-border bg-primary-surface px-6 py-4 text-primary-surface-foreground shadow-btn"
+                        className="relative flex scroll-mt-6 flex-wrap items-center gap-x-4 gap-y-2 border-2 border-border bg-primary-surface px-6 py-4 text-primary-surface-foreground shadow-btn"
                       >
                         <div className="flex min-w-0 flex-1 basis-56 flex-col gap-1">
-                          <h3 className="m-0 text-lg font-extrabold leading-tight">{sec.title}</h3>
+                          <h3 className="m-0 text-lg font-extrabold leading-tight" style={TITLE_TRACKING}>{sec.title}</h3>
                           <span className="text-caption font-semibold text-primary-surface-soft">{sec.meta}</span>
                         </div>
                         {sec.progress ? (
@@ -244,6 +332,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
                           </span>
                         ) : null}
                       </div>
+                      )}
                       <div className="relative" style={{ height: curves.height }}>
                         <svg
                           aria-hidden="true"
@@ -264,7 +353,8 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
                             row={i}
                             narrow={narrow}
                             selected={selected?.id === n.id}
-                            onSelect={() => select(n.id)}
+                            flash={flash && selected?.id === n.id}
+                            onSelect={() => select(n)}
                           />
                         ))}
                       </div>
@@ -276,53 +366,99 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
               {narrow ? null : (
                 <aside
                   aria-label={C.outlineLabel}
-                  className="sticky top-6 flex min-w-0 flex-col self-start border-2 border-border bg-card shadow-lg"
+                  className="sticky top-6 flex min-w-0 flex-col self-start overflow-y-auto border-2 border-border bg-card shadow-lg"
+                  style={{ maxHeight: "calc(100vh - 2 * var(--space-6))" }}
                 >
                   {selected ? (
                     <section
                       aria-label={C.summaryLabel}
-                      className="border-b-2 border-border px-6 py-5"
+                      className="flex-none border-b-2 border-border p-6"
                     >
                       <NodeSummary node={selected} action={action} />
                     </section>
                   ) : null}
-                  <nav aria-label={C.outlineHeading} className="flex flex-col">
+                  <nav aria-label={C.outlineHeading} className="flex flex-none flex-col">
                     <div className="px-6 py-3 text-eyebrow font-extrabold uppercase tracking-eyebrow text-muted-foreground">
                       {C.outlineHeading}
                     </div>
-                    {view.outline.map((m) => (
-                      <div key={m.id} className="flex flex-col">
-                        <div className="flex min-h-11 items-center gap-3 border-t border-hairline bg-primary-surface px-6 py-2 text-sm font-extrabold text-primary-surface-foreground">
-                          <span className="min-w-0 flex-auto">{m.title}</span>
-                          {m.progress ? <span className="flex-none tabular-nums">{m.progress}</span> : null}
-                        </div>
-                        <ol className="m-0 flex list-none flex-col p-0">
-                          {m.lessons.map((l) => (
-                            <li key={l.id} className="flex flex-col">
-                              <Link
-                                variant="wrapper"
-                                tone="neutral"
-                                href={l.firstStepId && l.tone !== "closed" ? href(l.firstStepId) : `#node-${l.firstStepId ?? ""}`}
-                                aria-label={l.label}
-                                aria-current={l.tone === "here" ? "step" : undefined}
+                    {view.outline.map((m, mi) => {
+                      const open = view.single || mi === openModule;
+                      return (
+                        <div key={m.id} className="flex flex-col">
+                          {view.single ? null : (
+                            // The canvas module row (`nm.go`), a bespoke outline control:
+                            // opens the module and brings its plate into view.
+                            <button
+                              type="button"
+                              aria-expanded={open}
+                              onClick={() => {
+                                setNavN(m.lessons[0]?.number ?? null);
+                                scrollToId(`module-${m.id}`);
+                              }}
+                              className="w-full text-left"
+                            >
+                              <span
+                                className={cn(
+                                  "flex min-h-11 w-full cursor-pointer items-center gap-3 border-t border-hairline px-6 py-2 text-sm font-extrabold transition-colors [button:focus-visible>&]:shadow-focus [button:hover>&]:bg-tint [button:hover>&]:text-tint-foreground",
+                                  open ? "bg-primary-surface text-primary-surface-foreground" : "bg-card text-foreground",
+                                )}
                               >
-                                <span
-                                  className={cn(
-                                    "flex min-h-10 w-full items-center gap-3 border-t border-hairline px-6 py-2 text-left text-sm font-semibold transition-colors hover:bg-tint hover:text-tint-foreground",
-                                    l.tone === "here" ? "bg-tint text-tint-foreground" : "bg-card",
-                                    l.tone === "closed" ? "text-muted-foreground" : l.tone === "here" ? "" : "text-foreground",
-                                  )}
-                                >
-                                  <span aria-hidden="true" className={cn("size-3 flex-none border-2", MARK_TONE[l.tone])} />
-                                  <span className="min-w-5 flex-none tabular-nums">{l.number}</span>
-                                  <span title={l.title} className="min-w-0 flex-auto truncate">{l.title}</span>
-                                </span>
-                              </Link>
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                    ))}
+                                <span className="min-w-0 flex-auto">{m.title}</span>
+                                {m.progress ? <span className="flex-none tabular-nums">{m.progress}</span> : null}
+                              </span>
+                            </button>
+                          )}
+                          <div
+                            className="grid"
+                            style={{
+                              gridTemplateRows: open ? "1fr" : "0fr",
+                              visibility: open ? "visible" : "hidden",
+                              transition: `grid-template-rows .25s ease-out, visibility 0s linear ${open ? "0s" : ".25s"}`,
+                            }}
+                          >
+                            <ol className="m-0 flex min-h-0 list-none flex-col overflow-hidden p-0">
+                              {m.lessons.map((l) => (
+                                <li key={l.id} className="flex flex-col">
+                                  <OutlineRow
+                                    href={`#node-${l.firstStepId ?? ""}`}
+                                    label={l.label}
+                                    current={l.number === inView}
+                                    tone={l.tone}
+                                    onClick={navPick(l.firstStepId ?? "", l.number)}
+                                  >
+                                    <span className="min-w-5 flex-none tabular-nums">{l.number}</span>
+                                    <span title={l.title} className="min-w-0 flex-auto truncate">{l.title}</span>
+                                  </OutlineRow>
+                                </li>
+                              ))}
+                              {m.club ? (
+                                <li className="flex flex-col">
+                                  <OutlineRow
+                                    href={`#node-${m.club.nodeId}`}
+                                    label={m.club.label}
+                                    tone={m.club.tone}
+                                    ring={selected?.id === m.club.nodeId}
+                                    onClick={navPick(m.club.nodeId, null)}
+                                  >
+                                    <span className="min-w-0 flex-auto">{C.club.outline}</span>
+                                  </OutlineRow>
+                                </li>
+                              ) : null}
+                            </ol>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <OutlineRow
+                      href={`#node-${view.documentRow.nodeId}`}
+                      label={view.documentRow.label}
+                      tone={view.documentRow.tone}
+                      ring={selected?.id === view.documentRow.nodeId}
+                      strong
+                      onClick={navPick(view.documentRow.nodeId, null)}
+                    >
+                      <span className="min-w-0 flex-auto">{C.document.title}</span>
+                    </OutlineRow>
                   </nav>
                 </aside>
               )}
@@ -379,6 +515,7 @@ function SnakeNode({
   row,
   narrow,
   selected,
+  flash,
   onSelect,
 }: {
   node: PathNode;
@@ -386,6 +523,8 @@ function SnakeNode({
   row: number;
   narrow: boolean;
   selected: boolean;
+  /** «Продолжить» just jumped here: the ring stands off further (canvas `flash`). */
+  flash: boolean;
   onSelect: () => void;
 }) {
   const g = snakeGeometry(narrow);
@@ -397,9 +536,13 @@ function SnakeNode({
   const box = cn(
     "inline-flex size-full items-center justify-center border-2 [button:hover>&]:shadow-btn [button:focus-visible>&]:shadow-focus",
     NODE_TONE[node.tone],
-    selected && "shadow-md",
+    // The canvas selection ring (`--border-width-4` in `--color-ring`, offset
+    // `--space-1`; `--space-2` while «Продолжить» flashes it).
+    selected && "outline-4 outline-ring",
+    selected && (flash ? "outline-offset-8" : "outline-offset-4"),
   );
   const boxStyle = {
+    scrollMarginTop: "var(--space-16)",
     top: (P - S) / 2,
     width: S,
     height: S,
@@ -447,17 +590,37 @@ function SnakeNode({
               : { right: `calc(50% + ${-off + edge}px)` }
         }
       >
+        {/* The label column is narrow (canvas geometry): the kicker breaks only
+            after «·», a short hyphenated token never splits, and the title
+            clamps to two lines so the label stays inside its 96 px row. */}
         <span className="text-xs font-bold tabular-nums text-faint">
-          {narrow && node.firstOfLesson && node.lessonNumber ? `${C.lessonLabel(node.lessonNumber)} · ` : ""}
-          {node.kicker}
+          {(narrow && node.firstOfLesson && node.lessonNumber
+            ? [C.lessonLabel(node.lessonNumber), ...node.kickerParts]
+            : node.kickerParts
+          ).map((part, i) => (
+            <Fragment key={i}>
+              {i > 0 ? " · " : null}
+              <span className="whitespace-nowrap">{part}</span>
+            </Fragment>
+          ))}
         </span>
         <span
+          title={node.title}
           className={cn(
-            "text-body-compact font-extrabold leading-tight",
+            "line-clamp-2 text-body-compact font-extrabold leading-tight",
             node.tone === "closed" ? "text-muted-foreground" : "text-foreground",
           )}
+          style={TITLE_TRACKING}
         >
-          {node.title}
+          {keepTokensWhole(node.title).map((run, i) =>
+            run.nowrap ? (
+              <span key={i} className="whitespace-nowrap">
+                {run.text}
+              </span>
+            ) : (
+              <Fragment key={i}>{run.text}</Fragment>
+            ),
+          )}
         </span>
         {node.here ? <Badge>{C.here}</Badge> : null}
         {node.reason ? (
@@ -465,5 +628,54 @@ function SnakeNode({
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * A row of the «Модули и уроки» outline: an in-page link to its path node
+ * (works before hydration; the click selects and scrolls smoothly). The lesson
+ * in view differs only by colour, so neighbouring rows never shift.
+ */
+function OutlineRow({
+  href,
+  label,
+  tone,
+  current,
+  ring,
+  strong,
+  onClick,
+  children,
+}: {
+  href: string;
+  label: string;
+  tone: OutlineLesson["tone"];
+  current?: boolean;
+  ring?: boolean;
+  strong?: boolean;
+  onClick: (e: React.MouseEvent) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      variant="wrapper"
+      tone="neutral"
+      href={href}
+      aria-label={label}
+      {...(current === undefined ? {} : { "aria-current": current ? "true" : "false" })}
+      onClick={onClick}
+    >
+      <span
+        className={cn(
+          "flex w-full items-center gap-3 border-t border-hairline px-6 py-2 text-left text-sm transition-colors hover:bg-tint hover:text-tint-foreground",
+          strong ? "min-h-11 font-extrabold" : "min-h-9 font-semibold",
+          current ? "bg-tint text-tint-foreground" : "bg-card",
+          !current && (tone === "closed" ? "text-muted-foreground" : "text-foreground"),
+          ring && "outline-2 -outline-offset-2 outline-ring",
+        )}
+      >
+        <span aria-hidden="true" className={cn("size-3 flex-none border-2", MARK_TONE[tone])} />
+        {children}
+      </span>
+    </Link>
   );
 }

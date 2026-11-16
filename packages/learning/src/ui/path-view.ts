@@ -29,6 +29,8 @@ export interface PathNode {
   /** The «Урок N» chip on the lesson's first node. */
   firstOfLesson: boolean;
   kicker: string;
+  /** The kicker's parts (type, duration): each stays whole, the line breaks only after «·». */
+  kickerParts: string[];
   title: string;
   /** The accessible name: «Урок N, шаг K. Тип. Название. Статус». */
   label: string;
@@ -41,6 +43,8 @@ export interface PathNode {
 
 export interface PathSection {
   id: string;
+  /** 1-based module position on the path. */
+  position: number;
   title: string;
   meta: string;
   progress: string | null;
@@ -56,12 +60,25 @@ export interface OutlineLesson {
   label: string;
 }
 
+export interface OutlineModule {
+  id: string;
+  title: string;
+  progress: string | null;
+  lessons: OutlineLesson[];
+  /** The module's club row (its path node id), when the course has clubs. */
+  club: { nodeId: string; tone: OutlineLesson["tone"]; label: string } | null;
+}
+
 export interface PathView {
   sections: PathSection[];
-  outline: { id: string; title: string; progress: string | null; lessons: OutlineLesson[] }[];
+  outline: OutlineModule[];
+  /** The document row closing the outline (its path node id). */
+  documentRow: { nodeId: string; tone: OutlineLesson["tone"]; label: string };
+  /** The canvas's exception: one module — no module plates, no module rows. */
+  single: boolean;
   lessonCount: number;
   doneLessons: number;
-  current: { stepId: string; lessonNumber: number } | null;
+  current: { stepId: string; lessonNumber: number; modulePosition: number } | null;
   empty: boolean;
 }
 
@@ -105,7 +122,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
       }
       lesson.steps.forEach((step, si) => {
         const here = step.id === hereStep;
-        if (here) current = { stepId: step.id, lessonNumber: lesson.number };
+        if (here) current = { stepId: step.id, lessonNumber: lesson.number, modulePosition: mod.position };
         const t = tone(step.state, here);
         const status = here ? "current" : step.state.status;
         const word = signedIn || status === "locked" ? C.statusWord[status] : "";
@@ -119,6 +136,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
           lessonNumber: lesson.number,
           firstOfLesson: si === 0,
           kicker: `${typeLabel} · ${durationText(step.durationMin)}`,
+          kickerParts: [typeLabel, durationText(step.durationMin)],
           title: step.title,
           label:
             `${C.lessonLabel(lesson.number)}, шаг ${si + 1}. ${typeLabel}. ${step.title}` +
@@ -143,6 +161,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
         lessonNumber: null,
         firstOfLesson: false,
         kicker: C.club.kicker,
+        kickerParts: [C.club.kicker],
         title: C.club.title,
         label: `${C.club.kicker}. ${C.club.title}`,
         reason: null,
@@ -161,6 +180,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
         lessonNumber: null,
         firstOfLesson: false,
         kicker: C.document.kicker,
+        kickerParts: [C.document.kicker],
         title: C.document.title,
         label: `${C.document.kicker}. ${C.document.title}`,
         reason: null,
@@ -171,6 +191,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
     }
     return {
       id: mod.id,
+      position: mod.position,
       title: C.moduleTitle(mod.position, mod.title),
       meta: C.moduleMeta(mod.lessons.length, modMin),
       progress: signedIn
@@ -180,7 +201,9 @@ export function buildPathView(path: LearningCoursePath): PathView {
     };
   });
 
-  const outline = path.modules.map((mod) => {
+  const rowTone = (s: LearningNodeState): OutlineLesson["tone"] =>
+    s.status === "done" ? "done" : s.status === "locked" ? "closed" : "open";
+  const outline = path.modules.map((mod): OutlineModule => {
     const done = mod.lessons.filter((l) => l.state.status === "done").length;
     return {
       id: mod.id,
@@ -205,12 +228,26 @@ export function buildPathView(path: LearningCoursePath): PathView {
           label: `${C.lessonLabel(l.number)}. ${l.title}` + (word ? `. ${word}` : ""),
         };
       }),
+      club: mod.club
+        ? {
+            nodeId: `club-${mod.id}`,
+            tone: rowTone(mod.club.state),
+            label: `${C.club.outline}` + (signedIn || mod.club.state.status === "locked" ? `. ${C.statusWord[mod.club.state.status]}` : ""),
+          }
+        : null,
     };
   });
+  const docState = path.document.state;
 
   return {
     sections,
     outline,
+    documentRow: {
+      nodeId: "document",
+      tone: rowTone(docState),
+      label: C.document.title + (signedIn || docState.status === "locked" ? `. ${C.statusWord[docState.status]}` : ""),
+    },
+    single: path.modules.length === 1,
     lessonCount,
     doneLessons,
     current,
@@ -265,4 +302,47 @@ export function sectionCurves(
   });
   if (nextLine && last) d[pair(last.ls, nextLine)] += curve(last, { x: g.axis, y: height });
   return { ...d, height };
+}
+
+// ── Label wrapping on the narrow label column of the snake ──────────────────
+
+export interface TextRun {
+  text: string;
+  /** A token kept on one line (rendered `white-space: nowrap`). */
+  nowrap: boolean;
+}
+
+/**
+ * A node label split into runs so a short token with an inner hyphen never
+ * breaks at it («CHA₂DS₂-» / «VA»): such a token (≤ `max` characters) is one
+ * nowrap run, the rest wraps at spaces. A longer hyphenated token may still
+ * break — a word wider than the column is worse than a break at its hyphen.
+ */
+export function keepTokensWhole(text: string, max = 24): TextRun[] {
+  const runs: TextRun[] = [];
+  for (const piece of text.split(/(\s+)/)) {
+    if (!piece) continue;
+    // `\p{Pd}`: any dash punctuation — hyphen-minus, hyphen, non-breaking hyphen, en dash.
+    const whole = /\S\p{Pd}\S/u.test(piece) && piece.length <= max;
+    const last = runs[runs.length - 1];
+    if (!whole && last && !last.nowrap) last.text += piece;
+    else runs.push({ text: piece, nowrap: whole });
+  }
+  return runs;
+}
+
+/**
+ * The canvas scroll-spy (`spy()`): walking the lessons in order, the lesson in
+ * view is the last whose first step's top has passed `line` (half the viewport);
+ * a missing node stops the walk. 0 = none has passed yet. Returns a 1-based
+ * index into `tops`.
+ */
+export function lessonInView(tops: (number | null)[], line: number): number {
+  let cur = 0;
+  for (let i = 0; i < tops.length; i++) {
+    const top = tops[i];
+    if (top === null || top === undefined || top > line) break;
+    cur = i + 1;
+  }
+  return cur;
 }

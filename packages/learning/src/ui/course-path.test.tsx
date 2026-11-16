@@ -30,13 +30,11 @@ describe("024 EARS-14 — the course path", () => {
     expect(screen.getByText("Шаг откроется, когда будут пройдены предыдущие.")).toBeInTheDocument();
   });
 
-  it("EARS-14: the progress band counts done lessons from the read and continues at the «Вы здесь» step", () => {
+  it("EARS-14: the progress band counts done lessons from the read and continues at the «Вы здесь» step on the path", () => {
     render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath()} />);
     expect(screen.getAllByText("Пройдено 1 урок из 3").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "Продолжить — урок 2" })).toHaveAttribute(
-      "href",
-      `/courses/kardio/steps/${ID.s2}`,
-    );
+    // Canvas `goHere`: the band brings the «Вы здесь» node into view; its summary opens the step.
+    expect(screen.getByRole("link", { name: "Продолжить — урок 2" })).toHaveAttribute("href", `#node-${ID.s2}`);
   });
 
   it("EARS-14: a course with no lessons shows the empty state, not an empty snake", () => {

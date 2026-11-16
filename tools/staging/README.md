@@ -484,7 +484,9 @@ Until the §8 backfill (#2068) rewords the spec feature files in the shared step
 vocabulary, every scenario reports as **skipped** — `missingSteps: "skip-scenario"`, the
 deliberate choice `packages/e2e/playwright.config.ts` records. The verdict block prints
 the skipped count rather than hiding it, so «0 passed / N skipped» is a truthful reading
-of the suite's coverage today, not a defect of this command.
+of what this run executed, not a defect of this command. The suite's coverage number is
+`pnpm scenarios:inventory`, which also counts scenarios proven by a verified
+`@proof:<level>` tag (regression-contour tech spec §6.1/§6.4).
 
 ## `slot.mjs` in one paragraph
 

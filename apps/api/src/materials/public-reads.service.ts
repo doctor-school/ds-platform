@@ -91,6 +91,14 @@ export async function toFeedCard(
     // public — whose name parts are then required (012 CHECK).
     throw new Error(`feed entry ${row.id} has no source name`);
   }
+  if (row.sourcePlatform !== "academy" || row.kind === "post") {
+    // The read serves only `FEED_CARD_PLATFORMS` (048-design §Delivery
+    // slices (slice 2)); this is the last guard should that list and the card
+    // contract ever disagree.
+    throw new Error(
+      `feed entry ${row.id} is a ${row.sourcePlatform} entry, which the card contract has no member for`,
+    );
+  }
   return {
     id: row.id,
     kind: row.kind,

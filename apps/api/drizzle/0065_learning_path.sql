@@ -1,4 +1,8 @@
 CREATE TYPE "public"."learning_state" AS ENUM('draft', 'published');--> statement-breakpoint
+-- 012 media pipeline: a step's video / download file is a media slot whose
+-- released object the cleanup worker reclaims (024-design §2).
+ALTER TYPE "public"."media_entity_kind" ADD VALUE 'learning_step';--> statement-breakpoint
+ALTER TYPE "public"."media_slot" ADD VALUE 'file';--> statement-breakpoint
 CREATE TABLE "learning_attempts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"person_id" uuid NOT NULL,
@@ -301,8 +305,3 @@ INSERT INTO "learning_presets" ("name", "values") VALUES
 	('Открытый курс', '{"unlock":{"kind":"immediate"},"order":"free","completion.lesson":{"all":[{"condition":"all-steps-done"},{"condition":"test-passed","test":"exit"}]},"test.exitRequired":true}'::jsonb),
 	('ДПО / аккредитация', '{"completion.lesson":{"all":[{"condition":"all-steps-done"},{"condition":"test-passed","test":"exit"}]},"test.threshold":80,"test.entryRequired":true,"order":"strict","testOut.allowed":false,"test.exitRequired":true}'::jsonb);
 -- learning-seed:end
---> statement-breakpoint
--- 012 media pipeline: a step's video / download file is a media slot whose
--- released object the cleanup worker reclaims (024-design §2).
-ALTER TYPE "public"."media_entity_kind" ADD VALUE 'learning_step';--> statement-breakpoint
-ALTER TYPE "public"."media_slot" ADD VALUE 'file';

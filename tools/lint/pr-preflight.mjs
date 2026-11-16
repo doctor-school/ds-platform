@@ -175,6 +175,9 @@ export const STATIC_GUARDS = [
   // quarantine check, the local `gh` — no PR number, so they belong here.
   { name: "scenario-step", file: "scenario-step-lint.ts" },
   { name: "scenario-coverage", file: "scenario-coverage-lint.ts" },
+  // The proof ratchet (#4062) reads its baseline from the local merge base with
+  // `origin/main` and calls `gh` only for a debt line added on the branch.
+  { name: "scenario-proof", file: "scenario-proof-lint.ts" },
 ];
 
 /**

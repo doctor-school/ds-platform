@@ -26,7 +26,7 @@ import { users } from "./users.js";
 //
 // drizzle does not model the append-only trigger on `learning_facts` or the 010
 // `audit_row_change()` attachments — that DDL is hand-written in migration
-// `0062_learning_path.sql`; the seed rows of the platform layer and the three
+// `0065_learning_path.sql`; the seed rows of the platform layer and the three
 // presets are inserted there too (EARS-5, EARS-9).
 
 /** The structure's two-state lifecycle (EARS-1, EARS-4). */
@@ -232,7 +232,7 @@ export const learningOptions = pgTable(
   (t) => [index("learning_options_question_idx").on(t.questionId, t.position)],
 );
 
-/** EARS-9 — a preset as data, seeded with three rows by 0062. Ownership `admin-only`. */
+/** EARS-9 — a preset as data, seeded with three rows by 0065. Ownership `admin-only`. */
 export const learningPresets = pgTable("learning_presets", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull().unique(),
@@ -289,7 +289,7 @@ export const learningRuleChanges = pgTable(
 
 /**
  * EARS-10 — the append-only progress facts (ADR-0003 §2.7): a unique client or
- * server event id; a BEFORE UPDATE OR DELETE trigger raises (0062), except the
+ * server event id; a BEFORE UPDATE OR DELETE trigger raises (0065), except the
  * ADR-0009 erasure re-pointing of `person_id`. Ownership `doctor`.
  */
 export const learningFacts = pgTable(

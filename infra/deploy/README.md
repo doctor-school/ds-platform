@@ -799,22 +799,56 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    versioning, lifecycle, lock or bucket policy, deleting the bucket, touching any
    other bucket, and every IAM call.
 
-   **Rotating the box's pgBackRest S3 key** (owner break-glass on data-prod; a new key
-   from `aws iam create-access-key` as above):
+   **Rotating the box's pgBackRest S3 key** (release path, no break-glass key and no
+   hand-run `docker compose` on data-prod — #4068; release pipeline spec §5
+   «Data-prod verbs.» → `secret-apply`). A new key comes from `aws iam
+create-access-key` on the operator's workstation, as above. The values never enter
+   GitHub: the workstation encrypts them to ds-data-prod's intake certificate, and only
+   the box holds the key that decrypts them.
 
-   ```bash
-   sudo cp /etc/ds-platform/data.env /etc/ds-platform/data.env.bak-<ts>
-   # edit as root: replace exactly the PGBACKREST_REPO1_S3_KEY= and
-   # PGBACKREST_REPO1_S3_KEY_SECRET= lines, keep root:root 0600
-   cd ~/ds-platform/infra/deploy/compose/data-prod
-   sudo docker compose up -d --no-build postgres pgbackrest   # restarts the DB for seconds
-   sudo docker compose exec -T -u postgres pgbackrest pgbackrest --stanza=ds check
-   ```
+   1. **Once per box: the intake certificate.** Until it is committed,
+      `pnpm prod:data-secret` refuses. The box can make it only once a release that
+      carries the data-secret verbs (#4068) is live, because that release installs them.
+      Then dispatch
+      `gh workflow run data-secret.yml --ref main -f action=recipient`. ds-data-prod
+      generates its intake key pair on the first call (root 0600 under
+      `/etc/ds-platform/secret-intake/`, never printed, never leaves the box) and the run
+      log prints the certificate and its SHA-256 fingerprint. Commit the certificate as
+      `infra/deploy/keys/data-secret-recipient.pem`. A rebuilt box generates a new pair:
+      commit its certificate again.
+   2. **Encrypt the new values** on the workstation, from a file that holds exactly the
+      lines to replace (no other `data.env` name is accepted):
 
-   Then dispatch `recovery-custody.yml` with `recovery-bundle`, then
-   `recovery-check`: the bundle fingerprints `data.env`.
+      ```bash
+      pnpm prod:data-secret <live sha> < new-key.txt   # PGBACKREST_REPO1_S3_KEY=… / PGBACKREST_REPO1_S3_KEY_SECRET=…
+      ```
 
-   Once `check` says OK and both jobs are green, revoke the previous key on the
+      It prints one base64 line and the dispatch command. The line is good once, for
+      that SHA, for 6 h: the box refuses another SHA, and keeps the `createdAt` + nonce
+      of the last rotation whose verdict stands (applied or rolled back), refusing any
+      ciphertext not newer than it — a captured line cannot put a revoked key back.
+      The stderr fingerprint must equal the one of step 1. Delete `new-key.txt`
+      afterwards.
+
+   3. **Apply it on the owner's word**, with the live prod SHA:
+      `gh workflow run data-secret.yml --ref main -f action=apply -f sha=<live sha> -f owner_quote="<the owner's words>" -f ciphertext=<the line>`.
+      In Environment `production` and a concurrency group of its own (never the
+      release's, whose one pending run it could cancel), refused while any `ds-prod-*`
+      unit runs, ds-data-prod decrypts, checks the names and value shapes, and runs the
+      durable unit `ds-prod-<sha12>-data-secret`: `data.env` backed up, exactly those
+      lines replaced (root:root 0600), postgres + pgbackrest recreated with data-up's
+      command on the recorded image overlay (`.postgres-artifacts.json`, so the guard
+      reads the recorded images and the next release passes `postgres-verify`), then
+      `pgbackrest --stanza=ds check`. A failed check puts the backup back, recreates
+      again and fails the run: the old key keeps working. The backup is removed either
+      way. A run whose job died is re-dispatched with the same inputs once the unit has
+      ended (while it runs, the apply is refused) and within the 6 h:
+      the box answers «already applied» for the last applied line, starts nothing, and
+      the run reads the unit's recorded verdict and closes the attempt.
+   4. Dispatch `recovery-custody.yml` with `recovery-bundle`, then `recovery-check`:
+      the bundle fingerprints `data.env`.
+
+   Once the apply run and both jobs are green, revoke the previous key on the
    operator's workstation with the account main key (never on the box):
 
    ```bash
@@ -827,13 +861,6 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    user), there is no user key to revoke: removing it from the box ends its exposure
    there. Rotating the main key itself is a separate account-level action that affects
    every bucket, and is not part of this procedure.
-
-   The `data.env.bak-<ts>` copy is the rollback path and still holds the old key.
-   Remove it once the next `expire` (the nightly full) has succeeded with the new key:
-
-   ```bash
-   sudo shred -u /etc/ds-platform/data.env.bak-<ts>
-   ```
 
    **Bundle the irreplaceable keys** before you leave this step, and again after any
    later change to these files: dispatch `recovery-custody.yml` with `recovery-bundle`,

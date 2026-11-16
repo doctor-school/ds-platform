@@ -27,6 +27,7 @@ bootstrap) is a one-time human setup, out of the steady-state loop.
 | `stage-main-check.mjs`     | —                                                                         | Stage `main` check (#2701): the last pre-flight step of a `--ref` hotfix — converge the stage `main` slot to the target and run the full stage suite from a clean checkout of it (see below). A `main` target reads the `stage-suite` status instead.                                                                                                                                                                                                                                                                                    |
 | `registry-retention.mjs`   | —                                                                         | Container-registry retention (#3110), run only by `registry-retention.yml`: keeps the last 3 releases, the latest production deployment, the newest 3 `main` images, the newest green-`stage-suite` `main` commit (#3240; not found ⇒ deletes nothing), every newer `main` commit whose `stage-suite` is in flight (#3752), the target of every queued or running `deploy-prod.yml` run (#3654; an unreadable target ⇒ deletes nothing), the open hotfix and PR heads, deletes the rest (`infra/deploy/README.md` → Container registry). |
 | `release-lane.mjs`         | `pnpm release:lane`                                                       | Read-only release lane (#3561): live production SHA, the release candidate (newest `main` SHA with a green `stage-suite` — the walk retention keeps, `lib/registry-retention.mjs`), Stage main runs in progress / pending, the `runtime-images.yml` queue and the `deploy-prod.yml` queue (a pending deploy means a new dispatch would cancel it). The release target for `run-prod-deploy`.                                                                                                                                             |
+| `data-secret.mjs`          | `prod:data-secret`                                                        | The data-box secret rotation (#4068; release pipeline spec §5 «Data-prod verbs.» → `secret-apply`): the live prod SHA as its argument and `NAME=value` lines of the allowlist on stdin → the base64 CMS ciphertext (one use: SHA-bound, nonce, 6 h) to the committed `infra/deploy/keys/data-secret-recipient.pem`, the input of `data-secret.yml`; the plaintext never touches disk. Also the workflow's runner-side `verdict` of the rotation unit.                                                                                    |
 | `prod-read.mjs`            | `prod:read`, `prod:schema-drift`, `prod:read-key`, `prod:read-result-key` | The prod read path (#3646; release pipeline spec §5 «Prod read verbs.»): decrypt one `prod-observe.yml` run's ciphertext artifact into `~/.ds-platform/prod-read/<run-id>.json`; the drift of a `schema` answer against the journal and the newest drizzle snapshot (exit 0 / 1 drift / 2 usage); the owner's read-key step; the lead's result-key step. Also the workflow's runner-side input, `capabilities` and status-line checks.                                                                                                   |
 
 ## Release from Actions (`deploy-prod.yml`, #3158)
@@ -89,11 +90,15 @@ images of <sha12>: admin, portal (…)`. Pick a SHA whose images the registry
   phase id and one control-free line of at most 160 characters. The reason is an
   allow-list: only a refusal prod.mjs authors, a `die(…, { authored: true })` whose
   first line interpolates no Error message, stderr or box output (a
-  `prod-local.test.mjs` source check holds every such call to that), gives its
-  first line. Every other failure (the `main().catch` catch-all, a wrapped
-  child-process error, a JSON.parse or network error) reads
-  `unexpected error — see the box journal`, with its phase still named; the full
-  message and the journal stay on the box. The failure
+  `prod-local.test.mjs` source check holds every such call to that), or a refusal
+  the PostgreSQL guard raises (`postgres-guard.mjs` `postgresGuardRefusal`: only the
+  guard's own `fail` marks one, keyed to its exact text; a `postgres-guard.test.mjs`
+  source check holds every guard message to fixed text), gives its first line. Every
+  other failure (the `main().catch` catch-all, a wrapped child-process error — the
+  probe's `PostgreSQL evidence unavailable: …` included — a JSON.parse or network
+  error) reads `unexpected error — see the box journal`, with its phase still named;
+  the full message and the journal stay on the box, and `prod-observe.yml`
+  `release-journal` reads them with no break-glass key (below). The failure
   Deployment record's status description reads
   `release failed @ <sha12> in <phase>: <reason>` (redeploy alike), and its payload
   keeps the note as `failure`. A new attempt drops the earlier note.
@@ -115,7 +120,8 @@ images of <sha12>: admin, portal (…)`. Pick a SHA whose images the registry
   digest as usual.
 - **Secrets.** `PROD_SSH_KEY` + `PROD_SSH_KNOWN_HOSTS` live in Environment
   `production` (deployment branches `main`, no required reviewer) and reach only
-  the `deploy` job.
+  the `deploy` job and `data-secret.yml`'s one `data-secret` job (#4068), pinned by
+  `tools/ci/deploy-prod-workflow.test.mjs`.
 
 ### Redeploy mode (#3354)
 
@@ -447,7 +453,8 @@ and the retention `prune` — each run as their own transient systemd unit
 `ds-prod-<sha12>-<step>` instead of a streamed ssh command, so killing the operator
 session no longer kills the step. The deploy starts (or attaches to) the unit, then polls
 `sudo ds-release status prod <sha>` every 10 s and prints one status line per poll; the
-full step log stays in the box's journal (`sudo journalctl -u ds-prod-<sha12>-<step>`).
+full step log stays in the box's journal (`sudo journalctl -u ds-prod-<sha12>-<step>`;
+ds-api-prod's failed steps also through `prod-observe.yml` `release-journal`, #4067).
 Each box keeps its status file `/var/lib/ds-platform/release/prod/<sha>.json` (tech spec
 2026-10-16 release pipeline §5) and takes its env lock `/run/ds-platform/ds-prod.lock` in
 a root-owned 0755 directory, never the world-writable `/run/lock` (#3297); the release
@@ -676,7 +683,10 @@ stay on the operator path above.
   basis of the Deployment-record notes the runner writes (spec §5).
 
 The unit's whole output stays in its journal (`journalctl -u ds-prod-<sha12>-driver`);
-the runner sees status lines only.
+the runner sees status lines only. The operator reads it with no break-glass key (#4067):
+`gh workflow run prod-observe.yml --ref main -f verb=release-journal -f sha=<sha>`, then
+`pnpm prod:read <run-id>` prints the driver's journal tail, the tails of ds-api-prod's
+failed step units and the failure note (spec §5 «Prod read verbs.»).
 
 ## Docker Hub login on the boxes (#2240)
 

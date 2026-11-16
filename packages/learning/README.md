@@ -17,7 +17,7 @@ The host — `apps/api/src/learning/learning.module.ts` — wires: the Drizzle d
 
 ## Settings are data
 
-No completion / unlock / order / visibility / test / progress value is a constant outside `LEARNING_PLATFORM_SEED`. Migration `0062_learning_path.sql` seeds the platform layer and the three presets with exactly those constants (an api e2e pins rows = constants). `test.exitRequired` is seeded on.
+No completion / unlock / order / visibility / test / progress value is a constant outside `LEARNING_PLATFORM_SEED`. Migration `0065_learning_path.sql` seeds the platform layer and the three presets with exactly those constants (an api e2e pins rows = constants). `test.exitRequired` is seeded on.
 
 ## Facts
 

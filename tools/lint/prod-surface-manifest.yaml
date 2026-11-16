@@ -501,6 +501,14 @@ routes:
     file: apps/admin/app/materials/[id]/page.tsx
     status: product-ready
   - app: admin
+    route: /materials/sources
+    file: apps/admin/app/materials/sources/page.tsx
+    status: product-ready
+  - app: admin
+    route: /materials/sources/create
+    file: apps/admin/app/materials/sources/create/page.tsx
+    status: product-ready
+  - app: admin
     route: /organisation-roles/create
     file: apps/admin/app/organisation-roles/create/page.tsx
     status: product-ready

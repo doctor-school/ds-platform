@@ -153,7 +153,9 @@ function isTaxonomyResource(resource: string): resource is TaxonomyResource {
 }
 
 /** Project create variables: the authored fields plus an optional cover file. */
-export type CreateProjectVars = CreateProjectRequestInput & { cover?: File | null };
+export type CreateProjectVars = CreateProjectRequestInput & {
+  cover?: File | null;
+};
 /**
  * Project edit variables. `cover` sets/replaces; `mediaAction: "clear"` removes;
  * supplying both is refused by the API with `MEDIA_INPUT_CONFLICT`, so the form
@@ -1160,6 +1162,19 @@ export const organisationsUrl = {
 export const materialsUrl = {
   publish: (id: string) => `${ADMIN_BASE}/materials/${id}/publish`,
   unpublish: (id: string) => `${ADMIN_BASE}/materials/${id}/unpublish`,
+};
+
+/**
+ * 048 EARS-20…EARS-22 (#3993) — «Источники». The list is answered WHOLE (no
+ * page, no `q`) and there is no `GET :id` — a row's `version` comes from the
+ * list — so the page rides the `custom` transport, which owns the
+ * Idempotency-Key, If-Match and CSRF headers every write owes.
+ */
+export const feedSourcesUrl = {
+  collection: () => `${ADMIN_BASE}/feed-sources`,
+  row: (id: string) => `${ADMIN_BASE}/feed-sources/${id}`,
+  command: (id: string, command: "disable" | "enable") =>
+    `${ADMIN_BASE}/feed-sources/${id}/${command}`,
 };
 
 /**

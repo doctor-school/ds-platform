@@ -69,11 +69,13 @@ const IGNORE = [
 
 // (1) Drive-letter root: a single letter + `:` + slash/backslash + a real path
 // segment char (`C:/Users`, `D:\repos`, or the escaped-string `C:\\Users`). Not
-// preceded by an alnum (so it is a path root, not part of a longer token), and
+// preceded by an alnum (so it is a path root, not part of a longer token) nor
+// by a backslash (so a regex/string escape such as `\d:\d` in a timestamp
+// pattern is not read as drive `d:`), and
 // the trailing path char rules out escaped-backtick artefacts like `EARS-N:\``
 // (a `:` + `\` + backtick, not a drive path). Allows one or two backslashes so
 // a JS-escaped literal `"C:\\Users"` is caught as well as a template `C:\Users`.
-const DRIVE_ROOT_RE = /(?<![A-Za-z0-9])[A-Za-z]:[\\/]{1,2}[A-Za-z0-9._]/;
+const DRIVE_ROOT_RE = /(?<![A-Za-z0-9\\])[A-Za-z]:[\\/]{1,2}[A-Za-z0-9._]/;
 // (2) Unix home root: `/home/<user>/…` or `/Users/<user>/…` — an absolute,
 // machine-specific home directory. Requires a non-empty user segment.
 const UNIX_HOME_RE = /\/(?:home|Users)\/[^/\s"'`\\]+/;

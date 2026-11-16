@@ -1,6 +1,6 @@
 # `learning` — 024 learning path host
 
-Spec: `apps/docs/content/specs/features/024-learning-module-path/` (design §1–§7, §9–§11). The model and services live in `@ds/learning` (`packages/learning/README.md`); this module is the Nest host that wires them to the API. Tables: `packages/db/src/schema/learning.ts` + migration `apps/api/drizzle/0062_learning_path.sql`. Contracts: `packages/schemas/src/learning/`.
+Spec: `apps/docs/content/specs/features/024-learning-module-path/` (design §1–§7, §9–§11). The model and services live in `@ds/learning` (`packages/learning/README.md`); this module is the Nest host that wires them to the API. Tables: `packages/db/src/schema/learning.ts` + migration `apps/api/drizzle/0065_learning_path.sql`. Contracts: `packages/schemas/src/learning/`.
 
 ## Files
 

@@ -12129,6 +12129,91 @@
         "tags": ["ExpertsAdmin"]
       }
     },
+    "/v1/admin/feed-sources": {
+      "get": {
+        "operationId": "FeedSourcesAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["FeedSourcesAdmin"]
+      },
+      "post": {
+        "operationId": "FeedSourcesAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["FeedSourcesAdmin"]
+      }
+    },
+    "/v1/admin/feed-sources/{id}": {
+      "patch": {
+        "operationId": "FeedSourcesAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["FeedSourcesAdmin"]
+      }
+    },
+    "/v1/admin/feed-sources/{id}/disable": {
+      "post": {
+        "operationId": "FeedSourcesAdminController_disable",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["FeedSourcesAdmin"]
+      }
+    },
+    "/v1/admin/feed-sources/{id}/enable": {
+      "post": {
+        "operationId": "FeedSourcesAdminController_enable",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["FeedSourcesAdmin"]
+      }
+    },
     "/v1/admin/learning/courses": {
       "get": {
         "operationId": "LearningAdminController_courses",
@@ -14059,6 +14144,18 @@
           }
         },
         "tags": ["Health"]
+      }
+    },
+    "/v1/integrations/telegram/webhook": {
+      "post": {
+        "operationId": "TelegramWebhookController_webhook",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["TelegramWebhook"]
       }
     },
     "/v1/learning/courses/{courseSlug}/path": {

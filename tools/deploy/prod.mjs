@@ -127,6 +127,7 @@ import {
   assertPostgresEvidence,
   certifiedTarget,
   guardedPostgresStep,
+  postgresGuardRefusal,
   postgresImageOverride,
   postgresProbeRequest,
   postgresStateRecord,
@@ -367,6 +368,18 @@ export function planWalker({ local = false, redeploy = false } = {}) {
       if (missed) throw new Error(`deploy phase ${missed} was left out`);
     },
   };
+}
+
+/**
+ * The catch-all's message (#4067). A refusal the PostgreSQL guard raised is authored
+ * text (postgresGuardRefusal: only `fail` in postgres-guard.mjs makes one, from its own
+ * fixed strings), so it becomes the public reason; any other error — a wrapped probe
+ * failure («PostgreSQL evidence unavailable: <box stderr>») included — stays unexpected.
+ */
+export function uncaughtFailure(err) {
+  const refusal = postgresGuardRefusal(err);
+  if (refusal !== null) return { message: refusal, authored: true };
+  return { message: err?.stack || err?.message || String(err), authored: false };
 }
 
 /** The longest reason a failure note carries (#3439). */
@@ -2392,6 +2405,21 @@ async function deploy(hotfixRef = null, local = null) {
     }
   }
 
+  // #4068: data-secret.yml runs in its own concurrency group, so a data-box secret
+  // rotation (unit ds-prod-<sha12>-data-secret, which recreates postgres + pgbackrest)
+  // can be running on ds-data-prod: refused, read-only, before the first state change
+  // of this run, as the rollback does. A step of this SHA left running by a dead
+  // driver refuses too, naming its unit; the re-run after it ends attaches. A
+  // redeploy touches ds-api-prod only and does not reach the data box.
+  if (!redeploy) {
+    try {
+      await dataProd().call(["check"]);
+    } catch (e) {
+      die(`refused on ${DATA_PROD}: ${e.message}`);
+    }
+    ok(`no ds-prod-* unit is running on ${DATA_PROD}`);
+  }
+
   // #3274: the configs the running caddy/centrifugo serve, kept outside the tree the
   // ship below replaces — the restore source of a failed validate or apply.
   walk.phase("runtime-config-backup");
@@ -3069,6 +3097,7 @@ if (
   import.meta.url === pathToFileURL(invokedPath).href
 ) {
   main().catch((err) => {
-    die(err.stack || err.message);
+    const { message, authored } = uncaughtFailure(err);
+    die(message, { authored });
   });
 }

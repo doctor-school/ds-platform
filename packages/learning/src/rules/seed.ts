@@ -2,7 +2,7 @@ import type { LearningSettings, LearningSettingValues } from "@ds/schemas";
 
 // 024 EARS-5, EARS-8, EARS-9 — the ONLY defaults in code: the platform layer's
 // seed and the three presets' contents (024-design §3). Migration
-// `0062_learning_path.sql` inserts exactly these as rows, and the runtime reads
+// `0065_learning_path.sql` inserts exactly these as rows, and the runtime reads
 // the rows, never these constants (an api e2e pins rows = constants).
 
 /** The platform layer: a value for every setting (EARS-5). */

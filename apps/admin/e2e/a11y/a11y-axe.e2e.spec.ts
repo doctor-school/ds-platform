@@ -316,7 +316,9 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       .getByRole("link", { name: "Школа", exact: true })
       .click();
     await page.waitForURL(/\/project-output-kinds\/[0-9a-f-]{36}$/);
-    await page.getByTestId("output-kind-lifecycle").waitFor({ state: "visible" });
+    await page
+      .getByTestId("output-kind-lifecycle")
+      .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
 
@@ -459,6 +461,57 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await expect(page.getByTestId("material-status")).toHaveText("Опубликован");
     await page.getByTestId("material-unpublish").click();
     await expect(page.getByTestId("material-unpublish-confirm")).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  // 048 (#3993) — «Источники»: the list with its row actions, the add form
+  // with the field-addressed refusal, the «Изменить адрес» dialog and the
+  // «Выключить» confirmation are each scanned as their own state.
+  test("048 EARS-20: the source list + add form + edit and switch-off dialogs pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    const address = `axe_${Date.now().toString(36)}`;
+    await page.goto("/materials/sources/create");
+    await page.getByTestId("feed-source-form").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.getByTestId("feed-source-address").fill("t.me/+AbCdEfGhIjK");
+    await page.getByTestId("submit-feed-source").click();
+    await page
+      .locator('[data-testid="feed-source-address"][aria-invalid="true"]')
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.getByTestId("feed-source-address").fill(`t.me/${address}`);
+    await page.getByTestId("submit-feed-source").click();
+    await page.waitForURL(/\/materials\/sources$/);
+    await page
+      .getByTestId(`feed-source-row-${address}`)
+      .filter({ visible: true })
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page
+      .getByTestId(`feed-source-edit-${address}`)
+      .filter({ visible: true })
+      .click();
+    await page
+      .getByTestId("feed-source-edit-dialog")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+    await page.keyboard.press("Escape");
+    await page
+      .getByTestId("feed-source-edit-dialog")
+      .waitFor({ state: "hidden" });
+
+    await page
+      .getByTestId(`feed-source-disable-${address}`)
+      .filter({ visible: true })
+      .click();
+    await page
+      .getByTestId("feed-source-disable-dialog")
+      .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
 

@@ -30,6 +30,7 @@ export const READ_VERBS = [
   "rehearse",
   "rehearse-restore",
   "rehearsal-status",
+  "release-journal",
 ];
 /** #3648: the verbs whose answer carries a rehearsal state word. */
 export const REHEARSAL_VERBS = [
@@ -144,12 +145,19 @@ export function checkCapabilities(text, verb) {
   return { ok: true };
 }
 
+/** The text with every control character dropped: C0, DEL and C1 (U+009B is a one-byte CSI). */
+export function printable(text) {
+  return [...String(text)]
+    .filter((ch) => {
+      const c = ch.charCodeAt(0);
+      return c > 0x1f && (c < 0x7f || c > 0x9f);
+    })
+    .join("");
+}
+
 /** One line, control characters stripped, at most MAX_REASON characters. */
 export function bound(text) {
-  return [...String(text)]
-    .filter((ch) => ch.charCodeAt(0) > 0x1f && ch.charCodeAt(0) !== 0x7f)
-    .join("")
-    .slice(0, MAX_REASON);
+  return printable(text).slice(0, MAX_REASON);
 }
 
 /**
@@ -308,6 +316,34 @@ export function readRun({ runId, home, repoRoot, run = defaultRun }) {
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
+}
+
+/**
+ * #4067: the operator's view of a decrypted `release-journal` answer — the failure note,
+ * then each unit's journal tail under its name, control characters dropped. Printed on
+ * the operator's terminal only, never in a job log.
+ * @returns {string[]}
+ */
+export function releaseJournalLines(answer) {
+  if (answer?.verb !== "release-journal" || !Array.isArray(answer.units))
+    throw new ReadError("the answer is not a release-journal answer");
+  const out = [`release ${answer.sha} journal, taken ${answer.takenAt ?? "?"}`];
+  const f = answer.failure;
+  out.push(
+    f && typeof f === "object"
+      ? `failure: phase ${f.phase ?? "none"} — ${f.reason ?? "no reason"}`
+      : "failure: no note recorded",
+  );
+  for (const unit of answer.units) {
+    const lines = Array.isArray(unit?.lines) ? unit.lines : [];
+    out.push(
+      "",
+      `== ${unit?.unit} (${lines.length} lines${unit?.truncated ? ", the tail only" : ""})`,
+      ...lines,
+    );
+  }
+  // every box-sourced text passes one filter: an escape sequence never reaches the terminal
+  return out.map(printable);
 }
 
 /** An already-decrypted answer of the run, or a fresh `readRun`. */

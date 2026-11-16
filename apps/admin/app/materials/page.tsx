@@ -13,6 +13,7 @@ import {
   type MaterialStatus,
 } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
+import { MaterialsSubnav } from "@/components/materials-subnav";
 import {
   ADMIN_DATA_LIST_INITIAL_QUERY,
   AdminDataList,
@@ -117,6 +118,7 @@ export default function MaterialsListPage() {
   return (
     <Authenticated key="materials-list" redirectOnFail="/login">
       <AppShell>
+        <MaterialsSubnav />
         <AdminDataList<MaterialAdminListItem, MaterialStatus>
           title={t("materials.listTitle")}
           description={t("materials.listDescription")}

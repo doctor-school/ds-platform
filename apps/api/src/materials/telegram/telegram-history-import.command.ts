@@ -1,5 +1,5 @@
-import { readFile, stat } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { normalizeFeedSourceAddress } from "@ds/schemas";
 import { FeedEntriesRepository } from "../feed-entries.repository.js";
@@ -28,6 +28,8 @@ import { TelegramPreviewService } from "./telegram-preview.service.js";
 // comes from the exported file, after the entry has committed (EARS-29's
 // normalize-and-store half, no Bot API call). Logs carry message ids and
 // reasons only, never a text (EARS-36).
+
+export const SOURCE_DELETED_REASON = "the source was deleted during the import";
 
 export const UNBOUND_SOURCE_REASON =
   "the source has no bound Telegram id; run the source check (EARS-31)";
@@ -122,7 +124,7 @@ export class TelegramHistoryImport {
       const card = message.card;
       const entryId = await this.sources.transaction(async (tx) => {
         const locked = await this.sources.lockById(tx, source.id);
-        if (!locked) return null;
+        if (!locked) throw new Error(SOURCE_DELETED_REASON);
         const held = await this.entries.telegramEntryByMessage(
           tx,
           source.id,
@@ -181,14 +183,21 @@ export class TelegramHistoryImport {
       this.logPreviewSkip(entryId, "not_exported");
       return false;
     }
-    const path = resolve(folder, file.path);
-    const inside = relative(folder, path);
-    if (inside === "" || inside.startsWith("..") || isAbsolute(inside)) {
-      this.logPreviewSkip(entryId, "outside_export");
-      return false;
-    }
     let body: Buffer;
     try {
+      // Both sides resolved through links, so a link inside the export folder
+      // cannot reach a file outside it.
+      const path = await realpath(resolve(folder, file.path));
+      const inside = relative(await realpath(folder), path);
+      if (
+        inside === "" ||
+        inside === ".." ||
+        inside.startsWith(`..${sep}`) ||
+        isAbsolute(inside)
+      ) {
+        this.logPreviewSkip(entryId, "outside_export");
+        return false;
+      }
       const info = await stat(path);
       if (!info.isFile() || info.size > TELEGRAM_FILE_MAX_BYTES) {
         this.logPreviewSkip(entryId, "too_large_or_not_a_file");

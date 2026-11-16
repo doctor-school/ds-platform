@@ -4,7 +4,7 @@ import {
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { Logger, VersioningType } from "@nestjs/common";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import sharp from "sharp";
@@ -20,6 +20,7 @@ import {
 } from "vitest";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
+import { FeedSourcesRepository } from "../../src/materials/feed-sources.repository.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
@@ -443,6 +444,44 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       expect(report).toMatchObject({ written: 1, previewsFailed: 1 });
       expect((await entriesOf(src))[0]!.image_ref).toBeNull();
+    });
+
+    it("048 EARS-30: when an exported file path reaches outside the export folder through a link inside it, the system shall not read it and count the preview as failed", async (ctx) => {
+      const src = await source();
+      const outside = await mkdtemp(join(dir, "outside-"));
+      await writeFile(join(outside, "outside.jpg"), jpeg);
+      const file = await exportOf(src.bare, [
+        message(941, { text: "Фото 941", photo: "photos/outside.jpg" }),
+      ]);
+      // A directory link: a junction on Windows (no privilege needed), a
+      // symlink elsewhere; the run skips only where links are not permitted.
+      try {
+        await symlink(outside, join(dirname(file), "photos"), "junction");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "EPERM") ctx.skip();
+        throw error;
+      }
+      const report = await importer.run({
+        source: src.address,
+        exportPath: file,
+      });
+      expect(report).toMatchObject({ written: 1, previewsFailed: 1 });
+      expect((await entriesOf(src))[0]!.image_ref).toBeNull();
+    });
+
+    it("048 EARS-30: when the source is deleted while the import runs, the system shall stop the run with its reason and not count the rest as already held", async () => {
+      const src = await source();
+      const file = await exportOf(src.bare, [
+        message(950, { text: "Архив 950" }),
+        message(951, { text: "Архив 951" }),
+      ]);
+      vi.spyOn(app.get(FeedSourcesRepository), "lockById").mockResolvedValue(
+        null,
+      );
+      await expect(
+        importer.run({ source: src.address, exportPath: file }),
+      ).rejects.toThrow("the source was deleted during the import");
+      expect(await entriesOf(src)).toEqual([]);
     });
   },
 );

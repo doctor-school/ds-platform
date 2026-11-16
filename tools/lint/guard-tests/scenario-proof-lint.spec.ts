@@ -123,6 +123,35 @@ describe("scenario-proof-lint", () => {
     expect(stderr).toContain("CI is set");
   });
 
+  // No base-debt seam and a base ref that does not exist: `git merge-base`
+  // fails, so the new-entry check cannot run.
+  const noMergeBase = (ci: string) => ({
+    env: {
+      ...seams("green").env,
+      LINT_PROOF_BASE_DEBT_FILE: "",
+      LINT_DIFF_BASE: "refs/heads/scenario-proof-no-such-base",
+      CI: ci,
+    },
+  });
+
+  it("red: under CI an unavailable merge base blocks → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("green"), noMergeBase("true"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("the merge base was unavailable");
+    expect(stderr).toContain("CI is set: BLOCK");
+  });
+
+  it("green: outside CI an unavailable merge base warns → exit 0", () => {
+    const { code, stdout, stderr } = runGuard(
+      GUARD,
+      dir("green"),
+      noMergeBase(""),
+    );
+    expect(stderr).toBe("");
+    expect(code).toBe(0);
+    expect(stdout).toContain("WARN the merge base was unavailable");
+  });
+
   it("red: an outline with one unbound Examples row, a scenario with only Background steps → unproven", () => {
     const { code, stderr } = runGuard(
       GUARD,

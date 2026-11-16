@@ -167,11 +167,9 @@
 006 | With no stored choice the theme follows the system preference, and an explicit choice wins
 007 | A caller who may not edit the event cannot change the option
 007 | A caller who may not edit the event cannot change the option [2]
-007 | A created event starts in draft and stores one canonical instant for a МСК time
 007 | A failed superseded-object delete never fails the edit (best-effort GC)
 007 | A legacy broadcast is born hidden and enters the shown archive by an explicit command
 007 | A non-admin caller cannot author or transition an event
-007 | A wrong stream URL is correctable while the event is published
 007 | Absolute admin times render in МСК regardless of the operator's timezone
 007 | Admin state is exactly what the portal surfaces reflect
 007 | An event that existed before the default changed reads hidden
@@ -186,7 +184,6 @@
 007 | Speakers are stored as an ordered list of free-text entries in wave 1
 007 | The admin surface is built on stock Refine with no canvas-fidelity gate
 007 | The produced public projection stays publicly readable
-007 | The stream is configured from an explicit provider enum
 007 | The two lifecycles are disjoint - a command of the other machine is refused
 007 | There is no unpublish transition
 008 | A doctor logs in, lands on the discovery front-door, and navigates the shell

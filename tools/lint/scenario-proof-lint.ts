@@ -775,10 +775,11 @@ async function main(): Promise<void> {
 
   const base = await baseDebt();
   if (base.status === "unknown") {
-    info(
-      `WARN the merge base was unavailable (${base.reason}); new debt entries ` +
-        `are not checked for an Issue, not blocked on a guess.`,
-    );
+    const msg =
+      `the merge base was unavailable (${base.reason}); ` +
+      `new debt entries are not checked for an Issue`;
+    if (inCi()) findings.push(`${msg}, and CI is set: BLOCK`);
+    else info(`WARN ${msg}; outside CI not blocked on a guess.`);
   } else if (base.status === "ok") {
     for (const e of debt) {
       if (base.keys.has(e.key)) continue;

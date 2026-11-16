@@ -39,4 +39,18 @@ describe("no-hardcoded-path-lint", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("hardcoded-abs-path");
   });
+
+  it("green: a regex escape sequence like `\\d:\\d` in a timestamp regex is not a drive root → exit 0", () => {
+    const { code } = runGuard(GUARD, dir("green-regex-escape"));
+    expect(code).toBe(0);
+  });
+
+  it.each(["red-forward-slash", "red-backslash", "red-escaped-string"])(
+    "red: drive-root literal (%s) is still flagged → exit 1",
+    (name) => {
+      const { code, stderr } = runGuard(GUARD, dir(name));
+      expect(code).toBe(1);
+      expect(stderr).toContain("hardcoded-abs-path");
+    },
+  );
 });

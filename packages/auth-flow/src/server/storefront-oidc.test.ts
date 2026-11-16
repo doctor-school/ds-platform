@@ -474,6 +474,34 @@ describe("storefront entry", () => {
     }
   });
 
+  it("024 EARS-22: a doctor /register or /login from the learning guest gate stores the course or step as the return path and registers nothing; the Academy stores none", async () => {
+    const entered = async (host: StorefrontOidcHost, path: string) => {
+      const api = fakeApi();
+      await storefrontEntry(get(path), host, path.startsWith("/login") ? "login" : "register", {
+        fetchImpl: api.fetchImpl,
+        env: ENV,
+      });
+      return api.internal("transaction")[0]?.body;
+    };
+    for (const target of [
+      "/courses/osnovy-prp",
+      "/courses/osnovy-prp/steps/0b6a4c1e-4f6f-4b8e-9d1a-2f0c3e5d7a90",
+    ]) {
+      for (const door of ["/register", "/login"]) {
+        const body = await entered(DOCTOR, `${door}?returnTo=${encodeURIComponent(target)}`);
+        expect(body?.returnPath, `${door} ${target}`).toBe(target);
+        expect(body?.completeRegistration).toBeUndefined();
+      }
+      // EARS-27 — the Academy serves no learning path, so it carries none.
+      const academy = await entered(ACADEMY, `/register?returnTo=${encodeURIComponent(target)}`);
+      expect(academy?.returnPath).toBeUndefined();
+    }
+    for (const hostile of ["/coursesX", "//evil.example/courses/x"]) {
+      const body = await entered(DOCTOR, `/register?returnTo=${encodeURIComponent(hostile)}`);
+      expect(body?.returnPath, hostile).toBeUndefined();
+    }
+  });
+
   it("003 EARS-12: a reset entry that carries no return target returns to this storefront's account page; a carried one stands", async () => {
     const entered = async (path: string) => {
       const api = fakeApi();

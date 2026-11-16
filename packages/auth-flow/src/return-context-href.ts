@@ -2,7 +2,10 @@ import { parseLandOnlyReturnTarget, parseReturnTarget } from "@ds/schemas";
 import { parseRoomReturnTarget } from "@ds/room/room-return";
 
 import type { AuthFlowHostConfig } from "./host-config";
-import { parseAccountReturnTarget } from "./return-target";
+import {
+  parseAccountReturnTarget,
+  parseCoursesReturnTarget,
+} from "./return-target";
 
 /**
  * The CARRY vocabulary of an auth hop (rule S3 / #2258), in a module with no
@@ -38,10 +41,22 @@ export function resolveRoomReturnTarget(
 }
 
 /**
+ * 024 EARS-22 - this host's LEARNING return (`routes.courses` and every page
+ * below it), or `null`. A host that serves no learning path admits none.
+ */
+export function resolveCoursesReturnTarget(
+  host: ReturnContextHost,
+  returnTo: string | undefined,
+): string | null {
+  return parseCoursesReturnTarget(returnTo, host.routes.courses);
+}
+
+/**
  * #2258 / rule S3 - the value that rides ONWARD across an auth hop, covering
  * every shape a visitor may legitimately be coming back to: this host account
- * family (`routes.account`, segment boundary enforced), this host room
- * (`routes.room`) and the эфир vocabulary.
+ * family (`routes.account`, segment boundary enforced), this host learning
+ * family (`routes.courses`, 024 EARS-22), this host room (`routes.room`) and
+ * the эфир vocabulary.
  * Deliberately NOT `resolveReturnTargetPath`, which must stay эфир-only.
  */
 export function resolveCarriedReturnTarget(
@@ -50,6 +65,9 @@ export function resolveCarriedReturnTarget(
 ): string | null {
   const account = parseAccountReturnTarget(returnTo, host.routes.account);
   if (account) return account;
+
+  const courses = resolveCoursesReturnTarget(host, returnTo);
+  if (courses) return courses;
 
   const room = resolveRoomReturnTarget(host, returnTo);
   if (room) return room;

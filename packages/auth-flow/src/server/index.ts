@@ -69,14 +69,19 @@ export { isTopLevelNavigation } from "./top-level-navigation";
  * resolvers, which decide where a signed-in visitor is sent before paint; the
  * codec itself is pure and framework-free.
  */
-export { parseAccountReturnTarget } from "../return-target";
+export {
+  parseAccountReturnTarget,
+  parseCoursesReturnTarget,
+} from "../return-target";
 export {
   RETURN_CONTEXT_PARAM,
   isAccountReturnTarget,
+  isCoursesReturnTarget,
   isLandOnlyReturnTarget,
   isRoomReturnTarget,
   readReturnEvent,
   resolveCarriedReturnTarget,
+  resolveCoursesReturnTarget,
   resolveReturnContext,
   resolveReturnLandingPath,
   resolveReturnTargetPath,

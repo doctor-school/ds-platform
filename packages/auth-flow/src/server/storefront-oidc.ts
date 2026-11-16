@@ -25,6 +25,7 @@ import { resolveArrivalLanding } from "./landing";
 import {
   RETURN_CONTEXT_PARAM,
   isAccountReturnTarget,
+  isCoursesReturnTarget,
   isLandOnlyReturnTarget,
   isRoomReturnTarget,
   readReturnEvent,
@@ -137,6 +138,7 @@ async function arrivalLanding(
     landingTarget &&
     (isAccountReturnTarget(config, returnTo) ||
       isRoomReturnTarget(config, returnTo) ||
+      isCoursesReturnTarget(config, returnTo) ||
       isLandOnlyReturnTarget(returnTo))
   ) {
     return landingTarget;
@@ -177,6 +179,7 @@ function registrationToComplete(
   if (
     isAccountReturnTarget(config, returnTo) ||
     isRoomReturnTarget(config, returnTo) ||
+    isCoursesReturnTarget(config, returnTo) ||
     isLandOnlyReturnTarget(returnTo)
   ) {
     return undefined;

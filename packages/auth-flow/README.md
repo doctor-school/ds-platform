@@ -223,8 +223,9 @@ reconstructed, so a hostile value is dropped rather than propagated.
 
 **S4 — every landing honours the carried target through the shared landing rule.**
 After login, registration, verification or a password reset, the destination comes
-from the host's one landing resolver — the account family AND the event shapes,
-not one of the two. The host's default landing applies exactly when the arrival
+from the host's one landing resolver — the account family, the learning family
+(`routes.courses`, the course path and its steps — declared on the doctor host only,
+024 EARS-22/27) AND the event shapes, not one of them. The host's default landing applies exactly when the arrival
 carried nothing, or carried something the guards refuse. On the Academy that
 resolver is `completeReturnTarget` (it also completes a carried 005 registration
 intent); on the doctor storefront it is `resolveReturnLandingPath`. `/reset` keeps

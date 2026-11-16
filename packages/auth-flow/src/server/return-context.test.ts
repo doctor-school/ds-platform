@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   RETURN_CONTEXT_PARAM,
   isAccountReturnTarget,
+  isCoursesReturnTarget,
   readReturnEvent,
   resolveCarriedReturnTarget,
   resolveReturnContext,
@@ -14,6 +15,7 @@ import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
 } from "../test-support/host-config-fixtures";
+import { ACADEMY_AUTH_FLOW, DOCTOR_AUTH_FLOW } from "../hosts";
 
 /**
  * 021 EARS-2 (#1538) — the RESOLUTION half of the return context: the canonical
@@ -483,5 +485,52 @@ describe("014 EARS-6 (#2487): the doors carry the land-only return end-to-end", 
     expect(
       resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/events/prp-pri-gonartroze"),
     ).toBe("/events/prp-pri-gonartroze");
+  });
+});
+
+/**
+ * 024 EARS-22 — the guest gate «… Вернём вас сюда.» sends a guest to
+ * registration with the course or step as the return target; the doors must
+ * land them back there, not on the LD-4 feed. The learning family is a landing
+ * in its own right (no эфир card, nothing registers), declared only by the
+ * doctor host: the Academy answers `/courses/*` 404 (EARS-27).
+ */
+describe("024 EARS-22: the learning family lands and carries on the doctor host only", () => {
+  const STEP = "/courses/osnovy-prp/steps/0b6a4c1e-4f6f-4b8e-9d1a-2f0c3e5d7a90";
+
+  it.each([
+    ["the package fixture", DOCTOR_FIXTURE],
+    ["the shipped doctor host", DOCTOR_AUTH_FLOW],
+  ])("024 EARS-22: on %s a course and a step land and carry as themselves", (_label, host) => {
+    for (const target of ["/courses/osnovy-prp", STEP]) {
+      expect(resolveReturnLandingPath(host, target)).toBe(target);
+      expect(resolveCarriedReturnTarget(host, target)).toBe(target);
+      expect(isCoursesReturnTarget(host, target)).toBe(true);
+      // …and it is no эфир: no card, nothing registers on the way back.
+      expect(resolveReturnTargetPath(target)).toBeNull();
+    }
+    expect(withReturnContext(host, "/register", "/courses/osnovy-prp")).toBe(
+      "/register?returnTo=%2Fcourses%2Fosnovy-prp",
+    );
+  });
+
+  it.each([
+    ["a prefix collision", "/coursesX"],
+    ["protocol-relative", "//evil.example/courses/x"],
+    ["cross-origin", "https://evil.example/courses/x"],
+  ])("024 EARS-22: %s is refused on the doctor host", (_label, value) => {
+    expect(resolveReturnLandingPath(DOCTOR_AUTH_FLOW, value)).toBeNull();
+    expect(resolveCarriedReturnTarget(DOCTOR_AUTH_FLOW, value)).toBeNull();
+    expect(isCoursesReturnTarget(DOCTOR_AUTH_FLOW, value)).toBe(false);
+  });
+
+  it.each([
+    ["the package fixture", ACADEMY_FIXTURE],
+    ["the shipped Academy host", ACADEMY_AUTH_FLOW],
+  ])("024 EARS-27: %s declares no learning family and admits none", (_label, host) => {
+    expect(host.routes.courses).toBeUndefined();
+    expect(resolveReturnLandingPath(host, "/courses/osnovy-prp")).toBeNull();
+    expect(resolveCarriedReturnTarget(host, STEP)).toBeNull();
+    expect(isCoursesReturnTarget(host, STEP)).toBe(false);
   });
 });

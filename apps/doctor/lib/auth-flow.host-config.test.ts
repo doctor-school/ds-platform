@@ -17,6 +17,7 @@ import { AUTH_FLOW_CHANNELS } from "@ds/auth-flow/host-config";
 import { DOCTOR_AUTH_FLOW } from "./auth-flow.host-config";
 import { doctorNav } from "./navigation-model";
 import { DOCTOR_ROOM_RETURN_ROUTES } from "./room-config";
+import { DOCTOR_LEARNING } from "./learning.host-config";
 
 /**
  * 017 US-7 / 003 EARS-28 — the doctor host config states its auth routes as
@@ -39,6 +40,10 @@ describe("DOCTOR_AUTH_FLOW.routes", () => {
     // 020 EARS-7 — the room sends a guest to `/login?returnTo=/events/<slug>/room`;
     // the door completes that return only if this host states the same template.
     expect(DOCTOR_AUTH_FLOW.routes.room).toBe(DOCTOR_ROOM_RETURN_ROUTES.room);
+  });
+
+  it("024 EARS-22: the learning return root equals the learning host's course route, so a gated guest lands back on the course or step", () => {
+    expect(DOCTOR_AUTH_FLOW.routes.courses).toBe(DOCTOR_LEARNING.routes.courses);
   });
 });
 

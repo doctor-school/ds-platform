@@ -10,6 +10,7 @@ import { parseAccountReturnTarget } from "../return-target";
 import {
   RETURN_CONTEXT_PARAM,
   resolveCarriedReturnTarget,
+  resolveCoursesReturnTarget,
   resolveRoomReturnTarget,
   withReturnContext,
   type ReturnContextHost,
@@ -25,6 +26,7 @@ import { serverApiBase } from "./session";
 export {
   RETURN_CONTEXT_PARAM,
   resolveCarriedReturnTarget,
+  resolveCoursesReturnTarget,
   resolveRoomReturnTarget,
   withReturnContext,
   type ReturnContextHost,
@@ -161,6 +163,19 @@ export function isAccountReturnTarget(
 }
 
 /**
+ * 024 EARS-22 - does this arrival name a page of THIS host learning family
+ * (`routes.courses`)? Like the account family it is a landing in its own right:
+ * it resolves no эфир card, registers nothing, and the step gate re-runs when
+ * the doctor arrives back on it.
+ */
+export function isCoursesReturnTarget(
+  host: ReturnContextHost,
+  returnTo: string | undefined,
+): boolean {
+  return resolveCoursesReturnTarget(host, returnTo) !== null;
+}
+
+/**
  * 006 EARS-6 - does this arrival name THIS host room? Like the account family, a
  * room return is a landing in its own right: it resolves no эфир card, and the
  * room gate re-runs when the doctor arrives back on it.
@@ -200,6 +215,10 @@ export function resolveReturnLandingPath(
 ): string | null {
   const account = parseAccountReturnTarget(returnTo, host.routes.account);
   if (account) return account;
+
+  // 024 EARS-22 - this host learning family (course path or step).
+  const courses = resolveCoursesReturnTarget(host, returnTo);
+  if (courses) return courses;
 
   // 006 EARS-6 - this host room, answered before the эфир vocabulary.
   const room = resolveRoomReturnTarget(host, returnTo);

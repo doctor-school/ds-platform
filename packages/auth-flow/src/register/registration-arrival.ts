@@ -2,6 +2,7 @@ import type { AuthFlowHostConfig } from "../host-config";
 import {
   guardAuthRoute,
   isAccountReturnTarget,
+  isCoursesReturnTarget,
   isLandOnlyReturnTarget,
   isRoomReturnTarget,
   readReturnEvent,
@@ -109,6 +110,9 @@ export async function resolveRegistrationArrival({
   // 006 EARS-6 · 020 EARS-7 — a room arrival is the same kind of landing: no
   // эфир card, and the parked cookie is only the lost-query fallback.
   const roomLanding = isRoomReturnTarget(config, returnTo);
+  // 024 EARS-22 — a course or step arrival (the guest gate «… Вернём вас
+  // сюда.») is one more landing of that kind: no эфир card, nothing registers.
+  const coursesLanding = isCoursesReturnTarget(config, returnTo);
 
   // 014 EARS-6 amendment 2026-09-30 (#2487) — the header's land-only эфир
   // return is one more landing of that kind: back on the event page, no эфир
@@ -117,7 +121,11 @@ export async function resolveRegistrationArrival({
 
   const landsOnCarriedTarget = Boolean(
     landingTarget &&
-      (gateResolved || accountLanding || roomLanding || landOnlyLanding),
+    (gateResolved ||
+      accountLanding ||
+      roomLanding ||
+      coursesLanding ||
+      landOnlyLanding),
   );
   const landing =
     landsOnCarriedTarget && landingTarget

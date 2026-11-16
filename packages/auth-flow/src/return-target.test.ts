@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseAccountReturnTarget } from "./return-target";
+import { parseAccountReturnTarget, parseCoursesReturnTarget } from "./return-target";
 
 /**
  * 014 EARS-6 / #1987 — the ACCOUNT FAMILY is the non-эфир landing shape.
@@ -73,5 +73,36 @@ describe("014 EARS-6 / #1987: the account family is a legal return target", () =
     expect(parseAccountReturnTarget("/webinars/ahilles-042", "/account")).toBeNull();
     expect(parseAccountReturnTarget(null, "/account")).toBeNull();
     expect(parseAccountReturnTarget(undefined, "/account")).toBeNull();
+  });
+});
+
+/**
+ * 024 EARS-22 — the LEARNING FAMILY: a guest gated on a course or a step
+ * («… Вернём вас сюда.») comes back to it after registration or sign-in. The
+ * family is host DATA (`routes.courses`, doctor host only — the Academy answers
+ * `/courses/*` 404 by EARS-27, so it declares none and admits none), with the
+ * same segment boundary and same-origin guard as the account family.
+ */
+describe("024 EARS-22: the learning family is a legal return target on the host that declares it", () => {
+  it.each([
+    ["the course path", "/courses/osnovy-prp"],
+    ["a step of the course", "/courses/osnovy-prp/steps/0b6a4c1e-4f6f-4b8e-9d1a-2f0c3e5d7a90"],
+  ])("024 EARS-22: %s round-trips as itself", (_label, value) => {
+    expect(parseCoursesReturnTarget(value, "/courses")).toBe(value);
+  });
+
+  it.each([
+    ["a prefix collision without a segment boundary", "/coursesX"],
+    ["a plural-hyphen collision", "/courses-evil/x"],
+    ["protocol-relative", "//evil.example/courses/x"],
+    ["cross-origin", "https://evil.example/courses/x"],
+    ["a traversal that ends in the family", "/events/../courses/x"],
+    ["not a path at all", "courses/x"],
+  ])("024 EARS-22: %s is refused", (_label, value) => {
+    expect(parseCoursesReturnTarget(value, "/courses")).toBeNull();
+  });
+
+  it("024 EARS-27: a host that declares no learning family admits none", () => {
+    expect(parseCoursesReturnTarget("/courses/osnovy-prp", undefined)).toBeNull();
   });
 });

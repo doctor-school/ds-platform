@@ -139,6 +139,40 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await shoot(page, "guest-gate-1280");
   });
 
+  test("EARS-22: a guest gated on a step or the course signs in and lands back on it, not on the feed", async ({ browser }) => {
+    const doctor = { email: newEmail(), password: livePassword() };
+    await provisionConfirmedAccount(browser, "doctor", DOCTOR_URL, doctor);
+    const context = await browser.newContext({ locale: "ru-RU", viewport: DESKTOP });
+    if (DARK) await context.addInitScript(DARK_INIT);
+    const page = await context.newPage();
+    await page.goto(`${DOCTOR_URL}/courses/${SLUG}`);
+    const firstStep = (await page.getByRole("button", { name: /Урок 1, шаг 1\. Серия/ }).getAttribute("id"))!.replace(/^node-/, "");
+    const stepPath = `/courses/${SLUG}/steps/${firstStep}`;
+    // The gate «… Вернём вас сюда.» names this step as the return target.
+    await page.goto(`${DOCTOR_URL}${stepPath}`);
+    const gateHref = (await page.getByRole("link", { name: "Зарегистрироваться" }).getAttribute("href"))!;
+    const returnTo = new URL(gateHref, DOCTOR_URL).searchParams.get("returnTo");
+    expect(returnTo).toBe(stepPath);
+    // The doors carry it (rule S3): signing in with that target lands on the step.
+    await signInWithPassword(page, { loginPath: `/login?returnTo=${encodeURIComponent(returnTo!)}` }, doctor, DOCTOR_URL);
+    await expect.poll(() => new URL(page.url()).pathname).toBe(stepPath);
+    await expect(page.getByRole("button", { name: "Смотреть видео" })).toBeVisible();
+    await context.close();
+
+    // The course path's own gate («Открыть») returns to the course path.
+    const second = await browser.newContext({ locale: "ru-RU", viewport: DESKTOP });
+    if (DARK) await second.addInitScript(DARK_INIT);
+    const guest = await second.newPage();
+    await guest.goto(`${DOCTOR_URL}/courses/${SLUG}`);
+    await guest.getByRole("button", { name: /Урок 1, шаг 1\. Серия/ }).click();
+    const openHref = (await guest.getByTestId("node-summary").getByRole("link", { name: "Открыть" }).getAttribute("href"))!;
+    const courseReturn = new URL(openHref, DOCTOR_URL).searchParams.get("returnTo")!;
+    expect(courseReturn).toMatch(new RegExp(`^/courses/${SLUG}(/|$)`));
+    await signInWithPassword(guest, { loginPath: `/login?returnTo=${encodeURIComponent(courseReturn)}` }, doctor, DOCTOR_URL);
+    await expect.poll(() => new URL(guest.url()).pathname).toBe(courseReturn);
+    await second.close();
+  });
+
   test("EARS-27: the Academy has no course path — /courses/* is its not-found page", async ({ page }) => {
     const res = await page.goto(`${PORTAL_URL}/courses/${SLUG}`);
     expect(res?.status()).toBe(404);

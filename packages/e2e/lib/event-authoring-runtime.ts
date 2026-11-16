@@ -3,7 +3,7 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { createServer, type Server } from "node:net";
 import { openSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { expect } from "@playwright/test";
 import {
   bootEventCountApi,
@@ -46,9 +46,10 @@ async function freePort() {
 }
 export async function bootEventAuthoringRuntime() {
   countOperation("run shared owning room-player adversarial unit suite");
-  const vitest = createRequire(
+  const vitestPackage = createRequire(
     resolve(countRoot, "packages/e2e/package.json"),
-  ).resolve("vitest/vitest.mjs");
+  ).resolve("vitest/package.json");
+  const vitest=resolve(dirname(vitestPackage),"vitest.mjs");
   const unit = execFileSync(
     process.execPath,
     [vitest, "run", "src/model/room-player.test.ts"],

@@ -1149,8 +1149,8 @@ jobs:
 
       # scenario-proof — every spec scenario is proven by its class or is
       # tracked debt (tech spec §6.1 + §6.4, Issues #4062, #4087): a `@journey`
-      # only bound to real-stack steps (packages/e2e, apps/admin/e2e); a `@rule`
-      # bound, or tagged `@proof:<level>` with a spec-scoped test at that level
+      # only bound by one real-stack runner config (packages/e2e, apps/admin);
+      # a `@rule` bound by one config, or tagged `@proof:<level>` with a spec-scoped test at that level
       # citing each of its `@EARS-N` ids; an unclassified scenario only bound;
       # or in a Draft spec; the rest is exactly
       # `packages/e2e/scenario-proof-debt.txt`. POSTURE: BLOCK, a plain

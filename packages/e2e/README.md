@@ -411,15 +411,17 @@ policies `playwright-bdd` 9.2 offers:
   «gone».
 
 A skipped scenario is not necessarily unproven. By class (tech spec §6.1): a
-`@journey` is proven only when bound to steps here or in `apps/admin/e2e`, and
-not quarantined — no lower-level test proves a journey; a `@rule` when bound in
-any tier or tagged with a verified `@proof:<level>`; a legacy unclassified
-scenario only when bound. `pnpm scenarios:inventory` — not the skipped count —
+`@journey` is proven only when ONE runner config here or in `apps/admin` both
+runs its feature file and binds every step of it, Background included (step
+definitions are never pooled across configs), and it is not quarantined — no
+lower-level test proves a journey; a `@rule` when bound by any one config or
+tagged with a verified `@proof:<level>`; a legacy unclassified scenario only
+when bound. `pnpm scenarios:inventory` — not the skipped count —
 is the coverage number, headlined journeys bound / journeys total
 (`tools/lint/scenario-proof-lint.ts`, §6.4). The unproven scenarios are exactly
 `scenario-proof-debt.txt` in this package: a backfill PR that classifies, tags
 or binds scenarios deletes their lines here, a new line names an OPEN Issue,
-and a new line for a journey of a `Shipped` spec is refused.
+and a spec does not move to `Shipped` while one of its journeys is unproven.
 
 `retries: 0` (§6.5): a retry turns a flake into a pass and a regression into a
 slow pass.

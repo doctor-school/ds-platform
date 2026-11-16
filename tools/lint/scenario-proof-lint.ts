@@ -13,22 +13,29 @@
  * real user walks end to end, with the refusals met on it) or `@rule` (a
  * variant, wording, limit or boundary); with neither it is unclassified, and a
  * scenario absent at the merge base with `origin/main` (same key as the debt
- * list) that has no class in a non-Draft user-facing spec is a BLOCK finding —
- * existing unclassified scenarios are legacy and only counted. Every scenario
- * of any other spec is a rule; `@journey` there, and both tags on one
- * scenario, are BLOCK findings.
+ * list) that has no class in a user-facing spec — Draft included, since every
+ * spec is born Draft — is a BLOCK finding; existing unclassified scenarios are
+ * legacy and only counted. Every scenario of any other spec is a rule;
+ * `@journey` there, and both tags on one scenario, are BLOCK findings.
  *
  * State, first match wins:
  *
  *   - pending — its spec's requirements `status:` is `Draft`;
- *   - bound — it has a step of its own and every step (Background steps
- *     included) matches a step definition from the `steps` globs of a
- *     `defineBddConfig` caller; an outline only when that holds for every row
- *     of every `Examples` block, placeholders substituted. For a journey only
- *     definitions under the real-stack tiers count — `packages/e2e/**` (the
- *     staging suite, the production compose set) and `apps/admin/e2e/**` (the
- *     admin tier on real api + database + IdP) — and a quarantined journey
- *     (`@quarantine(#N)`, `@quarantine:login(#N)`) is never bound;
+ *   - bound — bound BY ONE runner config (a `defineBddConfig` call): its
+ *     `features` globs take the scenario's file in, the scenario has a step of
+ *     its own, and every step (Background steps included) matches a step
+ *     definition from that same config's `steps` globs; an outline only when
+ *     that holds for every row of every `Examples` block, placeholders
+ *     substituted. Definitions are never pooled across configs — playwright-bdd
+ *     binds a feature only to the steps of the config that runs it. Tag
+ *     filters inside a config are not modelled. For a journey only a
+ *     real-stack config counts — one under `packages/e2e/` (the staging suite,
+ *     the production compose set) or `apps/admin/` (the admin tier on real
+ *     api + database + IdP) — and a journey quarantined on the scenario or on
+ *     any of its `Examples` blocks (`@quarantine(#N)`, `@quarantine:login(#N)`)
+ *     is never bound. A config whose `features` / `steps` are not string
+ *     literals, an array of them, a same-file const or a ternary of those is a
+ *     BLOCK finding;
  *   - proof:<level> — a rule carrying `@proof:<level>` (`unit` | `api` |
  *     `app-e2e`); counted under the highest level it names. On a journey, or
  *     on an unclassified scenario of a user-facing spec, the tag is a BLOCK
@@ -56,9 +63,13 @@
  * not an OPEN Issue — no number, a closed Issue, a number that does not exist,
  * a pull request — are BLOCK findings; a line already present at the merge
  * base needs no Issue, and when the list did not exist there every line is
- * baseline. A new line for a journey of a `status: Shipped` spec blocks with or
- * without an Issue: a shipped journey is bound before it ships. So the list
- * shrinks freely and grows only as tracked debt. When the lookup itself (or
+ * baseline. A spec does not move to Shipped while one of its journeys is
+ * unproven: a new line for a journey of a `status: Shipped` spec blocks with
+ * or without an Issue, and a spec whose `status:` is `Shipped` here but was
+ * not at the merge base (or did not exist there) blocks on each unproven
+ * journey, listed or not; specs already Shipped at the base keep their listed
+ * journeys as baseline. So the list shrinks freely and grows only as tracked
+ * debt. When the lookup itself (or
  * the merge base) cannot run (no `gh`, no auth, network), the line blocks
  * under `CI` and is a WARN elsewhere — CI must not pass an unverified line.
  *
@@ -105,18 +116,18 @@ const DEBT_REL = "packages/e2e/scenario-proof-debt.txt";
 const FEATURE_GLOB = "apps/docs/content/specs/features/*/*-scenarios.feature";
 const REQUIREMENTS_GLOB =
   "apps/docs/content/specs/features/*/*-requirements*.md";
-/** The `defineBddConfig` callers whose `steps` globs bind spec scenarios. */
+/** The files holding the `defineBddConfig` callers that bind spec scenarios. */
 const BDD_CONFIG_GLOBS = [
   "packages/e2e/*.config.ts",
   "apps/*/playwright*.config.ts",
 ];
 
 /**
- * Step-definition locations whose steps run on the real stack (tech spec
- * §6.1): the staging suite and the admin tier. Any other tier — the portal's
+ * Config locations whose runs are on the real stack (tech spec §6.1): the
+ * staging suite and the admin tier. A config anywhere else — the portal's
  * manual dev-stand tier among them — binds rules, never a journey.
  */
-const REAL_STACK_STEP_DIRS = ["packages/e2e/", "apps/admin/e2e/"];
+const REAL_STACK_CONFIG_DIRS = ["packages/e2e/", "apps/admin/"];
 
 export const LEVELS = ["unit", "api", "app-e2e"] as const;
 type Level = (typeof LEVELS)[number];
@@ -148,34 +159,195 @@ function relPath(file: string): string {
 
 // ── step definitions ────────────────────────────────────────────────────────
 
-/** The string literals of a source span (`["a", 'b']` → a, b). */
-function stringLiterals(span: string): string[] {
-  return [...span.matchAll(/(["'`])((?:(?!\1)[^\\]|\\.)*)\1/g)].map(
-    (m) => m[2],
-  );
+/**
+ * The index just past the string literal or comment starting at `i`, or -1
+ * when none starts there — so brackets, commas and `?`/`:` inside them never
+ * count as code.
+ */
+function skipNonCode(src: string, i: number): number {
+  const c = src[i];
+  if (c === "/" && src[i + 1] === "/") {
+    const end = src.indexOf("\n", i);
+    return end === -1 ? src.length : end;
+  }
+  if (c === "/" && src[i + 1] === "*") {
+    const end = src.indexOf("*/", i + 2);
+    return end === -1 ? src.length : end + 2;
+  }
+  if (c === '"' || c === "'" || c === "`") {
+    let j = i + 1;
+    while (j < src.length && src[j] !== c) j += src[j] === "\\" ? 2 : 1;
+    return Math.min(j + 1, src.length);
+  }
+  return -1;
 }
 
-/** The `steps` globs one `defineBddConfig` config declares, repo-relative. */
-export function configStepGlobs(src: string, configRel: string): string[] {
-  if (!src.includes("defineBddConfig")) return [];
-  const dir = posix.dirname(configRel);
-  const globs: string[] = [];
-  for (const m of src.matchAll(
-    /\bsteps:\s*(\[[^\]]*\]|(["'`])[^"'`]*\2|[A-Za-z_$][\w$]*)/g,
-  )) {
-    let span = m[1];
-    if (/^[A-Za-z_$]/.test(span)) {
-      const decl = src.match(
-        new RegExp(`\\b(?:const|let)\\s+${span}\\s*=\\s*(\\[[^\\]]*\\])`),
-      );
-      if (!decl) continue;
-      span = decl[1];
+/** Calls `visit` on each code character at bracket depth 0; `true` stops. */
+function scanTop(src: string, visit: (i: number) => boolean | void): void {
+  let depth = 0;
+  for (let i = 0; i < src.length;) {
+    const skip = skipNonCode(src, i);
+    if (skip !== -1) {
+      i = skip;
+      continue;
     }
-    for (const lit of stringLiterals(span)) {
-      globs.push(posix.normalize(posix.join(dir, lit)));
+    const c = src[i];
+    if ("([{".includes(c)) depth += 1;
+    else if (")]}".includes(c)) depth -= 1;
+    else if (depth === 0 && visit(i) === true) return;
+    i += 1;
+  }
+}
+
+/** The index of the bracket closing the one at `open`, or -1. */
+function closingBracket(src: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < src.length;) {
+    const skip = skipNonCode(src, i);
+    if (skip !== -1) {
+      i = skip;
+      continue;
+    }
+    if ("([{".includes(src[i])) depth += 1;
+    else if (")]}".includes(src[i])) {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+    i += 1;
+  }
+  return -1;
+}
+
+/** `src` split at its depth-0 commas. */
+function splitTopCommas(src: string): string[] {
+  const parts: string[] = [];
+  let from = 0;
+  scanTop(src, (i) => {
+    if (src[i] === ",") {
+      parts.push(src.slice(from, i));
+      from = i + 1;
+    }
+  });
+  parts.push(src.slice(from));
+  return parts;
+}
+
+/** `src` with its comments removed (string literals kept verbatim). */
+function stripComments(src: string): string {
+  let out = "";
+  for (let i = 0; i < src.length;) {
+    const skip = skipNonCode(src, i);
+    if (skip === -1) {
+      out += src[i];
+      i += 1;
+    } else {
+      if (src[i] !== "/") out += src.slice(i, skip);
+      i = skip;
     }
   }
-  return globs;
+  return out;
+}
+
+const IDENT_RE = /^[A-Za-z_$][\w$]*$/;
+const isTernaryMark = (s: string, i: number): boolean =>
+  s[i] === "?" && s[i + 1] !== "." && s[i + 1] !== "?" && s[i - 1] !== "?";
+
+/**
+ * The strings a config value can take, read statically: a string literal, an
+ * array of them, a same-file `const`/`let` naming one, or a ternary of those
+ * (both branches, the condition unread — a config that picks a file by
+ * environment runs either). `null` = not statically readable.
+ */
+function staticStrings(
+  expr: string,
+  src: string,
+  seen: Set<string> = new Set(),
+): string[] | null {
+  const e = stripComments(expr).trim();
+  if (e === "") return null;
+  if (`"'\``.includes(e[0]) && skipNonCode(e, 0) === e.length) {
+    const lit = decodeLiteral(e);
+    return lit === null ? null : [lit];
+  }
+  if (e[0] === "[" && closingBracket(e, 0) === e.length - 1) {
+    const out: string[] = [];
+    for (const part of splitTopCommas(e.slice(1, -1))) {
+      if (stripComments(part).trim() === "") continue;
+      const vals = staticStrings(part, src, seen);
+      if (vals === null) return null;
+      out.push(...vals);
+    }
+    return out;
+  }
+  let q = -1;
+  scanTop(e, (i) => {
+    if (!isTernaryMark(e, i)) return false;
+    q = i;
+    return true;
+  });
+  if (q !== -1) {
+    let colon = -1;
+    let nested = 0;
+    scanTop(e.slice(q + 1), (i) => {
+      const j = q + 1 + i;
+      if (isTernaryMark(e, j)) nested += 1;
+      else if (e[j] === ":") {
+        if (nested === 0) {
+          colon = j;
+          return true;
+        }
+        nested -= 1;
+      }
+      return false;
+    });
+    if (colon === -1) return null;
+    const a = staticStrings(e.slice(q + 1, colon), src, seen);
+    const b = staticStrings(e.slice(colon + 1), src, seen);
+    return a === null || b === null ? null : [...a, ...b];
+  }
+  if (IDENT_RE.test(e) && !seen.has(e)) {
+    const decl = new RegExp(`\\b(?:const|let)\\s+${e}\\s*=`).exec(src);
+    if (!decl) return null;
+    const rest = src.slice(decl.index + decl[0].length);
+    let end = -1;
+    scanTop(rest, (i) => {
+      if (rest[i] !== ";") return false;
+      end = i;
+      return true;
+    });
+    if (end === -1) return null;
+    return staticStrings(rest.slice(0, end), src, new Set([...seen, e]));
+  }
+  return null;
+}
+
+/** One `defineBddConfig` call: its `features` / `steps` globs, as written. */
+export interface BddConfigCall {
+  features: string[] | null;
+  steps: string[] | null;
+}
+
+/**
+ * Every `defineBddConfig({ … })` call of a config source, with the
+ * `features` and `steps` values read statically (`null` = not readable).
+ */
+export function bddConfigCalls(src: string): BddConfigCall[] {
+  const calls: BddConfigCall[] = [];
+  for (const m of src.matchAll(/\bdefineBddConfig\s*\(\s*/g)) {
+    const open = m.index + m[0].length;
+    const call: BddConfigCall = { features: null, steps: null };
+    calls.push(call);
+    if (src[open] !== "{") continue;
+    const close = closingBracket(src, open);
+    if (close === -1) continue;
+    for (const prop of splitTopCommas(src.slice(open + 1, close))) {
+      const p = stripComments(prop).trim();
+      const kv = p.match(/^([A-Za-z_$][\w$]*)\s*(?::([\s\S]*))?$/);
+      if (!kv || (kv[1] !== "features" && kv[1] !== "steps")) continue;
+      call[kv[1]] = staticStrings(kv[2] ?? kv[1], src);
+    }
+  }
+  return calls;
 }
 
 /** Decode a JS string-literal token (quotes included) to its value. */
@@ -213,68 +385,110 @@ export function stepPatterns(src: string): (string | RegExp)[] {
   return out;
 }
 
-async function loadStepMatcher(): Promise<{
+/**
+ * One runner config as playwright-bdd sees it: the spec feature files its
+ * `features` globs take in, and a matcher over the step definitions of its
+ * own `steps` globs only — a feature binds to nothing else in that run.
+ */
+interface RunnerConfig {
+  where: string;
+  realStack: boolean;
+  features: Set<string>;
+  matches: (text: string) => boolean;
+}
+
+/**
+ * Every `defineBddConfig` call on disk as a runner config. Tag filters
+ * (`tags`, a `grep`) are not modelled: a config binds every scenario of the
+ * files it takes in whose steps it matches, the way `missingSteps` would
+ * judge it. A call whose `features` or `steps` cannot be read statically is a
+ * finding — binding it by guess could pass a journey no runner executes.
+ */
+async function loadRunnerConfigs(findings: string[]): Promise<{
+  configs: RunnerConfig[];
   defs: number;
   files: number;
-  /** Some step definition of any tier matches the step. */
-  bound: (text: string) => boolean;
-  /** Some step definition of a real-stack tier matches the step. */
-  boundRealStack: (text: string) => boolean;
 }> {
-  const configs = await fg(BDD_CONFIG_GLOBS, {
-    cwd: REPO_ROOT,
-    absolute: true,
-    ignore: ["**/node_modules/**"],
-  });
-  const globs = new Set<string>();
-  for (const c of configs) {
-    for (const g of configStepGlobs(readFileSync(c, "utf8"), relPath(c))) {
-      globs.add(g);
-    }
-  }
-  const stepFiles =
-    globs.size === 0
-      ? []
-      : await fg([...globs], {
-          cwd: REPO_ROOT,
-          absolute: true,
-          ignore: ["**/node_modules/**"],
-        });
+  const configFiles = (
+    await fg(BDD_CONFIG_GLOBS, {
+      cwd: REPO_ROOT,
+      absolute: true,
+      ignore: ["**/node_modules/**"],
+    })
+  ).sort();
   const factory = new ExpressionFactory(new ParameterTypeRegistry());
-  const expressions: { expr: Expression; realStack: boolean }[] = [];
+  const exprsOf = new Map<string, Expression[]>();
   let unparsable = 0;
-  for (const f of stepFiles) {
-    const rel = relPath(f);
-    const realStack = REAL_STACK_STEP_DIRS.some((d) => rel.startsWith(d));
-    for (const p of stepPatterns(readFileSync(f, "utf8"))) {
-      try {
-        expressions.push({ expr: factory.createExpression(p), realStack });
-      } catch {
-        unparsable += 1;
+  const expressionsIn = (file: string): Expression[] => {
+    let list = exprsOf.get(file);
+    if (list === undefined) {
+      list = [];
+      for (const p of stepPatterns(readFileSync(file, "utf8"))) {
+        try {
+          list.push(factory.createExpression(p));
+        } catch {
+          unparsable += 1;
+        }
       }
+      exprsOf.set(file, list);
+    }
+    return list;
+  };
+  const resolveGlobs = (dir: string, globs: string[]): Promise<string[]> =>
+    globs.length === 0
+      ? Promise.resolve([])
+      : fg(
+          globs.map((g) => posix.normalize(posix.join(dir, g))),
+          { cwd: REPO_ROOT, absolute: true, ignore: ["**/node_modules/**"] },
+        );
+  const configs: RunnerConfig[] = [];
+  for (const file of configFiles) {
+    const rel = relPath(file);
+    const dir = posix.dirname(rel);
+    const realStack = REAL_STACK_CONFIG_DIRS.some((d) => rel.startsWith(d));
+    const calls = bddConfigCalls(readFileSync(file, "utf8"));
+    for (const [n, call] of calls.entries()) {
+      const where = calls.length > 1 ? `${rel} (call ${n + 1})` : rel;
+      const unread = [
+        call.features === null ? "features" : null,
+        call.steps === null ? "steps" : null,
+      ].filter((x): x is string => x !== null);
+      if (call.features === null || call.steps === null) {
+        findings.push(
+          `${where} -> a defineBddConfig call whose ${unread.join(" and ")} cannot be read ` +
+            `statically; write string literals, an array of them, or a same-file const`,
+        );
+        continue;
+      }
+      const features = new Set(
+        (await resolveGlobs(dir, call.features)).map(relPath),
+      );
+      const exprs = (await resolveGlobs(dir, call.steps)).flatMap(
+        expressionsIn,
+      );
+      const cache = new Map<string, boolean>();
+      configs.push({
+        where,
+        realStack,
+        features,
+        matches: (text) => {
+          let hit = cache.get(text);
+          if (hit === undefined) {
+            hit = exprs.some((x) => x.match(text) !== null);
+            cache.set(text, hit);
+          }
+          return hit;
+        },
+      });
     }
   }
   if (unparsable > 0) {
     info(`${unparsable} step pattern(s) are not valid expressions; ignored.`);
   }
-  const cache = new Map<string, { any: boolean; realStack: boolean }>();
-  const lookup = (text: string): { any: boolean; realStack: boolean } => {
-    let hit = cache.get(text);
-    if (hit === undefined) {
-      const matching = expressions.filter((e) => e.expr.match(text) !== null);
-      hit = {
-        any: matching.length > 0,
-        realStack: matching.some((e) => e.realStack),
-      };
-      cache.set(text, hit);
-    }
-    return hit;
-  };
   return {
-    defs: expressions.length,
-    files: stepFiles.length,
-    bound: (text) => lookup(text).any,
-    boundRealStack: (text) => lookup(text).realStack,
+    configs,
+    defs: [...exprsOf.values()].reduce((n, l) => n + l.length, 0),
+    files: exprsOf.size,
   };
 }
 
@@ -523,17 +737,39 @@ async function baseDebt(): Promise<BaseDebt> {
 
 const FEATURE_PATH_RE =
   /^apps\/docs\/content\/specs\/features\/[^/]+\/[^/]+-scenarios\.feature$/;
+const REQUIREMENTS_PATH_RE =
+  /^apps\/docs\/content\/specs\/features\/[^/]+\/[^/]+-requirements[^/]*\.md$/;
 
-/** The scenario keys of every spec `.feature` file at the merge base. */
+/**
+ * A spec's `status:` and surface, from its EN/base requirements file (the RU
+ * twin mirrors them, so it is skipped). `null` = not that file.
+ */
+function specFrontmatter(
+  rel: string,
+  text: string,
+): { status: string | undefined; userFacing: boolean } | null {
+  if (rel.endsWith("-requirements-ru.md")) return null;
+  const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? "";
+  return {
+    status: fm.match(/^status:\s*(.+?)\s*$/m)?.[1],
+    userFacing: /^surface:\s*user-facing\s*$/m.test(fm),
+  };
+}
+
+/**
+ * The scenario keys of every spec `.feature` file at the merge base, and the
+ * `status:` of every spec there (a spec absent there has none).
+ */
 async function baseScenarioKeys(): Promise<
-  { status: "ok"; keys: Set<string> } | { status: "unknown"; reason: string }
+  | { status: "ok"; keys: Set<string>; statusOf: Map<string, string> }
+  | { status: "unknown"; reason: string }
 > {
   const files: { rel: string; text: string }[] = [];
   const seam = process.env.LINT_PROOF_BASE_ROOT;
   if (seam) {
     const root = resolve(seam);
     if (existsSync(root)) {
-      for (const rel of await fg([FEATURE_GLOB], {
+      for (const rel of await fg([FEATURE_GLOB, REQUIREMENTS_GLOB], {
         cwd: root,
         ignore: ["**/node_modules/**"],
       })) {
@@ -555,7 +791,9 @@ async function baseScenarioKeys(): Promise<
         ],
         { cwd: REPO_ROOT },
       );
-      const rels = listed.split("\n").filter((p) => FEATURE_PATH_RE.test(p));
+      const rels = listed
+        .split("\n")
+        .filter((p) => FEATURE_PATH_RE.test(p) || REQUIREMENTS_PATH_RE.test(p));
       if (rels.length > 0) {
         // One `cat-file --batch` for every file: `<sha> blob <size>\n<bytes>\n`.
         const { stdout } = await execa("git", ["cat-file", "--batch"], {
@@ -585,13 +823,19 @@ async function baseScenarioKeys(): Promise<
     }
   }
   const keys = new Set<string>();
+  const statusOf = new Map<string, string>();
   for (const { rel, text } of files) {
     const feature = specFeature(rel);
     if (!feature) continue;
+    if (!rel.endsWith(".feature")) {
+      const status = specFrontmatter(rel, text)?.status;
+      if (status) statusOf.set(feature, status);
+      continue;
+    }
     const titles = parseScenarioSteps(text).map((s) => s.title);
     for (const k of scenarioKeys(feature, titles)) keys.add(k);
   }
-  return { status: "ok", keys };
+  return { status: "ok", keys, statusOf };
 }
 
 type IssueLookup =
@@ -674,11 +918,12 @@ async function lookupIssue(n: number): Promise<IssueLookup> {
 const DEBT_HEADER = [
   "# Unproven spec scenarios — the scenario-proof ratchet (tools/lint/scenario-proof-lint.ts,",
   "# regression-contour tech spec §6.4). One line per scenario of a non-Draft spec that is",
-  "# not proven: a @journey not bound to real-stack steps, a @rule neither bound nor carrying",
-  "# a verified @proof:<level> tag, an unclassified scenario not bound:",
+  "# not proven: a @journey not bound by one real-stack runner config, a @rule neither bound",
+  "# by one runner config nor carrying a verified @proof:<level> tag, an unclassified",
+  "# scenario not bound:",
   "#   NNN | <scenario title>[ [k]][ | #<issue>]   ([k] = the k-th scenario with that title)",
   "# Delete a line once its scenario is proven. A line added after the merge base names an",
-  "# OPEN Issue; a new line for a journey of a Shipped spec blocks.",
+  "# OPEN Issue; a spec does not move to Shipped while one of its journeys is unproven.",
   "# Regenerate: pnpm lint:scenario-proof --write-debt",
 ];
 
@@ -704,14 +949,10 @@ async function main(): Promise<void> {
     const feature = specFeature(rel);
     if (!feature) continue;
     knownFeatures.add(feature);
-    // Status and surface live in the EN/base requirements file; the RU twin
-    // mirrors them.
-    if (rel.endsWith("-requirements-ru.md")) continue;
-    const fm =
-      readFileSync(f, "utf8").match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? "";
-    const status = fm.match(/^status:\s*(.+?)\s*$/m)?.[1];
-    if (status) statusOf.set(feature, status);
-    if (/^surface:\s*user-facing\s*$/m.test(fm)) userFacing.add(feature);
+    const fm = specFrontmatter(rel, readFileSync(f, "utf8"));
+    if (!fm) continue;
+    if (fm.status) statusOf.set(feature, fm.status);
+    if (fm.userFacing) userFacing.add(feature);
   }
   const isDraft = (feature: string): boolean =>
     statusOf.get(feature) === "Draft";
@@ -740,8 +981,8 @@ async function main(): Promise<void> {
     if (proofs.length > 0) tests.push({ level, proofs });
   }
 
-  const steps = await loadStepMatcher();
   const findings: string[] = [];
+  const runners = await loadRunnerConfigs(findings);
   const scenarios: Scenario[] = [];
   const baseScenarios = mode === "check" ? await baseScenarioKeys() : null;
   if (baseScenarios?.status === "unknown") {
@@ -802,9 +1043,10 @@ async function main(): Promise<void> {
       } else {
         cls = journeyTag ? "journey" : ruleTag ? "rule" : "unclassified";
       }
+      // Draft specs included: every spec is born Draft, so a class is
+      // required where the scenario is written, not when the status moves.
       if (
         cls === "unclassified" &&
-        !isDraft(feature) &&
         baseScenarios?.status === "ok" &&
         !baseScenarios.keys.has(key)
       ) {
@@ -864,13 +1106,22 @@ async function main(): Promise<void> {
         }
       }
 
-      const boundBy = (match: (text: string) => boolean): boolean =>
-        s.ownSteps > 0 && s.runs.every((run) => run.every((t) => match(t)));
+      // Bound BY ONE config: it takes this file in and its own steps match
+      // every step of every run — a split across tiers runs nowhere.
+      const boundBy = (c: RunnerConfig): boolean =>
+        c.features.has(rel) &&
+        s.ownSteps > 0 &&
+        s.runs.every((run) => run.every((t) => c.matches(t)));
+      // A quarantine on any `Examples` block leaves those rows unrun.
+      const quarantined = [
+        ...tags,
+        ...tagged[i].examples.flatMap((x) => x.tags),
+      ].some((t) => QUARANTINE_TAG_RE.test(t));
       const bound =
         cls === "journey"
-          ? !tags.some((t) => QUARANTINE_TAG_RE.test(t)) &&
-            boundBy(steps.boundRealStack)
-          : boundBy(steps.bound);
+          ? !quarantined &&
+            runners.configs.some((c) => c.realStack && boundBy(c))
+          : runners.configs.some(boundBy);
       const highest =
         cls === "rule"
           ? [...LEVELS].reverse().find((l) => levels.includes(l))
@@ -984,6 +1235,23 @@ async function main(): Promise<void> {
     }
   }
 
+  // The status flip: a spec that is Shipped here and was not at the merge base
+  // (or did not exist there) carries no unproven journey, debt line or not.
+  // Specs Shipped at the base keep their listed journeys as baseline.
+  if (baseScenarios?.status === "ok") {
+    for (const s of scenarios) {
+      if (s.cls !== "journey" || s.state === "bound") continue;
+      if (statusOf.get(s.feature) !== "Shipped") continue;
+      const was = baseScenarios.statusOf.get(s.feature);
+      if (was === "Shipped") continue;
+      findings.push(
+        `${s.key} -> the spec moves to Shipped (${was ?? "absent"} at the merge base) ` +
+          `with this @journey unproven (${s.where}); a spec does not move to Shipped ` +
+          `while one of its journeys is unproven — bind it under packages/e2e or apps/admin/e2e`,
+      );
+    }
+  }
+
   const base = await baseDebt();
   if (base.status === "unknown") {
     const msg =
@@ -997,8 +1265,9 @@ async function main(): Promise<void> {
       const s = byKey.get(e.key);
       if (s?.cls === "journey" && statusOf.get(s.feature) === "Shipped") {
         findings.push(
-          `${e.key} -> new debt entry for a @journey of a Shipped spec; a shipped ` +
-            `journey is bound on the real stack, an Issue does not excuse it (${s.where})`,
+          `${e.key} -> new debt entry for a @journey of a Shipped spec; a spec does not ` +
+            `move to Shipped while one of its journeys is unproven, and an Issue does ` +
+            `not excuse it (${s.where})`,
         );
         continue;
       }
@@ -1041,7 +1310,8 @@ async function main(): Promise<void> {
   );
   info(
     `${scenarios.length} scenario(s) in ${featureFiles.length} feature file(s); ` +
-      `${steps.defs} step definition(s) from ${steps.files} file(s).`,
+      `${runners.defs} step definition(s) from ${runners.files} file(s) in ` +
+      `${runners.configs.length} runner config(s).`,
   );
   if (findings.length === 0) {
     info(

@@ -40,3 +40,16 @@ Feature: Alpha
   @EARS-1 @rule
   Scenario: new tagged rule
     When I press "Go"
+
+  @EARS-1 @journey
+  Scenario Outline: examples-quarantined journey
+    When I press "<button>"
+
+    Examples:
+      | button |
+      | Go     |
+
+    @quarantine(#7)
+    Examples:
+      | button |
+      | Stop   |

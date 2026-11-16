@@ -19,15 +19,19 @@ import { caseDir, ghDir, runGuard } from "./run-guard";
  *
  * A scenario of a user-facing spec is a `@journey`, a `@rule` or unclassified;
  * every scenario of a backend-only spec is a rule. A journey is proven only
- * when bound to real-stack steps (`packages/e2e/**`, `apps/admin/e2e/**`) and
- * not quarantined; a rule when bound or proof-tagged; an unclassified scenario
+ * when bound by a real-stack config (`packages/e2e/`, `apps/admin/`) and not
+ * quarantined; a rule when bound or proof-tagged; an unclassified scenario
  * only when bound. The `green` case carries every class plus the
  * discriminators that must not fire: a nested test id proving a flat EARS tag,
  * a multi-level tag satisfied at one of its levels, a rule both bound and
  * tagged, a repeated title keyed `[2]`, a new entry tracked by an OPEN Issue,
  * an outline bound through its `Examples` row, an API proof named by an
  * explicit `001 EARS-3` title in a file that also cites spec 002, a journey
- * bound across the staging and admin tiers, and a backend-only proof tag.
+ * bound by the admin tier's own config, and a backend-only proof tag.
+ *
+ * Binding is per runner config: a scenario is bound only when ONE
+ * `defineBddConfig` caller both includes its feature file and matches every
+ * step of it, Background included — pooled definitions run nowhere.
  */
 const GUARD = "scenario-proof-lint.ts";
 const dir = (name: string) => caseDir("scenario-proof", name);
@@ -106,7 +110,19 @@ describe("scenario-proof-lint", () => {
     expect(stderr).not.toContain("001 | staging journey");
   });
 
-  it("red: a new unclassified scenario in a user-facing spec → exit 1; legacy and Draft ones pass", () => {
+  it("red: a quarantine on one Examples block of a journey outline → the journey is unproven", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-journey"),
+      seams("red-journey"),
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain(
+      "001 | examples-quarantined journey -> unproven scenario missing from",
+    );
+  });
+
+  it("red: a new unclassified scenario in a user-facing spec, Draft included → exit 1; legacy ones pass", () => {
     const { code, stderr } = runGuard(
       GUARD,
       dir("red-journey"),
@@ -116,9 +132,81 @@ describe("scenario-proof-lint", () => {
     expect(stderr).toContain(
       `"new unclassified" -> new scenario (absent at the merge base) has no class; tag it @journey or @rule`,
     );
+    // A whole new Draft spec file, and a new scenario in a Draft spec that
+    // existed at the merge base: a class is born with the scenario.
+    expect(stderr).toContain(
+      `"draft newcomer" -> new scenario (absent at the merge base) has no class`,
+    );
+    expect(stderr).toContain(
+      `"new draft unclassified" -> new scenario (absent at the merge base) has no class`,
+    );
     expect(stderr).not.toContain(`"legacy unclassified" -> new scenario`);
+    expect(stderr).not.toContain(`"old draft scenario" -> new scenario`);
     expect(stderr).not.toContain(`"new tagged rule" -> new scenario`);
-    expect(stderr).not.toContain(`"draft newcomer" -> new scenario`);
+    // Draft scenarios stay pending for proof: never listed as missing debt.
+    expect(stderr).not.toContain("004 | draft newcomer -> unproven");
+    expect(stderr).not.toContain("005 | new draft unclassified -> unproven");
+  });
+
+  it("red: binding is per runner config — Background and own step split across tiers, a config not running the file → unproven", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-split-tier"),
+      seams("red-split-tier"),
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain(
+      "001 | split journey -> unproven scenario missing from",
+    );
+    expect(stderr).toContain(
+      "001 | split rule -> unproven scenario missing from",
+    );
+    expect(stderr).toContain(
+      "001 | scoped journey -> unproven scenario missing from",
+    );
+    // One config binding every step of a file it runs: proven.
+    expect(stderr).not.toContain("001 | staging journey");
+    expect(stderr).not.toContain("002 | scoped home journey");
+  });
+
+  it("red: a defineBddConfig caller whose steps cannot be read statically → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-split-tier"),
+      seams("red-split-tier"),
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain(
+      "apps/doctor/playwright.config.ts -> a defineBddConfig call whose steps cannot be read statically",
+    );
+    // A same-file const, a shorthand property and a ternary of literals are read.
+    expect(stderr).not.toContain("packages/e2e/playwright.config.ts ->");
+    expect(stderr).not.toContain("packages/e2e/scoped.config.ts ->");
+    expect(stderr).not.toContain("apps/admin/playwright.config.ts ->");
+  });
+
+  it("red: a spec moving to Shipped with an unproven journey blocks, its debt line already at the merge base → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-shipped-flip"),
+      seams("red-shipped-flip"),
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain(
+      "001 | flipped journey debt -> the spec moves to Shipped (In dev at the merge base) with this @journey unproven",
+    );
+    expect(stderr).toContain(
+      "003 | born shipped journey debt -> the spec moves to Shipped (absent at the merge base) with this @journey unproven",
+    );
+    expect(stderr).toContain(
+      "a spec does not move to Shipped while one of its journeys is unproven",
+    );
+    // A rule, a bound journey, a legacy Shipped spec and a flip with every
+    // journey bound pass.
+    expect(stderr).not.toContain("001 | flipped rule debt");
+    expect(stderr).not.toContain("001 | flipped bound journey");
+    expect(stderr).not.toContain("002 | legacy shipped journey debt");
+    expect(stderr).not.toContain("004 | ready journey");
   });
 
   it("red: a new journey debt line under a Shipped spec blocks even with an OPEN Issue → exit 1", () => {

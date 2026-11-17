@@ -289,6 +289,16 @@ from a clean detached checkout of the target SHA, right after `stage:slot up mai
 <sha>` converged the slot (`tools/deploy/README.md` → «Stage `main` check»); that run
 writes nothing to GitHub.
 
+The same command enforces the key-journey register (§6.7, #4129). The adjacent
+[`2026-09-08-key-journey-tests.json`](../../apps/docs/content/specs/tech/2026-09-08-key-journey-tests.json)
+lists exact leg/file/project/title identities, including outline examples, for the
+register's positive citations. Each must execute successfully; a skip, missing test,
+missing report or never-launched leg fails with exit `1` and names the row and test.
+Missing or invalid list data fails closed. A reused `--report-dir` is safe: each leg's
+old JSON is removed before launch. Update the list with a key action's shipping PR;
+it is not regenerated from whichever tests happen to run today. Focused runs without
+`--expect-sha` keep their existing semantics.
+
 ### The same check in Actions: `.github/workflows/stage.yml` (#2985)
 
 Every successful `runtime-images.yml` run of a push to `main` triggers
@@ -469,7 +479,8 @@ one `live:` line per config:
 - `SKIPPED — ran 0 passed / 0 failed / M skipped` — every test skipped, never green;
 - `skipped — missing env <names>` — the config was not launched.
 
-A skipped leg is loud but **not fatal** (a key the release check does not carry); the verdict
+A skipped leg is loud but **not fatal on its own** (a key the release check does not carry);
+the release check still fails if that leg owes any register-cited test. Otherwise the verdict
 reads `PASS — <n> live legs skipped`. Each leg writes `results.json` (and in public-log
 mode the summary reporter, HTML and traces) under `live-<host>-<config>/` in the report dir.
 
@@ -478,7 +489,8 @@ Reports land under `packages/e2e/playwright-report/<slot>-<timestamp>/` (HTML +
 Stdout ends with a fenced **verdict block** — slot, the SHA `/v1/health` reports, the
 per-project passed/failed/skipped counts, the axe verdict, one line per live-tier config
 and the report path. That block is the artefact you paste. Exit `0` no leg failed (skipped
-live legs included), `1` a failing leg, `2` pre-flight.
+live legs included only when they owe no required test), `1` a failing leg or required
+test, `2` pre-flight or invalid manifest.
 
 A scenario whose steps have no definition in the shared step vocabulary reports as
 **skipped** — `missingSteps: "skip-scenario"`, the
@@ -486,7 +498,8 @@ deliberate choice `packages/e2e/playwright.config.ts` records. The verdict block
 the skipped count rather than hiding it, so «0 passed / N skipped» is a truthful reading
 of what this run executed, not a defect of this command. Regression coverage is the
 key-journey register (regression-contour tech spec §6.7): each key user action mapped to
-the binding or live tier this run executes. `pnpm scenarios:inventory` is a record of
+the binding or live tier this run executes, with each positive citation required by the
+release check's machine list. Unlisted skips remain gaps. `pnpm scenarios:inventory` is a record of
 scenario proof, headlined journeys bound / journeys total; a `@rule` may
 also count by a verified `@proof:<level>` tag, a `@journey` only by binding here or in
 `apps/admin/e2e` (regression-contour tech spec §6.1/§6.4).

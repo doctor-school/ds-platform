@@ -1,0 +1,2217 @@
+{
+  "basis": {
+    "run": 44028660209,
+    "sha": "16966d37",
+    "section": "6.7"
+  },
+  "rows": {
+    "D1": {
+      "status": "FULL",
+      "gap": null
+    },
+    "D2": {
+      "status": "FULL",
+      "gap": null
+    },
+    "D3": {
+      "status": "FULL",
+      "gap": null
+    },
+    "D4": {
+      "status": "FULL",
+      "gap": null
+    },
+    "D5": {
+      "status": "FULL",
+      "gap": null
+    },
+    "D6": {
+      "status": "PARTIAL",
+      "gap": 4116
+    },
+    "D7": {
+      "status": "PARTIAL",
+      "gap": 4117
+    },
+    "D8": {
+      "status": "PARTIAL",
+      "gap": 4114
+    },
+    "D9": {
+      "status": "PARTIAL",
+      "gap": 4119
+    },
+    "D10": {
+      "status": "PARTIAL",
+      "gap": 4118
+    },
+    "D11": {
+      "status": "NONE",
+      "gap": 4115
+    },
+    "D12": {
+      "status": "FULL",
+      "gap": null
+    },
+    "D13": {
+      "status": "NONE",
+      "gap": 4128
+    },
+    "A1": {
+      "status": "FULL",
+      "gap": null
+    },
+    "A2": {
+      "status": "FULL",
+      "gap": null
+    },
+    "A3": {
+      "status": "FULL",
+      "gap": null
+    },
+    "A4": {
+      "status": "FULL",
+      "gap": null
+    },
+    "A5": {
+      "status": "PARTIAL",
+      "gap": 4120
+    },
+    "A6": {
+      "status": "FULL",
+      "gap": null
+    },
+    "A7": {
+      "status": "PARTIAL",
+      "gap": 4121
+    },
+    "S1": {
+      "status": "NONE",
+      "gap": 4122
+    },
+    "S2": {
+      "status": "NONE",
+      "gap": 4122
+    },
+    "S3": {
+      "status": "NONE",
+      "gap": 4125
+    },
+    "S4": {
+      "status": "NONE",
+      "gap": 4126
+    },
+    "S5": {
+      "status": "NONE",
+      "gap": 4127
+    }
+  },
+  "tests": [
+    {
+      "rows": ["A6"],
+      "leg": "suite",
+      "file": ".features-gen/academy/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "academy",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy receives one safe phone-confirmation notice for the same verified account"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy resends the actual phone SMS and confirms the same owner with its newest delivery"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses a wrong phone code and accepts the retained real code"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy binds each live phone confirmation code to its signed-in doctor"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses the consumed phone code without changing its verified owner"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy prefills the congress contact phone without confirming it or sending SMS"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy clears the old confirmed phone while confirming its replacement"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy abandons phone replacement without restoring either phone as an SMS identifier"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy keeps the owned confirmed phone when its confirmation is requested again"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy neutrally accepts another owned account's confirmed phone without sending SMS"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "The /account page renders the profile surface instead of raw claims"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Inline display-name edit persists through the existing endpoint"
+        ]
+      ]
+    },
+    {
+      "rows": ["D3"],
+      "leg": "suite",
+      "file": ".features-gen/academy/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "academy",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Logout revokes the session"
+        ]
+      ]
+    },
+    {
+      "rows": ["D5"],
+      "leg": "suite",
+      "file": ".features-gen/academy/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "academy",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A doctor signed in on the Academy is signed in on the doctor storefront with no click"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "With no shared session the silent check ends on the guest page and is not repeated"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Exempt requests and crawlers never redirect"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A speculative load of a checkable page is refused, never rendered unchecked"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A signed-in tab returned to after a sign-out on the other storefront turns guest",
+          "Example #1"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A signed-in tab returned to after a sign-out on the other storefront turns guest",
+          "Example #2"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A signed-in tab returned to after a sign-out on the other storefront turns guest",
+          "Example #3"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A signed-in tab returned to after a sign-out on the other storefront turns guest",
+          "Example #4"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A signed-in tab returned to after a sign-out on the other storefront turns guest",
+          "Example #5"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A tab whose session holds is unchanged on return",
+          "Example #1"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A tab whose session holds is unchanged on return",
+          "Example #2"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A signed-in link into the cabinet in a stale tab goes straight to the sign-in host",
+          "Example #1"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A signed-in link into the cabinet in a stale tab goes straight to the sign-in host",
+          "Example #2"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A signed-in link into the cabinet in a stale tab goes straight to the sign-in host",
+          "Example #3"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A signed-in link into the cabinet in a stale tab goes straight to the sign-in host",
+          "Example #4"
+        ]
+      ]
+    },
+    {
+      "rows": ["A1"],
+      "leg": "suite",
+      "file": ".features-gen/academy/004-event-page-listing/004-scenarios.feature.spec.js",
+      "project": "academy",
+      "titles": [
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Public listing cards identify the event they open",
+          "A guest discovers a golden upcoming broadcast and opens its public page"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Public event states remain readable without participation dead ends",
+          "An event with no program PDF renders the program section without a broken link"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Public event states remain readable without participation dead ends",
+          "An ended event shows no dead CTA"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Public event states remain readable without participation dead ends",
+          "A hidden event's distributed link degrades to a public notice, not a dead end"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Public visibility excludes drafts and preserves publish-safe projections",
+          "A draft event is not publicly reachable"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Public visibility excludes drafts and preserves publish-safe projections",
+          "Draft and hidden events never appear in the month view"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Public visibility excludes drafts and preserves publish-safe projections",
+          "The public endpoints never expose non-public events or PII"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Public calendar states remain readable and navigable",
+          "A month with only past events renders muted linked pills"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Public calendar states remain readable and navigable",
+          "An empty month renders a readable calendar, not a broken surface"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Public calendar states remain readable and navigable",
+          "The doctor navigates months by paging and by the picker with counts"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "The public feed and populated calendar share event state",
+          "The doctor switches the listing between feed and month views and back"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "The public feed and populated calendar share event state",
+          "The month view shows the whole month at a glance with the live event in red"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "The public feed and populated calendar share event state",
+          "A live event reads \"live now\" consistently on card and page"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "The public upcoming listing carries eligible ordered cards",
+          "The listing shows published upcoming events, nearest first"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Amendment 2026-10-02 (#2537) — online and hybrid events read in the viewer's timezone; offline events keep МСК",
+          "An online event reads in the viewer's zone after hydration"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Amendment 2026-10-02 (#2537) — online and hybrid events read in the viewer's timezone; offline events keep МСК",
+          "A Moscow-time viewer sees МСК on an online event"
+        ],
+        [
+          "Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts",
+          "Amendment 2026-10-02 (#2537) — online and hybrid events read in the viewer's timezone; offline events keep МСК",
+          "An offline event keeps МСК for every viewer"
+        ]
+      ]
+    },
+    {
+      "rows": ["A4"],
+      "leg": "suite",
+      "file": ".features-gen/academy/014-event-recordings/014-scenarios.feature.spec.js",
+      "project": "academy",
+      "titles": [
+        [
+          "A finished broadcast keeps its value as a recording, and the archive is browsable",
+          "A guest discovers a past broadcast through the public archive",
+          "A guest follows the golden archive card to its matching past event page"
+        ],
+        [
+          "A finished broadcast keeps its value as a recording, and the archive is browsable",
+          "Guests read complete public recording pages on the canonical event route",
+          "A guest reads the whole archived page on the single event route"
+        ],
+        [
+          "A finished broadcast keeps its value as a recording, and the archive is browsable",
+          "Guests read complete public recording pages on the canonical event route",
+          "The plaque states the readiness date the operator set"
+        ],
+        [
+          "A finished broadcast keeps its value as a recording, and the archive is browsable",
+          "Guests read complete public recording pages on the canonical event route",
+          "Archived speakers use the canonical relation"
+        ],
+        [
+          "A finished broadcast keeps its value as a recording, and the archive is browsable",
+          "Public upcoming facets retain eligible options and honest empty results",
+          "A zero-yield option stays visible and selectable"
+        ],
+        [
+          "A finished broadcast keeps its value as a recording, and the archive is browsable",
+          "Public upcoming facets retain eligible options and honest empty results",
+          "Counts reflect the other facets, not the facet's own selection"
+        ],
+        [
+          "A finished broadcast keeps its value as a recording, and the archive is browsable",
+          "Public upcoming facets retain eligible options and honest empty results",
+          "An empty combination is a successful empty page"
+        ],
+        [
+          "A finished broadcast keeps its value as a recording, and the archive is browsable",
+          "An anonymous archive entry leads to the complete recording page",
+          "Browsing the archive and the gate are one continuous path"
+        ]
+      ]
+    },
+    {
+      "rows": ["D6"],
+      "leg": "suite",
+      "file": ".features-gen/doctor/017-doctor-shell-specialties/017-scenarios.feature.spec.js",
+      "project": "doctor",
+      "titles": [
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public specialty catalog without a recorded choice",
+          "The catalog is the first action, presented as search with the frequent specialties beneath"
+        ],
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public specialty catalog without a recorded choice",
+          "Nothing blocks the page before a choice is made"
+        ],
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public specialty catalog without a recorded choice",
+          "A query matching nothing keeps the search recoverable"
+        ],
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public footer and deferred explore-content boundaries",
+          "The footer carries the documents links and the single Academy crossing"
+        ],
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public footer and deferred explore-content boundaries",
+          "«Что исследовать» is deferred until its content exists, not stubbed"
+        ],
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public source-backed statistics and the closed specialty book",
+          "A counter with no source is omitted rather than shown as zero"
+        ],
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public source-backed statistics and the closed specialty book",
+          "The specialty book is the closed Минздрав list plus «Другое»"
+        ],
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public specialty choice, whole-book search and changing the choice",
+          "A specialty outside the book is refused"
+        ],
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public specialty choice, whole-book search and changing the choice",
+          "Typing a fragment narrows the whole book, not the frequent set",
+          "Example #1"
+        ],
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public specialty choice, whole-book search and changing the choice",
+          "Typing a fragment narrows the whole book, not the frequent set",
+          "Example #2"
+        ],
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public specialty choice, whole-book search and changing the choice",
+          "Typing a fragment narrows the whole book, not the frequent set",
+          "Example #3"
+        ],
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public specialty choice, whole-book search and changing the choice",
+          "The collapsed row names the choice and offers to change it",
+          "Example #1"
+        ],
+        [
+          "A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs",
+          "Public specialty choice, whole-book search and changing the choice",
+          "The collapsed row names the choice and offers to change it",
+          "Example #2"
+        ]
+      ]
+    },
+    {
+      "rows": ["D12"],
+      "leg": "suite",
+      "file": ".features-gen/doctor/019-doctor-events-feed/019-scenarios.feature.spec.js",
+      "project": "doctor",
+      "titles": [
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A visitor reads the events screen in its composition and widens the horizon"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A guest reads the whole screen and opens an event page from a card"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "The live block reads the applied specialty scope and facets, the same ones the feed reads"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A day picked in the compact month moves the feed to that day"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "The month is a view of the same page and keeps the tense and the facets"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A facet applied in the side panel narrows the feed and resets"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "Feed state round-trips through the URL"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "«Прошедшие» groups past events by month and leads to a recording"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A signed-in doctor sees the short «Мои события» cut"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A signed-in doctor whose device remembers no specialty reads the feed targeted on the profile specialty"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "At 390 the facet panel sits behind a counted «Фильтры» control"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "The feed carries events and only events in both tenses and the month view"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "The doctor feed lists doctors-audience events and never an experts-audience one"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A specialty whose «Моя и смежные» has no events opens the feed on every specialty"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A specialty with no events of its own whose adjacent areas have events stays on «Моя и смежные»"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A facet result that matches nothing names the facet whose removal finds events"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A failing feed read is contained to its own block"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A failing month-grid read retried re-runs only that read"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "The doctor events screen is built from the shared module in both themes and at both breakpoints"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "Both storefronts mount one events module and differ only in the cited rows"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "Public desktop calendar markers",
+          "The month calendar stands beside the day feed on desktop"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "Past cards without a published recording",
+          "A past event with no recording renders without a dead link"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "Anonymous initial response and DOM",
+          "A guest never sees the «Мои события» block"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "Public URL, guest event entry and mobile composition",
+          "Feed state round-trips through the URL"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "Public URL, guest event entry and mobile composition",
+          "A guest reads the whole screen and signs up on the event page"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "Public URL, guest event entry and mobile composition",
+          "The screen works at 390 with the facet panel behind a counted control"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The original past recording journey with the Online format selected",
+          "«Прошедшие» leads to the recording"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "Every delivered doctor event remains visible",
+          "The doctor feed never hides delivered events in the client"
+        ]
+      ]
+    },
+    {
+      "rows": ["D12", "D7", "D8"],
+      "leg": "suite",
+      "file": ".features-gen/doctor/019-doctor-events-feed/019-scenarios.feature.spec.js",
+      "project": "doctor",
+      "titles": [
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A registered doctor enters the live room from the block above the feed"
+        ],
+        [
+          "A doctor opens one screen and sees what is on now, what is on this week and what they missed",
+          "The doctor events journeys on the golden dataset",
+          "A guest is sent from the live block to the event page, never into the room"
+        ]
+      ]
+    },
+    {
+      "rows": ["D1", "D2"],
+      "leg": "suite",
+      "file": ".features-gen/doctor/021-doctor-registration/021-scenarios.feature.spec.js",
+      "project": "doctor",
+      "titles": [
+        [
+          "A doctor stopped by a gate registers in a short honest form and comes back to what they came for",
+          "A doctor registers from a gate and returns to the эфир"
+        ],
+        [
+          "A doctor stopped by a gate registers in a short honest form and comes back to what they came for",
+          "A doctor arriving directly registers without the marketing opt-in and lands on their feed"
+        ],
+        [
+          "A doctor stopped by a gate registers in a short honest form and comes back to what they came for",
+          "A missing consent is reported on its own row after the press, and errors say what to do"
+        ],
+        [
+          "A doctor stopped by a gate registers in a short honest form and comes back to what they came for",
+          "A fresh registrant from a doctor-storefront gate ends signed in on both storefronts"
+        ]
+      ]
+    },
+    {
+      "rows": ["A1"],
+      "leg": "suite",
+      "file": "derived/navigation.walk.spec.ts",
+      "project": "walks",
+      "titles": [
+        ["academy navigation", "academy guest → /webinars"],
+        ["academy navigation", "signed in", "academy as doctor → /webinars"]
+      ]
+    },
+    {
+      "rows": ["D12"],
+      "leg": "suite",
+      "file": "derived/navigation.walk.spec.ts",
+      "project": "walks",
+      "titles": [
+        [
+          "academy navigation",
+          "signed in",
+          "academy as doctor → /account/events"
+        ],
+        ["doctor navigation", "doctor guest → /events"],
+        ["doctor navigation", "signed in", "doctor as doctor → /events"]
+      ]
+    },
+    {
+      "rows": ["D6"],
+      "leg": "suite",
+      "file": "derived/navigation.walk.spec.ts",
+      "project": "walks",
+      "titles": [
+        ["doctor navigation", "doctor guest → /feed"],
+        ["doctor navigation", "signed in", "doctor as doctor → /feed"]
+      ]
+    },
+    {
+      "rows": ["A1"],
+      "leg": "suite",
+      "file": "derived/routes.walk.spec.ts",
+      "project": "walks",
+      "titles": [
+        ["academy routes", "academy / → /"],
+        [
+          "academy routes",
+          "academy /[...catchAll] → /route-walk-unknown-address answers 404 on a direct visit (#2478)"
+        ],
+        ["academy routes", "academy /webinars → /webinars"],
+        [
+          "academy routes",
+          "academy /webinars/[slug] → /webinars/golden-event-upcoming"
+        ],
+        [
+          "academy routes",
+          "academy /webinars/[slug]/room → /webinars/golden-event-live-academy/room"
+        ]
+      ]
+    },
+    {
+      "rows": ["D13"],
+      "leg": "suite",
+      "file": "derived/routes.walk.spec.ts",
+      "project": "walks",
+      "titles": [
+        [
+          "academy routes",
+          "academy /auth/refused → /auth/refused answers 404 on a direct visit (003 EARS-72)"
+        ],
+        [
+          "doctor routes",
+          "doctor /auth/refused → /auth/refused answers 404 on a direct visit (003 EARS-72)"
+        ]
+      ]
+    },
+    {
+      "rows": ["A5"],
+      "leg": "suite",
+      "file": "derived/routes.walk.spec.ts",
+      "project": "walks",
+      "titles": [
+        [
+          "academy routes",
+          "academy /materials/[slug] → /materials/golden-material-published"
+        ]
+      ]
+    },
+    {
+      "rows": ["D11"],
+      "leg": "suite",
+      "file": "derived/routes.walk.spec.ts",
+      "project": "walks",
+      "titles": [
+        ["doctor routes", "doctor /account/congress → /account/congress"]
+      ]
+    },
+    {
+      "rows": ["D12"],
+      "leg": "suite",
+      "file": "derived/routes.walk.spec.ts",
+      "project": "walks",
+      "titles": [
+        ["doctor routes", "doctor /account/events → /account/events"],
+        ["doctor routes", "doctor /events → /events"],
+        [
+          "doctor routes",
+          "doctor /events/[slug] → /events/golden-event-upcoming"
+        ],
+        [
+          "doctor routes",
+          "doctor /events/[slug]/room → /events/golden-event-live/room"
+        ]
+      ]
+    },
+    {
+      "rows": ["D6"],
+      "leg": "suite",
+      "file": "derived/routes.walk.spec.ts",
+      "project": "walks",
+      "titles": [
+        ["doctor routes", "doctor /feed → /feed"],
+        ["doctor routes", "doctor /feed/[specialty] → /feed/kardiologiya"]
+      ]
+    },
+    {
+      "rows": ["A2", "A6", "D3", "D4"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Password reset by a confirmed phone delivers the code by SMS"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy keeps email reset delivery when the account also confirms a phone"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "D3", "D4"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy rejects another doctor's live SMS reset code and preserves both rightful reset challenges"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy reset explains SMS eligibility and returns to email without claiming delivery"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Password reset request is enumeration-resistant"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Completing a password reset revokes existing sessions and auto-logs-in"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses a consumed password reset code and preserves the accepted password"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A proven password reset marks the email verified and unblocks login-by-code"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy rejects another doctor's live email reset code and preserves both rightful reset challenges"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy resends the email password-reset code and completes the newest delivery for the same owner"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy receives the code-only password-reset mail and completes the real reset"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A consumed SMS reset code cannot replace the recovered owner password"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses a wrong SMS reset code and accepts the retained real code without losing the owner"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy resends the actual SMS reset code and accepts its newest delivery for the same owner"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "A6", "D11", "D4", "D5"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy silently accepts reset for unknown, congress-contact and pending phones"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "A6", "D3"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy shows the static SMS sign-in hint and neutrally accepts an unconfirmed phone"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy verified re-registration preserves the original password and display name"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses a consumed SMS login code without disturbing its confirmed-phone owner"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy signs in the same owned doctor with the confirmed phone SMS code"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy signs in the same owned doctor with the confirmed phone and password"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "D1", "D3"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Register with email and password"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Registration is refused without consent"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Re-registration never overwrites an existing platform consent"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Repeated duplicate registrations do not flood the inbox"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "The post-registration screen is the one code step for new and existing visitors"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy resend delivers the code fitting each account state without a private session"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A protected auth send executes an invisible challenge only on demand"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "The validation error replaces the hint in the one message slot"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy binds live registration codes to their own unverified accounts"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses a consumed registration code and preserves its verified owner"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A cold verification step still signs in by the code"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A refused code keeps the registrant on the verification step"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A /verify opened with no address goes to the registration door"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A wrong code fails identically for every identifier"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "The code method opens directly from a link"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "The typed address survives a switch between the sign-in methods"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A valid hand-off reference opens the code step with the code already sent"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy switches from another signed-in account to the hand-off account"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A sign-in from the Academy entry runs on the sign-in host and ends signed in on the stored page"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A guest signing in from an event page sees that event's card on the sign-in form"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "D3"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A verified password holder who re-registers is signed in by the code and keeps the password"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "An abandoned registrant who registers again gets the new password, not the abandoned one"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses the preverification password after the owner's first sign-in code"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Verify email with the OTP code"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Log in with password and establish a BFF session"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Wrong password returns a generic error without a private session"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses a wrong password without disturbing the independently authenticated owner"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy discards an external return target after successful owned-account password login"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Passwordless login with an email OTP code"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "An unverified account signs in with the code from the sign-in mail"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A login-email-code request for a verified account arms the challenge unchanged"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy resends the email login code and accepts the newest delivery for the same owner"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses a consumed email login code without disturbing its original session"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy isolates two live email login codes by their rightful accounts"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Login with an SMS OTP code within the toll-fraud budget"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses another doctor's live SMS login code and preserves both rightful codes"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses a wrong SMS login code and accepts the retained real code for the same owner"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "The verification code email is composed and sent by the BFF mailer, code-only"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A password of eight characters with no character classes is accepted"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A password shorter than the minimum length is rejected by the single rule"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "The single password rule is visible before submission"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Revealing a password has no side effect and never survives a reload"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "The held registration password is never persisted anywhere"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses a wrong email login code and accepts the retained real code for the same owner"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy resends the SMS login code and accepts the newest delivery for the same owner"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Every password field carries a keyboard-operable reveal toggle",
+          "Example #1"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Every password field carries a keyboard-operable reveal toggle",
+          "Example #2"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Every password field carries a keyboard-operable reveal toggle",
+          "Example #3"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "D11", "D3"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A password-less congress account that registers gets the entered password after the code"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "A6"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Phone-only registration is not offered and never 500s"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy Escape cancels an unsaved profile name without a write"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy persists the trimmed Unicode profile name after Enter and reload"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy guest profile reads match generic sibling refusals without identity disclosure"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy refuses a guest display-name write and preserves the authenticated owner's name"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "D3", "D5"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A login-email-code request for a nonexistent identifier is a silent no-op"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "D4"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Proving a code or completing reset is not challenged again"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A failed reset mutates nothing, including verification state"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "D11"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy bypasses a hand-off while signed in as its own congress account"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "D5"],
+      "leg": "suite",
+      "file": ".features-gen/login/003-user-authentication/003-scenarios.feature.spec.js",
+      "project": "login",
+      "titles": [
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "Academy falls back silently for unknown, malformed and exhausted handoff references"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A doctor signed in on the doctor storefront is signed in on the Academy with no form and no guest flash"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "An abandoned sign-in form does not hold back the silent check"
+        ],
+        [
+          "Net-new web authentication producing a doctor_guest identity",
+          "A registration on the sign-in host ends signed in on both storefronts"
+        ]
+      ]
+    },
+    {
+      "rows": ["D1"],
+      "leg": "suite",
+      "file": "sign-in-host/doctor-landing.spec.ts",
+      "project": "sign-in-host",
+      "titles": [
+        [
+          "021 EARS-10: the post-confirmation landing",
+          "021 EARS-10.1: a live carried target IS the landing — the accepted code opens the эфир itself"
+        ],
+        [
+          "021 EARS-10: the post-confirmation landing",
+          "021 EARS-10.3: a target that already ended lands on the эфир page anyway"
+        ],
+        [
+          "021 EARS-10: the post-confirmation landing",
+          "021 EARS-10.5: a target whose эфир no longer exists, with no remembered specialty, lands on the events feed, which says why on the first screen — once"
+        ],
+        [
+          "021 EARS-10: the post-confirmation landing",
+          "021 EARS-10.5: the line opens the content column below the hero band, never between the header and the band"
+        ],
+        [
+          "021 EARS-10: the post-confirmation landing",
+          "021 EARS-10.5: a live landing and an arbitrary notice value render no event-gone line"
+        ],
+        [
+          "021 EARS-10: the post-confirmation landing",
+          "021 EARS-10.4: a direct arrival lands where the DOOR decided"
+        ],
+        [
+          "021 EARS-10: the post-confirmation landing",
+          "021 EARS-15: the confirmed doctor lands on the эфир SIGNED IN, and is never asked to register again"
+        ],
+        [
+          "021 EARS-3: LD-4 — where the direct arrival lands",
+          "021 EARS-3.4: with a remembered specialty the landing is that specialty's 018 feed"
+        ],
+        [
+          "021 EARS-3: LD-4 — where the direct arrival lands",
+          "021 EARS-3.4: a specialty held only in the profile lands the bare «Войти» on that specialty's 018 feed"
+        ],
+        [
+          "021 EARS-3: LD-4 — where the direct arrival lands",
+          "021 EARS-3.5: the landing is never the account page, on either branch"
+        ],
+        [
+          "021 #1945: the doctor host's sign-in landing",
+          "021 #1945: a successful sign-in lands on the эфир, not on a 404"
+        ]
+      ]
+    },
+    {
+      "rows": ["D2"],
+      "leg": "suite",
+      "file": "sign-in-host/doctor-landing.spec.ts",
+      "project": "sign-in-host",
+      "titles": [
+        [
+          "020 EARS-5: the guest hand-off into 021 and the exact return",
+          "020 EARS-5.2: completing 021 returns the doctor to exactly the event page they left, signed in"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2"],
+      "leg": "suite",
+      "file": "sign-in-host/storefront-journeys.spec.ts",
+      "project": "sign-in-host",
+      "titles": [
+        [
+          "ADR-0015 §4 (academy): storefront → sign-in host → storefront",
+          "ADR-0015 §4 req. 6 (academy): after signing out, «Войти» shows the credential form — no silent re-sign-in"
+        ],
+        [
+          "ADR-0015 §4 (academy): storefront → sign-in host → storefront",
+          "ADR-0015 §4 journey (academy): password — storefront entry → host form → back signed in on the stored path"
+        ],
+        [
+          "ADR-0015 §4 (academy): storefront → sign-in host → storefront",
+          "ADR-0015 §4 journey (academy): e-mail code — storefront entry → host code step → back signed in on the stored path"
+        ],
+        [
+          "ADR-0015 §4 (academy): storefront → sign-in host → storefront",
+          "ADR-0015 §4 journey (academy): registration — storefront entry → host «Создать аккаунт» → code → back signed in on the stored path; the typed password signs in afterwards (003 EARS-24)"
+        ],
+        [
+          "ADR-0015 §4 (academy): storefront → sign-in host → storefront",
+          "ADR-0015 §4 journey (academy): reset — storefront entry → host «Забыли пароль?» → code + new password → back signed in on the stored path"
+        ],
+        [
+          "ADR-0015 §4 (academy): storefront → sign-in host → storefront",
+          "ADR-0015 §4 (academy): a wrong password shows the generic error on the host form"
+        ],
+        [
+          "ADR-0015 §4 (academy): storefront → sign-in host → storefront",
+          "ADR-0015 §4 S3 (academy): the storefront's dark theme is carried to the sign-in host"
+        ],
+        [
+          "ADR-0015 §4 (academy): storefront → sign-in host → storefront",
+          "ADR-0015 §4 journey (academy): «Войти» on an event page → host form → back signed in on that event page"
+        ],
+        [
+          "ADR-0015 §4 (academy): storefront → sign-in host → storefront",
+          "005 EARS-2 (academy): sign-in from an event page ends back on that event, registered"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "D5"],
+      "leg": "suite",
+      "file": "sign-in-host/storefront-journeys.spec.ts",
+      "project": "sign-in-host",
+      "titles": [
+        [
+          "ADR-0015 §4 (academy): storefront → sign-in host → storefront",
+          "003 EARS-61 (academy): a guest view of the storefront home creates no interactive IdP auth request — only the one silent check (EARS-63), and none once the guest marker is set"
+        ]
+      ]
+    },
+    {
+      "rows": ["D3"],
+      "leg": "suite",
+      "file": "sign-in-host/storefront-journeys.spec.ts",
+      "project": "sign-in-host",
+      "titles": [
+        [
+          "ADR-0015 §4 (doctor): storefront → sign-in host → storefront",
+          "ADR-0015 §4 req. 6 (doctor): after signing out, «Войти» shows the credential form — no silent re-sign-in"
+        ],
+        [
+          "ADR-0015 §4 (doctor): storefront → sign-in host → storefront",
+          "ADR-0015 §4 journey (doctor): password — storefront entry → host form → back signed in on the stored path"
+        ],
+        [
+          "ADR-0015 §4 (doctor): storefront → sign-in host → storefront",
+          "ADR-0015 §4 journey (doctor): e-mail code — storefront entry → host code step → back signed in on the stored path"
+        ],
+        [
+          "ADR-0015 §4 (doctor): storefront → sign-in host → storefront",
+          "ADR-0015 §4 (doctor): a wrong password shows the generic error on the host form"
+        ]
+      ]
+    },
+    {
+      "rows": ["D1", "D3"],
+      "leg": "suite",
+      "file": "sign-in-host/storefront-journeys.spec.ts",
+      "project": "sign-in-host",
+      "titles": [
+        [
+          "ADR-0015 §4 (doctor): storefront → sign-in host → storefront",
+          "ADR-0015 §4 journey (doctor): registration — storefront entry → host «Создать аккаунт» → code → back signed in on the stored path; the typed password signs in afterwards (003 EARS-24)"
+        ]
+      ]
+    },
+    {
+      "rows": ["D3", "D4"],
+      "leg": "suite",
+      "file": "sign-in-host/storefront-journeys.spec.ts",
+      "project": "sign-in-host",
+      "titles": [
+        [
+          "ADR-0015 §4 (doctor): storefront → sign-in host → storefront",
+          "ADR-0015 §4 journey (doctor): reset — storefront entry → host «Забыли пароль?» → code + new password → back signed in on the stored path"
+        ]
+      ]
+    },
+    {
+      "rows": ["D5"],
+      "leg": "suite",
+      "file": "sign-in-host/storefront-journeys.spec.ts",
+      "project": "sign-in-host",
+      "titles": [
+        [
+          "ADR-0015 §4 (doctor): storefront → sign-in host → storefront",
+          "003 EARS-61 (doctor): a guest view of the storefront home creates no interactive IdP auth request — only the one silent check (EARS-63), and none once the guest marker is set"
+        ]
+      ]
+    },
+    {
+      "rows": ["D2", "D7"],
+      "leg": "suite",
+      "file": "sign-in-host/storefront-journeys.spec.ts",
+      "project": "sign-in-host",
+      "titles": [
+        [
+          "ADR-0015 §4 (doctor): storefront → sign-in host → storefront",
+          "005 EARS-2 (doctor): sign-in from an event page ends back on that event, registered"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2"],
+      "leg": "live/academy/account-live",
+      "file": "../../../packages/e2e/lib/account-auth-paths.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "#3151 /account auth paths on the academy storefront",
+          "#3151 (academy): an expired session on /account bounces to login carrying returnTo=/account, and signing in returns to /account"
+        ],
+        [
+          "#3151 /account auth paths on the academy storefront",
+          "#3151 (academy): «Сменить пароль» on /account hands off to reset with returnTo=%2Faccount, and the completed reset returns to /account"
+        ]
+      ]
+    },
+    {
+      "rows": ["A1"],
+      "leg": "live/academy/default",
+      "file": "e2e/academy-home.e2e.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "Feature 013 — static public Academy home",
+          "EARS-1: when a visitor requests public /, portal shall render the exact static Academy home"
+        ],
+        [
+          "Feature 013 — static public Academy home",
+          "EARS-2: page shall render six supplied portraits and the approved repeated Project and Events rows"
+        ],
+        [
+          "Feature 013 — static public Academy home",
+          "EARS-4: static page shall remain readable at desktop and mobile in light and dark themes and pass axe"
+        ],
+        [
+          "Feature 013 — static public Academy home",
+          "#1877: parallel chrome mounts the app-shell header on / and on non-root routes"
+        ],
+        [
+          "Feature 013 — static public Academy home",
+          "#2664: the @footer slot mounts the home footer on / only — a soft navigation away drops it"
+        ]
+      ]
+    },
+    {
+      "rows": ["A5"],
+      "leg": "live/academy/default",
+      "file": "e2e/academy-home.e2e.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "Feature 013 — static public Academy home",
+          "048 EARS-14: on a 390 px phone the feed rail shows one row with the next card partly visible, no page scroll and no axe violation"
+        ]
+      ]
+    },
+    {
+      "rows": ["A7"],
+      "leg": "live/academy/default",
+      "file": "e2e/academy-home.e2e.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "Feature 013 — static public Academy home",
+          "EARS-5: enabled partnership form shall expose the exact controls and reject invalid contact accessibly"
+        ],
+        [
+          "Feature 013 — static public Academy home",
+          "EARS-5: first submit click after contact blur shall retain all required errors at mobile and desktop widths"
+        ],
+        [
+          "Feature 013 — static public Academy home",
+          "EARS-8: enabled partnership form shall remain keyboard-operable and axe-clean while pending"
+        ],
+        [
+          "Feature 013 — static public Academy home",
+          "EARS-8: submit shall remain visually distinct from the primary surface in both themes"
+        ]
+      ]
+    },
+    {
+      "rows": ["A5"],
+      "leg": "live/academy/default",
+      "file": "e2e/material-canvas-structure.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "#3829 Academy material page ≡ academy-material canvas · guest · 390",
+          "the reading page has the canvas structure"
+        ],
+        [
+          "#3829 Academy material page ≡ academy-material canvas · guest · 1440",
+          "the reading page has the canvas structure"
+        ]
+      ]
+    },
+    {
+      "rows": ["A1"],
+      "leg": "live/academy/default",
+      "file": "e2e/month-fidelity.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "EARS-19: desktop 7-column grid, legend and switcher render (light)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "EARS-19: canvas scale invariants — 11px pills, 118px cells, 300px column + month view span the 1240px content column, header/hero one blue (light)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "EARS-19: shading rule + always-on next-month link on an empty far-future month (light)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "EARS-19: mobile dot-grid + agenda render and day selection works (light)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "019 EARS-13: mobile feed view renders behind «Фильтры» with linked cards and no overflow (light)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "gate row 50: the feed view's head is the canvas head — title, subline, tense tabs, no hero taglines (light)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "owner verdict #7: nav «Эфиры» from an event page points at the canonical /webinars and lands on the feed view (light)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "owner verdict #4: the picker year ‹ › pages in place — popover stays open, counters swap, no navigation (light)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "owner verdict #6: the four month-toolbar controls (picker ‹ › «Сегодня») render one equal height (light)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "owner verdict #6: the picker year ‹ › pages in place ≥3 steps EACH direction across the former ±1 edge — popover open, no navigation (light)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "owner verdict #6: the feed body clears the navy head — no day-heading overlap (light)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "owner verdict #5: the «← prev month» return link is absent on the current month, present on a future month, and navigates back (light)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "EARS-19: desktop 7-column grid, legend and switcher render (dark)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "EARS-19: canvas scale invariants — 11px pills, 118px cells, 300px column + month view span the 1240px content column, header/hero one blue (dark)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "EARS-19: shading rule + always-on next-month link on an empty far-future month (dark)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "EARS-19: mobile dot-grid + agenda render and day selection works (dark)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "019 EARS-13: mobile feed view renders behind «Фильтры» with linked cards and no overflow (dark)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "gate row 50: the feed view's head is the canvas head — title, subline, tense tabs, no hero taglines (dark)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "owner verdict #7: nav «Эфиры» from an event page points at the canonical /webinars and lands on the feed view (dark)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "owner verdict #4: the picker year ‹ › pages in place — popover stays open, counters swap, no navigation (dark)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "owner verdict #6: the four month-toolbar controls (picker ‹ › «Сегодня») render one equal height (dark)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "owner verdict #6: the picker year ‹ › pages in place ≥3 steps EACH direction across the former ±1 edge — popover open, no navigation (dark)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "owner verdict #6: the feed body clears the navy head — no day-heading overlap (dark)"
+        ],
+        [
+          "004 EARS-19 month-calendar view fidelity",
+          "owner verdict #5: the «← prev month» return link is absent on the current month, present on a future month, and navigates back (dark)"
+        ]
+      ]
+    },
+    {
+      "rows": ["A3"],
+      "leg": "live/academy/default",
+      "file": "e2e/room-access-branches.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "006 EARS-6 denied-access routing (auth/register/not-live front door)",
+          "006 EARS-6.1: an unauthenticated visitor is routed through 003 auth carrying a room returnTo, and the gate RE-RUNS on return to admit a registered doctor"
+        ],
+        [
+          "006 EARS-6 denied-access routing (auth/register/not-live front door)",
+          "006 EARS-6.1: a guest who signs in from the room's login as a doctor NOT registered for the event is re-gated to the register front door, never admitted"
+        ],
+        [
+          "006 EARS-6 denied-access routing (auth/register/not-live front door)",
+          "006 EARS-6.2: an authenticated-but-unregistered doctor is guided to the register front door (no player), and admitted to the room on register"
+        ],
+        [
+          "006 EARS-6 denied-access routing (auth/register/not-live front door)",
+          "006 EARS-6.3: a registered doctor reaching the room of a NOT-`live` event lands on the truthful 004 lifecycle state, no watchable room"
+        ]
+      ]
+    },
+    {
+      "rows": ["A3"],
+      "leg": "live/academy/default",
+      "file": "e2e/room-close.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "006 EARS-7 room-close degrades to the truthful ended state",
+          "006 EARS-7: a room OPEN while the event is `live` is watchable — the baseline the ended state degrades away from"
+        ],
+        [
+          "006 EARS-7 room-close degrades to the truthful ended state",
+          "006 EARS-7: a doctor reaching the room of an event that has left `live` (ended) degrades to the truthful ended state — no watchable room"
+        ]
+      ]
+    },
+    {
+      "rows": ["A3"],
+      "leg": "live/academy/default",
+      "file": "e2e/room-display-name.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "006 EARS-14 JIT display-name prompt on first room entry (e2e)",
+          "006 EARS-14: a name-less doctor is prompted before the room, empty is rejected, and once set the prompt never returns"
+        ],
+        [
+          "006 EARS-15 header-avatar initials from the real saved name (e2e)",
+          "006 EARS-15: a single-word name yields the single initial in the header avatar"
+        ]
+      ]
+    },
+    {
+      "rows": ["A1"],
+      "leg": "live/academy/default",
+      "file": "e2e/webinars-feed-view.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "the Academy feed view (wave-2 entry gate §2.4)",
+          "gate row 28: the head carries «Прошедшие | Будущие», «Будущие» by default, and the tense is URL state"
+        ],
+        [
+          "the Academy feed view (wave-2 entry gate §2.4)",
+          "gate rows 29–30: «Прошедшие» groups by month newest first and renders no archive block"
+        ],
+        [
+          "the Academy feed view (wave-2 entry gate §2.4)",
+          "gate rows 31–32: the bare `?tense=past` offers «Показать ещё N (осталось M)» off the past read, and step by step reaches every past эфир — no age floor — with a published recording reading «Запись · <length>» + «Смотреть запись»"
+        ],
+        [
+          "the Academy feed view (wave-2 entry gate §2.4)",
+          "gate row 32: the bare `/webinars` holds the 10 nearest upcoming эфиры however far ahead — all of them at 11 or fewer — and offers «Показать ещё» only while more remain (019 LD-2, #2884)"
+        ],
+        [
+          "the Academy feed view (wave-2 entry gate §2.4)",
+          "gate rows 43, 50: the live block renders the experts-audience live event, between the head and the day feed"
+        ],
+        [
+          "the Academy feed view (wave-2 entry gate §2.4)",
+          "§4.3 D1: a legacy listing URL permanently redirects to its canonical feed URL"
+        ]
+      ]
+    },
+    {
+      "rows": ["A1"],
+      "leg": "live/academy/default",
+      "file": "e2e/webinars-listing.e2e.spec.ts",
+      "project": "e2e",
+      "titles": [
+        ["EARS-11: with no upcoming event, the listing renders the empty-state"]
+      ]
+    },
+    {
+      "rows": ["A4"],
+      "leg": "live/academy/default",
+      "file": "e2e/my-events.spec.ts",
+      "project": "golden-account",
+      "titles": [
+        [
+          "014 EARS-9 my-events tabs (e2e)",
+          "014 EARS-9: «Мои события» opens on Предстоящие, offers exactly Предстоящие|Записи, and deep-links the Записи tab"
+        ]
+      ]
+    },
+    {
+      "rows": ["A3"],
+      "leg": "live/academy/default",
+      "file": "e2e/room-chat.spec.ts",
+      "project": "golden-account",
+      "titles": [
+        [
+          "006 EARS-3 live chat over Centrifugo (e2e)",
+          "006 EARS-3: a message one doctor posts appears in the other doctor's room without a reload"
+        ],
+        [
+          "006 EARS-3 live chat over Centrifugo (e2e)",
+          "006 EARS-3: the composer rejects an empty/whitespace-only message (send stays disabled) — the SSOT reject path"
+        ],
+        [
+          "006 EARS-3 live chat over Centrifugo (e2e)",
+          "006 EARS-3: a doctor joining mid-webinar reads the recent conversation (history hydration on subscribe)"
+        ]
+      ]
+    },
+    {
+      "rows": ["A1"],
+      "leg": "live/academy/default",
+      "file": ".features-gen/e2e/features/discovery-journey.feature.spec.js",
+      "project": "bdd",
+      "titles": [
+        [
+          "004 Public webinar discovery — a guest reads an event page and scans upcoming broadcasts",
+          "A guest opens a sponsor link, reads the page, scans the listing, and returns via a card"
+        ],
+        [
+          "004 Public webinar discovery — a guest reads an event page and scans upcoming broadcasts",
+          "A hidden direct link degrades to a public notice, not a dead end"
+        ],
+        [
+          "004 Public webinar discovery — a guest reads an event page and scans upcoming broadcasts",
+          "Listing times follow the viewer's zone for online and hybrid events and МСК for offline ones"
+        ],
+        [
+          "004 Public webinar discovery — a guest reads an event page and scans upcoming broadcasts",
+          "The event page reflects each lifecycle state from the single state machine",
+          "Example #1"
+        ],
+        [
+          "004 Public webinar discovery — a guest reads an event page and scans upcoming broadcasts",
+          "The event page reflects each lifecycle state from the single state machine",
+          "Example #2"
+        ],
+        [
+          "004 Public webinar discovery — a guest reads an event page and scans upcoming broadcasts",
+          "The event page reflects each lifecycle state from the single state machine",
+          "Example #3"
+        ]
+      ]
+    },
+    {
+      "rows": ["A2", "A3"],
+      "leg": "live/academy/default",
+      "file": ".features-gen/e2e/features/registration-journey.feature.spec.js",
+      "project": "bdd",
+      "titles": [
+        [
+          "005 Webinar registration journey — guest through auth to «мои события», one-tap, and lifecycle gating",
+          "A guest registers through auth and finds the event in «мои события»"
+        ],
+        [
+          "005 Webinar registration journey — guest through auth to «мои события», one-tap, and lifecycle gating",
+          "A logged-in doctor registers in one tap on a second event"
+        ],
+        [
+          "005 Webinar registration journey — guest through auth to «мои события», one-tap, and lifecycle gating",
+          "A logged-in doctor registers in one tap on a LIVE event — no 404, no lost registration"
+        ],
+        [
+          "005 Webinar registration journey — guest through auth to «мои события», one-tap, and lifecycle gating",
+          "A guest's «Участвовать» on a LIVE event leads into the auth flow, never a 404"
+        ],
+        [
+          "005 Webinar registration journey — guest through auth to «мои события», one-tap, and lifecycle gating",
+          "«Мои события» and the per-user reads require authentication"
+        ],
+        [
+          "005 Webinar registration journey — guest through auth to «мои события», one-tap, and lifecycle gating",
+          "Ended and hidden events offer no register affordance",
+          "Example #1"
+        ],
+        [
+          "005 Webinar registration journey — guest through auth to «мои события», one-tap, and lifecycle gating",
+          "Ended and hidden events offer no register affordance",
+          "Example #2"
+        ]
+      ]
+    },
+    {
+      "rows": ["A3"],
+      "leg": "live/academy/default",
+      "file": ".features-gen/e2e/features/room-journey.feature.spec.js",
+      "project": "bdd",
+      "titles": [
+        [
+          "006 Webinar room journey — a registered doctor watches live, chats in real time, and is silently counted present",
+          "A registered doctor enters the live room and sees the player and chat"
+        ],
+        [
+          "006 Webinar room journey — a registered doctor watches live, chats in real time, and is silently counted present",
+          "A posted chat message fans out to the other doctor in real time without a reload"
+        ],
+        [
+          "006 Webinar room journey — a registered doctor watches live, chats in real time, and is silently counted present",
+          "A room that has left live degrades to the truthful ended state, no watchable room"
+        ],
+        [
+          "006 Webinar room journey — a registered doctor watches live, chats in real time, and is silently counted present",
+          "The room config, chat, and heartbeat endpoints refuse an unauthenticated caller"
+        ],
+        [
+          "006 Webinar room journey — a registered doctor watches live, chats in real time, and is silently counted present",
+          "An unadmissible caller is routed truthfully, never shown a soft wall over the player",
+          "Example #1"
+        ],
+        [
+          "006 Webinar room journey — a registered doctor watches live, chats in real time, and is silently counted present",
+          "An unadmissible caller is routed truthfully, never shown a soft wall over the player",
+          "Example #2"
+        ],
+        [
+          "006 Webinar room journey — a registered doctor watches live, chats in real time, and is silently counted present",
+          "An unadmissible caller is routed truthfully, never shown a soft wall over the player",
+          "Example #3"
+        ]
+      ]
+    },
+    {
+      "rows": ["A1"],
+      "leg": "live/academy/event-page",
+      "file": "event-page-020.e2e.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "020 EARS-1: a guest reads the whole event server-side, composed from the shared blocks"
+        ],
+        [
+          "020 EARS-1: the right column is the sign-up card with exactly one primary CTA for a guest"
+        ],
+        [
+          "020 EARS-1: the page is complete HTML from the server — the CTA is in the raw bytes, not injected by client JS"
+        ],
+        [
+          "020 EARS-1: an ended event renders the same composition with NO participation control (never a dead link)"
+        ],
+        [
+          "020 EARS-8/9/19 — wave-3 PR 3.3 on the academy host",
+          "020 EARS-19: a state sweep over format × phase × auth finds no «скоро», no empty labelled box, no disabled control and no Pul statement"
+        ],
+        [
+          "020 EARS-8/9/19 — wave-3 PR 3.3 on the academy host",
+          "020 EARS-8: the hybrid tab is written to the URL, survives reload and back, and defaults to the policy's half"
+        ],
+        [
+          "020 EARS-8/9/19 — wave-3 PR 3.3 on the academy host",
+          "020 EARS-9: a hybrid event with no seats opens on «онлайн» and says why"
+        ],
+        [
+          "020 EARS-8/9/19 — wave-3 PR 3.3 on the academy host",
+          "020 EARS-9: a sold-out offline event renders «мест нет», no control and no waiting-list affordance (gate row 35)"
+        ]
+      ]
+    },
+    {
+      "rows": ["A4"],
+      "leg": "live/academy/event-page",
+      "file": "webinar-archive.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "014 EARS-4 public post-live event page (e2e)",
+          "014 EARS-4: not one byte of playable source reaches the guest — not in the HTML, not on the wire"
+        ],
+        [
+          "014 EARS-4 public post-live event page (e2e)",
+          "014 EARS-4: an ended event with nothing published yet says «Запись готовится» and names no kind — it never claims a recording it does not have"
+        ],
+        [
+          "014 EARS-7 the «запись готовится» plaque (e2e)",
+          "014 EARS-7: a PUBLISHED recording carries no plaque — the promise clears itself the moment it is kept"
+        ],
+        [
+          "014 EARS-5 the login gate and the mounted player (e2e)",
+          "014 EARS-5: a guest gets the login gate in the player position — an account is named as the only thing in the way, and nothing about money"
+        ],
+        [
+          "014 EARS-5 the login gate and the mounted player (e2e)",
+          "014 EARS-5: both gate actions carry this event page back through auth (EARS-6) — the doctor returns to the recording, not to a home page"
+        ],
+        [
+          "014 EARS-5 the login gate and the mounted player (e2e)",
+          "014 EARS-5: a signed-in doctor gets the player itself — the gate is gone, one frame is mounted, and the recording meta rides with the card"
+        ],
+        [
+          "014 EARS-5 the login gate and the mounted player (e2e)",
+          "014 EARS-5: a LOUD player failure swaps in the RU retry card, and retry actually remounts the frame"
+        ],
+        [
+          "014 EARS-5 the login gate and the mounted player (e2e)",
+          "014 EARS-5: a QUIET player failure — the provider never answers at all — still resolves into the retry card, via the watchdog"
+        ],
+        [
+          "014 EARS-5 the login gate and the mounted player (e2e)",
+          "014 EARS-5: a signed-in doctor on an event with nothing published still gets the plaque — a session buys access, not a recording that does not exist"
+        ]
+      ]
+    },
+    {
+      "rows": ["D9"],
+      "leg": "live/doctor/event-page",
+      "file": "event-page-canvas-structure-live.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "#3889 doctor event page ≡ event-page canvas · guest · 390",
+          "до начала: the poster has the canvas structure"
+        ],
+        [
+          "#3889 doctor event page ≡ event-page canvas · guest · 390",
+          "до начала: the signup block has the canvas structure"
+        ],
+        [
+          "#3889 doctor event page ≡ event-page canvas · guest · 390",
+          "прошло · монтаж: the poster has the canvas structure"
+        ],
+        [
+          "#3889 doctor event page ≡ event-page canvas · guest · 390",
+          "прошло · монтаж: the recording player has the canvas structure"
+        ],
+        [
+          "#3889 doctor event page ≡ event-page canvas · guest · 1440",
+          "до начала: the poster has the canvas structure"
+        ],
+        [
+          "#3889 doctor event page ≡ event-page canvas · guest · 1440",
+          "до начала: the signup block has the canvas structure"
+        ],
+        [
+          "#3889 doctor event page ≡ event-page canvas · guest · 1440",
+          "прошло · монтаж: the poster has the canvas structure"
+        ],
+        [
+          "#3889 doctor event page ≡ event-page canvas · guest · 1440",
+          "прошло · монтаж: the recording player has the canvas structure"
+        ]
+      ]
+    },
+    {
+      "rows": ["D10"],
+      "leg": "live/doctor/event-register",
+      "file": "a11y/account-axe.e2e.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "003 EARS-28: the doctor /account profile surface passes WCAG 2 A/AA (both themes)"
+        ]
+      ]
+    },
+    {
+      "rows": ["D10"],
+      "leg": "live/doctor/event-register",
+      "file": "account-mobile.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "003 EARS-28: the doctor /account card is visible at 390 px with no horizontal overflow"
+        ]
+      ]
+    },
+    {
+      "rows": ["D7"],
+      "leg": "live/doctor/event-register",
+      "file": "my-events.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "014 EARS-9 (#1972): «Мои события» on the doctor storefront",
+          "014 EARS-6: a guest on /account/events lands on this host's door carrying the page"
+        ],
+        [
+          "014 EARS-9 (#1972): «Мои события» on the doctor storefront",
+          "014 EARS-9: a signed-in doctor sees both tabs, rows on this host's paths, reached from the /account hub"
+        ],
+        [
+          "019 EARS-13: /account/events presentation on the doctor storefront",
+          "019 EARS-13: the signed-in page passes WCAG 2 A/AA + one-h1, no overflow, both tabs (desktop, light)"
+        ],
+        [
+          "019 EARS-13: /account/events presentation on the doctor storefront",
+          "019 EARS-13: the guest's door from /account/events passes WCAG 2 A/AA + one-h1, no overflow (desktop, light)"
+        ],
+        [
+          "019 EARS-13: /account/events presentation on the doctor storefront",
+          "019 EARS-13: the signed-in page passes WCAG 2 A/AA + one-h1, no overflow, both tabs (desktop, dark)"
+        ],
+        [
+          "019 EARS-13: /account/events presentation on the doctor storefront",
+          "019 EARS-13: the guest's door from /account/events passes WCAG 2 A/AA + one-h1, no overflow (desktop, dark)"
+        ],
+        [
+          "019 EARS-13: /account/events presentation on the doctor storefront",
+          "019 EARS-13: the signed-in page passes WCAG 2 A/AA + one-h1, no overflow, both tabs (mobile, light)"
+        ],
+        [
+          "019 EARS-13: /account/events presentation on the doctor storefront",
+          "019 EARS-13: the guest's door from /account/events passes WCAG 2 A/AA + one-h1, no overflow (mobile, light)"
+        ],
+        [
+          "019 EARS-13: /account/events presentation on the doctor storefront",
+          "019 EARS-13: the signed-in page passes WCAG 2 A/AA + one-h1, no overflow, both tabs (mobile, dark)"
+        ],
+        [
+          "019 EARS-13: /account/events presentation on the doctor storefront",
+          "019 EARS-13: the guest's door from /account/events passes WCAG 2 A/AA + one-h1, no overflow (mobile, dark)"
+        ]
+      ]
+    },
+    {
+      "rows": ["D12"],
+      "leg": "live/doctor/events-live",
+      "file": "events-mobile.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "EARS-13: desktop month day and month navigation work with keyboard (light)"
+        ],
+        [
+          "EARS-13: desktop month day and month navigation work with keyboard (dark)"
+        ],
+        [
+          "390 light",
+          "EARS-13: loaded feed with live present is operable and accessible"
+        ],
+        [
+          "390 light",
+          "EARS-13: empty feed with live present is operable and accessible"
+        ],
+        [
+          "390 dark",
+          "EARS-13: loaded feed with live present is operable and accessible"
+        ],
+        [
+          "390 dark",
+          "EARS-13: empty feed with live present is operable and accessible"
+        ],
+        [
+          "1440 light",
+          "EARS-13: loaded feed with live present is operable and accessible"
+        ],
+        [
+          "1440 light",
+          "EARS-13: empty feed with live present is operable and accessible"
+        ],
+        [
+          "1440 dark",
+          "EARS-13: loaded feed with live present is operable and accessible"
+        ],
+        [
+          "1440 dark",
+          "EARS-13: empty feed with live present is operable and accessible"
+        ]
+      ]
+    },
+    {
+      "rows": ["D6"],
+      "leg": "live/doctor/feed-live",
+      "file": "feed-adjacent.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "018 EARS-8: the adjacent areas are their own block, the last block of the feed"
+        ],
+        [
+          "018 EARS-8: the chips are the adjacent specialties of the managed rows, each linking into that specialty's feed"
+        ],
+        ["018 EARS-8: following a chip opens that specialty's own feed"],
+        [
+          "018 EARS-8: a specialty with no adjacency row keeps the block in place and says so"
+        ],
+        [
+          "018 EARS-8: no adjacent item appears inside the events or value blocks"
+        ],
+        ["018 EARS-8: the feed is axe-clean with the adjacent block"],
+        ["018 EARS-8: the block renders without overflow · 1440 · light"],
+        ["018 EARS-8: the block renders without overflow · 1440 · dark"],
+        ["018 EARS-8: the block renders without overflow · 390 · light"],
+        ["018 EARS-8: the block renders without overflow · 390 · dark"]
+      ]
+    },
+    {
+      "rows": ["D10", "D4"],
+      "leg": "live/doctor/register-live",
+      "file": "../../../packages/e2e/lib/account-auth-paths.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "#3151 /account auth paths on the doctor storefront",
+          "#3151 (doctor): an expired session on /account bounces to login carrying returnTo=/account, and signing in returns to /account"
+        ],
+        [
+          "#3151 /account auth paths on the doctor storefront",
+          "#3151 (doctor): «Сменить пароль» on /account hands off to reset with returnTo=%2Faccount, and the completed reset returns to /account"
+        ]
+      ]
+    },
+    {
+      "rows": ["D1"],
+      "leg": "live/doctor/register-live",
+      "file": "register-existing.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "021 EARS-13 / 003 EARS-23: a duplicate registration on the doctor host",
+          "003 EARS-23/41/42: duplicate register → the same code step + a code mail (no link), an identical resend acknowledgement, and the code signs the owner in"
+        ]
+      ]
+    },
+    {
+      "rows": ["D8"],
+      "leg": "live/doctor/room",
+      "file": "room-canvas-structure-live.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "#3892 doctor room ≡ room canvas · chat expanded · 1440",
+          "the room has the canvas structure (controls by kind + label)"
+        ],
+        [
+          "#3892 doctor room ≡ room canvas · chat folded · 1440",
+          "the room has the canvas structure (controls by kind + label)"
+        ],
+        [
+          "#3892 doctor room ≡ room canvas · tab «Чат» · 390",
+          "the room has the canvas structure (controls by kind + label)"
+        ],
+        [
+          "#3892 doctor room ≡ room canvas · tab «О эфире» · 390",
+          "the room has the canvas structure (controls by kind + label)"
+        ]
+      ]
+    },
+    {
+      "rows": ["D10"],
+      "leg": "live/doctor/shell",
+      "file": "account-canvas-structure-live.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "#3758 /account ≡ account-profile canvas · signed-in · 390",
+          "the cabinet body has the canvas structure (controls by kind + label)"
+        ],
+        [
+          "#3758 /account ≡ account-profile canvas · signed-in · 1440",
+          "the cabinet body has the canvas structure (controls by kind + label)"
+        ],
+        [
+          "#3891 /account/congress ≡ doctor-lk-congress canvas · signed-in · 390",
+          "the section has the canvas structure (poster band + the state's body)"
+        ],
+        [
+          "#3891 /account/congress ≡ doctor-lk-congress canvas · signed-in · 1440",
+          "the section has the canvas structure (poster band + the state's body)"
+        ],
+        [
+          "#3890 /account/events ≡ account-my-events canvas · signed-in",
+          "390",
+          "«Предстоящие» has the canvas structure (chrome by kind + label, cards by shape)"
+        ],
+        [
+          "#3890 /account/events ≡ account-my-events canvas · signed-in",
+          "1440",
+          "«Предстоящие» has the canvas structure (chrome by kind + label, cards by shape)"
+        ]
+      ]
+    },
+    {
+      "rows": ["D6"],
+      "leg": "live/doctor/shell",
+      "file": "shell-live.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "017 EARS-5: the header search narrows the shipped feed",
+          "017 EARS-5.1: submitting the header search lands on the configured target with `q` and the feed answers it"
+        ]
+      ]
+    }
+  ]
+}

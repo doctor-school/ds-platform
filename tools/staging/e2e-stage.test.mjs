@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 
@@ -8,11 +17,14 @@ import {
   axeDecision,
   exitCodeFor,
   liveLegVerdict,
+  KEY_JOURNEYS_PATH,
+  keyJourneyTests,
   parseE2eArgs,
   PROJECTS,
   planLiveLeg,
   preflightVerdict,
   publicAxeLeg,
+  realEffects,
   releaseCheckExclusion,
   renderVerdictBlock,
   runE2eStage,
@@ -31,6 +43,287 @@ import {
   GOLDEN_LIVE_ENV,
   LIVE_TIERS,
 } from "./live-tiers.mjs";
+
+describe("§6.7 register execution guard (#4129)", () => {
+  const required = {
+    rows: ["A1"],
+    leg: "suite",
+    file: ".features-gen/academy/004-event/004-scenarios.feature.spec.js",
+    project: "academy",
+    title: ["Event", "opens the event"],
+  };
+  const reportFor = (
+    status = "expected",
+    results = [{ status: "passed" }],
+  ) => ({
+    suites: [
+      {
+        title: required.file,
+        file: required.file,
+        suites: [
+          {
+            title: "Event",
+            specs: [
+              {
+                file: required.file,
+                title: "opens the event",
+                tests: [
+                  {
+                    projectName: "academy",
+                    status,
+                    expectedStatus: "passed",
+                    results,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  for (const [label, report] of [
+    ["skipped", reportFor("skipped", [{ status: "skipped" }])],
+    ["missing", { suites: [] }],
+    ["missing report", undefined],
+    ["not executed", reportFor("expected", [])],
+    ["expected failure", reportFor("expected", [{ status: "failed" }])],
+    ["flaky", reportFor("flaky", [{ status: "failed" }, { status: "passed" }])],
+  ]) {
+    it(`fails the full release command and names a ${label} cited test`, async () => {
+      const { effects, lines } = harness({
+        readKeyJourneys: () => [required],
+        readReport: (file) => (isLiveReport(file) ? LIVE_GREEN : report),
+      });
+      const code = await runE2eStage(["main", "--expect-sha", SHA], {
+        env: { CI: "1", STAGE_BASIC_AUTH_PASS: "s3cret" },
+        effects,
+      });
+      assert.equal(code, 1);
+      assert.match(lines.join("\n"), /A1.*academy.*opens the event/);
+    });
+  }
+
+  it("accepts an executed cited test beside unrelated skipped tests", async () => {
+    const report = reportFor();
+    report.suites[0].suites[0].specs.push({
+      file: required.file,
+      title: "unbound scenario",
+      tests: [{ projectName: "academy", status: "skipped", results: [] }],
+    });
+    const { effects } = harness({
+      readKeyJourneys: () => [required],
+      readReport: (file) => (isLiveReport(file) ? LIVE_GREEN : report),
+    });
+    assert.equal(
+      await runE2eStage(["main", "--expect-sha", SHA], {
+        env: { CI: "1", STAGE_BASIC_AUTH_PASS: "s3cret" },
+        effects,
+      }),
+      0,
+    );
+  });
+
+  it("does not let the same title in another project or leg satisfy the citation", async () => {
+    for (const citation of [
+      { ...required, project: "doctor" },
+      { ...required, leg: "live/doctor/congress" },
+      { ...required, title: ["Other describe", "opens the event"] },
+    ]) {
+      const { effects } = harness({
+        readKeyJourneys: () => [citation],
+        readReport: (file) => (isLiveReport(file) ? LIVE_GREEN : reportFor()),
+      });
+      assert.equal(
+        await runE2eStage(["main", "--expect-sha", SHA], {
+          env: { CI: "1", STAGE_BASIC_AUTH_PASS: "s3cret" },
+          effects,
+        }),
+        1,
+      );
+    }
+  });
+
+  it("folds real Playwright JSON into the command exit, including skipped and uncollected outline examples", async () => {
+    const temp = mkdtempSync(path.join(tmpdir(), "ds-4129-playwright-"));
+    try {
+      const require = createRequire(
+        new URL("../../packages/e2e/package.json", import.meta.url),
+      );
+      const playwright = require.resolve("@playwright/test");
+      const cli = require.resolve("@playwright/test/cli");
+      const config = path.join(temp, "playwright.config.cjs");
+      writeFileSync(
+        config,
+        `module.exports = {testDir: __dirname, testMatch: '*.spec.cjs', workers: 1, retries: 0, projects: [{name:'academy'}, {name:'doctor'}], reporter: 'json'};`,
+      );
+      writeFileSync(
+        path.join(temp, "probe.spec.cjs"),
+        `
+        const {test} = require(${JSON.stringify(playwright)});
+        test.describe('Event', () => {
+          test.describe('outline', () => {
+            for (const example of [1, 2]) test('Example #' + example, () => {
+              test.skip(process.env.PROBE_SKIP === '1' && example === 2);
+            });
+          });
+          test.skip('unrelated debt', () => {});
+        });
+      `,
+      );
+      const citations = [1, 2].map((n) => ({
+        ...required,
+        file: "probe.spec.cjs",
+        title: ["Event", "outline", `Example #${n}`],
+      }));
+      for (const mode of ["pass", "skip", "filter"]) {
+        const { effects, lines } = harness({
+          readKeyJourneys: () => citations,
+          removeReport: realEffects.removeReport,
+          readReport: realEffects.readReport,
+          run: (_argv, { env }) =>
+            spawnSync(
+              process.execPath,
+              [
+                cli,
+                "test",
+                "--config",
+                config,
+                ...(mode === "filter" ? ["--grep", "Example #1"] : []),
+              ],
+              {
+                env: {
+                  ...process.env,
+                  PLAYWRIGHT_JSON_OUTPUT_FILE: path.join(temp, "results.json"),
+                  PROBE_SKIP: mode === "skip" ? "1" : "0",
+                  ...env,
+                },
+                encoding: "utf8",
+              },
+            ),
+        });
+        const code = await runE2eStage(
+          ["main", "--expect-sha", SHA, "--report-dir", temp],
+          {
+            env: { CI: "1", STAGE_BASIC_AUTH_PASS: "s3cret" },
+            effects,
+            liveTiers: [],
+          },
+        );
+        assert.equal(code, mode === "pass" ? 0 : 1, lines.join("\n"));
+        if (mode !== "pass")
+          assert.match(lines.join("\n"), /A1.*Example #2.*(?:skipped|not run)/);
+      }
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("does not reuse a previous report when the current runner writes none", async () => {
+    const reports = new Map();
+    const { effects, lines } = harness({
+      readKeyJourneys: () => [required],
+      run: () => ({ status: 0 }),
+      removeReport: (file) => reports.delete(file),
+      readReport: (file) => reports.get(file),
+    });
+    // A caller may choose --report-dir again; old passing JSON must not certify it.
+    const dir = path.resolve("packages/e2e/playwright-report/reused");
+    reports.set(path.join(dir, "results.json"), reportFor());
+    assert.equal(
+      await runE2eStage(["main", "--expect-sha", SHA, "--report-dir", dir], {
+        env: { CI: "1", STAGE_BASIC_AUTH_PASS: "s3cret" },
+        effects,
+        liveTiers: [],
+      }),
+      1,
+    );
+    assert.match(lines.join("\n"), /opens the event.*not run/);
+  });
+
+  it("rejects an empty, malformed or duplicate machine list", () => {
+    const entry = { ...required, titles: [required.title] };
+    delete entry.title;
+    for (const manifest of [
+      {},
+      { tests: [] },
+      { tests: [{ ...entry, titles: [] }] },
+      { tests: [{ ...entry, project: "" }] },
+      { tests: [entry, entry] },
+    ])
+      assert.throws(() => keyJourneyTests(manifest), /key-journey/);
+  });
+
+  it("fails a cited live test even when other tests make its leg green", async () => {
+    const live = reportFor("skipped", [{ status: "skipped" }]);
+    live.suites[0].suites[0].specs.push({
+      file: required.file,
+      title: "unrelated passing test",
+      tests: [
+        {
+          projectName: "academy",
+          status: "expected",
+          results: [{ status: "passed" }],
+        },
+      ],
+    });
+    const { effects, lines } = harness({
+      readKeyJourneys: () => [{ ...required, leg: LIVE_TIERS[0].name }],
+      readReport: (file) => (isLiveReport(file) ? live : reportFor()),
+    });
+    assert.equal(
+      await runE2eStage(["main", "--expect-sha", SHA], {
+        env: { CI: "1", STAGE_BASIC_AUTH_PASS: "s3cret" },
+        effects,
+      }),
+      1,
+    );
+    assert.match(
+      lines.join("\n"),
+      /A1.*live\/academy\/default.*opens the event.*skipped/,
+    );
+  });
+
+  it("keeps every register row and status in parity with the machine list", () => {
+    const manifest = JSON.parse(readFileSync(KEY_JOURNEYS_PATH, "utf8"));
+    const citations = keyJourneyTests(manifest);
+    for (const lang of ["en"]) {
+      const doc = readFileSync(
+        new URL(
+          `../../apps/docs/content/specs/tech/2026-09-08-staging-previews-and-regression-contour-${lang}.md`,
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      const rows = Object.fromEntries(
+        doc.split("\n").flatMap((line) => {
+          const id = /^\|\s*([DAS]\d+)\s*\|/.exec(line)?.[1];
+          const tail =
+            /\|\s*(FULL|PARTIAL|NONE)\s*\|\s*(?:#(\d+)|—)\s*\|\s*$/.exec(line);
+          return id && tail
+            ? [[id, { status: tail[1], gap: tail[2] ? Number(tail[2]) : null }]]
+            : [];
+        }),
+      );
+      assert.deepEqual(manifest.rows, rows, `${lang} register rows`);
+    }
+    for (const [id, row] of Object.entries(manifest.rows)) {
+      assert.ok(
+        row.status === "NONE" || citations.some((c) => c.rows.includes(id)),
+        `${id} needs positive execution evidence`,
+      );
+    }
+    for (const citation of citations) {
+      assert.ok(
+        citation.leg === "suite" ||
+          LIVE_TIERS.some((t) => t.name === citation.leg),
+        citation.leg,
+      );
+      for (const id of citation.rows) assert.ok(manifest.rows[id], id);
+    }
+  });
+});
 
 /**
  * `pnpm e2e:stage <slot>` — the C4 / §8-step-7 regression run over a CONVERGED slot.
@@ -351,6 +644,8 @@ function harness(overrides = {}) {
   const lines = [];
   const writes = [];
   const effects = {
+    readKeyJourneys: () => [],
+    removeReport: () => {},
     readBoxEnv: async () => BOX_ENV,
     fetchHealth: async () => ({
       status: 200,

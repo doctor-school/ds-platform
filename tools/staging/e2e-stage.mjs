@@ -31,7 +31,7 @@
  * the release-check exclusion path stays tested while no committed leg is excluded.
  */
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -85,6 +85,10 @@ export const PROJECTS = Object.freeze([
 export const AXE_GATE_ISSUE = 1692;
 
 const REPORT_ROOT = "packages/e2e/playwright-report";
+export const KEY_JOURNEYS_PATH = new URL(
+  "../../apps/docs/content/specs/tech/2026-09-08-key-journey-tests.json",
+  import.meta.url,
+);
 
 export function parseE2eArgs(argv) {
   const rest = [...argv];
@@ -567,6 +571,91 @@ export function summarizeReport(report) {
   };
 }
 
+/** Exact identities, including every outline example, survive collection changes (§6.7). */
+export function keyJourneyVerdict(citations, reports) {
+  const collected = new Map();
+  const key = ({ leg, file, project, title }) =>
+    JSON.stringify([leg, file?.replaceAll("\\", "/"), project, title]);
+  for (const [leg, report] of reports) {
+    const walk = (suite, parents = []) => {
+      const titles =
+        suite.title === suite.file ? parents : [...parents, suite.title];
+      for (const spec of suite.specs ?? []) {
+        for (const test of spec.tests ?? []) {
+          const identity = key({
+            leg,
+            file: spec.file,
+            project: test.projectName,
+            title: [...titles, spec.title],
+          });
+          const matches = collected.get(identity) ?? [];
+          matches.push(test);
+          collected.set(identity, matches);
+        }
+      }
+      for (const child of suite.suites ?? []) walk(child, titles);
+    };
+    for (const suite of report?.suites ?? []) walk(suite);
+  }
+  const failures = [];
+  const seen = new Set();
+  for (const citation of citations) {
+    const { rows, leg, file, project, title } = citation;
+    if (
+      !Array.isArray(rows) ||
+      rows.length === 0 ||
+      !rows.every((id) => /^(?:D|A|S)\d+$/.test(id)) ||
+      ![leg, file, project].every(
+        (v) => typeof v === "string" && v.length > 0,
+      ) ||
+      !Array.isArray(title) ||
+      title.length === 0 ||
+      !title.every((v) => typeof v === "string" && v.length > 0)
+    )
+      throw new SlotError("invalid key-journey test identity in §6.7 manifest");
+    const identity = key(citation);
+    if (seen.has(identity))
+      throw new SlotError(
+        `duplicate key-journey test: ${file} ${title.join(" > ")}`,
+      );
+    seen.add(identity);
+    const matches = collected.get(identity) ?? [];
+    const test = matches[0];
+    let reason;
+    if (matches.length === 0) reason = "not run (test or report absent)";
+    else if (matches.length !== 1) reason = "ambiguous duplicate test identity";
+    else if (test.status !== "expected") reason = test.status ?? "no outcome";
+    else if (
+      test.expectedStatus !== "passed" ||
+      test.results?.length !== 1 ||
+      test.results[0].status !== "passed"
+    )
+      reason =
+        "no single successful execution (skipped, expected failure or retry)";
+    if (reason)
+      failures.push(
+        `${rows.join(",")} ${leg} [${project}] ${file} > ${title.join(" > ")}: ${reason}`,
+      );
+  }
+  return { name: "key journeys", ok: failures.length === 0, failures };
+}
+
+export function keyJourneyTests(manifest) {
+  if (!Array.isArray(manifest?.tests) || manifest.tests.length === 0)
+    throw new SlotError(
+      "§6.7 key-journey manifest must list at least one test",
+    );
+  const citations = manifest.tests.flatMap(({ titles, ...entry }) => {
+    if (!Array.isArray(titles) || titles.length === 0)
+      throw new SlotError(
+        `§6.7 key-journey entry must list test titles: ${entry.file}`,
+      );
+    return titles.map((title) => ({ ...entry, title }));
+  });
+  keyJourneyVerdict(citations, new Map());
+  return citations;
+}
+
 export function exitCodeFor({ preflightOk, legs }) {
   if (!preflightOk) return 2;
   if (legs.length === 0) return 1;
@@ -671,6 +760,11 @@ export function assertShellInert(argv) {
 }
 
 export const realEffects = {
+  readKeyJourneys: () => {
+    const manifest = JSON.parse(readFileSync(KEY_JOURNEYS_PATH, "utf8"));
+    return keyJourneyTests(manifest);
+  },
+  removeReport: (file) => rmSync(file, { force: true }),
   readBoxEnv: () => readBoxEnvFile(STAGE_ENV_FILE),
   fetchHealth: async (url, headers) => {
     const controller = new AbortController();
@@ -807,12 +901,16 @@ export async function runE2eStage(
   const axeLeg = (host) => publicAxeLeg(env, suiteEnv.E2E_REPORT_DIR, host);
 
   const legs = [];
+  const reports = new Map();
+  const suiteReport = path.join(suiteEnv.E2E_REPORT_DIR, "results.json");
   const suiteArgv = ["pnpm", "--filter", "@ds/e2e", "test:e2e"];
   if (options.project) suiteArgv.push("--project", options.project);
+  effects.removeReport(suiteReport);
   legs.push({
     name: "suite",
     ok: effects.run(suiteArgv, { env: suiteEnv }).status === 0,
   });
+  reports.set("suite", effects.readReport(suiteReport));
 
   const axe = axeDecision({
     axe: options.axe,
@@ -895,6 +993,8 @@ export async function runE2eStage(
         continue;
       }
       const pnpm = ["pnpm", "--filter", tier.pkg];
+      const reportFile = path.join(reporting.dir, "results.json");
+      effects.removeReport(reportFile);
       let status = 0;
       if (tier.prepare) {
         status = effects.run([...pnpm, ...tier.prepare], {
@@ -922,20 +1022,26 @@ export async function runE2eStage(
           { env: legEnv },
         ).status;
       }
+      const report = effects.readReport(reportFile);
+      reports.set(tier.name, report);
       live.push(
         liveLegVerdict({
           name: tier.name,
           plan,
           status,
-          report: effects.readReport(path.join(reporting.dir, "results.json")),
+          report,
         }),
       );
     }
   }
 
-  const summary = summarizeReport(
-    effects.readReport(path.join(suiteEnv.E2E_REPORT_DIR, "results.json")),
-  );
+  if (options.expectSha !== undefined) {
+    const required = keyJourneyVerdict(effects.readKeyJourneys(), reports);
+    for (const failure of required.failures)
+      effects.log(`key journey FAIL: ${failure}`);
+    legs.push(required);
+  }
+  const summary = summarizeReport(reports.get("suite"));
   effects.log(
     renderVerdictBlock({
       slot,

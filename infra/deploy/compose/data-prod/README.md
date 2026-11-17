@@ -43,9 +43,11 @@ Custody of `PGBACKREST_REPO1_CIPHER_PASS` (without it every backup is unreadable
 ## Services
 
 - **postgres** — a pgvector + pg_partman + pgbackrest build (`postgres/Dockerfile`):
-  `pgvector/pgvector:pg17` + `postgresql-17-partman` (parity with the dev-stand
-  data-layer image, `infra/dev-stand/postgres/Dockerfile`) + pgbackrest, built
-  on-box, no registry. The pgvector requirement (ADR-0003) is the decisive reason
+  `pgvector/pgvector:pg17` by digest + `postgresql-17-partman` (parity with the
+  dev-stand data-layer image, `infra/dev-stand/postgres/Dockerfile`) + pgbackrest,
+  every version pinned. Built by `tools/deploy/postgres-artifact-prepare.mjs` on the
+  approved build host and certified before release, no registry
+  (`tools/deploy/README.md`). The pgvector requirement (ADR-0003) is the decisive reason
   for self-hosted PostgreSQL over Managed PG (spec §3); pg_partman backs the
   `audit_ledger` partitioning migration (`apps/api/drizzle/0004`); pgbackrest is
   embedded so `archive_command` can push WAL. Mounts: `init.sql` creates `vector`
@@ -53,8 +55,9 @@ Custody of `PGBACKREST_REPO1_CIPHER_PASS` (without it every backup is unreadable
   the admin credentials on first boot — no init here, dev-stand parity);
   `pgsocket` is shared with the pgbackrest sidecar.
 - **redis** — `redis:7-alpine` with AOF (`--appendonly yes`, ADR-0003 §8).
-- **pgbackrest** — a small on-box build: `postgres:17-bookworm` (uid-999 parity +
-  libpq/gosu) + pgbackrest + cron. Daily full at 02:30 MSK (`TZ=Europe/Moscow`, so
+- **pgbackrest** — a small build: `postgres:17-bookworm` by digest (uid-999
+  parity + libpq/gosu) + pgbackrest (the same pinned version as postgres) + cron,
+  prepared and certified with the postgres image. Daily full at 02:30 MSK (`TZ=Europe/Moscow`, so
   it fires in the maintenance window) + incremental every 6 h; `retention-full=7`;
   repo cipher AES-256-CBC; continuous WAL archive (postgres `archive_command`).
   The entrypoint runs `stanza-create` (idempotent), then cron in the foreground

@@ -21,6 +21,13 @@ export function durationText(min: number): string {
   return `${min} ${plural(min, "минута", "минуты", "минут")}`;
 }
 
+/** «в трёх модулях»: the prepositional count, in words up to ten. */
+const PREPOSITIONAL = ["", "одном", "двух", "трёх", "четырёх", "пяти", "шести", "семи", "восьми", "девяти", "десяти"];
+function modulesIn(n: number): string {
+  const word = PREPOSITIONAL[n] ?? String(n);
+  return `${word} ${n % 10 === 1 && n % 100 !== 11 ? "модуле" : "модулях"}`;
+}
+
 export const stepCountText = (n: number): string =>
   `${n} ${plural(n, "шаг", "шага", "шагов")}`;
 export const lessonCountText = (n: number): string =>
@@ -43,6 +50,16 @@ export const STEP_TYPE_LABEL: Record<LearningElementType, string> = {
   video: "Серия",
   download: "Материал для скачивания",
   test: "Тест",
+};
+
+/**
+ * The medium word of a path kicker, per the canvas step metas («Серия · видео ·
+ * 12 минут»); a type whose canvas meta names no medium word has none.
+ */
+export const STEP_MEDIUM: Record<LearningElementType, string | null> = {
+  video: "видео",
+  download: null,
+  test: null,
 };
 
 /** EARS-11 / EARS-14 — a locked node's reason in the doctor's words. */
@@ -78,6 +95,12 @@ export const LEARNING_UI_COPY = {
   sequential: "Уроки открываются по порядку.",
   continueTo: (n: number) => `Продолжить — урок ${n}`,
   continueLabel: "Продолжить",
+  startCourse: "Начать курс",
+  /** Canvas `notStartedText`: «18 уроков в трёх модулях»; one module — «4 урока и клуб». */
+  notStarted: (lessons: number, modules: number, club: boolean) =>
+    modules > 1
+      ? `${lessonCountText(lessons)} в ${modulesIn(modules)}`
+      : `${lessonCountText(lessons)}${club ? " и клуб" : ""}`,
   start: "Начать урок",
   lessonLabel: (n: number) => `Урок ${n}`,
   moduleTitle: (position: number, title: string) =>

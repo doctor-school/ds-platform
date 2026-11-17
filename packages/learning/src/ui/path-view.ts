@@ -6,6 +6,7 @@ import type {
 
 import {
   LEARNING_UI_COPY as C,
+  STEP_MEDIUM,
   STEP_TYPE_LABEL,
   durationText,
   lockReasonText,
@@ -14,9 +15,19 @@ import {
 // 024 EARS-13 / EARS-14 — the course path read projected onto the «snake» of
 // `design-source/doctor-course.dc.html` v16: one node per step, lessons as runs
 // of consecutive nodes, a club node per module, the document node last.
+//
+// The canvas draws three viewers (`renderVals`): a guest — every lesson step
+// `plain`, no state word, no reason, the line open throughout; a signed-in
+// doctor who has not started (no done step) — done / open / closed from the
+// read, no «Вы здесь»; a doctor in progress — the read's `current` (EARS-11)
+// is «Вы здесь» (`hereG`). The server's `current` is the same in all three;
+// only this projection differs.
 
-/** The node mark of the canvas (`tones`): done · here · open · closed · club · doc. */
-export type NodeTone = "done" | "here" | "open" | "closed" | "club" | "doc";
+/** The node mark of the canvas (`tones`): done · here · open · closed · plain · club · doc. */
+export type NodeTone = "done" | "here" | "open" | "closed" | "plain" | "club" | "doc";
+
+/** The canvas viewer: `guest` · `notStarted` · `inProgress` · `completed`. */
+export type PathPhase = "guest" | "not-started" | "in-progress" | "completed";
 type LineState = "done" | "open" | "closed";
 
 export interface PathNode {
@@ -55,7 +66,7 @@ export interface OutlineLesson {
   id: string;
   number: number;
   title: string;
-  tone: "done" | "here" | "open" | "closed";
+  tone: "done" | "here" | "open" | "closed" | "plain";
   firstStepId: string | null;
   label: string;
 }
@@ -78,9 +89,27 @@ export interface PathView {
   single: boolean;
   lessonCount: number;
   doneLessons: number;
+  phase: PathPhase;
+  /** «Вы здесь» — only while the doctor is in progress (canvas `hereG`). */
   current: { stepId: string; lessonNumber: number; modulePosition: number } | null;
+  /** The step «Начать курс» opens for a doctor who has not started. */
+  startStepId: string | null;
   empty: boolean;
 }
+
+/** The canvas viewer of a read: a guest, or a doctor by their done steps. */
+export function pathPhase(path: LearningCoursePath): PathPhase {
+  if (!path.signedIn) return "guest";
+  const lessons = path.modules.flatMap((m) => m.lessons);
+  if (lessons.length > 0 && lessons.every((l) => l.state.status === "done")) return "completed";
+  return lessons.some((l) => l.steps.some((s) => s.state.status === "done"))
+    ? "in-progress"
+    : "not-started";
+}
+
+/** A node's status word; the read's `current` that is not «Вы здесь» reads «Открыт». */
+const wordOf = (status: LearningNodeState["status"], here: boolean): string =>
+  here ? C.statusWord.current : C.statusWord[status === "current" ? "open" : status];
 
 function tone(state: LearningNodeState, here: boolean): NodeTone {
   if (here) return "here";
@@ -103,8 +132,10 @@ function line(state: LearningNodeState): LineState {
 }
 
 export function buildPathView(path: LearningCoursePath): PathView {
-  const hereStep = path.current?.stepId ?? null;
+  const phase = pathPhase(path);
   const signedIn = path.signedIn;
+  const guest = !signedIn;
+  const hereStep = phase === "in-progress" ? (path.current?.stepId ?? null) : null;
   let lessonCount = 0;
   let doneLessons = 0;
   let current: PathView["current"] = null;
@@ -123,10 +154,11 @@ export function buildPathView(path: LearningCoursePath): PathView {
       lesson.steps.forEach((step, si) => {
         const here = step.id === hereStep;
         if (here) current = { stepId: step.id, lessonNumber: lesson.number, modulePosition: mod.position };
-        const t = tone(step.state, here);
-        const status = here ? "current" : step.state.status;
-        const word = signedIn || status === "locked" ? C.statusWord[status] : "";
+        const t = guest ? "plain" : tone(step.state, here);
+        const word = guest ? "" : wordOf(step.state.status, here);
         const typeLabel = STEP_TYPE_LABEL[step.type];
+        const medium = STEP_MEDIUM[step.type];
+        const kickerParts = [typeLabel, ...(medium ? [medium] : []), durationText(step.durationMin)];
         nodes.push({
           id: step.id,
           kind: "step",
@@ -135,19 +167,19 @@ export function buildPathView(path: LearningCoursePath): PathView {
           lessonId: lesson.id,
           lessonNumber: lesson.number,
           firstOfLesson: si === 0,
-          kicker: `${typeLabel} · ${durationText(step.durationMin)}`,
-          kickerParts: [typeLabel, durationText(step.durationMin)],
+          kicker: kickerParts.join(" · "),
+          kickerParts,
           title: step.title,
           label:
             `${C.lessonLabel(lesson.number)}, шаг ${si + 1}. ${typeLabel}. ${step.title}` +
             (word ? `. ${word}` : ""),
           reason:
-            step.state.status === "locked"
+            !guest && step.state.status === "locked"
               ? lockReasonText(step.state.reason)
               : null,
           here,
           openable: step.state.status !== "locked",
-          line: line(step.state),
+          line: guest ? "open" : line(step.state),
         });
       });
     }
@@ -156,7 +188,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
         id: `club-${mod.id}`,
         kind: "club",
         stepType: null,
-        tone: mod.club.state.status === "locked" ? "closed" : mod.club.state.status === "done" ? "done" : "club",
+        tone: guest ? "club" : mod.club.state.status === "locked" ? "closed" : mod.club.state.status === "done" ? "done" : "club",
         lessonId: null,
         lessonNumber: null,
         firstOfLesson: false,
@@ -167,7 +199,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
         reason: null,
         here: false,
         openable: false,
-        line: line(mod.club.state),
+        line: guest ? "open" : line(mod.club.state),
       });
     }
     if (mi === path.modules.length - 1) {
@@ -186,7 +218,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
         reason: null,
         here: false,
         openable: false,
-        line: line(path.document.state),
+        line: guest ? "open" : line(path.document.state),
       });
     }
     return {
@@ -202,7 +234,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
   });
 
   const rowTone = (s: LearningNodeState): OutlineLesson["tone"] =>
-    s.status === "done" ? "done" : s.status === "locked" ? "closed" : "open";
+    guest ? "plain" : s.status === "done" ? "done" : s.status === "locked" ? "closed" : "open";
   const outline = path.modules.map((mod): OutlineModule => {
     const done = mod.lessons.filter((l) => l.state.status === "done").length;
     return {
@@ -211,14 +243,8 @@ export function buildPathView(path: LearningCoursePath): PathView {
       progress: signedIn ? C.moduleProgress(done, mod.lessons.length) : null,
       lessons: mod.lessons.map((l): OutlineLesson => {
         const here = l.steps.some((s) => s.id === hereStep);
-        const t: OutlineLesson["tone"] = here
-          ? "here"
-          : l.state.status === "done"
-            ? "done"
-            : l.state.status === "locked"
-              ? "closed"
-              : "open";
-        const word = signedIn || t === "closed" ? C.statusWord[here ? "current" : l.state.status] : "";
+        const t: OutlineLesson["tone"] = here ? "here" : rowTone(l.state);
+        const word = guest ? "" : wordOf(l.state.status, here);
         return {
           id: l.id,
           number: l.number,
@@ -232,7 +258,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
         ? {
             nodeId: `club-${mod.id}`,
             tone: rowTone(mod.club.state),
-            label: `${C.club.outline}` + (signedIn || mod.club.state.status === "locked" ? `. ${C.statusWord[mod.club.state.status]}` : ""),
+            label: `${C.club.outline}` + (guest ? "" : `. ${wordOf(mod.club.state.status, false)}`),
           }
         : null,
     };
@@ -245,12 +271,17 @@ export function buildPathView(path: LearningCoursePath): PathView {
     documentRow: {
       nodeId: "document",
       tone: rowTone(docState),
-      label: C.document.title + (signedIn || docState.status === "locked" ? `. ${C.statusWord[docState.status]}` : ""),
+      label: C.document.title + (guest ? "" : `. ${wordOf(docState.status, false)}`),
     },
     single: path.modules.length === 1,
     lessonCount,
     doneLessons,
+    phase,
     current,
+    startStepId:
+      phase === "not-started"
+        ? (path.current?.stepId ?? path.modules[0]?.lessons[0]?.steps[0]?.id ?? null)
+        : null,
     empty: lessonCount === 0,
   };
 }

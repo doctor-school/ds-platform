@@ -13,7 +13,8 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
 /**
  * 024 EARS-14…18, EARS-26, EARS-27 (#4011) — the doctor's course path and step
  * screens driven end to end on a live stand: a guest sees the path and the
- * registration gate; a signed-in doctor opens the «Вы здесь» video step, the
+ * registration gate (every step plain, no «Вы здесь»); a signed-in doctor who
+ * has not started sees step 1 open and «Начать курс», opens the video step, the
  * provider clock records progress, the download records `opened`, the exit
  * test fails below the threshold (reject) and passes on a retry (accept), the
  * lesson is done and the next lesson opens; the Academy answers `/courses/*`
@@ -124,6 +125,13 @@ test.describe("024 — the doctor's course path and step screens", () => {
       expect(res?.status()).toBe(200);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expect(page.getByRole("button", { name: /Урок 1, шаг 1\. Серия/ })).toBeVisible();
+      // Canvas guest: every lesson step `plain` — no state word, no «Вы здесь», no locked reason.
+      await expect(page.getByRole("button", { name: /\. (Вы здесь|Открыт|Закрыт|Пройден)$/ })).toHaveCount(0);
+      await expect(page.getByText("Вы здесь", { exact: true })).toHaveCount(0);
+      await expect(page.getByText(/^Шаг откроется/)).toHaveCount(0);
+      await expect(page.getByRole("link", { name: /^Продолжить/ })).toHaveCount(0);
+      // The kicker names the medium as the canvas metas: «Серия · видео · N минут».
+      await expect(page.getByText(/^Серия · видео · \d+ минут/).first()).toBeVisible();
       await expect(page.getByText("Автор курса")).toBeVisible();
       // EARS-14 — the points plate: a guest has no balance, every kind reads «—».
       const guestPlate = page.getByTestId("points-plate");
@@ -200,10 +208,14 @@ test.describe("024 — the doctor's course path and step screens", () => {
     const page = await context.newPage();
     await signInPageThroughHost(page, DOCTOR_URL, doctor);
 
-    // The path: lesson 1's video is «Вы здесь», lesson 2 is locked with its reason.
+    // The path, not started: lesson 1's video is open (no «Вы здесь» yet —
+    // canvas `notStarted`), lesson 2 is locked with its reason.
     await page.goto(`${DOCTOR_URL}/courses/${SLUG}`);
-    await expect(page.getByRole("button", { name: /Урок 1, шаг 1\. Серия\. .*Вы здесь/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Урок 1, шаг 1\. Серия\. .*Открыт$/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Урок 2, шаг 1\. .*Закрыт/ })).toBeVisible();
+    await expect(page.getByText("Вы здесь", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /^Продолжить/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Начать курс" })).toHaveAttribute("href", /\/courses\/[^/]+\/steps\//);
     // EARS-14 — the signed-in plate carries the doctor's own balances from 025.
     const plate = page.getByTestId("points-plate");
     await expect(plate.getByTestId("points-plate-value")).toHaveCount(3);
@@ -215,6 +227,8 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await axeClean(page);
     await shoot(page, "doctor-path-start-1280");
     await page.setViewportSize(PHONE);
+    await axeClean(page);
+    await shoot(page, "doctor-path-start-390");
     await page.getByRole("button", { name: /Урок 1, шаг 2\./ }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await axeClean(page);
@@ -222,11 +236,12 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await page.keyboard.press("Escape");
     await page.setViewportSize(DESKTOP);
 
-    // Video: the provider clock → position facts → 100 %. The band jumps to
-    // the «Вы здесь» node on the path (canvas `goHere`); its summary opens the step.
-    await page.getByRole("link", { name: /Продолжить — урок 1/ }).click();
-    await expect(page.getByRole("button", { name: /Урок 1, шаг 1\. .*Вы здесь/ })).toHaveAttribute("aria-pressed", "true");
-    await page.getByTestId("node-summary").getByRole("link", { name: "Продолжить" }).click();
+    // Video: the provider clock → position facts → 100 %. Step 1's summary
+    // offers «Начать» (canvas `actStart`); the band's «Начать курс» opens the step.
+    await page.getByRole("button", { name: /Урок 1, шаг 1\./ }).click();
+    const startHref = await page.getByRole("link", { name: "Начать курс" }).getAttribute("href");
+    await expect(page.getByTestId("node-summary").getByRole("link", { name: "Начать" })).toHaveAttribute("href", startHref!);
+    await page.getByRole("link", { name: "Начать курс" }).click();
     // Hydrated: the action is armed (it ships disabled from the server render).
     await expect(page.getByRole("button", { name: "Смотреть видео" })).toBeEnabled();
     // 024-design §8 — the step screen carries the same plate.

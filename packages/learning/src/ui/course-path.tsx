@@ -42,7 +42,8 @@ import { StepIcon } from "./step-icon";
 
 // 024 EARS-14 — the course path block per `design-source/doctor-course.dc.html`
 // v16: the «snake» of step nodes in module sections, the «Вы здесь» step with
-// «Продолжить», a locked node's reason, the «Модули и уроки» outline (one
+// «Продолжить» while the doctor is in progress («Начать курс» before the first
+// done step; a guest's steps are plain), a locked node's reason, the «Модули и уроки» outline (one
 // module open — the one in view — and the lesson in view marked, by the
 // canvas scroll-spy), and the loading / empty / error states. Multi-module is
 // the canvas default; one module drops the module plates and rows. No game
@@ -53,6 +54,7 @@ const NODE_TONE: Record<NodeTone, string> = {
   here: "bg-tint text-tint-foreground border-border shadow-md",
   open: "bg-card text-tint-foreground border-primary",
   closed: "bg-muted text-muted-foreground border-hairline",
+  plain: "bg-card text-foreground border-border",
   club: "bg-tint text-tint-foreground border-border",
   doc: "bg-background text-faint border-dashed border-faint",
 };
@@ -65,6 +67,7 @@ const MARK_TONE: Record<OutlineLesson["tone"], string> = {
   here: "bg-tint border-border",
   open: "bg-card border-primary",
   closed: "bg-muted border-hairline",
+  plain: "bg-card border-border",
 };
 
 /** The canvas's smooth jump to a plate or a node (`scrollTo`). */
@@ -213,9 +216,12 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
   const nodes = view ? view.sections.flatMap((sec) => sec.nodes) : [];
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Canvas `defaultSel`: «Вы здесь» while in progress, the document once
+  // completed, else the first step.
   const selected =
     nodes.find((n) => n.id === selectedId) ??
     nodes.find((n) => n.here) ??
+    (view?.phase === "completed" ? nodes.find((n) => n.kind === "doc") : undefined) ??
     nodes[0] ??
     null;
   const action = selected
@@ -324,6 +330,20 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
               <a href={`#node-${view.current.stepId}`} onClick={goHere}>
                 {C.continueTo(view.current.lessonNumber)}
               </a>
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
+      {/* Canvas `notStarted`: the course's volume and «Начать курс» — no «Вы здесь» yet. */}
+      {path?.signedIn && view && !view.empty && view.phase === "not-started" && view.startStepId ? (
+        <section className="px-gutter pt-8">
+          <div className="mx-auto flex max-w-content flex-wrap items-center gap-x-6 gap-y-4 border-2 border-border bg-card px-6 py-4 shadow-lg">
+            <div className="min-w-0 flex-1 basis-64 text-base font-semibold text-muted-foreground">
+              {C.notStarted(view.lessonCount, view.sections.length, path.modules.some((m) => m.club !== null))}
+            </div>
+            <Button asChild>
+              <a href={href(view.startStepId)}>{C.startCourse}</a>
             </Button>
           </div>
         </section>

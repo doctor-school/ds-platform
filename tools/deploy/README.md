@@ -182,7 +182,8 @@ and reports the cause afterwards — runbook
   runs — a `data-secret.yml` rotation recreating postgres + pgbackrest — exits 3
   (`DATA_REFUSED_EXIT` in `lib/data-prod.mjs`) and refuses the redeploy with
   `refused on <data-prod>: … is still running`; re-run it after the unit ends. Any
-  other failure (ssh down, the forced command not answering) does not block an
+  other failure (ssh down, the forced command not answering; each ssh connect of
+  the redeploy's check is bounded by `ConnectTimeout=15`) does not block an
   incident redeploy, which never touches the data box: it goes on with
   `⚠ <data-prod> could not run the live-unit check (<reason>)` in its log. A
   release refuses on either.

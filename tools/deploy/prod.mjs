@@ -547,12 +547,14 @@ function shipTree(sha, host) {
  * unit runs» (exit DATA_REFUSED_EXIT) refuses every run, a redeploy too. Any other
  * failure — ssh, a forced command that does not answer — refuses a release, while a
  * redeploy (incident recovery of ds-api-prod's app tier, which never touches the data
- * box) goes on with the reason as `warning`.
+ * box) goes on with the reason as `warning`, after at most REDEPLOY_CHECK_CONNECT_TIMEOUT
+ * of a black-holed box per ssh connection instead of the OS connect timeout.
  * @returns {Promise<{ok: true} | {refused: string} | {warning: string}>}
  */
+export const REDEPLOY_CHECK_CONNECT_TIMEOUT = ["-o", "ConnectTimeout=15"];
 export async function dataBoxUnitCheck(client, { redeploy }) {
   try {
-    await client.call(["check"]);
+    await client.call(["check"], redeploy ? { sshOptions: REDEPLOY_CHECK_CONNECT_TIMEOUT } : {});
     return { ok: true };
   } catch (e) {
     if (!redeploy || e.exitCode === DATA_REFUSED_EXIT) return { refused: e.message };

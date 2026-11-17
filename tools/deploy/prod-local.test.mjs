@@ -663,7 +663,12 @@ import {
   runBoxCommand,
   servesDataVerbs,
 } from "./lib/data-prod.mjs";
-import { dataBoxUnitCheck, dataProdEnvPayload, dataProdExcept } from "./prod.mjs";
+import {
+  REDEPLOY_CHECK_CONNECT_TIMEOUT,
+  dataBoxUnitCheck,
+  dataProdEnvPayload,
+  dataProdExcept,
+} from "./prod.mjs";
 import { BOX_ENTRYPOINTS } from "./lib/remote.mjs";
 
 const SHA_3313 = "0123456789abcdef0123456789abcdef01234567";
@@ -692,7 +697,7 @@ test("3313: only the data box's full capabilities answer counts", () => {
 function fakeDataProd(answers) {
   const calls = [];
   const run = async (host, command, options) => {
-    calls.push({ host, command, input: options?.input });
+    calls.push({ host, command, input: options?.input, sshOptions: options?.sshOptions });
     const answer = answers(command, calls.length);
     if (answer instanceof Error) throw answer;
     return answer;
@@ -1324,6 +1329,24 @@ test("4097: a check that answers lets either run go on", async () => {
     const { fake, client } = checkClient(() => "no ds-prod-* step unit is running");
     assert.deepEqual(await dataBoxUnitCheck(client, { redeploy }), { ok: true });
     assert.deepEqual(fake.calls.map((c) => c.command), ["capabilities", "check"]);
+  }
+});
+
+test("4097: a redeploy's check bounds each ssh connect — the capabilities probe and the verb — and a release's does not", async () => {
+  assert.deepEqual(REDEPLOY_CHECK_CONNECT_TIMEOUT, ["-o", "ConnectTimeout=15"]);
+  for (const [redeploy, expected] of [
+    [true, REDEPLOY_CHECK_CONNECT_TIMEOUT],
+    [false, undefined],
+  ]) {
+    const { fake, client } = checkClient(() => "no ds-prod-* step unit is running");
+    await dataBoxUnitCheck(client, { redeploy });
+    assert.deepEqual(
+      fake.calls.map((c) => [c.command, c.sshOptions]),
+      [
+        ["capabilities", expected ?? []],
+        ["check", expected],
+      ],
+    );
   }
 });
 

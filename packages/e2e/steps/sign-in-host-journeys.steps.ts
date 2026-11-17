@@ -45,6 +45,8 @@ import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 const SESSION_COOKIE = "__Host-ds_session";
 const ACADEMY_FORM_MARK = "auth-wordmark";
+const ACADEMY_PANEL_FOOTER = "© Doctor.School.";
+const DOCTOR_PANEL_FOOTER = "Платформа непрерывного медицинского образования";
 const EVENT = golden.events.pastWithRecording;
 const UPCOMING = golden.events.upcoming;
 const base = (id: HostId) => baseUrlFor(HOSTS[id]);
@@ -132,9 +134,17 @@ async function sessionStatus(page: Page): Promise<number> {
   );
 }
 
-/** The sign-in host renders the Academy's own form (its host config). */
+/**
+ * The sign-in host renders the Academy's own frame (its host config): the
+ * brand panel's footer is the Academy's «© Doctor.School.», never the doctor
+ * storefront's longer line. The panel keeps its footer beside a return card.
+ */
 async function expectAcademyForm(guest: Page): Promise<void> {
   await expect(guest.getByTestId(ACADEMY_FORM_MARK)).toBeVisible();
+  await expect(
+    guest.getByText(ACADEMY_PANEL_FOOTER, { exact: true }),
+  ).toBeVisible();
+  await expect(guest.getByText(DOCTOR_PANEL_FOOTER)).toHaveCount(0);
 }
 
 /** The guest on the golden recorded эфир's Academy page, its title kept. */

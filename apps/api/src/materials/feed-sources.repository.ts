@@ -61,6 +61,17 @@ export class FeedSourcesRepository {
     return row;
   }
 
+  /** EARS-32 — one source with the number of its posts (all pages of «Публикации»). */
+  async findWithCount(id: string): Promise<FeedSourceListRow | undefined> {
+    const [row] = await this.handle
+      .select({ source: feedSources, n: count(feedEntries.id) })
+      .from(feedSources)
+      .leftJoin(feedEntries, eq(feedEntries.feedSourceId, feedSources.id))
+      .where(eq(feedSources.id, id))
+      .groupBy(feedSources.id);
+    return row ? { source: row.source, entryCount: row.n } : undefined;
+  }
+
   async lockById(
     tx: FeedSourcesTx,
     id: string,

@@ -6,6 +6,7 @@ import {
   inArray,
   isNull,
   min,
+  ne,
   not,
   or,
   sql,
@@ -172,6 +173,18 @@ export const expertPubliclyVisible: SQL = and(
 )!;
 
 /**
+ * 048 EARS-22, EARS-32 (#3993, #3996) — the row-local feed marks: an entry
+ * is in the feed while it is neither hidden by an administrator nor of a
+ * switched-off source. The public read composes it with its platform gate;
+ * exported so the hide/return journey is proved on this exact predicate for a
+ * network entry the platform gate does not yet serve (#3997).
+ */
+export const feedEntryRowVisible: SQL = and(
+  isNull(feedEntries.hiddenAt),
+  not(feedEntries.sourceOff),
+)!;
+
+/**
  * 048 EARS-9, EARS-10, EARS-19 (#3513) — one page of the public feed, newest
  * first with ties by id, read from `feed_entries` joined ONLY to the directory
  * rows an entry references: its column's 012 expert (public state and current
@@ -190,8 +203,7 @@ export function publicFeedPageQuery(
 ) {
   const visible = and(
     inArray(feedEntries.sourcePlatform, [...FEED_CARD_PLATFORMS]),
-    isNull(feedEntries.hiddenAt),
-    not(feedEntries.sourceOff),
+    feedEntryRowVisible,
     or(isNull(feedEntries.authorExpertId), expertPubliclyVisible),
   );
   return db
@@ -235,6 +247,39 @@ export function publicFeedPageQuery(
 export type PublicFeedRow = Awaited<
   ReturnType<typeof publicFeedPageQuery>
 >[number];
+
+/**
+ * 048 EARS-32 — the row modification stamp in microseconds since the epoch:
+ * the version a «Публикации» write asserts in `If-Match`. Every writer of
+ * `feed_entries` moves `updated_at`, so the stamp moves with any change.
+ */
+const entryStamp = sql<string>`(extract(epoch from ${feedEntries.updatedAt}) * 1000000)::bigint`;
+
+/** The columns a «Публикации» row and its writes read. */
+const adminRowColumns = {
+  id: feedEntries.id,
+  sourcePlatform: feedEntries.sourcePlatform,
+  title: feedEntries.title,
+  href: feedEntries.href,
+  publishedAt: feedEntries.publishedAt,
+  publishedAtCursor: exactCursorInstant(feedEntries.publishedAt),
+  hiddenAt: feedEntries.hiddenAt,
+  sourceOff: feedEntries.sourceOff,
+  stamp: entryStamp,
+};
+
+/** One row of «Публикации» as read (EARS-32). */
+export interface FeedEntryAdminRow {
+  id: string;
+  sourcePlatform: (typeof feedEntries.sourcePlatform.enumValues)[number];
+  title: string;
+  href: string;
+  publishedAt: Date;
+  publishedAtCursor: string;
+  hiddenAt: Date | null;
+  sourceOff: boolean;
+  stamp: string;
+}
 
 @Injectable()
 export class FeedEntriesRepository {
@@ -451,6 +496,73 @@ export class FeedEntriesRepository {
       .where(
         and(eq(feedEntries.id, id), eq(feedEntries.sourcePlatform, "telegram")),
       );
+  }
+
+  /**
+   * 048 EARS-32 (#3996) — one page of «Публикации»: the source's entries,
+   * newest first with ties by id, every state included (hidden and
+   * switched-off entries stay listed). Served by
+   * `feed_entries (feed_source_id, published_at DESC)`.
+   */
+  adminSourcePage(
+    feedSourceId: string,
+    limit: number,
+    before: FeedCursorPosition | null,
+  ): Promise<FeedEntryAdminRow[]> {
+    const ofSource = eq(feedEntries.feedSourceId, feedSourceId);
+    return this.handle
+      .select(adminRowColumns)
+      .from(feedEntries)
+      .where(
+        before
+          ? and(
+              ofSource,
+              beforeKeysetCursor(
+                feedEntries.publishedAt,
+                feedEntries.id,
+                before,
+              ),
+            )
+          : ofSource,
+      )
+      .orderBy(desc(feedEntries.publishedAt), desc(feedEntries.id))
+      .limit(limit);
+  }
+
+  /** EARS-32 — lock one entry for a hide or unhide. */
+  async lockForAdmin(
+    tx: MaterialsTx,
+    id: string,
+  ): Promise<FeedEntryAdminRow | undefined> {
+    const [row] = await tx
+      .select(adminRowColumns)
+      .from(feedEntries)
+      .where(eq(feedEntries.id, id))
+      .for("update");
+    return row;
+  }
+
+  /**
+   * EARS-32 — set or clear `hidden_at` of a network entry. `published_at` is
+   * never touched, so a returned entry is back at its own date. The stamp
+   * strictly increases, so the version the caller held never matches again.
+   */
+  async setHidden(
+    tx: MaterialsTx,
+    id: string,
+    hidden: boolean,
+  ): Promise<FeedEntryAdminRow> {
+    const [row] = await tx
+      .update(feedEntries)
+      .set({
+        hiddenAt: hidden ? sql`now()` : null,
+        updatedAt: sql`greatest(clock_timestamp(), ${feedEntries.updatedAt} + interval '1 microsecond')`,
+      })
+      .where(
+        and(eq(feedEntries.id, id), ne(feedEntries.sourcePlatform, "academy")),
+      )
+      .returning(adminRowColumns);
+    return row!;
   }
 
   /** Remove the source record's card (EARS-6: an unpublished material leaves the feed). */

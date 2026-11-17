@@ -469,7 +469,7 @@ The admin screens are approved-non-canvas (the admin-screen default, slice 1 «A
 | `POST /v1/integrations/telegram/webhook`                            | Telegram updates (secret header)                        | EARS-24, EARS-25 |
 | `GET /v1/public/feed`                                               | unchanged route; gains the `post` member                | EARS-33          |
 
-Every admin route: `roles: [platform_admin]`, the MFA admin session, CSRF, `Idempotency-Key` and `If-Match` on writes (EARS-23). Hide and unhide refuse an `academy` entry with `409` — an own material leaves the feed by unpublish (EARS-6).
+Every admin route: `roles: [platform_admin]`, the MFA admin session, CSRF, `Idempotency-Key` and `If-Match` on writes (EARS-23). Hide and unhide refuse an `academy` entry with `409` — an own material leaves the feed by unpublish (EARS-6). The `If-Match` of a hide or unhide is the entry's `updated_at` in microseconds — every writer of `feed_entries` moves it, so a hide issued against a row that an edit or a switch-off moved since the list was read is refused with `412`, and the page reloads; a hide on a hidden entry and an unhide on a shown one are `409`. «Публикации» shows the stored post text (one line after EARS-26's whitespace collapse) cut to the row width.
 
 ### Egress, ingress and configuration (ADR-0011)
 

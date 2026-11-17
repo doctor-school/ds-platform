@@ -13,7 +13,9 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   CreateFeedSourceRequestSchema,
+  type FeedEntryAdminList,
   type FeedSourceAdminList,
+  FeedSourceEntriesQuerySchema,
   IDEMPOTENCY_KEY_HEADER,
   UpdateFeedSourceRequestSchema,
 } from "@ds/schemas";
@@ -62,6 +64,26 @@ export class FeedSourcesAdminController {
   })
   list(): Promise<FeedSourceAdminList> {
     return this.sources.list();
+  }
+
+  /** EARS-32 — «Публикации»: the source's posts, newest first, cursor. */
+  @Get(":id/entries")
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    audit: "none",
+    tests: ["EARS-32"],
+  })
+  entries(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<FeedEntryAdminList> {
+    requireId(id);
+    const parsed = FeedSourceEntriesQuerySchema.safeParse(req.query ?? {});
+    if (!parsed.success)
+      throw invalid("invalid «Публикации» query", parsed.error);
+    return this.sources.entryPage(id, parsed.data);
   }
 
   /** EARS-21 — «Добавить источник»; key required, no `If-Match`. */
@@ -224,6 +246,96 @@ export class FeedSourcesAdminController {
       action === "disable"
         ? await this.sources.disable(input)
         : await this.sources.enable(input);
+    void reply.header("etag", etag);
+    return detail;
+  }
+}
+
+// 048 EARS-32 (#3996) — «Скрыть из ленты» / «Вернуть в ленту» on one network
+// entry, under the same admin contract: the role re-established live, a
+// canonical UUID `Idempotency-Key`, the `If-Match` of the version the row was
+// listed at, one 010 audit row from the `feed_entries` capture trigger. An own
+// material is refused with 409 — it leaves the feed by unpublish (EARS-6).
+
+const ENTRIES_SCOPE = "feed-entries";
+
+@Controller({ path: "admin/feed-entries", version: "1" })
+@UseFilters(TaxonomyProblemFilter)
+export class FeedEntriesAdminController {
+  constructor(
+    @Inject(FeedSourcesService) private readonly sources: FeedSourcesService,
+    @Inject(IdempotencyService)
+    private readonly idempotency: IdempotencyService,
+  ) {}
+
+  /** EARS-32 — «Скрыть из ленты». */
+  @Post(":id/hide")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    revalidate: "live",
+    audit: "low-stakes",
+    tests: ["EARS-32"],
+  })
+  hide(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    return this.setHidden(id, "hide", req, reply);
+  }
+
+  /** EARS-32 — «Вернуть в ленту». */
+  @Post(":id/unhide")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    revalidate: "live",
+    audit: "low-stakes",
+    tests: ["EARS-32"],
+  })
+  unhide(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    return this.setHidden(id, "unhide", req, reply);
+  }
+
+  private async setHidden(
+    id: string,
+    action: "hide" | "unhide",
+    req: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<unknown> {
+    requireId(id);
+    const key = this.idempotency.requireKey(
+      req.headers[IDEMPOTENCY_KEY_HEADER],
+    );
+    const { raw, version } = requireVersion(req, `a ${action}`);
+    const outcome = await this.idempotency.begin({
+      key,
+      scope: ENTRIES_SCOPE,
+      actorId: actorSub(req),
+      method: "POST",
+      route: `/v1/admin/feed-entries/:id/${action}`,
+      fingerprint: this.idempotency.fingerprint({
+        method: "POST",
+        path: `/v1/admin/feed-entries/${id}/${action}`,
+        payload: {},
+        ifMatch: raw,
+      }),
+    });
+    if (replayed(outcome, reply)) return outcome.replay.body;
+    const input = { id, expectedVersion: version, lease: outcome.lease };
+    const { detail, etag } =
+      action === "hide"
+        ? await this.sources.hide(input)
+        : await this.sources.unhide(input);
     void reply.header("etag", etag);
     return detail;
   }

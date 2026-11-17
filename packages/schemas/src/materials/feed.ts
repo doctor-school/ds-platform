@@ -2,10 +2,10 @@ import { z } from "zod";
 
 // 048 (#3513) — the public feed contract (048-design §«Public reads»; EARS-9,
 // EARS-10, EARS-19). The card is the common shape every source renders from:
-// a discriminated union on `kind`, slice 1 defining `news` and `column`. No
-// field is specific to the own-materials source (EARS-10) — a network slice
-// adds its own member (`post`, `video`) with its own fields and leaves these
-// two unchanged.
+// a discriminated union on `kind`: `news` and `column` from the own materials,
+// `post` from Telegram (slice 2, EARS-33). No field of `news` / `column` is
+// specific to the own-materials source (EARS-10); a network member carries its
+// own fields and leaves those two unchanged.
 
 /** EARS-9 — the first page the rail asks for. */
 export const FEED_PAGE_SIZE_DEFAULT = 12;
@@ -55,10 +55,44 @@ export const FeedColumnCardSchema = z
   .object({ kind: z.literal("column"), ...cardFields })
   .strict();
 
+/** EARS-33 — the source line of every Telegram card. */
+export const FEED_TELEGRAM_SOURCE_NAME = "BBM Academy · Telegram";
+
+/**
+ * EARS-33 — a Telegram entry: the post text, the copied preview signed at the
+ * read (or `null` while there is none), a video's duration in seconds, never a
+ * partner, and the absolute `t.me` permalink it always opens in a new tab.
+ */
+export const FeedPostCardSchema = z
+  .object({
+    id: z.uuid(),
+    kind: z.literal("post"),
+    /** The post text as stored (EARS-26); empty for a post with only media. */
+    text: z.string(),
+    publishedAt: z.iso.datetime(),
+    image: z
+      .object({ url: z.string().min(1) })
+      .strict()
+      .nullable(),
+    duration: z.number().int().min(0).nullable(),
+    source: z
+      .object({
+        platform: z.literal("telegram"),
+        name: z.literal(FEED_TELEGRAM_SOURCE_NAME),
+      })
+      .strict(),
+    partner: z.null(),
+    href: z.string().regex(/^https:\/\/t\.me\/\S+$/),
+    external: z.literal(true),
+  })
+  .strict();
+export type FeedPostCard = z.infer<typeof FeedPostCardSchema>;
+
 /** One card of the feed (EARS-9) — renders from the card alone (EARS-10). */
 export const FeedCardSchema = z.discriminatedUnion("kind", [
   FeedNewsCardSchema,
   FeedColumnCardSchema,
+  FeedPostCardSchema,
 ]);
 export type FeedCard = z.infer<typeof FeedCardSchema>;
 

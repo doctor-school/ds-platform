@@ -203,15 +203,16 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
     expect(outline().getByRole("link", { name: /^Урок 61\. / })).toHaveAttribute("aria-current", "true");
   });
 
-  it("EARS-14: at 26 modules the outline column scrolls the open module into its view (summary stays when it fits)", () => {
+  it("EARS-14: on load the outline column shows its top — the summary and the start of the outline; it follows only once the open module changes", () => {
     vi.useFakeTimers();
     try {
-      // The column shows 0…800; module 15 (lesson 60 → «Вы здесь») sits far below the fold.
+      // The column shows 0…800; the open module's block (its row + 4 lessons +
+      // club row) sits far below the fold — module 15 on load (lesson 60 →
+      // «Вы здесь»), then module 17 after its row is picked.
       vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
         const box = (top: number, height: number) =>
           ({ top, bottom: top + height, left: 0, right: 0, width: 0, height, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
         if (this.tagName === "ASIDE") return box(0, 800);
-        // The open module's block (its row + 4 lessons + club row): module 15 of 26.
         if (this instanceof HTMLElement && this.dataset.outlineModule === "open") return box(916, 228);
         return box(0, 0);
       });
@@ -222,8 +223,14 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
       act(() => {
         vi.advanceTimersByTime(400);
       });
-      // Its block ends at 916 + 228 = 1144: the column scrolls by 1144 − 800 = 344
-      // so the whole open module shows and the summary above keeps what fits.
+      // Canvas on load: the column is not scrolled.
+      expect(scrollTo).not.toHaveBeenCalled();
+      // A pick opens another module: the column scrolls the least distance that
+      // shows it whole — its block ends at 916 + 228 = 1144, so by 1144 − 800 = 344.
+      fireEvent.click(moduleRow(17));
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
       expect(scrollTo).toHaveBeenLastCalledWith({ top: 344, behavior: "smooth" });
     } finally {
       vi.useRealTimers();

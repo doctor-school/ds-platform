@@ -699,6 +699,53 @@ describe("3439: the release poll names the failing phase and reason, run against
     assert.equal(r.outputs["failed-reason"], reason);
   });
 
+  it("4100: prints the data box's storage driver once, and only as one [a-z0-9-]{1,32} word", () => {
+    const withDriver = (active, rc, release, storageDriver) =>
+      JSON.stringify({
+        release,
+        unitAlive: active === "active",
+        driver: {
+          unit: "u",
+          active,
+          rc,
+          previousSha: null,
+          failure: null,
+          storageDriver,
+        },
+      });
+    const r = runPoll([
+      withDriver("active", null, { step: "up", state: "running" }, null),
+      withDriver(
+        "active",
+        null,
+        { step: "backup", state: "running" },
+        "overlay2",
+      ),
+      withDriver(
+        "inactive",
+        0,
+        { step: "finish", state: "succeeded" },
+        "overlay2",
+      ),
+    ]);
+    assert.equal(r.status, 0);
+    assert.equal(
+      r.stdout.match(/^data-box storage driver: overlay2$/gm)?.length,
+      1,
+      r.stdout,
+    );
+    const bad = runPoll([
+      withDriver(
+        "inactive",
+        0,
+        { step: "finish", state: "succeeded" },
+        "overlay2; id",
+      ),
+    ]);
+    assert.equal(bad.status, 0);
+    assert.doesNotMatch(bad.stdout, /storage driver/);
+  });
+
   it("a success carries no failure outputs", () => {
     const r = runPoll([
       reply("inactive", 0, { step: "finish", state: "succeeded" }),
@@ -762,4 +809,132 @@ describe("3654: the registry check of the pre-flight", () => {
       );
     }
   });
+});
+
+// #4089: the certified PostgreSQL artifact of a changed data input — the exact artifact
+// the pre-flight selected, and no second delivery beside this SHA's running driver.
+describe("deploy-prod.yml postgres artifact delivery", () => {
+  const SHA = "0123456789abcdef0123456789abcdef01234567";
+  const steps = wf.jobs.deploy.steps;
+  const download = steps.find(
+    (s) => s.name === "Download the certified PostgreSQL artifact",
+  );
+  const deliver = steps.find(
+    (s) =>
+      s.name === "Deliver the certified PostgreSQL artifact to ds-api-prod",
+  );
+
+  it("4089: the pre-flight hands on the selected artifact's id and API digest", () => {
+    const out = wf.jobs.preflight.outputs;
+    assert.equal(
+      out["postgres-artifact-id"],
+      "${{ steps.postgres-artifact.outputs.artifact-id }}",
+    );
+    assert.equal(
+      out["postgres-artifact-digest"],
+      "${{ steps.postgres-artifact.outputs.digest }}",
+    );
+  });
+
+  it("4089: the download takes the artifact the pre-flight checked, by its id, never by name", () => {
+    assert.equal(
+      download.with["artifact-ids"],
+      "${{ needs.preflight.outputs.postgres-artifact-id }}",
+    );
+    assert.equal(download.with.name, undefined);
+    assert.equal(
+      download.with["run-id"],
+      "${{ needs.preflight.outputs.postgres-artifact-run-id }}",
+    );
+    assert.equal(
+      download.if,
+      "needs.preflight.outputs.postgres-artifact-id != ''",
+    );
+    assert.equal(
+      deliver.if,
+      "inputs.mode == 'release' && needs.preflight.outputs.postgres-artifact-id != ''",
+    );
+    assert.equal(
+      deliver.env.ARTIFACT_DIGEST,
+      "${{ needs.preflight.outputs.postgres-artifact-digest }}",
+    );
+  });
+
+  // `ssh` answers `status prod <sha>` with the canned reply and logs every command.
+  const runDeliver = (statusReply) => {
+    const dir = mkdtempSync(path.join(tmpdir(), "pg-deliver-"));
+    const stubs = path.join(dir, "stubs");
+    mkdirSync(stubs);
+    mkdirSync(path.join(dir, "postgres-artifact"));
+    writeFileSync(
+      path.join(dir, "postgres-artifact", "certificate.json"),
+      "{}",
+    );
+    writeFileSync(path.join(dir, "postgres-artifact", "images.tar"), "tar");
+    writeFileSync(path.join(dir, "reply"), statusReply);
+    writeFileSync(
+      path.join(stubs, "ssh"),
+      [
+        "#!/usr/bin/env bash",
+        `printf '%s\n' "\${@: -1}" >> "${dir}/ssh.log"`,
+        `case "\${@: -1}" in "status "*) cat "${dir}/reply" ;; *) cat >/dev/null ;; esac`,
+        "",
+      ].join("\n"),
+    );
+    chmodSync(path.join(stubs, "ssh"), 0o755);
+    const r = spawnSync("bash", ["-e", "-o", "pipefail", "-c", deliver.run], {
+      timeout: 60_000,
+      cwd: dir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${stubs}${path.delimiter}${process.env.PATH}`,
+        SHA,
+        ARTIFACT_DIGEST: "sha256:" + "b".repeat(64),
+        PROD_SSH_USER: "deploy",
+        PROD_SSH_HOST: "box",
+        RUNNER_TEMP: dir,
+      },
+    });
+    return {
+      status: r.status,
+      stdout: r.stdout + r.stderr,
+      calls: readFileSync(path.join(dir, "ssh.log"), "utf8").trim().split("\n"),
+    };
+  };
+  const status = (active) =>
+    JSON.stringify({
+      release: { state: "running" },
+      driver: { unit: "u", active, rc: null, previousSha: null },
+    });
+
+  for (const active of ["active", "activating"]) {
+    it(`4089: a re-run beside this SHA's ${active} driver delivers nothing — the start re-attaches`, () => {
+      const r = runDeliver(status(active));
+      assert.equal(r.status, 0, r.stdout);
+      assert.deepEqual(r.calls, [`status prod ${SHA}`]);
+      assert.match(r.stdout, /still runs/);
+    });
+  }
+
+  for (const [label, reply] of [
+    ["no driver of this SHA", status("absent")],
+    ["a failed driver", status("failed")],
+    ["an unreadable status reply", "not json"],
+  ]) {
+    it(`4089: with ${label} the certificate, then the images are delivered, digest and sums printed`, () => {
+      const r = runDeliver(reply);
+      assert.equal(r.status, 0, r.stdout);
+      assert.deepEqual(r.calls, [
+        `status prod ${SHA}`,
+        `postgres-artifact prod ${SHA} certificate`,
+        `postgres-artifact prod ${SHA} images`,
+      ]);
+      assert.match(
+        r.stdout,
+        new RegExp(`artifact digest: sha256:${"b".repeat(64)}`),
+      );
+      assert.match(r.stdout, /postgres-artifact\/images\.tar/);
+    });
+  }
 });

@@ -21,14 +21,18 @@ export async function assertSecureSession(
 ): Promise<void> {
   const header = (await response.headerValue("set-cookie")) ?? "";
   if (new URL(response.url()).origin === new URL(base).origin) {
-    // A storefront's own command (session refresh) still mints in place.
+    // A storefront's own answer (its `/auth/callback`, a session refresh) mints
+    // in place. Only the session's own line must be host-only: the callback
+    // also sets the EARS-63 sign-in signal on the shared parent domain.
+    const minted = (await response.headersArray())
+      .filter((h) => h.name.toLowerCase() === "set-cookie")
+      .flatMap((h) => h.value.split("\n"))
+      .filter((line) => line.startsWith(`${SESSION}=`));
+    expect(minted.length, "authentication minted session cookie").toBe(1);
     expect(
-      header.includes(`${SESSION}=`),
-      "authentication minted session cookie",
-    ).toBe(true);
-    expect(/(?:^|;)\s*Domain=/i.test(header), "no Domain attribute").toBe(
-      false,
-    );
+      /;\s*Domain=/i.test(minted[0]!),
+      "no Domain attribute on the session cookie",
+    ).toBe(false);
   } else {
     expect(
       header.includes(`${SESSION}=`),

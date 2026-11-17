@@ -134,6 +134,12 @@ jobs:
       statuses: read
     outputs:
       images-run-id: ${{ steps.preflight.outputs.images-run-id || steps.rollback-preflight.outputs.images-run-id || steps.redeploy-preflight.outputs.images-run-id }}
+      # #4089: set only for a release that changes the data input (postgres-artifact.yml).
+      # The deploy job downloads exactly the artifact the pre-flight checked (its id) and
+      # prints its API digest beside the sha256 sums of what it delivers.
+      postgres-artifact-run-id: ${{ steps.postgres-artifact.outputs.run-id }}
+      postgres-artifact-id: ${{ steps.postgres-artifact.outputs.artifact-id }}
+      postgres-artifact-digest: ${{ steps.postgres-artifact.outputs.digest }}
     steps:
       - name: Refuse an empty owner quote or rollback reason
         env:
@@ -181,6 +187,16 @@ jobs:
           GH_REPO: ${{ github.repository }}
           REGISTRY_PULL_TOKEN: ${{ secrets.REGISTRY_PULL_TOKEN }}
         run: node tools/deploy/release-runner.mjs preflight --sha "$SHA"
+
+      # #4089: a release whose data source hash differs from the live SHA's delivers the
+      # certified artifact of that hash (postgres-artifact.yml, a main run in the target's history); none
+      # found is a refusal here, before any box step. The guard on ds-data-prod decides.
+      - name: Certified PostgreSQL artifact of a changed data input
+        id: postgres-artifact
+        if: inputs.mode == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/deploy/postgres-artifact-release.mjs --sha "$SHA"
 
       - name: Rollback pre-flight
         id: rollback-preflight
@@ -240,6 +256,15 @@ jobs:
           github-token: ${{ github.token }}
           path: manifest
 
+      - name: Download the certified PostgreSQL artifact
+        if: needs.preflight.outputs.postgres-artifact-id != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.preflight.outputs.postgres-artifact-id }}
+          run-id: ${{ needs.preflight.outputs.postgres-artifact-run-id }}
+          github-token: ${{ github.token }}
+          path: postgres-artifact
+
       - name: Write the ssh key
         env:
           PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
@@ -251,6 +276,40 @@ jobs:
           printf '%s\n' "$PROD_SSH_KEY" > "$dir/key"
           printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > "$dir/known_hosts"
           chmod 600 "$dir/key" "$dir/known_hosts"
+
+      # #4089: ds-api-prod keeps it for this SHA's driver, which docker-loads the images
+      # on ds-data-prod (postgres-load) before the guard. The certificate first: it
+      # starts this SHA's delivery afresh. A re-run while this SHA's driver still runs
+      # (e.g. after the 60-min poll limit) delivers nothing: that driver already holds
+      # its delivery, the box refuses an upload beside a release step, and the start
+      # below answers `attached`.
+      - name: Deliver the certified PostgreSQL artifact to ds-api-prod
+        if: inputs.mode == 'release' && needs.preflight.outputs.postgres-artifact-id != ''
+        env:
+          ARTIFACT_DIGEST: ${{ needs.preflight.outputs.postgres-artifact-digest }}
+        run: |
+          prod_ssh() {
+            ssh -i "$RUNNER_TEMP/prod-ssh/key" \
+              -o UserKnownHostsFile="$RUNNER_TEMP/prod-ssh/known_hosts" \
+              -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+              -o ServerAliveInterval=15 -o ServerAliveCountMax=8 \
+              "$PROD_SSH_USER@$PROD_SSH_HOST" "$1"
+          }
+          # An unreadable reply delivers: the box's own release-step check decides.
+          active=$( (prod_ssh "status prod $SHA" </dev/null 2>/dev/null || true) | head -n 1 |
+            jq -r '.driver.active // ""' 2>/dev/null || true)
+          case "$active" in
+            active | activating)
+              echo "delivery: the release driver of ${SHA:0:12} still runs ($active) — no new delivery, the start re-attaches"
+              exit 0 ;;
+          esac
+          echo "artifact digest: $ARTIFACT_DIGEST"
+          sha256sum postgres-artifact/certificate.json postgres-artifact/images.tar
+          for part in certificate images; do
+            file=postgres-artifact/certificate.json
+            [ "$part" = images ] && file=postgres-artifact/images.tar
+            prod_ssh "postgres-artifact prod $SHA $part" < "$file"
+          done
 
       - name: Start the release driver
         id: release
@@ -338,6 +397,13 @@ jobs:
             else
               echo "status: $line"
               last_json=$json
+              # #4100: ds-data-prod's docker storage driver, one word the box driver
+              # recorded after data-prod up — printed once, and only in that shape.
+              drv=$(jq -r '.driver.storageDriver // ""' <<<"$json")
+              if [[ "$drv" =~ ^[a-z0-9-]{1,32}$ && -z "${drv_seen:-}" ]]; then
+                echo "data-box storage driver: $drv"
+                drv_seen=1
+              fi
               active=$(jq -r '.driver.active // ""' <<<"$json")
               rc=$(jq -r '.driver.rc // ""' <<<"$json")
               state=$(jq -r '.release.state // ""' <<<"$json")

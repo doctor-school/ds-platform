@@ -1,5 +1,4 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { z } from "zod";
 import {
   expertDisplayName,
   expertShortName,
@@ -10,9 +9,9 @@ import {
   type PublicMaterial,
 } from "@ds/schemas";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
-import { isEventCursorInstant, TaxonomyError } from "../taxonomy/index.js";
+import { TaxonomyError } from "../taxonomy/index.js";
+import { decodeFeedCursor, encodeFeedCursor } from "./feed-cursor.js";
 import {
-  type FeedCursorPosition,
   FeedEntriesRepository,
   type PublicFeedRow,
 } from "./feed-entries.repository.js";
@@ -22,43 +21,6 @@ import { MaterialsRepository } from "./materials.repository.js";
 // the materials feed: a feed page and one public material. Everything 012 and
 // 032 own (an expert's name and public state, an organisation's title and
 // display rule) is judged by the repositories at the moment of the read.
-
-/**
- * The feed cursor: `(published_at, id)` with the instant exactly as Postgres
- * rendered it to the microsecond — the `public-event-cursor.ts` rule, whose
- * grammar check this reuses, so a truncated or hand-mangled instant is a 400,
- * never a repeat or a 500. Opaque by contract (base64url JSON).
- */
-const FEED_CURSOR_SHAPE = z
-  .object({
-    publishedAt: z
-      .string()
-      .refine(isEventCursorInstant, "not a cursor instant issued by this API"),
-    id: z.uuid(),
-  })
-  .strict();
-
-function encodeFeedCursor(row: PublicFeedRow): string {
-  return Buffer.from(
-    JSON.stringify({ publishedAt: row.publishedAtCursor, id: row.id }),
-    "utf8",
-  ).toString("base64url");
-}
-
-function decodeFeedCursor(cursor?: string): FeedCursorPosition | null {
-  if (cursor === undefined) return null;
-  try {
-    const { publishedAt, id } = FEED_CURSOR_SHAPE.parse(
-      JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")),
-    );
-    return { instant: publishedAt, id };
-  } catch {
-    throw new TaxonomyError(
-      "CURSOR_INVALID",
-      "this cursor was not issued by this API; start from the first page",
-    );
-  }
-}
 
 /**
  * The card's image (EARS-10): an own card stores the 012 media key

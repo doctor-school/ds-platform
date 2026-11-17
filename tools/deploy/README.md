@@ -681,6 +681,13 @@ stay on the operator path above.
   `release-driver record-previous prod <sha> <prev|none>` (the first basis recorded for
   a SHA is kept); `status prod <sha>` reports it as `driver.previousSha`, the
   basis of the Deployment-record notes the runner writes (spec §5).
+- **`storageDriver`** (#4100). After `data-prod up` the run reduces the checkpoint's
+  `storage driver:` line to one `[a-z0-9-]{1,32}` word (`unavailable` for anything else)
+  and records it through `release-driver record-storage-driver prod <sha> <word>`;
+  `status prod <sha>` reports it as `driver.storageDriver`, and the deploy job prints it
+  once as the status line `data-box storage driver: <word>` — ds-data-prod's store,
+  readable in the public Actions log with no break-glass key. Evidence only: a failed
+  record is a warning, and a redeploy (no `up`) records none.
 
 The unit's whole output stays in its journal (`journalctl -u ds-prod-<sha12>-driver`);
 the runner sees status lines only. The operator reads it with no break-glass key (#4067):
@@ -755,8 +762,7 @@ contexts. A log bound or restart policy therefore moves no hash; an image, comma
 volume, environment or build-context change does. The box probe computes the same v2
 when no record exists yet (`postgres-hash-migration.test.mjs` pins both
 implementations to one value). `postgres-source-pin.test.mjs` pins the accepted
-hash, so a changed input fails CI rather than the Actions release (which cannot
-certify, #3418), and the pin moves only together with a certification. The
+hash, so a changed input is a deliberate change of its PR (#3418). The
 certificate and the image source label carry the v2 hash.
 
 Records written before v2 hold the v1 hash (the raw bytes of the same files) and no
@@ -771,46 +777,122 @@ release journal is where the record is read: preparation prints the probed recor
 after `data-up` echoes the box's own answer for the record it wrote
 (`↳ ds-data-prod: record: hashVersion 2` / `record: v1 (no hashVersion)`) beside its
 `log bound` lines.
-Preparation sends only those infra
-contexts to an explicitly selected Docker host, labels the resulting images,
-executes their real PostgreSQL version and UID commands without a cluster,
-checks image PGDATA and matching UIDs, and exports the exact built images:
+
+### Certifying and shipping a changed data input (#4089)
+
+A changed data input ships through Actions like any release, with no break-glass
+key and no workstation-held artifact:
+
+1. **Certify.** Merging the change (a push to `main` touching the data compose, a
+   postgres/pgbackrest build context or this tooling) runs
+   `.github/workflows/postgres-artifact.yml`; `gh workflow run postgres-artifact.yml
+--ref main` runs it again (the artifact expires after 90 days). The GitHub-hosted
+   runner is the build host, as for every image (release-pipeline spec §3 item 1: no box
+   builds an image). The runner keeps Docker 29's default containerd image store, the
+   store ds-data-prod runs (`overlayfs`, #4104), and the workflow refuses any other: an
+   image id there is the digest of its image target (the entry of the archive's
+   `index.json`), not the config digest the classic overlay2 store would give, so only
+   that store measures the ids ds-data-prod reports after `docker load`.
+   `postgres-artifact-prepare.mjs --local` builds only the committed
+   contexts on the runner's Docker, labels the images, executes their real PostgreSQL
+   version, UID/GID and pgBackRest version commands without a cluster, checks image
+   PGDATA and matching ownership, exports the exact built images and refuses an archive
+   whose `index.json` image targets are not the certified ids (the ids `docker load`
+   yields on ds-data-prod). The run then does what ds-data-prod's `postgres-load` does:
+   it runs that verb's archive check on the real archive, removes the certified images,
+   `docker load`s the archive and inspects both certified ids. The run artifact `postgres-artifact-<sourceHash>` is the release
+   evidence: `certificate.json`, `audit.jsonl` (every command), `prepare.log` and
+   `images.tar`. The workflow needs no secret; the repository is public, and so is the
+   artifact — commands, image ids, versions and public packages, no credential, host
+   name or personal datum. A pull_request run certifies too (3-day retention), as a
+   check only.
+2. **Deliver.** `deploy-prod.yml`'s pre-flight compares the target's source hash with
+   the live SHA's (`postgres-artifact-release.mjs`). Equal: nothing is delivered and the
+   release runs as before. Different: it takes the newest successful push/dispatch run of
+   `postgres-artifact.yml` on `main` whose commit is the release target or an ancestor
+   of it (`git merge-base --is-ancestor` on the full checkout) and whose artifact carries
+   that hash and is not expired — a pull_request run, another branch (a hotfix included:
+   the Actions release has no hotfix ref), a run outside the target's history, another
+   workflow, a failed run or no qualifying run is a refusal before any box step, naming
+   the dispatch to run. The deploy job downloads exactly that artifact by the id the
+   pre-flight checked (`artifact-ids:`, never by name), prints its API digest beside the
+   sha256 sums of the two files, and hands ds-api-prod `certificate.json`, then
+   `images.tar`, through its forced command `postgres-artifact prod <sha> certificate|images`
+   (refused while a release step runs; kept root:deploy 0750 under
+   `/var/lib/ds-platform/postgres-artifact/<sha>/`, one SHA at a time, removed by
+   `ds-release finish prod <sha> succeeded`; a failed release keeps it for the re-run). A
+   re-run of the deploy job while this SHA's driver unit still runs (`status prod <sha>`
+   answers `driver.active` `active`/`activating`, e.g. after the 60-min poll limit)
+   delivers nothing and the start answers `attached`.
+3. **Load and guard.** The release driver (`prod.mjs --local`) finds that delivery for
+   its own SHA in `postgres-verify`, re-checks that the archive holds exactly the
+   certified untagged ids, streams it to ds-data-prod's
+   `postgres-load <sha> <postgres-id> <pgbackrest-id>` verb (bare hex ids) and runs the
+   guard with that certificate. The
+   box reads the archive in place before loading it and refuses (exit 3) one with a
+   member that docker could read differently (anything but a plain POSIX ustar header with an all-NUL
+   prefix, a link, a name
+   out of normal form or given twice), or that is not exactly a containerd-store
+   `docker image save` (measured on Docker 29.4.2, #4104): only the directories `blobs`
+   and `blobs/sha256`, `blobs/sha256/<hex>` blobs, `index.json`, `manifest.json` and
+   `oci-layout` (a `repositories` file is refused); `index.json` listing exactly those two
+   ids as entries of exactly `{mediaType, digest, size}` (no name, no platform), each
+   one's blob present and of its size and digest; `manifest.json` listing two untagged
+   images whose config blobs are present (the images are saved by id, and a name would
+   retarget it on the box); after `docker load` it checks that both ids are present. No container starts and the upload is removed.
+   Everything after is the ordinary guarded release: `data-env` records the certified
+   ids, `data-up` recreates postgres + pgbackrest on them, the checkpoint advances the
+   record. On every release that checkpoint also prints one
+   `↳ ds-data-prod: storage driver: <driver>` line (evidence only, `unavailable — <reason>`
+   on a docker error): the certified ids are containerd-store (`overlayfs`) image-target
+   digests, and a box on another store fails closed at the post-load inspect. The deploy
+   job's log carries the same value as `data-box storage driver: <word>` (#4100,
+   `storageDriver` above).
+
+The Actions path adds evidence, never acceptance: the guard alone decides, with the same
+checks as the break-glass path — a missing, stale (other source hash) or foreign
+certificate, or an inspected image whose id, major, PGDATA or source label differs,
+refuses (`postgres-guard.test.mjs`). `postgres-source-pin.test.mjs` pins the accepted
+hash so the change stays deliberate: the pin moves in the PR that changes the input.
+A release that installs this tooling changes no data input, so the box verbs it relies
+on are installed before the first release that needs them.
+
+### Break-glass fallback
+
+When Actions cannot run, the same preparation runs from a workstation against an
+explicitly selected Docker host over ssh, and the certificate ships with the owner's
+break-glass key:
 
 ```bash
 node tools/deploy/postgres-artifact-prepare.mjs --host <approved-build-host> --ref <commit> --output <certificate.json> --export <images.tar> --audit-log <commands.jsonl>
-```
-
-The data compose is JSON in a `.yml` path (#3157): Compose reads JSON as YAML, and
-the guard parses it with `JSON.parse`, so the box-local release from a bare tree
-needs no npm parser. The rewrite to JSON kept every value but changed the bytes, so
-the source hash: the first release carrying it needs this one-time certification,
-on the operator path (`prod.mjs --local` takes no `--postgres-artifacts`).
-
-This is a separate, audited build operation, not permission to mutate production.
-The exported images must already be available on the deployment host through the
-authorized artifact delivery operation; a missing image is a refusal, never an
-implicit pull or rebuild. Preserve the certificate with the exported image
-archive. Image IDs, source labels, declared major, measured version and PGDATA
-must all match. The preparation images use the `org.doctor-school.task=2141`
-label and remain available for export; remove only those owned image IDs when
-their retention is no longer needed. Probe containers use `--rm`, no network,
-read-only roots and no live mounts.
-
-```bash
 node tools/deploy/postgres-artifact-check.mjs --ref <commit> --certificate <certificate.json> --audit-log <commands.jsonl>
 pnpm deploy:prod --postgres-artifacts <certificate.json>
 ```
 
-Omit `--certificate` for read-only validation of the unchanged deployment. The
-check command uses the normal `DS_DATA_PROD_SSH`/SSH alias, reaches ds-data-prod only
-through its `postgres-probe` verb (the box's installed probe; any release after #3313
-installed it) and never calls deploy,
-build, init, stanza-create or SQL writes. The deploy writes an image-ID-only
-compose overlay after the guard, disabling PostgreSQL build/pull at activation;
-this prevents an uninspected on-box rebuild from replacing a verified artifact.
-Certificates are evidence generated from approved code/build access, not a
-signature or a replacement for release authorization. Arbitrary alternate
+The exported images must already be on ds-data-prod (a `docker load` of the archive);
+a missing image is a refusal, never an implicit pull or rebuild. The build host must run
+Docker's containerd image store, as ds-data-prod does: the preparation refuses the
+archive of any other store, whose ids ds-data-prod would not report (#4104). Preserve the
+certificate with the exported image archive. Omit `--certificate` for read-only
+validation of the unchanged deployment. The check command uses the normal
+`DS_DATA_PROD_SSH`/SSH alias, reaches ds-data-prod only through its `postgres-probe`
+verb and never calls deploy, build, init, stanza-create or SQL writes.
+
+On either path: preparation is a separate, audited build operation, not permission to
+mutate production. Image IDs, source labels, declared major, measured version and
+PGDATA must all match. The preparation images use the `org.doctor-school.task=2141`
+label (the Actions runner removes them at the end of its run; on an ssh build host
+remove only those owned image IDs when their retention is no longer needed). Probe
+containers use `--rm`, no network, read-only roots and no live mounts. The deploy
+writes an image-ID-only compose overlay after the guard, disabling PostgreSQL
+build/pull at activation; this prevents an uninspected on-box rebuild from replacing a
+verified artifact. Certificates are evidence generated from approved code/build access,
+not a signature or a replacement for release authorization. Arbitrary alternate
 entrypoints, external data volumes and unknown build contracts fail closed.
+
+The data compose is JSON in a `.yml` path (#3157): Compose reads JSON as YAML, and
+the guard parses it with `JSON.parse`, so the box-local release from a bare tree
+needs no npm parser.
 
 ## The app-only rollback boundary (`--rollback`, #1896)
 

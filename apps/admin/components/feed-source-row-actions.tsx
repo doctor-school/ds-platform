@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import {
@@ -29,8 +30,9 @@ import {
 import { feedSourcesUrl } from "@/providers/data-provider";
 
 /**
- * The two row actions of «Источники» (048 EARS-21, EARS-22):
+ * The row actions of «Источники» (048 EARS-21, EARS-22, EARS-32):
  *
+ * - **«Публикации»** opens the source's posts (EARS-32).
  * - **«Изменить адрес»** opens the address form in a `Dialog`; a refused
  *   address is marked at the field with the typed value kept, and nothing is
  *   stored. The PATCH carries the row `version` the list rendered as
@@ -106,6 +108,15 @@ export function FeedSourceRowActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <Button asChild variant="outline" size="sm">
+        <Link
+          href={`/materials/sources/${source.id}`}
+          aria-label={t("feedSources.actions.postsOf", { address: label })}
+          data-testid={`feed-source-posts-${source.address}`}
+        >
+          {t("feedSources.actions.posts")}
+        </Link>
+      </Button>
       <Button
         type="button"
         variant="outline"

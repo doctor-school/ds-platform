@@ -446,6 +446,7 @@
         "apps/admin/components/materials-subnav.tsx",
         "apps/admin/components/feed-source-form.tsx",
         "apps/admin/components/feed-source-row-actions.tsx",
+        "apps/admin/components/feed-post-row-actions.tsx",
         "apps/admin/components/admin-data-list.tsx",
         "apps/admin/components/status-chip.tsx",
         "apps/admin/lib/feed-source-errors.ts",
@@ -456,11 +457,13 @@
         "sources-nav",
         "sources-list",
         "sources-form",
-        "sources-lifecycle"
+        "sources-lifecycle",
+        "source-posts"
       ],
       "approvalProvenance": [
         "https://github.com/doctor-school/ds-platform/issues/1578#issuecomment-5435209906",
-        "https://github.com/doctor-school/ds-platform/issues/3993#issuecomment-6906102948"
+        "https://github.com/doctor-school/ds-platform/issues/3993#issuecomment-6906102948",
+        "https://github.com/doctor-school/ds-platform/issues/3996#issuecomment-6936674306"
       ]
     },
     "feature-049-director-events-v1": {

@@ -41,3 +41,25 @@ export function feedSourceErrorKey(
       return fallbackKey;
   }
 }
+
+/**
+ * 048 EARS-32 — the catalog key of a refused «Скрыть из ленты» / «Вернуть в
+ * ленту»: the post moved since the page was read (412 — an edit from the
+ * channel or another operator), it is already in that state (409), it is
+ * gone; anything else → the call site's own fallback.
+ */
+export function feedEntryErrorKey(error: unknown, fallbackKey: string): string {
+  switch ((error as TaxonomyHttpError | undefined)?.errorCode) {
+    case "PRECONDITION_FAILED":
+    case "PRECONDITION_REQUIRED":
+      return "feedPosts.errors.stale";
+    case "INVALID_TRANSITION":
+      return "feedPosts.errors.invalidTransition";
+    case "RESOURCE_NOT_FOUND":
+      return "feedPosts.errors.notFound";
+    case "IDEMPOTENCY_REQUEST_IN_PROGRESS":
+      return "feedSources.errors.requestInProgress";
+    default:
+      return fallbackKey;
+  }
+}

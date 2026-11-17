@@ -417,3 +417,15 @@ test(
     }
   },
 );
+
+test("4089: the post-up checkpoint also echoes ds-data-prod's docker storage driver line", () => {
+  assert.deepEqual(
+    checkpointJournalLines(
+      "PostgreSQL checkpoint written\nrecord: hashVersion 2\nstorage driver: overlay2\nother box text\n",
+    ),
+    [
+      "  ↳ ds-data-prod: record: hashVersion 2",
+      "  ↳ ds-data-prod: storage driver: overlay2",
+    ],
+  );
+});

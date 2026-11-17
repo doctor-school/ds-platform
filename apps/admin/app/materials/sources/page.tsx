@@ -31,7 +31,7 @@ import { feedSourcesUrl } from "@/providers/data-provider";
  * search or facet the route would refuse, and the pager slices what it holds.
  * The check that sets «Работает» / «Ошибка» belongs to the Telegram connector
  * (#3994): until it runs, a source reads «Не проверен». «Публикации» — the
- * row's posts — is #3996, so the rows are inert here.
+ * row's posts (EARS-32) — is a row action, so the row itself stays inert.
  */
 export default function FeedSourcesListPage() {
   const t = useTranslations();

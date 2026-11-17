@@ -1,13 +1,14 @@
-// tools/deploy/postgres-source-pin.test.mjs — Issues #3418, #3419.
+// tools/deploy/postgres-source-pin.test.mjs — Issues #3418, #3419, #4089.
 //
 // The regression this locks: #3392 changed the bytes of
 // `infra/deploy/compose/data-prod/compose.yml` (a log bound), which changed the
-// PostgreSQL source hash, and the Actions prod release — the box-local driver
-// (`prod.mjs --local`), which takes no `--postgres-artifacts` — refused at
-// `postgres-verify` on a hash it could not certify. The hash is v2 since #3419
-// (`postgresSourceHash`: the data compose without its runtime-only service keys +
-// every file under `postgres/` and `pgbackrest/`), so a log bound no longer moves
-// it; an image/cluster input still does. This pin moves that refusal to CI.
+// PostgreSQL source hash, and the release refused at `postgres-verify` on a hash
+// nobody had certified. The hash is v2 since #3419 (`postgresSourceHash`: the data
+// compose without its runtime-only service keys + every file under `postgres/` and
+// `pgbackrest/`), so a log bound no longer moves it; an image/cluster input still
+// does. Since #4089 a changed input ships through Actions (postgres-artifact.yml
+// certifies it, deploy-prod.yml delivers the certificate), and this pin keeps the
+// change deliberate: it moves only in the PR that changes the input.
 //
 // The hash is read from COMMITTED bytes (`git show`), never the working tree: a
 // Windows autocrlf checkout would otherwise disagree with CI.
@@ -33,11 +34,10 @@ test("3418: the committed data-prod postgres source hash is the accepted one", (
     sourceHash,
     ACCEPTED_SOURCE_HASH,
     "The committed data-prod postgres source changed (infra/deploy/compose/data-prod/" +
-      "compose.yml or a file under postgres/ / pgbackrest/). The Actions release path " +
-      "(prod.mjs --local) cannot certify a changed data input and refuses at " +
-      "postgres-verify. A change needs postgres-artifact-prepare.mjs + break-glass " +
-      "`pnpm deploy:prod --postgres-artifacts <certificate.json>` (tools/deploy/" +
-      "README.md → PostgreSQL deployment guard); update this pin only together with " +
-      "that certification.",
+      "compose.yml or a file under postgres/ / pgbackrest/). A changed data input " +
+      "recreates the production database containers: its merge runs " +
+      "postgres-artifact.yml, which certifies the images, and the release delivers " +
+      "that certificate (tools/deploy/README.md → PostgreSQL deployment guard). " +
+      "Update this pin in the PR that changes the input.",
   );
 });

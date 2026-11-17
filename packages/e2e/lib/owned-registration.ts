@@ -367,6 +367,12 @@ export async function submitOwnedRegistration(
   page: Page,
   base: string,
   account: OwnedCredentials,
+  /**
+   * The register command the door sends: the Academy door's `/v1/auth/register`
+   * by default; the doctor door sends `/v1/storefront/doctor/register` (021
+   * EARS-4/5/7 stamping). Pass the storefront path, unprefixed.
+   */
+  command = "/v1/auth/register",
 ): Promise<{ response: Response; body: string; code: string }> {
   await inputSecret(page.locator('input[autocomplete="email"]'), account.email);
   await inputSecret(
@@ -381,10 +387,7 @@ export async function submitOwnedRegistration(
   );
   // The form navigates to the code step on success, so the body is kept at
   // arrival (lib/captured-response.ts) for the caller's evidence.
-  const registered = captureResponse(
-    page,
-    signInHostApiPath("/v1/auth/register"),
-  );
+  const registered = captureResponse(page, signInHostApiPath(command));
   await page.getByTestId("register-submit").click();
   const { response, body } = await registered;
   expect(response.ok(), "owned account registration accepted").toBe(true);

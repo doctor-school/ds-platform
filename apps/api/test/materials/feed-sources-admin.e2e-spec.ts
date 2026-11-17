@@ -7,11 +7,15 @@ import {
 import { VersioningType } from "@nestjs/common";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
+import { and, desc, inArray } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { feedEntries } from "@ds/db";
 import {
   FEED_SOURCE_ADDRESS_ERROR,
   FEED_SOURCE_ADDRESS_TAKEN_ERROR,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
+import { feedEntryRowVisible } from "../../src/materials/feed-entries.repository.js";
 import { FakeTelegramBotApi } from "../../src/materials/telegram/telegram-bot-api.fake.js";
 import { TELEGRAM_BOT_API } from "../../src/materials/telegram/telegram-bot-api.types.js";
 import { TELEGRAM_CONFIG } from "../../src/materials/telegram/telegram-config.js";
@@ -846,6 +850,364 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ]);
       // `subject_id` is the acting administrator's opaque IdP `sub`.
       for (const r of rows) expect(r.subject_id).toBe(adminSub);
+    });
+
+    // ── EARS-32: «Публикации» — hide and return one post ─────────────────
+
+    /** Seconds since the epoch of a delivered post: an hour ago plus its id. */
+    const postBase = Math.floor(Date.now() / 1000) - 3600;
+    let updateSeq = Math.floor(Math.random() * 1e6) + 7_000_000;
+
+    /** A channel message of the source as the Bot API delivers it. */
+    function channelMessage(
+      s: { address: string; chatId: number },
+      messageId: number,
+      text: string,
+    ) {
+      return {
+        message_id: messageId,
+        date: postBase + messageId,
+        chat: {
+          id: s.chatId,
+          type: "channel",
+          username: s.address,
+          title: "BBM Academy",
+        },
+        sender_chat: { id: s.chatId, type: "channel" },
+        text,
+      };
+    }
+
+    /** Deliver one update to the webhook with the configured secret. */
+    async function deliverUpdate(
+      kind: "channel_post" | "edited_channel_post",
+      msg: unknown,
+    ): Promise<void> {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/integrations/telegram/webhook",
+        headers: {
+          "content-type": "application/json",
+          "x-telegram-bot-api-secret-token": "e2e_sources-secret",
+        },
+        payload: JSON.stringify({ update_id: ++updateSeq, [kind]: msg }),
+      });
+      expect(res.statusCode, res.payload).toBe(200);
+    }
+
+    /** A source with posts delivered through the real webhook path. */
+    async function sourceWithPosts(
+      posts: [number, string][],
+    ): Promise<Source & { chatId: number }> {
+      const s = await add(username());
+      const chatId = -1_000_000_000_000 - Math.floor(Math.random() * 1e9);
+      for (const [id, text] of posts) {
+        await deliverUpdate(
+          "channel_post",
+          channelMessage({ ...s, chatId }, id, text),
+        );
+      }
+      return { ...s, chatId };
+    }
+
+    type EntryItem = {
+      id: string;
+      text: string;
+      publishedAt: string;
+      state: "in_feed" | "hidden" | "source_off";
+      hidden: boolean;
+      href: string;
+      version: number;
+    };
+
+    async function listEntries(
+      sourceId: string,
+      query = "",
+      c: Call = {},
+    ): Promise<{
+      source: Source;
+      data: EntryItem[];
+      nextCursor: string | null;
+    }> {
+      const res = await call(
+        "GET",
+        `/v1/admin/feed-sources/${sourceId}/entries${query}`,
+        c,
+      );
+      expect(res.statusCode, res.payload).toBe(200);
+      return json(res);
+    }
+
+    const toggle = (
+      e: { id: string; version: number },
+      action: "hide" | "unhide",
+      c: Call = {},
+    ) =>
+      call("POST", `/v1/admin/feed-entries/${e.id}/${action}`, {
+        ifMatch: `W/"${e.version}"`,
+        ...c,
+      });
+
+    async function entryRow(id: string) {
+      const { rows } = await pool.query<{
+        hidden_at: Date | null;
+        published_at: Date;
+        title: string;
+      }>(
+        "SELECT hidden_at, published_at, title FROM feed_entries WHERE id = $1",
+        [id],
+      );
+      return rows[0]!;
+    }
+
+    // The public read's row-local marks (EARS-22/32), run over the given ids
+    // newest first: the public feed does not serve network entries yet
+    // (#3997), so absence from `/v1/public/feed` alone proves nothing here.
+    async function rowVisibleIds(ids: string[]): Promise<string[]> {
+      const rows = await drizzle(pool)
+        .select({ id: feedEntries.id })
+        .from(feedEntries)
+        .where(and(inArray(feedEntries.id, ids), feedEntryRowVisible))
+        .orderBy(desc(feedEntries.publishedAt), desc(feedEntries.id));
+      return rows.map((r) => r.id);
+    }
+
+    async function entryAudit(id: string) {
+      const { rows } = await pool.query<{
+        event_type: string;
+        subject_id: string | null;
+      }>(
+        `SELECT event_type, subject_id FROM audit_ledger
+          WHERE event_type LIKE 'data.feed_entries.%' AND metadata->'pk'->>'id' = $1
+          ORDER BY created_at`,
+        [id],
+      );
+      return rows;
+    }
+
+    it("048 EARS-32: when a platform administrator opens «Публикации» of a source, the system shall list its entries newest first with the post text, the date, the state and the link to the original", async () => {
+      const s = await sourceWithPosts([
+        [1201, "Пост 1201"],
+        [1202, "Пост 1202"],
+      ]);
+      const other = await sourceWithPosts([[1203, "Чужой пост"]]);
+      const page = await listEntries(s.id);
+      expect(page.nextCursor).toBeNull();
+      expect(page.source).toMatchObject({
+        id: s.id,
+        address: s.address,
+        entryCount: 2,
+      });
+      expect(page.data.map((e) => e.text)).toEqual(["Пост 1202", "Пост 1201"]);
+      expect(page.data[1]).toMatchObject({
+        state: "in_feed",
+        hidden: false,
+        href: `https://t.me/${s.address}/1201`,
+        publishedAt: new Date((postBase + 1201) * 1000).toISOString(),
+      });
+      expect(page.data[1]!.version).toBeGreaterThan(0);
+      expect(page.data.map((e) => e.id)).not.toContain(
+        (await listEntries(other.id)).data[0]!.id,
+      );
+
+      // Newest first, one page at a time.
+      const first = await listEntries(s.id, "?limit=1");
+      expect(first.data.map((e) => e.text)).toEqual(["Пост 1202"]);
+      expect(first.nextCursor).not.toBeNull();
+      const second = await listEntries(
+        s.id,
+        `?limit=1&cursor=${first.nextCursor}`,
+      );
+      expect(second.data.map((e) => e.text)).toEqual(["Пост 1201"]);
+      expect(second.nextCursor).toBeNull();
+
+      // A switched-off source's posts read «Источник выключен».
+      await write(s, "disable");
+      const off = await listEntries(s.id);
+      expect(off.data.map((e) => e.state)).toEqual([
+        "source_off",
+        "source_off",
+      ]);
+
+      // An unknown source and a mangled cursor are refused.
+      const missing = await call(
+        "GET",
+        `/v1/admin/feed-sources/${randomUUID()}/entries`,
+      );
+      expect(missing.statusCode).toBe(404);
+      const badCursor = await call(
+        "GET",
+        `/v1/admin/feed-sources/${s.id}/entries?cursor=bm90LWEtY3Vyc29y`,
+      );
+      expect(badCursor.statusCode).toBe(400);
+    });
+
+    it("048 EARS-32: when the administrator hides a post, the system shall mark it hidden so it leaves the feed and stays listed, an edit shall not bring it back, and «Вернуть в ленту» returns it at its own date", async () => {
+      const s = await sourceWithPosts([
+        [1201, "Пост 1201"],
+        [1202, "Пост 1202"],
+      ]);
+      const [p1202, p1201] = (await listEntries(s.id)).data;
+      const before = await entryRow(p1202!.id);
+
+      const hidden = await toggle(p1202!, "hide");
+      expect(hidden.statusCode, hidden.payload).toBe(200);
+      const hiddenItem = json(hidden) as EntryItem;
+      expect(hiddenItem).toMatchObject({
+        id: p1202!.id,
+        state: "hidden",
+        hidden: true,
+      });
+      expect(hidden.headers.etag).toBe(`W/"${hiddenItem.version}"`);
+      expect((await entryRow(p1202!.id)).hidden_at).not.toBeNull();
+      const pair = [p1202!.id, p1201!.id];
+      expect(await rowVisibleIds(pair)).toEqual([p1201!.id]);
+      expect(await publicFeedIds()).not.toContain(p1202!.id);
+      // Still listed, as «Скрыт»; the sibling untouched.
+      let listed = (await listEntries(s.id)).data;
+      expect(listed.map((e) => [e.id, e.state])).toEqual([
+        [p1202!.id, "hidden"],
+        [p1201!.id, "in_feed"],
+      ]);
+
+      // An edit of the post rewrites its text and keeps it hidden.
+      const hiddenAt = (await entryRow(p1202!.id)).hidden_at;
+      await deliverUpdate("edited_channel_post", {
+        ...channelMessage(s, 1202, "Пост 1202, исправленный"),
+        edit_date: postBase + 5000,
+      });
+      const edited = await entryRow(p1202!.id);
+      expect(edited.title).toBe("Пост 1202, исправленный");
+      expect(edited.hidden_at).toEqual(hiddenAt);
+      expect(await rowVisibleIds(pair)).toEqual([p1201!.id]);
+      expect(await publicFeedIds()).not.toContain(p1202!.id);
+
+      // The edit moved the row: the version read before it is stale.
+      const stale = await toggle(hiddenItem, "unhide");
+      expect(stale.statusCode, stale.payload).toBe(412);
+      listed = (await listEntries(s.id)).data;
+      const current = listed.find((e) => e.id === p1202!.id)!;
+      expect(current).toMatchObject({
+        state: "hidden",
+        text: "Пост 1202, исправленный",
+      });
+
+      const back = await toggle(current, "unhide");
+      expect(back.statusCode, back.payload).toBe(200);
+      expect(json(back)).toMatchObject({ state: "in_feed", hidden: false });
+      const returned = await entryRow(p1202!.id);
+      expect(returned.hidden_at).toBeNull();
+      expect(returned.published_at).toEqual(before.published_at);
+      // Back in the feed's own order, at its own date ahead of the older post.
+      expect(await rowVisibleIds(pair)).toEqual([p1202!.id, p1201!.id]);
+      expect((await listEntries(s.id)).data.map((e) => e.id)).toEqual([
+        p1202!.id,
+        p1201!.id,
+      ]);
+    });
+
+    it("048 EARS-32: when hide or unhide names an own material, an entry already in that state or an unknown id, the system shall refuse it and change nothing", async () => {
+      const own = await academyEntry(32);
+      const ownVersion = Number(
+        (
+          await pool.query<{ v: string }>(
+            "SELECT (extract(epoch FROM updated_at) * 1000000)::bigint AS v FROM feed_entries WHERE id = $1",
+            [own],
+          )
+        ).rows[0]!.v,
+      );
+      for (const action of ["hide", "unhide"] as const) {
+        const res = await toggle({ id: own, version: ownVersion }, action);
+        expect(res.statusCode, res.payload).toBe(409);
+      }
+      expect((await entryRow(own)).hidden_at).toBeNull();
+      expect(await publicFeedIds()).toContain(own);
+
+      const s = await sourceWithPosts([[1301, "Пост 1301"]]);
+      const [p] = (await listEntries(s.id)).data;
+      const alreadyShown = await toggle(p!, "unhide");
+      expect(alreadyShown.statusCode).toBe(409);
+      expect(problem(alreadyShown).errorCode).toBe("INVALID_TRANSITION");
+      const hid = json(await toggle(p!, "hide")) as EntryItem;
+      const twice = await toggle(hid, "hide");
+      expect(twice.statusCode).toBe(409);
+
+      const unknown = await toggle({ id: randomUUID(), version: 1 }, "hide");
+      expect(unknown.statusCode).toBe(404);
+    });
+
+    it("048 EARS-32: each hide and unhide shall leave one 010 audit row under the acting administrator, and an exact retry replays without a second write", async () => {
+      const s = await sourceWithPosts([[1401, "Пост 1401"]]);
+      const [p] = (await listEntries(s.id)).data;
+      const before = (await entryAudit(p!.id)).length;
+      const k = key();
+      const first = await toggle(p!, "hide", { idempotencyKey: k });
+      expect(first.statusCode, first.payload).toBe(200);
+      const replay = await toggle(p!, "hide", { idempotencyKey: k });
+      expect(replay.statusCode, replay.payload).toBe(200);
+      expect(json(replay)).toEqual(json(first));
+      await toggle(json(first) as EntryItem, "unhide");
+      const rows = (await entryAudit(p!.id)).slice(before);
+      expect(rows.map((r) => r.event_type)).toEqual([
+        "data.feed_entries.update",
+        "data.feed_entries.update",
+      ]);
+      for (const r of rows) expect(r.subject_id).toBe(adminSub);
+    });
+
+    it("048 EARS-32: «Публикации», hide and unhide shall refuse a caller without the MFA admin session or platform_admin, and a write without its key or If-Match, changing nothing", async () => {
+      const s = await sourceWithPosts([[1501, "Пост 1501"]]);
+      const [p] = (await listEntries(s.id)).data;
+      const email = uniqueEmail("posts-doctor");
+      await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      const portal = await signIn(app, email, password, { device });
+      const routes: [string, string][] = [
+        ["GET", `/v1/admin/feed-sources/${s.id}/entries`],
+        ["POST", `/v1/admin/feed-entries/${p!.id}/hide`],
+        ["POST", `/v1/admin/feed-entries/${p!.id}/unhide`],
+      ];
+      for (const [method, url] of routes) {
+        for (const cookie of [undefined, `${SESSION_COOKIE_NAME}=${portal}`]) {
+          const res = await app.inject({
+            method: method as "GET",
+            url,
+            headers: {
+              ...device,
+              "idempotency-key": randomUUID(),
+              "if-match": `W/"${p!.version}"`,
+              ...(cookie ? { cookie } : {}),
+            },
+          });
+          expect(res.statusCode, `${method} ${url} ${cookie ?? ""}`).toBe(401);
+        }
+      }
+
+      const other = await adminSession();
+      await fake.revokeProjectRole(other.sub, "platform_admin");
+      for (const action of ["hide", "unhide"] as const) {
+        const res = await toggle(p!, action, { sid: other.sid });
+        expect(res.statusCode, res.payload).toBe(403);
+      }
+
+      const noKey = await toggle(p!, "hide", { idempotencyKey: null });
+      expect(noKey.statusCode).toBe(428);
+      expect(problem(noKey).errorCode).toBe("IDEMPOTENCY_KEY_REQUIRED");
+      const noIfMatch = await call(
+        "POST",
+        `/v1/admin/feed-entries/${p!.id}/hide`,
+      );
+      expect(noIfMatch.statusCode).toBe(428);
+      const stale = await toggle(
+        { id: p!.id, version: p!.version - 1 },
+        "hide",
+      );
+      expect(stale.statusCode).toBe(412);
+      expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
+      expect((await entryRow(p!.id)).hidden_at).toBeNull();
     });
   },
 );

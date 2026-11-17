@@ -2,6 +2,7 @@
 
 import { Badge } from "@ds/design-system";
 import type {
+  FeedEntryAdminState,
   FeedSourceStatus,
   RelationshipStatus,
   TaxonomyStatus,
@@ -43,6 +44,17 @@ const FEED_SOURCE_TONE: Record<FeedSourceStatus | FeedSourceState, string> = {
   disabled: "bg-destructive-tint text-destructive-text",
 };
 
+/**
+ * 048 EARS-32 — a post's state in «Публикации»: «В ленте» on the success pair,
+ * «Скрыт» on the destructive pair (an administrator took it out), «Источник
+ * выключен» on the `draft` pair (out for a reason that is not the post's own).
+ */
+const FEED_ENTRY_TONE: Record<FeedEntryAdminState, string> = {
+  in_feed: "bg-success-tint text-success-text",
+  hidden: "bg-destructive-tint text-destructive-text",
+  source_off: "bg-warning-tint text-foreground",
+};
+
 /** «Включён» / «Выключен» of a feed source. */
 export type FeedSourceState = "enabled" | "disabled";
 
@@ -50,6 +62,7 @@ const TONE: Record<string, string> = {
   ...TAXONOMY_TONE,
   ...RELATIONSHIP_TONE,
   ...FEED_SOURCE_TONE,
+  ...FEED_ENTRY_TONE,
 };
 
 export function StatusChip({
@@ -58,7 +71,11 @@ export function StatusChip({
   testId,
 }: {
   status:
-    TaxonomyStatus | RelationshipStatus | FeedSourceStatus | FeedSourceState;
+    | TaxonomyStatus
+    | RelationshipStatus
+    | FeedSourceStatus
+    | FeedSourceState
+    | FeedEntryAdminState;
   label: string;
   /**
    * Overrides the default `status-<value>` handle. Record pages carry a

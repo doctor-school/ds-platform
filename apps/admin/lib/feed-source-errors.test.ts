@@ -4,6 +4,7 @@ import {
   FEED_SOURCE_ADDRESS_TAKEN_ERROR,
 } from "@ds/schemas";
 import {
+  feedEntryErrorKey,
   feedSourceAddressRefusal,
   feedSourceErrorKey,
 } from "./feed-source-errors";
@@ -53,6 +54,22 @@ describe("feed source refusals", () => {
       feedSourceErrorKey({ errorCode: "RESOURCE_NOT_FOUND" }, fallback),
     ).toBe("feedSources.errors.notFound");
     expect(feedSourceErrorKey({ errorCode: "SOMETHING_ELSE" }, fallback)).toBe(
+      fallback,
+    );
+  });
+
+  it("EARS-32: a moved post, a repeated hide or unhide and a gone post get their own sentences", () => {
+    const fallback = "feedPosts.errors.hideFailed";
+    expect(
+      feedEntryErrorKey({ errorCode: "PRECONDITION_FAILED" }, fallback),
+    ).toBe("feedPosts.errors.stale");
+    expect(
+      feedEntryErrorKey({ errorCode: "INVALID_TRANSITION" }, fallback),
+    ).toBe("feedPosts.errors.invalidTransition");
+    expect(
+      feedEntryErrorKey({ errorCode: "RESOURCE_NOT_FOUND" }, fallback),
+    ).toBe("feedPosts.errors.notFound");
+    expect(feedEntryErrorKey({ errorCode: "INTERNAL" }, fallback)).toBe(
       fallback,
     );
   });

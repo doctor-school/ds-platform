@@ -9,6 +9,10 @@ import {
   SOURCE_LABEL,
   readPostgresTarget,
 } from "./postgres-guard.mjs";
+import {
+  assertArchiveMatchesCertificate,
+  imageArchiveIds,
+} from "./postgres-artifact-release.mjs";
 
 export function artifactBuildPlan({ sourceHash, target, task = "2141" }) {
   if (!/^[a-f0-9]{64}$/.test(sourceHash) || !/^\d+$/.test(task))
@@ -71,44 +75,84 @@ export function assertArtifactPair(images) {
   }
 }
 
-async function main() {
-  const args = process.argv.slice(2);
+/**
+ * The command line of `--host <alias>` (an ssh build host) or `--local` (#4089: the
+ * GitHub-hosted runner of postgres-artifact.yml, whose own Docker builds — spec §3 item 1,
+ * no box builds an image) plus the four outputs. Exactly one build host.
+ */
+export function parsePrepareArgs(args) {
+  const local = args.includes("--local");
+  if (local === args.includes("--host"))
+    throw new Error("Use exactly one of --host <alias> or --local");
   const option = (name) => args[args.indexOf(name) + 1];
-  for (const name of [
-    "--host",
+  const required = [
+    ...(local ? [] : ["--host"]),
     "--ref",
     "--output",
     "--audit-log",
     "--export",
-  ]) {
+  ];
+  for (const name of required) {
     if (!args.includes(name) || !option(name) || option(name).startsWith("--"))
       throw new Error(`Required ${name} <value>`);
   }
-  if (args.length !== 10) throw new Error("Unknown/duplicate arguments");
-  const host = option("--host");
-  if (!/^[\w.-]+$/.test(host))
+  if (args.length !== required.length * 2 + (local ? 1 : 0))
+    throw new Error("Unknown/duplicate arguments");
+  const host = local ? null : option("--host");
+  if (host !== null && !/^[\w.-]+$/.test(host))
     throw new Error("Use a configured SSH host alias");
-  const ref = option("--ref");
-  const target = readPostgresTarget(ref);
-  const { sshBaseArgs } = await import("./prod.mjs");
-  const sshArgs = [
-    "-o",
-    "BatchMode=yes",
-    "-o",
-    "ConnectTimeout=10",
-    ...sshBaseArgs(host),
-  ];
+  return {
+    host,
+    ref: option("--ref"),
+    output: option("--output"),
+    auditLog: option("--audit-log"),
+    export: option("--export"),
+  };
+}
+
+/** The process of one build-host command: ssh to the host, or bash on the runner. */
+export function prepareSpawn(command, { host, sshArgs }) {
+  return host === null
+    ? ["bash", ["-c", command]]
+    : ["ssh", [...sshArgs, command]];
+}
+
+async function main() {
+  const options = parsePrepareArgs(process.argv.slice(2));
+  const option = (name) =>
+    ({
+      "--ref": options.ref,
+      "--output": options.output,
+      "--audit-log": options.auditLog,
+      "--export": options.export,
+    })[name];
+  const host = options.host ?? "the local runner";
+  const target = readPostgresTarget(options.ref);
+  const sshArgs =
+    options.host === null
+      ? []
+      : [
+          "-o",
+          "BatchMode=yes",
+          "-o",
+          "ConnectTimeout=10",
+          ...(await import("./prod.mjs")).sshBaseArgs(options.host),
+        ];
   const remote = (command, { input, binaryOutput } = {}) => {
+    const [executable, argv] = prepareSpawn(command, {
+      host: options.host,
+      sshArgs,
+    });
     appendFileSync(
       option("--audit-log"),
       JSON.stringify({
         at: new Date().toISOString(),
-        executable: "ssh",
-        args: [...sshArgs, command],
+        executable,
+        args: argv,
         input: input ? "committed infra build context tar" : null,
       }) + "\n",
     );
-    const r = spawnSync("ssh", [...sshArgs, command], {
+    const r = spawnSync(executable, argv, {
       input,
       encoding: binaryOutput ? undefined : "utf8",
       stdio: binaryOutput ? ["pipe", binaryOutput, "pipe"] : undefined,
@@ -181,6 +225,11 @@ async function main() {
   } finally {
     closeSync(output);
   }
+  // #4089: what a `docker load` of the archive yields is what ds-data-prod inspects.
+  assertArchiveMatchesCertificate(
+    imageArchiveIds(option("--export")),
+    certificate,
+  );
   writeFileSync(
     option("--output"),
     JSON.stringify(certificate, null, 2) + "\n",

@@ -12129,6 +12129,48 @@
         "tags": ["ExpertsAdmin"]
       }
     },
+    "/v1/admin/feed-entries/{id}/hide": {
+      "post": {
+        "operationId": "FeedEntriesAdminController_hide",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["FeedEntriesAdmin"]
+      }
+    },
+    "/v1/admin/feed-entries/{id}/unhide": {
+      "post": {
+        "operationId": "FeedEntriesAdminController_unhide",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["FeedEntriesAdmin"]
+      }
+    },
     "/v1/admin/feed-sources": {
       "get": {
         "operationId": "FeedSourcesAdminController_list",
@@ -12196,6 +12238,27 @@
     "/v1/admin/feed-sources/{id}/enable": {
       "post": {
         "operationId": "FeedSourcesAdminController_enable",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["FeedSourcesAdmin"]
+      }
+    },
+    "/v1/admin/feed-sources/{id}/entries": {
+      "get": {
+        "operationId": "FeedSourcesAdminController_entries",
         "parameters": [
           {
             "in": "path",

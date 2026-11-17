@@ -1175,6 +1175,15 @@ export const feedSourcesUrl = {
   row: (id: string) => `${ADMIN_BASE}/feed-sources/${id}`,
   command: (id: string, command: "disable" | "enable") =>
     `${ADMIN_BASE}/feed-sources/${id}/${command}`,
+  /** 048 EARS-32 — one page of «Публикации»; the `custom` path takes no query. */
+  entries: (id: string, page: { limit: number; cursor?: string }) =>
+    `${ADMIN_BASE}/feed-sources/${id}/entries?${new URLSearchParams({
+      limit: String(page.limit),
+      ...(page.cursor ? { cursor: page.cursor } : {}),
+    }).toString()}`,
+  /** 048 EARS-32 — «Скрыть из ленты» / «Вернуть в ленту». */
+  entryCommand: (entryId: string, command: "hide" | "unhide") =>
+    `${ADMIN_BASE}/feed-entries/${entryId}/${command}`,
 };
 
 /**

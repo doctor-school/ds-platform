@@ -16,10 +16,10 @@
 003 | A credential created under the previous four-class policy still signs in
 003 | A definitive Postbox failure is delivered through mail.ru
 003 | A disabled mail.ru reserve is skipped and not counted as reserve
+003 | A display name submitted with a re-registration is written only when the account has none | #3771
 003 | A failure before the message body was committed is definitive
 003 | A form_post or foreign-state callback yields no session
 003 | A guest from an event page keeps that event's card while switching between the sign-in and registration forms
-003 | A guest signing in from an event page sees that event's card on the sign-in form
 003 | A guest who opened password recovery from an event returns to the sign-in form with that event's card
 003 | A guest whose entry hits the per-address limit waits out the countdown on the refusal page
 003 | A guest whose entry the API cannot answer can retry at once
@@ -36,16 +36,13 @@
 003 | A rate-limited redemption is refused like any code request
 003 | A refusal that is not a recipient-address status moves to the next channel
 003 | A refused entry on the sign-in host is the refusal page with both storefronts as the way out
-003 | A registration on the sign-in host ends signed in on both storefronts
 003 | A sign-in finished after the 60-minute transaction ends signed in by the landing rules
-003 | A sign-in from the Academy entry runs on the sign-in host and ends signed in on the stored page
 003 | A signed-in user confirms a phone from the profile
 003 | A stale auth request returns to its storefront and a direct visit goes to the doctor storefront
 003 | A stalled transport terminates and cannot report late success
 003 | A successful login forgives the per-user rate-limit window
 003 | A successful native SMTP write without converged readback cannot activate a release
 003 | A tripped silent-check limit answers the guest page without a redirect | #4073
-003 | A verified password holder who re-registers is signed in by the code and keeps the password
 003 | A wrong, expired or reused phone code confirms nothing
 003 | Academy password reset completion clears the same identifier rate window | #4073
 003 | Academy refuses a live handoff with the ordinary generic account throttle | #4073
@@ -69,7 +66,6 @@
 003 | Every session and check cookie is host-only and never shared across hosts
 003 | Invalid real configuration cannot fall through to another sender
 003 | Login OTP uses the existing BFF mailer and shared code-only layout
-003 | Login with an SMS OTP code within the toll-fraud budget
 003 | Mirror reconciliation closes a webhook-miss divergence
 003 | No eight-cell code step exists on either storefront
 003 | Only a valid back-channel logout token revokes sessions
@@ -492,13 +488,9 @@
 020 | With no shared session the other storefront's event page is the guest page, with no form
 020 | «К записи ↓» also leads to the plaque while the recording is in preparation
 020 | «К записи ↓» is absent before the event has ended
-021 | A doctor arriving directly registers without the marketing opt-in and lands on their feed
 021 | A doctor arriving from an эфир sees its card on the sign-in host's registration form
-021 | A doctor arriving on a representative's link is attributed and handed to the mailing base
-021 | A doctor registers from a gate and returns to the эфир
+021 | A doctor arriving on a representative's link is attributed and handed to the mailing base | #1544
 021 | A failed submission preserves everything the doctor typed
-021 | A fresh registrant from a doctor-storefront gate ends signed in on both storefronts
-021 | A missing consent is reported on its own row after the press, and errors say what to do
 021 | A registration whose эфир vanished before the code lands per LD-4
 021 | A stale return target degrades honestly instead of dead-ending
 021 | An already-registered email is never disclosed as already registered
@@ -623,15 +615,12 @@
 048 | An administrator hides one VK video
 048 | An administrator hides one post
 048 | An event of a community that is not in the source list is dropped
-048 | An export of another channel is refused
-048 | An import for a source with no bound channel id is refused with its reason
 048 | An unreachable Telegram marks the source failing and leaves the rail working
 048 | An unreachable VK marks the source failing and leaves the rail working
 048 | No VK secret or post author is stored or logged
 048 | The VK source pages and VK cards work on a phone
 048 | The doctor storefront shows no VK card
 048 | The one-off VK import brings in earlier posts and a re-run duplicates nothing
-048 | The one-off import brings in earlier posts and a re-run duplicates nothing
 048 | The source pages work on a phone
 048 | VK confirms the Callback server of the listed community
 049 | A broadcast director creates an event and runs its broadcast

@@ -1082,6 +1082,25 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/feed-sources/${ABSENT_ID}/enable`,
     payload: {},
   },
+  // 048 EARS-32 (#3996) — «Публикации», hide and unhide on the same floor;
+  // the ids name nothing, so an admitted principal gets a 404/428.
+  {
+    endpoint: "GET /v1/admin/feed-sources/:id/entries",
+    method: "GET",
+    url: `/v1/admin/feed-sources/${ABSENT_ID}/entries`,
+  },
+  {
+    endpoint: "POST /v1/admin/feed-entries/:id/hide",
+    method: "POST",
+    url: `/v1/admin/feed-entries/${ABSENT_ID}/hide`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/feed-entries/:id/unhide",
+    method: "POST",
+    url: `/v1/admin/feed-entries/${ABSENT_ID}/unhide`,
+    payload: {},
+  },
   // 025 EARS-25 (#3808) — publishing a rule version. The rule id names no rule
   // and the body is empty, so an admitted principal gets a 404/422 and no
   // version is ever stored by this suite.

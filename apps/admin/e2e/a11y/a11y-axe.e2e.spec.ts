@@ -19,6 +19,7 @@ import {
   sendOralSubmission,
 } from "../support/congress-submissions";
 import { selectRelationshipCombobox } from "../support/relationship-combobox";
+import { removeTelegramPosts, seedTelegramPosts } from "../support/feed-posts";
 
 /**
  * 007 EARS-11 — axe-core WCAG 2 A/AA scan of the admin event surface (the runtime
@@ -513,6 +514,47 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       .getByTestId("feed-source-disable-dialog")
       .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
+  });
+
+  // 048 (#3996) — «Публикации»: the post list with its states and the
+  // «Скрыть из ленты» confirmation, each scanned as its own state.
+  test("048 EARS-32: the posts list + hide confirmation pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    const address = `axe_posts_${Date.now().toString(36)}`;
+    await page.goto("/materials/sources/create");
+    await page.getByTestId("feed-source-address").fill(`t.me/${address}`);
+    await page.getByTestId("submit-feed-source").click();
+    await page.waitForURL(/\/materials\/sources$/);
+    const posts = await seedTelegramPosts(address, [
+      [1, "Пост в ленте", "2026-11-10T09:00:00Z"],
+      [2, "Скрытый пост", "2026-11-11T09:00:00Z"],
+    ]);
+    try {
+      await page
+        .getByTestId(`feed-source-posts-${address}`)
+        .filter({ visible: true })
+        .click();
+      await page.waitForURL(/\/materials\/sources\/[0-9a-f-]{36}$/);
+      const hiddenPost = posts[1]!;
+      await page
+        .getByTestId(`feed-post-hide-${hiddenPost.id}`)
+        .filter({ visible: true })
+        .click();
+      await page
+        .getByTestId("feed-post-hide-dialog")
+        .waitFor({ state: "visible" });
+      for (const theme of THEMES) await scan(page, theme);
+      await page.getByTestId("feed-post-hide-confirm").click();
+      await page
+        .getByTestId(`feed-post-unhide-${hiddenPost.id}`)
+        .filter({ visible: true })
+        .waitFor({ state: "visible" });
+      for (const theme of THEMES) await scan(page, theme);
+    } finally {
+      await removeTelegramPosts(posts.map((p) => p.id));
+    }
   });
 
   test("032 EARS-14: the organisation-role list + add + rename surfaces pass WCAG 2 A/AA (light)", async ({

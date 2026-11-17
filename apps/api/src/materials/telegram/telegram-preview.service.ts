@@ -137,6 +137,41 @@ export class TelegramPreviewService {
       path.data,
       TELEGRAM_FILE_MAX_BYTES,
     );
+    return this.normalizeAndStore(entryId, body);
+  }
+
+  /**
+   * EARS-30 — set the preview of an entry the history import just wrote from
+   * the exported photo or video thumbnail file (no Bot API call). A failure
+   * is logged with its reason only and leaves the entry without an image;
+   * there is no Telegram `file_id` to retry from, so nothing is scheduled.
+   * Never throws.
+   */
+  async storeExported(entryId: string, body: Buffer): Promise<boolean> {
+    try {
+      if (body.length > TELEGRAM_FILE_MAX_BYTES) {
+        throw new PreviewRefusedError("too_large");
+      }
+      const key = await this.normalizeAndStore(entryId, body);
+      await this.sources.transaction((tx) =>
+        this.entries.settlePreview(tx, entryId, {
+          imageRef: key,
+          previewState: "done",
+        }),
+      );
+      this.log("telegram_preview_imported", entryId, null);
+      return true;
+    } catch (error) {
+      this.log("telegram_preview_import_failed", entryId, failureReason(error));
+      return false;
+    }
+  }
+
+  /** Sniff → normalize (012) → PUT under a server key; returns the key. */
+  private async normalizeAndStore(
+    entryId: string,
+    body: Buffer,
+  ): Promise<string> {
     const contentType = sniffImageType(body);
     if (contentType === null) throw new PreviewRefusedError("not_an_image");
     const normalized = await this.normalizer.normalize({

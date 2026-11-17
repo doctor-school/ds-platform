@@ -51,9 +51,8 @@ import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
  * ── Missing steps ────────────────────────────────────────────────────────────
  * `missingSteps: "skip-scenario"`. The three alternatives playwright-bdd 9.2
  * offers are the wrong trade here: `fail-on-gen` makes `bddgen` exit non-zero for
- * every scenario whose step text is still the pre-contract prose of the §8
- * backfill, which would put the generation step permanently red and teach the
- * team to skip it; `fail-on-run` reports the same scenarios as FAILURES, which
+ * every scenario whose step text is still pre-contract step prose, which would
+ * put the generation step permanently red and teach the team to skip it; `fail-on-run` reports the same scenarios as FAILURES, which
  * makes a red suite the normal state and destroys the signal of a real
  * regression. `skip-scenario` keeps generation green AND lists every
  * unimplemented scenario in the run output as skipped — visible and countable,

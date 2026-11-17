@@ -16,7 +16,7 @@ import { caseDir, ghDir, runGuard } from "./run-guard";
  *   - an uncovered `EARS-N` in a spec THIS PR touched is a BLOCK;
  *   - the same finding in an untouched spec is a WARN row (a record, tech spec §6.7);
  *   - a quarantine that names no Issue, or names a CLOSED one, is a BLOCK wherever it
- *     sits — a test switched off with nobody tracking it is not backfill debt.
+ *     sits — a test switched off with nobody tracking it is not tracked debt.
  * The `green` case carries the discriminators that must NOT fire: a `_Retired._` id
  * declares no handler, a `surface: backend-only` spec owns Vitest e2e instead of
  * scenarios (F-22), a valid `@quarantine(#N)` on an OPEN Issue is fine as long as

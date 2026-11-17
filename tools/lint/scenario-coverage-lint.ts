@@ -48,7 +48,7 @@
  * runs it. These findings are BLOCK wherever they sit, from day 0 rather than
  * the ADR-0007 §2.6 WARN v1 default: Issue #3345 (owner-sourced) requires the
  * sign-in-host binding under `scenario-coverage (BLOCK)`, and the catalog
- * carries no backfill debt of the rule. The §2.6 demotion rule still applies —
+ * carries no pre-existing debt of the rule. The §2.6 demotion rule still applies —
  * one confirmed false positive demotes it to WARN.
  *
  * Where a binding runs (#3345 item 4). Every `@host:login` scenario names its
@@ -449,7 +449,7 @@ async function main(): Promise<void> {
   quarantines.push(...doorScan.hostQuarantines);
 
   // §6.5 — every quarantine must name an OPEN Issue. BLOCK wherever it sits: a
-  // quarantine nobody tracks is a test switched off for good, not backfill debt.
+  // quarantine nobody tracks is a test switched off for good, not tracked debt.
   const badQuarantines: string[] = [];
   for (const q of quarantines) {
     if (q.issue === null) {

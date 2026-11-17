@@ -63,7 +63,7 @@
  * The ratchet. `packages/e2e/scenario-proof-debt.txt` lists exactly the
  * unproven scenarios, key `NNN | <title>` (` [k]` for the k-th repeat of a
  * title in a spec), optionally ` | #<issue>`. It lives with the harness so a
- * backfill PR that only tags scenarios and deletes lines stays test-only. An
+ * PR that only tags scenarios and deletes lines stays test-only. An
  * unlisted unproven scenario, a stale line (its scenario is proven, Draft or
  * gone) and a line absent at the merge base with `origin/main` whose number is
  * not an OPEN Issue — no number, a closed Issue, a number that does not exist,

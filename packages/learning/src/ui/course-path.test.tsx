@@ -21,14 +21,14 @@ describe("024 EARS-14 — the course path", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("EARS-14: every node names its state — done, «Вы здесь», open and locked with its reason", () => {
+  it("EARS-14: every node names its state — done, «Вы здесь», open and the first locked one with the canvas line", () => {
     render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath()} />);
     expect(node(/Урок 1, шаг 1\. Серия\. Сбор анамнеза\. Пройден/)).toBeInTheDocument();
     expect(node(/Урок 2, шаг 1\. Серия\. Чтение ЭКГ\. Вы здесь/)).toBeInTheDocument();
     expect(node(/Урок 2, шаг 2\. Материал для скачивания\. Памятка по ЭКГ\. Открыт/)).toBeInTheDocument();
     expect(node(/Урок 3, шаг 1\. Тест\. Итоговый тест\. Закрыт/)).toBeInTheDocument();
     expect(screen.getAllByText("Вы здесь", { selector: "span,div" }).length).toBeGreaterThan(0);
-    expect(screen.getByText("Шаг откроется, когда будут пройдены предыдущие.")).toBeInTheDocument();
+    expect(screen.getByText("Откроется после предыдущего шага")).toBeInTheDocument();
   });
 
   it("EARS-14: the progress band counts done lessons from the read and continues at the «Вы здесь» step on the path", () => {
@@ -219,6 +219,26 @@ describe("024 EARS-14 — the path per viewer state (guest · not started · in 
     expect(hereBadges()).toHaveLength(1);
     expect(screen.queryByRole("link", { name: "Начать курс" })).toBeNull();
     expect(screen.getByRole("link", { name: "Продолжить — урок 2" })).toBeInTheDocument();
+  });
+
+  // Canvas `reason: st === 'closed' && g === doneSteps + 2 ? 'Откроется после предыдущего шага' : ''`:
+  // only the first closed step — the one right after the doctor's next step —
+  // carries the line on the path; the summary of ANY selected closed step names
+  // its reason (`sum.hasReason: isLesson && st === 'closed'`).
+  it("EARS-14: only the first locked step carries «Откроется после предыдущего шага» on the path; a selected locked step's summary names its reason", () => {
+    const LINE = "Откроется после предыдущего шага";
+    const fresh = buildPathView(freshPath(true)).sections[0]!.nodes.filter((n) => n.kind === "step");
+    expect(fresh.map((n) => n.lockNote)).toEqual([null, LINE, null, null]);
+    const going = buildPathView(coursePath()).sections[0]!.nodes.filter((n) => n.kind === "step");
+    expect(going.map((n) => n.lockNote)).toEqual([null, null, null, LINE]);
+
+    render(<CoursePath courseSlug="kardio" config={CONFIG} initial={freshPath(true)} />);
+    expect(screen.getAllByText(LINE)).toHaveLength(1);
+    expect(screen.queryByText("Шаг откроется, когда будут пройдены предыдущие.")).toBeNull();
+    fireEvent.click(node(/^Урок 3, шаг 1\. Тест\. Итоговый тест\. Закрыт$/));
+    const summary = within(screen.getByTestId("node-summary"));
+    expect(summary.getByText("Шаг откроется, когда будут пройдены предыдущие.")).toBeInTheDocument();
+    expect(summary.queryByRole("link")).toBeNull();
   });
 
   it("EARS-14: the kicker names the step's medium as the canvas metas do — video «Серия · видео · N минут»", () => {

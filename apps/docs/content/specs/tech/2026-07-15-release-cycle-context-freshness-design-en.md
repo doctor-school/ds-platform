@@ -303,7 +303,7 @@ The gate is **fail-closed** like the эфир hold (§10.4 item 7): a `gh` failu
 
 ### 10.11 Hotfix deploy (#1881)
 
-§10.10 keeps `main` deployable by default through reverts, scoped prerequisites and a global hold only for universal hazards. When prod needs one already-merged fix without everything else merged since, this section narrows the release unit from `deployedSha..origin/main` (§10.2) to a selected hotfix. Prerequisites of unrelated PRs are outside that unit; valid global holds remain.
+§10.10 keeps `main` deployable by default through reverts, scoped prerequisites and a global hold only for universal hazards. When prod needs one already-merged fix without everything else merged since, this section narrows the release unit from `deployedSha..<target>` (§10.2) to a selected hotfix. Prerequisites of unrelated PRs are outside that unit; valid global holds remain.
 
 **The rule.** `pnpm deploy:prod --ref <sha>` ships exactly `<sha>` instead of `origin/main`. It is break-glass: it runs from the workstation under the owner's offline `breakglass` key, on the owner's word, since the release workflow ships only SHAs on `main`. `<sha>` is the head of a `hotfix/<N>-<slug>` branch cut FROM the SHA running in production, carrying cherry-picks of already-merged squash commits and nothing else. The branch is deleted once the deploy is recorded. This is a narrowing of the deploy range, never a widening of what is deployable.
 

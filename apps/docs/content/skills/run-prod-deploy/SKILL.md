@@ -57,7 +57,7 @@ The gate covers the **whole deploy range** (`deployedSha..<target>`): a failing 
 
 11. **Stage suite green on the target SHA — pipeline-owned.** Environment-level risk (prod build, real IdP, real-shaped data) is covered once per release on the shared stage `main` slot: `stage.yml` converges slot `main` on every `main` push, runs the full stage suite and posts the `stage-suite` commit status on the SHA (release-pipeline spec §3 item 3). The pre-flight requires it `success`; missing/pending/red refuses — wait for `stage.yml` or fix its cause. `pnpm release:lane` shows the candidate and the queues.
 
-Record three separate facts before execution: authorization (the owner's word, verbatim, with its source and scope), readiness (each required check's evidence), and execution (not started / running / verified result). A preparation-only go never becomes a cutover go. After execution, attach the actual release/deployment and health evidence.
+Record three separate facts before execution: authorization (the owner's word, verbatim, with its source and scope — spec §10.2 «What the word covers»), readiness (each required check's evidence), and execution (not started / running / verified result). A preparation-only go never becomes a cutover go. After execution, attach the actual release/deployment and health evidence.
 
 ## `main` stays deployable — revert by default (spec §10.10)
 
@@ -76,7 +76,7 @@ Run checklist items 1–11 (above); items 6–8 and 11 are the ones the workflow
 
 ### 2. Dispatch on the owner's word
 
-`pnpm release:lane` first: a pending deploy run means wait (a new dispatch cancels it). Its green candidate is the `sha`; after the word never wait for a newer SHA's `stage-suite`; no green candidate → hold and report the failing gate. A candidate past the proposed SHA: re-run items 1–11 and the class over `deployedSha..<candidate>` — standing-auth and green → dispatch with the same `owner_quote`; escalate → re-ask, naming the added PRs.
+`pnpm release:lane` first: a pending deploy run means wait (a new dispatch cancels it). Its green candidate is the `sha`; after the word never wait for a newer SHA's `stage-suite`; no green candidate → hold and report the failing gate. A candidate past the proposed SHA: re-run items 1–11 and the class over `deployedSha..<candidate>` — standing-auth and green → dispatch with the same `owner_quote`; re-ask, naming the added PRs, only when they raise the class to escalate or change the risk, conditions or recovery path an escalate-scoped word named (unchanged, that word still covers them).
 
 ```bash
 gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_quote="<the owner's words, verbatim>"

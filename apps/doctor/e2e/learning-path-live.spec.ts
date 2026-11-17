@@ -216,6 +216,10 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await expect(page.getByText("Вы здесь", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /^Продолжить/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Начать курс" })).toHaveAttribute("href", /\/courses\/[^/]+\/steps\//);
+    // Canvas `reason`: only the first closed step — right after the doctor's
+    // next step — carries «Откроется после предыдущего шага» on the path.
+    await expect(page.getByText("Откроется после предыдущего шага", { exact: true })).toHaveCount(1);
+    await expect(page.getByText(/^Шаг откроется/)).toHaveCount(0);
     // EARS-14 — the signed-in plate carries the doctor's own balances from 025.
     const plate = page.getByTestId("points-plate");
     await expect(plate.getByTestId("points-plate-value")).toHaveCount(3);
@@ -327,6 +331,7 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await expect(page.getByRole("button", { name: /Урок 1, шаг 3\. .*Пройден/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Урок 2, шаг 1\. .*Вы здесь/ })).toBeVisible();
     await expect(page.getByText("Пройдено 1 урок из 2").first()).toBeVisible();
+    await expect(page.getByText("Откроется после предыдущего шага", { exact: true })).toHaveCount(1);
     await axeClean(page);
     await shoot(page, "doctor-path-next-lesson-1280");
     await page.setViewportSize(PHONE);

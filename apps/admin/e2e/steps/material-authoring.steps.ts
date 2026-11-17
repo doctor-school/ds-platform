@@ -407,12 +407,19 @@ Then("{string} stays a draft", async ({ page, world }, title: string) => {
     await rows("SELECT * FROM materials WHERE id=$1", [current.material!.id]),
   ).toEqual(current.storedDraft);
 });
+/** The titles of the own-material cards (a Telegram `post` has a text, no title). */
+function ownCardTitles(cards: { kind: string; title?: string }[]): string[] {
+  return cards.flatMap((card) =>
+    card.kind === "post" || card.title === undefined ? [] : [card.title],
+  );
+}
+
 Then(
   "the rail has no card {string}",
   async ({ page, world }, title: string) => {
     const current = state(world);
     const feed = await publicFeed(page);
-    expect(feed.data.map((card) => card.title)).not.toContain(title);
+    expect(ownCardTitles(feed.data)).not.toContain(title);
     expect(feed.data.map((card) => card.href)).not.toContain(
       `/materials/${current.material!.slug}`,
     );
@@ -427,6 +434,7 @@ Then(
       slug: current.material!.slug,
       title,
       similarlyNamedPublishedCards: feed.data
+        .flatMap((card) => (card.kind === "post" ? [] : [card]))
         .filter((card) => card.title !== title && card.title.startsWith(title))
         .map((card) => ({ id: card.id, title: card.title, href: card.href })),
     });
@@ -534,8 +542,6 @@ Then(
     expect(await rows("SELECT * FROM feed_entries ORDER BY id")).toEqual(
       current.feedRowsBefore,
     );
-    expect(feed.data.map((card) => card.title)).not.toContain(
-      current.previewTitle,
-    );
+    expect(ownCardTitles(feed.data)).not.toContain(current.previewTitle);
   },
 );

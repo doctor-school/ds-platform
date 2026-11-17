@@ -63,20 +63,41 @@ describe("024 EARS-14 — node labels wrap at word and separator boundaries", ()
     vi.unstubAllGlobals();
   });
 
-  it("EARS-14: a clamped title on the left of the snake ends with «…» as on the right — the right-aligned clamp gets room past its edge for the ellipsis", () => {
+  it("EARS-14: a clamped title on the left of the snake ends with «…» as on the right — a measured clamped left title is left-aligned so the «…» lands inside its box", () => {
     // Chrome right-aligns a clamped line without its «…» and draws the «…»
     // after the line's end — past a right-aligned box's edge, where it is cut.
+    // jsdom has no layout: a title is clamped when its `scrollHeight` exceeds
+    // its `clientHeight`, stubbed per title here.
+    const clamped = new Set(["Чтение ЭКГ"]);
+    const title = (el: HTMLElement) => el.getAttribute("title") ?? "";
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return clamped.has(title(this)) ? 60 : 36;
+    });
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(() => 36);
     stubMatchMedia(false);
     stubFetch({});
     render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath()} />);
     // Desktop: node 0 sits right of the axis (its text on the right), node 1 left.
-    const right = document.querySelector('[title="Сбор анамнеза"]')!;
-    const left = document.querySelector('[title="Чтение ЭКГ"]')!;
+    const right = document.querySelector<HTMLElement>('[title="Сбор анамнеза"]')!;
+    const left = document.querySelector<HTMLElement>('[title="Чтение ЭКГ"]')!;
     expect(left.parentElement).toHaveClass("text-right");
-    expect(left).toHaveClass("line-clamp-2", "pe-3", "-me-3");
+    expect(left).toHaveClass("line-clamp-2", "text-left");
+    expect(left).not.toHaveClass("pe-3");
     expect(right.parentElement).toHaveClass("text-left");
     expect(right).toHaveClass("line-clamp-2");
-    expect(right).not.toHaveClass("pe-3");
+    // A left title that fits keeps the column's right alignment; the flag
+    // follows the measurement on resize.
+    clamped.delete("Чтение ЭКГ");
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(left).not.toHaveClass("text-left");
+    clamped.add("Чтение ЭКГ");
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(left).toHaveClass("text-left");
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 });

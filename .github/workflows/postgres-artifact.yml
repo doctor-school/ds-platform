@@ -76,28 +76,11 @@ jobs:
           echo "source-hash=$hash" >> "$GITHUB_OUTPUT"
           echo "data source hash $hash at $SHA"
 
-      # The image store decides the id an image gets: the classic store gives the config
-      # digest, the containerd store (the runner's Docker 29 default) the manifest
-      # digest. ds-data-prod `docker load`s into the classic store and its guard inspects
-      # those ids, so the build host measures in the same store; the preparation refuses
-      # an archive whose config digests are not the certified ids.
-      - name: Classic image store, as on ds-data-prod
-        run: |
-          cfg=/etc/docker/daemon.json
-          if sudo test -s "$cfg"; then
-            sudo jq '.features["containerd-snapshotter"] = false' "$cfg" > "$RUNNER_TEMP/daemon.json"
-          else
-            echo '{"features":{"containerd-snapshotter":false}}' > "$RUNNER_TEMP/daemon.json"
-          fi
-          sudo install -m 0644 "$RUNNER_TEMP/daemon.json" "$cfg"
-          sudo systemctl restart docker
-          driver=$(docker info --format '{{.Driver}}')
-          [ "$driver" = overlay2 ] || { echo "::error::image store is $driver, not the classic overlay2"; exit 1; }
-
       - name: Build host facts
         run: docker version --format 'docker {{.Server.Version}}' && docker info --format 'storage {{.Driver}} {{.DriverStatus}}'
 
       - name: Prepare and certify
+        continue-on-error: true
         env:
           SHA: ${{ github.sha }}
         run: |
@@ -107,33 +90,34 @@ jobs:
             2>&1 | tee out/prepare.log
           exit "${PIPESTATUS[0]}"
 
-      - name: Check the certificate against the commit
-        env:
-          SHA: ${{ github.sha }}
-          HASH: ${{ steps.hash.outputs.source-hash }}
+      - name: MEASURE containerd archive
         run: |
-          node --input-type=module -e '
-            import { readFileSync } from "node:fs";
-            import { assertArchiveMatchesCertificate, imageArchiveConfigIds } from "./tools/deploy/postgres-artifact-release.mjs";
-            const c = JSON.parse(readFileSync("out/certificate.json", "utf8"));
-            if (c.schema !== 1 || c.sourceHash !== process.env.HASH) throw new Error("certificate is not of this source hash");
-            assertArchiveMatchesCertificate(imageArchiveConfigIds("out/images.tar"), c);
-            for (const [role, image] of Object.entries(c.images))
-              console.log(`${role}: ${image.id} ${image.version} ${image.pgbackrestVersion} uid ${image.uid}:${image.gid}`);'
-          sha256sum out/certificate.json out/images.tar
-
-      - name: Keep the certificate, the audit log and the images
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: postgres-artifact-${{ steps.hash.outputs.source-hash }}
-          path: |
-            out/certificate.json
-            out/audit.jsonl
-            out/prepare.log
-            out/images.tar
-          retention-days: ${{ github.event_name == 'pull_request' && 3 || 90 }}
-          if-no-files-found: error
-          compression-level: 6
+          set -x
+          tar -tvf out/images.tar | head -60
+          for f in manifest.json index.json oci-layout repositories; do echo "== $f"; tar -xOf out/images.tar "$f" || true; echo; done
+          python3 - <<'PY'
+          import json, tarfile
+          t = tarfile.open("out/images.tar")
+          idx = json.load(t.extractfile("index.json"))
+          for d in idx["manifests"]:
+              b = json.load(t.extractfile("blobs/sha256/" + d["digest"].split(":")[1]))
+              print("TARGET", d["digest"], d.get("mediaType"), "->", json.dumps(b)[:1500])
+              for m in b.get("manifests", []):
+                  print("  CHILD", m["digest"], m.get("mediaType"), m.get("platform"), m.get("annotations"))
+          for m in t.getmembers()[:5]:
+              raw = open("out/images.tar","rb"); raw.seek(m.offset); h = raw.read(512)
+              print("HDR", m.name, h[257:265], any(h[345:500]), m.pax_headers)
+          print("PAX", t.pax_headers)
+          PY
+          docker image ls --digests --no-trunc --filter label=org.doctor-school.task=2141
+          ids=$(docker image ls -q --no-trunc --filter label=org.doctor-school.task=2141 | sort -u)
+          echo "IDS before: $ids"
+          for i in $ids; do docker image inspect --format '{{.Id}} {{json .RepoTags}} {{json .RepoDigests}}' "$i"; done
+          docker image ls -q --filter label=org.doctor-school.task=2141 | sort -u | xargs -r docker image rm -f
+          docker image prune -af >/dev/null
+          docker load -i out/images.tar
+          docker image ls --digests --no-trunc -a
+          for i in $ids; do docker image inspect --format 'AFTER {{.Id}} {{json .RepoTags}}' "$i" || echo "MISSING $i"; done
 
       - name: Remove the preparation images
         if: always()

@@ -170,7 +170,7 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
     expect(moduleRow(21)).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("EARS-14: after «Продолжить» the outline keeps «Вы здесь» marked while the jump scrolls; the spy resumes once it settles", () => {
+  it("EARS-14: after «Продолжить» the outline keeps «Вы здесь» marked while the jump scrolls and once it lands — the jumped-to lesson occupies the top", () => {
     // Short lessons: once lesson 60 sits at the top, lesson 61's first step is
     // already above the spy line — the jump must not hand the mark to 61.
     const path = multiModulePath(26, 4, 60);
@@ -199,8 +199,44 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
     });
     scrollFrame("scroll");
     expect(outline().getByRole("link", { name: /^Урок 60\. / })).toHaveAttribute("aria-current", "true");
+    // The jump has landed: lesson 60 occupies the top of the viewport, so the
+    // spy keeps it although lesson 61 starts above the middle.
     scrollFrame("scrollend", "scroll");
-    expect(outline().getByRole("link", { name: /^Урок 61\. / })).toHaveAttribute("aria-current", "true");
+    expect(outline().getByRole("link", { name: /^Урок 60\. / })).toHaveAttribute("aria-current", "true");
+  });
+
+  it("EARS-14: the lesson in view is the one at the top of the viewport; the outline column's own scroll never moves it", () => {
+    const path = multiModulePath(26, 4, 60);
+    const view = buildPathView(path);
+    const firstStep = new Map(view.outline.flatMap((m) => m.lessons).map((l) => [`node-${l.firstStepId}`, l.number]));
+    // Lessons are 288 px apart (3 steps); `scrolled` moves them all up.
+    let scrolled = 0;
+    stubLayout((id) => {
+      const n = firstStep.get(id);
+      return n === undefined ? 0 : 64 + (n - 60) * 288 - scrolled;
+    });
+    vi.stubGlobal("innerHeight", 900);
+    const current = () => outline().getByRole("link", { current: true });
+    render(<CoursePath courseSlug="k" config={CONFIG} initial={path} />);
+    act(() => {
+      window.dispatchEvent(new Event("scroll"));
+    });
+    // Lesson 60 sits at the top, lesson 61 starts at 352 (above the middle).
+    expect(current()).toHaveAccessibleName(/^Урок 60\. /);
+    // The reader picks lesson 59 in the outline, then the column settles its
+    // own scroll: the pick stands.
+    fireEvent.click(outline().getByRole("link", { name: /^Урок 59\. / }));
+    act(() => {
+      window.dispatchEvent(new Event("scrollend"));
+      document.querySelector("aside")!.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    expect(current()).toHaveAccessibleName(/^Урок 59\. /);
+    // Lesson 61's first step reaches the top of the viewport: it is in view.
+    scrolled = 260;
+    act(() => {
+      window.dispatchEvent(new Event("scroll"));
+    });
+    expect(current()).toHaveAccessibleName(/^Урок 61\. /);
   });
 
   it("EARS-14: on load the outline column shows its top — the summary and the start of the outline; it follows only once the open module changes", () => {

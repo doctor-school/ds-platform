@@ -147,13 +147,22 @@ function useScrollSpy(
 }
 
 /**
- * At volume (26 modules) the outline column is taller than the viewport: once
- * the open module's height transition ends, the column scrolls (by itself, never
- * the page) the least distance that shows the whole open module — so the
- * outline visibly follows the reader and the summary stays while it fits.
+ * At volume (26 modules) the outline column is taller than the viewport. On
+ * load it shows its top — the summary and the start of the outline — as the
+ * canvas does. Once the open module changes (the scroll-spy, a pick,
+ * «Продолжить»), after its height transition ends the column scrolls (by
+ * itself, never the page) the least distance that shows the whole open module —
+ * so the outline visibly follows the reader and the summary stays while it fits.
  */
 function useOutlineFollow(aside: React.RefObject<HTMLElement | null>, openModule: number) {
+  const shown = useRef<number | null>(null);
   useEffect(() => {
+    // The module open on load (and a repeated run for it) is no change.
+    if (shown.current === null || shown.current === openModule) {
+      shown.current = openModule;
+      return;
+    }
+    shown.current = openModule;
     const timer = setTimeout(() => {
       const column = aside.current;
       const block = column?.querySelector<HTMLElement>('[data-outline-module="open"]');

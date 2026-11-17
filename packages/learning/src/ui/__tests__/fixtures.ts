@@ -60,7 +60,7 @@ export function coursePath(over: Partial<LearningCoursePath> = {}): LearningCour
             durationMin: 12,
             stepCount: 1,
             state: { status: "done" },
-            steps: [{ id: ID.s1, type: "video", title: "Сбор анамнеза", durationMin: 12, state: { status: "done" } }],
+            steps: [{ id: ID.s1, type: "video", title: "Сбор анамнеза", durationMin: 12, test: null, file: null, state: { status: "done" } }],
           },
           {
             id: ID.l2,
@@ -70,8 +70,8 @@ export function coursePath(over: Partial<LearningCoursePath> = {}): LearningCour
             stepCount: 2,
             state: { status: "current" },
             steps: [
-              { id: ID.s2, type: "video", title: "Чтение ЭКГ", durationMin: 15, state: { status: "current" } },
-              { id: ID.s3, type: "download", title: "Памятка по ЭКГ", durationMin: 5, state: { status: "open" } },
+              { id: ID.s2, type: "video", title: "Чтение ЭКГ", durationMin: 15, test: null, file: null, state: { status: "current" } },
+              { id: ID.s3, type: "download", title: "Памятка по ЭКГ", durationMin: 5, test: null, file: { format: "PDF", sizeBytes: 1_258_291 }, state: { status: "open" } },
             ],
           },
           {
@@ -86,7 +86,7 @@ export function coursePath(over: Partial<LearningCoursePath> = {}): LearningCour
                 id: ID.s4,
                 type: "test",
                 title: "Итоговый тест",
-                durationMin: 10,
+                durationMin: 10, test: { questionCount: 10, threshold: 80 }, file: null,
                 state: { status: "locked", reason: { kind: "previous" } },
               },
             ],
@@ -99,6 +99,13 @@ export function coursePath(over: Partial<LearningCoursePath> = {}): LearningCour
     ...over,
   };
 }
+
+/** The kicker facts of a step node by its type (EARS-13). */
+const KICKER_FACTS = {
+  video: { test: null, file: null },
+  download: { test: null, file: { format: "PDF", sizeBytes: 1_258_291 } },
+  test: { test: { questionCount: 10, threshold: 80 }, file: null },
+} as const;
 
 export function lessonRead(over: Partial<LearningLessonRead> = {}): LearningLessonRead {
   return {
@@ -116,8 +123,8 @@ export function lessonRead(over: Partial<LearningLessonRead> = {}): LearningLess
     },
     signedIn: true,
     steps: [
-      { id: ID.s2, type: "video", title: "Чтение ЭКГ", durationMin: 15, state: { status: "current" }, completionSentence: "Досмотрите видео до конца." },
-      { id: ID.s3, type: "download", title: "Памятка по ЭКГ", durationMin: 5, state: { status: "open" }, completionSentence: "Откройте материал." },
+      { id: ID.s2, type: "video", title: "Чтение ЭКГ", durationMin: 15, test: null, file: null, state: { status: "current" }, completionSentence: "Досмотрите видео до конца." },
+      { id: ID.s3, type: "download", title: "Памятка по ЭКГ", durationMin: 5, test: null, file: { format: "PDF", sizeBytes: 1_258_291 }, state: { status: "open" }, completionSentence: "Откройте материал." },
     ],
     ...over,
   };
@@ -127,7 +134,7 @@ export function videoStep(over: Partial<LearningStepRead> = {}): LearningStepRea
   return {
     courseSlug: "kardio",
     lessonId: ID.l2,
-    step: { id: ID.s2, type: "video", title: "Чтение ЭКГ", durationMin: 15, state: { status: "current" }, completionSentence: "Досмотрите видео до конца." },
+    step: { id: ID.s2, type: "video", title: "Чтение ЭКГ", durationMin: 15, test: null, file: null, state: { status: "current" }, completionSentence: "Досмотрите видео до конца." },
     lessonCompletionSentence: "Урок пройден, когда пройдены все шаги.",
     body: { type: "video", provider: "rutube", embedRef: "0123456789abcdef0123456789abcdef", durationSec: 120, watchedPercent: 0, positionSec: 0 },
     nextStepId: ID.s3,
@@ -196,7 +203,7 @@ export function multiModulePath(modules: number, lessonsPer: number, hereLesson:
           : here && si === 0
             ? ({ status: "current" } as const)
             : locked;
-        return { id, type, title: `${type === "video" ? "Серия" : type === "download" ? "Памятка" : "Тест"} урока ${n}`, durationMin: 5, state };
+        return { id, type, title: `${type === "video" ? "Серия" : type === "download" ? "Памятка" : "Тест"} урока ${n}`, durationMin: 5, ...KICKER_FACTS[type], state };
       });
       if (here) hereLessonId = lessonId;
       lessons.push({

@@ -7,6 +7,7 @@ import {
   call,
   doctor,
   eventId,
+  PDF,
   type BuiltCourse,
   type Harness,
   type Problem,
@@ -155,6 +156,76 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         (await call(h, "GET", `/learning/courses/${draft.courseSlug}/path`))
           .status,
       ).toBe(404);
+    });
+
+    it("EARS-13: every step node carries its kicker facts — a test's questions per attempt and resolved pass mark, a download's file format and size — to a guest and a doctor alike", async () => {
+      type Node = {
+        id: string;
+        test: { questionCount: number; threshold: number } | null;
+        file: { format: string; sizeBytes: number } | null;
+      };
+      type PathBody = { modules: { lessons: { steps: Node[] }[] }[] };
+      type LessonBody = { steps: Node[] };
+      const course = await buildCourse(h);
+      const stepsOf = async (headers?: Record<string, string>) => {
+        const path = await call<PathBody>(
+          h,
+          "GET",
+          `/learning/courses/${course.courseSlug}/path`,
+          headers,
+        );
+        expect(path.status).toBe(200);
+        return path.body.modules[0]!.lessons[0]!.steps;
+      };
+      const byId = (steps: Node[]) =>
+        Object.fromEntries(steps.map((s) => [s.id, s]));
+
+      // The platform seed: every question drawn, the 80 % mark; the file as uploaded.
+      const guest = byId(await stepsOf());
+      expect(guest[course.videoId]).toMatchObject({ test: null, file: null });
+      expect(guest[course.downloadId]).toMatchObject({
+        test: null,
+        file: { format: "PDF", sizeBytes: PDF.length },
+      });
+      expect(guest[course.testId]).toMatchObject({
+        test: { questionCount: 2, threshold: 80 },
+        file: null,
+      });
+
+      // The resolved rules: one question drawn per attempt, the lesson's mark over the course's.
+      expect(
+        (
+          await setRules(h, "course", course.courseId, {
+            "test.questions": 1,
+            "test.threshold": 60,
+          })
+        ).status,
+      ).toBe(200);
+      expect(
+        (await setRules(h, "lesson", course.lessonId, { "test.threshold": 90 }))
+          .status,
+      ).toBe(200);
+      const d = await doctor(h);
+      for (const steps of [await stepsOf(), await stepsOf(d.headers)])
+        expect(byId(steps)[course.testId]!.test).toEqual({
+          questionCount: 1,
+          threshold: 90,
+        });
+
+      // The lesson read's step list carries the same facts.
+      const lesson = await call<LessonBody>(
+        h,
+        "GET",
+        `/learning/lessons/${course.lessonId}`,
+      );
+      expect(byId(lesson.body.steps)[course.downloadId]!.file).toEqual({
+        format: "PDF",
+        sizeBytes: PDF.length,
+      });
+      expect(byId(lesson.body.steps)[course.testId]!.test).toEqual({
+        questionCount: 1,
+        threshold: 90,
+      });
     });
 
     it("EARS-14: the path read names the course's direction, school and author from the school's rows", async () => {

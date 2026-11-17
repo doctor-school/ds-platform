@@ -246,7 +246,31 @@ describe("024 EARS-14 — the path per viewer state (guest · not started · in 
     const kicker = (id: string) => nodes.find((n) => n.id === id)!.kicker;
     expect(kicker(ID.s1)).toBe("Серия · видео · 12 минут");
     expect(nodes.find((n) => n.id === ID.s1)!.kickerParts).toEqual(["Серия", "видео", "12 минут"]);
-    expect(kicker(ID.s3)).toBe("Материал для скачивания · 5 минут");
-    expect(kicker(ID.s4)).toBe("Тест · 10 минут");
+  });
+
+  it("EARS-14: the kicker carries the canvas metas — a test «Тест · N вопросов · порог P %», a download «Материал для скачивания · PDF · 1,2 МБ»", () => {
+    const nodes = buildPathView(coursePath()).sections[0]!.nodes;
+    const node = (id: string) => nodes.find((n) => n.id === id)!;
+    expect(node(ID.s3).kicker).toBe("Материал для скачивания · PDF · 1,2 МБ");
+    expect(node(ID.s3).kickerParts).toEqual(["Материал для скачивания", "PDF", "1,2 МБ"]);
+    expect(node(ID.s4).kicker).toBe("Тест · 10 вопросов · порог 80 %");
+    expect(node(ID.s4).kickerParts).toEqual(["Тест", "10 вопросов", "порог 80 %"]);
+  });
+
+  it("EARS-14: the question count is declined and a small file reads in КБ", () => {
+    const kickers = (test: { questionCount: number; threshold: number }, file = { format: "PDF", sizeBytes: 1_258_291 }) => {
+      const path = coursePath();
+      path.modules[0]!.lessons[1]!.steps[1]!.file = file;
+      path.modules[0]!.lessons[2]!.steps[0]!.test = test;
+      const nodes = buildPathView(path).sections[0]!.nodes;
+      return [ID.s3, ID.s4].map((id) => nodes.find((n) => n.id === id)!.kicker);
+    };
+    expect(kickers({ questionCount: 1, threshold: 70 }, { format: "DOCX", sizeBytes: 350 * 1024 })).toEqual([
+      "Материал для скачивания · DOCX · 350 КБ",
+      "Тест · 1 вопрос · порог 70 %",
+    ]);
+    expect(kickers({ questionCount: 3, threshold: 100 })[1]).toBe("Тест · 3 вопроса · порог 100 %");
+    expect(kickers({ questionCount: 21, threshold: 80 })[1]).toBe("Тест · 21 вопрос · порог 80 %");
+    expect(kickers({ questionCount: 12, threshold: 80 })[1]).toBe("Тест · 12 вопросов · порог 80 %");
   });
 });

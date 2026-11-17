@@ -35,14 +35,14 @@ describe("024 EARS-14 — node labels wrap at word and separator boundaries", ()
     expect(keepTokensWhole("Фибрилляция предсердий")).toEqual([{ text: "Фибрилляция предсердий", nowrap: false }]);
   });
 
-  it("EARS-14: the kicker breaks only after «·» — «3 минуты» never splits from its number", () => {
+  it("EARS-14: the kicker breaks only after «·» — «1,2 МБ» never splits from its number", () => {
     const view = buildPathView(coursePath());
     const memo = view.sections[0]!.nodes.find((n) => n.title === "Памятка по ЭКГ")!;
-    expect(memo.kickerParts).toEqual(["Материал для скачивания", "5 минут"]);
+    expect(memo.kickerParts).toEqual(["Материал для скачивания", "PDF", "1,2 МБ"]);
     stubMatchMedia(false);
     stubFetch({});
     render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath()} />);
-    const part = screen.getByText("5 минут", { selector: "span" });
+    const part = screen.getByText("1,2 МБ", { selector: "span" });
     expect(part).toHaveClass("whitespace-nowrap");
     vi.unstubAllGlobals();
   });

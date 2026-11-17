@@ -43,7 +43,7 @@ const testStep = (attemptsLeft: number | null = 2): LearningStepRead =>
       id: ID.s4,
       type: "test",
       title: "Итоговый тест",
-      durationMin: 10,
+      durationMin: 10, test: { questionCount: 1, threshold: 70 }, file: null,
       state: { status: "open" },
       completionSentence: "Сдайте тест на 70 % и выше.",
     },
@@ -89,7 +89,7 @@ const testLesson = () =>
         id: ID.s4,
         type: "test",
         title: "Итоговый тест",
-        durationMin: 10,
+        durationMin: 10, test: { questionCount: 10, threshold: 80 }, file: null,
         state: { status: "open" },
         completionSentence: "Сдайте тест на 70 % и выше.",
       },
@@ -129,7 +129,7 @@ describe("024 EARS-15…18 — the step screen", () => {
           id: ID.s3,
           type: "download",
           title: "Памятка по ЭКГ",
-          durationMin: 5,
+          durationMin: 5, test: null, file: { format: "PDF", sizeBytes: 1_258_291 },
           state: {
             status: "locked",
             reason: { kind: "date", at: "2026-12-01T09:00:00.000Z" },
@@ -141,6 +141,15 @@ describe("024 EARS-15…18 — the step screen", () => {
     renderStep(null, ID.s3, lesson);
     expect(screen.getByText("Шаг откроется 1 декабря.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Скачать" })).toBeNull();
+  });
+
+  it("EARS-15: the step kicker reads as the canvas — «Шаг N из M · type · meta»", () => {
+    const view = renderStep(videoStep());
+    expect(screen.getByText("Шаг 1 из 2 · Серия · видео · 15 минут")).toBeInTheDocument();
+    view.unmount();
+    const lesson = lessonRead({ steps: [...lessonRead().steps, { ...testStep().step }] });
+    renderStep(testStep(), ID.s4, lesson);
+    expect(screen.getByText("Шаг 3 из 3 · Тест · 1 вопрос · порог 70 %")).toBeInTheDocument();
   });
 
   it("EARS-15: a guest meets the registration gate that returns them to this step", () => {
@@ -482,7 +491,7 @@ describe("024 EARS-15…18 — the step screen", () => {
           id: ID.s3,
           type: "download",
           title: "Памятка по ЭКГ",
-          durationMin: 5,
+          durationMin: 5, test: null, file: { format: "PDF", sizeBytes: 2_621_440 },
           state: { status: "open" },
           completionSentence: "Откройте материал.",
         },
@@ -496,7 +505,9 @@ describe("024 EARS-15…18 — the step screen", () => {
         nextStepId: null,
       }),
     );
-    expect(screen.getByText("2,5 МБ")).toBeInTheDocument();
+    // The canvas meta (`doctor-lesson.dc.html`): «PDF · 2,5 МБ» under the file name and in the kicker.
+    expect(screen.getByText("PDF · 2,5 МБ")).toBeInTheDocument();
+    expect(screen.getByText("Шаг 2 из 2 · Материал для скачивания · PDF · 2,5 МБ")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Скачать" });
     expect(link).toHaveAttribute("href", "https://s3.example/signed");
     link.addEventListener("click", (e) => e.preventDefault());
@@ -559,7 +570,7 @@ describe("024 EARS-15…18 — the step screen", () => {
             id: ID.s4,
             type: "test",
             title: "Итоговый тест",
-            durationMin: 10,
+            durationMin: 10, test: { questionCount: 10, threshold: 80 }, file: null,
             state: { status: "locked", reason: { kind: "previous" } },
             completionSentence: "Сдайте тест.",
           },
@@ -632,15 +643,15 @@ describe("024 EARS-15/17 — the step screen follows the evaluated state in plac
   const before = () =>
     lessonRead({
       steps: [
-        { id: ID.s2, type: "video", title: "Чтение ЭКГ", durationMin: 15, state: { status: "current" }, completionSentence: "Досмотрите видео до конца." },
-        { id: ID.s3, type: "download", title: "Памятка по ЭКГ", durationMin: 5, state: { status: "locked", reason: { kind: "previous" } }, completionSentence: "Откройте материал." },
+        { id: ID.s2, type: "video", title: "Чтение ЭКГ", durationMin: 15, test: null, file: null, state: { status: "current" }, completionSentence: "Досмотрите видео до конца." },
+        { id: ID.s3, type: "download", title: "Памятка по ЭКГ", durationMin: 5, test: null, file: { format: "PDF", sizeBytes: 1_258_291 }, state: { status: "locked", reason: { kind: "previous" } }, completionSentence: "Откройте материал." },
       ],
     });
   const after = () =>
     lessonRead({
       steps: [
-        { id: ID.s2, type: "video", title: "Чтение ЭКГ", durationMin: 15, state: { status: "done" }, completionSentence: "Досмотрите видео до конца." },
-        { id: ID.s3, type: "download", title: "Памятка по ЭКГ", durationMin: 5, state: { status: "current" }, completionSentence: "Откройте материал." },
+        { id: ID.s2, type: "video", title: "Чтение ЭКГ", durationMin: 15, test: null, file: null, state: { status: "done" }, completionSentence: "Досмотрите видео до конца." },
+        { id: ID.s3, type: "download", title: "Памятка по ЭКГ", durationMin: 5, test: null, file: { format: "PDF", sizeBytes: 1_258_291 }, state: { status: "current" }, completionSentence: "Откройте материал." },
       ],
     });
   const account = (pul: number) => ({

@@ -45,7 +45,13 @@ export interface PathNode {
   title: string;
   /** The accessible name: «Урок N, шаг K. Тип. Название. Статус». */
   label: string;
+  /** The summary's reason: every locked step of a signed-in doctor (canvas `sum.hasReason`). */
   reason: string | null;
+  /**
+   * The line under the node on the path: only the first locked step — the one
+   * right after the doctor's next step (canvas `g === doneSteps + 2`).
+   */
+  lockNote: string | null;
   here: boolean;
   /** A step the doctor may open (not locked). */
   openable: boolean;
@@ -139,6 +145,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
   let lessonCount = 0;
   let doneLessons = 0;
   let current: PathView["current"] = null;
+  let lockNoted = false;
 
   const sections: PathSection[] = path.modules.map((mod, mi) => {
     const nodes: PathNode[] = [];
@@ -159,6 +166,8 @@ export function buildPathView(path: LearningCoursePath): PathView {
         const typeLabel = STEP_TYPE_LABEL[step.type];
         const medium = STEP_MEDIUM[step.type];
         const kickerParts = [typeLabel, ...(medium ? [medium] : []), durationText(step.durationMin)];
+        const firstLocked = !guest && !lockNoted && step.state.status === "locked";
+        if (firstLocked) lockNoted = true;
         nodes.push({
           id: step.id,
           kind: "step",
@@ -176,6 +185,12 @@ export function buildPathView(path: LearningCoursePath): PathView {
           reason:
             !guest && step.state.status === "locked"
               ? lockReasonText(step.state.reason)
+              : null,
+          lockNote:
+            firstLocked && step.state.status === "locked"
+              ? step.state.reason.kind === "previous"
+                ? C.lockNote
+                : lockReasonText(step.state.reason)
               : null,
           here,
           openable: step.state.status !== "locked",
@@ -197,6 +212,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
         title: C.club.title,
         label: `${C.club.kicker}. ${C.club.title}`,
         reason: null,
+        lockNote: null,
         here: false,
         openable: false,
         line: guest ? "open" : line(mod.club.state),
@@ -216,6 +232,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
         title: C.document.title,
         label: `${C.document.kicker}. ${C.document.title}`,
         reason: null,
+        lockNote: null,
         here: false,
         openable: false,
         line: guest ? "open" : line(path.document.state),

@@ -713,8 +713,8 @@ function SnakeNode({
             <Badge>{C.here}</Badge>
           </span>
         ) : null}
-        {node.reason ? (
-          <span className="shrink-0 text-xs font-semibold text-muted-foreground">{node.reason}</span>
+        {node.lockNote ? (
+          <span className="shrink-0 text-xs font-semibold text-muted-foreground">{node.lockNote}</span>
         ) : null}
       </div>
     </div>

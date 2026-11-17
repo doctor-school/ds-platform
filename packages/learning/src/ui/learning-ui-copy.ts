@@ -92,6 +92,8 @@ export const LEARNING_UI_COPY = {
   outlineHeading: "Модули и уроки",
   outlineLabel: "Навигация по пути курса",
   here: "Вы здесь",
+  /** Canvas: the line under the first locked step on the path. */
+  lockNote: "Откроется после предыдущего шага",
   sequential: "Уроки открываются по порядку.",
   continueTo: (n: number) => `Продолжить — урок ${n}`,
   continueLabel: "Продолжить",

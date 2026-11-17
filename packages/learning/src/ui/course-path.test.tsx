@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoursePath } from "./course-path";
 import { summaryAction } from "./node-summary";
-import { buildPathView } from "./path-view";
+import { buildPathView, sectionCurves, snakeGeometry } from "./path-view";
 import { CONFIG, ID, coursePath, lessonRead, stubFetch, stubMatchMedia } from "./__tests__/fixtures";
+import type { LearningCoursePath } from "@ds/schemas";
 
 // 024 EARS-14 — the course path block of `design-source/doctor-course.dc.html`
 // v16: node states, the locked reason, the empty and error states, the
@@ -138,5 +139,94 @@ describe("024 EARS-14 — the points plate on the course path", () => {
   it("EARS-14: a failed points read shows no plate rather than a made-up number", () => {
     render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath()} />);
     expect(screen.queryByTestId("points-plate")).toBeNull();
+  });
+});
+
+/**
+ * The read of a course nobody has started (EARS-11/13): step 1 is the server's
+ * `current`, every later node locked behind the previous — what a guest
+ * (no facts) and a signed-in doctor with no done step both get.
+ */
+function freshPath(signedIn: boolean): LearningCoursePath {
+  const locked = { status: "locked", reason: { kind: "previous" } } as const;
+  const base = coursePath();
+  const lessons = base.modules[0]!.lessons.map((l, li) => ({
+    ...l,
+    state: li === 0 ? ({ status: "current" } as const) : locked,
+    steps: l.steps.map((s) => ({ ...s, state: s.id === ID.s1 ? ({ status: "current" } as const) : locked })),
+  }));
+  return coursePath({
+    signedIn,
+    modules: [{ ...base.modules[0]!, lessons }],
+    current: { stepId: ID.s1, lessonId: ID.l1 },
+  });
+}
+
+// `design-source/doctor-course.dc.html` `renderVals`: a guest's lesson steps
+// are all `plain`; a signed-in doctor's are done / here (only while
+// `inProgress`, `hereG`) / closed / open; `defaultSel` = hereG or 's1'.
+describe("024 EARS-14 — the path per viewer state (guest · not started · in progress)", () => {
+  beforeEach(() => {
+    stubMatchMedia(false);
+    stubFetch({});
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const hereBadges = () => screen.queryAllByText("Вы здесь", { selector: "span,div" });
+
+  it("EARS-14: a guest sees every step plain — no «Вы здесь», no state word, no locked reason, the line open", () => {
+    const view = buildPathView(freshPath(false));
+    const steps = view.sections[0]!.nodes.filter((n) => n.kind === "step");
+    expect(steps.map((n) => n.tone)).toEqual(["plain", "plain", "plain", "plain"]);
+    expect(steps.every((n) => !n.here && n.reason === null)).toBe(true);
+    expect(view.current).toBeNull();
+    const curves = sectionCurves(view.sections[0]!.nodes, 0, snakeGeometry(false), null, null);
+    expect(curves.locked).toBe("");
+    expect(curves.open).not.toBe("");
+    expect(view.outline[0]!.lessons.map((l) => l.tone)).toEqual(["plain", "plain", "plain"]);
+
+    render(<CoursePath courseSlug="kardio" config={CONFIG} initial={freshPath(false)} />);
+    expect(hereBadges()).toHaveLength(0);
+    expect(node(/^Урок 1, шаг 1\. Серия\. Сбор анамнеза$/)).toBeInTheDocument();
+    expect(node(/^Урок 3, шаг 1\. Тест\. Итоговый тест$/)).toBeInTheDocument();
+    expect(screen.queryByText("Шаг откроется, когда будут пройдены предыдущие.")).toBeNull();
+    expect(screen.queryByRole("link", { name: /Продолжить/ })).toBeNull();
+    // Step 1 is selected first; its summary offers the registration door.
+    const summary = within(screen.getByTestId("node-summary"));
+    expect(summary.getByText("Сбор анамнеза")).toBeInTheDocument();
+    expect(summary.getByRole("link", { name: "Открыть" })).toHaveAttribute("href", expect.stringMatching(/^\/register\?returnTo=/));
+  });
+
+  it("EARS-14: a doctor who has not started sees step 1 open and the rest closed — no «Вы здесь»; the band offers «Начать курс»", () => {
+    const view = buildPathView(freshPath(true));
+    expect(view.sections[0]!.nodes.filter((n) => n.kind === "step").map((n) => n.tone)).toEqual(["open", "closed", "closed", "closed"]);
+    expect(view.current).toBeNull();
+
+    render(<CoursePath courseSlug="kardio" config={CONFIG} initial={freshPath(true)} />);
+    expect(hereBadges()).toHaveLength(0);
+    expect(node(/^Урок 1, шаг 1\. Серия\. Сбор анамнеза\. Открыт$/)).toBeInTheDocument();
+    expect(node(/^Урок 2, шаг 1\. Серия\. Чтение ЭКГ\. Закрыт$/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Продолжить/ })).toBeNull();
+    expect(screen.getByText("3 урока")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Начать курс" })).toHaveAttribute("href", `/courses/kardio/steps/${ID.s1}`);
+    const summary = within(screen.getByTestId("node-summary"));
+    expect(summary.getByText("Сбор анамнеза")).toBeInTheDocument();
+    expect(summary.getByRole("link", { name: "Начать" })).toHaveAttribute("href", `/courses/kardio/steps/${ID.s1}`);
+  });
+
+  it("EARS-14: a doctor in progress sees exactly one «Вы здесь» — on the current step, with «Продолжить»", () => {
+    render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath()} />);
+    expect(hereBadges()).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: "Начать курс" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Продолжить — урок 2" })).toBeInTheDocument();
+  });
+
+  it("EARS-14: the kicker names the step's medium as the canvas metas do — video «Серия · видео · N минут»", () => {
+    const nodes = buildPathView(coursePath()).sections[0]!.nodes;
+    const kicker = (id: string) => nodes.find((n) => n.id === id)!.kicker;
+    expect(kicker(ID.s1)).toBe("Серия · видео · 12 минут");
+    expect(nodes.find((n) => n.id === ID.s1)!.kickerParts).toEqual(["Серия", "видео", "12 минут"]);
+    expect(kicker(ID.s3)).toBe("Материал для скачивания · 5 минут");
+    expect(kicker(ID.s4)).toBe("Тест · 10 минут");
   });
 });

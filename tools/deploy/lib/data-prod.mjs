@@ -126,9 +126,18 @@ export function servesDataVerbs(stdout) {
 }
 
 /**
+ * The exit status of a data verb the box refused (ds-release's and the entrypoint's
+ * `refuse`): the box answered «no». ssh itself fails with 255, the entrypoint's
+ * usage rejection exits 2 — a caller that must tell a refusal from an unreachable box
+ * (#4097) reads the error's `exitCode`, never its prose.
+ */
+export const DATA_REFUSED_EXIT = 3;
+
+/**
  * Run one ssh command on `host`, stdin = `input` (a string/Buffer) or the file
  * `inputFile`. Resolves to stdout; `stream` forwards the box's output live instead.
- * Rejects on a non-zero exit with the first stderr line.
+ * Rejects on a non-zero exit with the first stderr line; the error's `exitCode` is
+ * that exit status.
  */
 export function runBoxCommand(
   host,
@@ -155,8 +164,11 @@ export function runBoxCommand(
       if (code === 0) return resolve(out.trim());
       const detail = err.trim().split(/\r?\n/)[0];
       reject(
-        new Error(
-          `${label} on ${host} exited ${code}${detail ? `: ${detail}` : ""}`,
+        Object.assign(
+          new Error(
+            `${label} on ${host} exited ${code}${detail ? `: ${detail}` : ""}`,
+          ),
+          { exitCode: code },
         ),
       );
     });
@@ -185,11 +197,14 @@ export function createDataProdClient({
   const through = form === "forced" ? "the forced command" : "sudo -n";
   let answered = false;
   let unreachable = null; // set by a converge after which the forced command does not answer
-  const ask = async () => {
+  // `sshOptions`: a caller's per-call ssh options (a ConnectTimeout, #4097) reach the
+  // probe its first call makes too.
+  const ask = async (sshOptions = []) => {
     try {
       return servesDataVerbs(
         await run(host, dataVerbCommand("capabilities", form), {
           label: "capabilities",
+          sshOptions,
         }),
       );
     } catch {
@@ -201,17 +216,17 @@ export function createDataProdClient({
       return host;
     },
     /** The command form, once `capabilities` answered through it. */
-    async ready() {
+    async ready({ sshOptions } = {}) {
       if (unreachable) throw unreachable;
       if (answered) return form;
-      answered = await ask();
+      answered = await ask(sshOptions);
       if (!answered)
         throw new Error(`${host} serves no data-prod verbs through ${through}`);
       return form;
     },
     /** The ssh command of `words`, once the form answered. */
-    async command(words) {
-      return dataVerbCommand(words.join(" "), await client.ready());
+    async command(words, options) {
+      return dataVerbCommand(words.join(" "), await client.ready(options));
     },
     /** The ssh command of `words` if the form already answered, else null (sync callers). */
     knownCommand(words) {
@@ -261,7 +276,7 @@ export function createDataProdClient({
     },
     /** Run one verb; `options` as runBoxCommand's. */
     async call(words, options = {}) {
-      return run(host, await client.command(words), {
+      return run(host, await client.command(words, options), {
         label: words[0],
         ...options,
       });

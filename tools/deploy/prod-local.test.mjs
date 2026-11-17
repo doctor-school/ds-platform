@@ -657,11 +657,18 @@ import {
   DATA_READ_VERBS,
   DATA_VERBS,
   RELEASE_GATE_VERBS,
+  DATA_REFUSED_EXIT,
   createDataProdClient,
   dataVerbCommand,
+  runBoxCommand,
   servesDataVerbs,
 } from "./lib/data-prod.mjs";
-import { dataProdEnvPayload, dataProdExcept } from "./prod.mjs";
+import {
+  REDEPLOY_CHECK_CONNECT_TIMEOUT,
+  dataBoxUnitCheck,
+  dataProdEnvPayload,
+  dataProdExcept,
+} from "./prod.mjs";
 import { BOX_ENTRYPOINTS } from "./lib/remote.mjs";
 
 const SHA_3313 = "0123456789abcdef0123456789abcdef01234567";
@@ -690,7 +697,7 @@ test("3313: only the data box's full capabilities answer counts", () => {
 function fakeDataProd(answers) {
   const calls = [];
   const run = async (host, command, options) => {
-    calls.push({ host, command, input: options?.input });
+    calls.push({ host, command, input: options?.input, sshOptions: options?.sshOptions });
     const answer = answers(command, calls.length);
     if (answer instanceof Error) throw answer;
     return answer;
@@ -1255,16 +1262,110 @@ test("3648: --skip-rehearsal is validated at start-up and never reaches the Acti
   assert.doesNotMatch(workflow, /skip[-_]rehearsal/);
 });
 
-test("4068: a forward release refuses while any ds-prod-* unit runs on ds-data-prod (a data-secret rotation), before its first state change", () => {
+test("4068/4097: every run — a redeploy too — asks ds-data-prod for a running ds-prod-* unit before its first state change", () => {
   const body = deployBody.slice(deployBody.indexOf('walk.phase("previous-sha")'));
-  const check = body.indexOf('await dataProd().call(["check"])');
-  assert.match(body, /if \(!redeploy\) \{\s*try \{\s*await dataProd\(\)\.call\(\["check"\]\)/);
+  const check = body.indexOf("await dataBoxUnitCheck(dataProd(), { redeploy })");
+  assert.doesNotMatch(body, /if \(!redeploy\) \{\s*try \{\s*await dataProd\(\)\.call\(\["check"\]\)/);
   const backup = body.indexOf('walk.phase("runtime-config-backup")');
   const ship = body.indexOf('walk.phase("ship")');
-  assert.ok(check > 0, "a read-only data-box live-unit check");
+  assert.ok(check > 0, "a read-only data-box live-unit check, unconditional");
   assert.ok(check < backup && backup < ship, "before the config backup and the ship");
   assert.ok(
     body.indexOf("if (!descent.ok) die(descent.reason") < check,
     "after the descent guard",
   );
+  assert.ok(
+    body.slice(check).includes("if (units.refused) die(`refused on ${DATA_PROD}: ${units.refused}`)"),
+    "a refusal dies, naming the box's message",
+  );
+});
+
+// --- #4097: a redeploy beside a running data-secret rotation ----------------------
+const RUNNING_UNIT = "ds-release: refused: ds-prod-0123456789ab-data-secret.service is still running";
+function checkClient(answer) {
+  const fake = fakeDataProd((command) => (command === "capabilities" ? CAPABILITIES : answer(command)));
+  return { fake, client: createDataProdClient({ host: "deploy@vpc", form: "forced", run: fake.run, log: () => {} }) };
+}
+const exited = (code, detail) =>
+  Object.assign(new Error(`check on deploy@vpc exited ${code}: ${detail}`), { exitCode: code });
+
+test("4097: a redeploy while a ds-prod-* unit runs on ds-data-prod is refused, naming the unit", async () => {
+  const { client } = checkClient(() => exited(DATA_REFUSED_EXIT, RUNNING_UNIT));
+  const units = await dataBoxUnitCheck(client, { redeploy: true });
+  assert.match(units.refused, /ds-prod-0123456789ab-data-secret\.service is still running/);
+  assert.equal(units.warning, undefined);
+});
+
+test("4097: a redeploy whose data box does not answer proceeds with the reason as a warning", async () => {
+  for (const answer of [
+    () => exited(255, "ssh: connect to host vpc port 22: Connection timed out"),
+    () => new Error("spawn ssh ENOENT"),
+  ]) {
+    const { client } = checkClient(answer);
+    const units = await dataBoxUnitCheck(client, { redeploy: true });
+    assert.equal(units.refused, undefined);
+    assert.match(units.warning, /exited 255|ENOENT/);
+  }
+  const silent = fakeDataProd(() => new Error("capabilities on deploy@vpc exited 255"));
+  const client = createDataProdClient({ host: "deploy@vpc", form: "forced", run: silent.run, log: () => {} });
+  const units = await dataBoxUnitCheck(client, { redeploy: true });
+  assert.match(units.warning, /serves no data-prod verbs through the forced command/);
+});
+
+test("4097: a forward release still refuses on any failed check — a refusal and an unreachable box alike", async () => {
+  for (const answer of [() => exited(DATA_REFUSED_EXIT, RUNNING_UNIT), () => exited(255, "ssh: timed out")]) {
+    const { client } = checkClient(answer);
+    const units = await dataBoxUnitCheck(client, { redeploy: false });
+    assert.ok(units.refused);
+    assert.equal(units.warning, undefined);
+  }
+  const silent = fakeDataProd(() => new Error("capabilities on deploy@vpc exited 255"));
+  const client = createDataProdClient({ host: "deploy@vpc", form: "forced", run: silent.run, log: () => {} });
+  assert.match((await dataBoxUnitCheck(client, { redeploy: false })).refused, /serves no data-prod verbs/);
+});
+
+test("4097: a check that answers lets either run go on", async () => {
+  for (const redeploy of [true, false]) {
+    const { fake, client } = checkClient(() => "no ds-prod-* step unit is running");
+    assert.deepEqual(await dataBoxUnitCheck(client, { redeploy }), { ok: true });
+    assert.deepEqual(fake.calls.map((c) => c.command), ["capabilities", "check"]);
+  }
+});
+
+test("4097: a redeploy's check bounds each ssh connect — the capabilities probe and the verb — and a release's does not", async () => {
+  assert.deepEqual(REDEPLOY_CHECK_CONNECT_TIMEOUT, ["-o", "ConnectTimeout=15"]);
+  for (const [redeploy, expected] of [
+    [true, REDEPLOY_CHECK_CONNECT_TIMEOUT],
+    [false, undefined],
+  ]) {
+    const { fake, client } = checkClient(() => "no ds-prod-* step unit is running");
+    await dataBoxUnitCheck(client, { redeploy });
+    assert.deepEqual(
+      fake.calls.map((c) => [c.command, c.sshOptions]),
+      [
+        ["capabilities", expected ?? []],
+        ["check", expected],
+      ],
+    );
+  }
+});
+
+test("4097: a box command's non-zero exit carries its exit status, so a refusal is told apart from ssh", async () => {
+  const { EventEmitter } = await import("node:events");
+  const { setImmediate } = await import("node:timers");
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = Object.assign(new EventEmitter(), { end() {} });
+    setImmediate(() => {
+      child.stderr.emit("data", `${RUNNING_UNIT}
+`);
+      child.emit("close", DATA_REFUSED_EXIT);
+    });
+    return child;
+  };
+  const error = await runBoxCommand("deploy@vpc", "check", { label: "check", spawnImpl }).catch((e) => e);
+  assert.equal(error.exitCode, DATA_REFUSED_EXIT);
+  assert.equal(error.message, `check on deploy@vpc exited 3: ${RUNNING_UNIT}`);
 });

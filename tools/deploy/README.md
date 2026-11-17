@@ -162,7 +162,8 @@ and reports the cause afterwards — runbook
   `data-prod-env`, `data-prod-up` (so
   neither the persistence plane nor GlitchTip is recreated), `backup`, the IdP converge and the migrate (`REDEPLOY_SKIPPED_STEPS` in
   `prod.mjs`), and ships the api-prod tree only. It **runs** the test-token
-  refusal, the runtime-env check (#1468), the previous-SHA read, the runtime config backup, the api-prod ship,
+  refusal, the runtime-env check (#1468), the previous-SHA read, the ds-data-prod
+  live-unit check (#4097, below), the runtime config backup, the api-prod ship,
   `pull`, boot verify, the edge config validate, the swap,
   runtime configs, `verify-running-sha`, `prune`, smoke and `finish` (ds-api-prod
   only). The swap is the durable step `recreate`,
@@ -175,6 +176,17 @@ and reports the cause afterwards — runbook
   `--force-recreate`); the workflow still writes a redeploy record for it. The
   driver re-reads the live SHA under its lock, so a rollback that ended in
   between refuses the redeploy.
+- **Beside a data-box secret rotation** (#4097). Before its first state change a
+  redeploy, like a release, runs the read-only `check` data verb on ds-data-prod
+  (`ds-release check prod`, lock-free). The box answering that a `ds-prod-*` unit
+  runs — a `data-secret.yml` rotation recreating postgres + pgbackrest — exits 3
+  (`DATA_REFUSED_EXIT` in `lib/data-prod.mjs`) and refuses the redeploy with
+  `refused on <data-prod>: … is still running`; re-run it after the unit ends. Any
+  other failure (ssh down, the forced command not answering; each ssh connect of
+  the redeploy's check is bounded by `ConnectTimeout=15`) does not block an
+  incident redeploy, which never touches the data box: it goes on with
+  `⚠ <data-prod> could not run the live-unit check (<reason>)` in its log. A
+  release refuses on either.
 - **After a terminal status.** No release cut and no digest (no new code).
   `redeploy-record` writes a new Deployment record of every run —
   `redeploy @ <sha12> — «<quote>»`, payload `kind: redeploy` — even though the

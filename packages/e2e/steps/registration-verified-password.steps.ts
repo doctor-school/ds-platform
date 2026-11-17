@@ -46,6 +46,8 @@ interface VerifiedRegistration extends OwnedCredentials {
   contexts: BrowserContext[];
   replacementPassword: string;
   displayName: string;
+  /** The journey's quoted address, when the journey (not the projection) runs. */
+  address?: string | undefined;
   subject?: string;
   priorCookies: string[];
   authPosts: string[];
@@ -54,6 +56,17 @@ interface VerifiedRegistration extends OwnedCredentials {
   accepted?: CapturedResponse;
 }
 const registrations = new WeakMap<Page, VerifiedRegistration>();
+/**
+ * A shared slot cannot re-create one fixed account on every run, so the
+ * journey's quoted address is the template of the run's own: its local part,
+ * a run id and its domain (`owner@example.org` → `owner-<uuid>@example.org`).
+ */
+function ownedAddress(template: string): string {
+  const at = template.lastIndexOf("@");
+  if (at < 1) throw new Error("003 #3771: the journey quotes no address");
+  return `${template.slice(0, at)}-${randomUUID()}${template.slice(at)}`;
+}
+
 function registration(key: Page): VerifiedRegistration {
   const state = registrations.get(key);
   if (!state) throw new Error("Owned verified registration was not prepared");
@@ -115,9 +128,14 @@ async function privateIdentity(
   state.subject = observed.subject;
 }
 
+// 003 #3771: the broader EARS-23/41 journey re-registers through these same
+// steps; each pattern names the projection's text and the journey's.
 Given(
-  "a uniquely owned verified Academy password holder has saved an original display name and logged out",
-  async ({ page, browser, baseURL, httpCredentials, world }) => {
+  /^(?:a uniquely owned verified Academy password holder has saved an original display name and logged out|a verified account with a password for "([^"]+)")$/,
+  async (
+    { page, browser, baseURL, httpCredentials, world },
+    address?: string,
+  ) => {
     expect(world.host.id).toBe("academy");
     const context = await browser.newContext({
       locale: "ru-RU",
@@ -127,7 +145,10 @@ Given(
     const state: VerifiedRegistration = {
       page: owned,
       contexts: [context],
-      email: `verified-password-2904-${randomUUID()}@example.test`,
+      email: address
+        ? ownedAddress(address)
+        : `verified-password-2904-${randomUUID()}@example.test`,
+      address,
       password: `Original-${randomUUID()}-aA1!`,
       replacementPassword: `Replacement-${randomUUID()}-aA1!`,
       displayName: "Вера Петрова",
@@ -262,9 +283,15 @@ Given(
 );
 
 When(
-  "an independent Academy guest re-registers that verified address with a distinct password and the account return target",
-  async ({ page, browser, baseURL, httpCredentials, world }) => {
+  /^(?:an independent Academy guest re-registers that verified address with a distinct password and the account return target|a visitor submits the registration form for "([^"]+)" with a different password)$/,
+  async (
+    { page, browser, baseURL, httpCredentials, world },
+    address?: string,
+  ) => {
     const state = registration(page);
+    expect(address, "the journey re-registers the address it prepared").toBe(
+      state.address,
+    );
     expect(
       state.replacementPassword !== state.password,
       "replacement credentials differ",
@@ -359,7 +386,7 @@ When(
 );
 
 Then(
-  "fresh addressed mail says already registered and password unchanged in both complete bodies with an unconsumed six-digit code",
+  /^(?:fresh addressed mail says already registered and password unchanged in both complete bodies with an unconsumed six-digit code|the mail says the address is already registered and «Ваш пароль не изменился»)$/,
   async ({ page, world }) => {
     const state = registration(page);
     if (!state.before)
@@ -424,7 +451,7 @@ Then(
 );
 
 When(
-  "that guest enters the delivered verified re-registration code once in its requesting Academy tab",
+  /^(?:that guest enters the delivered verified re-registration code once in its requesting Academy tab|the visitor enters the code from that mail on the code step)$/,
   async ({ page, world }) => {
     const state = registration(page);
     if (!state.code)
@@ -455,7 +482,7 @@ When(
 );
 
 Then(
-  "that code opens the same verified account and original name with a fresh secure session at the account return target without password replay",
+  /^(?:that code opens the same verified account and original name with a fresh secure session at the account return target without password replay|a BFF session is established and the return target is honoured)$/,
   async ({ page, world }) => {
     const state = registration(page);
     if (!state.accepted)
@@ -492,7 +519,7 @@ Then(
 );
 
 Then(
-  "independent guests sign into that same named account with the original password while the submitted replacement gets only generic refusal and no private access",
+  /^(?:independent guests sign into that same named account with the original password while the submitted replacement gets only generic refusal and no private access|the original password still signs in and the submitted one does not)$/,
   async ({ page, browser, baseURL, httpCredentials, world }) => {
     const state = registration(page);
     for (const isOriginal of [true, false]) {
@@ -611,33 +638,38 @@ Then(
   },
 );
 
-After("@registration-verified-password", async ({ page }) => {
-  const state = registrations.get(page);
-  if (!state) return;
-  try {
-    for (const context of state.contexts) {
-      if ((await context.cookies()).some((cookie) => cookie.name === SESSION)) {
-        const result = await context.pages()[0]!.evaluate(async () => {
-          const logout = await fetch("/v1/auth/logout", {
-            method: "POST",
-            credentials: "include",
+After(
+  "@registration-verified-password or @registration-verified-reregister",
+  async ({ page }) => {
+    const state = registrations.get(page);
+    if (!state) return;
+    try {
+      for (const context of state.contexts) {
+        if (
+          (await context.cookies()).some((cookie) => cookie.name === SESSION)
+        ) {
+          const result = await context.pages()[0]!.evaluate(async () => {
+            const logout = await fetch("/v1/auth/logout", {
+              method: "POST",
+              credentials: "include",
+            });
+            const profile = await fetch("/v1/me/profile", {
+              credentials: "include",
+            });
+            return { logout: logout.status, profile: profile.status };
           });
-          const profile = await fetch("/v1/me/profile", {
-            credentials: "include",
-          });
-          return { logout: logout.status, profile: profile.status };
-        });
-        expect(
-          result,
-          "owned verified re-registration session revoked",
-        ).toEqual({ logout: 200, profile: 401 });
+          expect(
+            result,
+            "owned verified re-registration session revoked",
+          ).toEqual({ logout: 200, profile: 401 });
+        }
       }
+    } finally {
+      for (const context of state.contexts) {
+        await Promise.all(context.pages().map((owned) => owned.close()));
+        await context.close();
+      }
+      registrations.delete(page);
     }
-  } finally {
-    for (const context of state.contexts) {
-      await Promise.all(context.pages().map((owned) => owned.close()));
-      await context.close();
-    }
-    registrations.delete(page);
-  }
-});
+  },
+);

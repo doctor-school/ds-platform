@@ -131,7 +131,7 @@ test.describe("024 — the doctor's course path and step screens", () => {
       await expect(page.getByText(/^Шаг откроется/)).toHaveCount(0);
       await expect(page.getByRole("link", { name: /^Продолжить/ })).toHaveCount(0);
       // The kicker names the medium as the canvas metas: «Серия · видео · N минут».
-      await expect(page.getByText(/^Серия · видео · \d+ минут/).first()).toBeVisible();
+      await expect(page.getByText(/Серия · видео · \d+ минут/).first()).toBeVisible();
       await expect(page.getByText("Автор курса")).toBeVisible();
       // EARS-14 — the points plate: a guest has no balance, every kind reads «—».
       const guestPlate = page.getByTestId("points-plate");

@@ -7,15 +7,12 @@ import {
 import { VersioningType } from "@nestjs/common";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
-import { and, desc, inArray } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { feedEntries } from "@ds/db";
 import {
   FEED_SOURCE_ADDRESS_ERROR,
   FEED_SOURCE_ADDRESS_TAKEN_ERROR,
+  PublicFeedPageSchema,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
-import { feedEntryRowVisible } from "../../src/materials/feed-entries.repository.js";
 import { FakeTelegramBotApi } from "../../src/materials/telegram/telegram-bot-api.fake.js";
 import { TELEGRAM_BOT_API } from "../../src/materials/telegram/telegram-bot-api.types.js";
 import { TELEGRAM_CONFIG } from "../../src/materials/telegram/telegram-config.js";
@@ -212,9 +209,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     /**
      * A network entry of the source as the Telegram connector writes it —
      * permalink of its smallest message id, `source_ref` `<source>:<id>` —
-     * dated in the far future (past every other suite's window) so it heads the public feed's first page. The
-     * `post` kind lands with the connector (#3994), so the fixture is a `news`
-     * card; the marks under test are row-local and kind-blind.
+     * dated in the far future (past every other suite's window) so it heads
+     * the public feed's first page, as a `post` card (EARS-33).
      */
     async function entry(
       source: { id: string; address: string },
@@ -223,7 +219,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO feed_entries
            (source_platform, source_ref, feed_source_id, kind, title, source_name, href, published_at)
-         VALUES ('telegram', $1, $2, 'news', $3, 'BBM Academy · Telegram', $4,
+         VALUES ('telegram', $1, $2, 'post', $3, 'BBM Academy · Telegram', $4,
                  '2999-01-01T00:00:00Z'::timestamptz + ($5 || ' seconds')::interval)
          RETURNING id`,
         [
@@ -586,7 +582,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(ids).not.toContain(off);
     });
 
-    it("048 EARS-10: the feed read serves no entry of a platform the card contract has no member for — a visible telegram entry is not served and the read stays 200", async () => {
+    it("048 EARS-33: a visible telegram entry of a source that is on is served by the feed read as a post card, beside the own materials", async () => {
       const s = await add(username());
       const post = await entry(s, 9);
       expect(
@@ -600,7 +596,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const shown = await academyEntry(5);
       const ids = await publicFeedIds();
       expect(ids).toContain(shown);
-      expect(ids).not.toContain(post);
+      expect(ids).toContain(post);
     });
 
     // ── EARS-23: authz, idempotency, If-Match, audit ─────────────────────
@@ -956,16 +952,32 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return rows[0]!;
     }
 
-    // The public read's row-local marks (EARS-22/32), run over the given ids
-    // newest first: the public feed does not serve network entries yet
-    // (#3997), so absence from `/v1/public/feed` alone proves nothing here.
-    async function rowVisibleIds(ids: string[]): Promise<string[]> {
-      const rows = await drizzle(pool)
-        .select({ id: feedEntries.id })
-        .from(feedEntries)
-        .where(and(inArray(feedEntries.id, ids), feedEntryRowVisible))
-        .orderBy(desc(feedEntries.publishedAt), desc(feedEntries.id));
-      return rows.map((r) => r.id);
+    /**
+     * The given ids in the order the public feed serves them (EARS-32,
+     * EARS-33): every page is walked from the top down to the oldest of them,
+     * so an absent id is absent from the whole read, not just off page one.
+     */
+    async function publicFeedOrder(ids: string[]): Promise<string[]> {
+      const { rows } = await pool.query<{ oldest: Date }>(
+        "SELECT min(published_at) AS oldest FROM feed_entries WHERE id = ANY($1::uuid[])",
+        [ids],
+      );
+      const oldest = rows[0]!.oldest.getTime();
+      const served: string[] = [];
+      let cursor: string | null = null;
+      for (let pages = 0; pages < 500; pages += 1) {
+        const res = await app.inject({
+          method: "GET",
+          url: `/v1/public/feed?limit=24${cursor ? `&cursor=${cursor}` : ""}`,
+        });
+        expect(res.statusCode, res.payload).toBe(200);
+        const page = PublicFeedPageSchema.parse(json(res));
+        served.push(...page.data.map((c) => c.id));
+        const last = page.data.at(-1);
+        cursor = page.nextCursor;
+        if (!cursor || !last || Date.parse(last.publishedAt) < oldest) break;
+      }
+      return served.filter((id) => ids.includes(id));
     }
 
     async function entryAudit(id: string) {
@@ -1057,7 +1069,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(hidden.headers.etag).toBe(`W/"${hiddenItem.version}"`);
       expect((await entryRow(p1202!.id)).hidden_at).not.toBeNull();
       const pair = [p1202!.id, p1201!.id];
-      expect(await rowVisibleIds(pair)).toEqual([p1201!.id]);
+      expect(await publicFeedOrder(pair)).toEqual([p1201!.id]);
       expect(await publicFeedIds()).not.toContain(p1202!.id);
       // Still listed, as «Скрыт»; the sibling untouched.
       let listed = (await listEntries(s.id)).data;
@@ -1075,7 +1087,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const edited = await entryRow(p1202!.id);
       expect(edited.title).toBe("Пост 1202, исправленный");
       expect(edited.hidden_at).toEqual(hiddenAt);
-      expect(await rowVisibleIds(pair)).toEqual([p1201!.id]);
+      expect(await publicFeedOrder(pair)).toEqual([p1201!.id]);
       expect(await publicFeedIds()).not.toContain(p1202!.id);
 
       // The edit moved the row: the version read before it is stale.
@@ -1095,7 +1107,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(returned.hidden_at).toBeNull();
       expect(returned.published_at).toEqual(before.published_at);
       // Back in the feed's own order, at its own date ahead of the older post.
-      expect(await rowVisibleIds(pair)).toEqual([p1202!.id, p1201!.id]);
+      expect(await publicFeedOrder(pair)).toEqual([p1202!.id, p1201!.id]);
       expect((await listEntries(s.id)).data.map((e) => e.id)).toEqual([
         p1202!.id,
         p1201!.id,

@@ -137,7 +137,11 @@ messages }`, `id` bare and compared as `-(10^12 + id)` with the bound
    `hidden_at IS NOT NULL` and `source_off` entries on the entry row itself, so
    it never reads `feed_sources` (EARS-22, Lead decision 11). It serves only
    the platforms in `FEED_CARD_PLATFORMS` — those the card contract has a
-   member for — so a stored network entry is never served before its card
-   (048-design §Delivery slices (slice 2)). The admin
+   member for: `academy` (`news`, `column`) and `telegram` (`post`, EARS-33) —
+   so a stored network entry is never served before its card (048-design
+   §Delivery slices (slice 2)). A `post` card is built from the stored entry
+   alone — the preview key signed at the read, `null` while it is pending or
+   failed — so the read never calls Telegram and serves every stored entry
+   while the connector is down or unconfigured (EARS-35). The admin
    controllers share `admin-write.http.ts` (id shape, `If-Match`, field errors,
    idempotent replay).

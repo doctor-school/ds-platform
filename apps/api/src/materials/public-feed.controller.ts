@@ -4,7 +4,7 @@ import { Authz, Public } from "../authz/index.js";
 import { TaxonomyError, TaxonomyProblemFilter } from "../taxonomy/index.js";
 import { MaterialsPublicReadsService } from "./public-reads.service.js";
 
-// 048 EARS-9, EARS-10, EARS-19 (#3513) — `GET /v1/public/feed`, the anonymous
+// 048 EARS-9, EARS-10, EARS-19, EARS-33 (#3513, #3997) — `GET /v1/public/feed`, the anonymous
 // feed page the Academy home rail reads. Same public surface pattern as the
 // 012/032 public controllers: `@Public()` for the 003 layer, `@Authz` as the
 // SSOT of the guard, the completeness gate and the matrix. No Cache-Control:
@@ -27,7 +27,7 @@ export class PublicFeedController {
     access: "public",
     check: "none",
     audit: "none",
-    tests: ["EARS-9", "EARS-10", "EARS-19"],
+    tests: ["EARS-9", "EARS-10", "EARS-19", "EARS-33", "EARS-35"],
   })
   feed(@Query() rawQuery: Record<string, string>): Promise<PublicFeedPage> {
     const parsed = PublicFeedQuerySchema.safeParse(rawQuery);

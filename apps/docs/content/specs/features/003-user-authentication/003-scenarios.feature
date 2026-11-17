@@ -320,15 +320,25 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And no account, consent, or audit_ledger row is written before a code is accepted
     And the API response is indistinguishable in status, body, and timing from the never-registered case
 
-  @EARS-23 @EARS-41 @happy @door:register @quarantine:login(#3771) @journey
+  @EARS-23 @EARS-41 @happy @registration-verified-reregister @door:register @host:login @stage-only:login(mail) @journey
   Scenario: A verified password holder who re-registers is signed in by the code and keeps the password
     Given a verified account with a password for "owner@example.org"
-    When a visitor submits the registration form for "owner@example.org" with a different password and a display name
+    When a visitor submits the registration form for "owner@example.org" with a different password
     Then the mail says the address is already registered and «Ваш пароль не изменился»
     When the visitor enters the code from that mail on the code step
     Then a BFF session is established and the return target is honoured
     And the original password still signs in and the submitted one does not
-    And the display name is written only if the account had none
+    # #3771: bound in registration-verified-password.steps.ts; each run owns
+    # a unique address of the quoted one's form. The Academy form has no
+    # display-name field, so the profile-fill clause is the rule below.
+
+  @EARS-23 @happy @rule
+  Scenario: A display name submitted with a re-registration is written only when the account has none
+    Given a verified account with a password
+    When a visitor re-registers that address with a display name and enters the code from the mail
+    Then the display name is written only if the account had none
+    # A server fact: no storefront form that reaches it from the Academy sends
+    # a display name. Unproven until an API test owns it (#3771).
 
   @EARS-23 @EARS-41 @happy @registration-verified-password @door:register @host:login @stage-only:login(mail) @journey
   Scenario: Academy verified re-registration preserves the original password and display name
@@ -645,12 +655,22 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # public UI, absent addressed mail and private access, without native reads or
     # statistical timing probes. Keep the golden verified EARS-6 journey intact.
 
-  @EARS-7 @EARS-14 @happy @door:login @quarantine:login(#3771) @journey
+  @EARS-7 @EARS-14 @happy @login-sms-budget @door:login @host:login @stage-only:login(sms) @journey
   Scenario: Login with an SMS OTP code within the toll-fraud budget
     Given a verified doctor_guest user whose phone is under all SMS thresholds
     When the user requests an SMS login code and submits the correct code
+    Then a BFF session is established
+    # #3771: bound in login-sms-confirmed.steps.ts. Which IdP check verified
+    # the code is not visible to a browser: the rule below.
+
+  @EARS-7 @happy @rule @proof:unit @proof:api
+  Scenario: An SMS login code is verified through Zitadel's otp_sms check
+    Given a verified doctor_guest user whose phone is under all SMS thresholds
+    When the user requests an SMS login code and submits the correct code
     Then Zitadel otp_sms verifies it
-    And a BFF session is established
+    # apps/api/src/auth/idp/zitadel.idp.spec.ts EARS-7 «loginWithSmsOtp happy
+    # path verifies with the otpSms check»; apps/api/test/auth/login-otp.e2e-spec.ts
+    # EARS-7 (the SMS code request and sign-in through the sign-in host).
 
   @host:academy @EARS-7 @EARS-8 @EARS-16 @EARS-41 @failure @login-sms-code-reuse @door:login @host:login @stage-only:login(sms) @rule
   Scenario: Academy refuses a consumed SMS login code without disturbing its confirmed-phone owner
@@ -1609,14 +1629,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # no new user-visible text. Cross-storefront journeys run from the Academy here;
   # the doctor direction is 020 EARS-18 (@host:both).
 
-  @EARS-61 @EARS-62 @EARS-5 @EARS-8 @happy @sign-in-host @door:login @quarantine:login(#3771) @journey
+  @EARS-61 @EARS-62 @EARS-5 @EARS-8 @happy @sign-in-host @door:login @host:login @stage-only:login(mail) @journey
   Scenario: A sign-in from the Academy entry runs on the sign-in host and ends signed in on the stored page
     Given a signed-out browser on the Academy with no shared sign-in-host session
-    When the guest follows the Academy sign-in entry from "/webinars/some-event"
+    When the guest follows the Academy sign-in entry from "/webinars/golden-event-past-recorded"
     Then the Academy renders no form and redirects to the authorize endpoint with a new interactive transaction
     And the sign-in host shows the Academy's own sign-in form
     When the guest signs in there with a verified password account
-    Then the Academy callback mints a fresh session and answers 303 to "/webinars/some-event#"
+    Then the Academy callback mints a fresh session and answers 303 to "/webinars/golden-event-past-recorded#"
     And the authorization code never appears in a rendered document
 
   @EARS-61 @EARS-62 @failure @return-path-hardening @door:login @quarantine:login(#3771) @rule
@@ -1798,7 +1818,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And none of them carries Domain=.doctor.school
     And a cross-site post of an attacker's credentials to the sign-in host creates no session
 
-  @EARS-24 @EARS-41 @happy @register-on-sign-in-host @door:register @quarantine:login(#3771) @journey
+  @EARS-24 @EARS-41 @happy @register-on-sign-in-host @door:register @host:login @stage-only:login(cross-host-session) @journey
   Scenario: A registration on the sign-in host ends signed in on both storefronts
     Given a guest on the Academy with no account
     When the guest follows the Academy registration entry
@@ -1844,7 +1864,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the sign-in host renders the plain sign-in form with no error
     And no user is looked up from the login hint
 
-  @EARS-71 @happy @entry-intent-event-target @door:login @quarantine:login(#3771) @journey
+  @EARS-71 @happy @entry-intent-event-target @door:login @host:login @stage-only:login(mail) @journey
   Scenario: A guest signing in from an event page sees that event's card on the sign-in form
     Given a guest on the page of a published эфир on the Academy
     When the guest follows the sign-in link to "/login?returnTo=/webinars/<slug>"

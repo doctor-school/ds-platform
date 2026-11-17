@@ -132,8 +132,9 @@ export const LEARNING_UI_COPY = {
   lessonLabel: (n: number) => `Урок ${n}`,
   moduleTitle: (position: number, title: string) =>
     `Модуль ${position}. ${title}`,
-  moduleMeta: (lessons: number, min: number) =>
-    `${lessonCountText(lessons)} · ${durationText(min)}`,
+  /** Canvas `sec.meta`: «6 уроков и клуб · …» — the club named when the module has one. */
+  moduleMeta: (lessons: number, club: boolean, min: number) =>
+    `${lessonCountText(lessons)}${club ? " и клуб" : ""} · ${durationText(min)}`,
   courseEyebrow: (modules: number, lessons: number) =>
     `Курс · ${modules} ${plural(modules, "модуль", "модуля", "модулей")} · ${lessonCountText(lessons)}`,
   progress: (done: number, total: number, modulePosition?: number) =>

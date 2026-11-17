@@ -240,7 +240,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
       id: mod.id,
       position: mod.position,
       title: C.moduleTitle(mod.position, mod.title),
-      meta: C.moduleMeta(mod.lessons.length, modMin),
+      meta: C.moduleMeta(mod.lessons.length, mod.club !== null, modMin),
       progress: signedIn
         ? C.moduleProgress(modDone, mod.lessons.length)
         : null,

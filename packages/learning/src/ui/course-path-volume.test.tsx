@@ -115,6 +115,17 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
     }
   });
 
+  it("EARS-14: a module plate counts its lessons and its club as the canvas does — «3 урока и клуб · …»; no club, no «и клуб»", () => {
+    const path = multiModulePath(6, 3, 8);
+    path.modules[1]!.club = null;
+    render(<CoursePath courseSlug="k" config={CONFIG} initial={path} />);
+    const plate = (m: number) =>
+      screen.getByRole("heading", { level: 3, name: `Модуль ${m}. Раздел ${m}` }).parentElement!;
+    // Three lessons of 15 minutes: 45 minutes = 1 academic hour.
+    expect(within(plate(1)).getByText("3 урока и клуб · 1 академический час")).toBeInTheDocument();
+    expect(within(plate(2)).getByText("3 урока · 1 академический час")).toBeInTheDocument();
+  });
+
   it("EARS-14: the outline opens ONE module — the one holding «Вы здесь» — and marks that lesson in view", () => {
     // Lesson 8 of 3-per-module → module 3.
     render(<CoursePath courseSlug="k" config={CONFIG} initial={multiModulePath(6, 3, 8)} />);

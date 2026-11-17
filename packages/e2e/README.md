@@ -426,7 +426,9 @@ its line here, a new line names an OPEN Issue, and a spec does not move to
 work queue — no PR is cut to drain it. The regression set the suite owes before
 release is the key-journey register (regression-contour tech spec §6.7): every
 key user action mapped to the binding here or the live tier
-(`tools/staging/live-tiers.mjs`) that runs it, each gap with an OPEN Issue.
+(`tools/staging/live-tiers.mjs`) that runs it, each gap with an OPEN Issue. A
+gap is closed by the PR that changes that action's code or by its hotfix, never
+as standalone work.
 
 `retries: 0` (§6.5): a retry turns a flake into a pass and a regression into a
 slow pass.

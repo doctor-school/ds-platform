@@ -56,24 +56,21 @@ async function shoot(page: Page, name: string, fullPage = false) {
 /**
  * Every title the snake clamps to two lines ends with «…», on either side of
  * the axis. Chrome right-aligns a clamped line without its «…» and draws the
- * «…» after the line's end, so a right-aligned title shows it only when its end
- * padding holds the glyph; a left-aligned one draws it inside its box. Returns
- * how many titles are clamped on each side.
+ * «…» after the line's end, past a right-aligned box's edge; a clamped title
+ * on the left of the axis is therefore left-aligned and draws it inside its
+ * box. Returns how many titles are clamped on each side.
  */
 async function clampedTitlesKeepTheirEllipsis(page: Page): Promise<{ left: number; right: number }> {
   const titles = await page.locator("span.line-clamp-2[title]").evaluateAll((els) => {
-    const ctx = document.createElement("canvas").getContext("2d")!;
+    // Chrome draws a clamped line's «…» after the line's end: inside the box
+    // only when the clamped line is start-aligned, never when right-aligned.
     return els
       .filter((el) => el.scrollHeight > el.clientHeight + 1)
-      .map((el) => {
-        const cs = getComputedStyle(el);
-        ctx.font = cs.font;
-        return {
-          title: el.getAttribute("title"),
-          left: cs.textAlign === "right",
-          fits: cs.textAlign !== "right" || parseFloat(cs.paddingRight) >= ctx.measureText("…").width,
-        };
-      });
+      .map((el) => ({
+        title: el.getAttribute("title"),
+        left: getComputedStyle(el.parentElement!).textAlign === "right",
+        fits: !["right", "end"].includes(getComputedStyle(el).textAlign),
+      }));
   });
   expect(titles.filter((t) => !t.fits).map((t) => t.title)).toEqual([]);
   return { left: titles.filter((t) => t.left).length, right: titles.filter((t) => !t.left).length };

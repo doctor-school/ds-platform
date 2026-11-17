@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { expertInitials, type LearningCoursePath } from "@ds/schemas";
 import {
   Badge,
@@ -646,6 +646,8 @@ function SnakeNode({
   const off = (index % 2 === 0 ? 1 : -1) * g.offset;
   const right = narrow || off > 0;
   const edge = S / 2 + 16;
+  const titleRef = useRef<HTMLSpanElement>(null);
+  const clamped = useClamped(titleRef, !right, node.title);
   const box = cn(
     "inline-flex size-full items-center justify-center border-2 [button:hover>&]:shadow-btn [button:focus-visible>&]:shadow-focus",
     NODE_TONE[node.tone],
@@ -708,8 +710,8 @@ function SnakeNode({
             clamps to two lines; no part shrinks, so a wrapped kicker plus a
             reason never clips the title's second line. Chrome right-aligns a
             clamped line without its «…» and draws the «…» past the line's end,
-            so a right-aligned title keeps its edge (negative end margin) and
-            gets the room for the «…» as end padding — it hangs into the gap. */}
+            so a left-side title that is actually clamped (measured) is
+            left-aligned and its «…» lands inside the box. */}
         <span className="shrink-0 text-xs font-bold tabular-nums text-faint">
           {(narrow && node.firstOfLesson && node.lessonNumber
             ? [C.lessonLabel(node.lessonNumber), ...node.kickerParts]
@@ -722,10 +724,11 @@ function SnakeNode({
           ))}
         </span>
         <span
+          ref={titleRef}
           title={node.title}
           className={cn(
             "line-clamp-2 shrink-0 text-body-compact font-extrabold leading-tight",
-            !right && "-me-3 pe-3",
+            clamped && "text-left",
             node.tone === "closed" ? "text-muted-foreground" : "text-foreground",
           )}
           style={TITLE_TRACKING}
@@ -751,6 +754,42 @@ function SnakeNode({
       </div>
     </div>
   );
+}
+
+/** A clamped box hides lines: its content is taller than its box. */
+function isClamped(el: HTMLElement): boolean {
+  return el.scrollHeight > el.clientHeight + 1;
+}
+
+/**
+ * Whether the line-clamped element is actually clamped, measured after layout
+ * and again whenever its text, its size, the viewport or the loaded fonts change.
+ * Alignment never changes the line count, so the flag cannot oscillate.
+ */
+function useClamped(ref: React.RefObject<HTMLElement | null>, enabled: boolean, text: string): boolean {
+  const [clamped, setClamped] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!enabled || !el) {
+      setClamped(false);
+      return;
+    }
+    const measure = () => setClamped(isClamped(el));
+    measure();
+    window.addEventListener("resize", measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(el);
+    let live = true;
+    void document.fonts?.ready.then(() => {
+      if (live) measure();
+    });
+    return () => {
+      live = false;
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  }, [ref, enabled, text]);
+  return clamped;
 }
 
 /**

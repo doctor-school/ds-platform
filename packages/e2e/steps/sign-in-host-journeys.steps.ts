@@ -44,7 +44,9 @@ import { After, Given, Then, When } from "./support/auth-fixtures.js";
  */
 
 const SESSION_COOKIE = "__Host-ds_session";
-const ACADEMY_FORM_MARK = "auth-wordmark";
+/** The shell's marks: the form-column lockup (and its dark swap) and the panel mark. */
+const AUTH_MARKS =
+  "[data-testid^='auth-wordmark'], [data-testid='auth-panel-wordmark']";
 const ACADEMY_PANEL_FOOTER = "© Doctor.School.";
 const DOCTOR_PANEL_FOOTER = "Платформа непрерывного медицинского образования";
 const EVENT = golden.events.pastWithRecording;
@@ -140,7 +142,11 @@ async function sessionStatus(page: Page): Promise<number> {
  * storefront's longer line. The panel keeps its footer beside a return card.
  */
 async function expectAcademyForm(guest: Page): Promise<void> {
-  await expect(guest.getByTestId(ACADEMY_FORM_MARK)).toBeVisible();
+  // Exactly one mark is visible per viewport: above the split it is the panel
+  // mark and the form-column lockup is hidden (as on the doctor door).
+  await expect(guest.locator(AUTH_MARKS).locator("visible=true")).toHaveCount(
+    1,
+  );
   await expect(
     guest.getByText(ACADEMY_PANEL_FOOTER, { exact: true }),
   ).toBeVisible();

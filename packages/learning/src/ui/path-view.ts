@@ -39,6 +39,14 @@ export interface PathNode {
   /** The «Урок N» chip on the lesson's first node. */
   firstOfLesson: boolean;
   kicker: string;
+  /**
+   * Where a step sits — «Урок N · модуль M · шаг s из S» (the module only on a
+   * course of several modules; canvas `lessonKicker`); null for the club and
+   * the document.
+   */
+  position: string | null;
+  /** The state word of the accessible name («Пройден», «Вы здесь»…); "" for a guest. */
+  status: string;
   /** The kicker's parts (type, then its canvas meta): each stays whole, the line breaks only after «·». */
   kickerParts: string[];
   title: string;
@@ -141,6 +149,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
   const signedIn = path.signedIn;
   const guest = !signedIn;
   const hereStep = phase === "in-progress" ? (path.current?.stepId ?? null) : null;
+  const several = path.modules.length > 1;
   let lessonCount = 0;
   let doneLessons = 0;
   let current: PathView["current"] = null;
@@ -174,6 +183,8 @@ export function buildPathView(path: LearningCoursePath): PathView {
           lessonId: lesson.id,
           lessonNumber: lesson.number,
           firstOfLesson: si === 0,
+          position: C.stepPosition(lesson.number, several ? mod.position : undefined, si + 1, lesson.steps.length),
+          status: word,
           kicker: kickerParts.join(" · "),
           kickerParts,
           title: step.title,
@@ -205,6 +216,8 @@ export function buildPathView(path: LearningCoursePath): PathView {
         lessonId: null,
         lessonNumber: null,
         firstOfLesson: false,
+        position: null,
+        status: "",
         kicker: C.club.kicker,
         kickerParts: [C.club.kicker],
         title: C.club.title,
@@ -225,6 +238,8 @@ export function buildPathView(path: LearningCoursePath): PathView {
         lessonId: null,
         lessonNumber: null,
         firstOfLesson: false,
+        position: null,
+        status: "",
         kicker: C.document.kicker,
         kickerParts: [C.document.kicker],
         title: C.document.title,

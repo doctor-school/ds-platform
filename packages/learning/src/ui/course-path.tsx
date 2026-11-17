@@ -599,10 +599,21 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
           <SheetContent>
             <SheetHeader>
               <SheetTitle>{selected.title}</SheetTitle>
-              <SheetDescription>{selected.kicker}</SheetDescription>
+              <SheetDescription>{selected.position ?? selected.kicker}</SheetDescription>
             </SheetHeader>
             <SheetBody>
-              <NodeSummary node={selected} action={action} showTitle={false} />
+              <NodeSummary
+                node={selected}
+                action={action}
+                showTitle={false}
+                steps={
+                  selected.kind === "step"
+                    ? nodes
+                        .filter((n) => n.kind === "step" && n.lessonId === selected.lessonId)
+                        .map((n, i) => ({ no: i + 1, label: `${n.kickerParts[0]} · ${n.title}` }))
+                    : undefined
+                }
+              />
             </SheetBody>
           </SheetContent>
         </Sheet>

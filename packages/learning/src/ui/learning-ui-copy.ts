@@ -130,6 +130,9 @@ export const LEARNING_UI_COPY = {
       : `${lessonCountText(lessons)}${club ? " и клуб" : ""}`,
   start: "Начать урок",
   lessonLabel: (n: number) => `Урок ${n}`,
+  /** Canvas `lessonKicker`: «Урок 8 · модуль 3 · шаг 2 из 3»; one module — no module. */
+  stepPosition: (lesson: number, module: number | undefined, step: number, steps: number) =>
+    `Урок ${lesson}${module ? ` · модуль ${module}` : ""} · шаг ${step} из ${steps}`,
   moduleTitle: (position: number, title: string) =>
     `Модуль ${position}. ${title}`,
   /** Canvas `sec.meta`: «6 уроков и клуб · …» — the club named when the module has one. */

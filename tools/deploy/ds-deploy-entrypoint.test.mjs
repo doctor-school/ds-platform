@@ -1582,8 +1582,14 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
   });
 
   // --- 4089: the certified PostgreSQL artifact, delivered by the Actions release -------
-  const PG_ID = `sha256:${"1".repeat(64)}`;
-  const BR_ID = `sha256:${"2".repeat(64)}`;
+  // #4104: the ids are the digests of the image targets a containerd-store `docker image
+  // save` lists in index.json (ds-data-prod runs that store), so the fixture's ids are
+  // the real digests of its target blobs.
+  const OCI_INDEX = "application/vnd.oci.image.index.v1+json";
+  const digest = (body) => `sha256:${createHash("sha256").update(body).digest("hex")}`;
+  const TARGETS = ["postgres", "pgbackrest", "other"].map((role) => JSON.stringify({ schemaVersion: 2, mediaType: OCI_INDEX, role }));
+  const [PG_ID, BR_ID, OTHER_ID] = TARGETS.map(digest);
+  const CONFIGS = ["c1", "c2", "c3"];
   const pgCertificate = (over = {}) =>
     JSON.stringify({ schema: 1, sourceHash: "a".repeat(64), images: { postgres: { id: PG_ID }, pgbackrest: { id: BR_ID } }, ...over });
   const artifactDir = (sha = SHA) => join(root, "var/lib/ds-platform/postgres-artifact", sha);
@@ -1642,18 +1648,30 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     );
     chmodSync(join(stubs, "docker"), 0o755);
   };
-  // A `docker image save <id> <id>` archive: untagged images, config digests as ids.
-  const imageArchive = ({ ids = [PG_ID, BR_ID], tags = {}, extra = [] } = {}) =>
-    tarArchive([
+  // A `docker image save <id> <id>` archive of the containerd store, as measured on Docker
+  // 29.4.2 (#4104): blobs/, blobs/sha256/, the blobs, index.json, manifest.json, oci-layout.
+  const imageArchive = ({ ids = [PG_ID, BR_ID], tags = {}, extra = [], entry = (e) => e, index = (i) => i, drop = [], blob = (b) => b } = {}) => {
+    const roles = ids.map((id) => [PG_ID, BR_ID, OTHER_ID].indexOf(id));
+    const members = [
       { name: "blobs/", type: "5" },
-      { name: `blobs/sha256/${"9".repeat(64)}`, body: "layer" },
-      { name: "index.json", body: JSON.stringify({ schemaVersion: 2, manifests: [] }) },
+      { name: "blobs/sha256/", type: "5" },
+      ...CONFIGS.map((c) => ({ name: `blobs/sha256/${digest(c).slice(7)}`, body: c })),
+      ...TARGETS.map((t, i) => ({ name: `blobs/sha256/${digest(t).slice(7)}`, body: blob(t, i) })),
+      {
+        name: "index.json",
+        body: JSON.stringify(
+          index({ schemaVersion: 2, mediaType: OCI_INDEX, manifests: ids.map((id, i) => entry({ mediaType: OCI_INDEX, digest: id, size: Buffer.byteLength(TARGETS[roles[i]]) }, i)) }),
+        ),
+      },
       {
         name: "manifest.json",
-        body: JSON.stringify(ids.map((id) => ({ Config: `blobs/sha256/${id.slice(7)}`, RepoTags: tags[id] ?? null, Layers: [] }))),
+        body: JSON.stringify(ids.map((id, i) => ({ Config: `blobs/sha256/${digest(CONFIGS[roles[i]]).slice(7)}`, RepoTags: tags[id] ?? null, Layers: [] }))),
       },
+      { name: "oci-layout", body: '{"imageLayoutVersion":"1.0.0"}' },
       ...extra,
-    ]);
+    ];
+    return tarArchive(members.filter((m) => !drop.includes(m.name)));
+  };
   const load = (input, env) => run(`postgres-load ${SHA} ${PG_ID.slice(7)} ${BR_ID.slice(7)}`, { input, env });
 
   it("4089: postgres-load docker-loads exactly the certified untagged images, checks their ids and keeps no copy", () => {
@@ -1662,21 +1680,31 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     const r = load(archive);
     assert.equal(r.status, 0, String(r.stderr));
     assert.deepEqual(readFileSync(join(dir, "loaded.tar")), archive);
-    assert.match(String(r.stdout), /certified images 111111111111 \/ 222222222222 of 0123456789ab loaded/);
-    assert.match(log("docker"), /^docker load -i \S+\ndocker image inspect --format \{\{\.Id\}\} sha256:1{64}\ndocker image inspect --format \{\{\.Id\}\} sha256:2{64}\n$/);
+    assert.match(String(r.stdout), new RegExp(`certified images ${PG_ID.slice(7, 19)} / ${BR_ID.slice(7, 19)} of 0123456789ab loaded`));
+    assert.equal(log("docker"), `docker load -i ${log("docker").split("\n")[0].split(" ")[3]}\ndocker image inspect --format {{.Id}} ${PG_ID}\ndocker image inspect --format {{.Id}} ${BR_ID}\n`);
     const work = join(root, "var/lib/ds-platform");
     assert.deepEqual(existsSync(work) ? readdirSync(work).filter((n) => n.includes("postgres-load")) : [], [], "the upload is removed");
   });
 
-  it("4089: postgres-load refuses an archive with an extra image, a wrong id, a tag or a name before loading it", () => {
+  it("4089 / 4104: postgres-load refuses an archive with an extra image, a wrong id, a tag, a name or a member outside the containerd archive before loading it", () => {
     loadBox();
-    const OTHER = `sha256:${"3".repeat(64)}`;
+    const want = new RegExp(`are not the certified ${PG_ID.slice(0, 19)}… / ${BR_ID.slice(0, 19)}…`);
     const cases = [
-      [imageArchive({ ids: [PG_ID, BR_ID, OTHER] }), /holds 3 images, not the 2 certified/],
-      [imageArchive({ ids: [PG_ID, OTHER] }), /are not the certified sha256:1{12}… \/ sha256:2{12}…/],
+      [imageArchive({ ids: [PG_ID, BR_ID, OTHER_ID] }), /holds 3 images, not the 2 certified/],
+      [imageArchive({ ids: [PG_ID, OTHER_ID] }), want],
       [imageArchive({ ids: [PG_ID, PG_ID] }), /are not the certified/],
       [imageArchive({ tags: { [BR_ID]: ["postgres:17"] } }), /an image carries a tag/],
-      [imageArchive({ extra: [{ name: "repositories", body: JSON.stringify({ postgres: { 17: BR_ID.slice(7) } }) }] }), /names an image/],
+      [imageArchive({ extra: [{ name: "repositories", body: JSON.stringify({ postgres: { 17: BR_ID.slice(7) } }) }] }), /a member outside a containerd image archive/],
+      [imageArchive({ extra: [{ name: "extra.json", body: "{}" }] }), /a member outside a containerd image archive/],
+      [imageArchive({ extra: [{ name: "blobs/sha512/", type: "5" }] }), /a member outside a containerd image archive/],
+      [imageArchive({ drop: ["index.json"] }), /no index\.json/],
+      [imageArchive({ drop: ["oci-layout"] }), /no oci-layout/],
+      [imageArchive({ entry: (e, i) => (i === 1 ? { ...e, annotations: { "io.containerd.image.name": "docker.io/library/postgres:17" } } : e) }), /an index\.json entry names an image/],
+      [imageArchive({ entry: (e, i) => (i === 0 ? { ...e, annotations: { "org.opencontainers.image.ref.name": "17" } } : e) }), /an index\.json entry names an image/],
+      [imageArchive({ entry: (e) => ({ ...e, platform: { os: "linux" } }) }), /an index\.json entry/],
+      [imageArchive({ entry: (e, i) => (i === 0 ? { ...e, size: e.size + 1 } : e) }), /blob is absent or not of its size/],
+      [imageArchive({ blob: (b, i) => (i === 0 ? b.replace("postgres", "postgreZ") : b) }), /blob is not of its digest/],
+      [imageArchive({ index: (x) => ({ ...x, annotations: {} }) }), /index\.json is not an OCI image index/],
       [
         imageArchive({ extra: [{ name: "manifest.json", body: "[]" }] }),
         /more than one manifest\.json/,
@@ -1699,21 +1727,13 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       assert.equal(String(r.stderr).trim().split("\n").length, 1, "a status line only");
     }
     assert.equal(log("docker"), "", "nothing loaded");
-    const named = tarArchive([
-      { name: "index.json", body: JSON.stringify({ manifests: [{ annotations: { "io.containerd.image.name": "docker.io/library/postgres:17" } }] }) },
-      { name: "manifest.json", body: JSON.stringify([PG_ID, BR_ID].map((id) => ({ Config: `blobs/sha256/${id.slice(7)}`, RepoTags: null }))) },
-    ]);
-    const r = load(named);
-    assert.equal(r.status, 3);
-    assert.match(String(r.stderr), /names an image/);
-    assert.equal(log("docker"), "", "nothing loaded");
   });
 
   it("4089: postgres-load refuses when the loaded ids are not the certified ones", () => {
     loadBox();
     const r = load(imageArchive(), { STUB_INSPECT_ID: `sha256:${"4".repeat(64)}` });
     assert.equal(r.status, 3);
-    assert.match(String(r.stderr), /docker load of 0123456789ab did not yield the certified image sha256:1{12}/);
+    assert.match(String(r.stderr), new RegExp(`docker load of 0123456789ab did not yield the certified image ${PG_ID.slice(0, 19)}`));
   });
 
   it("4089: postgres-load refuses an oversized stream, a failed load, another box and bad words", () => {

@@ -196,7 +196,7 @@ import {
   ARTIFACT_IMAGES,
   POSTGRES_ARTIFACT_DIR,
   assertArchiveMatchesCertificate,
-  imageArchiveConfigIds,
+  imageArchiveIds,
 } from "./postgres-artifact-release.mjs";
 import {
   SKIP_REHEARSAL_FLAG,
@@ -2305,7 +2305,7 @@ export function deliveredPostgresArtifact(sha, { dir = POSTGRES_ARTIFACT_DIR } =
   const imagesFile = join(own, ARTIFACT_IMAGES);
   if (!existsSync(imagesFile))
     throw new Error(`the delivered PostgreSQL artifact of ${sha.slice(0, 12)} has no images.tar`);
-  assertArchiveMatchesCertificate(imageArchiveConfigIds(imagesFile), certificate);
+  assertArchiveMatchesCertificate(imageArchiveIds(imagesFile), certificate);
   return { certificate, imagesFile };
 }
 

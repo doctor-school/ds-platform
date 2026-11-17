@@ -1046,7 +1046,8 @@ first_line() {
   printf '%s' "${reason:0:200}"
 }
 # #4089: the docker storage driver of this box, one evidence line: the certified image
-# ids (postgres-artifact.yml) are config digests of the classic store (`overlay2`).
+# ids (postgres-artifact.yml) are image-target digests of the containerd store
+# (`overlayfs`, #4104).
 data_storage_driver() {
   local out
   if ! out=$(sudo docker info --format '{{.Driver}}' 2>&1); then
@@ -1200,22 +1201,30 @@ release_lock_verb() {
 
 # The archive postgres-load may hand `docker load`, read in place with python3 `tarfile`
 # (nothing extracted): every member a plain ustar header with a name in normal form,
-# none twice (python and docker then read the same members), exactly one manifest.json
-# listing exactly the two certified config ids (argv 2-3, sha256:<hex>), every image
-# untagged, and no `repositories` or index.json name. The release saves the images by id (postgres-artifact-prepare.mjs),
-# so a tag or name can only be an archive that would retarget a name on this box — the
-# compose override runs the images by id, and no load needs to name one. Exit 0 ok ·
-# 3 refused (the reason on stdout).
+# none twice (python and docker then read the same members), and the archive exactly
+# what `docker image save <id> <id>` writes on this box's containerd image store
+# (`overlayfs`; measured on Docker 29.4.2, #4104): the directories blobs and blobs/sha256,
+# blobs/sha256/<hex> blobs, index.json, manifest.json and oci-layout, nothing else.
+# index.json lists exactly the two certified ids (argv 2-3, sha256:<hex>) as image
+# targets of exactly {mediaType, digest, size} (no name), each one's blob present, of its
+# size and digest; manifest.json lists two untagged images whose config blobs are
+# present. The release saves the images by id (postgres-artifact-prepare.mjs), so a name
+# can only be an archive that would retarget a name on this box — the compose override
+# runs the images by id. Exit 0 ok · 3 refused (the reason on stdout).
 read -r -d '' PG_LOAD_PY <<'PY' || true
-import json, posixpath, re, sys, tarfile
+import hashlib, json, posixpath, re, sys, tarfile
 archive, want = sys.argv[1], sys.argv[2:4]
-NAMES = ("io.containerd.image.name", "org.opencontainers.image.ref.name")
+OCI_INDEX = "application/vnd.oci.image.index.v1+json"
+OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json"
+BLOB = re.compile(r"blobs/sha256/[a-f0-9]{64}")
+FILES = ("index.json", "manifest.json", "oci-layout")
+SMALL = 1024 * 1024
 
 def stop(reason):
     print(reason)
     sys.exit(3)
 
-members, seen = {}, set()
+members, blobs, seen = {}, {}, set()
 try:
     with tarfile.open(archive, mode="r:") as tar, open(archive, "rb") as raw:
         for m in tar:
@@ -1239,31 +1248,54 @@ try:
             if name in seen:
                 stop(f"the image archive holds more than one {name}")
             seen.add(name)
-            if name in ("manifest.json", "repositories", "index.json"):
-                if not m.isreg() or m.size > 1024 * 1024:
+            if m.isdir() and name in ("blobs", "blobs/sha256"):
+                continue
+            if m.isreg() and BLOB.fullmatch(name):
+                blobs[name] = m
+                continue
+            if m.isreg() and name in FILES:
+                if m.size > SMALL:
                     stop(f"the image archive's {name} is not a small regular file")
                 members[name] = json.loads(tar.extractfile(m).read().decode("utf-8"))
+                continue
+            stop("the image archive refused: a member outside a containerd image archive")
+        for name in FILES:
+            if name not in members:
+                stop(f"not a containerd image archive (no {name})")
+        if members["oci-layout"] != {"imageLayoutVersion": "1.0.0"}:
+            stop("not a containerd image archive (oci-layout is not 1.0.0)")
+        index, manifest = members["index.json"], members["manifest.json"]
+        if (not isinstance(index, dict) or sorted(index) != ["manifests", "mediaType", "schemaVersion"]
+                or index["schemaVersion"] != 2 or index["mediaType"] != OCI_INDEX
+                or not isinstance(index["manifests"], list)):
+            stop("not a containerd image archive (index.json is not an OCI image index)")
+        if len(index["manifests"]) != 2:
+            stop(f"the image archive holds {len(index['manifests'])} images, not the 2 certified")
+        ids = []
+        for e in index["manifests"]:
+            if (not isinstance(e, dict) or sorted(e) != ["digest", "mediaType", "size"]
+                    or e["mediaType"] not in (OCI_INDEX, OCI_MANIFEST)
+                    or not re.fullmatch(r"sha256:[a-f0-9]{64}", str(e["digest"]))
+                    or type(e["size"]) is not int):
+                stop("the image archive refused: an index.json entry names an image or is not an image target")
+            ids.append(e["digest"])
+        if sorted(ids) != sorted(want) or len(set(ids)) != 2:
+            stop(f"the image archive's images are not the certified {want[0][:19]}… / {want[1][:19]}…")
+        for e in index["manifests"]:
+            b = blobs.get(f"blobs/sha256/{e['digest'][7:]}")
+            if b is None or b.size != e["size"] or b.size > SMALL:
+                stop("the image archive refused: an image target blob is absent or not of its size")
+            if "sha256:" + hashlib.sha256(tar.extractfile(b).read()).hexdigest() != e["digest"]:
+                stop("the image archive refused: an image target blob is not of its digest")
+        if not isinstance(manifest, list) or len(manifest) != 2 or not all(isinstance(e, dict) for e in manifest):
+            stop("not a containerd image archive (manifest.json does not list the 2 images)")
+        for e in manifest:
+            if e.get("RepoTags") not in (None, []):
+                stop("the image archive refused: an image carries a tag")
+            if str(e.get("Config", "")) not in blobs:
+                stop("the image archive refused: an image has no config blob")
 except (tarfile.TarError, OSError, ValueError, UnicodeDecodeError):
     stop("not a docker image archive (an uncompressed tar with a JSON manifest.json)")
-manifest = members.get("manifest.json")
-if not isinstance(manifest, list) or not all(isinstance(e, dict) for e in manifest):
-    stop("not a docker image archive (no manifest.json image list)")
-if len(manifest) != 2:
-    stop(f"the image archive holds {len(manifest)} images, not the 2 certified")
-ids = []
-for e in manifest:
-    if e.get("RepoTags") not in (None, []):
-        stop("the image archive refused: an image carries a tag")
-    m = re.fullmatch(r"(?:blobs/sha256/([a-f0-9]{64})|([a-f0-9]{64})\.json)", str(e.get("Config", "")))
-    ids.append(f"sha256:{m.group(1) or m.group(2)}" if m else "")
-if sorted(ids) != sorted(want) or len(set(ids)) != 2:
-    stop(f"the image archive's images are not the certified {want[0][:19]}… / {want[1][:19]}…")
-if members.get("repositories") not in (None, {}):
-    stop("the image archive refused: its repositories file names an image")
-index = members.get("index.json")
-for entry in (index.get("manifests") or []) if isinstance(index, dict) else []:
-    if isinstance(entry, dict) and any(k in (entry.get("annotations") or {}) for k in NAMES):
-        stop("the image archive refused: its index.json names an image")
 PY
 
 # postgres-load <sha> <postgres-id-hex> <pgbackrest-id-hex> (#4089): the certified images

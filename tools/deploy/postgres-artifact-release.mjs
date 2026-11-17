@@ -9,6 +9,7 @@
 // POSTGRES_ARTIFACT_DIR and `prod.mjs --local` loads it into ds-data-prod before the
 // guard. The guard alone decides what is accepted: this module only finds the evidence.
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   appendFileSync,
   closeSync,
@@ -31,11 +32,6 @@ export const ARTIFACT_IMAGES = "images.tar";
 const HASH_RE = /^[a-f0-9]{64}$/;
 const SHA_RE = /^[a-f0-9]{40}$/;
 const IMAGE_ID_RE = /^sha256:[a-f0-9]{64}$/;
-// The names `docker load` would give an image of an OCI-layout archive.
-const IMAGE_NAME_ANNOTATIONS = [
-  "io.containerd.image.name",
-  "org.opencontainers.image.ref.name",
-];
 
 export const postgresArtifactName = (sourceHash) => {
   if (!HASH_RE.test(sourceHash ?? ""))
@@ -44,27 +40,26 @@ export const postgresArtifactName = (sourceHash) => {
 };
 
 /**
- * The bytes of the regular file `name` at the top of the tar archive `path`, or null.
- * Read in place (a `docker image save` archive is 300+ MB) and refused unless every
- * member has one reading for this reader, the box's `postgres-load` and docker alike:
- * one plain POSIX ustar header (no pax or GNU header, an all-NUL prefix), a regular
- * file or directory, a name already in normal form, no name twice. `docker image save`
- * writes nothing else.
+ * Visits every member of the tar archive `path` in order: `visit(name, type, size, body)`,
+ * `body()` reading that member's bytes. Read in place (a `docker image save` archive is
+ * 300+ MB) and refused unless every member has one reading for this reader, the box's
+ * `postgres-load` and docker alike: one plain POSIX ustar header (no pax or GNU header,
+ * an all-NUL prefix), a regular file or directory, a name already in normal form, no
+ * name twice. `docker image save` writes nothing else.
  */
-export function readTarMember(
+function scanTar(
   path,
-  name,
+  visit,
   { open = openSync, read = readSync, close = closeSync } = {},
 ) {
   const fd = open(path, "r");
   try {
     const header = Buffer.alloc(512);
     const seen = new Set();
-    let found = null;
     let offset = 0;
     for (;;) {
-      if (read(fd, header, 0, 512, offset) !== 512) return found;
-      if (header.every((b) => b === 0)) return found;
+      if (read(fd, header, 0, 512, offset) !== 512) return;
+      if (header.every((b) => b === 0)) return;
       const field = (start, length) =>
         header
           .subarray(start, start + length)
@@ -95,11 +90,13 @@ export function readTarMember(
       if (seen.has(member))
         throw new Error(`${path} holds more than one ${member}`);
       seen.add(member);
-      if (type === "0" && member === name) {
-        found = Buffer.alloc(size);
-        if (read(fd, found, 0, size, offset + 512) !== size)
-          throw new Error(`${path}: ${name} is truncated`);
-      }
+      const at = offset + 512;
+      visit(member, type, size, () => {
+        const bytes = Buffer.alloc(size);
+        if (read(fd, bytes, 0, size, at) !== size)
+          throw new Error(`${path}: ${member} is truncated`);
+        return bytes;
+      });
       offset += 512 + Math.ceil(size / 512) * 512;
     }
   } finally {
@@ -107,60 +104,138 @@ export function readTarMember(
   }
 }
 
+/** The bytes of the regular file `name` of the tar archive `path` (`scanTar` rules), or null. */
+export function readTarMember(path, name, io) {
+  let found = null;
+  scanTar(
+    path,
+    (member, type, _size, body) => {
+      if (type === "0" && member === name) found = body();
+    },
+    io,
+  );
+  return found;
+}
+
+const OCI_INDEX = "application/vnd.oci.image.index.v1+json";
+const OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
+const BLOB_RE = /^blobs\/sha256\/[a-f0-9]{64}$/;
+const ARCHIVE_DIRS = ["blobs", "blobs/sha256"];
+const ARCHIVE_FILES = ["index.json", "manifest.json", "oci-layout"];
+const SMALL_MEMBER = 1024 * 1024;
+
+const sameKeys = (value, keys) =>
+  value !== null &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  JSON.stringify(Object.keys(value).sort()) ===
+    JSON.stringify([...keys].sort());
+
 /**
- * The image ids a `docker load` of the archive yields: the config digest of each image of
- * its `manifest.json` (`blobs/sha256/<hex>` since Docker 25, `<hex>.json` before). An
- * image with a RepoTag is refused: the certified images are saved by id, and a load that
- * names an image — a RepoTag, a `repositories` entry or an index.json name — would
- * retarget that name on ds-data-prod (the box's `postgres-load` refuses the same).
+ * The image ids a `docker load` of the archive yields on Docker's containerd image store,
+ * the store ds-data-prod runs (`overlayfs`, #4104): the digests of the image targets its
+ * OCI `index.json` lists — the id `docker image inspect` reports and the `Image` of a
+ * container run from it. The member set and entry shape are those of a real
+ * `docker image save <id> <id>` on Docker 29.4.2 under that store (#4104): the
+ * directories `blobs` and `blobs/sha256`, `blobs/sha256/<hex>` blobs, `index.json`,
+ * `manifest.json` and `oci-layout`, each index.json entry exactly {mediaType, digest,
+ * size}. Anything else is refused: another member (a `repositories` file included), a
+ * classic-store archive (no index.json), an entry with a name or platform, a target blob
+ * absent or not of its digest and size, a manifest.json image that is tagged or whose
+ * config blob is absent. The images are saved by id, so a name could only retarget a tag
+ * on ds-data-prod (the box's `postgres-load` refuses the same).
  */
-export function imageArchiveConfigIds(path, io) {
-  const raw = readTarMember(path, "manifest.json", io);
-  if (!raw)
-    throw new Error(
-      `${path} carries no manifest.json: not a docker image archive`,
-    );
-  let manifest;
-  try {
-    manifest = JSON.parse(raw.toString("utf8"));
-  } catch {
-    throw new Error(`${path}: manifest.json is not JSON`);
-  }
-  if (!Array.isArray(manifest) || manifest.length === 0)
-    throw new Error(`${path}: manifest.json lists no image`);
+export function imageArchiveIds(path, io) {
+  const files = new Map();
+  const blobs = new Map();
+  scanTar(
+    path,
+    (member, type, size, body) => {
+      if (type === "5" && ARCHIVE_DIRS.includes(member)) return;
+      if (type === "0" && BLOB_RE.test(member)) {
+        blobs.set(member, size);
+        return;
+      }
+      if (type === "0" && ARCHIVE_FILES.includes(member)) {
+        if (size > SMALL_MEMBER)
+          throw new Error(`${path}: ${member} is not a small file`);
+        files.set(member, body());
+        return;
+      }
+      throw new Error(
+        `${path} refused: ${member} is not a member of a containerd image archive`,
+      );
+    },
+    io,
+  );
   const json = (name) => {
-    const bytes = readTarMember(path, name, io);
+    const bytes = files.get(name);
+    if (!bytes)
+      throw new Error(
+        `${path} carries no ${name}: not a containerd image archive`,
+      );
     try {
-      return bytes && JSON.parse(bytes.toString("utf8"));
+      return JSON.parse(bytes.toString("utf8"));
     } catch {
       throw new Error(`${path}: ${name} is not JSON`);
     }
   };
-  const repositories = json("repositories");
-  if (repositories && Object.keys(repositories).length)
-    throw new Error(`${path}: its repositories file names an image`);
+  const layout = json("oci-layout");
+  if (
+    !sameKeys(layout, ["imageLayoutVersion"]) ||
+    layout.imageLayoutVersion !== "1.0.0"
+  )
+    throw new Error(`${path}: oci-layout is not the OCI image layout 1.0.0`);
   const index = json("index.json");
   if (
-    (index?.manifests ?? []).some((entry) =>
-      IMAGE_NAME_ANNOTATIONS.some((key) => entry?.annotations?.[key]),
-    )
+    !sameKeys(index, ["schemaVersion", "mediaType", "manifests"]) ||
+    index.schemaVersion !== 2 ||
+    index.mediaType !== OCI_INDEX ||
+    !Array.isArray(index.manifests) ||
+    index.manifests.length === 0
   )
-    throw new Error(`${path}: its index.json names an image`);
-  return manifest.map((entry) => {
+    throw new Error(`${path}: index.json is not an OCI image index of images`);
+  const manifest = json("manifest.json");
+  if (!Array.isArray(manifest) || manifest.length !== index.manifests.length)
+    throw new Error(
+      `${path}: manifest.json does not list the ${index.manifests.length} images of index.json`,
+    );
+  for (const entry of manifest) {
     const tags = entry?.RepoTags ?? [];
     if (!Array.isArray(tags) || tags.length)
       throw new Error(
         `${path}: an image of manifest.json carries the tag ${[].concat(tags).join(", ")}`,
       );
-    const match = String(entry?.Config ?? "").match(
-      /^(?:blobs\/sha256\/([a-f0-9]{64})|([a-f0-9]{64})\.json)$/,
-    );
-    if (!match)
+    if (!blobs.has(String(entry?.Config ?? "")))
       throw new Error(
-        `${path}: an image of manifest.json has no config digest`,
+        `${path}: an image of manifest.json has no config blob in the archive`,
       );
-    return `sha256:${match[1] ?? match[2]}`;
+  }
+  const targets = index.manifests.map((entry) => {
+    if (
+      !sameKeys(entry, ["mediaType", "digest", "size"]) ||
+      ![OCI_INDEX, OCI_MANIFEST].includes(entry.mediaType) ||
+      !IMAGE_ID_RE.test(entry.digest ?? "") ||
+      !Number.isSafeInteger(entry.size)
+    )
+      throw new Error(
+        `${path}: an index.json entry is not exactly {mediaType, digest, size} of an unnamed image`,
+      );
+    const blob = `blobs/sha256/${entry.digest.slice(7)}`;
+    if (blobs.get(blob) !== entry.size || entry.size > SMALL_MEMBER)
+      throw new Error(
+        `${path}: the image ${entry.digest} has no blob of its size in the archive`,
+      );
+    return { id: entry.digest, blob };
   });
+  for (const { id, blob } of targets) {
+    const bytes = readTarMember(path, blob, io);
+    if (`sha256:${createHash("sha256").update(bytes).digest("hex")}` !== id)
+      throw new Error(
+        `${path}: the blob of the image ${id} is not of its digest`,
+      );
+  }
+  return targets.map(({ id }) => id);
 }
 
 /**

@@ -130,8 +130,11 @@ test.describe("024 — the doctor's course path and step screens", () => {
       await expect(page.getByText("Вы здесь", { exact: true })).toHaveCount(0);
       await expect(page.getByText(/^Шаг откроется/)).toHaveCount(0);
       await expect(page.getByRole("link", { name: /^Продолжить/ })).toHaveCount(0);
-      // The kicker names the medium as the canvas metas: «Серия · видео · N минут».
+      // The kicker carries the canvas metas: «Серия · видео · N минут», the
+      // download's file «PDF · <size>», the test's «2 вопроса · порог P %».
       await expect(page.getByText(/Серия · видео · \d+ минут/).first()).toBeVisible();
+      await expect(page.getByText(/^Материал для скачивания · PDF · \d+(,\d)? [КМ]Б$/).first()).toBeVisible();
+      await expect(page.getByText(/^Тест · 2 вопроса · порог \d+ %$/).first()).toBeVisible();
       await expect(page.getByText("Автор курса")).toBeVisible();
       // EARS-14 — the points plate: a guest has no balance, every kind reads «—».
       const guestPlate = page.getByTestId("points-plate");
@@ -250,6 +253,8 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await expect(page.getByRole("button", { name: "Смотреть видео" })).toBeEnabled();
     // 024-design §8 — the step screen carries the same plate.
     await expect(page.getByTestId("points-plate").getByTestId("points-plate-value").first()).toHaveText(/^\d/);
+    // The step kicker as `doctor-lesson.dc.html` draws it: «Шаг N из M · type · meta».
+    await expect(page.getByText(/^Шаг 1 из 3 · Серия · видео · \d+ минут/)).toBeVisible();
     await axeClean(page);
     await shoot(page, "step-video-1280");
     const strip = page.getByRole("list", { name: "Шаги урока" });
@@ -301,6 +306,8 @@ test.describe("024 — the doctor's course path and step screens", () => {
     await download.click();
     await (await popup)?.close();
     await expect(page.getByText("Материал открыт", { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Шаг 2 из 3 · Материал для скачивания · PDF · \d+(,\d)? [КМ]Б$/)).toBeVisible();
+    await expect(page.getByText(/^PDF · \d+(,\d)? [КМ]Б$/)).toBeVisible();
     // The `opened` fact completes the step: «Дальше» to the test appears in place.
     await expect(page.getByRole("link", { name: "Дальше" })).toBeVisible();
     await expect(strip.getByRole("link", { name: /Вы здесь$/ })).toHaveCount(1);
@@ -309,6 +316,7 @@ test.describe("024 — the doctor's course path and step screens", () => {
 
     // Exit test: reject below the threshold, then accept.
     await page.getByRole("link", { name: "Дальше" }).click();
+    await expect(page.getByText(/^Шаг 3 из 3 · Тест · 2 вопроса · порог \d+ %$/)).toBeVisible();
     await page.getByRole("button", { name: "Начать тест" }).click();
     for (let i = 0; i < 2; i++) {
       await page.getByRole("radiogroup").getByText("Неверно", { exact: true }).click();

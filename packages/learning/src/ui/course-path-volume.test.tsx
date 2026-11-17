@@ -180,7 +180,7 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
   it("EARS-14: scrolling the path moves the open module and the lesson in view (scroll-spy)", () => {
     const path = multiModulePath(26, 4, 2);
     const view = buildPathView(path);
-    // Lessons 1…57 have passed the middle of the viewport; lesson 58 (module 15) is below it.
+    // Lessons 1…57 have passed the spy line near the viewport top; lesson 58 (module 15) is below it.
     const firstStep = new Map(view.outline.flatMap((m) => m.lessons).map((l) => [`node-${l.firstStepId}`, l.number]));
     stubLayout((id) => {
       const n = firstStep.get(id);

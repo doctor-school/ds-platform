@@ -394,7 +394,9 @@ export function keepTokensWhole(text: string, max = 24): TextRun[] {
 
 /**
  * The canvas scroll-spy (`spy()`): walking the lessons in order, the lesson in
- * view is the last whose first step's top has passed `line` (half the viewport);
+ * view is the last whose first step's top has passed `line` (the caller passes
+ * one path row, `SNAKE.pitch`, below the viewport top — not the canvas's half
+ * height, so the lesson at the top of the screen is the one marked);
  * a missing node stops the walk. 0 = none has passed yet. Returns a 1-based
  * index into `tops`.
  */

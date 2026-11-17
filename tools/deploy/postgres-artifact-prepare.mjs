@@ -11,7 +11,7 @@ import {
 } from "./postgres-guard.mjs";
 import {
   assertArchiveMatchesCertificate,
-  imageArchiveConfigIds,
+  imageArchiveIds,
 } from "./postgres-artifact-release.mjs";
 
 export function artifactBuildPlan({ sourceHash, target, task = "2141" }) {
@@ -227,7 +227,7 @@ async function main() {
   }
   // #4089: what a `docker load` of the archive yields is what ds-data-prod inspects.
   assertArchiveMatchesCertificate(
-    imageArchiveConfigIds(option("--export")),
+    imageArchiveIds(option("--export")),
     certificate,
   );
   writeFileSync(

@@ -76,23 +76,16 @@ jobs:
           echo "source-hash=$hash" >> "$GITHUB_OUTPUT"
           echo "data source hash $hash at $SHA"
 
-      # The image store decides the id an image gets: the classic store gives the config
-      # digest, the containerd store (the runner's Docker 29 default) the manifest
-      # digest. ds-data-prod `docker load`s into the classic store and its guard inspects
-      # those ids, so the build host measures in the same store; the preparation refuses
-      # an archive whose config digests are not the certified ids.
-      - name: Classic image store, as on ds-data-prod
+      # The image store decides the id an image gets: the containerd store gives the digest
+      # of the image target (`index.json` of the archive), the classic store the config
+      # digest. ds-data-prod runs the containerd store (`overlayfs`, #4100 / #4104), and so
+      # does the runner's Docker 29 by default; the build host measures in that store, and
+      # the preparation refuses an archive whose index.json targets are not the certified ids.
+      - name: Containerd image store, as on ds-data-prod
         run: |
-          cfg=/etc/docker/daemon.json
-          if sudo test -s "$cfg"; then
-            sudo jq '.features["containerd-snapshotter"] = false' "$cfg" > "$RUNNER_TEMP/daemon.json"
-          else
-            echo '{"features":{"containerd-snapshotter":false}}' > "$RUNNER_TEMP/daemon.json"
-          fi
-          sudo install -m 0644 "$RUNNER_TEMP/daemon.json" "$cfg"
-          sudo systemctl restart docker
-          driver=$(docker info --format '{{.Driver}}')
-          [ "$driver" = overlay2 ] || { echo "::error::image store is $driver, not the classic overlay2"; exit 1; }
+          status=$(docker info --format '{{.Driver}} {{.DriverStatus}}')
+          [[ $status == "overlayfs [[driver-type io.containerd.snapshotter.v1]]" ]] ||
+            { echo "::error::image store is $status, not the containerd overlayfs store of ds-data-prod"; exit 1; }
 
       - name: Build host facts
         run: docker version --format 'docker {{.Server.Version}}' && docker info --format 'storage {{.Driver}} {{.DriverStatus}}'
@@ -114,13 +107,34 @@ jobs:
         run: |
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
-            import { assertArchiveMatchesCertificate, imageArchiveConfigIds } from "./tools/deploy/postgres-artifact-release.mjs";
+            import { assertArchiveMatchesCertificate, imageArchiveIds } from "./tools/deploy/postgres-artifact-release.mjs";
             const c = JSON.parse(readFileSync("out/certificate.json", "utf8"));
             if (c.schema !== 1 || c.sourceHash !== process.env.HASH) throw new Error("certificate is not of this source hash");
-            assertArchiveMatchesCertificate(imageArchiveConfigIds("out/images.tar"), c);
+            assertArchiveMatchesCertificate(imageArchiveIds("out/images.tar"), c);
             for (const [role, image] of Object.entries(c.images))
               console.log(`${role}: ${image.id} ${image.version} ${image.pgbackrestVersion} uid ${image.uid}:${image.gid}`);'
           sha256sum out/certificate.json out/images.tar
+
+      # What ds-data-prod's postgres-load does, on the same store: its archive check
+      # (PG_LOAD_PY) run on the real archive, the certified images removed, the archive
+      # loaded, each certified id inspected (#4104).
+      - name: Load the archive with the certified images removed and inspect their ids
+        run: |
+          mapfile -t ids < <(jq -r '.images.postgres.id, .images.pgbackrest.id' out/certificate.json)
+          [ "${#ids[@]}" = 2 ] || { echo "::error::the certificate names ${#ids[@]} images"; exit 1; }
+          sed -n "/^read -r -d '' PG_LOAD_PY <<'PY'/,/^PY\$/p" infra/deploy/bin/ds-deploy-entrypoint | sed '1d;$d' > "$RUNNER_TEMP/pg-load.py"
+          python3 -I -X utf8 "$RUNNER_TEMP/pg-load.py" out/images.tar "${ids[@]}" ||
+            { echo "::error::the box-side postgres-load check refuses the real archive"; exit 1; }
+          docker image rm -f "${ids[@]}"
+          for id in "${ids[@]}"; do
+            ! docker image inspect "$id" >/dev/null 2>&1 || { echo "::error::$id is still in the store"; exit 1; }
+          done
+          docker load -i out/images.tar
+          for id in "${ids[@]}"; do
+            got=$(docker image inspect --format '{{.Id}}' "$id")
+            [ "$got" = "$id" ] || { echo "::error::docker load gave $got, not the certified $id"; exit 1; }
+            echo "loaded $id"
+          done
 
       - name: Keep the certificate, the audit log and the images
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

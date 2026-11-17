@@ -1,6 +1,7 @@
-// #4089: the Actions path of a changed data-prod image input — the archive identity the
-// release loads into ds-data-prod, and which certification run a release may deliver.
+// #4089 / #4104: the Actions path of a changed data-prod image input — the archive identity
+// the release loads into ds-data-prod's containerd image store, and which certification run a release may deliver.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +10,7 @@ import { test } from "node:test";
 import {
   POSTGRES_ARTIFACT_WORKFLOW,
   assertArchiveMatchesCertificate,
-  imageArchiveConfigIds,
+  imageArchiveIds,
   postgresArtifactName,
   postgresInputChanged,
   readTarMember,
@@ -81,97 +82,186 @@ const certificate = {
   images: { postgres: { id: PG }, pgbackrest: { id: BR } },
 };
 
-test("4089: the archive's image ids are the config digests of its manifest.json, either layout", () => {
-  const manifest = JSON.stringify([
-    { Config: `blobs/sha256/${"1".repeat(64)}`, RepoTags: null, Layers: [] },
-    { Config: `${"2".repeat(64)}.json`, RepoTags: null, Layers: [] },
+const sha256 = (body) =>
+  `sha256:${createHash("sha256").update(body).digest("hex")}`;
+const OCI_INDEX = "application/vnd.oci.image.index.v1+json";
+
+/**
+ * The members of a `docker image save <id> <id>` on Docker's containerd image store, as
+ * measured on Docker 29.4.2 (#4104): two image targets (OCI indexes) in blobs/sha256,
+ * their config and layer blobs, index.json naming the targets, manifest.json,
+ * oci-layout. `over` replaces index.json / manifest.json / oci-layout bodies.
+ */
+function containerdArchive(over = {}) {
+  const configs = ["c1", "c2"].map((c) => [
+    `blobs/sha256/${sha256(c).slice(7)}`,
+    c,
   ]);
-  withArchive(
-    [
-      [`blobs/sha256/${"9".repeat(64)}`, Buffer.alloc(1300, 7)],
-      ["manifest.json", manifest],
-    ],
-    (path) => {
-      assert.deepEqual(imageArchiveConfigIds(path), [PG, BR]);
-      assert.equal(readTarMember(path, "absent.json"), null);
-      assert.equal(readTarMember(path, "manifest.json").toString(), manifest);
-    },
+  const targets = ["postgres", "pgbackrest"].map((role) =>
+    JSON.stringify({ schemaVersion: 2, mediaType: OCI_INDEX, role }),
   );
-});
-
-test("4089: an archive with no manifest.json or no config digest is refused", () => {
-  withArchive([["index.json", "{}"]], (path) =>
-    assert.throws(() => imageArchiveConfigIds(path), /no manifest\.json/),
-  );
-  withArchive([["manifest.json", JSON.stringify([{ Config: "x" }])]], (path) =>
-    assert.throws(() => imageArchiveConfigIds(path), /no config digest/),
-  );
-  withArchive([["manifest.json", "[]"]], (path) =>
-    assert.throws(() => imageArchiveConfigIds(path), /lists no image/),
-  );
-});
-
-test("4089: an archive whose repositories file or index.json names an image is refused", () => {
-  const manifest = JSON.stringify(
-    [PG, BR].map((id) => ({
-      Config: `blobs/sha256/${id.slice(7)}`,
-      RepoTags: null,
+  const ids = targets.map(sha256);
+  const index = {
+    schemaVersion: 2,
+    mediaType: OCI_INDEX,
+    manifests: targets.map((t, i) => ({
+      mediaType: OCI_INDEX,
+      digest: ids[i],
+      size: Buffer.byteLength(t),
     })),
+  };
+  const manifest = configs.map(([name]) => ({
+    Config: name,
+    RepoTags: null,
+    Layers: [],
+  }));
+  const entries = [
+    ["blobs/", "", "5"],
+    ["blobs/sha256/", "", "5"],
+    ...configs,
+    ...targets.map((t, i) => [`blobs/sha256/${ids[i].slice(7)}`, t]),
+    ["index.json", over.index ?? JSON.stringify(index)],
+    ["manifest.json", over.manifest ?? JSON.stringify(manifest)],
+    ["oci-layout", over.layout ?? '{"imageLayoutVersion":"1.0.0"}'],
+  ];
+  return { entries, ids, index, manifest, targets };
+}
+
+test("4104: the archive's image ids are the digests of the containerd image targets its index.json lists", () => {
+  const { entries, ids } = containerdArchive();
+  withArchive(entries, (path) => {
+    assert.deepEqual(imageArchiveIds(path), ids);
+    assert.equal(readTarMember(path, "absent.json"), null);
+    assert.equal(
+      readTarMember(path, "oci-layout").toString(),
+      '{"imageLayoutVersion":"1.0.0"}',
+    );
+  });
+});
+
+test("4104: a classic-store archive (no index.json, no oci-layout) is refused: its ids are not what ds-data-prod's containerd store loads", () => {
+  const manifest = JSON.stringify(
+    [PG, BR].map((id) => ({ Config: `${id.slice(7)}.json`, RepoTags: null })),
   );
   withArchive(
     [
-      ["repositories", JSON.stringify({ postgres: { 17: "x" } })],
+      [`${PG.slice(7)}.json`, "{}"],
+      [`${BR.slice(7)}.json`, "{}"],
       ["manifest.json", manifest],
     ],
     (path) =>
       assert.throws(
-        () => imageArchiveConfigIds(path),
-        /repositories file names an image/,
+        () => imageArchiveIds(path),
+        /is not a member of a containerd image archive/,
       ),
   );
+  const { entries } = containerdArchive();
   withArchive(
-    [
-      [
-        "index.json",
-        JSON.stringify({
-          manifests: [
-            { annotations: { "org.opencontainers.image.ref.name": "17" } },
-          ],
-        }),
-      ],
-      ["manifest.json", manifest],
-    ],
+    entries.filter(([n]) => n !== "index.json"),
+    (path) => assert.throws(() => imageArchiveIds(path), /no index\.json/),
+  );
+  withArchive(
+    entries.filter(([n]) => n !== "oci-layout"),
+    (path) => assert.throws(() => imageArchiveIds(path), /no oci-layout/),
+  );
+});
+
+test("4104: a member outside the measured set is refused, a repositories file included", () => {
+  const { entries } = containerdArchive();
+  for (const extra of [
+    ["repositories", "{}"],
+    ["blobs/sha512/", "", "5"],
+    ["blobs/sha256/abc", "x"],
+    ["extra.json", "{}"],
+    ["index.json/", "", "5"],
+  ])
+    withArchive([...entries, extra], (path) =>
+      assert.throws(
+        () => imageArchiveIds(path),
+        /is not a member of a containerd image archive|holds more than one/,
+        extra[0],
+      ),
+    );
+});
+
+test("4104: an index.json entry that names an image, carries more than {mediaType, digest, size} or whose blob is absent, resized or not of its digest is refused", () => {
+  const { entries, index, targets } = containerdArchive();
+  const withIndex = (mutate, why) => {
+    const copy = JSON.parse(JSON.stringify(index));
+    mutate(copy);
+    const { entries: e } = containerdArchive({ index: JSON.stringify(copy) });
+    withArchive(e, (path) => assert.throws(() => imageArchiveIds(path), why));
+  };
+  withIndex((i) => {
+    i.manifests[1].annotations = { "io.containerd.image.name": "postgres:17" };
+  }, /not exactly \{mediaType, digest, size\}/);
+  withIndex((i) => {
+    i.manifests[0].annotations = { "org.opencontainers.image.ref.name": "17" };
+  }, /not exactly \{mediaType, digest, size\}/);
+  withIndex((i) => {
+    i.manifests[0].platform = { os: "linux", architecture: "amd64" };
+  }, /not exactly/);
+  withIndex((i) => {
+    i.manifests[0].mediaType =
+      "application/vnd.docker.distribution.manifest.list.v2+json";
+  }, /not exactly/);
+  withIndex((i) => {
+    i.manifests[0].size += 1;
+  }, /has no blob of its size/);
+  withIndex((i) => {
+    i.manifests[0].digest = PG;
+  }, /has no blob of its size/);
+  withIndex((i) => {
+    i.annotations = { x: "y" };
+  }, /not an OCI image index/);
+  withIndex((i) => {
+    i.manifests = [];
+  }, /not an OCI image index/);
+  withIndex((i) => {
+    i.manifests.push(i.manifests[0]);
+  }, /does not list the 3 images/);
+  // A target blob whose bytes are not of its digest (same size, other bytes).
+  const forged = entries.map(([name, body, type]) =>
+    body === targets[0]
+      ? [name, body.replace("postgres", "postgreZ"), type]
+      : [name, body, type],
+  );
+  withArchive(forged, (path) =>
+    assert.throws(() => imageArchiveIds(path), /is not of its digest/),
+  );
+});
+
+test("4104: a tagged manifest.json image, an absent config blob or a foreign oci-layout is refused", () => {
+  const { manifest } = containerdArchive();
+  const tagged = JSON.parse(JSON.stringify(manifest));
+  tagged[1].RepoTags = ["postgres:17"];
+  withArchive(
+    containerdArchive({ manifest: JSON.stringify(tagged) }).entries,
     (path) =>
       assert.throws(
-        () => imageArchiveConfigIds(path),
-        /index\.json names an image/,
+        () => imageArchiveIds(path),
+        /an image of manifest\.json carries the tag postgres:17/,
       ),
   );
+  const unconfigured = JSON.parse(JSON.stringify(manifest));
+  unconfigured[0].Config = `blobs/sha256/${"9".repeat(64)}`;
   withArchive(
-    [
-      ["repositories", "{}"],
-      ["index.json", JSON.stringify({ manifests: [{}, {}] })],
-      ["manifest.json", manifest],
-    ],
-    (path) => assert.deepEqual(imageArchiveConfigIds(path), [PG, BR]),
+    containerdArchive({ manifest: JSON.stringify(unconfigured) }).entries,
+    (path) => assert.throws(() => imageArchiveIds(path), /no config blob/),
+  );
+  withArchive(
+    containerdArchive({ layout: '{"imageLayoutVersion":"2.0.0"}' }).entries,
+    (path) =>
+      assert.throws(() => imageArchiveIds(path), /OCI image layout 1\.0\.0/),
+  );
+  withArchive(containerdArchive({ index: "{" }).entries, (path) =>
+    assert.throws(() => imageArchiveIds(path), /index\.json is not JSON/),
   );
 });
 
 test("4089: the archive reader reads one name one way: a member name out of normal form, a repeated name, a pax or long-name header or a link is refused", () => {
-  const manifest = JSON.stringify(
-    [PG, BR].map((id) => ({
-      Config: `blobs/sha256/${id.slice(7)}`,
-      RepoTags: null,
-    })),
-  );
-  const base = [
-    ["blobs/", "", "5"],
-    [`blobs/sha256/${"9".repeat(64)}`, "layer"],
-    ["manifest.json", manifest],
-  ];
-  withArchive(base, (path) =>
-    assert.deepEqual(imageArchiveConfigIds(path), [PG, BR]),
-  );
+  const { entries: base, ids } = containerdArchive();
+  withArchive(base, (path) => assert.deepEqual(imageArchiveIds(path), ids));
   const cases = [
     [[".//manifest.json", "[]"], /a member name not in normal form/],
     [["./manifest.json", "[]"], /a member name not in normal form/],
@@ -188,26 +278,9 @@ test("4089: the archive reader reads one name one way: a member name out of norm
   ];
   for (const [entry, why] of cases) {
     withArchive([...base, entry], (path) =>
-      assert.throws(() => imageArchiveConfigIds(path), why, String(entry[0])),
+      assert.throws(() => imageArchiveIds(path), why, String(entry[0])),
     );
   }
-});
-
-test("4089: an archive whose image carries a tag is refused: a load must name nothing on the box", () => {
-  const manifest = JSON.stringify([
-    { Config: `blobs/sha256/${"1".repeat(64)}`, RepoTags: [], Layers: [] },
-    {
-      Config: `blobs/sha256/${"2".repeat(64)}`,
-      RepoTags: ["postgres:17"],
-      Layers: [],
-    },
-  ]);
-  withArchive([["manifest.json", manifest]], (path) =>
-    assert.throws(
-      () => imageArchiveConfigIds(path),
-      /an image of manifest\.json carries the tag postgres:17/,
-    ),
-  );
 });
 
 test("4089: the archive must hold exactly the certified images", () => {
@@ -408,6 +481,35 @@ test("4089: postgres-artifact.yml certifies on a runner with no secret and keeps
   );
 });
 
+test("4104: postgres-artifact.yml certifies under the containerd image store ds-data-prod runs and proves a docker load of the archive yields the certified ids", () => {
+  const workflow = readFileSync(
+    new URL(`../../${POSTGRES_ARTIFACT_WORKFLOW}`, import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(
+    workflow,
+    /containerd-snapshotter|systemctl restart docker/,
+    "the runner keeps Docker's containerd store",
+  );
+  assert.match(workflow, /io\.containerd\.snapshotter\.v1/);
+  const at = (needle) => {
+    const i = workflow.indexOf(needle);
+    assert.ok(i > 0, needle);
+    return i;
+  };
+  assert.ok(
+    at("- name: Containerd image store, as on ds-data-prod") <
+      at("- name: Prepare and certify"),
+  );
+  const proof = workflow.slice(
+    at("- name: Load the archive with the certified images removed"),
+    at("- name: Keep the certificate"),
+  );
+  assert.match(proof, /docker image rm/);
+  assert.match(proof, /docker load -i out\/images\.tar/);
+  assert.match(proof, /docker image inspect --format '\{\{\.Id\}\}'/);
+});
+
 test("4089: preparation runs on an ssh build host or, in Actions, on the runner's own Docker", async () => {
   const { parsePrepareArgs, prepareSpawn } =
     await import("./postgres-artifact-prepare.mjs");
@@ -496,29 +598,24 @@ test("4089: a box-local release reads the delivered artifact of its own SHA, loa
     const own = join(dir, sha);
     const { mkdirSync } = await import("node:fs");
     mkdirSync(own);
+    const { entries, ids } = containerdArchive();
+    const loaded = {
+      ...certificate,
+      images: { postgres: { id: ids[0] }, pgbackrest: { id: ids[1] } },
+    };
     writeFileSync(join(own, "certificate.json"), JSON.stringify(certificate));
     assert.throws(
       () => deliveredPostgresArtifact(sha, { dir }),
       /no images\.tar|ENOENT/,
     );
-    const manifest = (ids) =>
-      JSON.stringify(
-        ids.map((id) => ({ Config: `blobs/sha256/${id.slice(7)}` })),
-      );
-    writeFileSync(
-      join(own, "images.tar"),
-      tar([["manifest.json", manifest([PG])]]),
-    );
+    writeFileSync(join(own, "images.tar"), tar(entries));
     assert.throws(
       () => deliveredPostgresArtifact(sha, { dir }),
       /the image archive holds/,
     );
-    writeFileSync(
-      join(own, "images.tar"),
-      tar([["manifest.json", manifest([PG, BR])]]),
-    );
+    writeFileSync(join(own, "certificate.json"), JSON.stringify(loaded));
     const delivered = deliveredPostgresArtifact(sha, { dir });
-    assert.deepEqual(delivered.certificate, certificate);
+    assert.deepEqual(delivered.certificate, loaded);
     assert.equal(delivered.imagesFile, join(own, "images.tar"));
     const calls = [];
     const client = {
@@ -534,13 +631,16 @@ test("4089: a box-local release reads the delivered artifact of its own SHA, loa
     });
     assert.deepEqual(calls, [
       [
-        ["postgres-load", sha, PG.slice(7), BR.slice(7)],
+        ["postgres-load", sha, ids[0].slice(7), ids[1].slice(7)],
         { inputFile: join(own, "images.tar") },
       ],
     ]);
     assert.match(
       lines.join("\n"),
-      /certified PostgreSQL images 111111111111 \/ 222222222222.*Loaded image ID: x/s,
+      new RegExp(
+        `certified PostgreSQL images ${ids[0].slice(7, 19)} / ${ids[1].slice(7, 19)}.*Loaded image ID: x`,
+        "s",
+      ),
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });

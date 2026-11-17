@@ -788,16 +788,19 @@ key and no workstation-held artifact:
    `.github/workflows/postgres-artifact.yml`; `gh workflow run postgres-artifact.yml
 --ref main` runs it again (the artifact expires after 90 days). The GitHub-hosted
    runner is the build host, as for every image (release-pipeline spec §3 item 1: no box
-   builds an image). The workflow first switches the runner's dockerd to the classic
-   overlay2 image store (Docker 29 defaults to the containerd store, where an image id
-   is its manifest digest, not its config digest), so the build host measures the ids
-   that ds-data-prod's classic store gives on `docker load`.
+   builds an image). The runner keeps Docker 29's default containerd image store, the
+   store ds-data-prod runs (`overlayfs`, #4104), and the workflow refuses any other: an
+   image id there is the digest of its image target (the entry of the archive's
+   `index.json`), not the config digest the classic overlay2 store would give, so only
+   that store measures the ids ds-data-prod reports after `docker load`.
    `postgres-artifact-prepare.mjs --local` builds only the committed
    contexts on the runner's Docker, labels the images, executes their real PostgreSQL
    version, UID/GID and pgBackRest version commands without a cluster, checks image
    PGDATA and matching ownership, exports the exact built images and refuses an archive
-   whose config digests are not the certified ids (the ids `docker load` yields on
-   ds-data-prod). The run artifact `postgres-artifact-<sourceHash>` is the release
+   whose `index.json` image targets are not the certified ids (the ids `docker load`
+   yields on ds-data-prod). The run then does what ds-data-prod's `postgres-load` does:
+   it runs that verb's archive check on the real archive, removes the certified images,
+   `docker load`s the archive and inspects both certified ids. The run artifact `postgres-artifact-<sourceHash>` is the release
    evidence: `certificate.json`, `audit.jsonl` (every command), `prepare.log` and
    `images.tar`. The workflow needs no secret; the repository is public, and so is the
    artifact — commands, image ids, versions and public packages, no credential, host
@@ -829,16 +832,20 @@ key and no workstation-held artifact:
    box reads the archive in place before loading it and refuses (exit 3) one with a
    member that docker could read differently (anything but a plain POSIX ustar header with an all-NUL
    prefix, a link, a name
-   out of normal form or given twice), or whose `manifest.json` lists other or more than those two images, or that names an image (a
-   RepoTag, a `repositories` entry, an index.json name: the images are saved by id, and a
-   name would retarget it on the box); after `docker load` it checks that both ids are
-   present. No container starts and the upload is removed.
+   out of normal form or given twice), or that is not exactly a containerd-store
+   `docker image save` (measured on Docker 29.4.2, #4104): only the directories `blobs`
+   and `blobs/sha256`, `blobs/sha256/<hex>` blobs, `index.json`, `manifest.json` and
+   `oci-layout` (a `repositories` file is refused); `index.json` listing exactly those two
+   ids as entries of exactly `{mediaType, digest, size}` (no name, no platform), each
+   one's blob present and of its size and digest; `manifest.json` listing two untagged
+   images whose config blobs are present (the images are saved by id, and a name would
+   retarget it on the box); after `docker load` it checks that both ids are present. No container starts and the upload is removed.
    Everything after is the ordinary guarded release: `data-env` records the certified
    ids, `data-up` recreates postgres + pgbackrest on them, the checkpoint advances the
    record. On every release that checkpoint also prints one
    `↳ ds-data-prod: storage driver: <driver>` line (evidence only, `unavailable — <reason>`
-   on a docker error): the certified ids are classic-store (`overlay2`) config digests,
-   and a box on the containerd store fails closed at the post-load inspect. The deploy
+   on a docker error): the certified ids are containerd-store (`overlayfs`) image-target
+   digests, and a box on another store fails closed at the post-load inspect. The deploy
    job's log carries the same value as `data-box storage driver: <word>` (#4100,
    `storageDriver` above).
 
@@ -863,7 +870,9 @@ pnpm deploy:prod --postgres-artifacts <certificate.json>
 ```
 
 The exported images must already be on ds-data-prod (a `docker load` of the archive);
-a missing image is a refusal, never an implicit pull or rebuild. Preserve the
+a missing image is a refusal, never an implicit pull or rebuild. The build host must run
+Docker's containerd image store, as ds-data-prod does: the preparation refuses the
+archive of any other store, whose ids ds-data-prod would not report (#4104). Preserve the
 certificate with the exported image archive. Omit `--certificate` for read-only
 validation of the unchanged deployment. The check command uses the normal
 `DS_DATA_PROD_SSH`/SSH alias, reaches ds-data-prod only through its `postgres-probe`

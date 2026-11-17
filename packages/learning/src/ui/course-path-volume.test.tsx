@@ -216,26 +216,27 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
       return n === undefined ? 0 : 64 + (n - 60) * 288 - scrolled;
     });
     vi.stubGlobal("innerHeight", 900);
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
+    const frame = (target: EventTarget, ...events: string[]) =>
+      act(() => {
+        for (const type of events) target.dispatchEvent(new Event(type, { bubbles: true }));
+        frames.splice(0).forEach((cb) => cb(0));
+      });
     const current = () => outline().getByRole("link", { current: true });
     render(<CoursePath courseSlug="k" config={CONFIG} initial={path} />);
-    act(() => {
-      window.dispatchEvent(new Event("scroll"));
-    });
+    frame(window, "scroll");
     // Lesson 60 sits at the top, lesson 61 starts at 352 (above the middle).
     expect(current()).toHaveAccessibleName(/^Урок 60\. /);
-    // The reader picks lesson 59 in the outline, then the column settles its
-    // own scroll: the pick stands.
+    // The reader picks lesson 59 in the outline; the page jump lands, then the
+    // column settles its own follow-scroll: the pick stands.
     fireEvent.click(outline().getByRole("link", { name: /^Урок 59\. / }));
-    act(() => {
-      window.dispatchEvent(new Event("scrollend"));
-      document.querySelector("aside")!.dispatchEvent(new Event("scroll", { bubbles: true }));
-    });
+    frame(window, "scrollend");
+    frame(document.querySelector("aside")!, "scroll");
     expect(current()).toHaveAccessibleName(/^Урок 59\. /);
     // Lesson 61's first step reaches the top of the viewport: it is in view.
     scrolled = 260;
-    act(() => {
-      window.dispatchEvent(new Event("scroll"));
-    });
+    frame(window, "scroll");
     expect(current()).toHaveAccessibleName(/^Урок 61\. /);
   });
 

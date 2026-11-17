@@ -82,8 +82,15 @@ function openModuleIndex(view: PathView, n: number): number {
 }
 
 /**
- * The canvas `spy()`: on scroll (one read per animation frame) the lesson whose
- * first step has passed the middle of the viewport becomes the lesson in view.
+ * The canvas `spy()`: on a scroll of the page (one read per animation frame) the
+ * last lesson whose first step has passed the line becomes the lesson in view.
+ * The line is the top row of the viewport (one row pitch), not the canvas's
+ * middle: the canvas's lessons are four steps long, ours may be two or three,
+ * and with the middle line the lesson after the one at the top already counts
+ * once its first step is above the middle. A jump lands its node at
+ * `--space-16` from the top, above the line, and the next lesson starts at
+ * least a row below it — so the lesson jumped to stays the lesson in view.
+ * The outline column scrolling itself is not the page moving and never counts.
  * Desktop only — the narrow axis has no outline.
  *
  * A jump the reader asked for («Продолжить», an outline row, a module row) has
@@ -96,6 +103,7 @@ function openModuleIndex(view: PathView, n: number): number {
 function useScrollSpy(
   view: PathView | null,
   enabled: boolean,
+  aside: React.RefObject<HTMLElement | null>,
   onLesson: (n: number) => void,
 ): () => void {
   const latest = useRef(onLesson);
@@ -130,11 +138,11 @@ function useScrollSpy(
         const el = l.firstStepId ? document.getElementById(`node-${l.firstStepId}`) : null;
         return el ? el.getBoundingClientRect().top : null;
       });
-      const cur = lessonInView(tops, (window.innerHeight || 0) * 0.5);
+      const cur = lessonInView(tops, SNAKE.pitch);
       if (cur) latest.current(lessons[cur - 1]!.number);
     };
-    const onScroll = () => {
-      if (frame) return;
+    const onScroll = (e: Event) => {
+      if (frame || (e.target instanceof Element && aside.current?.contains(e.target))) return;
       frame = window.requestAnimationFrame(spy);
     };
     window.addEventListener("scroll", onScroll, true);
@@ -142,7 +150,7 @@ function useScrollSpy(
       window.removeEventListener("scroll", onScroll, true);
       if (frame) window.cancelAnimationFrame?.(frame);
     };
-  }, [view, enabled]);
+  }, [view, enabled, aside]);
   return hold;
 }
 
@@ -250,7 +258,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
     },
     [],
   );
-  const holdSpy = useScrollSpy(view, !narrow, (n) => setNavN((prev) => (prev === n ? prev : n)));
+  const holdSpy = useScrollSpy(view, !narrow, asideRef, (n) => setNavN((prev) => (prev === n ? prev : n)));
   /** A jump the reader asked for: the spy waits until it lands. */
   const jumpTo = (id: string) => {
     holdSpy();

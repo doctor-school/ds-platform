@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CoursePath } from "./course-path";
 import { summaryAction } from "./node-summary";
 import { buildPathView, sectionCurves, snakeGeometry } from "./path-view";
-import { CONFIG, ID, coursePath, lessonRead, stubFetch, stubMatchMedia } from "./__tests__/fixtures";
+import { CONFIG, ID, coursePath, lessonRead, multiModulePath, stubFetch, stubMatchMedia } from "./__tests__/fixtures";
 import type { LearningCoursePath } from "@ds/schemas";
 
 // 024 EARS-14 — the course path block of `design-source/doctor-course.dc.html`
@@ -96,6 +96,37 @@ describe("024 EARS-14 — the course path", () => {
     const sheet = within(screen.getByRole("dialog"));
     expect(sheet.getByText("Памятка по ЭКГ")).toBeInTheDocument();
     expect(sheet.getByRole("link", { name: "Начать" })).toHaveAttribute("href", `/courses/kardio/steps/${ID.s3}`);
+  });
+
+  it("EARS-14: the summary names where the step is — «Урок N · шаг s из S · статус» — then the step's type and meta (canvas `sum`)", () => {
+    const { unmount } = render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath()} />);
+    const summary = within(screen.getByTestId("node-summary"));
+    expect(summary.getByText("Урок 2 · шаг 1 из 2 · Вы здесь")).toBeInTheDocument();
+    expect(summary.getByRole("heading", { name: "Чтение ЭКГ" })).toBeInTheDocument();
+    expect(summary.getByText("Серия · видео · 15 минут")).toBeInTheDocument();
+    // The lesson's step list is the Sheet's (canvas `materials`), not the aside's.
+    expect(summary.queryByRole("list", { name: "Шаги урока" })).toBeNull();
+    fireEvent.click(node(/Памятка по ЭКГ\. Открыт/));
+    expect(summary.getByText("Урок 2 · шаг 2 из 2 · Открыт")).toBeInTheDocument();
+    expect(summary.getByText("Материал для скачивания · PDF · 1,2 МБ")).toBeInTheDocument();
+    unmount();
+    // A course of several modules names the module too.
+    render(<CoursePath courseSlug="k" config={CONFIG} initial={multiModulePath(6, 3, 8)} />);
+    expect(within(screen.getByTestId("node-summary")).getByText("Урок 8 · модуль 3 · шаг 1 из 3 · Вы здесь")).toBeInTheDocument();
+  });
+
+  it("EARS-14: the Sheet names where the step is — «Урок N · модуль M · шаг s из S» — and lists the lesson's steps (canvas `sheetNote`, `materials`)", () => {
+    stubMatchMedia(true);
+    render(<CoursePath courseSlug="k" config={CONFIG} initial={multiModulePath(6, 3, 8)} />);
+    fireEvent.click(node(/^Урок 8, шаг 2\./));
+    const sheet = within(screen.getByRole("dialog"));
+    expect(sheet.getByText("Урок 8 · модуль 3 · шаг 2 из 3")).toBeInTheDocument();
+    const steps = within(sheet.getByRole("list", { name: "Шаги урока" })).getAllByRole("listitem");
+    expect(steps.map((li) => li.textContent)).toEqual([
+      "1Серия · Серия урока 8",
+      "2Материал для скачивания · Памятка урока 8",
+      "3Тест · Тест урока 8",
+    ]);
   });
 });
 

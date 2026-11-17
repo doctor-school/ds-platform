@@ -84,6 +84,10 @@ function openModuleIndex(view: PathView, n: number): number {
 /**
  * The canvas `spy()`: on a scroll of the page (one read per animation frame) the
  * last lesson whose first step has passed the line becomes the lesson in view.
+ * A module's first lesson starts at its module plate: the plate is taller than
+ * the line, so once it has passed the line its module is the one in view (open
+ * in the outline, its first lesson marked) — not the previous module's last
+ * lesson until the first step below the plate reaches the line.
  * The line is the top row of the viewport (one row pitch), not the canvas's
  * middle: the canvas's lessons are four steps long, ours may be two or three,
  * and with the middle line the lesson after the one at the top already counts
@@ -129,13 +133,20 @@ function useScrollSpy(
   useEffect(() => () => held.current?.(), []);
   useEffect(() => {
     if (!enabled || !view) return;
-    const lessons = view.outline.flatMap((m) => m.lessons);
+    const lessons = view.outline.flatMap((m) =>
+      m.lessons.map((l, i) => ({
+        number: l.number,
+        plate: i === 0 && !view.single ? `module-${m.id}` : null,
+        step: l.firstStepId ? `node-${l.firstStepId}` : null,
+      })),
+    );
     let frame = 0;
     const spy = () => {
       frame = 0;
       if (held.current) return;
       const tops = lessons.map((l) => {
-        const el = l.firstStepId ? document.getElementById(`node-${l.firstStepId}`) : null;
+        const el =
+          (l.plate ? document.getElementById(l.plate) : null) ?? (l.step ? document.getElementById(l.step) : null);
         return el ? el.getBoundingClientRect().top : null;
       });
       const cur = lessonInView(tops, SNAKE.pitch);
@@ -157,20 +168,20 @@ function useScrollSpy(
 /**
  * At volume (26 modules) the outline column is taller than the viewport. On
  * load it shows its top — the summary and the start of the outline — as the
- * canvas does. Once the open module changes (the scroll-spy, a pick,
- * «Продолжить»), after its height transition ends the column scrolls (by
- * itself, never the page) the least distance that shows the whole open module —
- * so the outline visibly follows the reader and the summary stays while it fits.
+ * canvas does. Once the open module changes (the scroll-spy) or the reader asks
+ * for a jump (`request` grows: «Продолжить», a lesson or module pick — the
+ * module may already be the open one, as «Вы здесь» is after load), after the
+ * height transition ends the column scrolls (by itself, never the page) the
+ * least distance that shows the whole open module — so the outline visibly
+ * follows the reader and the summary stays while it fits.
  */
-function useOutlineFollow(aside: React.RefObject<HTMLElement | null>, openModule: number) {
-  const shown = useRef<number | null>(null);
+function useOutlineFollow(aside: React.RefObject<HTMLElement | null>, openModule: number, request: number) {
+  const shown = useRef<{ module: number; request: number } | null>(null);
   useEffect(() => {
+    const prev = shown.current;
+    shown.current = { module: openModule, request };
     // The module open on load (and a repeated run for it) is no change.
-    if (shown.current === null || shown.current === openModule) {
-      shown.current = openModule;
-      return;
-    }
-    shown.current = openModule;
+    if (!prev || (prev.module === openModule && prev.request === request)) return;
     const timer = setTimeout(() => {
       const column = aside.current;
       const block = column?.querySelector<HTMLElement>('[data-outline-module="open"]');
@@ -182,7 +193,7 @@ function useOutlineFollow(aside: React.RefObject<HTMLElement | null>, openModule
       if (delta) column.scrollTo({ top: column.scrollTop + delta, behavior: "smooth" });
     }, 300);
     return () => clearTimeout(timer);
-  }, [aside, openModule]);
+  }, [aside, openModule, request]);
 }
 
 /** The canvas switches the path to its narrow axis below the desktop grid. */
@@ -228,7 +239,6 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
   }, [courseSlug]);
 
   const view = useMemo(() => (path ? buildPathView(path) : null), [path]);
-  const g = snakeGeometry(narrow);
   const href = (id: string) => stepHref(config, courseSlug, id);
   const nodes = view ? view.sections.flatMap((sec) => sec.nodes) : [];
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -259,14 +269,17 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
     [],
   );
   const holdSpy = useScrollSpy(view, !narrow, asideRef, (n) => setNavN((prev) => (prev === n ? prev : n)));
+  // Each jump the reader asks for brings the open module into the outline column.
+  const [followRequest, setFollowRequest] = useState(0);
   /** A jump the reader asked for: the spy waits until it lands. */
   const jumpTo = (id: string) => {
     holdSpy();
+    setFollowRequest((r) => r + 1);
     scrollToId(id);
   };
   const inView = navN ?? selected?.lessonNumber ?? view?.current?.lessonNumber ?? 1;
   const openModule = view ? openModuleIndex(view, inView) : 0;
-  useOutlineFollow(asideRef, openModule);
+  useOutlineFollow(asideRef, openModule, followRequest);
 
   const select = (n: PathNode) => {
     setSelectedId(n.id);
@@ -415,7 +428,6 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
                     .reduce((n, s) => n + s.nodes.length, 0);
                   const prev = view.sections[si - 1]?.nodes.at(-1)?.line ?? null;
                   const next = view.sections[si + 1]?.nodes[0]?.line ?? null;
-                  const curves = sectionCurves(sec.nodes, start, g, prev, next);
                   return (
                     <div key={sec.id}>
                       {view.single ? null : (
@@ -434,31 +446,19 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
                         ) : null}
                       </div>
                       )}
-                      <div className="relative" style={{ height: curves.height }}>
-                        <svg
-                          aria-hidden="true"
-                          width={g.width}
-                          height={curves.height}
-                          className="pointer-events-none absolute top-0 overflow-visible"
-                          style={{ left: narrow ? 0 : `calc(50% - ${g.width / 2}px)` }}
-                        >
-                          <path d={curves.locked} fill="none" strokeWidth={4} strokeLinecap="square" strokeDasharray="8 8" className="stroke-muted-2" />
-                          <path d={curves.open} fill="none" strokeWidth={4} strokeLinecap="square" strokeDasharray="8 8" className="stroke-primary-action" />
-                          <path d={curves.done} fill="none" strokeWidth={4} strokeLinecap="square" className="stroke-primary-action" />
-                        </svg>
+                      <SnakeTrack nodes={sec.nodes} start={start} prev={prev} next={next} narrow={narrow}>
                         {sec.nodes.map((n, i) => (
                           <SnakeNode
                             key={n.id}
                             node={n}
                             index={start + i}
-                            row={i}
                             narrow={narrow}
                             selected={selected?.id === n.id}
                             flash={flash && selected?.id === n.id}
                             onSelect={() => select(n)}
                           />
                         ))}
-                      </div>
+                      </SnakeTrack>
                     </div>
                   );
                 })}
@@ -622,10 +622,81 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
   );
 }
 
+/**
+ * The rows of one section and the snake drawn through them. A row is one
+ * pitch (the canvas) and grows with a taller label (a wrapped kicker, a
+ * two-line title, «Вы здесь», a note), so no label runs into the next row;
+ * the rows are measured after layout and again on resize, a font load or a
+ * label change, and the line is drawn through their middles, unbroken.
+ */
+function SnakeTrack({
+  nodes,
+  start,
+  prev,
+  next,
+  narrow,
+  children,
+}: {
+  nodes: PathNode[];
+  start: number;
+  prev: PathNode["line"] | null;
+  next: PathNode["line"] | null;
+  narrow: boolean;
+  children: React.ReactNode;
+}) {
+  const g = snakeGeometry(narrow);
+  const track = useRef<HTMLDivElement>(null);
+  const heights = useRowHeights(track, nodes);
+  const curves = sectionCurves(nodes, start, g, prev, next, heights);
+  return (
+    <div ref={track} className="relative">
+      <svg
+        aria-hidden="true"
+        width={g.width}
+        height={curves.height}
+        className="pointer-events-none absolute top-0 overflow-visible"
+        style={{ left: narrow ? 0 : `calc(50% - ${g.width / 2}px)` }}
+      >
+        <path d={curves.locked} fill="none" strokeWidth={4} strokeLinecap="square" strokeDasharray="8 8" className="stroke-muted-2" />
+        <path d={curves.open} fill="none" strokeWidth={4} strokeLinecap="square" strokeDasharray="8 8" className="stroke-primary-action" />
+        <path d={curves.done} fill="none" strokeWidth={4} strokeLinecap="square" className="stroke-primary-action" />
+      </svg>
+      {children}
+    </div>
+  );
+}
+
+/** The measured heights of a track's rows (`[data-snake-row]`), in order. */
+function useRowHeights(track: React.RefObject<HTMLElement | null>, key: unknown): number[] | undefined {
+  const [heights, setHeights] = useState<number[] | undefined>(undefined);
+  useLayoutEffect(() => {
+    const el = track.current;
+    if (!el) return;
+    const rows = [...el.querySelectorAll<HTMLElement>(":scope > [data-snake-row]")];
+    const measure = () => {
+      const next = rows.map((r) => r.getBoundingClientRect().height);
+      setHeights((prev) => (prev && prev.length === next.length && prev.every((h, i) => h === next[i]) ? prev : next));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    for (const r of rows) observer?.observe(r);
+    let live = true;
+    void document.fonts?.ready.then(() => {
+      if (live) measure();
+    });
+    return () => {
+      live = false;
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  }, [track, key]);
+  return heights;
+}
+
 function SnakeNode({
   node,
   index,
-  row,
   narrow,
   selected,
   flash,
@@ -633,7 +704,6 @@ function SnakeNode({
 }: {
   node: PathNode;
   index: number;
-  row: number;
   narrow: boolean;
   selected: boolean;
   /** «Продолжить» just jumped here: the ring stands off further (canvas `flash`). */
@@ -641,7 +711,6 @@ function SnakeNode({
   onSelect: () => void;
 }) {
   const g = snakeGeometry(narrow);
-  const P = SNAKE.pitch;
   const S = SNAKE.side;
   const off = (index % 2 === 0 ? 1 : -1) * g.offset;
   const right = narrow || off > 0;
@@ -658,14 +727,16 @@ function SnakeNode({
   );
   const boxStyle = {
     scrollMarginTop: "var(--space-16)",
-    top: (P - S) / 2,
+    top: `calc(50% - ${S / 2}px)`,
     width: S,
     height: S,
     left: narrow ? g.axis + off - S / 2 : `calc(50% + ${off - S / 2}px)`,
   };
   const glyph = node.kind === "step" && node.stepType ? node.stepType : node.kind === "club" ? "club" : "doc";
   return (
-    <div className="absolute inset-x-0" style={{ top: row * P, height: P }}>
+    // The row is one pitch and grows with its label (`py-2` keeps a taller
+    // label off its neighbours); the node and the lesson chip stay centred.
+    <div data-snake-row="" className="relative flex flex-col justify-center py-2" style={{ minHeight: SNAKE.pitch }}>
       {!narrow && node.firstOfLesson && node.lessonNumber ? (
         <div
           className="absolute inset-y-0 flex items-center"
@@ -693,16 +764,13 @@ function SnakeNode({
         </span>
       </button>
       <div
-        className={cn(
-          "absolute inset-y-0 flex min-w-0 flex-col justify-center gap-1",
-          right ? "right-0 items-start text-left" : "left-0 items-end text-right",
-        )}
+        className={cn("flex min-w-0 flex-col gap-1", right ? "items-start text-left" : "items-end text-right")}
         style={
           narrow
-            ? { left: g.axis + g.offset + edge }
+            ? { marginLeft: g.axis + g.offset + edge }
             : right
-              ? { left: `calc(50% + ${off + edge}px)` }
-              : { right: `calc(50% + ${-off + edge}px)` }
+              ? { marginLeft: `calc(50% + ${off + edge}px)` }
+              : { marginRight: `calc(50% + ${-off + edge}px)` }
         }
       >
         {/* The label column is narrow (canvas geometry): the kicker breaks only

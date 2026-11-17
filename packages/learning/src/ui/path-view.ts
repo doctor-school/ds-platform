@@ -329,20 +329,30 @@ export interface SnakeGeometry {
 export const snakeGeometry = (mobile: boolean): SnakeGeometry =>
   mobile ? { axis: 64, offset: 24, width: 128 } : { axis: 120, offset: 56, width: 240 };
 
-/** The S-curves of one section, split by the canvas's line states. */
+/**
+ * The S-curves of one section, split by the canvas's line states. Each node
+ * sits at the middle of its row; a row is one pitch (the canvas) unless its
+ * measured height (`heights`, by node) is given — a label taller than the
+ * pitch grows its row, and the line runs through the grown rows unbroken.
+ */
 export function sectionCurves(
   nodes: PathNode[],
   startIndex: number,
   g: SnakeGeometry,
   prevLine: LineState | null,
   nextLine: LineState | null,
+  heights?: readonly number[],
 ): { done: string; open: string; locked: string; height: number } {
   const P = SNAKE.pitch;
+  let y = 0;
   const pts = nodes.map((n, i) => {
     const sign = (startIndex + i) % 2 === 0 ? 1 : -1;
-    return { x: g.axis + sign * g.offset, y: i * P + P / 2, ls: n.line };
+    const h = Math.max(P, heights?.[i] ?? P);
+    const pt = { x: g.axis + sign * g.offset, y: y + h / 2, ls: n.line };
+    y += h;
+    return pt;
   });
-  const height = nodes.length * P;
+  const height = y;
   const d = { done: "", open: "", locked: "" };
   const pair = (a: LineState, b: LineState): keyof typeof d =>
     a === "done" && b === "done"

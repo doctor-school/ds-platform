@@ -1216,6 +1216,8 @@ const DEBT_HEADER = [
   "#   NNN | <scenario title>[ [k]][ | #<issue>]   ([k] = the k-th scenario with that title)",
   "# Delete a line once its scenario is proven. A line added after the merge base names an",
   "# OPEN Issue; a spec does not move to Shipped while one of its journeys is unproven.",
+  "# A record, not a work queue — never drained as a backlog; the regression set is the",
+  "# key-journey register (regression-contour tech spec §6.7).",
   "# Regenerate: pnpm lint:scenario-proof --write-debt",
 ];
 

@@ -316,7 +316,7 @@ fails loudly instead of quietly shrinking the suite.
 Adding or retargeting a host tag is a suite-selection edit, not scenario
 authorship: `tools/lint/lib/diff.ts` keeps such a file OUT of the §6.4/§6.5
 «touched» set, so annotating a spec does not make the annotating PR inherit that
-spec's §8 backfill debt. Change one scenario line in the same file and it counts
+spec's scenario debt. Change one scenario line in the same file and it counts
 as touched again.
 
 ### Compiled-API operational originals (001 EARS-1; 002 EARS-1/2)
@@ -397,8 +397,8 @@ provision these fixtures or redirect stage traffic to a local API.
 
 ## Missing-step policy: `skip-scenario`
 
-Most spec feature files still carry the pre-contract step prose the §8 backfill
-rewords, so most scenarios have no matching step definition yet. Of the three
+Most spec feature files still carry pre-contract step prose, so most scenarios
+have no matching step definition. Of the three
 policies `playwright-bdd` 9.2 offers:
 
 - `fail-on-gen` would make `bddgen` exit non-zero permanently — a gate nobody can
@@ -420,9 +420,13 @@ tagged with a verified `@proof:<level>`; a legacy unclassified scenario only
 when bound. `pnpm scenarios:inventory` — not the skipped count —
 is the coverage number, headlined journeys bound / journeys total
 (`tools/lint/scenario-proof-lint.ts`, §6.4). The unproven scenarios are exactly
-`scenario-proof-debt.txt` in this package: a backfill PR that classifies, tags
-or binds scenarios deletes their lines here, a new line names an OPEN Issue,
-and a spec does not move to `Shipped` while one of its journeys is unproven.
+`scenario-proof-debt.txt` in this package: a PR that proves a scenario deletes
+its line here, a new line names an OPEN Issue, and a spec does not move to
+`Shipped` while one of its journeys is unproven. The list is a record, not a
+work queue — no PR is cut to drain it. The regression set the suite owes before
+release is the key-journey register (regression-contour tech spec §6.7): every
+key user action mapped to the binding here or the live tier
+(`tools/staging/live-tiers.mjs`) that runs it, each gap with an OPEN Issue.
 
 `retries: 0` (§6.5): a retry turns a flake into a pass and a regression into a
 slow pass.

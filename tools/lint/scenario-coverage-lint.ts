@@ -23,7 +23,7 @@
  *
  * Severity (§6.4). BLOCK for a spec this PR created or modified (either the
  * requirements file or its feature file); a WARN report row for untouched specs,
- * until the §8 backfill waves close. So the guard exits 1 only on coverage the
+ * a record, not a work queue (§6.7). So the guard exits 1 only on coverage the
  * author of THIS PR is responsible for, plus any bad quarantine. Registered in
  * the `guards-block` CI job: it self-limits its own exit code, so the WARN rows
  * never block a merge, and a real finding is a red check the moment it appears.
@@ -515,7 +515,7 @@ async function main(): Promise<void> {
   if (warning.length > 0) {
     info(
       `${warning.length} untouched spec(s) carry uncovered handlers — WARN ` +
-        `until the §8 backfill waves close (ADR-0007 §2.6 promotion applies).`,
+        `(a record, not a work queue: tech spec §6.7; ADR-0007 §2.6 promotion applies).`,
     );
   }
   if (touched === null) {

@@ -8,7 +8,7 @@
  * before the rule existed cannot be a blanket BLOCK without reddening every
  * unrelated PR. The regression-contour tech spec §6.4 writes the resolution into
  * the contract itself — BLOCK for a spec created or modified in the PR, a WARN
- * report row for untouched ones until the §8 backfill waves close — so the check
+ * report row for untouched ones — so the check
  * on what the author actually changed is never weakened.
  *
  * What «modified» means for a `.feature` file: a change to the SCENARIOS, not to
@@ -17,7 +17,7 @@
  * `packages/e2e/lib/host-tags.ts`), and adding or retargeting that tag is a
  * SUITE-SELECTION edit: it changes which storefront runs the scenarios, never
  * what they cover or how they assert. Counting it as authorship would make a
- * repo-wide selection pass inherit the whole §8 backfill debt of every spec it
+ * repo-wide selection pass inherit the whole scenario debt of every spec it
  * annotated — exactly the «reddening every unrelated PR» the split exists to
  * prevent. So a `.feature` path whose entire diff is host-tag lines is dropped
  * from the touched set; change ONE scenario line in the same file and it counts.

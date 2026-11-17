@@ -480,12 +480,14 @@ per-project passed/failed/skipped counts, the axe verdict, one line per live-tie
 and the report path. That block is the artefact you paste. Exit `0` no leg failed (skipped
 live legs included), `1` a failing leg, `2` pre-flight.
 
-Until the §8 backfill (#2068) rewords the spec feature files in the shared step
-vocabulary, every scenario reports as **skipped** — `missingSteps: "skip-scenario"`, the
+A scenario whose steps have no definition in the shared step vocabulary reports as
+**skipped** — `missingSteps: "skip-scenario"`, the
 deliberate choice `packages/e2e/playwright.config.ts` records. The verdict block prints
 the skipped count rather than hiding it, so «0 passed / N skipped» is a truthful reading
-of what this run executed, not a defect of this command. The suite's coverage number is
-`pnpm scenarios:inventory`, headlined journeys bound / journeys total; a `@rule` may
+of what this run executed, not a defect of this command. Regression coverage is the
+key-journey register (regression-contour tech spec §6.7): each key user action mapped to
+the binding or live tier this run executes. `pnpm scenarios:inventory` is a record of
+scenario proof, headlined journeys bound / journeys total; a `@rule` may
 also count by a verified `@proof:<level>` tag, a `@journey` only by binding here or in
 `apps/admin/e2e` (regression-contour tech spec §6.1/§6.4).
 

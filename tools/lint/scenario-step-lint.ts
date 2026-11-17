@@ -58,7 +58,11 @@ const FEATURE_GLOBS = [
   "apps/portal/e2e/features/*.feature",
 ];
 const STEP_GLOBS = ["packages/e2e/steps/**/*.ts"];
-const SCAN_IGNORE = ["**/node_modules/**", "**/.features-gen/**", "**/.next/**"];
+const SCAN_IGNORE = [
+  "**/node_modules/**",
+  "**/.features-gen/**",
+  "**/.next/**",
+];
 
 /** The navigation verbs §6.2 names. */
 const NAV_RE = /\b(?:navigates?\s+to|re-?opens|opens|lands?\s+on)\b/i;
@@ -71,7 +75,8 @@ const EVIDENCE_RE = /\bshowing\b\s*\S|data-surface/i;
  * address, so §6.2's «200 on the wrong page» defect cannot hide in it and the
  * rule does not apply.
  */
-const DESTINATION_RE = /(?:^|[\s"'«(])\/[A-Za-z0-9_\-./[\]{}]*|\{(?:string|word|int)\}/;
+const DESTINATION_RE =
+  /(?:^|[\s"'«(])\/[A-Za-z0-9_\-./[\]{}]*|\{(?:string|word|int)\}/;
 /**
  * A negative assertion (`the visitor never lands on /`). It asserts the ABSENCE
  * of a destination, so there is no landing whose evidence could be named.
@@ -121,7 +126,11 @@ export function scanFeatureText(text: string): Omit<Finding, "file">[] {
     const m = line.match(GHERKIN_STEP_RE);
     if (!m) {
       // A Scenario/Background/Feature header resets the conjunction context.
-      if (/^\s*(Feature|Background|Scenario|Scenario Outline|Example|Rule)\b/.test(line)) {
+      if (
+        /^\s*(Feature|Background|Scenario|Scenario Outline|Example|Rule)\b/.test(
+          line,
+        )
+      ) {
         context = null;
       }
       return;
@@ -188,7 +197,7 @@ async function main(): Promise<void> {
 
   // §6.4 severity model, applied to §6.2's rule: the check on what THIS PR wrote
   // is a hard BLOCK; scenario prose authored before the contract existed reports
-  // as a WARN row until the §8 backfill waves fold the journey files in. An
+  // as a WARN row until a PR touching that file rewords it. An
   // unavailable diff (`null`) is «severity unknown» — report, never block.
   const touched = await touchedPaths(REPO_ROOT);
   const blocking: Finding[] = [];
@@ -206,7 +215,7 @@ async function main(): Promise<void> {
   if (warning.length > 0) {
     info(
       `${warning.length} pre-existing bare navigation step(s) in files this PR ` +
-        `did not touch — WARN until the §8 backfill waves reword them.`,
+        `did not touch — WARN until a PR touching the file rewords them.`,
     );
   }
   if (touched === null) {
@@ -217,7 +226,9 @@ async function main(): Promise<void> {
   }
 
   if (blocking.length === 0) {
-    info("PASS — no navigation outcome step this PR touched is missing its landing evidence (§6.2).");
+    info(
+      "PASS — no navigation outcome step this PR touched is missing its landing evidence (§6.2).",
+    );
     process.exit(0);
   }
 

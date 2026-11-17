@@ -22,7 +22,7 @@ import type {
   LearningScopeKind,
   LearningSettingValues,
 } from "@ds/schemas";
-import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   LEARNING_PLATFORM_SCOPE_ID,
   type LearningCourseModel,
@@ -253,6 +253,25 @@ export async function loadFacts(
     }
   }
   return facts;
+}
+
+/** EARS-13 — each test's live question count, in one read (tests with none are absent). */
+export async function questionCounts(
+  db: Handle,
+  testIds: readonly string[],
+): Promise<Map<string, number>> {
+  if (testIds.length === 0) return new Map();
+  const rows = await db
+    .select({ testId: learningQuestions.testId, n: count() })
+    .from(learningQuestions)
+    .where(
+      and(
+        inArray(learningQuestions.testId, [...testIds]),
+        isNull(learningQuestions.removedAt),
+      ),
+    )
+    .groupBy(learningQuestions.testId);
+  return new Map(rows.map((r) => [r.testId, Number(r.n)]));
 }
 
 /** A test's live questions with their options, in order. */

@@ -1,4 +1,4 @@
-import type { LearningElementType, LearningLockReason } from "@ds/schemas";
+import type { LearningElementType, LearningLockReason, LearningPathStep } from "@ds/schemas";
 
 // 024 EARS-14…18, EARS-26 — the RU copy of the doctor's course path and step
 // screens. Every count, duration, date and threshold is built from the read;
@@ -52,15 +52,40 @@ export const STEP_TYPE_LABEL: Record<LearningElementType, string> = {
   test: "Тест",
 };
 
+/** «1,2 МБ» / «350 КБ» — a file size as the canvas metas write it. */
+export function fileSizeText(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1
+    ? `${mb.toFixed(1).replace(".", ",")} МБ`
+    : `${Math.max(1, Math.round(bytes / 1024))} КБ`;
+}
+
+/** «10 вопросов · порог 80 %» — a test's meta as the canvas writes it. */
+export const testMetaParts = (questions: number, threshold: number): string[] => [
+  `${questions} ${plural(questions, "вопрос", "вопроса", "вопросов")}`,
+  `порог ${threshold} %`,
+];
+
 /**
- * The medium word of a path kicker, per the canvas step metas («Серия · видео ·
- * 12 минут»); a type whose canvas meta names no medium word has none.
+ * 024 EARS-14 — a step's meta after its type, per the canvas step metas
+ * (`doctor-course.dc.html`, `doctor-lesson.dc.html`): a video «видео · 12
+ * минут», a test «10 вопросов · порог 80 %», a download «PDF · 1,2 МБ». The
+ * duration stands in only where the read carries no such fact.
  */
-export const STEP_MEDIUM: Record<LearningElementType, string | null> = {
-  video: "видео",
-  download: null,
-  test: null,
-};
+export function stepMetaParts(step: Pick<LearningPathStep, "type" | "durationMin" | "test" | "file">): string[] {
+  switch (step.type) {
+    case "video":
+      return ["видео", durationText(step.durationMin)];
+    case "test":
+      return step.test
+        ? testMetaParts(step.test.questionCount, step.test.threshold)
+        : [durationText(step.durationMin)];
+    case "download":
+      return step.file
+        ? [step.file.format, fileSizeText(step.file.sizeBytes)]
+        : [durationText(step.durationMin)];
+  }
+}
 
 /** EARS-11 / EARS-14 — a locked node's reason in the doctor's words. */
 export function lockReasonText(reason: LearningLockReason): string {
@@ -141,8 +166,9 @@ export const LEARNING_UI_COPY = {
   lessonEyebrow: (n: number, steps: number, min: number) =>
     `Урок ${n} · ${stepCountText(steps)} · ${durationText(min)}`,
   stepsLabel: "Шаги урока",
-  stepKicker: (no: number, type: LearningElementType, min: number) =>
-    `Шаг ${no} · ${STEP_TYPE_LABEL[type]} · ${durationText(min)}`,
+  /** «Шаг 2 из 3 · Тест · 10 вопросов · порог 80 %» (`doctor-lesson.dc.html` `sv.kicker`). */
+  stepKicker: (no: number, of: number, step: Pick<LearningPathStep, "type" | "durationMin" | "test" | "file">) =>
+    [`Шаг ${no} из ${of}`, STEP_TYPE_LABEL[step.type], ...stepMetaParts(step)].join(" · "),
   stepLoading: "Шаг загружается",
   errorStep: {
     title: "Не удалось загрузить шаг.",
@@ -165,15 +191,11 @@ export const LEARNING_UI_COPY = {
   // Download.
   download: "Скачать",
   opened: "Материал открыт",
-  fileMeta: (bytes: number) => {
-    const mb = bytes / (1024 * 1024);
-    return mb >= 1
-      ? `${mb.toFixed(1).replace(".", ",")} МБ`
-      : `${Math.max(1, Math.round(bytes / 1024))} КБ`;
-  },
+  /** «PDF · 1,2 МБ» under the file name; the size alone when the read names no format. */
+  fileMeta: (format: string | null, bytes: number) =>
+    format ? `${format} · ${fileSizeText(bytes)}` : fileSizeText(bytes),
   // Test.
-  testIntro: (questions: number, threshold: number) =>
-    `${questions} ${plural(questions, "вопрос", "вопроса", "вопросов")} · порог ${threshold} %`,
+  testIntro: (questions: number, threshold: number) => testMetaParts(questions, threshold).join(" · "),
   startTest: "Начать тест",
   question: (i: number, of: number) => `Вопрос ${i} из ${of}`,
   optionsLabel: "Варианты ответа",

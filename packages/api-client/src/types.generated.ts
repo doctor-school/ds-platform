@@ -4562,6 +4562,10 @@ export interface components {
                     stepCount: number;
                     steps: {
                         durationMin: number;
+                        file: {
+                            format: string;
+                            sizeBytes: number;
+                        } | null;
                         /** Format: uuid */
                         id: string;
                         state: {
@@ -4595,6 +4599,10 @@ export interface components {
                             /** @constant */
                             status: "test-out-reachable";
                         };
+                        test: {
+                            questionCount: number;
+                            threshold: number;
+                        } | null;
                         title: string;
                         /** @enum {string} */
                         type: "video" | "download" | "test";
@@ -4746,6 +4754,10 @@ export interface components {
             steps: {
                 completionSentence: string;
                 durationMin: number;
+                file: {
+                    format: string;
+                    sizeBytes: number;
+                } | null;
                 /** Format: uuid */
                 id: string;
                 state: {
@@ -4779,6 +4791,10 @@ export interface components {
                     /** @constant */
                     status: "test-out-reachable";
                 };
+                test: {
+                    questionCount: number;
+                    threshold: number;
+                } | null;
                 title: string;
                 /** @enum {string} */
                 type: "video" | "download" | "test";
@@ -5050,6 +5066,10 @@ export interface components {
             step: {
                 completionSentence: string;
                 durationMin: number;
+                file: {
+                    format: string;
+                    sizeBytes: number;
+                } | null;
                 /** Format: uuid */
                 id: string;
                 state: {
@@ -5083,6 +5103,10 @@ export interface components {
                     /** @constant */
                     status: "test-out-reachable";
                 };
+                test: {
+                    questionCount: number;
+                    threshold: number;
+                } | null;
                 title: string;
                 /** @enum {string} */
                 type: "video" | "download" | "test";

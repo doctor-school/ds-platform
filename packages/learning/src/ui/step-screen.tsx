@@ -236,7 +236,7 @@ export function StepScreen({ courseSlug, config, stepId, ...initial }: StepScree
             <article className="border-2 border-border bg-card shadow-lg">
               <header className="flex flex-col gap-2 border-b-2 border-border px-6 py-5">
                 <div className="text-eyebrow font-extrabold uppercase tracking-eyebrow text-primary-action">
-                  {C.stepKicker(index + 1, step.step.type, step.step.durationMin)}
+                  {C.stepKicker(index + 1, lesson.steps.length, step.step)}
                 </div>
                 <h2 className="m-0 text-xl font-extrabold leading-tight">{step.step.title}</h2>
               </header>
@@ -500,7 +500,7 @@ function DownloadBody({
       </span>
       <div className="flex min-w-0 flex-1 basis-56 flex-col gap-1">
         <span className="text-base font-extrabold">{body.fileName}</span>
-        <span className="text-sm font-semibold text-muted-foreground">{C.fileMeta(body.fileSizeBytes)}</span>
+        <span className="text-sm font-semibold text-muted-foreground">{C.fileMeta(step.step.file?.format ?? null, body.fileSizeBytes)}</span>
         {opened ? <Badge variant="success">{C.opened}</Badge> : null}
       </div>
       {hydrated ? (

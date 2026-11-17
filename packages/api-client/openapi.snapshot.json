@@ -5105,6 +5105,29 @@
                               "minimum": -9007199254740991,
                               "type": "integer"
                             },
+                            "file": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "format": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "sizeBytes": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": ["format", "sizeBytes"],
+                                  "type": "object"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
                             "id": {
                               "format": "uuid",
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -5222,6 +5245,30 @@
                                 }
                               ]
                             },
+                            "test": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "questionCount": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "threshold": {
+                                      "maximum": 100,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": ["questionCount", "threshold"],
+                                  "type": "object"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
                             "title": {
                               "type": "string"
                             },
@@ -5235,6 +5282,8 @@
                             "type",
                             "title",
                             "durationMin",
+                            "test",
+                            "file",
                             "state"
                           ],
                           "type": "object"
@@ -5839,6 +5888,29 @@
                   "minimum": -9007199254740991,
                   "type": "integer"
                 },
+                "file": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "format": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sizeBytes": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": ["format", "sizeBytes"],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "id": {
                   "format": "uuid",
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -5956,6 +6028,30 @@
                     }
                   ]
                 },
+                "test": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "questionCount": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "threshold": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": ["questionCount", "threshold"],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "title": {
                   "type": "string"
                 },
@@ -5969,6 +6065,8 @@
                 "type",
                 "title",
                 "durationMin",
+                "test",
+                "file",
                 "state",
                 "completionSentence"
               ],
@@ -7130,6 +7228,29 @@
                 "minimum": -9007199254740991,
                 "type": "integer"
               },
+              "file": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "format": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sizeBytes": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["format", "sizeBytes"],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "id": {
                 "format": "uuid",
                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -7247,6 +7368,30 @@
                   }
                 ]
               },
+              "test": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "questionCount": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "threshold": {
+                        "maximum": 100,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["questionCount", "threshold"],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "title": {
                 "type": "string"
               },
@@ -7260,6 +7405,8 @@
               "type",
               "title",
               "durationMin",
+              "test",
+              "file",
               "state",
               "completionSentence"
             ],

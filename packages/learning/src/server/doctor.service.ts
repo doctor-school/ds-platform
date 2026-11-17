@@ -11,6 +11,7 @@ import type {
   LearningCoursePath,
   LearningLessonRead,
   LearningNodeState,
+  LearningPathStep,
   LearningStepBody,
   LearningStepRead,
   RecordLearningFactRequest,
@@ -44,6 +45,7 @@ import {
   project,
   type LearningStatusChange,
 } from "./projector.js";
+import { fileFormatLabel } from "./file-format.js";
 import {
   courseBySlug,
   coursePlaces,
@@ -53,6 +55,7 @@ import {
   loadFacts,
   loadLayersFor,
   loadQuestions,
+  questionCounts,
   scopesOf,
   type LoadedCourse,
 } from "./repository.js";
@@ -69,6 +72,13 @@ interface Evaluated {
   evaluator: LearningCourseEvaluator;
   evaluation: LearningEvaluation;
 }
+
+/** A step node's kicker facts (EARS-13): a test's questions and pass mark, a download's file. */
+type KickerFacts = Pick<LearningPathStep, "test" | "file">;
+
+/** The questions one attempt draws: `test.questions`, or every live question. */
+const drawnPerAttempt = (perAttempt: number | "all", live: number): number =>
+  perAttempt === "all" ? live : Math.min(perAttempt, live);
 
 const notFound = (what: string) =>
   new LearningServerError("NOT_FOUND", `${what} not found`);
@@ -141,6 +151,56 @@ export class LearningDoctorService {
     return numbers;
   }
 
+  /**
+   * EARS-13 — the kicker facts of the course's steps, read once per request:
+   * a test's questions per attempt and resolved pass mark (EARS-8), a
+   * download's uploaded file format and size. Public facts (EARS-22): no
+   * question text, no file URL.
+   */
+  private async kickerFacts(
+    db: Handle,
+    e: Evaluated,
+  ): Promise<(stepId: string) => KickerFacts> {
+    const rows = new Map(e.loaded.steps.map((r) => [r.id, r]));
+    const tests = [...e.evaluator.index.steps.values()]
+      .map((entry) => entry.step)
+      .filter((st) => st.type === "test");
+    const counts = await questionCounts(
+      db,
+      tests.map((t) => t.id),
+    );
+    return (stepId) => {
+      const step = e.evaluator.index.steps.get(stepId)?.step;
+      const row = rows.get(stepId);
+      if (!step || !row) return { test: null, file: null };
+      if (step.type === "test")
+        return {
+          test: {
+            questionCount: drawnPerAttempt(
+              e.evaluator.setting("test.questions", step),
+              counts.get(stepId) ?? 0,
+            ),
+            threshold: e.evaluator.setting("test.threshold", step),
+          },
+          file: null,
+        };
+      if (step.type === "download") {
+        // A published download always carries its file (EARS-4); without one there is no fact to show.
+        const format = row.mediaRef
+          ? fileFormatLabel(row.mediaContentType, String(step.payload["fileName"] ?? ""))
+          : null;
+        return {
+          test: null,
+          file:
+            format !== null && row.mediaSizeBytes !== null
+              ? { format, sizeBytes: row.mediaSizeBytes }
+              : null,
+        };
+      }
+      return { test: null, file: null };
+    };
+  }
+
   // ── Reads ─────────────────────────────────────────────────────────────────
 
   /** EARS-13 — `GET /v1/learning/courses/{courseSlug}/path`. */
@@ -151,6 +211,7 @@ export class LearningDoctorService {
     const course = await courseBySlug(this.deps.db, courseSlug);
     if (!course || course.state !== "published") throw notFound("course");
     const e = await this.evaluate(this.deps.db, course, personId);
+    const facts = await this.kickerFacts(this.deps.db, e);
     const numbers = this.lessonNumbers(e);
     const modules = e.loaded.model.modules
       .filter((m) => !this.hidden(e, "module", m.id))
@@ -178,6 +239,7 @@ export class LearningDoctorService {
                   type: s.type,
                   title: s.title,
                   durationMin: s.durationMin,
+                  ...facts(s.id),
                   state: this.stateOf(e, s.id),
                 })),
             })),
@@ -232,6 +294,7 @@ export class LearningDoctorService {
     const e = await this.evaluate(this.deps.db, owner.course, personId);
     const model = e.evaluator.index.lessons.get(lessonId)?.lesson;
     if (!model) throw notFound("lesson");
+    const facts = await this.kickerFacts(this.deps.db, e);
     // EARS-13 — what the path omits as hidden and locked is not served here either.
     if (
       this.hidden(e, "module", owner.module.id) ||
@@ -266,6 +329,7 @@ export class LearningDoctorService {
           type: s.type,
           title: s.title,
           durationMin: s.durationMin,
+          ...facts(s.id),
           state: this.stateOf(e, s.id),
           completionSentence: e.evaluator.sentence({ kind: "step", id: s.id }),
         })),
@@ -297,6 +361,7 @@ export class LearningDoctorService {
         type: entry.step.type,
         title: entry.step.title,
         durationMin: entry.step.durationMin,
+        ...(await this.kickerFacts(this.deps.db, e))(stepId),
         state,
         completionSentence: e.evaluator.sentence({ kind: "step", id: stepId }),
       },
@@ -363,10 +428,7 @@ export class LearningDoctorService {
       type: "test",
       testId: row.id,
       kind: "exit",
-      questionCount:
-        perAttempt === "all"
-          ? questions.length
-          : Math.min(perAttempt, questions.length),
+      questionCount: drawnPerAttempt(perAttempt, questions.length),
       threshold,
       attemptsLeft: usage.attemptsLeft,
       lastResult:

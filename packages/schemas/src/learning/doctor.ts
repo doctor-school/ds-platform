@@ -30,11 +30,34 @@ export type LearningNodeStatus = LearningNodeState["status"];
 
 // ── The course path (EARS-13) ───────────────────────────────────────────────
 
+/**
+ * EARS-13 — a test step's kicker facts: the questions one attempt draws
+ * (`test.questions`, or every live question) and the resolved pass mark
+ * (`test.threshold`, whole percent, EARS-8). No question text (EARS-22).
+ */
+export const LearningPathTestFactsSchema = z.strictObject({
+  questionCount: z.number().int().min(0),
+  threshold: z.number().int().min(0).max(100),
+});
+
+/**
+ * EARS-13 — a download step's kicker facts: the uploaded file's format label
+ * («PDF», from its content type or extension) and size. No file URL (EARS-22).
+ */
+export const LearningPathFileFactsSchema = z.strictObject({
+  format: z.string().min(1),
+  sizeBytes: z.number().int().min(0),
+});
+
 export const LearningPathStepSchema = z.strictObject({
   id: z.uuid(),
   type: LearningElementTypeSchema,
   title: z.string(),
   durationMin: z.number().int(),
+  /** A test step's facts; null for any other type. */
+  test: LearningPathTestFactsSchema.nullable(),
+  /** A download step's file facts; null for any other type (or with no file uploaded). */
+  file: LearningPathFileFactsSchema.nullable(),
   state: LearningNodeStateSchema,
 });
 export type LearningPathStep = z.infer<typeof LearningPathStepSchema>;

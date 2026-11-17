@@ -6,10 +6,9 @@ import type {
 
 import {
   LEARNING_UI_COPY as C,
-  STEP_MEDIUM,
   STEP_TYPE_LABEL,
-  durationText,
   lockReasonText,
+  stepMetaParts,
 } from "./learning-ui-copy";
 
 // 024 EARS-13 / EARS-14 — the course path read projected onto the «snake» of
@@ -40,7 +39,7 @@ export interface PathNode {
   /** The «Урок N» chip on the lesson's first node. */
   firstOfLesson: boolean;
   kicker: string;
-  /** The kicker's parts (type, duration): each stays whole, the line breaks only after «·». */
+  /** The kicker's parts (type, then its canvas meta): each stays whole, the line breaks only after «·». */
   kickerParts: string[];
   title: string;
   /** The accessible name: «Урок N, шаг K. Тип. Название. Статус». */
@@ -164,8 +163,7 @@ export function buildPathView(path: LearningCoursePath): PathView {
         const t = guest ? "plain" : tone(step.state, here);
         const word = guest ? "" : wordOf(step.state.status, here);
         const typeLabel = STEP_TYPE_LABEL[step.type];
-        const medium = STEP_MEDIUM[step.type];
-        const kickerParts = [typeLabel, ...(medium ? [medium] : []), durationText(step.durationMin)];
+        const kickerParts = [typeLabel, ...stepMetaParts(step)];
         const firstLocked = !guest && !lockNoted && step.state.status === "locked";
         if (firstLocked) lockNoted = true;
         nodes.push({

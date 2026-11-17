@@ -695,7 +695,10 @@ function SnakeNode({
         {/* The label column is narrow (canvas geometry): the kicker breaks only
             after «·», a short hyphenated token never splits, and the title
             clamps to two lines; no part shrinks, so a wrapped kicker plus a
-            reason never clips the title's second line. */}
+            reason never clips the title's second line. Chrome right-aligns a
+            clamped line without its «…» and draws the «…» past the line's end,
+            so a right-aligned title keeps its edge (negative end margin) and
+            gets the room for the «…» as end padding — it hangs into the gap. */}
         <span className="shrink-0 text-xs font-bold tabular-nums text-faint">
           {(narrow && node.firstOfLesson && node.lessonNumber
             ? [C.lessonLabel(node.lessonNumber), ...node.kickerParts]
@@ -711,6 +714,7 @@ function SnakeNode({
           title={node.title}
           className={cn(
             "line-clamp-2 shrink-0 text-body-compact font-extrabold leading-tight",
+            !right && "-me-3 pe-3",
             node.tone === "closed" ? "text-muted-foreground" : "text-foreground",
           )}
           style={TITLE_TRACKING}

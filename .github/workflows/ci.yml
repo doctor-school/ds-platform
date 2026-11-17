@@ -1044,7 +1044,7 @@ jobs:
       # green. POSTURE: BLOCK by spec mandate, hence a plain step. Its severity
       # is tool-encoded on the §6.4 model: only a bare step in a file THIS PR
       # touched exits 1; pre-contract prose prints a WARN row and exits 0, so the
-      # backfill waves are visible without reddening unrelated PRs. The full
+      # pre-contract rows stay visible without reddening unrelated PRs. The full
       # checkout above is what makes the `origin/main` diff behind that split
       # meaningful.
       - name: scenario-step
@@ -1136,7 +1136,7 @@ jobs:
       # `NNN-scenarios.feature` (tech spec §6.4 + §6.5, Issue #2067); coverage was
       # a reviewer's memory before this. Same tool-encoded severity split as
       # scenario-step: BLOCK for a spec this PR created or modified, a WARN row
-      # for untouched ones until the §8 backfill waves close. The ONE finding
+      # for untouched ones (a record, tech spec §6.7). The ONE finding
       # that blocks everywhere is §6.5's — a `@quarantine` naming no Issue or a
       # CLOSED one, which is a test switched off for good rather than tracked
       # debt. GH_TOKEN is what lets that OPEN-Issue check run (`gh issue view`

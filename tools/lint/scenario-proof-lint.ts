@@ -63,7 +63,7 @@
  * The ratchet. `packages/e2e/scenario-proof-debt.txt` lists exactly the
  * unproven scenarios, key `NNN | <title>` (` [k]` for the k-th repeat of a
  * title in a spec), optionally ` | #<issue>`. It lives with the harness so a
- * backfill PR that only tags scenarios and deletes lines stays test-only. An
+ * PR that only tags scenarios and deletes lines stays test-only. An
  * unlisted unproven scenario, a stale line (its scenario is proven, Draft or
  * gone) and a line absent at the merge base with `origin/main` whose number is
  * not an OPEN Issue — no number, a closed Issue, a number that does not exist,
@@ -1216,6 +1216,8 @@ const DEBT_HEADER = [
   "#   NNN | <scenario title>[ [k]][ | #<issue>]   ([k] = the k-th scenario with that title)",
   "# Delete a line once its scenario is proven. A line added after the merge base names an",
   "# OPEN Issue; a spec does not move to Shipped while one of its journeys is unproven.",
+  "# A record, not a work queue — never drained as a backlog; the regression set is the",
+  "# key-journey register (regression-contour tech spec §6.7).",
   "# Regenerate: pnpm lint:scenario-proof --write-debt",
 ];
 

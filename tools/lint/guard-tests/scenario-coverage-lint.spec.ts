@@ -14,9 +14,9 @@ import { caseDir, ghDir, runGuard } from "./run-guard";
  *
  * The three rules under test, exactly as §6.4/§6.5 write them:
  *   - an uncovered `EARS-N` in a spec THIS PR touched is a BLOCK;
- *   - the same finding in an untouched spec is a WARN row until the §8 backfill closes;
+ *   - the same finding in an untouched spec is a WARN row (a record, tech spec §6.7);
  *   - a quarantine that names no Issue, or names a CLOSED one, is a BLOCK wherever it
- *     sits — a test switched off with nobody tracking it is not backfill debt.
+ *     sits — a test switched off with nobody tracking it is not tracked debt.
  * The `green` case carries the discriminators that must NOT fire: a `_Retired._` id
  * declares no handler, a `surface: backend-only` spec owns Vitest e2e instead of
  * scenarios (F-22), a valid `@quarantine(#N)` on an OPEN Issue is fine as long as
@@ -87,7 +87,7 @@ describe("scenario-coverage-lint", () => {
     // Same uncovered EARS-2 and the same declared touched set as the red case
     // above; the only difference is that the file's diff consists of the
     // Feature-level `@host:` line alone (tech spec §6.1). Adding a suite-selection
-    // tag must not make the annotating PR inherit the spec's §8 backfill debt.
+    // tag must not make the annotating PR inherit the spec's scenario debt.
     const { code, stdout } = runGuard(GUARD, dir("host-tag-only-diff"), {
       env: {
         ...seams("host-tag-only-diff").env,

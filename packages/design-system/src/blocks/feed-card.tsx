@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { FeedCard as FeedCardData } from "@ds/schemas";
+import type { FeedCard as FeedCardData, FeedPostCard } from "@ds/schemas";
 
 import { cn } from "../lib/utils";
 import { Avatar } from "../primitives/avatar";
@@ -19,9 +19,18 @@ import { Skeleton } from "../primitives/skeleton";
  * network mark; the canvas `data-link` text underline is a canvas-runtime
  * artefact and is not built (048-design «Academy — rail and card»).
  *
- * The whole card is ONE same-tab link — no nested interactive element. The
- * frame presses its offset shadow `shadow-lg` → `shadow-md` on hover and
- * shows `shadow-focus` on keyboard focus.
+ * Slice 2 (048 EARS-34, #3997) adds the `post` variant — `source` =
+ * telegram, `media` = «картинка» / «видео» / «нет» — with the Stage A lead
+ * corrections (#3997 comment 6941007863): the source line wraps, never
+ * truncates; no partner line; a video without a copied preview takes the plain
+ * no-image layout (not the canvas «Превью видео» placeholder); ▶ and ↗ carry
+ * U+FE0E so they render as text glyphs, not colour emoji.
+ *
+ * The whole card is ONE link — no nested interactive element: own cards open
+ * in the same tab, a `post` opens its original in a new tab with
+ * `rel="noopener noreferrer"`. The frame presses its offset shadow
+ * `shadow-lg` → `shadow-md` on hover and shows `shadow-focus` on keyboard
+ * focus.
  */
 
 export const FEED_CARD_COPY = {
@@ -31,7 +40,27 @@ export const FEED_CARD_COPY = {
   partner: (name: string) => `Партнёрский материал · ${name}`,
   /** The doctor content card's done mark (canvas `unit-content-card` «✓ Завершено»). */
   done: "✓ Завершено",
+  /** The `post` network (canvas `SRC.telegram`): field mark, chip, mark. */
+  telegram: {
+    net: "Telegram",
+    chip: "TG",
+    newTab: ", откроется в новой вкладке на площадке Telegram",
+  },
 } as const;
+
+/** U+FE0E — keeps ▶ / ↗ in text presentation (Stage A correction 4). */
+const TEXT_GLYPH = "\uFE0E";
+
+/**
+ * A video duration in whole seconds as `m:ss`, `h:mm:ss` from one hour
+ * (048 EARS-34).
+ */
+export function formatFeedDuration(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const ss = String(totalSeconds % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
 
 /**
  * The doctor content card, variant Б «типографская» of
@@ -146,6 +175,14 @@ export function FeedCard({ card, now, logo, className }: FeedCardProps) {
   if (card.kind === "content-row") {
     return <FeedContentRow card={card} className={className} />;
   }
+  const link = cn(
+    "relative block text-inherit no-underline shadow-lg transition-shadow duration-150 hover:shadow-md focus-visible:shadow-focus focus-visible:outline-none",
+    className,
+  );
+  if (card.kind === "post") {
+    return <FeedPostCardView card={card} now={now} logo={logo} link={link} />;
+  }
+
   const isNews = card.kind === "news";
   const kindMark = FEED_CARD_COPY.kinds[card.kind];
   const sourceName = isNews ? FEED_CARD_COPY.academy : card.source.name;
@@ -154,46 +191,20 @@ export function FeedCard({ card, now, logo, className }: FeedCardProps) {
   const clamp = card.partner ? "line-clamp-3" : "line-clamp-4";
 
   return (
-    <a
-      href={card.href}
-      className={cn(
-        "relative block text-inherit no-underline shadow-lg transition-shadow duration-150 hover:shadow-md focus-visible:shadow-focus focus-visible:outline-none",
-        className,
-      )}
-    >
+    <a href={card.href} className={link}>
       <FeedCardFrame>
-        <div className="relative aspect-video overflow-hidden border-b-2 border-border bg-section">
+        <div className={MEDIA}>
           {card.image ? (
-            <img
-              src={card.image.url}
-              alt=""
-              className="absolute inset-0 block size-full object-cover"
-            />
+            <FeedCardImage url={card.image.url} />
           ) : (
-            <div
-              data-feed-card-media="none"
-              className="absolute inset-0 flex items-end p-4"
-            >
-              <span className="text-3xl leading-none font-extrabold tracking-tight text-balance text-primary-action">
-                {kindMark}
-              </span>
-            </div>
+            <FeedCardFieldMark mark={kindMark} />
           )}
         </div>
 
         <div className={BODY}>
           <div className="flex min-w-0 items-center gap-2">
             {isNews ? (
-              <Avatar
-                variant="tint"
-                aria-hidden="true"
-                data-feed-card-avatar="logo"
-                className="shrink-0"
-              >
-                <span className="flex size-3/5 items-center justify-center [&>*]:size-full [&>*]:object-contain">
-                  {logo}
-                </span>
-              </Avatar>
+              <FeedCardLogoAvatar logo={logo} />
             ) : (
               <Avatar
                 variant="tint"
@@ -341,6 +352,140 @@ function FeedContentRow({
       <span aria-hidden="true" className="flex-none text-sm font-extrabold text-primary-action">
         →
       </span>
+    </a>
+  );
+}
+
+const MEDIA =
+  "relative aspect-video overflow-hidden border-b-2 border-border bg-section";
+
+function FeedCardImage({ url }: { url: string }) {
+  return (
+    <img
+      src={url}
+      alt=""
+      className="absolute inset-0 block size-full object-cover"
+    />
+  );
+}
+
+/** The no-image layout: the field mark set large at the bottom-left. */
+function FeedCardFieldMark({ mark }: { mark: string }) {
+  return (
+    <div
+      data-feed-card-media="none"
+      className="absolute inset-0 flex items-end p-4"
+    >
+      <span className="text-3xl leading-none font-extrabold tracking-tight text-balance text-primary-action">
+        {mark}
+      </span>
+    </div>
+  );
+}
+
+function FeedCardLogoAvatar({ logo }: { logo: React.ReactNode }) {
+  return (
+    <Avatar
+      variant="tint"
+      aria-hidden="true"
+      data-feed-card-avatar="logo"
+      className="shrink-0"
+    >
+      <span className="flex size-3/5 items-center justify-center [&>*]:size-full [&>*]:object-contain">
+        {logo}
+      </span>
+    </Avatar>
+  );
+}
+
+/**
+ * The `post` variant (canvas `source` = telegram). Canvas clamp math: 148px
+ * of text room (no kind mark, never a partner) over a 24px body line → 6.
+ */
+function FeedPostCardView({
+  card,
+  now,
+  logo,
+  link,
+}: {
+  card: FeedPostCard;
+  now: Date | undefined;
+  logo: React.ReactNode;
+  link: string;
+}) {
+  const copy = FEED_CARD_COPY.telegram;
+  return (
+    <a
+      href={card.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={link}
+    >
+      <FeedCardFrame>
+        <div className={MEDIA}>
+          {card.image ? (
+            <>
+              <FeedCardImage url={card.image.url} />
+              {card.duration !== null ? (
+                <>
+                  <span
+                    aria-hidden="true"
+                    data-feed-card-play=""
+                    className="absolute top-1/2 left-1/2 flex size-13 -translate-1/2 items-center justify-center bg-foreground text-lg text-background shadow-btn"
+                  >
+                    {`▶${TEXT_GLYPH}`}
+                  </span>
+                  <span
+                    data-feed-card-duration=""
+                    className="absolute right-2 bottom-2 bg-foreground px-1.5 py-0.5 text-xs font-bold text-background tabular-nums"
+                  >
+                    {formatFeedDuration(card.duration)}
+                  </span>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <FeedCardFieldMark mark={copy.net} />
+          )}
+        </div>
+
+        <div className={BODY}>
+          <div className="flex min-w-0 items-center gap-2">
+            <FeedCardLogoAvatar logo={logo} />
+            <span className="min-w-0 flex-1 text-sm font-semibold wrap-break-word text-foreground">
+              {card.source.name}
+            </span>
+            <span
+              role="img"
+              aria-label={copy.net}
+              title={copy.net}
+              className="shrink-0 border-2 border-border px-1 text-xs leading-4 font-extrabold tracking-wide text-foreground"
+            >
+              {copy.chip}
+            </span>
+          </div>
+
+          {card.text ? (
+            <div
+              data-feed-card-text=""
+              className="line-clamp-6 text-base leading-normal wrap-break-word text-pretty text-foreground"
+            >
+              {card.text}
+            </div>
+          ) : null}
+
+          <div className="mt-auto flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground tabular-nums">
+            <span>{formatFeedCardDate(card.publishedAt, now)}</span>
+            <span
+              data-feed-card-external=""
+              className="font-bold text-foreground"
+            >
+              <span aria-hidden="true">{`${copy.net} ↗${TEXT_GLYPH}`}</span>
+              <span className="sr-only">{copy.newTab}</span>
+            </span>
+          </div>
+        </div>
+      </FeedCardFrame>
     </a>
   );
 }

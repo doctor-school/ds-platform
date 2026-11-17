@@ -62,6 +62,23 @@ describe("024 EARS-14 — node labels wrap at word and separator boundaries", ()
     for (const part of title!.parentElement!.children) expect(part).toHaveClass("shrink-0");
     vi.unstubAllGlobals();
   });
+
+  it("EARS-14: a clamped title on the left of the snake ends with «…» as on the right — the right-aligned clamp gets room past its edge for the ellipsis", () => {
+    // Chrome right-aligns a clamped line without its «…» and draws the «…»
+    // after the line's end — past a right-aligned box's edge, where it is cut.
+    stubMatchMedia(false);
+    stubFetch({});
+    render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath()} />);
+    // Desktop: node 0 sits right of the axis (its text on the right), node 1 left.
+    const right = document.querySelector('[title="Сбор анамнеза"]')!;
+    const left = document.querySelector('[title="Чтение ЭКГ"]')!;
+    expect(left.parentElement).toHaveClass("text-right");
+    expect(left).toHaveClass("line-clamp-2", "pe-3", "-me-3");
+    expect(right.parentElement).toHaveClass("text-left");
+    expect(right).toHaveClass("line-clamp-2");
+    expect(right).not.toHaveClass("pe-3");
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("024 EARS-14 — the scroll-spy line", () => {

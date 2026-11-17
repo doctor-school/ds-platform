@@ -126,9 +126,18 @@ export function servesDataVerbs(stdout) {
 }
 
 /**
+ * The exit status of a data verb the box refused (ds-release's and the entrypoint's
+ * `refuse`): the box answered «no». ssh itself fails with 255, the entrypoint's
+ * usage rejection exits 2 — a caller that must tell a refusal from an unreachable box
+ * (#4097) reads the error's `exitCode`, never its prose.
+ */
+export const DATA_REFUSED_EXIT = 3;
+
+/**
  * Run one ssh command on `host`, stdin = `input` (a string/Buffer) or the file
  * `inputFile`. Resolves to stdout; `stream` forwards the box's output live instead.
- * Rejects on a non-zero exit with the first stderr line.
+ * Rejects on a non-zero exit with the first stderr line; the error's `exitCode` is
+ * that exit status.
  */
 export function runBoxCommand(
   host,
@@ -155,8 +164,11 @@ export function runBoxCommand(
       if (code === 0) return resolve(out.trim());
       const detail = err.trim().split(/\r?\n/)[0];
       reject(
-        new Error(
-          `${label} on ${host} exited ${code}${detail ? `: ${detail}` : ""}`,
+        Object.assign(
+          new Error(
+            `${label} on ${host} exited ${code}${detail ? `: ${detail}` : ""}`,
+          ),
+          { exitCode: code },
         ),
       );
     });

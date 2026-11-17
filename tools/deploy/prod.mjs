@@ -190,7 +190,7 @@ import {
   sshScript as boxScript,
 } from "./lib/remote.mjs";
 import { OPTIONAL_VHOST_PROBES } from "./smoke-prod.mjs";
-import { createDataProdClient } from "./lib/data-prod.mjs";
+import { DATA_REFUSED_EXIT, createDataProdClient } from "./lib/data-prod.mjs";
 import {
   ARTIFACT_CERTIFICATE,
   ARTIFACT_IMAGES,
@@ -539,6 +539,25 @@ function targetMigrations(sha) {
 /** The ship: the committed SHA (`git archive`), or on the box the tree it runs from. */
 function shipTree(sha, host) {
   return shipCommittedTree(sha, host, prodShipOptions(host, { api: API_PROD, localTree: LOCAL_TREE }));
+}
+
+/**
+ * The read-only live-unit check of ds-data-prod (`check`: ds-release check prod)
+ * before a run's first state change (#4068, #4097). The box answering «a ds-prod-*
+ * unit runs» (exit DATA_REFUSED_EXIT) refuses every run, a redeploy too. Any other
+ * failure — ssh, a forced command that does not answer — refuses a release, while a
+ * redeploy (incident recovery of ds-api-prod's app tier, which never touches the data
+ * box) goes on with the reason as `warning`.
+ * @returns {Promise<{ok: true} | {refused: string} | {warning: string}>}
+ */
+export async function dataBoxUnitCheck(client, { redeploy }) {
+  try {
+    await client.call(["check"]);
+    return { ok: true };
+  } catch (e) {
+    if (!redeploy || e.exitCode === DATA_REFUSED_EXIT) return { refused: e.message };
+    return { warning: e.message };
+  }
 }
 
 // #3313: ds-data-prod is reached only through the data verbs of its entrypoint (spec §5
@@ -2480,20 +2499,19 @@ async function deploy(hotfixRef = null, local = null) {
     }
   }
 
-  // #4068: data-secret.yml runs in its own concurrency group, so a data-box secret
-  // rotation (unit ds-prod-<sha12>-data-secret, which recreates postgres + pgbackrest)
-  // can be running on ds-data-prod: refused, read-only, before the first state change
-  // of this run, as the rollback does. A step of this SHA left running by a dead
-  // driver refuses too, naming its unit; the re-run after it ends attaches. A
-  // redeploy touches ds-api-prod only and does not reach the data box.
-  if (!redeploy) {
-    try {
-      await dataProd().call(["check"]);
-    } catch (e) {
-      die(`refused on ${DATA_PROD}: ${e.message}`);
-    }
-    ok(`no ds-prod-* unit is running on ${DATA_PROD}`);
-  }
+  // #4068/#4097: data-secret.yml runs in its own concurrency group, so a data-box
+  // secret rotation (unit ds-prod-<sha12>-data-secret, which recreates postgres +
+  // pgbackrest) can be running on ds-data-prod: refused, read-only, before the first
+  // state change of this run, as the rollback does — a redeploy included. A step of
+  // this SHA left running by a dead driver refuses too, naming its unit; the re-run
+  // after it ends attaches.
+  const units = await dataBoxUnitCheck(dataProd(), { redeploy });
+  if (units.refused) die(`refused on ${DATA_PROD}: ${units.refused}`);
+  if (units.warning)
+    console.log(
+      `  ⚠ ${DATA_PROD} could not run the live-unit check (${units.warning}) — the redeploy goes on: it recreates the app tier of ds-api-prod only`,
+    );
+  else ok(`no ds-prod-* unit is running on ${DATA_PROD}`);
 
   // #3274: the configs the running caddy/centrifugo serve, kept outside the tree the
   // ship below replaces — the restore source of a failed validate or apply.

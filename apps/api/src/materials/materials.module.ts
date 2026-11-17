@@ -9,7 +9,10 @@ import { feedEntries, materials } from "@ds/db";
 import { MediaSlotRegistry } from "../taxonomy/index.js";
 import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
 import { FeedEntriesRepository } from "./feed-entries.repository.js";
-import { FeedSourcesAdminController } from "./feed-sources.admin.controller.js";
+import {
+  FeedEntriesAdminController,
+  FeedSourcesAdminController,
+} from "./feed-sources.admin.controller.js";
 import { FeedSourcesRepository } from "./feed-sources.repository.js";
 import { FeedSourcesService } from "./feed-sources.service.js";
 import { MaterialsAdminController } from "./materials.admin.controller.js";
@@ -53,6 +56,7 @@ import { TelegramWebhookMiddleware } from "./telegram/telegram-webhook.middlewar
   controllers: [
     MaterialsAdminController,
     FeedSourcesAdminController,
+    FeedEntriesAdminController,
     PublicFeedController,
     PublicMaterialsController,
     TelegramWebhookController,

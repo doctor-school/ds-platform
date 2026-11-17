@@ -13,6 +13,12 @@ import {
   signInAsAdmin,
 } from "@ds/e2e/admin-events";
 import { bindRegistrarToEvent } from "./support/event-grants";
+import {
+  editTelegramPost,
+  hiddenAt,
+  removeTelegramPosts,
+  seedTelegramPosts,
+} from "./support/feed-posts";
 import { visible } from "./support/visible";
 
 /**
@@ -30,8 +36,17 @@ import { visible } from "./support/visible";
  * section, so no «Источники»: the route renders the refusal and the server
  * answers 403. The axe half is `e2e/a11y/a11y-axe.e2e.spec.ts` («048 EARS-20»).
  *
+ * «Публикации» (EARS-32, #3996): reached from the row action, the source's
+ * posts newest first with the text, the date, the state and «Открыть в
+ * Telegram ↗» (a new tab); «Скрыть из ленты» asks first (cancel changes
+ * nothing), the post then reads «Скрыт» and stays listed; a post an edit from
+ * the channel moved since the page was read is refused with the reason and
+ * the list re-read; «Вернуть в ленту» returns it. The stand has no bot
+ * connected, so the posts are stored as the connector stores them
+ * (`support/feed-posts.ts`).
+ *
  * The «Работает» verdict against a live bot is proven by the API e2e against
- * the Telegram double (#3994); «Публикации» is #3996 — not driven here.
+ * the Telegram double (#3994).
  *
  * Dev-stand-gated like every `apps/admin/e2e` flow spec; run against a booted
  * admin + api with `--config=playwright.flows.config.ts`. `E2E_SHOT_DIR` opts
@@ -250,12 +265,12 @@ test.describe("048 EARS-20…EARS-23 — «Источники»", () => {
       "Ещё не проверялся",
     );
     await expect(cell(admin, `feed-source-count-${OFFICIAL}`)).toHaveText("0");
-    // No «Публикации» action yet (#3996): exactly the two row actions.
+    // «Публикации» is a link to the source's posts; the two commands are buttons.
     await expect(added.getByRole("button")).toHaveText([
       "Изменить адрес",
       "Выключить",
     ]);
-    await expect(added.getByRole("link")).toHaveCount(0);
+    await expect(added.getByRole("link")).toHaveText(["Публикации"]);
     await shot(admin, "sources-list");
 
     const before = await storedAddresses(admin);
@@ -339,6 +354,112 @@ test.describe("048 EARS-20…EARS-23 — «Источники»", () => {
       "Включён",
     );
     await expect(cell(admin, `feed-source-disable-${moved}`)).toBeVisible();
+  });
+
+  test("EARS-32: «Публикации» lists the posts; «Скрыть из ленты» asks first and the post reads «Скрыт»; a moved post is refused; «Вернуть в ленту» returns it", async () => {
+    const posts = await seedTelegramPosts(moved, [
+      [
+        1201,
+        "Пост 1201 — анонс вебинара по кардиологии",
+        "2026-11-10T09:00:00Z",
+      ],
+      [1202, "Пост 1202 — запись эфира уже доступна", "2026-11-12T15:30:00Z"],
+    ]);
+    const p1201 = posts[0]!;
+    const p1202 = posts[1]!;
+    try {
+      await openSources(admin);
+      await cell(admin, `feed-source-posts-${moved}`).click();
+      await admin.waitForURL(/\/materials\/sources\/[0-9a-f-]{36}$/);
+      await expect(
+        admin.getByRole("heading", {
+          level: 1,
+          name: `Публикации · t.me/${moved}`,
+        }),
+      ).toBeVisible();
+      await expect(
+        visible(
+          admin.getByText(
+            "Пост, удалённый в Telegram, остаётся в ленте, пока его не скрыть.",
+          ),
+        ),
+      ).toBeVisible();
+      // Newest first, each with its state and the original in a new tab.
+      const texts = admin
+        .getByTestId("feed-posts-table")
+        .locator('[data-testid^="feed-post-text-"]')
+        .filter({ visible: true });
+      await expect(texts).toHaveText([p1202.text, p1201.text]);
+      await expect(cell(admin, `feed-post-state-${p1202.id}`)).toHaveText(
+        "В ленте",
+      );
+      const original = cell(admin, `feed-post-original-${p1202.id}`);
+      await expect(original).toHaveText("Открыть в Telegram ↗");
+      await expect(original).toHaveAttribute(
+        "href",
+        `https://t.me/${moved}/1202`,
+      );
+      await expect(original).toHaveAttribute("target", "_blank");
+      await expect(original).toHaveAttribute("rel", "noopener noreferrer");
+      await shot(admin, "posts-list");
+
+      // «Скрыть из ленты» asks first; cancel changes nothing.
+      await cell(admin, `feed-post-hide-${p1202.id}`).click();
+      const confirm = admin.getByTestId("feed-post-hide-dialog");
+      await expect(confirm).toContainText("Скрыть пост из ленты?");
+      await expect(confirm).toContainText(
+        "Пост уйдёт из ленты Академии. В Telegram он останется.",
+      );
+      await shot(admin, "posts-hide-confirm");
+      await confirm.getByRole("button", { name: "Отмена" }).click();
+      await expect(confirm).toBeHidden();
+      expect(await hiddenAt(p1202.id)).toBeNull();
+
+      await cell(admin, `feed-post-hide-${p1202.id}`).click();
+      await admin.getByTestId("feed-post-hide-confirm").click();
+      await expect(confirm).toBeHidden();
+      await expect(admin.getByTestId("feed-post-notice")).toContainText(
+        "Пост скрыт из ленты.",
+      );
+      await expect(cell(admin, `feed-post-state-${p1202.id}`)).toHaveText(
+        "Скрыт",
+      );
+      await expect(cell(admin, `feed-post-unhide-${p1202.id}`)).toBeVisible();
+      // Still listed, the sibling untouched.
+      await expect(texts).toHaveText([p1202.text, p1201.text]);
+      await expect(cell(admin, `feed-post-state-${p1201.id}`)).toHaveText(
+        "В ленте",
+      );
+      expect(await hiddenAt(p1202.id)).not.toBeNull();
+      await shot(admin, "posts-hidden");
+
+      // An edit from the channel moves the row after the page read it: the
+      // return is refused with the reason, nothing changes, the list re-reads.
+      await editTelegramPost(p1202.id, "Пост 1202 — исправленный текст");
+      await cell(admin, `feed-post-unhide-${p1202.id}`).click();
+      await expect(admin.getByTestId("feed-post-error")).toContainText(
+        "Пост только что изменился. Список обновлён — проверьте его и повторите.",
+      );
+      await expect(cell(admin, `feed-post-text-${p1202.id}`)).toHaveText(
+        "Пост 1202 — исправленный текст",
+      );
+      await expect(cell(admin, `feed-post-state-${p1202.id}`)).toHaveText(
+        "Скрыт",
+      );
+      expect(await hiddenAt(p1202.id)).not.toBeNull();
+      await shot(admin, "posts-refused");
+
+      await cell(admin, `feed-post-unhide-${p1202.id}`).click();
+      await expect(admin.getByTestId("feed-post-notice")).toContainText(
+        "Пост вернулся в ленту на свою дату.",
+      );
+      await expect(cell(admin, `feed-post-state-${p1202.id}`)).toHaveText(
+        "В ленте",
+      );
+      expect(await hiddenAt(p1202.id)).toBeNull();
+    } finally {
+      await removeTelegramPosts(posts.map((p) => p.id));
+    }
   });
 
   test("EARS-23: a congress registrar sees no «Источники» and the server refuses the list", async ({

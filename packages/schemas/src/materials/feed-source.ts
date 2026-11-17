@@ -103,3 +103,71 @@ export const FeedSourceAdminListSchema = z.object({
   data: z.array(FeedSourceAdminSchema),
 });
 export type FeedSourceAdminList = z.infer<typeof FeedSourceAdminListSchema>;
+
+// ── EARS-32 — «Публикации»: one source's posts, hide and return ───────────
+
+/** The admin page size of «Публикации». */
+export const FEED_SOURCE_ENTRIES_PAGE_DEFAULT = 50;
+export const FEED_SOURCE_ENTRIES_PAGE_MAX = 100;
+
+/** `GET /v1/admin/feed-sources/{id}/entries?cursor=&limit=` — newest first. */
+export const FeedSourceEntriesQuerySchema = z
+  .object({
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(FEED_SOURCE_ENTRIES_PAGE_MAX)
+      .default(FEED_SOURCE_ENTRIES_PAGE_DEFAULT),
+    cursor: z.string().min(1).max(512).optional(),
+  })
+  .strict();
+export type FeedSourceEntriesQuery = z.infer<
+  typeof FeedSourceEntriesQuerySchema
+>;
+
+/**
+ * EARS-32 — «В ленте» / «Скрыт» / «Источник выключен». A hidden post of a
+ * switched-off source reads «Скрыт»: the hide outlives the switch-on.
+ */
+export const FeedEntryAdminStateSchema = z.enum([
+  "in_feed",
+  "hidden",
+  "source_off",
+]);
+export type FeedEntryAdminState = z.infer<typeof FeedEntryAdminStateSchema>;
+
+/** EARS-32 — one row of «Публикации»; `version` is the ETag of its writes. */
+export const FeedEntryAdminSchema = z.object({
+  id: TaxonomyIdSchema,
+  /**
+   * The post text as the card stores it (EARS-26: whitespace collapsed, so it
+   * is one line); the page shows its first line, cut to the row width.
+   */
+  text: z.string(),
+  /** The post's Telegram date — the card date. */
+  publishedAt: z.string(),
+  state: FeedEntryAdminStateSchema,
+  /** Whether «Скрыть из ленты» (false) or «Вернуть в ленту» (true) applies. */
+  hidden: z.boolean(),
+  /** The original post, opened in a new tab. */
+  href: z.string(),
+  /**
+   * The row's modification stamp (microseconds since the epoch): any write
+   * to the entry — a hide, an edit from the channel — moves it, so a hide
+   * issued against what the administrator saw is refused once the row moved.
+   */
+  version: z.number().int().min(1),
+});
+export type FeedEntryAdmin = z.infer<typeof FeedEntryAdminSchema>;
+
+/**
+ * `GET /v1/admin/feed-sources/{id}/entries` — one page of «Публикации», with
+ * the source it lists (its `entryCount` is the number of rows over all pages).
+ */
+export const FeedEntryAdminListSchema = z.object({
+  source: FeedSourceAdminSchema,
+  data: z.array(FeedEntryAdminSchema),
+  nextCursor: z.string().nullable(),
+});
+export type FeedEntryAdminList = z.infer<typeof FeedEntryAdminListSchema>;

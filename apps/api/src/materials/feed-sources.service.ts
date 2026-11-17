@@ -3,7 +3,10 @@ import type { FeedSource } from "@ds/db";
 import {
   type CreateFeedSourceRequest,
   FEED_SOURCE_ADDRESS_TAKEN_ERROR,
+  type FeedEntryAdmin,
+  type FeedEntryAdminList,
   type FeedSourceAdmin,
+  type FeedSourceEntriesQuery,
   type FeedSourceAdminList,
   type FeedSourceNetwork,
   taxonomyETag,
@@ -15,6 +18,11 @@ import {
   markReplayable,
   TaxonomyError,
 } from "../taxonomy/index.js";
+import { decodeFeedCursor, encodeFeedCursor } from "./feed-cursor.js";
+import {
+  FeedEntriesRepository,
+  type FeedEntryAdminRow,
+} from "./feed-entries.repository.js";
 import {
   FeedSourcesRepository,
   type FeedSourcesTx,
@@ -58,12 +66,25 @@ export interface FeedSourceSwitchInput {
   lease: IdempotencyLease;
 }
 
+/** EARS-32 — a hide or unhide of one entry, under the `If-Match` it was read at. */
+export interface FeedEntryHideInput {
+  id: string;
+  expectedVersion: number;
+  lease: IdempotencyLease;
+}
+
+export interface FeedEntryCommandResult {
+  detail: FeedEntryAdmin;
+  etag: string;
+}
+
 export interface FeedSourceCommandResult {
   detail: FeedSourceAdmin;
   etag: string;
 }
 
 const STALE = "the source changed since it was read; reload and retry";
+const ENTRY_STALE = "the post changed since it was read; reload and retry";
 
 @Injectable()
 export class FeedSourcesService {
@@ -76,6 +97,8 @@ export class FeedSourcesService {
     private readonly idempotency: IdempotencyService,
     @Inject(TelegramSourceCheck)
     private readonly sourceCheck: TelegramSourceCheck,
+    @Inject(FeedEntriesRepository)
+    private readonly entries: FeedEntriesRepository,
   ) {}
 
   /** EARS-20 — `GET /v1/admin/feed-sources`. */
@@ -208,6 +231,83 @@ export class FeedSourcesService {
     );
   }
 
+  /**
+   * EARS-32 — `GET /v1/admin/feed-sources/{id}/entries`: one page of
+   * «Публикации», newest first.
+   */
+  async entryPage(
+    sourceId: string,
+    query: FeedSourceEntriesQuery,
+  ): Promise<FeedEntryAdminList> {
+    const before = decodeFeedCursor(query.cursor);
+    const listed = await this.repo.findWithCount(sourceId);
+    if (!listed) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    const rows = await this.entries.adminSourcePage(
+      sourceId,
+      query.limit + 1,
+      before,
+    );
+    const page = rows.slice(0, query.limit);
+    const last = page.at(-1);
+    return {
+      source: toAdmin(listed.source, listed.entryCount),
+      data: page.map(toEntryAdmin),
+      nextCursor:
+        rows.length > query.limit && last ? encodeFeedCursor(last) : null,
+    };
+  }
+
+  /** EARS-32 — «Скрыть из ленты». */
+  hide(input: FeedEntryHideInput): Promise<FeedEntryCommandResult> {
+    return this.setHidden(input, true);
+  }
+
+  /** EARS-32 — «Вернуть в ленту»: back at its own date. */
+  unhide(input: FeedEntryHideInput): Promise<FeedEntryCommandResult> {
+    return this.setHidden(input, false);
+  }
+
+  /**
+   * EARS-32 — one audit-attributed transaction: row lock → own-material
+   * refusal (an own material leaves the feed by unpublish, EARS-6) →
+   * precondition → transition → write → fenced record completion.
+   */
+  private setHidden(
+    input: FeedEntryHideInput,
+    hidden: boolean,
+  ): Promise<FeedEntryCommandResult> {
+    return this.fenced(input.lease, () =>
+      this.repo.transaction(async (tx) => {
+        const row = await this.entries.lockForAdmin(tx, input.id);
+        if (!row) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+        if (row.sourcePlatform === "academy") {
+          throw new TaxonomyError(
+            "INVALID_TRANSITION",
+            "an own material leaves the feed by unpublish, not by hide",
+          );
+        }
+        if (Number(row.stamp) !== input.expectedVersion) {
+          throw new TaxonomyError("PRECONDITION_FAILED", ENTRY_STALE);
+        }
+        if ((row.hiddenAt !== null) === hidden) {
+          throw new TaxonomyError(
+            "INVALID_TRANSITION",
+            hidden ? "this post is already hidden" : "this post is not hidden",
+          );
+        }
+        const moved = await this.entries.setHidden(tx, row.id, hidden);
+        const detail = toEntryAdmin(moved);
+        const etag = taxonomyETag(detail.version);
+        await this.idempotency.complete(tx, input.lease, {
+          status: 200,
+          body: detail,
+          etag,
+        });
+        return { detail, etag };
+      }),
+    );
+  }
+
   /** Tag a deterministic refusal with its record, so an exact retry replays it. */
   private async fenced<T>(
     lease: IdempotencyLease,
@@ -292,5 +392,19 @@ function toAdmin(row: FeedSource, entryCount: number): FeedSourceAdmin {
     entryCount,
     version: row.version,
     updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+/** EARS-32 — a hidden post reads «Скрыт» whatever its source's state. */
+function toEntryAdmin(row: FeedEntryAdminRow): FeedEntryAdmin {
+  const hidden = row.hiddenAt !== null;
+  return {
+    id: row.id,
+    text: row.title,
+    publishedAt: row.publishedAt.toISOString(),
+    state: hidden ? "hidden" : row.sourceOff ? "source_off" : "in_feed",
+    hidden,
+    href: row.href,
+    version: Number(row.stamp),
   };
 }

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   CreateFeedSourceRequestSchema,
   FEED_SOURCE_ADDRESS_ERROR,
+  FeedEntryAdminListSchema,
   FeedSourceAdminListSchema,
+  FeedSourceEntriesQuerySchema,
   normalizeFeedSourceAddress,
   telegramPostHref,
   UpdateFeedSourceRequestSchema,
@@ -135,5 +137,53 @@ describe("048 feed source contract (V-13)", () => {
     expect(telegramPostHref("bbmacademy", 1201)).toBe(
       "https://t.me/bbmacademy/1201",
     );
+  });
+});
+
+describe("048 «Публикации» contract (EARS-32)", () => {
+  it("048 EARS-32: the page query defaults its size, refuses an unknown key, and a row carries one of the three states", () => {
+    expect(FeedSourceEntriesQuerySchema.parse({})).toEqual({ limit: 50 });
+    expect(
+      FeedSourceEntriesQuerySchema.safeParse({ limit: "101" }).success,
+    ).toBe(false);
+    expect(FeedSourceEntriesQuerySchema.safeParse({ page: "2" }).success).toBe(
+      false,
+    );
+    const row = {
+      id: "0b6c2f4e-6f1a-4c3e-9a1d-2f8e4b7c9d10",
+      text: "Пост",
+      publishedAt: "2026-11-17T00:00:00.000Z",
+      hidden: false,
+      href: "https://t.me/bbmacademy/1",
+      version: 1731801600000000,
+    };
+    const source = {
+      id: "1b6c2f4e-6f1a-4c3e-9a1d-2f8e4b7c9d10",
+      platform: "telegram",
+      address: "bbmacademy",
+      enabled: true,
+      status: "ok",
+      statusReason: null,
+      checkedAt: null,
+      entryCount: 1,
+      version: 1,
+      updatedAt: "2026-11-17T00:00:00.000Z",
+    };
+    for (const state of ["in_feed", "hidden", "source_off"]) {
+      expect(
+        FeedEntryAdminListSchema.safeParse({
+          source,
+          data: [{ ...row, state }],
+          nextCursor: null,
+        }).success,
+      ).toBe(true);
+    }
+    expect(
+      FeedEntryAdminListSchema.safeParse({
+        source,
+        data: [{ ...row, state: "deleted" }],
+        nextCursor: null,
+      }).success,
+    ).toBe(false);
   });
 });

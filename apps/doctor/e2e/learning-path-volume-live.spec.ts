@@ -53,6 +53,32 @@ async function shoot(page: Page, name: string, fullPage = false) {
   await page.screenshot({ path: join(SHOT_DIR, `${name}${DARK ? "-dark" : ""}.png`), fullPage });
 }
 
+/**
+ * Every title the snake clamps to two lines ends with «…», on either side of
+ * the axis. Chrome right-aligns a clamped line without its «…» and draws the
+ * «…» after the line's end, so a right-aligned title shows it only when its end
+ * padding holds the glyph; a left-aligned one draws it inside its box. Returns
+ * how many titles are clamped on each side.
+ */
+async function clampedTitlesKeepTheirEllipsis(page: Page): Promise<{ left: number; right: number }> {
+  const titles = await page.locator("span.line-clamp-2[title]").evaluateAll((els) => {
+    const ctx = document.createElement("canvas").getContext("2d")!;
+    return els
+      .filter((el) => el.scrollHeight > el.clientHeight + 1)
+      .map((el) => {
+        const cs = getComputedStyle(el);
+        ctx.font = cs.font;
+        return {
+          title: el.getAttribute("title"),
+          left: cs.textAlign === "right",
+          fits: cs.textAlign !== "right" || parseFloat(cs.paddingRight) >= ctx.measureText("…").width,
+        };
+      });
+  });
+  expect(titles.filter((t) => !t.fits).map((t) => t.title)).toEqual([]);
+  return { left: titles.filter((t) => t.left).length, right: titles.filter((t) => !t.left).length };
+}
+
 async function axeClean(page: Page) {
   await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))));
   const { violations } = await new AxeBuilder({ page })
@@ -81,10 +107,22 @@ test.describe("024 — the course path at volume", () => {
     const row = (n: number) => outline.getByRole("button", { name: new RegExp(`^Модуль ${n}\\. `) });
     await expect(row(1)).toHaveAttribute("aria-expanded", "true");
     for (let n = 2; n <= count; n++) await expect(row(n)).toHaveAttribute("aria-expanded", "false");
+    // A plate's meta counts its lessons and names its club as the canvas does.
+    await expect(page.getByText(/^\d+ урок\S* (и клуб )?· /).first()).toBeVisible();
+    // On load the outline column shows its top: the summary of the first step,
+    // which names where it sits, and the start of the outline.
+    const aside = page.getByRole("complementary", { name: "Навигация по пути курса" });
+    const summary = aside.getByTestId("node-summary");
+    await expect(summary.getByText(/^Урок 1 · модуль 1 · шаг 1 из \d+$/)).toBeVisible();
+    await page.waitForTimeout(600);
+    expect(await aside.evaluate((el) => el.scrollTop)).toBe(0);
+    await expect(summary).toBeInViewport();
+    const clamped = await clampedTitlesKeepTheirEllipsis(page);
+    console.log(`clamped titles at 1280: left ${clamped.left}, right ${clamped.right}`);
     await axeClean(page);
     await shoot(page, `path-${count}-modules-top-1280`);
 
-    // Scrolling down the path: each module's plate passing the middle of the
+    // Scrolling down the path: each module's plate reaching the top of the
     // viewport opens that module in the outline and closes the one before.
     for (let n = 2; n <= count; n++) {
       await plates.nth(n - 1).evaluate((el) => el.scrollIntoView({ block: "start" }));
@@ -100,6 +138,29 @@ test.describe("024 — the course path at volume", () => {
     await row(mid).click();
     await expect(row(mid)).toHaveAttribute("aria-expanded", "true");
     await expect(plates.nth(mid - 1)).toBeInViewport();
+    // The column brings the open module into its own view.
+    const open = aside.locator('[data-outline-module="open"]');
+    await expect
+      .poll(async () => {
+        const [c, b] = await Promise.all([aside.boundingBox(), open.boundingBox()]);
+        return !!c && !!b && b.y >= c.y - 1 && b.y + b.height <= c.y + c.height + 1;
+      })
+      .toBe(true);
+    // A lesson row picked deeper in that module stays the lesson in view once
+    // the jump lands, and while the reader nudges the page — the lesson at
+    // the top of the viewport is the one in view.
+    const lessons = open.getByRole("link", { name: /^Урок \d+\. / });
+    const pick = lessons.nth(Math.min(1, (await lessons.count()) - 1));
+    const picked = (await pick.getAttribute("aria-label"))!.match(/^Урок (\d+)\./)![1];
+    await pick.click();
+    await page.waitForTimeout(1_600);
+    const inView = outline.locator('a[aria-current="true"]');
+    await expect(inView).toHaveAttribute("aria-label", new RegExp(`^Урок ${picked}\\. `));
+    await page.mouse.move(200, 450);
+    await page.mouse.wheel(0, 30);
+    await page.waitForTimeout(400);
+    await expect(inView).toHaveAttribute("aria-label", new RegExp(`^Урок ${picked}\\. `));
+    await expect(summary.getByText(new RegExp(`^Урок ${picked} · модуль ${mid} · шаг 1 из \\d+$`))).toBeVisible();
     await axeClean(page);
     await shoot(page, `path-${count}-modules-outline-1280`);
   });
@@ -112,11 +173,17 @@ test.describe("024 — the course path at volume", () => {
     expect(count).toBeGreaterThan(1);
     await expect(page.getByRole("navigation", { name: "Модули и уроки" })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const clamped = await clampedTitlesKeepTheirEllipsis(page);
+    console.log(`clamped titles at 390: left ${clamped.left}, right ${clamped.right}`);
     await plates.nth(count - 1).scrollIntoViewIfNeeded();
     await shoot(page, `path-${count}-modules-390`);
     const node = page.getByRole("button", { name: /^Урок \d+, шаг 1\./ }).last();
     await node.click();
-    await expect(page.getByRole("dialog")).toBeVisible();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    // The Sheet names where the step sits and lists the lesson's steps.
+    await expect(dialog.getByText(/^Урок \d+ · модуль \d+ · шаг 1 из \d+$/)).toBeVisible();
+    await expect(dialog.getByRole("list", { name: "Шаги урока" }).getByRole("listitem").first()).toBeVisible();
     await axeClean(page);
     await shoot(page, `path-${count}-modules-sheet-390`);
   });

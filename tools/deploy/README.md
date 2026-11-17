@@ -705,7 +705,10 @@ The unit's whole output stays in its journal (`journalctl -u ds-prod-<sha12>-dri
 the runner sees status lines only. The operator reads it with no break-glass key (#4067):
 `gh workflow run prod-observe.yml --ref main -f verb=release-journal -f sha=<sha>`, then
 `pnpm prod:read <run-id>` prints the driver's journal tail, the tails of ds-api-prod's
-failed step units and the failure note (spec §5 «Prod read verbs.»).
+failed step units and the failure note (spec §5 «Prod read verbs.»). The driver's tail is
+read by its `release-driver` identifier (`journalctl -u ds-prod-<sha12>-driver -t release-driver`,
+#4124): the driver's sudo calls journal an audit line each under `sudo`, and those lines
+would otherwise fill the 400-line window and push out the data-prod phases' status lines.
 
 ## Docker Hub login on the boxes (#2240)
 

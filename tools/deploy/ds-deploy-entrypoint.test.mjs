@@ -2330,7 +2330,13 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(answer.units[0].truncated, false);
     assert.equal(
       log("journalctl"),
-      ["driver", "migrate", "prune"].map((u) => `-u ds-prod-${sha12}-${u} -n 400 -o short-iso -q --no-pager\n`).join(""),
+      [
+        ["driver", " -t release-driver"],
+        ["migrate", ""],
+        ["prune", ""],
+      ]
+        .map(([u, match]) => `-u ds-prod-${sha12}-${u}${match} -n 400 -o short-iso -q --no-pager\n`)
+        .join(""),
     );
     assert.equal(log("ds-release") + log("ssh") + log("docker"), "", "no release check, no hop");
   });
@@ -2347,6 +2353,63 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.ok(Buffer.byteLength(answer.units[0].lines.join("\n")) <= 256 * 1024);
     assert.equal(answer.units[0].truncated, true);
     assert.match(answer.units[0].lines.at(-1), /line 4000$/);
+  });
+
+  it("4124: release-journal reads the driver unit by its release-driver identifier, so sudo audit lines never push out the data-prod phases", () => {
+    const sha12 = journalBox({
+      status: (s) => ({ steps: [{ name: "migrate", unit: `ds-prod-${s}-migrate`, rc: 1 }] }),
+    });
+    // The measured shape (prod-observe run 44035314228): the driver's own lines between
+    // root's sudo audit lines; the app phases alone fill a 400-line window with ~250 of them.
+    const at = (i) =>
+      `2026-11-17T10:${String(Math.floor(i / 60) % 60).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}+00:00 ds-api-prod`;
+    const sudo = (i) => `${at(i)} sudo[${1000 + i}]:     root : PWD=/ ; USER=root ; COMMAND=/usr/bin/docker compose ps -q`;
+    const driver = (i, text) => `${at(i)} release-driver[77]: ${text}`;
+    const statusLines = [
+      "▶ postgres-verify",
+      "▶ postgres-load",
+      "✓ postgres-load",
+      "▶ data-env",
+      "▶ data-prod up",
+      "↳ PostgreSQL checkpoint written (storage driver overlay2)",
+      "✓ data-prod up",
+      "▶ backup",
+      "↳ pre-migrate incr backup taken",
+      "✓ backup",
+    ];
+    const fixture = [];
+    let n = 0;
+    for (const text of statusLines) fixture.push(sudo(n++), driver(n++, text), sudo(n++));
+    for (let i = 0; i < 150; i++) fixture.push(driver(n++, `▶ app step ${i}`), sudo(n++), sudo(n++));
+    const journal = join(stubs, "journal.fixture");
+    writeFileSync(journal, `${fixture.join("\n")}\n`);
+    // journalctl as journald answers it: -t keeps one SYSLOG_IDENTIFIER, -n the last lines.
+    writeFileSync(
+      join(stubs, "journalctl"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "$*" >> "$STUB_DIR/journalctl.log"',
+        'ident="" lines=0',
+        'while (($#)); do case $1 in -t) ident=$2; shift ;; -n) lines=$2; shift ;; esac; shift; done',
+        `if [[ -n $ident ]]; then grep -E "^[^ ]+ [^ ]+ $ident\\[" "${journal}"; else cat "${journal}"; fi | tail -n "$lines"`,
+      ].join("\n") + "\n",
+    );
+    chmodSync(join(stubs, "journalctl"), 0o755);
+    const r = readRun(`release-journal ${SHA}`);
+    assert.equal(r.status, 0, r.stderr);
+    const [driverUnit, migrateUnit] = decrypt(r.stdout).units;
+    assert.equal(driverUnit.unit, `ds-prod-${sha12}-driver`);
+    const kept = driverUnit.lines.map((l) => l.split("]: ").slice(1).join("]: "));
+    for (const text of statusLines) assert.ok(kept.includes(text), `the driver's answer keeps «${text}»`);
+    assert.equal(driverUnit.lines.filter((l) => / sudo\[/.test(l)).length, 0, "no sudo audit line");
+    assert.equal(driverUnit.lines.length, statusLines.length + 150);
+    assert.equal(driverUnit.truncated, false);
+    assert.equal(migrateUnit.unit, `ds-prod-${sha12}-migrate`, "a step unit reads as before, unfiltered");
+    assert.equal(
+      log("journalctl"),
+      `-u ds-prod-${sha12}-driver -t release-driver -n 400 -o short-iso -q --no-pager\n` +
+        `-u ds-prod-${sha12}-migrate -n 400 -o short-iso -q --no-pager\n`,
+    );
   });
 
   it("4067: release-journal refuses (exit 3) with no recipient certificate and on any box but the prod box", () => {

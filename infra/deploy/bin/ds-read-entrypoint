@@ -383,7 +383,7 @@ PY
 
 release_journal() {
   local sha=$1 i=0 unit
-  local -a units steps
+  local -a units steps match
   read_workdir
   mapfile -t steps < <({ sudo cat "$RELEASE_STATUS_DIR/$sha.json" 2>/dev/null || true; } |
     python3 -I -c "$FAILED_STEP_UNITS_PY" "${sha:0:12}" "$JOURNAL_MAX_STEP_UNITS" 2>/dev/null || true)
@@ -392,7 +392,11 @@ release_journal() {
     if [[ -n $unit ]]; then units+=("$unit"); fi
   done
   for unit in "${units[@]}"; do
-    { sudo "$JOURNALCTL" -u "$unit" -n "$JOURNAL_LINES" -o short-iso -q --no-pager </dev/null 2>/dev/null || true; } |
+    # #4124: the driver unit is read by its own identifier — the driver's output and its
+    # children's — so the audit lines of its sudo calls never fill the 400-line window.
+    match=()
+    if [[ $unit == "${units[0]}" ]]; then match=(-t release-driver); fi
+    { sudo "$JOURNALCTL" -u "$unit" "${match[@]}" -n "$JOURNAL_LINES" -o short-iso -q --no-pager </dev/null 2>/dev/null || true; } |
       python3 -I -c "$TAIL_BYTES_PY" "$JOURNAL_MAX_BYTES" >"$read_work/unit-$i.log"
     i=$((i + 1))
   done

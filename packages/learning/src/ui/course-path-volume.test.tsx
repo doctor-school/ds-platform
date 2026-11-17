@@ -4,7 +4,7 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoursePath } from "./course-path";
-import { buildPathView, keepTokensWhole, lessonInView } from "./path-view";
+import { buildPathView, keepTokensWhole, lessonInView, sectionCurves, snakeGeometry } from "./path-view";
 import { CONFIG, coursePath, multiModulePath, stubFetch, stubMatchMedia } from "./__tests__/fixtures";
 
 // 024 EARS-14 — the course path at the volume of `design-source/doctor-course.dc.html`
@@ -21,6 +21,22 @@ function stubLayout(tops: (id: string) => number) {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const top = tops(this.id);
     return { top, bottom: top + 56, left: 0, right: 0, width: 0, height: 56, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+  });
+}
+
+/**
+ * The page layout by lesson: `lessonTop(n)` places lesson n's first step; each
+ * module plate sits a plate's height (100 px) above its first lesson's step.
+ */
+function stubPathLayout(path: ReturnType<typeof multiModulePath>, lessonTop: (n: number) => number) {
+  const view = buildPathView(path);
+  const firstStep = new Map(view.outline.flatMap((m) => m.lessons).map((l) => [`node-${l.firstStepId}`, l.number]));
+  const plate = new Map(view.outline.map((m) => [`module-${m.id}`, m.lessons[0]!.number]));
+  stubLayout((id) => {
+    const n = firstStep.get(id);
+    if (n !== undefined) return lessonTop(n);
+    const p = plate.get(id);
+    return p === undefined ? 0 : lessonTop(p) - 100;
   });
 }
 
@@ -97,6 +113,47 @@ describe("024 EARS-14 — node labels wrap at word and separator boundaries", ()
       window.dispatchEvent(new Event("resize"));
     });
     expect(left).toHaveClass("text-left");
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("024 EARS-14 — a label taller than the 96 px row grows its row", () => {
+  it("EARS-14: the snake runs through rows of their own heights — each node at its row's middle, the section as tall as its rows", () => {
+    const nodes = buildPathView(coursePath()).sections[0]!.nodes.slice(0, 3);
+    const curves = sectionCurves(nodes, 0, snakeGeometry(false), null, null, [96, 160, 96]);
+    expect(curves.height).toBe(352);
+    const d = curves.done + curves.open + curves.locked;
+    // Node 0 at (176, 48), node 1 at (64, 96 + 80), node 2 at (176, 256 + 48).
+    expect(d).toContain("M 176 48 C 176 112, 64 112, 64 176 ");
+    expect(d).toContain("M 64 176 C 64 240, 176 240, 176 304 ");
+    // Without measured heights every row is one pitch (the canvas).
+    expect(sectionCurves(nodes, 0, snakeGeometry(false), null, null).height).toBe(288);
+  });
+
+  it("EARS-14: a node row is at least one pitch tall and grows with its label; the line follows the measured rows", () => {
+    stubMatchMedia(false);
+    stubFetch({});
+    // jsdom has no layout: the row holding «Чтение ЭКГ» measures 160 px (a
+    // label of a two-line kicker, a two-line title, «Вы здесь» and a note).
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const tall = this instanceof HTMLElement && this.dataset.snakeRow !== undefined && this.querySelector('[title="Чтение ЭКГ"]');
+      const height = this instanceof HTMLElement && this.dataset.snakeRow !== undefined ? (tall ? 160 : 96) : 0;
+      return { top: 0, bottom: height, left: 0, right: 0, width: 0, height, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
+    render(<CoursePath courseSlug="kardio" config={CONFIG} initial={coursePath()} />);
+    const rows = [...document.querySelectorAll<HTMLElement>("[data-snake-row]")];
+    expect(rows.length).toBe(buildPathView(coursePath()).sections[0]!.nodes.length);
+    for (const row of rows) {
+      expect(row.style.minHeight).toBe("96px");
+      expect(row.style.height).toBe("");
+      expect(row).not.toHaveClass("absolute");
+    }
+    // The label sits in the row's flow (it gives the row its height).
+    const label = document.querySelector('[title="Чтение ЭКГ"]')!.parentElement!;
+    expect(label).not.toHaveClass("absolute");
+    const svg = rows[0]!.parentElement!.querySelector("svg")!;
+    expect(svg.getAttribute("height")).toBe(String(96 * (rows.length - 1) + 160));
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -179,13 +236,8 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
 
   it("EARS-14: scrolling the path moves the open module and the lesson in view (scroll-spy)", () => {
     const path = multiModulePath(26, 4, 2);
-    const view = buildPathView(path);
     // Lessons 1…57 have passed the spy line near the viewport top; lesson 58 (module 15) is below it.
-    const firstStep = new Map(view.outline.flatMap((m) => m.lessons).map((l) => [`node-${l.firstStepId}`, l.number]));
-    stubLayout((id) => {
-      const n = firstStep.get(id);
-      return n === undefined ? 0 : n <= 57 ? -100 : 2_000;
-    });
+    stubPathLayout(path, (n) => (n <= 57 ? -100 : 2_000));
     vi.stubGlobal("innerHeight", 900);
     render(<CoursePath courseSlug="k" config={CONFIG} initial={path} />);
     expect(moduleRow(1)).toHaveAttribute("aria-expanded", "true");
@@ -223,12 +275,7 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
     // Short lessons: once lesson 60 sits at the top, lesson 61's first step is
     // already above the spy line — the jump must not hand the mark to 61.
     const path = multiModulePath(26, 4, 60);
-    const view = buildPathView(path);
-    const firstStep = new Map(view.outline.flatMap((m) => m.lessons).map((l) => [`node-${l.firstStepId}`, l.number]));
-    stubLayout((id) => {
-      const n = firstStep.get(id);
-      return n === undefined ? 0 : n <= 60 ? 64 - (60 - n) * 160 : n === 61 ? 224 : 2_000;
-    });
+    stubPathLayout(path, (n) => (n <= 60 ? 64 - (60 - n) * 160 : n === 61 ? 224 : 2_000));
     vi.stubGlobal("innerHeight", 900);
     // Frames run when the test flushes them, as in a browser (one per frame).
     const frames: FrameRequestCallback[] = [];
@@ -256,14 +303,9 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
 
   it("EARS-14: the lesson in view is the one at the top of the viewport; the outline column's own scroll never moves it", () => {
     const path = multiModulePath(26, 4, 60);
-    const view = buildPathView(path);
-    const firstStep = new Map(view.outline.flatMap((m) => m.lessons).map((l) => [`node-${l.firstStepId}`, l.number]));
     // Lessons are 288 px apart (3 steps); `scrolled` moves them all up.
     let scrolled = 0;
-    stubLayout((id) => {
-      const n = firstStep.get(id);
-      return n === undefined ? 0 : 64 + (n - 60) * 288 - scrolled;
-    });
+    stubPathLayout(path, (n) => 64 + (n - 60) * 288 - scrolled);
     vi.stubGlobal("innerHeight", 900);
     const frames: FrameRequestCallback[] = [];
     vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
@@ -287,6 +329,21 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
     scrolled = 260;
     frame(window, "scroll");
     expect(current()).toHaveAccessibleName(/^Урок 61\. /);
+  });
+
+  it("EARS-14: once a module's plate passes the spy line, that module is in view — open in the outline with its first lesson marked", () => {
+    // Module 16's plate sits at the top of the viewport (20 px); the plate is
+    // taller than the line, so lesson 61's first step (module 16) is still below it.
+    const path = multiModulePath(26, 4, 2);
+    stubPathLayout(path, (n) => (n <= 60 ? -400 - (60 - n) * 288 : n === 61 ? 120 : 2_000));
+    vi.stubGlobal("innerHeight", 900);
+    render(<CoursePath courseSlug="k" config={CONFIG} initial={path} />);
+    act(() => {
+      window.dispatchEvent(new Event("scroll"));
+    });
+    expect(moduleRow(16)).toHaveAttribute("aria-expanded", "true");
+    expect(moduleRow(15)).toHaveAttribute("aria-expanded", "false");
+    expect(outline().getByRole("link", { name: /^Урок 61\. / })).toHaveAttribute("aria-current", "true");
   });
 
   it("EARS-14: on load the outline column shows its top — the summary and the start of the outline; it follows only once the open module changes", () => {
@@ -314,6 +371,42 @@ describe("024 EARS-14 — the course path at 6 and 26 modules", () => {
       // A pick opens another module: the column scrolls the least distance that
       // shows it whole — its block ends at 916 + 228 = 1144, so by 1144 − 800 = 344.
       fireEvent.click(moduleRow(17));
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 344, behavior: "smooth" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("EARS-14: «Продолжить» right after load brings the open «Вы здесь» module into the outline column; a pick of a lesson in the open module does too", () => {
+    vi.useFakeTimers();
+    try {
+      // On load module 15 (lesson 60, «Вы здесь») is already the open one, its
+      // block below the column's fold (916…1144 in a 0…800 column).
+      vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+        const box = (top: number, height: number) =>
+          ({ top, bottom: top + height, left: 0, right: 0, width: 0, height, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+        if (this.tagName === "ASIDE") return box(0, 800);
+        if (this instanceof HTMLElement && this.dataset.outlineModule === "open") return box(916, 228);
+        return box(0, 0);
+      });
+      render(<CoursePath courseSlug="k" config={CONFIG} initial={multiModulePath(26, 4, 60)} />);
+      const aside = document.querySelector("aside")!;
+      const scrollTo = vi.fn();
+      aside.scrollTo = scrollTo as unknown as typeof aside.scrollTo;
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(scrollTo).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("link", { name: "Продолжить — урок 60" }));
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 344, behavior: "smooth" });
+      scrollTo.mockClear();
+      fireEvent.click(outline().getByRole("link", { name: /^Урок 59\. / }));
       act(() => {
         vi.advanceTimersByTime(400);
       });

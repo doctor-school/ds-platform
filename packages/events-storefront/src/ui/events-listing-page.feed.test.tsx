@@ -644,6 +644,28 @@ describe("the doctor's default «Моя и смежные» is empty (019 EARS-9
   });
 });
 
+describe("the listing with no upcoming event (004 EARS-11)", () => {
+  it("EARS-11: with no facet, no cards and nothing beyond the range, the Academy feed renders the plain empty state «Эфиров нет» — no action, no «Показать ещё», no widen read", async () => {
+    render(
+      await FeedSection({
+        config: ACADEMY,
+        query: {},
+        feed: Promise.resolve({ ok: true as const, value: EMPTY_PAGE }),
+        mine: Promise.resolve({ ok: true, value: null }),
+        specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
+        request: REQUEST,
+        retry: RETRY,
+      }),
+    );
+    const empty = screen.getByTestId("events-feed-empty");
+    expect(within(empty).getByText("Эфиров нет")).toBeInTheDocument();
+    expect(within(empty).queryAllByRole("link")).toEqual([]);
+    expect(screen.queryByTestId("events-feed-show-more")).toBeNull();
+    expect(mocks.fetchEventsFeed).not.toHaveBeenCalled();
+  });
+});
+
 describe("the empty state of both views (019 EARS-9, #2786)", () => {
   const TOPICS = {
     topic: [

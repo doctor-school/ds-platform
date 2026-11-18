@@ -186,6 +186,7 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
       "live/academy/default",
       "live/academy/event-page",
       "live/doctor/event-page",
+      "live/doctor/event-register",
       "live/doctor/feed-live",
       "live/doctor/learning",
       "live/doctor/room",

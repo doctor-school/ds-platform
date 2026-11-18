@@ -10,6 +10,7 @@ name: Prod observe
 #   gh workflow run prod-observe.yml --ref main -f verb=rehearse-restore -f sha=<40-hex main SHA>
 #   gh workflow run prod-observe.yml --ref main -f verb=observe -f name=table-rows -f params='{"table":"users"}'
 #   gh workflow run prod-observe.yml --ref main -f verb=release-journal -f sha=<40-hex release SHA>
+#   gh workflow run prod-observe.yml --ref main -f verb=host-state
 #   pnpm prod:read <run-id>            # or: pnpm prod:schema-drift <run-id>
 #
 # The key reaches only ds-read-entrypoint on ds-api-prod (forced command). The job
@@ -28,6 +29,9 @@ name: Prod observe
 # `release-journal` (#4067) answers a release's driver journal, its failed step units'
 # journals and its failure note — the box journal a failed release points to, read
 # with no break-glass key; `pnpm prod:read <run-id>` prints it on the operator's terminal.
+# `host-state` (#4144) answers both prod boxes' resolver, self-hostname, disk and uptime,
+# and ds-data-prod's WAL archiver and pgBackRest version — a closed field list, no
+# input; `pnpm prod:read <run-id>` prints it likewise.
 
 on:
   workflow_dispatch:
@@ -44,6 +48,7 @@ on:
             rehearse-restore,
             rehearsal-status,
             release-journal,
+            host-state,
           ]
         default: schema
       name:

@@ -721,6 +721,16 @@ read by its `release-driver` identifier (`journalctl -u ds-prod-<sha12>-driver -
 #4124): the driver's sudo calls journal an audit line each under `sudo`, and those lines
 would otherwise fill the 400-line window and push out the data-prod phases' status lines.
 
+Both prod boxes' host state reads the same way, with no break-glass key and no release
+check (#4144): `gh workflow run prod-observe.yml --ref main -f verb=host-state`, then
+`pnpm prod:read <run-id>` prints, per box, the resolver (the configured nameservers,
+`resolvectl`'s upstream and whether `s3.twcstorage.ru` resolves), the self-hostname
+(`hostname`, `getent hosts`, a line in `/etc/hosts`), used/free bytes and inodes of `/`
+(and of the Postgres data volume on ds-data-prod) and the uptime; on ds-data-prod also
+`pg_stat_archiver` and the `pgbackrest version` line. The answer is a closed field list
+(`lib/prod-read.mjs` `HOST_STATE_FIELDS`); an unreachable data box answers a fixed reason
+for its half while ds-api-prod's still answers (spec §5 «Prod read verbs.»).
+
 ## Docker Hub login on the boxes (#2240)
 
 Since #2981 step 5 builds nothing on `api-prod`: our own images come from the

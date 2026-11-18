@@ -55,11 +55,12 @@ test("3662: the verb whitelist — ds-read-entrypoint serves the two recovery ve
     "rehearse-restore",
     "rehearsal-status",
     "release-journal",
+    "host-state",
     ...RECOVERY_VERBS,
   ]);
   assert.match(
     READ_ENTRYPOINT,
-    /^ {2}capabilities \| schema \| recovery-bundle \| recovery-check\) \[\[ \$\{#words\[@\]\} -eq 1 \]\]/m,
+    /^ {2}capabilities \| schema \| host-state \| recovery-bundle \| recovery-check\) \[\[ \$\{#words\[@\]\} -eq 1 \]\]/m,
   );
   for (const verb of [
     "recovery-bundle",

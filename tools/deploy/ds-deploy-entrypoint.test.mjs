@@ -1785,9 +1785,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
   });
 
   // The api-secret unit's script, run for real: the in-container /v1/health answers
-  // with a failure while api.env holds `failValue`.
+  // with a failure while api.env holds `failValue`, and /v1/ready (DB + object
+  // storage) while it holds `readyFailValue`.
   let apiUnitInput;
-  const runApiUnit = async (failValue, now = new Date()) => {
+  const runApiUnit = async (failValue, now = new Date(), readyFailValue = "NO-SUCH-VALUE") => {
     apiBox();
     apiUnitInput = await apiCipher(OFF, { now });
     assert.equal(run(`api-secret-apply prod ${SHA}`, { input: apiUnitInput }).status, 0);
@@ -1798,7 +1799,8 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         "#!/usr/bin/env bash",
         'echo "docker $*" >> "$STUB_DIR/docker.log"',
         `[[ $1 == inspect ]] && { echo 'ds-api:${SHA}'; exit 0; }`,
-        `[[ $1 == exec ]] && grep -q -- '${failValue}' '${apiEnv()}' && exit 1`,
+        `[[ $1 == exec && $* == */v1/ready* ]] && grep -q -- '${readyFailValue}' '${apiEnv()}' && exit 1`,
+        `[[ $1 == exec && $* == */v1/health* ]] && grep -q -- '${failValue}' '${apiEnv()}' && exit 1`,
         "exit 0",
       ].join("\n") + "\n",
     );
@@ -1814,7 +1816,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     });
   };
 
-  it("4153: the api-secret unit swaps both files keeping their modes, recreates the live SHA's stack and checks /v1/health", async () => {
+  it("4153: the api-secret unit swaps both files keeping their modes, recreates the live SHA's stack and checks /v1/health and /v1/ready", async () => {
     const r = await runApiUnit("NO-SUCH-VALUE");
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.match(readFileSync(apiEnv(), "utf8"), /^BOT_PROTECTION_ENABLED=false$/m);
@@ -1828,7 +1830,23 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       calls.some((l) => l.startsWith("docker exec ds-api-prod-api-1 node -e ") && l.includes("/v1/health") && l.includes(SHA)),
       calls.join("\n"),
     );
+    assert.ok(
+      calls.some((l) => l.startsWith("docker exec ds-api-prod-api-1 node -e ") && l.includes("/v1/ready")),
+      calls.join("\n"),
+    );
     assert.ok(existsSync(applied()) && !existsSync(pending()));
+    noValueIn(r.stdout + r.stderr);
+  });
+
+  it("4153: a healthy api whose /v1/ready reports down (a broken DATABASE_URL) puts both previous files back and fails the unit", async () => {
+    const r = await runApiUnit("NO-SUCH-VALUE", new Date(), "BOT_PROTECTION_ENABLED=false");
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /restoring the previous api\.env and compose \.env/);
+    assert.equal(readFileSync(apiEnv(), "utf8"), OLD_API);
+    assert.equal(readFileSync(composeEnv(), "utf8"), OLD_COMPOSE);
+    assert.ok(!existsSync(apiBackup()) && !existsSync(composeBackup()));
+    assert.equal(log("docker").split("\n").filter((l) => l.includes(" up -d ")).length, 2, "recreated twice");
+    assert.ok(existsSync(applied()) && !existsSync(pending()), "a rolled-back ciphertext is spent too");
     noValueIn(r.stdout + r.stderr);
   });
 

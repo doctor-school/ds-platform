@@ -602,7 +602,8 @@ api_secret() {
 
 # The unit's script: back up each staged file's live copy, put the staged copy in place
 # with the live copy's mode and owner, recreate, then the running api must answer
-# /v1/health at <sha>; on any failure put the backups back, recreate again and fail.
+# /v1/health at <sha> and report /v1/ready (DB and object storage) ok; on any failure put the
+# backups back, recreate again and fail.
 # It runs as root; its output stays in the unit's journal.
 api_secret_script() {
   local sha=$1
@@ -621,14 +622,21 @@ restore() {
 }
 health() {
   test "\$(docker inspect ds-api-prod-api-1 --format '{{.Config.Image}}')" = 'ds-api:$sha' &&
-    docker exec ds-api-prod-api-1 node -e "fetch('http://localhost:'+(process.env.PORT||3000)+'/v1/health').then(r=>r.ok?r.json():{}).then(j=>process.exit(j.version==='$sha'?0:1)).catch(()=>process.exit(1))"
+    docker exec ds-api-prod-api-1 node -e "fetch('http://localhost:'+(process.env.PORT||3000)+'/v1/health').then(r=>r.ok?r.json():{}).then(j=>process.exit(j.version==='$sha'?0:1)).catch(()=>process.exit(1))" &&
+    ready
+}
+# /v1/ready as the prod smoke reads it (smoke-prod.mjs checkApiReady, 002 EARS-1..3): 200
+# and every check ok, postgres and pgvector required. A changed DATABASE_URL leaves
+# /v1/health green, so liveness alone would keep a broken value.
+ready() {
+  docker exec ds-api-prod-api-1 node -e "fetch('http://localhost:'+(process.env.PORT||3000)+'/v1/ready').then(r=>r.json().then(j=>{const c={postgres:undefined,pgvector:undefined,...(j&&j.checks)};process.exit(r.status===200&&Object.values(c).every(s=>s==='ok')?0:1)})).catch(()=>process.exit(1))"
 }
 swap '$API_ENV' '$API_STAGED' '$API_BACKUP'
 swap '$API_COMPOSE_ENV' '$API_COMPOSE_STAGED' '$API_COMPOSE_BACKUP'
 echo 'api-secret: api.env / compose .env changed; recreating the stack on the live images'
 if $API_RECREATE && health; then
   rm -f -- '$API_BACKUP' '$API_COMPOSE_BACKUP'
-  echo 'api-secret: the recreated stack answers /v1/health at ${sha:0:12}'
+  echo 'api-secret: the recreated stack answers /v1/health at ${sha:0:12} and /v1/ready'
   mv -f -- '$SECRET_PENDING' '$SECRET_APPLIED'
   exit 0
 fi
@@ -637,7 +645,7 @@ echo 'api-secret: the new values failed; restoring the previous api.env and comp
 restore '$API_ENV' '$API_BACKUP'
 restore '$API_COMPOSE_ENV' '$API_COMPOSE_BACKUP'
 $API_RECREATE || echo 'api-secret: WARNING: recreating the stack with the previous values failed'
-health || echo 'api-secret: WARNING: /v1/health fails with the previous values too'
+health || echo 'api-secret: WARNING: /v1/health or /v1/ready fails with the previous values too'
 # The new values were tried and refused: this ciphertext is spent too.
 mv -f -- '$SECRET_PENDING' '$SECRET_APPLIED' || echo 'api-secret: WARNING: the ciphertext could not be recorded spent'
 exit 1

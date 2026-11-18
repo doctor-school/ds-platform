@@ -109,7 +109,7 @@ export const BOXES = Object.freeze({
       ),
     ),
     step: "api-secret",
-    checked: "the recreated stack answers /v1/health at the live SHA",
+    checked: "the recreated stack answers /v1/health at the live SHA and /v1/ready",
     restored: "the previous api.env and compose .env are back",
     runbook:
       "infra/deploy/README.md → «Changing an api.env or compose .env line», step 1",

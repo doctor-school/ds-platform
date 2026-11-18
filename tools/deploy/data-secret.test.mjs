@@ -417,7 +417,7 @@ describe("4153: the api box", () => {
       JSON.stringify({ release: { sha: SHA, steps: [{ name: "api-secret", rc }] }, unitAlive: rc === null });
     assert.deepEqual(rotationVerdict(answer(0), SHA, "api"), {
       state: "succeeded",
-      line: "status: api-secret succeeded (the recreated stack answers /v1/health at the live SHA)",
+      line: "status: api-secret succeeded (the recreated stack answers /v1/health at the live SHA and /v1/ready)",
     });
     assert.equal(rotationVerdict(answer(null), SHA, "api").state, "running");
     assert.match(rotationVerdict(answer(1), SHA, "api").line, /api-secret failed, exit 1 \(the previous api\.env and compose \.env are back\)/);

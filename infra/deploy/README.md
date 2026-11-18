@@ -656,8 +656,14 @@ tables and the test that pins them equal). Values never carry whitespace or quot
    durable unit `ds-prod-<sha12>-api-secret`: each changed file backed up, the lines
    replaced (an absent one appended; mode and owner kept), every container recreated
    on the live images as a redeploy does, then the api must answer `/v1/health` at
-   the live SHA. A failed recreate or health check puts both files back and
-   recreates again; the run ends red. The run log carries names and status lines
+   the live SHA and `/v1/ready` with every check `ok` (Postgres, pgvector, object
+   storage — the prod smoke's reading), so a broken `DATABASE_URL` is caught even
+   though liveness stays green. A failed recreate, health or readiness check puts
+   both files back and recreates again; the run ends red. The check proves the
+   process, its SHA, and DB and storage reachability. It does not prove the IdP
+   client credentials, the SMS and mail providers or a Telegram token: nothing
+   exercises them at startup, so a wrong value surfaces on first use (a sign-in,
+   a code delivery, a bot update) and is changed again through this path. The run log carries names and status lines
    only. No separate redeploy is needed: the unit recreated the stack.
 
 Evidence is the green run and `/v1/health`, never a value.
@@ -1337,7 +1343,7 @@ deploy.
    compose .env line» (Release section, #4153), on the owner's word, at the live
    SHA — no hand edit and no backup by hand: the unit backs both files up, recreates
    every container (the api and the storefronts that read the site key at runtime
-   included) and puts both files back if `/v1/health` fails.
+   included) and puts both files back if `/v1/health` or `/v1/ready` fails.
 
    - **OFF** — encrypt `BOT_PROTECTION_ENABLED=false`, `SMARTCAPTCHA_SERVER_KEY=`
      and `SMARTCAPTCHA_SITE_KEY=` (both keys emptied, not commented out); the clients

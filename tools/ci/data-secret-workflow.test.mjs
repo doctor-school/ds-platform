@@ -41,6 +41,7 @@ it("4068: no workflow secret or input carries a data-box value: the ssh key pair
     "secrets.PROD_SSH_KNOWN_HOSTS",
   ]);
   assert.deepEqual(Object.keys(wf.on.workflow_dispatch.inputs), [
+    "box",
     "action",
     "sha",
     "owner_quote",
@@ -51,21 +52,29 @@ it("4068: no workflow secret or input carries a data-box value: the ssh key pair
 it("4068: apply calls only the relay verbs, closes the attempt with finish and always removes the key", () => {
   const apply = step("Apply, poll and close the rotation");
   assert.equal(apply.if, "inputs.action == 'apply'");
-  const verbs = [...apply.run.matchAll(/box "([a-z-]+) prod/g)].map(
+  const verbs = [...apply.run.matchAll(/box "\$BOX-([a-z-]+) prod/g)].map(
     (m) => m[1],
   );
-  assert.deepEqual(verbs, [
-    "data-secret-apply",
-    "data-secret-status",
-    "data-secret-finish",
-  ]);
+  assert.deepEqual(verbs, ["secret-apply", "secret-status", "secret-finish"]);
   assert.match(
     apply.run,
-    /node tools\/deploy\/data-secret\.mjs verdict "\$SHA"/,
+    /node tools\/deploy\/data-secret\.mjs verdict --box "\$BOX" "\$SHA"/,
   );
   assert.match(
     step("Print the intake certificate").run,
-    /"data-secret-recipient prod"/,
+    /"\$BOX-secret-recipient prod"/,
   );
   assert.equal(step("Remove the ssh key").if, "always()");
+});
+
+it("4153: one `box` input picks the box — data (the default) or api — and reaches the verbs only as the BOX env of the two ssh steps", () => {
+  const box = wf.on.workflow_dispatch.inputs.box;
+  assert.deepEqual(
+    { type: box.type, default: box.default, options: box.options, required: box.required },
+    { type: "choice", default: "data", options: ["data", "api"], required: true },
+  );
+  for (const name of ["Print the intake certificate", "Apply, poll and close the rotation"]) {
+    assert.equal(step(name).env.BOX, "${{ inputs.box }}", name);
+    assert.doesNotMatch(step(name).run, /\$\{\{/, `${name}: no expression in the script`);
+  }
 });

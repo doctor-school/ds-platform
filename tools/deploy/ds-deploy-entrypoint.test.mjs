@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, it, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
-import { SECRET_KEYS, SECRET_MAX_AGE_SEC, SECRET_VALUE } from "./data-secret.mjs";
+import { BOXES, SECRET_KEYS, SECRET_MAX_AGE_SEC, SECRET_VALUE } from "./data-secret.mjs";
 import { DATA_READ_VERBS, DATA_SECRET_VERBS, DATA_VERBS, POSTGRES_ARTIFACT_VERBS } from "./lib/data-prod.mjs";
 import { BOX_ENTRYPOINTS, DATA_BOX_ENTRYPOINTS, DS_READ_ENTRYPOINT_BIN } from "./lib/remote.mjs";
 import { HOST_STATE_FIELDS } from "./lib/prod-read.mjs";
@@ -160,6 +160,24 @@ test("4068: the box accepts exactly the names and value shape `pnpm prod:data-se
   const age = text.match(/^SECRET_MAX_AGE = (\d+) \* 3600$/m);
   assert.ok(age, "DATA_PY defines SECRET_MAX_AGE");
   assert.equal(Number(age[1]) * 3600, SECRET_MAX_AGE_SEC);
+});
+
+test("4153: the api box accepts exactly the names, files, shapes and generators `pnpm prod:api-secret` encrypts", () => {
+  const text = readFileSync(ENTRYPOINT, "utf8");
+  const start = text.indexOf("\nAPI_SECRETS = {\n");
+  assert.ok(start > 0, "DATA_PY defines API_SECRETS");
+  const body = text.slice(start + "\nAPI_SECRETS = {\n".length, text.indexOf("\n}\n", start));
+  const table = {};
+  for (const line of body.split("\n")) {
+    if (line.trim().startsWith("#")) continue;
+    const m = line.match(/^ {4}"([A-Z_]+)": \("(api|compose)", r"(.*)", (None|"hex32"|"base64-32")\),$/);
+    assert.ok(m, `one entry per line: ${line}`);
+    table[m[1]] = { file: m[2], shape: m[3], ...(m[4] === "None" ? {} : { generate: JSON.parse(m[4]) }) };
+  }
+  const tool = Object.fromEntries(
+    Object.entries(BOXES.api.names).map(([n, { file, shape, generate }]) => [n, { file, shape, ...(generate ? { generate } : {}) }]),
+  );
+  assert.deepEqual(table, tool);
 });
 
 test("3313, 3646: the data box installs the DATA_BOX_ENTRYPOINTS of remote.mjs, in order — no ds-read-entrypoint", () => {
@@ -1596,6 +1614,262 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     ]) {
       assert.equal(run(command).status, 2, command);
     }
+  });
+
+  // --- 4153: the api-box secret change on ds-api-prod ----------------------------------
+  const apiEnv = () => join(root, "etc/ds-platform/api.env");
+  const apiCompose = () => join(tree(), "infra/deploy/compose/api-prod");
+  const composeEnv = () => join(apiCompose(), ".env");
+  const apiStaged = () => join(root, "etc/ds-platform/.api.env.next");
+  const composeStaged = () => join(root, "etc/ds-platform/.api-compose.env.next");
+  const apiBackup = () => join(root, "etc/ds-platform/.api.env.previous");
+  const composeBackup = () => join(root, "etc/ds-platform/.api-compose.env.previous");
+  const SERVER_KEY = `ysc2_${"S".repeat(40)}`;
+  const SITE_KEY = `ysc1_${"P".repeat(40)}`;
+  const OLD_API =
+    "DATABASE_URL=postgresql://ds:db-password@192.168.0.10:5432/ds_prod\n" +
+    `AUDIT_IDENTIFIER_PEPPER=${"a".repeat(64)}\nBOT_PROTECTION_ENABLED=true\nSMARTCAPTCHA_SERVER_KEY=${SERVER_KEY}\n`;
+  const OLD_COMPOSE = `DEPLOY_SHA=${SHA}\nSMARTCAPTCHA_SITE_KEY=${SITE_KEY}\n`;
+  const BOT_TOKEN = `123456789:${"T".repeat(35)}`;
+  const OFF = {
+    BOT_PROTECTION_ENABLED: "false",
+    SMARTCAPTCHA_SERVER_KEY: "",
+    SMARTCAPTCHA_SITE_KEY: "",
+    TELEGRAM_BOT_TOKEN: BOT_TOKEN,
+  };
+  const liveDocker = (image) => {
+    writeFileSync(
+      join(stubs, "docker"),
+      `#!/usr/bin/env bash\necho "docker $*" >> "$STUB_DIR/docker.log"\n[[ $1 == inspect ]] && { printf '%s\\n' '${image}'; exit 0; }\nexit 0\n`,
+    );
+    chmodSync(join(stubs, "docker"), 0o755);
+  };
+  const apiBox = (image = `ds-api:${SHA}`) => {
+    setRole("prod");
+    secretRelease();
+    liveDocker(image);
+    writeFileSync(apiEnv(), OLD_API, { mode: 0o600 });
+    mkdirSync(apiCompose(), { recursive: true });
+    writeFileSync(composeEnv(), OLD_COMPOSE, { mode: 0o644 });
+    const r = run("api-secret-recipient prod");
+    assert.equal(r.status, 0, r.stderr);
+  };
+  const apiCipher = async (values, { now = new Date(), cert = intakeCert(), sha = SHA } = {}) => {
+    const { encryptSecret, secretPlaintext } = await import("./data-secret.mjs");
+    return JSON.stringify({ ciphertext: encryptSecret(secretPlaintext(values, { sha, now }), cert) });
+  };
+  const noValueIn = (text) => {
+    for (const v of [BOT_TOKEN, SERVER_KEY, SITE_KEY, "db-password", "a".repeat(64)]) {
+      assert.ok(!text.includes(v), "no value in the output");
+    }
+  };
+
+  it("4153: api-secret-recipient generates ds-api-prod's own intake key, on the prod box only", () => {
+    setRole("prod");
+    const r = run("api-secret-recipient prod");
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /^-----BEGIN CERTIFICATE-----\n[\s\S]*-----END CERTIFICATE-----\n(sha256|SHA256) Fingerprint=/);
+    assert.doesNotMatch(r.stdout, /PRIVATE KEY/);
+    const subject = spawnSync("openssl", ["x509", "-in", intakeCert(), "-noout", "-subject"], { encoding: "utf8" });
+    assert.match(subject.stdout, /CN ?= ?ds-api-prod-secret-intake/);
+    assert.equal(statSync(join(root, "etc/ds-platform/secret-intake/key.pem")).mode & 0o777, 0o600);
+    for (const role of ["data", "stage"]) {
+      setRole(role);
+      assert.equal(run("api-secret-recipient prod").status, 3, role);
+    }
+    for (const command of [
+      "api-secret-recipient",
+      "api-secret-apply prod",
+      `api-secret-finish prod ${SHA} maybe`,
+      `api-secret-status stage-main ${SHA}`,
+    ]) {
+      assert.equal(run(command, { input: "" }).status, 2, command);
+    }
+  });
+
+  it("4153: api-secret-apply stages allowlisted lines of both files — replaced, appended, emptied — and starts the api-secret unit; no value printed", async () => {
+    apiBox();
+    const r = run(`api-secret-apply prod ${SHA}`, { input: await apiCipher(OFF) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(
+      r.stdout,
+      /staged: BOT_PROTECTION_ENABLED, SMARTCAPTCHA_SERVER_KEY, SMARTCAPTCHA_SITE_KEY, TELEGRAM_BOT_TOKEN\n/,
+    );
+    assert.match(r.stdout, /-api-secret started/);
+    noValueIn(r.stdout + r.stderr);
+    assert.equal(
+      readFileSync(apiStaged(), "utf8"),
+      "DATABASE_URL=postgresql://ds:db-password@192.168.0.10:5432/ds_prod\n" +
+        `AUDIT_IDENTIFIER_PEPPER=${"a".repeat(64)}\nBOT_PROTECTION_ENABLED=false\nSMARTCAPTCHA_SERVER_KEY=\nTELEGRAM_BOT_TOKEN=${BOT_TOKEN}\n`,
+    );
+    assert.equal(readFileSync(composeStaged(), "utf8"), `DEPLOY_SHA=${SHA}\nSMARTCAPTCHA_SITE_KEY=\n`);
+    assert.equal(statSync(apiStaged()).mode & 0o777, 0o600);
+    assert.equal(readFileSync(apiEnv(), "utf8"), OLD_API, "api.env changes only inside the unit");
+    assert.equal(readFileSync(composeEnv(), "utf8"), OLD_COMPOSE);
+    assert.ok(existsSync(pending()) && !existsSync(applied()));
+    assert.match(log("ds-release"), new RegExp(`check prod\nds-release-called release prod ${SHA} api-secret \\S+\n$`));
+    const script = readFileSync(join(dir, "step.sh"), "utf8");
+    assert.match(script, /docker compose up -d --force-recreate --wait --wait-timeout 300/);
+    assert.match(script, /\/v1\/health/);
+  });
+
+  it("4153: <generate> fills an absent name on the box and never prints it; it refuses a name that already has a value", async () => {
+    apiBox();
+    const { GENERATE } = await import("./data-secret.mjs");
+    const r = run(`api-secret-apply prod ${SHA}`, { input: await apiCipher({ TELEGRAM_WEBHOOK_SECRET: GENERATE }) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /generated: TELEGRAM_WEBHOOK_SECRET/);
+    const secret = readFileSync(apiStaged(), "utf8").match(/^TELEGRAM_WEBHOOK_SECRET=([0-9a-f]{64})$/m);
+    assert.ok(secret, "a 64-hex value appended");
+    assert.ok(!(r.stdout + r.stderr).includes(secret[1]));
+    assert.ok(!existsSync(composeStaged()), "the compose .env is not touched");
+
+    rmSync(apiStaged(), { force: true });
+    rmSync(pending(), { force: true });
+    const again = run(`api-secret-apply prod ${SHA}`, {
+      input: await apiCipher({ AUDIT_IDENTIFIER_PEPPER: GENERATE }, { now: new Date(Date.now() + 1000) }),
+    });
+    assert.equal(again.status, 2, again.stderr);
+    assert.match(again.stderr, /AUDIT_IDENTIFIER_PEPPER already has a value/);
+    assert.ok(!existsSync(apiStaged()) && !existsSync(pending()), "nothing staged");
+  });
+
+  it("4153: api-secret-apply refuses an off-list name, a bad shape, a stale or foreign ciphertext and stages nothing", async () => {
+    apiBox();
+    const other = join(dir, "other.pem");
+    const made = spawnSync(
+      "openssl",
+      ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", join(dir, "other.key"), "-out", other, "-subj", "/CN=other", "-days", "1"],
+      { encoding: "utf8" },
+    );
+    assert.equal(made.status, 0, made.stderr);
+    const cases = [
+      [await apiCipher({ PGBACKREST_REPO1_S3_KEY: "ABCDEFGH1234" }), /bad payload for secret-stage/],
+      [await apiCipher({ IDP_SIGN_IN_PAT: "abcdefgh1234" }), /bad payload for secret-stage/],
+      [await apiCipher({ BOT_PROTECTION_ENABLED: "yes" }), /the value of BOT_PROTECTION_ENABLED is not its allowed shape/],
+      [await apiCipher({ TELEGRAM_BOT_TOKEN: "1:has space inside the token value x" }), /TELEGRAM_BOT_TOKEN is not its allowed shape/],
+      [await apiCipher(OFF, { now: new Date(Date.now() - 7 * 3600 * 1000) }), /encrypted more than 6 h ago/],
+      [await apiCipher(OFF, { sha: "f".repeat(40) }), /encrypted for another prod SHA/],
+      [await apiCipher(OFF, { cert: other }), /does not decrypt with this box's intake key/],
+    ];
+    for (const [input, reason] of cases) {
+      const r = run(`api-secret-apply prod ${SHA}`, { input });
+      assert.equal(r.status, 2, r.stderr);
+      assert.match(r.stderr, reason);
+      noValueIn(r.stdout + r.stderr);
+      assert.ok(!existsSync(apiStaged()) && !existsSync(composeStaged()) && !existsSync(pending()), "nothing staged");
+    }
+    assert.doesNotMatch(log("ds-release"), /release prod/, "no unit started");
+  });
+
+  it("4153: api-secret-apply refuses a SHA that is not live, an unknown live SHA, a running release and a box with no intake key — before decrypting", async () => {
+    apiBox();
+    const input = await apiCipher(OFF);
+    liveDocker(`ds-api:${"f".repeat(40)}`);
+    const r1 = run(`api-secret-apply prod ${SHA}`, { input });
+    assert.equal(r1.status, 3);
+    assert.match(r1.stderr, /is not the live prod SHA ffffffffffff/);
+    liveDocker("nginx:latest");
+    assert.match(run(`api-secret-apply prod ${SHA}`, { input }).stderr, /the live prod SHA is unknown/);
+    liveDocker(`ds-api:${SHA}`);
+    const r3 = run(`api-secret-apply prod ${SHA}`, { input, env: { STUB_CHECK_RC: "3" } });
+    assert.equal(r3.status, 3, "refused while a ds-prod-* unit runs");
+    rmSync(join(root, "etc/ds-platform/secret-intake"), { recursive: true });
+    const r4 = run(`api-secret-apply prod ${SHA}`, { input });
+    assert.equal(r4.status, 3);
+    assert.match(r4.stderr, /no intake key on this box: run api-secret-recipient first/);
+    assert.ok(!existsSync(apiStaged()) && !existsSync(pending()));
+    assert.doesNotMatch(log("ds-release"), /release prod/);
+    setRole("data");
+    assert.equal(run(`api-secret-apply prod ${SHA}`, { input }).status, 3, "the prod box only");
+  });
+
+  // The api-secret unit's script, run for real: the in-container /v1/health answers
+  // with a failure while api.env holds `failValue`.
+  let apiUnitInput;
+  const runApiUnit = async (failValue, now = new Date()) => {
+    apiBox();
+    apiUnitInput = await apiCipher(OFF, { now });
+    assert.equal(run(`api-secret-apply prod ${SHA}`, { input: apiUnitInput }).status, 0);
+    rmSync(join(dir, "docker.log"), { force: true });
+    writeFileSync(
+      join(stubs, "docker"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "docker $*" >> "$STUB_DIR/docker.log"',
+        `[[ $1 == inspect ]] && { echo 'ds-api:${SHA}'; exit 0; }`,
+        `[[ $1 == exec ]] && grep -q -- '${failValue}' '${apiEnv()}' && exit 1`,
+        "exit 0",
+      ].join("\n") + "\n",
+    );
+    writeFileSync(
+      join(stubs, "install"),
+      '#!/usr/bin/env bash\nargs=(); skip=0\nfor a in "$@"; do\n  if [[ $skip == 1 ]]; then skip=0; continue; fi\n  case $a in -o|-g) skip=1 ;; *) args+=("$a") ;; esac\ndone\nexec /usr/bin/install "${args[@]}"\n',
+    );
+    chmodSync(join(stubs, "docker"), 0o755);
+    chmodSync(join(stubs, "install"), 0o755);
+    return spawnSync("bash", ["--norc", "-euo", "pipefail", join(dir, "step.sh")], {
+      env: { ...process.env, PATH: `${stubs}${delimiter}${process.env.PATH}`, STUB_DIR: dir },
+      encoding: "utf8",
+    });
+  };
+
+  it("4153: the api-secret unit swaps both files keeping their modes, recreates the live SHA's stack and checks /v1/health", async () => {
+    const r = await runApiUnit("NO-SUCH-VALUE");
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(readFileSync(apiEnv(), "utf8"), /^BOT_PROTECTION_ENABLED=false$/m);
+    assert.match(readFileSync(composeEnv(), "utf8"), /^SMARTCAPTCHA_SITE_KEY=$/m);
+    assert.equal(statSync(apiEnv()).mode & 0o777, 0o600);
+    assert.equal(statSync(composeEnv()).mode & 0o777, 0o644);
+    for (const f of [apiStaged(), composeStaged(), apiBackup(), composeBackup()]) assert.ok(!existsSync(f), f);
+    const calls = log("docker").trim().split("\n");
+    assert.equal(calls[0], "docker compose up -d --force-recreate --wait --wait-timeout 300");
+    assert.ok(
+      calls.some((l) => l.startsWith("docker exec ds-api-prod-api-1 node -e ") && l.includes("/v1/health") && l.includes(SHA)),
+      calls.join("\n"),
+    );
+    assert.ok(existsSync(applied()) && !existsSync(pending()));
+    noValueIn(r.stdout + r.stderr);
+  });
+
+  it("4153: a failed /v1/health puts both previous files back, recreates again and fails the unit", async () => {
+    const r = await runApiUnit("BOT_PROTECTION_ENABLED=false");
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /restoring the previous api\.env and compose \.env/);
+    assert.equal(readFileSync(apiEnv(), "utf8"), OLD_API);
+    assert.equal(readFileSync(composeEnv(), "utf8"), OLD_COMPOSE);
+    assert.equal(statSync(apiEnv()).mode & 0o777, 0o600);
+    assert.equal(statSync(composeEnv()).mode & 0o777, 0o644);
+    assert.ok(!existsSync(apiBackup()) && !existsSync(composeBackup()));
+    assert.equal(log("docker").split("\n").filter((l) => l.includes(" up -d ")).length, 2, "recreated twice");
+    assert.ok(existsSync(applied()) && !existsSync(pending()), "a rolled-back ciphertext is spent too");
+  });
+
+  it("4153: an applied api ciphertext is spent: a replay starts nothing, an older one is refused", async () => {
+    const before = new Date(Date.now() - 600 * 1000);
+    assert.equal((await runApiUnit("NO-SUCH-VALUE")).status, 0);
+    rmSync(join(dir, "ds-release.log"), { force: true });
+    const replay = run(`api-secret-apply prod ${SHA}`, { input: apiUnitInput });
+    assert.equal(replay.status, 0, replay.stderr);
+    assert.match(replay.stdout, /already applied/);
+    const older = run(`api-secret-apply prod ${SHA}`, {
+      input: await apiCipher({ BOT_PROTECTION_ENABLED: "true" }, { now: before }),
+    });
+    assert.equal(older.status, 2, older.stderr);
+    assert.match(older.stderr, /not newer than the last applied one/);
+    assert.ok(!existsSync(apiStaged()) && !existsSync(pending()));
+    assert.doesNotMatch(log("ds-release"), /release prod/);
+  });
+
+  it("4153: api-secret-status and api-secret-finish read and close the attempt with the local ds-release", () => {
+    apiBox();
+    rmSync(join(dir, "ds-release.log"), { force: true });
+    assert.equal(run(`api-secret-status prod ${SHA}`).status, 0);
+    assert.equal(run(`api-secret-finish prod ${SHA} succeeded`).status, 0);
+    assert.equal(
+      log("ds-release"),
+      `ds-release-called status prod ${SHA}\nds-release-called finish prod ${SHA} succeeded\n`,
+    );
   });
 
   // --- 4089: the certified PostgreSQL artifact, delivered by the Actions release -------

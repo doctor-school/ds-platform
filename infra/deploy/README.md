@@ -193,6 +193,16 @@ reload when the check fails, then proves the effective values with `sshd -T`. Th
 operator line of `deploy`'s `authorized_keys` stays byte-identical; a CI key is matched by
 its key body, so re-running with the same key changes nothing.
 
+**The box's own name (`--role prod` and `--role data`, `--from-release` included; #4152).**
+`sudo` resolves the box's hostname on every call, and only an `/etc/hosts` line answers it
+without the outside resolver. When no non-comment line of `/etc/hosts` names the hostname,
+the converge appends `127.0.1.1 <fqdn> <short>` (the short form only when it differs) and
+keeps every other byte, other tools' `# BEGIN …` / `# END …` blocks included; the write is
+a same-directory temp file carrying the file's owner and mode, then a rename. `--dry-run`
+prints `would write /etc/hosts (…)`. A hostname it cannot read refuses the run before any
+change. A rebuilt box gets the same line from cloud-init `manage_etc_hosts: localhost`
+(`api-prod.yaml`, `data-prod.yaml`). ds-stage-1 (`--role stage`) is left as it is.
+
 **sudo on prod (ds-api-prod, `--role prod`; tech spec §4 «sudo on prod», step (f)):**
 `deploy` holds one sudo right, `/etc/sudoers.d/90-ds-deploy` (the entrypoint as root, no
 argument, `SSH_ORIGINAL_COMMAND` kept through sudo's env reset), and the CI keys carry

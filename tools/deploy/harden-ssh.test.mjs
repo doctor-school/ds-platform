@@ -84,6 +84,10 @@ for (const [file, role] of Object.entries(ROLES)) {
       "the breakglass sudoers file is byte-identical",
     );
     assert.equal(cloudInitFile(yaml, "/etc/ds-platform/box-role"), `${role}\n`);
+    if (role !== "stage") {
+      // #4152: a rebuilt prod box names its own hostname in /etc/hosts, as the converge does.
+      assert.match(yaml, /^manage_etc_hosts: localhost$/m, "sudo resolves the hostname with no DNS");
+    }
     const deployUser = yaml.match(/^ {2}- name: deploy\n((?: {4}.*\n)*)/m);
     assert.ok(deployUser, "cloud-init creates deploy");
     if (role === "prod") {
@@ -180,6 +184,11 @@ const FORCED_PROD =
   'command="sudo -n /usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-user-rc';
 const HOP = 'restrict,from="192.168.0.20" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHOPKEYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ds-api-prod-hop';
 const HOP_FORCED = `command="sudo -n /usr/local/bin/ds-deploy-entrypoint",${HOP}`;
+// #4152: the data box's own name, and an /etc/hosts that already names it (the default
+// fixture, so every other case converges nothing there).
+const BOX_HOSTNAME = "8529185-kw435155.twc1.net";
+const HOSTS_NAMED = `127.0.0.1 localhost\n192.168.0.20 ${BOX_HOSTNAME} 8529185-kw435155\n`;
+const HOSTS_LINE = `127.0.1.1 ${BOX_HOSTNAME} 8529185-kw435155  # ds-platform: the box's own name (harden-ssh.sh, #4152)\n`;
 const CLOUD_INIT_USERS = "# Created by cloud-init\n\n# User rules for deploy\ndeploy ALL=(ALL) NOPASSWD:ALL\n";
 const GROUPS = "root:x:0:\nsudo:x:27:deploy\ndocker:x:999:deploy\ndeploy:x:1000:\n";
 
@@ -210,6 +219,8 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
     writeFileSync(join(root, "home/deploy/.ssh/authorized_keys"), `${OPERATOR}\n`);
     writeFileSync(join(root, "etc/passwd"), "root:x:0:0::/root:/bin/bash\ndeploy:x:1000:1000::/home/deploy:/bin/bash\n");
     writeFileSync(join(root, "etc/group"), GROUPS);
+    writeFileSync(join(root, "etc/hostname"), `${BOX_HOSTNAME}\n`);
+    writeFileSync(join(root, "etc/hosts"), HOSTS_NAMED);
     writeFileSync(join(root, "etc/sudoers.d/90-cloud-init-users"), CLOUD_INIT_USERS);
     writeFileSync(join(keys, "breakglass.pub"), `${BREAKGLASS}\n`);
     writeFileSync(join(keys, "ci-stage.pub"), `${CI_STAGE}\n`);
@@ -842,6 +853,108 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
     assert.match(r.out, /run --role prod from a breakglass session/);
     assert.equal(read("etc/sudoers.d/90-cloud-init-users"), CLOUD_INIT_USERS);
     assert.equal(read("etc/group"), GROUPS);
+  });
+
+  // #4152: sudo resolves the box's own hostname on every call; an /etc/hosts line
+  // answers it with no DNS. A BBM-style managed block of another tool stays as it is.
+  const HOSTS_UNNAMED =
+    "127.0.0.1 localhost\n::1 localhost ip6-localhost\n# BEGIN tg-egress-pin\n149.154.167.220 api.telegram.org\n# END tg-egress-pin\n";
+  const hostsCases = {
+    "--role prod": () => [prodArgs(), {}],
+    "--role data": () => {
+      dataBox();
+      return [dataArgs(), {}];
+    },
+    "--role data --from-release": () => {
+      dataBox();
+      breakglassBox();
+      return [releaseArgs(), { SUDO_USER: "deploy" }];
+    },
+    "--role prod --from-release": () => {
+      prodBox();
+      return [prodReleaseArgs(), { SUDO_USER: "root" }];
+    },
+  };
+  for (const [what, setup] of Object.entries(hostsCases)) {
+    it(`4152: ${what} appends the box's own name to /etc/hosts and keeps every other line`, () => {
+      const [args, env] = setup();
+      writeFileSync(join(root, "etc/hosts"), HOSTS_UNNAMED);
+      chmodSync(join(root, "etc/hosts"), 0o644);
+      const mode = statSync(join(root, "etc/hosts")).mode;
+      const r = run(args, env);
+      assert.equal(r.status, 0, r.out);
+      assert.equal(read("etc/hosts"), HOSTS_UNNAMED + HOSTS_LINE);
+      assert.equal(statSync(join(root, "etc/hosts")).mode, mode, "the mode is kept");
+      assert.ok(!existsSync(join(root, "etc/hosts.ds-harden.new")), "no temp file left");
+      const converged = snapshot();
+      const again = run(args, env);
+      assert.equal(again.status, 0, again.out);
+      assert.match(again.out, /nothing to change/);
+      assert.deepEqual(snapshot(), converged);
+    });
+  }
+
+  it("4152: a hostname already named on any /etc/hosts line changes nothing there", () => {
+    prodBox();
+    for (const hosts of [HOSTS_NAMED, `10.0.0.5\t${BOX_HOSTNAME.toUpperCase()}\n`, `127.0.1.1 x ${BOX_HOSTNAME} # pinned\n`]) {
+      writeFileSync(join(root, "etc/hosts"), hosts);
+      const r = run(prodReleaseArgs(), { SUDO_USER: "root" });
+      assert.equal(r.status, 0, r.out);
+      assert.doesNotMatch(r.out, /etc\/hosts/);
+      assert.equal(read("etc/hosts"), hosts);
+    }
+  });
+
+  it("4152: a name only in a comment, or as a prefix of another name, does not count", () => {
+    prodBox();
+    const hosts = `# 127.0.1.1 ${BOX_HOSTNAME}\n10.0.0.5 ${BOX_HOSTNAME}.old`;
+    writeFileSync(join(root, "etc/hosts"), hosts);
+    const r = run(prodReleaseArgs(), { SUDO_USER: "root" });
+    assert.equal(r.status, 0, r.out);
+    assert.equal(read("etc/hosts"), `${hosts}\n${HOSTS_LINE}`, "a last line without a newline gets one");
+  });
+
+  it("4152: a hostname with no domain writes no short form", () => {
+    prodBox();
+    writeFileSync(join(root, "etc/hostname"), "ds-data-prod\n");
+    writeFileSync(join(root, "etc/hosts"), "127.0.0.1 localhost\n");
+    assert.equal(run(prodReleaseArgs(), { SUDO_USER: "root" }).status, 0);
+    assert.equal(
+      read("etc/hosts"),
+      "127.0.0.1 localhost\n127.0.1.1 ds-data-prod  # ds-platform: the box's own name (harden-ssh.sh, #4152)\n",
+    );
+  });
+
+  it("4152: --dry-run names the /etc/hosts write and changes nothing", () => {
+    for (const [args, env] of [
+      [prodReleaseArgs("--dry-run"), { SUDO_USER: "root" }],
+      [releaseArgs("--dry-run"), { SUDO_USER: "deploy" }],
+    ]) {
+      prodBox();
+      dataBox({ deployKeys: `${FORCED_PROD} ${CI_PROD}\n${HOP}\n` });
+      writeFileSync(join(root, "etc/hosts"), HOSTS_UNNAMED);
+      const before = snapshot();
+      const r = run(args, env);
+      assert.equal(r.status, 0, r.out);
+      assert.match(r.out, /would write .*etc\/hosts/);
+      assert.deepEqual(snapshot(), before);
+    }
+  });
+
+  it("4152: an unreadable hostname refuses the run before anything changes", () => {
+    prodBox();
+    writeFileSync(join(root, "etc/hostname"), "");
+    const before = snapshot();
+    const r = run(prodReleaseArgs(), { SUDO_USER: "root" });
+    assert.equal(r.status, 1, r.out);
+    assert.match(r.out, /cannot read this box's hostname.*nothing was changed/);
+    assert.deepEqual(snapshot(), before);
+  });
+
+  it("4152: stage's /etc/hosts is not the converge's", () => {
+    writeFileSync(join(root, "etc/hosts"), HOSTS_UNNAMED);
+    assert.equal(run(stageArgs()).status, 0);
+    assert.equal(read("etc/hosts"), HOSTS_UNNAMED);
   });
 
   for (const [what, args] of [

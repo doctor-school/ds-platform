@@ -6,6 +6,10 @@
 
 timezone: Europe/Moscow
 
+# #4152: /etc/hosts names the box's own hostname (`127.0.1.1 <fqdn> <hostname>`), so
+# sudo resolves it with no DNS; harden-ssh.sh converges a running box to the same.
+manage_etc_hosts: localhost
+
 package_update: true
 package_upgrade: true
 packages:

@@ -159,6 +159,7 @@ const VERIFIED_REGISTRATION_TEMPLATE = [
   { eventId: golden.events.live.id, registeredAt: { days: -5 } },
   { eventId: golden.events.academyLive.id, registeredAt: { days: -5 } },
   { eventId: golden.events.pastWithRecording.id, registeredAt: { days: -40 } },
+  { eventId: golden.events.doctorCongress.id, registeredAt: { days: -5 } },
 ] as const;
 
 /**
@@ -640,9 +641,15 @@ export function buildGoldenDataset(
       registeredAt: at({ days: -40 }),
       recordStatus: "active",
     },
-    // #2805 — every pool copy holds the verified doctor's four registrations, so
-    // a worker's «Мои события», live room and recording paths see what worker 0
-    // sees. Ordinals 100 + 10·n + k stay in the named range and clear of 1..5.
+    {
+      id: golden.registrations.verifiedOnDoctorCongress.id,
+      userId: doctors.verifiedCardiologist.id,
+      eventId: golden.events.doctorCongress.id,
+      registeredAt: at({ days: -5 }),
+      recordStatus: "active",
+    },
+    // #2805 — every pool copy holds the verified doctor's named registrations.
+    // Ordinals 100 + 10·n + k stay in the named range and clear of 1..6.
     ...verifiedPool.flatMap((copy, poolIndex) =>
       VERIFIED_REGISTRATION_TEMPLATE.map((template, k) => ({
         id: goldenUuid(

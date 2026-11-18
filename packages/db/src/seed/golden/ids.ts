@@ -364,6 +364,10 @@ export const golden = Object.freeze({
     verifiedOnAcademyLive: Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.registrations, 5),
     }),
+    /** verifiedCardiologist → doctorCongress (the cabinet kind picker). */
+    verifiedOnDoctorCongress: Object.freeze({
+      id: goldenUuid(GOLDEN_GROUP.registrations, 6),
+    }),
     /** verifiedCardiologist → pastWithRecording (the «моя запись» path). */
     verifiedOnPast: Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.registrations, 4),

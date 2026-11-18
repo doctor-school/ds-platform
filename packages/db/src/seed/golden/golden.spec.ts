@@ -612,6 +612,18 @@ describe("#2063 golden seed plan", () => {
     expect(goldenReferentialIssues(dataset)).toEqual([]);
   });
 
+  it("046 EARS-6: each verified worker can open the kind picker for the doctor congress", () => {
+    for (const doctor of golden.workerPool.verifiedCardiologist) {
+      const rows = dataset.registrations.filter(
+        (row) =>
+          row.userId === doctor.id &&
+          row.eventId === golden.events.doctorCongress.id &&
+          row.recordStatus === "active",
+      );
+      expect(rows, doctor.email).toHaveLength(1);
+    }
+  });
+
   it("resolves doctor specialties through the seeded book", () => {
     const rows = resolveDoctorSpecialtyRows(
       dataset.doctorSpecialties,

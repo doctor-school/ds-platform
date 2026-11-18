@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import { boxErrorDetail } from "./lib/data-prod.mjs";
 
 import {
   REHEARSAL_CANNOT_RUN,
@@ -303,6 +304,27 @@ describe("3648: the gate run", () => {
       ok: false,
       reason: "migration 0001_a failed (SQLSTATE 42P07)",
     });
+  });
+
+  it("4139: a refusal after sudo's resolver warning still gives its fixed reason, only as the last line", async () => {
+    const refused = (stderr) =>
+      hop({
+        rehearse: [
+          new Error(`rehearse on deploy@10.0.0.2 exited 1: ${boxErrorDetail(stderr)}`),
+        ],
+      });
+    const warning =
+      "sudo: unable to resolve host 8529185-kw435155.twc1.net: Temporary failure in name resolution";
+    assert.deepEqual(
+      await gate(refused(`${warning}\nds-deploy-entrypoint: insufficient headroom (disk)\n`)),
+      { ok: false, reason: "insufficient headroom (disk)" },
+    );
+    assert.deepEqual(
+      await gate(
+        refused(`ds-deploy-entrypoint: insufficient headroom (disk)\nunexpected trailing output\n`),
+      ),
+      { ok: false, reason: REHEARSAL_CANNOT_RUN },
+    );
   });
 
   it("fails on a refused start with its fixed reason, any other refusal as cannot-run", async () => {

@@ -1091,8 +1091,20 @@ const invokedDirectly =
   process.argv[1] &&
   fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 
+export function runE2eStageCommand(argv, options) {
+  // Keep staff credentials out of every ambient child environment (including
+  // the SSH box read and gh lookup). Only the admin leg receives them explicitly.
+  const env = { ...process.env };
+  for (const name of Object.keys(process.env)) {
+    if (name.toUpperCase().startsWith("DS_STAGE_AGENT_ADMIN_")) {
+      delete process.env[name];
+    }
+  }
+  return runE2eStage(argv, { ...options, env });
+}
+
 if (invokedDirectly) {
-  runE2eStage(process.argv.slice(2)).then(
+  runE2eStageCommand(process.argv.slice(2)).then(
     (code) => {
       process.exitCode = code;
     },

@@ -1,13 +1,28 @@
 import { randomUUID } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test as base } from "@playwright/test";
 import {
-  createPublishedEvent,
+  createDraftEvent,
   eventSlugFromDetail,
   openEventLive,
+  publishEvent,
+  retireEventFromStorefronts,
   signInAsAdmin,
 } from "@ds/e2e/admin-events";
 import { signInPageThroughHost } from "@ds/e2e/host-sign-in";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
+
+const test = base.extend<{ ownedEvent: { id?: string } }>({
+  ownedEvent: async ({ page }, use) => {
+    const event: { id?: string } = {};
+    await use(event);
+    const id = event.id;
+    if (id) {
+      await test.step("Retire the event created by this run", async () => {
+        await retireEventFromStorefronts(page, id);
+      });
+    }
+  },
+});
 
 // The stage workflow publishes its reports. Keep the staff login and MFA
 // challenge out of the trace and captures, including on a failed attempt.
@@ -22,6 +37,7 @@ function required(name: string): string {
 test("Staff publishes an event on both storefronts and ends its open room", async ({
   page: admin,
   browser,
+  ownedEvent,
 }) => {
   test.setTimeout(240_000);
   const staffCredentials = {
@@ -40,11 +56,16 @@ test("Staff publishes an event on both storefronts and ends its open room", asyn
   const embedRef = "a682bead10b37ce96beef4f3a6d59b08";
 
   await signInAsAdmin(admin, staffCredentials);
-  const id = await createPublishedEvent(admin, title, {
+  const id = await createDraftEvent(admin, title, {
     startsInMs: 5 * 60_000,
     audience: "doctors",
-    rutubeEmbedRef: embedRef,
   });
+  ownedEvent.id = id;
+  await admin.getByTestId("provider").selectOption("rutube");
+  await admin.getByTestId("embed-ref").fill(embedRef);
+  await admin.getByTestId("save-stream").click();
+  await expect(admin.getByTestId("stream-ok")).toBeVisible();
+  await publishEvent(admin);
   const slug = encodeURIComponent(await eventSlugFromDetail(admin, id));
 
   const context = await browser.newContext({

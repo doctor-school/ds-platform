@@ -23,9 +23,16 @@ function mskInput(offsetMs: number): string {
     .slice(0, 16);
 }
 
+interface DraftEventOptions {
+  startsInMs?: number;
+  kindTitle?: string;
+  audience?: "experts" | "doctors";
+  venue?: string | null;
+}
+
 /**
- * A real, PUBLISHED event through the admin create form + lifecycle bar; returns
- * its id. The page must already be signed in on the admin origin.
+ * Create a draft through the admin form and return its id. The page must
+ * already be signed in on the admin origin.
  *
  * @param options.startsInMs When the event starts, relative to now (default: a
  *   week ahead). A spec that opens the event `live` passes a start inside the
@@ -36,16 +43,10 @@ function mskInput(offsetMs: number): string {
  *   the box empty). Filled by default because the 044 congress intake — the
  *   registrar's desk included — refuses an event with no venue (#2517).
  */
-export async function createPublishedEvent(
+export async function createDraftEvent(
   page: Page,
   title: string,
-  options: {
-    startsInMs?: number;
-    kindTitle?: string;
-    audience?: "experts" | "doctors";
-    venue?: string | null;
-    rutubeEmbedRef?: string;
-  } = {},
+  options: DraftEventOptions = {},
 ): Promise<string> {
   await page.goto("/events/create");
   await expect(page.getByTestId("event-form")).toBeVisible();
@@ -69,19 +70,24 @@ export async function createPublishedEvent(
   });
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 20_000 });
-  const id = page.url().split("/").pop()!;
+  return page.url().split("/").pop()!;
+}
 
-  if (options.rutubeEmbedRef) {
-    await page.getByTestId("provider").selectOption("rutube");
-    await page.getByTestId("embed-ref").fill(options.rutubeEmbedRef);
-    await page.getByTestId("save-stream").click();
-    await expect(page.getByTestId("stream-ok")).toBeVisible();
-  }
-
+export async function publishEvent(page: Page): Promise<void> {
   await page.getByTestId("action-publish").click();
   await expect(page.getByTestId("state-published")).toBeVisible({
     timeout: 20_000,
   });
+}
+
+/** Create and publish an event on the admin origin, returning its id. */
+export async function createPublishedEvent(
+  page: Page,
+  title: string,
+  options: DraftEventOptions = {},
+): Promise<string> {
+  const id = await createDraftEvent(page, title, options);
+  await publishEvent(page);
   return id;
 }
 
@@ -97,22 +103,25 @@ export async function openEventLive(page: Page): Promise<void> {
 }
 
 /**
- * Take a PUBLISHED event off every storefront through the 007 lifecycle bar
- * (published → live → ended → hidden) — the cleanup of a journey that made one.
+ * Take a journey-owned event off every storefront through the 007 lifecycle
+ * bar (published → live → ended → hidden). Drafts are already private.
  */
 export async function retireEventFromStorefronts(
   page: Page,
   eventId: string,
 ): Promise<void> {
   await page.goto(`/events/${eventId}`);
-  await expect(page.getByTestId("state-published")).toBeVisible({
-    timeout: 20_000,
-  });
-  await openEventLive(page);
-  await page.getByTestId("action-close").click();
-  await expect(page.getByTestId("state-ended")).toBeVisible({
-    timeout: 20_000,
-  });
+  const state = page.getByTestId(/^state-(draft|published|live|ended|hidden)$/);
+  await expect(state).toBeVisible({ timeout: 20_000 });
+  const current = await state.getAttribute("data-testid");
+  if (current === "state-draft" || current === "state-hidden") return;
+  if (current === "state-published") await openEventLive(page);
+  if (current === "state-live" || current === "state-published") {
+    await page.getByTestId("action-close").click();
+    await expect(page.getByTestId("state-ended")).toBeVisible({
+      timeout: 20_000,
+    });
+  }
   await page.getByTestId("action-hide").click();
   await expect(page.getByTestId("state-hidden")).toBeVisible({
     timeout: 20_000,

@@ -447,6 +447,8 @@ The runner also sets `PLAYWRIGHT_NO_COPY_PROMPT=1` for the admin leg to keep the
 MFA form out of Playwright's error-time accessibility snapshot.
 The test also uses the golden verified doctor to register for the event it just
 created, watch the room open, and observe its closure on the authenticated heartbeat.
+Fixture teardown hides the run's event via the existing admin lifecycle on success
+or failure. A draft that was never published remains private.
 
 Event slugs come from the golden set the slot was seeded with (#2996): a tier's
 `seededEnv` (`live-tiers.mjs` → `GOLDEN_SLUGS`) names the golden event carrying each shape

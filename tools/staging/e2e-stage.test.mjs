@@ -1240,6 +1240,69 @@ describe("liveLegVerdict", () => {
 describe("runE2eStage — the live legs", () => {
   const ENV = { STAGE_BASIC_AUTH_PASS: "s3cret" };
 
+  it("keeps stage admin credentials out of ambient child-process inheritance", () => {
+    const module = new URL("./e2e-stage.mjs", import.meta.url).href;
+    const child = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `
+        import assert from "node:assert/strict";
+        import { spawnSync } from "node:child_process";
+        import { runE2eStageCommand } from ${JSON.stringify(module)};
+
+        const keys = ["DS_STAGE_AGENT_ADMIN_PASSWORD", "DS_STAGE_AGENT_ADMIN_TOTP_SECRET"];
+        const probe = (overrides = {}) => {
+          const child = spawnSync(process.execPath, [
+            "-e",
+            "console.log(JSON.stringify(Object.keys(process.env).filter(key => key.startsWith('DS_STAGE_AGENT_ADMIN_')).sort()))"
+          ], { encoding: "utf8", env: { ...process.env, ...overrides } });
+          assert.equal(child.status, 0, child.stderr);
+          return JSON.parse(child.stdout);
+        };
+        let admin = false;
+        const effects = {
+          readBoxEnv: async () => {
+            assert.deepEqual(probe(), [], "SSH must inherit no stage admin credentials");
+            return { STAGE_BASE_DOMAIN: "stage.doctor.school", STAGE_BASIC_AUTH_USER: "stage" };
+          },
+          fetchHealth: async () => ({ status: 200, body: JSON.stringify({ version: "a".repeat(40) }) }),
+          now: () => new Date(),
+          log: () => {},
+          issueState: () => {
+            assert.deepEqual(probe(), [], "gh must inherit no stage admin credentials");
+            return "OPEN";
+          },
+          run: (argv, { env }) => {
+            const isAdmin = argv.includes("@ds/admin");
+            if (isAdmin) admin = true;
+            assert.deepEqual(probe(env), isAdmin ? keys : []);
+            return { status: 0 };
+          },
+          writeFile: () => {},
+          removeReport: () => {},
+          readReport: () => ({}),
+        };
+        await runE2eStageCommand(["pr-4122"], { effects });
+        assert.ok(admin);
+      `,
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          STAGE_BASE_DOMAIN: "",
+          STAGE_BASIC_AUTH_PASS: "test-basic",
+          DS_STAGE_AGENT_ADMIN_PASSWORD: "test-password",
+          DS_STAGE_AGENT_ADMIN_TOTP_SECRET: "test-factor",
+          DS_STAGE_AGENT_ADMIN_SUB: "test-subject",
+        },
+      },
+    );
+    assert.equal(child.status, 0, child.stderr);
+  });
+
   it("selects only the slot lifecycle spec in the admin flows config and scopes the staff credentials to it", async () => {
     const env = {
       ...ENV,

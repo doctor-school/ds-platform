@@ -1270,9 +1270,11 @@ describe("runE2eStage — the live legs", () => {
       admin.env.DS_STAGE_AGENT_ADMIN_TOTP_SECRET,
       env.DS_STAGE_AGENT_ADMIN_TOTP_SECRET,
     );
+    assert.equal(admin.env.PLAYWRIGHT_NO_COPY_PROMPT, "1");
     for (const call of calls.filter((call) => call !== admin)) {
       assert.equal(call.env.DS_STAGE_AGENT_ADMIN_PASSWORD, undefined);
       assert.equal(call.env.DS_STAGE_AGENT_ADMIN_TOTP_SECRET, undefined);
+      assert.equal(call.env.PLAYWRIGHT_NO_COPY_PROMPT, undefined);
     }
 
     const doctor = harness();

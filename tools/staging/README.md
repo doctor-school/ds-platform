@@ -443,6 +443,8 @@ pre-enrolled TOTP challenge. It requires `DS_STAGE_AGENT_ADMIN_PASSWORD` and
 `DS_STAGE_AGENT_ADMIN_TOTP_SECRET` in the existing Actions **Stage suite** step or
 the operator's in-memory environment. The runner forwards those two inputs only
 to the admin leg. The Playwright case keeps trace, screenshot and video capture off.
+The runner also sets `PLAYWRIGHT_NO_COPY_PROMPT=1` for the admin leg to keep the
+MFA form out of Playwright's error-time accessibility snapshot.
 The test also uses the golden verified doctor to register for the event it just
 created, watch the room open, and observe its closure on the authenticated heartbeat.
 

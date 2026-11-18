@@ -1003,6 +1003,9 @@ export async function runE2eStage(
       };
       if (tier.host === "admin") {
         legEnv.E2E_STAGE_ADMIN_EMAIL = STAGE_AGENT_ADMIN.username;
+        // Playwright's error-time ARIA snapshot is independent of trace and
+        // screenshot settings. Keep the MFA form out of published reports.
+        legEnv.PLAYWRIGHT_NO_COPY_PROMPT = "1";
         for (const name of AGENT_ADMIN_SECRET_NAMES) legEnv[name] = env[name];
       }
       const plan = planLiveLeg(tier, { ...env, ...legEnv });

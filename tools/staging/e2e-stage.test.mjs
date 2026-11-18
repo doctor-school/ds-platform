@@ -37,6 +37,7 @@ import {
 import {
   AXE_LEG_CONFIGS,
   GOLDEN_MATERIAL_SLUG,
+  GOLDEN_LEARNING_COURSE_SLUG,
   GOLDEN_SLUGS,
   HERMETIC_CONFIGS,
   GOLDEN_EVENT_SLUGS,
@@ -2018,6 +2019,20 @@ describe("golden live env (#3191) — derived from the dataset every slot is clo
         (g) => g.file === "e2e/account-canvas-structure-live.spec.ts",
       ),
     );
+  });
+
+  it("hands the doctor learning leg the golden course (#4059)", () => {
+    const ids = repoFile("packages/db/src/seed/golden/ids.ts");
+    assert.ok(ids.includes(`slug: "${GOLDEN_LEARNING_COURSE_SLUG}"`));
+    const leg = LIVE_TIERS.find((t) => t.name === "live/doctor/learning");
+    assert.equal(
+      leg.seededEnv.E2E_LEARNING_COURSE_SLUG,
+      GOLDEN_LEARNING_COURSE_SLUG,
+    );
+    const journey = leg.gated.find(
+      (g) => g.file === "e2e/learning-path-live.spec.ts",
+    );
+    assert.equal(journey.slotReason, undefined);
   });
 
   it("hands each storefront's legs its own golden slugs, an operator export winning", () => {

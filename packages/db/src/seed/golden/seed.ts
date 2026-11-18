@@ -20,6 +20,7 @@ import { goldenUuid } from "./ids.js";
 import { GOLDEN_VOLUME_ORDINAL_BASE } from "./volume.js";
 import { specialtiesMinzdrav } from "../../schema/specialties.js";
 import { users, type NewUser } from "../../schema/users.js";
+import { learningPresets } from "../../schema/learning.js";
 import { seedSpecialtiesMinzdrav } from "../specialties-minzdrav.js";
 import { buildGoldenDataset, GoldenDatasetError } from "./dataset.js";
 import { resolveGoldenSubjects, type GoldenSubjectMap } from "./idp.js";
@@ -33,6 +34,7 @@ import {
   buildGoldenSeedPlan,
   goldenReferentialIssues,
   GoldenPlanError,
+  type GoldenLearningPresetRow,
   type GoldenSeedStep,
 } from "./plan.js";
 
@@ -76,6 +78,35 @@ export async function loadSpecialtyIdByName(
     );
   }
   return new Map(rows.map((row) => [row.name, row.id]));
+}
+
+/**
+ * 024 (#4059) — reads `learning_presets` as `name → { id, values }`. The rows
+ * are inserted by migration 0065 with generated ids, so the golden course's
+ * rule layer resolves its preset here; an empty table is a hard stop (the
+ * migration did not run), never a layer without its preset.
+ */
+export async function loadLearningPresetByName(
+  db: GoldenExecutor,
+): Promise<Map<string, GoldenLearningPresetRow>> {
+  const rows: { id: string; name: string; values: unknown }[] = await db
+    .select({
+      id: learningPresets.id,
+      name: learningPresets.name,
+      values: learningPresets.values,
+    })
+    .from(learningPresets);
+  if (rows.length === 0) {
+    throw new GoldenPlanError(
+      "learning_presets is empty — migration 0065 inserts the presets the golden course applies",
+    );
+  }
+  return new Map(
+    rows.map((row) => [
+      row.name,
+      { id: row.id, values: row.values as Record<string, unknown> },
+    ]),
+  );
 }
 
 /**
@@ -280,7 +311,11 @@ export async function seedGolden(
       await seedSpecialtiesMinzdrav(tx, { now });
     }
     const specialtyIdByName = await loadSpecialtyIdByName(tx);
-    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      await loadLearningPresetByName(tx),
+    );
     const steps: { name: string; rows: number }[] = [];
     await adoptMirroredGoldenIdentities(tx, dataset.users);
     for (const step of plan) {

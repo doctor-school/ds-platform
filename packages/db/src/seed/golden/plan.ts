@@ -38,6 +38,18 @@ import {
   projects,
 } from "../../schema/taxonomy.js";
 import { users } from "../../schema/users.js";
+import {
+  learningCourses,
+  learningLessons,
+  learningModules,
+  learningOptions,
+  learningQuestions,
+  learningRuleLayers,
+  learningSchools,
+  learningSteps,
+  learningTests,
+} from "../../schema/learning.js";
+import type { GoldenLearningPresetLayer } from "./learning.js";
 import { GOLDEN_GROUP, SEED_EVENT_KINDS } from "./ids.js";
 import type {
   GoldenDataset,
@@ -151,6 +163,15 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   // then the feed card that references the material.
   "materials",
   "feed_entries",
+  "learning_schools",
+  "learning_courses",
+  "learning_modules",
+  "learning_lessons",
+  "learning_steps",
+  "learning_tests",
+  "learning_questions",
+  "learning_options",
+  "learning_rule_layers",
 ]);
 
 /**
@@ -225,10 +246,52 @@ export function resolveDirectionSpecialtyRows(
   });
 }
 
+/** A `learning_presets` row as the plan reads it: migration 0065 mints its id. */
+export interface GoldenLearningPresetRow {
+  id: string;
+  values: Record<string, unknown>;
+}
+
+/**
+ * 024 (#4059) — resolves the golden rule layers that apply a preset, exactly as
+ * `LearningAdminService.applyPreset` writes one on a layer with no own values:
+ * the preset row's values (merged over nothing) and `applied_preset_id` set.
+ * The preset is read from the database, never copied here, so the layer is
+ * what applying the preset the platform holds produces. A missing preset is a
+ * hard stop — the migrations that insert the three presets did not run.
+ */
+export function resolveLearningRuleLayerRows(
+  layers: readonly GoldenLearningPresetLayer[],
+  presetByName: ReadonlyMap<string, GoldenLearningPresetRow>,
+): Record<string, unknown>[] {
+  const missing = layers
+    .map((layer) => layer.presetName)
+    .filter((name) => !presetByName.has(name));
+  if (missing.length > 0) {
+    throw new GoldenPlanError(
+      `learning_presets does not carry: ${[...new Set(missing)].join(", ")} — run the migrations (0065 inserts the presets) before the golden seed`,
+    );
+  }
+  return layers.map((layer) => {
+    const preset = presetByName.get(layer.presetName)!;
+    return {
+      id: layer.id,
+      scopeKind: layer.scopeKind,
+      scopeId: layer.scopeId,
+      values: structuredClone(preset.values),
+      appliedPresetId: preset.id,
+      version: 1,
+      createdAt: layer.createdAt,
+      updatedAt: layer.updatedAt,
+    };
+  });
+}
+
 /** Builds the ordered, idempotent write plan for a dataset. */
 export function buildGoldenSeedPlan(
   dataset: GoldenDataset,
   specialtyIdByName: ReadonlyMap<string, string>,
+  learningPresetByName: ReadonlyMap<string, GoldenLearningPresetRow>,
 ): GoldenSeedStep[] {
   const steps: GoldenSeedStep[] = [
     step("users", users, dataset.users, ["id"]),
@@ -333,6 +396,25 @@ export function buildGoldenSeedPlan(
       dataset.feedEntries,
       ["sourcePlatform", "sourceRef"],
       { setOnceKeys: ["publishedAt"] },
+    ),
+    step("learning_schools", learningSchools, dataset.learningSchools, ["id"]),
+    step("learning_courses", learningCourses, dataset.learningCourses, ["id"]),
+    step("learning_modules", learningModules, dataset.learningModules, ["id"]),
+    step("learning_lessons", learningLessons, dataset.learningLessons, ["id"]),
+    step("learning_steps", learningSteps, dataset.learningSteps, ["id"]),
+    step("learning_tests", learningTests, dataset.learningTests, ["stepId"]),
+    step("learning_questions", learningQuestions, dataset.learningQuestions, [
+      "id",
+    ]),
+    step("learning_options", learningOptions, dataset.learningOptions, ["id"]),
+    step(
+      "learning_rule_layers",
+      learningRuleLayers,
+      resolveLearningRuleLayerRows(
+        dataset.learningRuleLayers,
+        learningPresetByName,
+      ),
+      ["scopeKind", "scopeId"],
     ),
   ];
 
@@ -526,6 +608,62 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
     dataset.feedEntries,
     "materialId",
     idSet(dataset.materials),
+  );
+
+  // 024 (#4059) — the learning course hangs together top to bottom.
+  check(
+    "learning_schools",
+    dataset.learningSchools,
+    "directionId",
+    directionIds,
+  );
+  check("learning_schools", dataset.learningSchools, "leadExpertId", expertIds);
+  check("learning_schools", dataset.learningSchools, "projectId", projectIds);
+  check(
+    "learning_courses",
+    dataset.learningCourses,
+    "schoolId",
+    idSet(dataset.learningSchools),
+  );
+  check("learning_courses", dataset.learningCourses, "projectId", projectIds);
+  const courseIds = idSet(dataset.learningCourses);
+  check("learning_modules", dataset.learningModules, "courseId", courseIds);
+  check(
+    "learning_lessons",
+    dataset.learningLessons,
+    "moduleId",
+    idSet(dataset.learningModules),
+  );
+  check("learning_lessons", dataset.learningLessons, "projectId", projectIds);
+  check(
+    "learning_steps",
+    dataset.learningSteps,
+    "lessonId",
+    idSet(dataset.learningLessons),
+  );
+  const testStepIds = new Set(
+    dataset.learningSteps
+      .filter((row) => row.type === "test")
+      .map((row) => row.id as string),
+  );
+  check("learning_tests", dataset.learningTests, "stepId", testStepIds);
+  check(
+    "learning_questions",
+    dataset.learningQuestions,
+    "testId",
+    new Set(dataset.learningTests.map((row) => row.stepId)),
+  );
+  check(
+    "learning_options",
+    dataset.learningOptions,
+    "questionId",
+    idSet(dataset.learningQuestions),
+  );
+  check(
+    "learning_rule_layers",
+    dataset.learningRuleLayers,
+    "scopeId",
+    courseIds,
   );
 
   return issues;

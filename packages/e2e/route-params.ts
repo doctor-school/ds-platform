@@ -30,8 +30,13 @@ import type { HostId } from "./hosts.js";
 /** A dynamic route pattern exactly as the Next route manifest spells it. */
 export type RoutePattern = `/${string}`;
 
-/** Resolves the value that makes a dynamic route addressable. */
-export type RouteParamResolver = () => string;
+/**
+ * Resolves the value that makes a dynamic route addressable: one value for
+ * every segment, or — for a route of several segments that name different
+ * entities (`/courses/[courseSlug]/steps/[stepId]`) — a value per segment name.
+ */
+export type RouteParamResolver = () =>
+  string | Readonly<Record<string, string>>;
 
 /**
  * The first published legal document, chosen DETERMINISTICALLY: `listDocuments()`
@@ -102,6 +107,16 @@ export const routeParams: RouteParamsMap = Object.freeze({
      * book, which every environment seeds whole (ADR-0016 §5).
      */
     "/feed/[specialty]": () => "kardiologiya",
+    /** 024 EARS-14 — the course path of the golden published course (#4059). */
+    "/courses/[courseSlug]": () => golden.learning.course.slug,
+    /**
+     * 024 EARS-15 — a step screen of that course: lesson 1's first step, which a
+     * guest opens too (the screen with its registration gate).
+     */
+    "/courses/[courseSlug]/steps/[stepId]": () => ({
+      courseSlug: golden.learning.course.slug,
+      stepId: golden.learning.steps.firstVideo.id,
+    }),
   }),
 });
 
@@ -116,7 +131,29 @@ export function resolveRoute(
 ): string | undefined {
   const resolver = routeParams[host][pattern as RoutePattern];
   if (!resolver) return undefined;
-  return pattern.replace(/\[(?:\.\.\.)?([^\]]+)\]/g, () => resolver());
+  return resolvePattern(pattern, resolver);
+}
+
+/**
+ * Substitutes a resolver's value(s) into a pattern. A per-segment resolver
+ * that leaves a segment unanswered throws, naming it — the walk reports that
+ * as a failing route, never as an address with a hole in it.
+ */
+export function resolvePattern(
+  pattern: string,
+  resolver: RouteParamResolver,
+): string {
+  const value = resolver();
+  return pattern.replace(/\[(?:\.\.\.)?([^\]]+)\]/g, (_, name: string) => {
+    if (typeof value === "string") return value;
+    const segment = value[name];
+    if (segment === undefined) {
+      throw new Error(
+        `${pattern}: the route-params entry answers no [${name}]`,
+      );
+    }
+    return segment;
+  });
 }
 
 /**

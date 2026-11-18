@@ -37,6 +37,11 @@ import { PDFDocument, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { NewExpert } from "../../schema/taxonomy.js";
 import type { GoldenDataset } from "./dataset.js";
 import {
+  GOLDEN_COURSE_MEMO_CONTENT_TYPE,
+  GOLDEN_COURSE_MEMO_KEY,
+  goldenCourseMemoPdf,
+} from "./learning.js";
+import {
   eventProgrammeKey,
   formatMskDate,
   formatMskTime,
@@ -262,6 +267,25 @@ export async function buildGoldenMediaPlan(
       contentType: PROGRAMME_CONTENT_TYPE,
       bytes: await renderProgrammePdf(spec),
       refresh: "always",
+    });
+  }
+
+  // 024 (#4059) — the golden course's download. Its bytes are text-derived and
+  // pin-invariant (`goldenCourseMemoPdf`), and its step row records their size,
+  // so an object already in the bucket is this object — `if-absent`.
+  for (const step of dataset.learningSteps) {
+    const key = step.mediaRef;
+    if (!key) continue;
+    if (key !== GOLDEN_COURSE_MEMO_KEY) {
+      throw new GoldenMediaError(
+        `learning step ${String(step.id)} carries media_ref "${key}", which is not a golden learning media key`,
+      );
+    }
+    plan.push({
+      key,
+      contentType: GOLDEN_COURSE_MEMO_CONTENT_TYPE,
+      bytes: goldenCourseMemoPdf(),
+      refresh: "if-absent",
     });
   }
 

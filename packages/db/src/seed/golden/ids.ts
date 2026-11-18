@@ -81,6 +81,16 @@ export const GOLDEN_GROUP = Object.freeze({
   // 048 EARS-11 (#3705) — the own materials and the feed cards they publish.
   materials: 0x0013,
   feedEntries: 0x0014,
+  // 024 (#4059) — the published learning course the doctor course routes and
+  // the `live/doctor/learning` slot leg open.
+  learningSchools: 0x0015,
+  learningCourses: 0x0016,
+  learningModules: 0x0017,
+  learningLessons: 0x0018,
+  learningSteps: 0x0019,
+  learningQuestions: 0x001a,
+  learningOptions: 0x001b,
+  learningRuleLayers: 0x001c,
 });
 
 /**
@@ -274,6 +284,55 @@ export const golden = Object.freeze({
     published: Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.materials, 1),
       slug: "golden-material-published",
+    }),
+  }),
+  /**
+   * 024 (#4059) — the one published course: school → course → 2 modules →
+   * lesson 1 (video → download → exit test) in module 1, lesson 2 (video →
+   * exit test) in module 2, «Путь (Duolingo)» applied on the course. The doctor
+   * route walk opens `/courses/<slug>` and lesson 1's video step; the
+   * `live/doctor/learning` slot leg opens the same slug.
+   */
+  learning: Object.freeze({
+    school: Object.freeze({
+      id: goldenUuid(GOLDEN_GROUP.learningSchools, 1),
+      slug: "golden-school-cardiology",
+    }),
+    course: Object.freeze({
+      id: goldenUuid(GOLDEN_GROUP.learningCourses, 1),
+      slug: "golden-course-path",
+    }),
+    modules: Object.freeze({
+      first: Object.freeze({ id: goldenUuid(GOLDEN_GROUP.learningModules, 1) }),
+      second: Object.freeze({
+        id: goldenUuid(GOLDEN_GROUP.learningModules, 2),
+      }),
+    }),
+    lessons: Object.freeze({
+      first: Object.freeze({ id: goldenUuid(GOLDEN_GROUP.learningLessons, 1) }),
+      second: Object.freeze({
+        id: goldenUuid(GOLDEN_GROUP.learningLessons, 2),
+      }),
+    }),
+    steps: Object.freeze({
+      firstVideo: Object.freeze({
+        id: goldenUuid(GOLDEN_GROUP.learningSteps, 1),
+      }),
+      firstDownload: Object.freeze({
+        id: goldenUuid(GOLDEN_GROUP.learningSteps, 2),
+      }),
+      firstExitTest: Object.freeze({
+        id: goldenUuid(GOLDEN_GROUP.learningSteps, 3),
+      }),
+      secondVideo: Object.freeze({
+        id: goldenUuid(GOLDEN_GROUP.learningSteps, 4),
+      }),
+      secondExitTest: Object.freeze({
+        id: goldenUuid(GOLDEN_GROUP.learningSteps, 5),
+      }),
+    }),
+    courseRules: Object.freeze({
+      id: goldenUuid(GOLDEN_GROUP.learningRuleLayers, 1),
     }),
   }),
   recordings: Object.freeze({

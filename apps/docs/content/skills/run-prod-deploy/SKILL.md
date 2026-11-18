@@ -101,6 +101,8 @@ Verify, all three:
 - **Health** — `curl -s https://api.doctor.school/v1/health | jq -r .version` equals the deployed SHA.
 - **Digest CONTENT, not the HTTP 200** (retro 2026-07-15) — grep the `release-digest` run log for the delivered product-PR count (`delivered … (N product PR(s))`). A "release done" claim is FORBIDDEN until N>0 **or** an intentional zero is explicitly acknowledged to the owner. **Any change to the notes/digest machinery** additionally requires a golden-output dry-run (`node tools/deploy/release-notes.mjs --dry-run --prev-sha <prev> --new-sha <new>`, `DELIVERY_ENV=prod`) against the ACTUAL next `prev..new` delta, eyeballed, before merge (#968 shipped an empty-digest bug a dry-run would have caught).
 
+**Box read-back, no break-glass key** — when the release changed box state (a pgBackRest or PostgreSQL image, the resolver, cloud-init, the converge), read it back: `gh workflow run prod-observe.yml --ref main -f verb=host-state`, then `pnpm prod:read <run-id>` prints both boxes' resolver, self-hostname, disk and uptime, and ds-data-prod's `pg_stat_archiver` and `pgbackrest version` (tech spec 2026-10-16 §5 «Prod read verbs.»). It needs no owner word and answers during a failed release too.
+
 Report to the owner: the deployed SHA, the verification evidence and, when the candidate moved after the word, the PRs merged after it (by number).
 
 Then the **release-milestone close-out** (#1729): when the range ships the LAST open feature of a track-release milestone (its gate Issue's `blocked_by` graph is drained), close the gate Issue and the milestone (`gh api -X PATCH repos/doctor-school/ds-platform/milestones/<n> -f state=closed`). A milestone with open features stays OPEN; roadmap dates belong to `pnpm roadmap:forecast`.

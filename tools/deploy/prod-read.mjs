@@ -5,7 +5,8 @@
 //
 // Operator (workstation):
 //   pnpm prod:read <run-id>               download + decrypt one run's artifact (a
-//                                         release-journal answer is also printed, #4067)
+//                                         release-journal (#4067) or host-state (#4144)
+//                                         answer is also printed)
 //   pnpm prod:schema-drift <run-id>       drift of a `schema` answer or a rehearsal report's
 //                                         catalogueAfter vs the tree (exit 0 / 1 drift / 2 usage)
 //   pnpm prod:read-key                    the owner's step: the read ssh key pair
@@ -32,6 +33,7 @@ import {
   answerOf,
   checkCapabilities,
   checkInputs,
+  hostStateLines,
   readKey,
   ReadError,
   readRun,
@@ -107,6 +109,9 @@ function main(argv) {
       // #4067: a release's journal is read here, on the operator's terminal.
       if (answer.verb === "release-journal")
         for (const line of releaseJournalLines(answer)) console.log(line);
+      // #4144: both boxes' host state, likewise.
+      if (answer.verb === "host-state")
+        for (const line of hostStateLines(answer)) console.log(line);
       return 0;
     }
     case "schema-drift": {

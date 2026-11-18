@@ -283,6 +283,10 @@ jobs:
           DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED }}
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Hold these as unexported shell variables until the timed suite starts.
+          declare +x stage_suite_admin_password="$DS_STAGE_AGENT_ADMIN_PASSWORD"
+          declare +x stage_suite_admin_totp="$DS_STAGE_AGENT_ADMIN_TOTP_SECRET"
+          unset DS_STAGE_AGENT_ADMIN_PASSWORD DS_STAGE_AGENT_ADMIN_TOTP_SECRET
           mkdir -p "$REPORT_DIR"
           # The suite reads the box only through the forced command's `observe`
           # verb (packages/e2e/lib/stage-observe.ts): two paths and a destination.
@@ -296,9 +300,12 @@ jobs:
           ( while :; do free -m | awk '/^Mem:/ {print $3}' >> "$mem"; sleep 5; done ) &
           sampler=$!
           set +e
+          DS_STAGE_AGENT_ADMIN_PASSWORD="$stage_suite_admin_password" \
+          DS_STAGE_AGENT_ADMIN_TOTP_SECRET="$stage_suite_admin_totp" \
           /usr/bin/time -v -o "$RUNNER_TEMP/time.log" \
             node tools/staging/e2e-stage.mjs main --expect-sha "$SHA" --report-dir "$REPORT_DIR"
           rc=$?
+          unset stage_suite_admin_password stage_suite_admin_totp
           set -e
           kill "$sampler" 2>/dev/null || true
           # Numbers only, so the job log carries them too: the step summary is not

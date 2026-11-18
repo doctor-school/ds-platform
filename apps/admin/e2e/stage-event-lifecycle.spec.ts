@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { expect, test as base } from "@playwright/test";
+import { expect, test as base, type Response } from "@playwright/test";
 import {
   createDraftEvent,
   eventSlugFromDetail,
   openEventLive,
-  publishEvent,
   retireEventFromStorefronts,
   signInAsAdmin,
 } from "@ds/e2e/admin-events";
@@ -34,6 +33,16 @@ function required(name: string): string {
   return value;
 }
 
+function eventResponse(method: string, path: string) {
+  return (response: Response): boolean =>
+    response.request().method() === method &&
+    new URL(response.url()).pathname === path;
+}
+
+function versionTag(header: string | null): string {
+  return /^(?:W\/)?"(\d+)"$/.exec(header ?? "")?.[1] ?? "absent/non-version";
+}
+
 test("Staff publishes an event on both storefronts and ends its open room", async ({
   page: admin,
   browser,
@@ -61,11 +70,51 @@ test("Staff publishes an event on both storefronts and ends its open room", asyn
     audience: "doctors",
   });
   ownedEvent.id = id;
+  const detailPath = `/v1/admin/events/${id}`;
   await admin.getByTestId("provider").selectOption("rutube");
   await admin.getByTestId("embed-ref").fill(embedRef);
-  await admin.getByTestId("save-stream").click();
+  const [stream] = await Promise.all([
+    admin.waitForResponse(eventResponse("PUT", `${detailPath}/stream`)),
+    admin.getByTestId("save-stream").click(),
+  ]);
   await expect(admin.getByTestId("stream-ok")).toBeVisible();
-  await publishEvent(admin);
+  const streamVersion = versionTag(await stream.headerValue("etag"));
+  expect(streamVersion, "saved stream event version").toMatch(/^\d+$/);
+
+  // Saving the stream advances the event version. Reopen the admin detail
+  // before publishing so the next action uses the version this operator reads.
+  const [detail] = await Promise.all([
+    admin.waitForResponse(eventResponse("GET", detailPath)),
+    admin.reload({ waitUntil: "domcontentloaded" }),
+  ]);
+  expect(detail.status(), "fresh admin detail").toBe(200);
+  const detailVersion = versionTag(await detail.headerValue("etag"));
+  expect(detailVersion, "reloaded event version").toBe(streamVersion);
+  await expect(admin.getByTestId("state-draft")).toBeVisible();
+  const publishButton = admin.getByTestId("action-publish");
+  await expect(publishButton).toBeVisible();
+  const [publish] = await Promise.all([
+    admin.waitForResponse(eventResponse("POST", `${detailPath}/publish`)),
+    publishButton.click(),
+  ]);
+  const refusalShown = publish.ok()
+    ? false
+    : await admin
+        .getByTestId("transition-error")
+        .waitFor({ state: "visible", timeout: 3_000 })
+        .then(
+          () => true,
+          () => false,
+        );
+  const publishVersion = versionTag(
+    await publish.request().headerValue("if-match"),
+  );
+  const outcome =
+    `Publish HTTP ${publish.status()}, saved stream version ${streamVersion}, ` +
+    `sent version ${publishVersion}, refusal shown ${refusalShown}`;
+  expect(publish.status(), outcome).toBe(200);
+  expect(publishVersion, outcome).toBe(detailVersion);
+  await expect(admin.getByTestId("state-published"), outcome).toBeVisible();
   const slug = encodeURIComponent(await eventSlugFromDetail(admin, id));
 
   const context = await browser.newContext({

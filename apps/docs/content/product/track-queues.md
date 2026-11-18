@@ -9,6 +9,7 @@ The order in which each product track's Issues are taken, set by the owner. The 
 
 A key is a track label without the `track:` prefix; a new track needs only a new key here and its label.
 
+<!-- prettier-ignore -->
 ```yaml
 academy:
   goal: Новая главная Академии и посты из соцсетей в ленте
@@ -16,4 +17,7 @@ academy:
 doctor:
   goal: Выложить курс — врач проходит его на сайте
   queue: [2272, 1503, 1792, 1793, 1497, 1500, 1501]
+platform:
+  goal: Ключевые действия старых фич проверяются на stage перед релизом
+  queue: [4114, 4117, 4122, 4115, 4127, 4121, 4126, 4119, 4116, 4125, 4120, 4118, 4128, 4130]
 ```

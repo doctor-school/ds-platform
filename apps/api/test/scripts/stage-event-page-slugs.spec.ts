@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 interface LiveTiersModule {
   readonly GOLDEN_SLUGS: Readonly<Record<string, string>>;
   readonly GOLDEN_MATERIAL_SLUG: string;
+  readonly GOLDEN_LEARNING_COURSE_SLUG: string;
   readonly GOLDEN_EVENT_SLUGS: { readonly live: string };
   readonly LIVE_TIERS: readonly {
     readonly name: string;
@@ -14,10 +15,15 @@ interface LiveTiersModule {
 // The staging runner's mirror of the golden slugs (#2996) — untyped plain ESM
 // tooling, loaded by URL like `packages/e2e/lib/password-policy.ts` loads its
 // `tools/staging` modules. This spec is what keeps that mirror honest.
-const { GOLDEN_SLUGS, GOLDEN_MATERIAL_SLUG, GOLDEN_EVENT_SLUGS, LIVE_TIERS } =
-  (await import(
-    new URL("../../../../tools/staging/live-tiers.mjs", import.meta.url).href
-  )) as LiveTiersModule;
+const {
+  GOLDEN_SLUGS,
+  GOLDEN_MATERIAL_SLUG,
+  GOLDEN_LEARNING_COURSE_SLUG,
+  GOLDEN_EVENT_SLUGS,
+  LIVE_TIERS,
+} = (await import(
+  new URL("../../../../tools/staging/live-tiers.mjs", import.meta.url).href
+)) as LiveTiersModule;
 
 // #2996 — a staging slot runs ONLY `seed:golden`, so the event-page live tiers
 // read golden slugs (`tools/staging/live-tiers.mjs` → `seededEnv`). This builds
@@ -159,6 +165,9 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
   // The seeded env names whose value addresses a material (048 EARS-11), not an
   // event; every other seeded name addresses an event.
   const MATERIAL_ENV = new Set(["E2E_MATERIAL_SLUG"]);
+  // The seeded env names whose value addresses a learning course (024 EARS-14),
+  // not an event.
+  const LEARNING_ENV = new Set(["E2E_LEARNING_COURSE_SLUG"]);
   // The seeded env names whose value addresses a specialty (018 EARS-8), proven
   // against the golden adjacency by `stage-feed-adjacent-env.spec.ts`.
   const SPECIALTY_ENV = new Set([
@@ -178,11 +187,17 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
       "live/academy/event-page",
       "live/doctor/event-page",
       "live/doctor/feed-live",
+      "live/doctor/learning",
       "live/doctor/room",
     ]);
     for (const tier of tiers) {
       for (const [name, value] of Object.entries(tier.seededEnv!)) {
-        if (MATERIAL_ENV.has(name) || SPECIALTY_ENV.has(name)) continue;
+        if (
+          MATERIAL_ENV.has(name) ||
+          LEARNING_ENV.has(name) ||
+          SPECIALTY_ENV.has(name)
+        )
+          continue;
         for (const slug of value.split(",")) {
           expect(verified.has(slug), `${tier.name} ${name}=${slug}`).toBe(true);
         }
@@ -205,6 +220,26 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
     );
     expect(refs).toEqual([
       `live/academy/default E2E_MATERIAL_SLUG=${GOLDEN_MATERIAL_SLUG}`,
+    ]);
+  });
+
+  it("024 EARS-14: every seeded learning-course reference is the published golden course", () => {
+    const ds = buildGoldenDataset(new Date("2026-10-22T09:00:00Z"), subjects);
+    const published = ds.learningCourses
+      .filter((c) => c.state === "published")
+      .map((c) => c.slug);
+    expect(published).toEqual([GOLDEN_LEARNING_COURSE_SLUG]);
+    expect(ds.events.map((e) => e.slug)).not.toContain(
+      GOLDEN_LEARNING_COURSE_SLUG,
+    );
+    expect(Object.values(slugs)).not.toContain(GOLDEN_LEARNING_COURSE_SLUG);
+    const refs = LIVE_TIERS.flatMap((tier) =>
+      Object.entries(tier.seededEnv ?? {})
+        .filter(([name]) => LEARNING_ENV.has(name))
+        .map(([name, value]) => `${tier.name} ${name}=${value}`),
+    );
+    expect(refs).toEqual([
+      `live/doctor/learning E2E_LEARNING_COURSE_SLUG=${GOLDEN_LEARNING_COURSE_SLUG}`,
     ]);
   });
 });

@@ -52,8 +52,18 @@ import {
   shortSha,
   slotHostnames,
 } from "./slot.mjs";
-import { GOLDEN_IDP_ACCOUNTS, GOLDEN_PASSWORD_ENV_VARS } from "./idp.mjs";
+import {
+  AGENT_ADMIN_TOTP_ENV_VAR,
+  GOLDEN_IDP_ACCOUNTS,
+  GOLDEN_PASSWORD_ENV_VARS,
+  STAGE_AGENT_ADMIN,
+} from "./idp.mjs";
 import { GOLDEN_LIVE_ENV, LIVE_TIERS } from "./live-tiers.mjs";
+
+const AGENT_ADMIN_SECRET_NAMES = [
+  STAGE_AGENT_ADMIN.passwordEnvVar,
+  AGENT_ADMIN_TOTP_ENV_VAR,
+];
 
 /** The repo root — every leg runs from there, like the scripts in `package.json`. */
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -255,6 +265,7 @@ export function slotE2eEnv({ slot, baseDomain, user, password }) {
     E2E_PORTAL_URL: `https://${hosts.academy}`,
     E2E_DOCTOR_URL: `https://${hosts.doctor}`,
     E2E_LOGIN_URL: `https://${hosts.login}`,
+    E2E_ADMIN_URL: `https://${hosts.admin}`,
     E2E_HTTP_USER: user,
     E2E_HTTP_PASS: password,
     E2E_SMS_SINK_URL: `https://sms-sink.${baseDomain}`,
@@ -782,13 +793,16 @@ export const realEffects = {
       clearTimeout(timer);
     }
   },
-  run: (argv, { env }) =>
-    spawnSync(assertShellInert(argv), {
+  run: (argv, { env }) => {
+    const inherited = { ...process.env };
+    for (const name of AGENT_ADMIN_SECRET_NAMES) delete inherited[name];
+    return spawnSync(assertShellInert(argv), {
       cwd: REPO_ROOT,
       stdio: "inherit",
       shell: true,
-      env: { ...process.env, ...env },
-    }),
+      env: { ...inherited, ...env },
+    });
+  },
   writeFile: (file, content) => {
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, content, "utf8");
@@ -987,6 +1001,10 @@ export async function runE2eStage(
         E2E_API_URL: env.E2E_API_URL || new URL(healthUrl).origin,
         ...reporting.env,
       };
+      if (tier.host === "admin") {
+        legEnv.E2E_STAGE_ADMIN_EMAIL = STAGE_AGENT_ADMIN.username;
+        for (const name of AGENT_ADMIN_SECRET_NAMES) legEnv[name] = env[name];
+      }
       const plan = planLiveLeg(tier, { ...env, ...legEnv });
       if (!plan.run) {
         live.push(liveLegVerdict({ name: tier.name, plan }));
@@ -1002,11 +1020,21 @@ export async function runE2eStage(
         }).status;
       }
       if (status === 0) {
-        const invert = [];
+        const selection = [];
+        if (tier.include) {
+          const listFile = `${reporting.dir}/selected.txt`;
+          const files = tier.include.map((file) =>
+            path.posix.relative(tier.rootDir, file),
+          );
+          effects.writeFile(listFile, `${files.join("\n")}\n`);
+          selection.push(`--test-list=${listFile}`);
+        } else {
+          selection.push("--pass-with-no-tests");
+        }
         if (plan.invertList.length > 0) {
           const listFile = `${reporting.dir}/not-run.txt`;
           effects.writeFile(listFile, `${plan.invertList.join("\n")}\n`);
-          invert.push(`--test-list-invert=${listFile}`);
+          selection.push(`--test-list-invert=${listFile}`);
         }
         status = effects.run(
           [
@@ -1015,8 +1043,7 @@ export async function runE2eStage(
             "playwright",
             "test",
             `--config=${tier.config}`,
-            "--pass-with-no-tests",
-            ...invert,
+            ...selection,
             ...reporting.args,
           ],
           { env: legEnv },

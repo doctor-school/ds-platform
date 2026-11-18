@@ -44,6 +44,7 @@ export async function createPublishedEvent(
     kindTitle?: string;
     audience?: "experts" | "doctors";
     venue?: string | null;
+    rutubeEmbedRef?: string;
   } = {},
 ): Promise<string> {
   await page.goto("/events/create");
@@ -69,6 +70,13 @@ export async function createPublishedEvent(
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   const id = page.url().split("/").pop()!;
+
+  if (options.rutubeEmbedRef) {
+    await page.getByTestId("provider").selectOption("rutube");
+    await page.getByTestId("embed-ref").fill(options.rutubeEmbedRef);
+    await page.getByTestId("save-stream").click();
+    await expect(page.getByTestId("stream-ok")).toBeVisible();
+  }
 
   await page.getByTestId("action-publish").click();
   await expect(page.getByTestId("state-published")).toBeVisible({

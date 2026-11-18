@@ -1,4 +1,5 @@
 import { type Page } from "@playwright/test";
+import { inputSecret } from "../lib/owned-registration";
 import { bootstrapAdminSession, type BootstrapResult } from "./admin-session";
 import { totpCode } from "./totp";
 
@@ -50,17 +51,19 @@ const STEP_MS = 30_000;
  *
  * @param credentials Reuse an already-bootstrapped account instead of
  *   provisioning a fresh one — the specs that assert against a specific admin
- *   pass the same `BootstrapResult` they seeded their fixtures with.
+ *   pass the same `BootstrapResult` they seeded their fixtures with. A supplied
+ *   TOTP secret requires an already-enrolled account, so a stage run can complete
+ *   a challenge without touching the account's enrollment.
  */
 export async function signInAsAdmin(
   page: Page,
-  credentials?: BootstrapResult,
+  credentials?: BootstrapResult & { totpSecret?: string },
 ): Promise<string> {
   const { email, password } =
     credentials ?? (await bootstrapAdminSession(ADMIN_ORIGIN));
 
   /** The enrollment secret, once a `/mfa/enroll` card has surfaced it. */
-  let secret: string | undefined;
+  let secret = credentials?.totpSecret;
   /** The last code submitted — never replayed within its own step. */
   let burntCode: string | undefined;
 
@@ -69,13 +72,20 @@ export async function signInAsAdmin(
 
     await page.goto("/login");
     await page.locator("#email").fill(email);
-    await page.locator("#password").fill(password);
+    const passwordInput = page.locator("#password");
+    if (credentials?.totpSecret) await inputSecret(passwordInput, password);
+    else await passwordInput.fill(password);
     await page.getByTestId("login-submit").click();
 
     try {
       // Either MFA card is a valid landing: enrollment on a first pass, the
       // challenge once an earlier attempt got as far as enrolling the factor.
-      await page.waitForURL(/\/mfa\/(enroll|challenge)/, { timeout: 8000 });
+      await page.waitForURL(
+        credentials?.totpSecret
+          ? /\/mfa\/challenge/
+          : /\/mfa\/(enroll|challenge)/,
+        { timeout: 8000 },
+      );
 
       const enrolling = /\/mfa\/enroll/.test(page.url());
       if (enrolling) {
@@ -91,10 +101,11 @@ export async function signInAsAdmin(
 
       const code = await freshCode(page, secret, burntCode);
       burntCode = code;
-      await page
+      const codeInput = page
         .getByTestId(enrolling ? "mfa-enroll-form" : "mfa-challenge-form")
-        .getByRole("textbox")
-        .fill(code);
+        .getByRole("textbox");
+      if (credentials?.totpSecret) await inputSecret(codeInput, code);
+      else await codeInput.fill(code);
 
       // The hop the local copies left unguarded: the role projection lags the
       // grant, so a login inside that window lands back on `/login` instead.

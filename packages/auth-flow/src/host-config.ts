@@ -507,6 +507,14 @@ export type AuthFlowRoutes = {
    * same plain value `@ds/room` reads; absent on a host that serves no room.
    */
   readonly room?: string;
+  /**
+   * 024 EARS-22 — this host's learning-path root (`/courses`): the course path
+   * and every step below it are a legal return target, so a guest gated on a
+   * course or step comes back to it after registration or sign-in. Absent on a
+   * host that serves no learning path (the Academy answers `/courses/*` 404,
+   * EARS-27), which therefore admits none.
+   */
+  readonly courses?: string;
 };
 
 /** The event-page shapes a host can serve — Academy `/webinars/<slug>`, doctor `/events/<slug>`. */

@@ -281,6 +281,22 @@ describe("#2027 PR 1.6: the props the mount hands the sign-up door", () => {
     expect(step.carriedTarget).toBe("/account");
   });
 
+  it("024 EARS-22: a course-step arrival from the guest gate lands back on the step and carries onward, naming no эфир to complete", async () => {
+    const target = "/courses/osnovy-prp/steps/0b6a4c1e-4f6f-4b8e-9d1a-2f0c3e5d7a90";
+    const params = { returnTo: target };
+
+    expect((await doorOf(DOCTOR_FIXTURE, params)).landing).toBe(target);
+    const step = await stepOf(DOCTOR_FIXTURE, params);
+    expect(step.landing).toBe(target);
+    expect(step.returnTarget ?? null).toBe(null);
+    expect(step.carriedTarget).toBe(target);
+    expect(readReturnEvent).not.toHaveBeenCalled();
+    // EARS-27 — the Academy serves no learning path: the target is dropped.
+    expect((await stepOf(ACADEMY_FIXTURE, params)).carriedTarget ?? null).toBe(
+      null,
+    );
+  });
+
   it("006 EARS-6: a doctor-room arrival lands back in the room and carries onward, naming no эфир to complete", async () => {
     const params = { returnTo: "/events/cardio-live/room" };
 

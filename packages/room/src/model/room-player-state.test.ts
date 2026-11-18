@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   INITIAL_PLAYER_STATE,
   PLAYER_MAX_AUTO_RETRIES,
+  PROVIDER_HAS_CLOCK,
   PROVIDER_HAS_PARENT_API,
   initialPlayerState,
   mapYouTubeErrorCode,
+  parseProviderClock,
   parseProviderSignal,
   playerReducer,
+  providerClockHandshake,
   type PlayerState,
 } from "./room-player-state";
 
@@ -282,5 +285,71 @@ describe("006 EARS-18 player-failure state machine — pure logic", () => {
     expect(restarted.status).toBe("loading");
     expect(restarted.grade).toBeNull();
     expect(restarted.embedKey).toBe(suspected.embedKey + 1);
+  });
+});
+
+// 024 EARS-10 / EARS-16 (#4011) — the playback clock a step video reports as its
+// position: only from the provider's own origin, only for a provider whose embed
+// speaks to the parent; a structurally silent provider (cdnvideo) has no clock.
+describe("024 EARS-10 provider playback clock", () => {
+  it("EARS-10: reads the YouTube infoDelivery currentTime from the YouTube origin only", () => {
+    const data = JSON.stringify({ event: "infoDelivery", info: { currentTime: 42.7 } });
+    expect(parseProviderClock("youtube", { origin: "https://www.youtube.com", data })).toBe(42.7);
+    expect(parseProviderClock("youtube", { origin: "https://evil.example", data })).toBeNull();
+    expect(
+      parseProviderClock("youtube", {
+        origin: "https://www.youtube.com",
+        data: JSON.stringify({ event: "infoDelivery", info: { playerState: 1 } }),
+      }),
+    ).toBeNull();
+  });
+
+  it("EARS-10: reads the Rutube player:currentTime time", () => {
+    expect(
+      parseProviderClock("rutube", {
+        origin: "https://rutube.ru",
+        data: JSON.stringify({ type: "player:currentTime", data: { time: 12 } }),
+      }),
+    ).toBe(12);
+    expect(
+      parseProviderClock("rutube", {
+        origin: "https://rutube.ru",
+        data: { type: "player:changeState", data: { state: "playing" } },
+      }),
+    ).toBeNull();
+  });
+
+  it("EARS-10: reads the VK timeupdate time", () => {
+    expect(
+      parseProviderClock("vk", { origin: "https://vk.com", data: { event: "timeupdate", state: "playing", time: 30.5 } }),
+    ).toBe(30.5);
+    expect(parseProviderClock("vk", { origin: "https://vk.com", data: { event: "started" } })).toBeNull();
+  });
+
+  it("EARS-10: a negative or non-finite time is no clock", () => {
+    expect(
+      parseProviderClock("rutube", {
+        origin: "https://rutube.ru",
+        data: { type: "player:currentTime", data: { time: -1 } },
+      }),
+    ).toBeNull();
+    expect(
+      parseProviderClock("rutube", {
+        origin: "https://rutube.ru",
+        data: { type: "player:currentTime", data: { time: "NaN" } },
+      }),
+    ).toBeNull();
+  });
+
+  it("EARS-10: cdnvideo has no clock and no handshake", () => {
+    expect(PROVIDER_HAS_CLOCK.cdnvideo).toBe(false);
+    expect(parseProviderClock("cdnvideo", { origin: "https://cdnvideo.ru", data: { time: 5 } })).toBeNull();
+    expect(providerClockHandshake("cdnvideo")).toBeNull();
+  });
+
+  it("EARS-10: YouTube needs the listening handshake to start reporting; the others report unasked", () => {
+    expect(JSON.parse(providerClockHandshake("youtube")!)).toMatchObject({ event: "listening" });
+    expect(providerClockHandshake("rutube")).toBeNull();
+    expect(providerClockHandshake("vk")).toBeNull();
   });
 });

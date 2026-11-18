@@ -80,6 +80,9 @@ export const DOCTOR_AUTH_FLOW = {
     // 006 EARS-6 / 020 EARS-7 — the room a guest bounced to `/login` returns to
     // (the same literal `lib/room-config.ts` states; pinned by the test).
     room: "/events/:slug/room",
+    // 024 EARS-22 — the learning path a gated guest returns to (the same
+    // literal `lib/learning.host-config.ts` states; pinned by the test).
+    courses: "/courses",
   },
   // 021 EARS-3 / LD-4 — a remembered specialty lands on ITS 018 feed
   // (`/feed/<code>`, the route `app/(storefront)/feed/[specialty]` serves); no

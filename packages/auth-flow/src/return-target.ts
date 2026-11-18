@@ -55,12 +55,29 @@ export function parseAccountReturnTarget(
   returnTo: unknown,
   accountPath: string,
 ): string | null {
+  return parsePathFamily(returnTo, accountPath);
+}
+
+/**
+ * 024 EARS-22 — the LEARNING family: this host's `routes.courses` root and every
+ * page below it (`/courses/<slug>`, `/courses/<slug>/steps/<id>`), under the same
+ * same-origin guard and segment boundary as the account family. `null` on a
+ * host that declares no learning root (the Academy, EARS-27).
+ */
+export function parseCoursesReturnTarget(
+  returnTo: unknown,
+  coursesPath: string | undefined,
+): string | null {
+  return coursesPath ? parsePathFamily(returnTo, coursesPath) : null;
+}
+
+/** A host-declared path FAMILY: the root itself or any page below it, segment-bounded. */
+function parsePathFamily(returnTo: unknown, root: string): string | null {
   const safe = parseSameOriginReturnTarget(returnTo);
   if (safe === null) return null;
   // `safe` is the guard's canonical reconstruction: an absolute-path reference
-  // with the query and the fragment already stripped, so the boundary test is a
-  // plain segment comparison and nothing can be smuggled past it in a query.
-  return safe === accountPath || safe.startsWith(`${accountPath}/`)
-    ? safe
-    : null;
+  // with the fragment stripped and only the guard's allow-listed query params
+  // kept. The boundary test compares segments, so a query never carries a path
+  // across it; a bare root with a query (`/courses?mode=online`) is refused.
+  return safe === root || safe.startsWith(`${root}/`) ? safe : null;
 }

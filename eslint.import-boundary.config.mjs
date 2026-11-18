@@ -58,6 +58,10 @@ export const PACKAGE_GRAPH = {
   // player, which needs `@ds/room/embed`, beside the event reads — so it sits
   // beside `auth-flow`, and never imports it.
   "event-page": ["schemas", "design-system", "room", "events-storefront"],
+  // The learning path (024): the doctor screens play a video step through the
+  // one recording player (`event-page`) and read the provider clock from the
+  // shared player signals (`room`); the model and server halves need no node.
+  learning: ["schemas", "design-system", "room", "event-page"],
   // The congress-submissions section (046): primitives, the shared schemas and
   // the auth-flow server helpers its route mount decides a guest with.
   "congress-submissions": ["schemas", "design-system", "auth-flow"],

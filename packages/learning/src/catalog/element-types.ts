@@ -1,0 +1,142 @@
+import {
+  LEARNING_ELEMENT_TYPES,
+  LEARNING_STEP_INPUTS,
+  LEARNING_STEP_PAYLOAD_SCHEMAS,
+  type LearningElementType,
+} from "@ds/schemas";
+import type { z } from "zod";
+import { LEARNING_COPY_RU } from "../copy/learning-copy-ru.js";
+import { VIDEO_END_WINDOW_SEC } from "./video-end-window.js";
+import type { LearningStepModel } from "../model.js";
+import type { LearningEvalContext } from "../evaluator/context.js";
+
+// 024 EARS-2 — the element-type catalog as code. Each type declares its payload
+// schema, the progress facts a client may report on it and its «viewed»
+// definition with its default; a percentage is the setting of EARS-5, never a
+// literal here. Adding a type is a code change (#4013 adds the rest).
+
+export type LearningClientFactKind = "position" | "opened";
+
+/** A type's media slot under the 012 media contract (an uploaded object, never a URL). */
+export interface LearningMediaDef {
+  /** The content types the upload accepts. */
+  contentTypes: readonly string[];
+  maxBytes: number;
+}
+
+export interface LearningElementTypeDef {
+  type: LearningElementType;
+  payloadSchema: z.ZodType;
+  /** The step's required media, or null for a type with none (EARS-4 requires it on publish). */
+  media: LearningMediaDef | null;
+  /**
+   * Whether the step plays from the 006 provider abstraction
+   * (`{ provider, embedRef }`, as a 014 recording); EARS-4 requires it on publish.
+   */
+  providerSource: boolean;
+  /** The facts `POST /v1/me/learning/facts` accepts on a step of this type. */
+  clientFacts: readonly LearningClientFactKind[];
+  /** The type's «viewed» definition over the doctor's facts and the resolved settings. */
+  viewed(step: LearningStepModel, ctx: LearningEvalContext): boolean;
+  /** The «viewed» clause of the completion sentence (EARS-17). */
+  viewedPhrase(step: LearningStepModel, ctx: LearningEvalContext): string;
+}
+
+/** The media length a `video` payload declares, in seconds. */
+export function videoDurationSec(step: LearningStepModel): number {
+  const d = step.payload["durationSec"];
+  return typeof d === "number" && d > 0 ? d : 0;
+}
+
+/**
+ * EARS-10 — the position the server accepts from a client report: never past
+ * the real media length, and never further than the server wall-clock time
+ * since the doctor's first accepted position report on the step at the
+ * fastest credited playback rate, plus the slack (both settings). The
+ * allowance is anchored on that first report, so the slack is granted once —
+ * back-to-back reports cannot add it again — and a first report
+ * (`sinceFirstSec` null) gets the slack only. The allowance never takes back
+ * an already accepted maximum. A clamped report is accepted with the clamped
+ * value, so an honest client on a bad network never fails.
+ */
+export function clampReportedPosition(input: {
+  reportedSec: number;
+  durationSec: number;
+  previousMaxSec: number;
+  sinceFirstSec: number | null;
+  maxPlaybackRate: number;
+  slackSec: number;
+}): number {
+  const allowance = Math.max(
+    input.previousMaxSec,
+    Math.max(0, input.sinceFirstSec ?? 0) * input.maxPlaybackRate +
+      input.slackSec,
+  );
+  const cap =
+    input.durationSec > 0 ? Math.min(input.durationSec, allowance) : allowance;
+  return Math.max(0, Math.min(Math.floor(input.reportedSec), Math.floor(cap)));
+}
+
+export { VIDEO_END_WINDOW_SEC } from "./video-end-window.js";
+
+/** EARS-10 — the watched share, positions capped at the real media duration. */
+export function watchedShare(duration: number, maxPosition: number): number {
+  if (duration <= 0) return 0;
+  const position = Math.min(maxPosition, duration);
+  if (position > 0 && duration - position <= VIDEO_END_WINDOW_SEC) return 100;
+  return Math.floor((position / duration) * 100);
+}
+
+export function watchedPercent(
+  step: LearningStepModel,
+  ctx: LearningEvalContext,
+): number {
+  return watchedShare(videoDurationSec(step), ctx.facts.maxPosition(step.id));
+}
+
+export const LEARNING_ELEMENT_CATALOG: Readonly<
+  Record<LearningElementType, LearningElementTypeDef>
+> = {
+  video: {
+    type: "video",
+    payloadSchema: LEARNING_STEP_PAYLOAD_SCHEMAS.video,
+    ...LEARNING_STEP_INPUTS.video,
+    clientFacts: ["position"],
+    viewed: (step, ctx) =>
+      watchedPercent(step, ctx) >= ctx.setting("viewed.video.percent", step),
+    viewedPhrase: (step, ctx) =>
+      LEARNING_COPY_RU.phrase.videoWatched(
+        ctx.setting("viewed.video.percent", step),
+      ),
+  },
+  download: {
+    type: "download",
+    payloadSchema: LEARNING_STEP_PAYLOAD_SCHEMAS.download,
+    ...LEARNING_STEP_INPUTS.download,
+    clientFacts: ["opened"],
+    viewed: (step, ctx) => ctx.facts.opened(step.id),
+    viewedPhrase: () => LEARNING_COPY_RU.phrase.downloadOpened,
+  },
+  test: {
+    type: "test",
+    payloadSchema: LEARNING_STEP_PAYLOAD_SCHEMAS.test,
+    ...LEARNING_STEP_INPUTS.test,
+    clientFacts: [],
+    viewed: (step, ctx) =>
+      ctx.facts.bestScore(step.id) >= ctx.setting("test.threshold", step),
+    viewedPhrase: (step, ctx) =>
+      LEARNING_COPY_RU.phrase.testPassed(ctx.setting("test.threshold", step)),
+  },
+};
+
+/** EARS-2 — the catalog entry, or undefined for a type it does not declare. */
+export function elementType(type: string): LearningElementTypeDef | undefined {
+  return (LEARNING_ELEMENT_TYPES as readonly string[]).includes(type)
+    ? LEARNING_ELEMENT_CATALOG[type as LearningElementType]
+    : undefined;
+}
+
+/** Whether a step is a lesson's exit test. */
+export function isExitTest(step: LearningStepModel): boolean {
+  return step.type === "test" && step.payload["kind"] === "exit";
+}

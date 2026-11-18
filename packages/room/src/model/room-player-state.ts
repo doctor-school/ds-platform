@@ -1,4 +1,4 @@
-import type { StreamProvider } from "@ds/schemas";
+import { STREAM_PROVIDER_HAS_PARENT_API, type StreamProvider } from "@ds/schemas";
 
 /**
  * 006 EARS-18 — the in-room player-failure state machine (watchdog + provider-event
@@ -105,14 +105,11 @@ export type PlayerFailureKind = "embedding-disabled" | "unavailable" | "generic"
  * structural capability constraint verified by probe. This flag therefore also decides
  * the MOUNT state ({@link initialPlayerState}): an observable provider starts in
  * `loading` under the watchdog, the silent one starts in `unverified` and is never
- * graded at all.
+ * graded at all. The values live beside the provider enum in `@ds/schemas`
+ * (`STREAM_PROVIDER_HAS_PARENT_API`) so the compiled api reads the same fact.
  */
-export const PROVIDER_HAS_PARENT_API: Record<StreamProvider, boolean> = {
-  youtube: true,
-  rutube: true,
-  vk: true,
-  cdnvideo: false,
-};
+export const PROVIDER_HAS_PARENT_API: Record<StreamProvider, boolean> =
+  STREAM_PROVIDER_HAS_PARENT_API;
 
 /** The origin each provider's embed posts messages from (postMessage source guard). */
 const PROVIDER_ORIGIN: Partial<Record<StreamProvider, string>> = {
@@ -252,6 +249,68 @@ export function parseProviderSignal(
   }
 
   return null;
+}
+
+/**
+ * 024 EARS-10 (#4011) — which providers report a playback clock to the parent.
+ * The same three that speak at all ({@link PROVIDER_HAS_PARENT_API}); cdnvideo is
+ * structurally silent, so a step video played through it has no position source.
+ */
+export const PROVIDER_HAS_CLOCK: Record<StreamProvider, boolean> = {
+  ...PROVIDER_HAS_PARENT_API,
+};
+
+/** A finite, non-negative number of seconds, or null. */
+function seconds(value: unknown): number | null {
+  const n = typeof value === "number" ? value : NaN;
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/**
+ * 024 EARS-10 (#4011) — the provider's own playback position in seconds from a
+ * postMessage, or `null` when the message carries none or is untrusted (the same
+ * origin guard as {@link parseProviderSignal}).
+ *
+ * - **youtube** — IFrame Player API `infoDelivery` `info.currentTime` (sent only
+ *   after the parent's {@link providerClockHandshake} and with `enablejsapi=1`).
+ * - **rutube** — `player:currentTime` `data.time`.
+ * - **vk** — the JS API `timeupdate` `time` (only with `js_api=1`, always set).
+ * - **cdnvideo** — none.
+ */
+export function parseProviderClock(
+  provider: StreamProvider,
+  event: { origin: string; data: unknown },
+): number | null {
+  if (!PROVIDER_HAS_CLOCK[provider]) return null;
+  if (event.origin !== PROVIDER_ORIGIN[provider]) return null;
+  const msg = asRecord(event.data);
+  if (!msg) return null;
+  if (provider === "youtube") {
+    if (msg.event !== "infoDelivery") return null;
+    const info = asRecord(msg.info);
+    return info ? seconds(info.currentTime) : null;
+  }
+  if (provider === "rutube") {
+    if (msg.type !== "player:currentTime") return null;
+    const data = asRecord(msg.data);
+    return data ? seconds(data.time) : null;
+  }
+  if (provider === "vk") {
+    const name = typeof msg.event === "string" ? msg.event : msg.type;
+    return name === "timeupdate" ? seconds(msg.time) : null;
+  }
+  return null;
+}
+
+/**
+ * The message the parent posts into a provider frame so it starts reporting its
+ * clock, or `null` when the provider reports unasked (rutube, vk) or never
+ * (cdnvideo). YouTube's IFrame API stays silent until it hears `listening`.
+ */
+export function providerClockHandshake(provider: StreamProvider): string | null {
+  return provider === "youtube"
+    ? JSON.stringify({ event: "listening", id: 1, channel: "widget" })
+    : null;
 }
 
 /** The reducer state for the player-failure machine. */

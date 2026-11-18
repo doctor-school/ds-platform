@@ -19,6 +19,7 @@
     "@ds/api-client": "workspace:*",
     "@ds/congress-submissions": "workspace:*",
     "@ds/design-system": "workspace:*",
+    "@ds/learning": "workspace:*",
     "@ds/schemas": "workspace:*",
     "@hookform/resolvers": "^5.9.1",
     "@refinedev/core": "^5.0.12",

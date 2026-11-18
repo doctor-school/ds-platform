@@ -13,7 +13,13 @@ import {
   type SQL,
 } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
-import { experts, feedEntries, feedEntryMessages, organisations } from "@ds/db";
+import {
+  experts,
+  expertPubliclyVisible,
+  feedEntries,
+  feedEntryMessages,
+  organisations,
+} from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import {
   beforeKeysetCursor,
@@ -165,12 +171,8 @@ export interface FeedCursorPosition {
   id: string;
 }
 
-/** 012 public expert: published, not retired, not editorially removed. */
-export const expertPubliclyVisible: SQL = and(
-  eq(experts.status, "published"),
-  isNull(experts.deletedAt),
-  isNull(experts.contentRemovedAt),
-)!;
+/** 012 public expert — the one predicate, owned by `@ds/db`. */
+export { expertPubliclyVisible };
 
 /**
  * 048 EARS-22, EARS-32 (#3993, #3996) — the row-local feed marks: an entry

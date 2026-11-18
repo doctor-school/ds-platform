@@ -5,3 +5,13 @@
  * @ds/design-system (ADR-0004 §6.3, 007 EARS-11 token discipline).
  */
 @import "@ds/design-system/globals.css";
+
+/*
+ * Tailwind v4 scans only what it can see. A workspace package that ships TSX
+ * source is compiled by this app's bundler but invisible to the JIT unless it is
+ * declared here — in the Docker image (no repository root for automatic source
+ * detection) its utilities vanish with every test still green. Declared per app
+ * (D15); `app/globals-tailwind-source.test.ts` keeps the list whole.
+ */
+@source "../../../packages/congress-submissions/src";
+@source "../../../packages/learning/src";

@@ -9,6 +9,7 @@
     "./ui": "./src/ui/index.ts",
     "./server": "./src/server/index.ts",
     "./embed": "./src/model/room-player.ts",
+    "./player-signals": "./src/model/room-player-state.ts",
     "./room-return": "./src/model/room-return.ts",
     "./route-table": "./src/model/room-route-table.ts",
     "./copy": "./src/copy/room-copy-ru.ts",

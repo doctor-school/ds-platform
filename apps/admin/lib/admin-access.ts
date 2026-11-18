@@ -114,6 +114,9 @@ export const ADMIN_SECTION_NAV: readonly AdminNavItem[] = [
     testId: "nav-project-output-kinds",
     labelKey: "app.nav.projectOutputKinds",
   },
+  // 024 EARS-28 / EARS-29 (#4011) — courses: lesson composition and the
+  // course's rule preset.
+  { href: "/learning", testId: "nav-learning", labelKey: "app.nav.learning" },
   { href: "/experts", testId: "nav-experts", labelKey: "app.nav.experts" },
   // 032 EARS-11 (#3492) — «Организации» take the place of «Партнёры», and the
   // role book they draw their roles from sits right beside them.

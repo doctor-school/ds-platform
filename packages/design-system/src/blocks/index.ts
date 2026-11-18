@@ -235,6 +235,13 @@ export { RecordingSpoiler } from "./recording-spoiler";
 export type { RecordingSpoilerProps } from "./recording-spoiler";
 export { EventSpeakerCard } from "./event-speaker-card";
 export type { EventSpeakerCardProps } from "./event-speaker-card";
+// 025 — the one «Очки внимания» plate over the points ledger (024 EARS-14).
+export { PointsPlate, POINTS_PLATE_KINDS } from "./points-plate";
+export type {
+  PointsPlateBalances,
+  PointsPlateKind,
+  PointsPlateProps,
+} from "./points-plate";
 export {
   EventFormatBlock,
   EventFormatRoomPanel,

@@ -52,6 +52,7 @@ const ADMIN_SECTIONS = [
   "nav-materials",
   "nav-projects",
   "nav-project-output-kinds",
+  "nav-learning",
   "nav-experts",
   "nav-organisations",
   "nav-organisation-roles",

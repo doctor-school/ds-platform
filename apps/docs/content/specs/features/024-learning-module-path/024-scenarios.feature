@@ -17,14 +17,40 @@ Feature: 024 — A doctor walks one course path of steps whose rules are setting
     And lesson 1 of the module has the steps video "Тест Лахмана" of 12 minutes, download "Сроки восстановления" of 3 minutes and the exit test "Тест по уроку 1"
     And lesson 2 of the module has the steps video "Разрыв ПКС у бегуньи" of 10 minutes and the exit test "Тест по уроку 2"
 
-  @EARS-1 @EARS-2 @EARS-3 @EARS-5 @EARS-6 @EARS-7 @EARS-9 @EARS-11 @EARS-13 @EARS-14 @EARS-26 @learning-doctor-journeys
-  Scenario: A doctor sees the course as one path of steps with computed states
+  @EARS-1 @EARS-2 @EARS-3 @EARS-5 @EARS-6 @EARS-7 @EARS-9 @EARS-11 @EARS-13 @EARS-14 @EARS-26 @learning-doctor-journeys @journey
+  Scenario: A doctor who has not started sees the course as one path of steps with computed states
     Given a doctor is signed in on the doctor storefront
+    And the doctor has done no step of the course
     When the doctor opens "/courses/ortho-basic"
     Then the path shows the section "Суставы и хрящ" with lesson 1 of 3 steps and lesson 2 of 2 steps, a club node and the document node
-    And the step "Тест Лахмана" is marked «Вы здесь» with «Продолжить»
-    And the step "Разрыв ПКС у бегуньи" is locked with «Шаг откроется, когда будут пройдены предыдущие.»
+    And no step is marked «Вы здесь»
+    And the band reads «2 урока и клуб» with «Начать курс» opening the step "Тест Лахмана"
+    And the step "Тест Лахмана" is open
+    And the step "Разрыв ПКС у бегуньи" is locked
+    And exactly one step on the path carries «Откроется после предыдущего шага», the first locked step
+    When the doctor selects the step "Разрыв ПКС у бегуньи"
+    Then its summary names «Шаг откроется, когда будут пройдены предыдущие.»
     And no text on the page contains «бесплатно» or «проект»
+
+  @EARS-14 @EARS-11 @learning-doctor-journeys @journey
+  Scenario: A doctor in progress sees one «Вы здесь» and continues from it
+    Given a doctor is signed in on the doctor storefront
+    And the doctor has done lesson 1
+    When the doctor opens "/courses/ortho-basic"
+    Then lesson 1 is done on the path
+    And the step "Разрыв ПКС у бегуньи" is the only step marked «Вы здесь»
+    And exactly one step on the path carries «Откроется после предыдущего шага», the first locked step
+    When the doctor chooses «Продолжить — урок 2»
+    Then the step "Разрыв ПКС у бегуньи" is selected and its summary offers «Продолжить»
+
+  @EARS-14 @EARS-22 @learning-guest-journeys @journey
+  Scenario: A guest sees the path with plain steps and opens a step through registration
+    Given a visitor who is not signed in
+    When the visitor opens "/courses/ortho-basic"
+    Then every step on the path is plain, with no state word and no locked reason
+    And no step is marked «Вы здесь»
+    When the visitor selects the step "Тест Лахмана"
+    Then its summary offers «Открыть», which leads to registration and back to the course path
 
   @EARS-10 @EARS-11 @EARS-12 @EARS-15 @EARS-16 @EARS-17 @EARS-18 @learning-doctor-journeys
   Scenario: A doctor completes a lesson step by step and the next lesson opens

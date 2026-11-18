@@ -9,7 +9,8 @@
     "./page": "./src/ui/event-page.tsx",
     "./host-config": "./src/host-config.ts",
     "./error": "./src/ui/event-page-error.tsx",
-    "./skeleton": "./src/ui/event-page-skeleton.tsx"
+    "./skeleton": "./src/ui/event-page-skeleton.tsx",
+    "./recording-player": "./src/ui/recording-player.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -27,6 +27,10 @@ const NOT_MEDIA_SLOTS: Readonly<Record<string, string>> = {
     "provider-scoped stream id (006 provider abstraction), not an object-storage key",
   "event_recordings.poster_ref":
     "operator-entered poster reference string; never uploaded through the taxonomy pipeline",
+  "learning_steps.embed_ref":
+    "024 video step: provider-scoped stream id (006 provider abstraction), not an object-storage key",
+  "learning_facts.item_ref":
+    "024 fact's path-item id (a lesson or module the fact is about), not a media object",
   "events.partner_ref": "free-text sponsor / partner reference (wave 1)",
   "feed_entries.source_ref":
     "048 feed source record key (the material id for an `academy` entry), not an object-storage key",

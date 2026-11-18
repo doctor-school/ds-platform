@@ -11,6 +11,7 @@ import type { AuthFlowHostConfig } from "../host-config";
 import {
   guardAuthRoute,
   isAccountReturnTarget,
+  isCoursesReturnTarget,
   isLandOnlyReturnTarget,
   isRoomReturnTarget,
   readReturnEvent,
@@ -87,9 +88,7 @@ export async function LoginRoute({
   // entry and only when it has the reference's shape; anything else is never
   // sent and the door falls back to the EARS-43 state.
   const handoffRef =
-    defaultMethod === "otp"
-      ? resolveHandoffRef(inputs.handoff)
-      : null;
+    defaultMethod === "otp" ? resolveHandoffRef(inputs.handoff) : null;
   // The guard reconstruction of the эфир arrival target — the ONE vocabulary,
   // resolved before any read, and the raw param never stands in for it.
   const safeTarget = resolveReturnTargetPath(returnTo);
@@ -149,6 +148,9 @@ export async function LoginRoute({
   // query param, so without it the door would drop a guest the room sent here on
   // the default landing instead of back in the room.
   const roomLanding = isRoomReturnTarget(config, returnTo);
+  // 024 EARS-22 — a course or step arrival (the guest gate «… Вернём вас
+  // сюда.») is one more landing of that kind: no эфир card, nothing registers.
+  const coursesLanding = isCoursesReturnTarget(config, returnTo);
 
   // 014 EARS-6 amendment 2026-09-30 (#2487) — the header's land-only эфир
   // return is one more landing of that kind: back on the event page, no эфир
@@ -157,7 +159,11 @@ export async function LoginRoute({
 
   const landsOnCarriedTarget = Boolean(
     landingTarget &&
-    (gateResolved || accountLanding || roomLanding || landOnlyLanding),
+    (gateResolved ||
+      accountLanding ||
+      roomLanding ||
+      coursesLanding ||
+      landOnlyLanding),
   );
   const landing =
     landsOnCarriedTarget && landingTarget

@@ -274,6 +274,35 @@ describe("017 #1955: /login is closed to a doctor who already has a session", ()
 });
 
 /**
+ * 024 EARS-22 — the learning guest gate («… Вернём вас сюда.») sends a guest to
+ * the doors with the course or step as the return target; signing in must land
+ * them back there, not on the LD-4 feed. No эфир card, no эфир read.
+ */
+describe("024 EARS-22: a course or step arrival signs in back onto it", () => {
+  it("024 EARS-22: a guest arriving with a course or step target signs in INTO it on the doctor host", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    for (const target of [
+      "/courses/osnovy-prp",
+      "/courses/osnovy-prp/steps/0b6a4c1e-4f6f-4b8e-9d1a-2f0c3e5d7a90",
+    ]) {
+      expect(await guestLandingOf(DOCTOR_FIXTURE, { returnTo: target })).toBe(
+        target,
+      );
+    }
+    expect(readReturnEvent).not.toHaveBeenCalled();
+  });
+
+  it("024 EARS-27: the Academy declares no learning family — the target is the default landing", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    expect(
+      await guestLandingOf(ACADEMY_FIXTURE, { returnTo: "/courses/osnovy-prp" }),
+    ).not.toBe("/courses/osnovy-prp");
+  });
+});
+
+/**
  * #1987 — `/account` survives the door.
  *
  * The 017 signed-in affordance and a direct `/account` open both send a guest to

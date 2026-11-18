@@ -214,6 +214,27 @@ export const StreamProviderSchema = z.enum(STREAM_PROVIDERS);
 export type StreamProvider = z.infer<typeof StreamProviderSchema>;
 
 /**
+ * Which provider embeds talk to the parent page at all (006 design §3.1) — and
+ * so which can report a playback clock (024 EARS-10). `cdnvideo` posts no
+ * parent-directed message of any kind (verified by probe), so a video played
+ * through it has no position source (#4055). The 006 room reads this as
+ * `PROVIDER_HAS_PARENT_API` / `PROVIDER_HAS_CLOCK` (`packages/room`, where the
+ * per-provider message parsing lives); it is kept here, beside the provider
+ * enum, because the compiled api and the learning server must read the same
+ * fact and cannot load the source-only room package.
+ */
+export const STREAM_PROVIDER_HAS_PARENT_API: Record<StreamProvider, boolean> = {
+  youtube: true,
+  rutube: true,
+  vk: true,
+  cdnvideo: false,
+};
+
+/** The providers whose embed reports a playback clock, in enum order. */
+export const STREAM_PROVIDERS_WITH_CLOCK: readonly StreamProvider[] =
+  STREAM_PROVIDERS.filter((p) => STREAM_PROVIDER_HAS_PARENT_API[p]);
+
+/**
  * A value that LOOKS LIKE a URL — a scheme separator (`://`), a leading
  * `http(s):`, or a leading `www.`. An `embedRef` must be a provider-scoped stream
  * id, never a URL to be sniffed (EARS-3, the legacy mistake recon §5), so the SSOT

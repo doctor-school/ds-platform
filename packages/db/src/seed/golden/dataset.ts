@@ -435,6 +435,24 @@ export function buildGoldenDataset(
       origin: "legacy",
       liveAt: at({ days: -365 }),
     },
+    {
+      ...baseEvent({
+        id: golden.events.doctorCongress.id,
+        slug: golden.events.doctorCongress.slug,
+        title: "Конгресс для врачей (эталон)",
+        // The cabinet selects the configured congress with the latest start (046 EARS-4).
+        startsAt: at({ days: 15 }),
+        state: "published",
+        created,
+        updated: created,
+        specialties: ["Кардиология", "Терапия"],
+      }),
+      kindId: SEED_EVENT_KINDS.kongress.id,
+      audience: "doctors",
+      participationFormat: "offline",
+      durationMin: 480,
+      venue: "Москва, тестовая площадка (эталон)",
+    },
     ...volume.events,
   ];
 
@@ -472,6 +490,11 @@ export function buildGoldenDataset(
         registrationUrl: "https://orthobio.ru/congress/registration",
         firstAuthorCounts: false,
       },
+      {
+        eventId: golden.events.doctorCongress.id,
+        registrationUrl: null,
+        firstAuthorCounts: false,
+      },
     ];
   const congressSubmissionKindSettings: GoldenDataset["congressSubmissionKindSettings"] =
     [
@@ -497,6 +520,14 @@ export function buildGoldenDataset(
         opensAt: mskDay(8),
         closesAt: mskDay(29),
         submitLimit: 3,
+        maxAgeYears: null,
+      },
+      {
+        eventId: golden.events.doctorCongress.id,
+        kind: "oral",
+        opensAt: mskDay(-7),
+        closesAt: mskDay(14),
+        submitLimit: null,
         maxAgeYears: null,
       },
     ];
@@ -731,6 +762,7 @@ export function buildGoldenDataset(
     [golden.events.pastWithRecording.id, "general-practice"],
     [golden.events.archived.id, "general-practice"],
     [golden.events.academyLive.id, "cardiology"],
+    [golden.events.doctorCongress.id, "cardiology"],
   ];
   const eventDirections: NewEventDirection[] = [
     ...namedEventDirections.map(([eventId, slug], index) => ({

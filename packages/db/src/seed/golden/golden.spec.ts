@@ -424,7 +424,9 @@ describe("#2063 golden dataset", () => {
     // scenarios page through. `live` is the doctor storefront's named room
     // (019 EARS-6 «Идёт сейчас» reads only `doctors` live events).
     const named = new Set(
-      Object.values(golden.events).map((event) => event.id as string),
+      Object.values(golden.events)
+        .filter((event) => event.id !== golden.events.doctorCongress.id)
+        .map((event) => event.id as string),
     );
     const rows = dataset.events.filter((event) =>
       named.has(event.id as string),
@@ -568,14 +570,18 @@ describe("#2063 golden seed plan", () => {
 
   it("046 EARS-1 (#2432): the upcoming эфир is a configured congress — open oral and poster, abstracts announced, all on Moscow day boundaries", () => {
     const eventId = golden.events.upcoming.id;
-    expect(dataset.congressSubmissionSettings).toEqual([
+    expect(
+      dataset.congressSubmissionSettings.filter((s) => s.eventId === eventId),
+    ).toEqual([
       expect.objectContaining({
         eventId,
         registrationUrl: expect.stringMatching(/^https:\/\//),
         firstAuthorCounts: false,
       }),
     ]);
-    const kinds = dataset.congressSubmissionKindSettings;
+    const kinds = dataset.congressSubmissionKindSettings.filter(
+      (s) => s.eventId === eventId,
+    );
     expect(kinds.map((k) => [k.eventId, k.kind])).toEqual([
       [eventId, "oral"],
       [eventId, "poster"],

@@ -1425,7 +1425,11 @@ test("4139: the detail drops control characters and is bounded to BOX_ERROR_DETA
   assert.ok(!long.includes("\uFFFD"));
 });
 
-test("4139: a stderr of only resolver warnings gives its first raw line, as before", () => {
+test("4139: a stderr of only resolver warnings gives its first line, control characters dropped", () => {
   assert.equal(boxErrorDetail(`${RESOLVER_WARNING}\n`), RESOLVER_WARNING);
+  assert.equal(
+    boxErrorDetail("sudo: unable to resolve host b\u001b[0m:\tName or service not known\u0007\nsudo: unable to resolve host c: x\n"),
+    "sudo: unable to resolve host b[0m:Name or service not known",
+  );
   assert.equal(boxErrorDetail(""), "");
 });

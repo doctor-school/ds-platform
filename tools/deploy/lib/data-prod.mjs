@@ -144,16 +144,16 @@ const SUDO_RESOLVER_WARNING = /^sudo: unable to resolve host /;
  * dropped, minus sudo's resolver warnings, the last BOX_ERROR_DETAIL_LINES non-empty
  * ones joined with ` | `, bounded to BOX_ERROR_DETAIL_MAX_BYTES (the head is cut, with
  * a leading `…`, so the last line — the error — stays). A stderr with nothing else
- * gives its first raw line.
+ * gives its first line, control characters dropped.
  */
 export function boxErrorDetail(stderr) {
-  const raw = String(stderr ?? "").trim();
-  const lines = raw
+  const cleaned = String(stderr ?? "")
+    .trim()
     .split(/\r?\n/)
     // eslint-disable-next-line no-control-regex -- the control characters are what is dropped
-    .map((line) => line.replace(/[\u0000-\u001f\u007f]/g, "").trim())
-    .filter((line) => line && !SUDO_RESOLVER_WARNING.test(line));
-  if (lines.length === 0) return raw.split(/\r?\n/)[0];
+    .map((line) => line.replace(/[\u0000-\u001f\u007f]/g, "").trim());
+  const lines = cleaned.filter((line) => line && !SUDO_RESOLVER_WARNING.test(line));
+  if (lines.length === 0) return cleaned[0];
   const detail = lines.slice(-BOX_ERROR_DETAIL_LINES).join(" | ");
   if (Buffer.byteLength(detail, "utf8") <= BOX_ERROR_DETAIL_MAX_BYTES) return detail;
   const chars = Array.from(detail);

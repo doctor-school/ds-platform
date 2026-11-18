@@ -148,7 +148,12 @@ export function rehearsalFailureReason(report) {
     : REHEARSAL_CANNOT_RUN;
 }
 
-/** The fixed reason a refused data verb names on its first stderr line, else cannot-run. */
+/**
+ * The fixed reason a refused data verb names as the last line of its error detail
+ * (`boxErrorDetail`, #4139: sudo's resolver warning dropped, lines joined with ` | `),
+ * else cannot-run. Only a REHEARSAL_REASONS entry or REHEARSAL_CANNOT_RUN is returned,
+ * never the box's text — the reason reaches the public failure note (#3439).
+ */
 function refusalReason(error) {
   const line = String(error?.message ?? "").split(/\r?\n/)[0];
   return (

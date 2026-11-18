@@ -651,10 +651,13 @@ stay on the operator path above.
   `exitCode` = the exit status (callers key on it, never the prose). The detail
   (`boxErrorDetail`) is the box's stderr minus sudo's `sudo: unable to resolve host …`
   warning, which precedes the real error when the box cannot resolve its own hostname:
-  the last 5 non-empty lines joined with `|`, control characters dropped, at most 500
-  bytes (a longer one keeps its tail behind a leading `…`); a stderr of nothing else
-  gives its first line. It lands in the run's log and the box driver's journal only —
-  a failure note's reason stays `unexpected error — see the box journal` (#3439).
+  the last 5 non-empty lines joined with a space-padded `|`, control characters
+  dropped, at most 500 bytes (a longer one keeps its tail behind a leading `…`); a
+  stderr of nothing else gives its first line, control characters dropped. It lands in
+  the run's log and the box driver's journal; a failure note's reason stays `unexpected
+error — see the box journal` (#3439), except the rehearse gate's refusal, which maps
+  the detail's last line to one of its fixed reasons (`refusalReason`,
+  `lib/rehearsal-gate.mjs`) and never carries the box's text.
   **Converge (#3320):** right after its data `install` and before `data-prod-env`, the
   `--local` run converges ds-data-prod itself (`client.converge()`), every release: the
   `converge <sha>` verb, through the forced command, installs the shipped box entrypoints

@@ -647,6 +647,14 @@ stay on the operator path above.
   workstation path's `breakglass` shell login sends it through `sudo -n`. The client asks
   `capabilities` once per run in that form only; a form that does not answer refuses the
   run (the other form is never tried) — `capabilities` must name every verb.
+  **A failed verb's error (#4139)** reads `<label> on <host> exited <rc>: <detail>`, with
+  `exitCode` = the exit status (callers key on it, never the prose). The detail
+  (`boxErrorDetail`) is the box's stderr minus sudo's `sudo: unable to resolve host …`
+  warning, which precedes the real error when the box cannot resolve its own hostname:
+  the last 5 non-empty lines joined with `|`, control characters dropped, at most 500
+  bytes (a longer one keeps its tail behind a leading `…`); a stderr of nothing else
+  gives its first line. It lands in the run's log and the box driver's journal only —
+  a failure note's reason stays `unexpected error — see the box journal` (#3439).
   **Converge (#3320):** right after its data `install` and before `data-prod-env`, the
   `--local` run converges ds-data-prod itself (`client.converge()`), every release: the
   `converge <sha>` verb, through the forced command, installs the shipped box entrypoints

@@ -660,6 +660,8 @@ import {
   DATA_REFUSED_EXIT,
   createDataProdClient,
   dataVerbCommand,
+  BOX_ERROR_DETAIL_MAX_BYTES,
+  boxErrorDetail,
   runBoxCommand,
   servesDataVerbs,
 } from "./lib/data-prod.mjs";
@@ -1368,4 +1370,62 @@ test("4097: a box command's non-zero exit carries its exit status, so a refusal 
   const error = await runBoxCommand("deploy@vpc", "check", { label: "check", spawnImpl }).catch((e) => e);
   assert.equal(error.exitCode, DATA_REFUSED_EXIT);
   assert.equal(error.message, `check on deploy@vpc exited 3: ${RUNNING_UNIT}`);
+});
+
+// --- #4139: a failed box command reports the real error, not sudo's resolver warning ---
+const RESOLVER_WARNING =
+  "sudo: unable to resolve host 8529185-kw435155.twc1.net: Temporary failure in name resolution";
+
+test("4139: a failed box command's detail drops sudo's resolver warning and keeps the real error", async () => {
+  const { EventEmitter } = await import("node:events");
+  const { setImmediate } = await import("node:timers");
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = Object.assign(new EventEmitter(), { end() {} });
+    setImmediate(() => {
+      child.stderr.emit("data", `${RESOLVER_WARNING}\nds-release: postgres-probe: container ds-postgres is not running\n`);
+      child.emit("close", 1);
+    });
+    return child;
+  };
+  const error = await runBoxCommand("deploy@vpc", "postgres-probe", { label: "probe", spawnImpl }).catch((e) => e);
+  assert.equal(error.exitCode, 1);
+  assert.equal(
+    error.message,
+    "probe on deploy@vpc exited 1: ds-release: postgres-probe: container ds-postgres is not running",
+  );
+});
+
+test("4139: the detail is the last five non-empty lines minus resolver warnings, joined with ' | '", () => {
+  const stderr = [
+    RESOLVER_WARNING,
+    "line 1",
+    "",
+    "sudo: unable to resolve host box: Name or service not known",
+    "line 2",
+    "line 3",
+    "   ",
+    "line 4",
+    "line 5",
+    "line 6",
+    "",
+  ].join("\r\n");
+  assert.equal(boxErrorDetail(stderr), "line 2 | line 3 | line 4 | line 5 | line 6");
+});
+
+test("4139: the detail drops control characters and is bounded to BOX_ERROR_DETAIL_MAX_BYTES", () => {
+  assert.equal(boxErrorDetail("a\u001b[31mred\u0007\tend\u007f"), "a[31mredend");
+  const long = boxErrorDetail(`${"x".repeat(400)}\n${"я".repeat(400)}\nthe real error`);
+  assert.ok(Buffer.byteLength(long, "utf8") <= BOX_ERROR_DETAIL_MAX_BYTES);
+  assert.equal(BOX_ERROR_DETAIL_MAX_BYTES, 500);
+  assert.ok(long.endsWith("| the real error"));
+  assert.ok(long.startsWith("…"));
+  assert.ok(!long.includes("\uFFFD"));
+});
+
+test("4139: a stderr of only resolver warnings gives its first raw line, as before", () => {
+  assert.equal(boxErrorDetail(`${RESOLVER_WARNING}\n`), RESOLVER_WARNING);
+  assert.equal(boxErrorDetail(""), "");
 });

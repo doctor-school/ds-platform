@@ -133,11 +133,46 @@ export function servesDataVerbs(stdout) {
  */
 export const DATA_REFUSED_EXIT = 3;
 
+/** The longest detail a failed box command's error carries, in UTF-8 bytes (#4139). */
+export const BOX_ERROR_DETAIL_MAX_BYTES = 500;
+const BOX_ERROR_DETAIL_LINES = 5;
+// sudo's warning when the box cannot resolve its own hostname; it precedes the real error.
+const SUDO_RESOLVER_WARNING = /^sudo: unable to resolve host /;
+
+/**
+ * The detail of a failed box command (#4139): its stderr lines with control characters
+ * dropped, minus sudo's resolver warnings, the last BOX_ERROR_DETAIL_LINES non-empty
+ * ones joined with ` | `, bounded to BOX_ERROR_DETAIL_MAX_BYTES (the head is cut, with
+ * a leading `…`, so the last line — the error — stays). A stderr with nothing else
+ * gives its first raw line.
+ */
+export function boxErrorDetail(stderr) {
+  const raw = String(stderr ?? "").trim();
+  const lines = raw
+    .split(/\r?\n/)
+    // eslint-disable-next-line no-control-regex -- the control characters are what is dropped
+    .map((line) => line.replace(/[\u0000-\u001f\u007f]/g, "").trim())
+    .filter((line) => line && !SUDO_RESOLVER_WARNING.test(line));
+  if (lines.length === 0) return raw.split(/\r?\n/)[0];
+  const detail = lines.slice(-BOX_ERROR_DETAIL_LINES).join(" | ");
+  if (Buffer.byteLength(detail, "utf8") <= BOX_ERROR_DETAIL_MAX_BYTES) return detail;
+  const chars = Array.from(detail);
+  let bytes = Buffer.byteLength("…", "utf8");
+  let start = chars.length;
+  while (start > 0) {
+    const size = Buffer.byteLength(chars[start - 1], "utf8");
+    if (bytes + size > BOX_ERROR_DETAIL_MAX_BYTES) break;
+    bytes += size;
+    start -= 1;
+  }
+  return `…${chars.slice(start).join("")}`;
+}
+
 /**
  * Run one ssh command on `host`, stdin = `input` (a string/Buffer) or the file
  * `inputFile`. Resolves to stdout; `stream` forwards the box's output live instead.
- * Rejects on a non-zero exit with the first stderr line; the error's `exitCode` is
- * that exit status.
+ * Rejects on a non-zero exit with `boxErrorDetail` of its stderr; the error's
+ * `exitCode` is that exit status.
  */
 export function runBoxCommand(
   host,
@@ -162,7 +197,7 @@ export function runBoxCommand(
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) return resolve(out.trim());
-      const detail = err.trim().split(/\r?\n/)[0];
+      const detail = boxErrorDetail(err);
       reject(
         Object.assign(
           new Error(

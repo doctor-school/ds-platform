@@ -654,8 +654,8 @@ stay on the operator path above.
   the last 5 non-empty lines joined with a space-padded `|`, control characters
   dropped, at most 500 bytes (a longer one keeps its tail behind a leading `…`); a
   stderr of nothing else gives its first line, control characters dropped. It lands in
-  the run's log and the box driver's journal; a failure note's reason stays `unexpected
-error — see the box journal` (#3439), except the rehearse gate's refusal, which maps
+  the run's log and the box driver's journal; a failure note's reason stays
+  `unexpected error — see the box journal` (#3439), except the rehearse gate's refusal, which maps
   the detail's last line to one of its fixed reasons (`refusalReason`,
   `lib/rehearsal-gate.mjs`) and never carries the box's text.
   **Converge (#3320):** right after its data `install` and before `data-prod-env`, the

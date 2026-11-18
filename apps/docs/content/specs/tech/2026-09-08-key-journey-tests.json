@@ -1701,15 +1701,6 @@
       ]
     },
     {
-      "rows": ["A1"],
-      "leg": "live/academy/default",
-      "file": "e2e/webinars-listing.e2e.spec.ts",
-      "project": "e2e",
-      "titles": [
-        ["EARS-11: with no upcoming event, the listing renders the empty-state"]
-      ]
-    },
-    {
       "rows": ["A4"],
       "leg": "live/academy/default",
       "file": "e2e/my-events.spec.ts",

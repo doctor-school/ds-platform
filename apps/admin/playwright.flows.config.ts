@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
 
 /**
  * Plain `@playwright/test` FLOW specs for the admin app — the browser half of a
@@ -32,12 +33,16 @@ import { defineConfig, devices } from "@playwright/test";
  * the ceilings themselves are proven by `abuse-limits.e2e` + `mfa-challenge.e2e`,
  * not here.
  */
+const stageLifecycle = Boolean(process.env.E2E_STAGE_ADMIN_EMAIL);
+
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "*.spec.ts",
+  testMatch: stageLifecycle ? "stage-event-lifecycle.spec.ts" : "*.spec.ts",
   // The a11y scan is its own gate with its own config and its own meaning of
   // "green"; picking it up here would report a WCAG failure as a flow failure.
-  testIgnore: "a11y/**",
+  testIgnore: stageLifecycle
+    ? "a11y/**"
+    : ["a11y/**", "stage-event-lifecycle.spec.ts"],
   fullyParallel: false,
   workers: 1,
   // One CI retry (sibling convention: portal/doctor ci configs) — the tier
@@ -52,6 +57,7 @@ export default defineConfig({
     baseURL: process.env.E2E_ADMIN_URL ?? "http://localhost:3200",
     trace: "retain-on-failure",
     locale: "ru-RU",
+    httpCredentials: standHttpCredentials(),
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 });

@@ -269,7 +269,7 @@ describe("§6.7 register execution guard (#4129)", () => {
       ],
     });
     const { effects, lines } = harness({
-      readKeyJourneys: () => [{ ...required, leg: LIVE_TIERS[0].name }],
+      readKeyJourneys: () => [{ ...required, leg: "live/academy/default" }],
       readReport: (file) => (isLiveReport(file) ? live : reportFor()),
     });
     assert.equal(
@@ -410,7 +410,7 @@ describe("parseE2eArgs", () => {
 });
 
 describe("slotE2eEnv", () => {
-  it("derives both storefront URLs from the slot name and carries the basic-auth pair", () => {
+  it("derives the admin and storefront URLs from the slot name and carries the basic-auth pair", () => {
     assert.deepEqual(
       slotE2eEnv({
         slot: "main",
@@ -422,6 +422,7 @@ describe("slotE2eEnv", () => {
         E2E_PORTAL_URL: "https://academy-main.stage.doctor.school",
         E2E_DOCTOR_URL: "https://doctor-main.stage.doctor.school",
         E2E_LOGIN_URL: "https://login-main.stage.doctor.school",
+        E2E_ADMIN_URL: "https://admin-main.stage.doctor.school",
         E2E_HTTP_USER: "stage",
         E2E_HTTP_PASS: "s3cret",
         E2E_SMS_SINK_URL: "https://sms-sink.stage.doctor.school",
@@ -979,7 +980,9 @@ function requiredNames(source) {
 
 describe("live-tier inventory (#3168) — every storefront config is classified", () => {
   it("lists every apps/{portal,doctor}/playwright*.config.ts exactly once", () => {
-    const live = LIVE_TIERS.map((t) => `${t.app}/${t.config}`);
+    const live = LIVE_TIERS.filter((tier) => tier.host !== "admin").map(
+      (tier) => `${tier.app}/${tier.config}`,
+    );
     const classified = [
       ...live,
       ...Object.keys(AXE_LEG_CONFIGS),
@@ -1236,6 +1239,114 @@ describe("liveLegVerdict", () => {
 
 describe("runE2eStage — the live legs", () => {
   const ENV = { STAGE_BASIC_AUTH_PASS: "s3cret" };
+
+  it("keeps stage admin credentials out of ambient child-process inheritance", () => {
+    const module = new URL("./e2e-stage.mjs", import.meta.url).href;
+    const child = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `
+        import assert from "node:assert/strict";
+        import { spawnSync } from "node:child_process";
+        import { runE2eStageCommand } from ${JSON.stringify(module)};
+
+        const keys = ["DS_STAGE_AGENT_ADMIN_PASSWORD", "DS_STAGE_AGENT_ADMIN_TOTP_SECRET"];
+        const probe = (overrides = {}) => {
+          const child = spawnSync(process.execPath, [
+            "-e",
+            "console.log(JSON.stringify(Object.keys(process.env).filter(key => key.startsWith('DS_STAGE_AGENT_ADMIN_')).sort()))"
+          ], { encoding: "utf8", env: { ...process.env, ...overrides } });
+          assert.equal(child.status, 0, child.stderr);
+          return JSON.parse(child.stdout);
+        };
+        let admin = false;
+        const effects = {
+          readBoxEnv: async () => {
+            assert.deepEqual(probe(), [], "SSH must inherit no stage admin credentials");
+            return { STAGE_BASE_DOMAIN: "stage.doctor.school", STAGE_BASIC_AUTH_USER: "stage" };
+          },
+          fetchHealth: async () => ({ status: 200, body: JSON.stringify({ version: "a".repeat(40) }) }),
+          now: () => new Date(),
+          log: () => {},
+          issueState: () => {
+            assert.deepEqual(probe(), [], "gh must inherit no stage admin credentials");
+            return "OPEN";
+          },
+          run: (argv, { env }) => {
+            const isAdmin = argv.includes("@ds/admin");
+            if (isAdmin) admin = true;
+            assert.deepEqual(probe(env), isAdmin ? keys : []);
+            return { status: 0 };
+          },
+          writeFile: () => {},
+          removeReport: () => {},
+          readReport: () => ({}),
+        };
+        await runE2eStageCommand(["pr-4122"], { effects });
+        assert.ok(admin);
+      `,
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          STAGE_BASE_DOMAIN: "",
+          STAGE_BASIC_AUTH_PASS: "test-basic",
+          DS_STAGE_AGENT_ADMIN_PASSWORD: "test-password",
+          DS_STAGE_AGENT_ADMIN_TOTP_SECRET: "test-factor",
+          DS_STAGE_AGENT_ADMIN_SUB: "test-subject",
+        },
+      },
+    );
+    assert.equal(child.status, 0, child.stderr);
+  });
+
+  it("selects only the slot lifecycle spec in the admin flows config and scopes the staff credentials to it", async () => {
+    const env = {
+      ...ENV,
+      DS_STAGE_AGENT_ADMIN_PASSWORD: "staff-password",
+      DS_STAGE_AGENT_ADMIN_TOTP_SECRET: "staff-factor",
+    };
+    const { calls, effects, writes } = harness();
+    await runE2eStage(["pr-4122"], { env, effects });
+    const admin = calls.find((call) => call.argv.includes("@ds/admin"));
+    assert.ok(admin, "the complete slot run must launch the admin leg");
+    assert.ok(admin.argv.includes("--config=playwright.flows.config.ts"));
+    const selection = admin.argv.find((arg) => arg.startsWith("--test-list="));
+    assert.ok(selection);
+    assert.equal(
+      writes.find(({ file }) => selection === `--test-list=${file}`)?.content,
+      "stage-event-lifecycle.spec.ts\n",
+    );
+    assert.ok(!admin.argv.includes("--pass-with-no-tests"));
+    assert.equal(
+      admin.env.E2E_ADMIN_URL,
+      "https://admin-pr-4122.stage.doctor.school",
+    );
+    assert.equal(
+      admin.env.DS_STAGE_AGENT_ADMIN_PASSWORD,
+      env.DS_STAGE_AGENT_ADMIN_PASSWORD,
+    );
+    assert.equal(
+      admin.env.DS_STAGE_AGENT_ADMIN_TOTP_SECRET,
+      env.DS_STAGE_AGENT_ADMIN_TOTP_SECRET,
+    );
+    assert.equal(admin.env.PLAYWRIGHT_NO_COPY_PROMPT, "1");
+    for (const call of calls.filter((call) => call !== admin)) {
+      assert.equal(call.env.DS_STAGE_AGENT_ADMIN_PASSWORD, undefined);
+      assert.equal(call.env.DS_STAGE_AGENT_ADMIN_TOTP_SECRET, undefined);
+      assert.equal(call.env.PLAYWRIGHT_NO_COPY_PROMPT, undefined);
+    }
+
+    const doctor = harness();
+    await runE2eStage(["pr-4122", "--project", "doctor"], {
+      env,
+      effects: doctor.effects,
+    });
+    assert.ok(!doctor.calls.some((call) => call.argv.includes("@ds/admin")));
+  });
 
   it("runs one leg per live config with the slot's URLs, IdP and Mailpit", async () => {
     const { calls, effects } = harness();

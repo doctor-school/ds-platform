@@ -103,6 +103,16 @@ const CONGRESS_SIGNUP = [
  */
 export const LIVE_TIERS = Object.freeze([
   {
+    name: "live/admin/event-lifecycle",
+    host: "admin",
+    app: "apps/admin",
+    pkg: "@ds/admin",
+    config: "playwright.flows.config.ts",
+    rootDir: "e2e",
+    include: ["e2e/stage-event-lifecycle.spec.ts"],
+    gated: [],
+  },
+  {
     name: "live/academy/default",
     host: "academy",
     app: "apps/portal",

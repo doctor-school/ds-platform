@@ -399,6 +399,7 @@ them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 
 | Leg                          | Config (`apps/<app>/…`)                                                                                         | Release check |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------- |
+| `live/admin/event-lifecycle` | `admin/playwright.flows.config.ts` (`stage-event-lifecycle.spec.ts`)                                            | yes           |
 | `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                                                   | yes           |
 | `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                                                      | yes           |
 | `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)                                  | yes           |
@@ -415,7 +416,8 @@ Each leg gets the suite env plus `IDP_ISSUER=https://id.<base domain>` and
 `MAILPIT_URL=https://mailpit.<base domain>` (hostnames, never `127.0.0.1`: Playwright
 sends no `__Host-` cookie there); the doctor configs answer the basic-auth challenge
 through `@ds/e2e/stand-http-credentials`. `--project academy|doctor` selects legs like
-the axe legs (`walks` selects none); `--no-live` drops them. The release check
+the axe legs (`walks` selects none); `--no-live` drops them. The admin leg runs on a
+full slot run without a storefront project filter. The release check
 (`--expect-sha`) runs every leg the table marks «yes» (#3191) — every leg since #3229. A
 leg kept out carries `releaseCheck: { excluded: "<reason>" }` in `live-tiers.mjs` and
 reads «no» here: the release check prints `live: <leg> not in the release check —
@@ -423,8 +425,8 @@ reads «no» here: the release check prints `live: <leg> not in the release chec
 
 **Derived for the slot (#3191).** The release check runs in Actions (`stage.yml` job
 `suite`, «The same check in Actions» above), which never reads the box: its env is the
-base domain, the basic-auth pair, the captcha test token and the four golden passwords,
-nothing else. The rest of a leg's env is therefore derived from those and from repo data
+base domain, the basic-auth pair, the captcha test token, the four golden passwords
+and the dedicated stage agent admin credentials. The rest of a leg's env is derived from those and from repo data
 only — `slotLiveStandEnv` (`e2e-stage.mjs`), one derivation for both modes (over ssh the
 golden passwords come from the box's `stage.env` under the same `DS_GOLDEN_PASSWORD_*`
 names, and no other box key is handed over); an operator export wins over each value:
@@ -435,6 +437,18 @@ names, and no other box key is handed over); an operator export wins over each v
 - the golden event slugs and `/events` paths per storefront (`GOLDEN_LIVE_ENV` in
   `live-tiers.mjs`, held against `packages/db/src/seed/golden/ids.ts`), and
   `E2E_API_URL` = the slot's api origin.
+
+The admin leg signs in as the dedicated stage agent admin and completes its
+pre-enrolled TOTP challenge. It requires `DS_STAGE_AGENT_ADMIN_PASSWORD` and
+`DS_STAGE_AGENT_ADMIN_TOTP_SECRET` in the existing Actions **Stage suite** step or
+the operator's in-memory environment. The runner forwards those two inputs only
+to the admin leg. The Playwright case keeps trace, screenshot and video capture off.
+The runner also sets `PLAYWRIGHT_NO_COPY_PROMPT=1` for the admin leg to keep the
+MFA form out of Playwright's error-time accessibility snapshot.
+The test also uses the golden verified doctor to register for the event it just
+created, watch the room open, and observe its closure on the authenticated heartbeat.
+Fixture teardown hides the run's event via the existing admin lifecycle on success
+or failure. A draft that was never published remains private.
 
 Event slugs come from the golden set the slot was seeded with (#2996): a tier's
 `seededEnv` (`live-tiers.mjs` → `GOLDEN_SLUGS`) names the golden event carrying each shape

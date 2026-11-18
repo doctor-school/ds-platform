@@ -30,8 +30,8 @@
       "gap": 4116
     },
     "D7": {
-      "status": "PARTIAL",
-      "gap": 4117
+      "status": "FULL",
+      "gap": null
     },
     "D8": {
       "status": "FULL",
@@ -1983,6 +1983,17 @@
       "titles": [
         [
           "003 EARS-28: the doctor /account card is visible at 390 px with no horizontal overflow"
+        ]
+      ]
+    },
+    {
+      "rows": ["D7"],
+      "leg": "live/doctor/event-register",
+      "file": "event-register-one-tap-live.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "005 EARS-1: a signed-in doctor registers in one tap and finds the event in My Events"
         ]
       ]
     },

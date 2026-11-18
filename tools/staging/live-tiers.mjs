@@ -399,7 +399,12 @@ export const LIVE_TIERS = Object.freeze([
     pkg: "@ds/doctor",
     config: "playwright.event-register.config.ts",
     rootDir: "e2e",
+    seededEnv: { E2E_DOCTOR_ONE_TAP_LIVE_SLUG: GOLDEN_SLUGS.doctorUpcoming },
     gated: [
+      {
+        file: "e2e/event-register-one-tap-live.spec.ts",
+        requires: [URL_DOCTOR, "MAILPIT_URL", "E2E_DOCTOR_ONE_TAP_LIVE_SLUG"],
+      },
       {
         file: "e2e/event-register-one-tap.spec.ts",
         slotReason:

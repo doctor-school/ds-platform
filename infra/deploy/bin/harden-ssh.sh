@@ -18,11 +18,12 @@
 # --role prod --from-release (#3646; spec §4 «The read key on ds-api-prod») is the
 # prod release's converge of the read key on ds-api-prod, run as root by the release
 # driver from the same root-owned copy. After the same break-glass checks it
-# converges exactly two things and removes no other line: the read line of deploy's
+# converges exactly these and removes no other line: the read line of deploy's
 # authorized_keys, rewritten from the installed tree's infra/deploy/keys/prod-read.pub
 # behind `command="sudo -n /usr/local/bin/ds-read-entrypoint",restrict` (a missing or
 # malformed file refuses the run, changing nothing), and
-# /etc/sudoers.d/90-ds-deploy (PROD_DEPLOY_SUDOERS_CONTENT, `visudo -cf` first).
+# /etc/sudoers.d/90-ds-deploy (PROD_DEPLOY_SUDOERS_CONTENT, `visudo -cf` first), and
+# the box's own name in /etc/hosts (below).
 #
 # It converges:
 #   - /etc/ssh/sshd_config.d/10-ds-hardening.conf (the drop-in below);
@@ -47,6 +48,9 @@
 #     unless the installed entrypoint serves the data verbs and deploy holds exactly
 #     one hop line; data takes no --ci-pubkey (no CI key reaches the data box);
 #   - /etc/ds-platform/box-role = the role;
+#   - prod and data, --from-release included (#4152): /etc/hosts names the box's
+#     hostname — `127.0.1.1 <fqdn> <short>` appended when no line names it, every
+#     other line kept — so sudo resolves it with no DNS;
 #   - fail2ban and unattended-upgrades enabled and running.
 # `sshd -t` runs BEFORE `systemctl reload ssh`; on failure the sshd files are
 # restored and nothing is reloaded.
@@ -71,6 +75,9 @@ PASSWD=$ROOT/etc/passwd
 GROUP=$ROOT/etc/group
 SUDOERS_D=$ROOT/etc/sudoers.d
 DEPLOY_SUDOERS=$SUDOERS_D/90-ds-deploy
+HOSTS=$ROOT/etc/hosts
+# The box's hostname: `hostname` on a box, this file under HARDEN_ROOT (the tests).
+HOSTNAME_FILE=$ROOT/etc/hostname
 
 # The forced command of a CI key. On prod the entrypoint runs as root through the
 # one sudo right deploy holds there (DEPLOY_SUDOERS_CONTENT below); on stage deploy
@@ -223,6 +230,23 @@ if [[ $role == prod && $from_release == 1 ]]; then
   want_read="$READ_FORCED $read_key"
 fi
 
+# --- prod, data: the box's own name, before anything changes (#4152) -------------------
+# sudo resolves the box's hostname on every call; with `hosts: files dns` a line of
+# /etc/hosts answers it locally, so no privileged step waits on the outside resolver.
+if [[ $role == prod || $role == data ]]; then
+  if [[ -n $ROOT ]]; then
+    box_hostname=$(tr -d '[:space:]' <"$HOSTNAME_FILE" 2>/dev/null) || box_hostname=
+  else
+    box_hostname=$(hostname) || box_hostname=
+  fi
+  [[ $box_hostname =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] ||
+    fail "cannot read this box's hostname (got '$box_hostname'); nothing was changed"
+  box_short=${box_hostname%%.*}
+  hosts_line="127.0.1.1 $box_hostname"
+  [[ $box_short == "$box_hostname" ]] || hosts_line+=" $box_short"
+  hosts_line+="  # ds-platform: the box's own name (harden-ssh.sh, #4152)"
+fi
+
 sudoers_line='breakglass ALL=(ALL) NOPASSWD:ALL
 '
 
@@ -281,6 +305,32 @@ converge_file() {
   return 0
 }
 
+# /etc/hosts names the box's hostname (#4152): when no non-comment line carries it as
+# a name, one line is appended; every other byte stays (other tools' managed blocks,
+# BBM's `# BEGIN …` / `# END …` ones included). Same-directory temp file carrying the
+# original owner and mode, then a rename.
+converge_hosts() {
+  if [[ -f $HOSTS ]] && awk -v h="$box_hostname" '
+      { sub(/#.*/, ""); for (i = 2; i <= NF; i++) if (tolower($i) == tolower(h)) found = 1 }
+      END { exit !found }' "$HOSTS"; then
+    return 0
+  fi
+  note "write $HOSTS (127.0.1.1 $box_hostname)"
+  [[ $dry_run == 1 ]] && return 0
+  local tmp=$HOSTS.ds-harden.new
+  if [[ -f $HOSTS ]]; then
+    cp -p "$HOSTS" "$tmp"
+    # A last line with no newline gets one, so the new line stands on its own.
+    [[ ! -s $HOSTS || $(tail -c1 "$HOSTS" | wc -l) == 1 ]] || printf '\n' >>"$tmp"
+  else
+    mkdir -p "$(dirname "$HOSTS")"
+    (umask 022 && : >"$tmp")
+    chmod 0644 "$tmp"
+  fi
+  printf '%s\n' "$hosts_line" >>"$tmp"
+  mv -f "$tmp" "$HOSTS"
+}
+
 # A sudoers.d file: checked with `visudo -cf` before it is in place, then renamed in
 # (sudo skips a name with a dot, so the `.ds-harden.new` file is never read).
 install_sudoers() {
@@ -337,6 +387,7 @@ if [[ $role == prod && $from_release == 1 ]]; then
       mv -f "$DEPLOY_KEYS.ds-harden.new" "$DEPLOY_KEYS"
     fi
   fi
+  converge_hosts
   [[ $changed == 1 ]] || say "nothing to change"
   exit 0
 fi
@@ -466,6 +517,9 @@ fi
 
 # --- box role -------------------------------------------------------------------------
 converge_file "$BOX_ROLE_FILE" 0644 "$role"$'\n' || true
+
+# --- prod, data: the box's own name in /etc/hosts (#4152) -------------------------------
+[[ $role != prod && $role != data ]] || converge_hosts
 
 # --- fail2ban, unattended-upgrades ----------------------------------------------------
 for unit in fail2ban unattended-upgrades; do

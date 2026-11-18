@@ -46,8 +46,8 @@
       "gap": 4118
     },
     "D11": {
-      "status": "NONE",
-      "gap": 4115
+      "status": "FULL",
+      "gap": null
     },
     "D12": {
       "status": "FULL",
@@ -1983,6 +1983,17 @@
       "titles": [
         [
           "003 EARS-28: the doctor /account card is visible at 390 px with no horizontal overflow"
+        ]
+      ]
+    },
+    {
+      "rows": ["D11"],
+      "leg": "live/doctor/congress",
+      "file": "congress-submission-stage.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "046 EARS-9: a doctor registers for an event and submits an oral talk from the cabinet"
         ]
       ]
     },

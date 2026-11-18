@@ -171,6 +171,14 @@ branch database name before connecting and again inside the transaction, and
 never deletes data. Its refusal checks run with
 `node --test apps/doctor/e2e/support/events-live-phase.test.mjs`.
 
+## Live room on the release stand (006 EARS-2 and EARS-3)
+
+`pnpm e2e:stage pr-<N> --project doctor --no-axe` runs `live/doctor/room`.
+The slot supplies two golden doctors registered for the same live event and
+its RuTube stream configuration. `room-player-chat-live.spec.ts` checks the
+mounted player and uses the real chat composer to deliver a message between
+the doctors' independent sessions.
+
 ## Storefront mobile and accessibility matrix (017 EARS-14)
 
 `e2e/mobile.spec.ts` sweeps the release-1 017 surfaces on `/` — the shell header

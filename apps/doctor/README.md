@@ -171,6 +171,14 @@ branch database name before connecting and again inside the transaction, and
 never deletes data. Its refusal checks run with
 `node --test apps/doctor/e2e/support/events-live-phase.test.mjs`.
 
+## One-tap event registration on the release stand (005 EARS-1)
+
+`pnpm e2e:stage pr-<N> --project doctor --no-axe` runs
+`event-register-one-tap-live.spec.ts` in `live/doctor/event-register`. The
+test signs in with a newly confirmed doctor, registers for the slot's upcoming
+doctor event, and checks that the same event appears in «Мои события». Each
+run creates its own account because registration is append-only.
+
 ## Live room on the release stand (006 EARS-2 and EARS-3)
 
 `pnpm e2e:stage pr-<N> --project doctor --no-axe` runs `live/doctor/room`.

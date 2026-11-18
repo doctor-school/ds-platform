@@ -37,6 +37,7 @@ export default defineConfig({
   // account and stand, reading what one-tap registration writes.
   testMatch: [
     /(^|\/)event-register-one-tap\.spec\.ts$/,
+    /(^|\/)event-register-one-tap-live\.spec\.ts$/,
     /(^|\/)my-events\.spec\.ts$/,
     // #2073 (wave-4 gate row 19): the signed-in `/account` cabinet — its axe
     // scan and its 390 px check — on the same reused doctor account.

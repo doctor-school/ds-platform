@@ -131,6 +131,7 @@
     "deploy:prod": "node tools/deploy/prod.mjs",
     "deploy:release-notes": "node tools/deploy/release-notes.mjs",
     "deploy:smoke": "node tools/deploy/smoke-prod.mjs",
+    "prod:api-secret": "node tools/deploy/data-secret.mjs --box api",
     "prod:data-secret": "node tools/deploy/data-secret.mjs",
     "prod:read": "node tools/deploy/prod-read.mjs read",
     "prod:read-key": "node tools/deploy/prod-read.mjs read-key",

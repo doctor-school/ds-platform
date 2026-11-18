@@ -35,6 +35,11 @@
 #                          -> the data-box secret rotation (prod box only; #4068):
 #                             relayed over the hop to the data verbs secret-recipient,
 #                             secret-apply, status and finish (see DATA_SECRET below)
+#   api-secret-recipient prod | api-secret-apply prod <sha> |
+#   api-secret-status prod <sha> | api-secret-finish prod <sha> succeeded|failed
+#                          -> the api-box secret change (prod box only; #4153): the
+#                             same rotation for ds-api-prod's own api.env and compose
+#                             .env, served here (see API_SECRET below)
 #   postgres-artifact prod <sha> certificate|images
 #                          -> the certified PostgreSQL artifact of a release whose data
 #                             input changed, on stdin, kept for its release driver
@@ -540,15 +545,126 @@ data_secret_relay() {
     data-secret-apply)
       # The live SHA only, and never beside a release step on this box (the -driver,
       # -rollback and step units); ds-data-prod checks its own units again.
-      image=$(sudo docker inspect ds-api-prod-api-1 --format '{{.Config.Image}}' 2>/dev/null </dev/null |
-        tr -d '[:space:]' || true)
-      [[ $image =~ $LIVE_IMAGE_RE ]] || refuse "the live prod SHA is unknown (no running ds-api-prod-api-1)"
-      live=${BASH_REMATCH[1]}
-      [[ $sha == "$live"* ]] ||
-        refuse "$sha is not the live prod SHA ${live:0:12}: a data-box secret is applied at the live SHA only"
+      require_live_sha "$sha" "a data-box secret"
       sudo "$DS_RELEASE" check prod </dev/null >/dev/null
       head -c "$((MAX_DATA_PAYLOAD_BYTES + 1))" | secret_hop --stdin "secret-apply $sha" ;;
   esac
+}
+
+# <sha> <what>: refuses unless the running api runs <sha> (the release driver's
+# live-SHA read: the image tag of ds-api-prod-api-1).
+require_live_sha() {
+  local image live
+  image=$(sudo docker inspect ds-api-prod-api-1 --format '{{.Config.Image}}' 2>/dev/null </dev/null |
+    tr -d '[:space:]' || true)
+  [[ $image =~ $LIVE_IMAGE_RE ]] || refuse "the live prod SHA is unknown (no running ds-api-prod-api-1)"
+  live=${BASH_REMATCH[1]}
+  [[ $1 == "$live"* ]] || refuse "$1 is not the live prod SHA ${live:0:12}: $2 is applied at the live SHA only"
+}
+
+# --- the api-box secret change on ds-api-prod (#4153; spec §5 «Api-prod secret verbs.») ---
+# data-secret.yml with box=api: the data box's rotation (secret_recipient,
+# secret_decrypt_stage, secret_start_unit below; DATA_PY secret-stage with its
+# API_SECRETS) on this box's own files. The intake key is this box's, generated here.
+API_ENV=$ROOT/etc/ds-platform/api.env
+API_COMPOSE=$ROOT/home/deploy/ds-platform/infra/deploy/compose/api-prod
+API_COMPOSE_ENV=$API_COMPOSE/.env
+API_STAGED=$ROOT/etc/ds-platform/.api.env.next
+API_BACKUP=$ROOT/etc/ds-platform/.api.env.previous
+API_COMPOSE_STAGED=$ROOT/etc/ds-platform/.api-compose.env.next
+API_COMPOSE_BACKUP=$ROOT/etc/ds-platform/.api-compose.env.previous
+# The redeploy's recreate (tools/deploy/prod.mjs recreateScript: every container
+# re-reads the env files, on the live SHA's local images), waiting for the healthchecks.
+API_RECREATE='docker compose up -d --force-recreate --wait --wait-timeout 300'
+
+api_secret() {
+  local n=${#words[@]} sha=${words[2]-} role
+  case $verb in
+    api-secret-recipient) [[ $n == 2 && ${words[1]} == prod ]] || reject "usage: api-secret-recipient prod" ;;
+    api-secret-apply | api-secret-status)
+      [[ $n == 3 && ${words[1]} == prod ]] || reject "usage: $verb prod <sha>"
+      check_sha "$sha" ;;
+    api-secret-finish)
+      [[ $n == 4 && ${words[1]} == prod && ${words[3]} =~ ^(succeeded|failed)$ ]] ||
+        reject "usage: api-secret-finish prod <sha> succeeded|failed"
+      check_sha "$sha" ;;
+  esac
+  accepted
+  role=$(sudo cat "$BOX_ROLE_FILE" 2>/dev/null || true)
+  [[ $role == prod ]] || refuse "$verb is served by the prod box only"
+  case $verb in
+    api-secret-recipient) secret_recipient ds-api-prod-secret-intake </dev/null ;;
+    api-secret-status) exec sudo "$DS_RELEASE" status prod "$sha" </dev/null ;;
+    api-secret-finish) exec sudo "$DS_RELEASE" finish prod "$sha" "${words[3]}" </dev/null ;;
+    api-secret-apply) api_secret_apply "$sha" ;;
+  esac
+}
+
+# The unit's script: back up each staged file's live copy, put the staged copy in place
+# with the live copy's mode and owner, recreate, then the running api must answer
+# /v1/health at <sha> and report /v1/ready (DB and object storage) ok; on any failure put the
+# backups back, recreate again and fail.
+# It runs as root; its output stays in the unit's journal.
+api_secret_script() {
+  local sha=$1
+  cat <<SH
+cd '$API_COMPOSE'
+test -f '$API_STAGED' || test -f '$API_COMPOSE_STAGED' || { echo 'api-secret: no staged change (api-secret-apply stages one)'; exit 1; }
+swap() {
+  test -f "\$2" || return 0
+  cp -p -- "\$1" "\$3"
+  install -m "\$(stat -c %a -- "\$1")" -o "\$(stat -c %u -- "\$1")" -g "\$(stat -c %g -- "\$1")" -- "\$2" "\$1"
+  rm -f -- "\$2"
+}
+restore() {
+  test -f "\$2" || return 0
+  if cp -p -- "\$2" "\$1"; then rm -f -- "\$2"; else echo "api-secret: ERROR: \$1 could not be put back; the previous copy is kept at \$2"; fi
+}
+health() {
+  test "\$(docker inspect ds-api-prod-api-1 --format '{{.Config.Image}}')" = 'ds-api:$sha' &&
+    docker exec ds-api-prod-api-1 node -e "fetch('http://localhost:'+(process.env.PORT||3000)+'/v1/health').then(r=>r.ok?r.json():{}).then(j=>process.exit(j.version==='$sha'?0:1)).catch(()=>process.exit(1))" &&
+    ready
+}
+# /v1/ready as the prod smoke reads it (smoke-prod.mjs checkApiReady, 002 EARS-1..3): 200
+# and every check ok, postgres and pgvector required. A changed DATABASE_URL leaves
+# /v1/health green, so liveness alone would keep a broken value.
+ready() {
+  docker exec ds-api-prod-api-1 node -e "fetch('http://localhost:'+(process.env.PORT||3000)+'/v1/ready').then(r=>r.json().then(j=>{const c={postgres:undefined,pgvector:undefined,...(j&&j.checks)};process.exit(r.status===200&&Object.values(c).every(s=>s==='ok')?0:1)})).catch(()=>process.exit(1))"
+}
+swap '$API_ENV' '$API_STAGED' '$API_BACKUP'
+swap '$API_COMPOSE_ENV' '$API_COMPOSE_STAGED' '$API_COMPOSE_BACKUP'
+echo 'api-secret: api.env / compose .env changed; recreating the stack on the live images'
+if $API_RECREATE && health; then
+  rm -f -- '$API_BACKUP' '$API_COMPOSE_BACKUP'
+  echo 'api-secret: the recreated stack answers /v1/health at ${sha:0:12} and /v1/ready'
+  mv -f -- '$SECRET_PENDING' '$SECRET_APPLIED'
+  exit 0
+fi
+# The restore runs every step whatever the one before it did (the unit's bash is -e).
+echo 'api-secret: the new values failed; restoring the previous api.env and compose .env'
+restore '$API_ENV' '$API_BACKUP'
+restore '$API_COMPOSE_ENV' '$API_COMPOSE_BACKUP'
+$API_RECREATE || echo 'api-secret: WARNING: recreating the stack with the previous values failed'
+health || echo 'api-secret: WARNING: /v1/health or /v1/ready fails with the previous values too'
+# The new values were tried and refused: this ciphertext is spent too.
+mv -f -- '$SECRET_PENDING' '$SECRET_APPLIED' || echo 'api-secret: WARNING: the ciphertext could not be recorded spent'
+exit 1
+SH
+}
+
+# api-secret-apply prod <sha>: stdin {"ciphertext": <base64 CMS DER>}, as secret-apply.
+api_secret_apply() {
+  local sha=$1
+  require_live_sha "$sha" "an api-box secret"
+  { sudo test -s "$SECRET_INTAKE_KEY" && sudo test -s "$SECRET_INTAKE_CERT"; } ||
+    refuse "no intake key on this box: run api-secret-recipient first (deploy README → Changing an api.env or compose .env line)"
+  sudo test -f "$API_ENV" || refuse "$API_ENV is absent"
+  sudo test -f "$API_COMPOSE_ENV" || refuse "the api-prod compose has no .env (a release writes it)"
+  # Refused while any ds-prod-* unit runs, before anything is staged.
+  sudo "$DS_RELEASE" check prod </dev/null >/dev/null
+  secret_decrypt_stage "$API_STAGED $API_COMPOSE_STAGED" api "$sha" "$SECRET_APPLIED" "$SECRET_PENDING" \
+    api "$API_ENV" "$API_STAGED" compose "$API_COMPOSE_ENV" "$API_COMPOSE_STAGED"
+  secret_start_unit api-secret "$sha" "$API_STAGED $API_COMPOSE_STAGED" "$(api_secret_script "$sha")"
 }
 
 # --- the certified PostgreSQL artifact (#4089; spec §5 «Certified PostgreSQL artifacts.») ---
@@ -675,7 +791,7 @@ ROLLBACK_UNIT_RE='^ds-prod-[0-9a-f]{12}-rollback$'
 # result on stdout) · 2 a bad payload · 3 unsafe or unreadable (one fixed reason on
 # stdout, nothing written).
 read -r -d '' DATA_PY <<'PY' || true
-import base64, datetime, ipaddress, json, os, re, shutil, sys, tarfile, tempfile
+import base64, datetime, ipaddress, json, os, re, secrets, shutil, sys, tarfile, tempfile
 
 action = sys.argv[1]
 
@@ -695,6 +811,34 @@ ROLES = ("postgres", "pgbackrest")
 SECRET_KEYS = ("PGBACKREST_REPO1_S3_KEY", "PGBACKREST_REPO1_S3_KEY_SECRET")
 SECRET_VALUE = re.compile("[A-Za-z0-9+/=_.-]{8,256}")
 SECRET_MAX_AGE = 6 * 3600
+# #4153: the names api-secret-apply may set on ds-api-prod — NAME: (file, value shape,
+# generator) — pinned equal to tools/deploy/data-secret.mjs BOXES.api. `api`: api.env,
+# `compose`: the api-prod compose .env. No shape admits whitespace, a quote or a shell
+# metacharacter: api.env is sourced by bash.
+API_SECRETS = {
+    "DATABASE_URL": ("api", r"postgres(ql)?://[A-Za-z0-9._%+-]{1,128}(:[A-Za-z0-9._%+-]{1,256})?@[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?/[A-Za-z0-9_-]{1,63}", None),
+    "AUDIT_IDENTIFIER_PEPPER": ("api", r"[0-9a-f]{64}", "hex32"),
+    "LIFECYCLE_IMPACT_TOKEN_SECRET": ("api", r"[0-9a-f]{64}", "hex32"),
+    "SIGN_IN_RECORD_KEY": ("api", r"[A-Za-z0-9+/]{43}=", "base64-32"),
+    "ACADEMY_PUBLIC_ORIGIN": ("api", r"https://[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?", None),
+    "DOCTOR_PUBLIC_ORIGIN": ("api", r"https://[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?", None),
+    "IDP_SERVICE_TOKEN": ("api", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "IDP_CLIENT_ID": ("api", r"[A-Za-z0-9@._-]{1,128}", None),
+    "IDP_CLIENT_SECRET": ("api", r"[A-Za-z0-9+/=_.-]{8,256}", None),
+    "IDP_PROJECT_ID": ("api", r"[0-9]{1,24}", None),
+    "BOT_PROTECTION_ENABLED": ("api", r"true|false", None),
+    "SMARTCAPTCHA_SERVER_KEY": ("api", r"(ysc2_[A-Za-z0-9_-]{20,250})?", None),
+    "SMARTCAPTCHA_SITE_KEY": ("compose", r"(ysc1_[A-Za-z0-9_-]{20,250})?", None),
+    "TELEGRAM_BOT_TOKEN": ("api", r"[0-9]{1,20}:[A-Za-z0-9_-]{30,100}", None),
+    "TELEGRAM_WEBHOOK_SECRET": ("api", r"[A-Za-z0-9_-]{1,256}", "hex32"),
+    "TELEGRAM_WEBHOOK_URL": ("api", r"https://api[.]doctor[.]school/v1/integrations/telegram/webhook", None),
+}
+# secret-stage's boxes: NAME → (file tag, compiled shape, generator).
+SECRET_BOXES = {
+    "data": {name: ("data", SECRET_VALUE, None) for name in SECRET_KEYS},
+    "api": {name: (tag, re.compile(shape), gen) for name, (tag, shape, gen) in API_SECRETS.items()},
+}
+SECRET_FILE_LABELS = {"data": "data.env", "api": "api.env", "compose": "the compose .env"}
 SHA40 = re.compile("[0-9a-f]{40}")
 NONCE = re.compile("[0-9a-f]{32}")
 # The data-env outputs, as paths in the tree; ship_tree's DATA_COMPOSE_GENERATED.
@@ -818,14 +962,20 @@ if action == "secret-cipher":
 
 if action == "secret-stage":
     # #4068: stdin the decrypted plaintext, {"schema": 1, "createdAt": "<UTC>Z",
-    # "sha": <live sha>, "nonce": <32 hex>, "values": {NAME: value}}; argv: data.env,
-    # the staged copy, the sha secret-apply was called with, the applied record, the
-    # pending record. Only the names of SECRET_KEYS, each replacing the one NAME= line
-    # data.env already holds. Neither a value nor a line of data.env is ever printed.
-    # One use per ciphertext: it names the SHA it is for, and its createdAt must be
-    # newer than the one the last rotation unit recorded once its verdict stood. The
-    # last applied ciphertext itself exits 4: secret-apply attaches to its verdict.
-    data_env, staged, sha, applied, pending = sys.argv[2:7]
+    # "sha": <live sha>, "nonce": <32 hex>, "values": {NAME: value}} (#4153: plus an
+    # optional "generate": [NAME]); argv: the box (SECRET_BOXES), the sha the apply was
+    # called with, the applied record, the pending record, then <file tag> <file>
+    # <staged copy> per file. Only the box's names: on data each replaces the one NAME=
+    # line data.env already holds; on api it replaces its one line or is appended, and a
+    # generated name must be absent or empty. Neither a value nor a line of a file is
+    # ever printed. One use per ciphertext: it names the SHA it is for, and its
+    # createdAt must be newer than the one the last rotation unit recorded once its
+    # verdict stood. The last applied ciphertext itself exits 4: the apply attaches to
+    # its verdict.
+    box, sha, applied, pending = sys.argv[2:6]
+    rest = sys.argv[6:]
+    table = SECRET_BOXES[box]
+    files = {rest[i]: (rest[i + 1], rest[i + 2]) for i in range(0, len(rest), 3)}
     raw = sys.stdin.buffer.read(8193)
     # openssl writes nothing when the ciphertext is not for this box's key.
     if not raw:
@@ -836,7 +986,8 @@ if action == "secret-stage":
         req = json.loads(raw.decode("utf-8"))
     except ValueError:
         stop(2, "the secret is not one JSON object")
-    check(isinstance(req, dict) and set(req) == {"schema", "createdAt", "sha", "nonce", "values"})
+    fields = {"schema", "createdAt", "sha", "nonce", "values"}
+    check(isinstance(req, dict) and fields <= set(req) <= fields | ({"generate"} if box == "api" else set()))
     check(type(req["schema"]) is int and req["schema"] == 1)
     check(isinstance(req["sha"], str) and SHA40.fullmatch(req["sha"]) is not None)
     check(isinstance(req["nonce"], str) and NONCE.fullmatch(req["nonce"]) is not None)
@@ -865,29 +1016,61 @@ if action == "secret-stage":
     if last is not None and req["createdAt"] <= last["createdAt"]:
         stop(2, "the secret is not newer than the last applied one (a replay): encrypt it again")
     values = req["values"]
-    check(isinstance(values, dict) and values and set(values) <= set(SECRET_KEYS))
+    generate = req.get("generate", [])
+    check(isinstance(values, dict) and set(values) <= set(table))
+    check(isinstance(generate, list) and len(set(generate)) == len(generate)
+          and all(isinstance(g, str) and g in table and table[g][2] and g not in values for g in generate))
+    check(bool(values) or bool(generate))
     for name, value in values.items():
-        if not (isinstance(value, str) and SECRET_VALUE.fullmatch(value)):
-            stop(2, "the value of " + name + " is not 8-256 characters of A-Z a-z 0-9 + / = _ . -")
-    try:
-        with open(data_env, encoding="utf-8") as f:
-            lines = f.read().split("\n")
-    except OSError:
-        stop(3, "data.env could not be read")
-    for name in sorted(values):
-        n = sum(1 for line in lines if line.startswith(name + "="))
-        if n != 1:
-            stop(3, "data.env holds %d %s= lines, not one" % (n, name))
-    new = []
-    for line in lines:
-        name = line.split("=", 1)[0]
-        new.append(name + "=" + values[name] if "=" in line and name in values else line)
+        if not (isinstance(value, str) and table[name][1].fullmatch(value)):
+            stop(2, "the value of " + name + " is not " +
+                 ("8-256 characters of A-Z a-z 0-9 + / = _ . -" if box == "data" else "its allowed shape"))
+    lines = {}
+    for tag in sorted({table[name][0] for name in list(values) + generate}):
+        try:
+            with open(files[tag][0], encoding="utf-8") as f:
+                lines[tag] = f.read().split("\n")
+        except OSError:
+            stop(3, SECRET_FILE_LABELS[tag] + " could not be read")
+    for name in sorted(list(values) + generate):
+        tag = table[name][0]
+        held = [line for line in lines[tag] if line.startswith(name + "=")]
+        if (box == "data" and len(held) != 1) or len(held) > 1:
+            stop(3, "%s holds %d %s= lines, not one" % (SECRET_FILE_LABELS[tag], len(held), name))
+        if name in generate:
+            if held and held[0] != name + "=":
+                stop(2, name + " already has a value: <generate> fills an absent or empty one only")
+            values[name] = (secrets.token_hex(32) if table[name][2] == "hex32"
+                            else base64.b64encode(secrets.token_bytes(32)).decode("ascii"))
+    new = {}
+    for tag, old in lines.items():
+        out, seen = [], set()
+        for line in old:
+            name = line.split("=", 1)[0]
+            if "=" in line and name in values and table[name][0] == tag:
+                out.append(name + "=" + values[name])
+                seen.add(name)
+            else:
+                out.append(line)
+        added = [n + "=" + values[n] for n in sorted(values) if table[n][0] == tag and n not in seen]
+        if added:
+            # Before the trailing newline's empty last element, so the file keeps ending in one.
+            at = len(out) - 1 if out and out[-1] == "" else len(out)
+            out[at:at] = added
+        new[tag] = out
     # The rotation unit moves it onto the applied record once its verdict stands;
     # written first, so a staged copy never lacks it.
     write(pending, json.dumps({"createdAt": req["createdAt"], "nonce": req["nonce"]}) + "\n")
-    write(staged, "\n".join(new))  # mkstemp: 0600, owned by root (the caller)
-    names = ", ".join(sorted(values))
-    sys.stdout.write(("staged: " if new != lines else "unchanged: ") + names + "\n")
+    for tag, out in new.items():
+        write(files[tag][1], "\n".join(out))  # mkstemp: 0600, owned by root (the caller)
+    given = ", ".join(sorted(set(values) - set(generate)))
+    changed = any(new[tag] != lines[tag] for tag in new)
+    report = []
+    if given:
+        report.append(("staged: " if changed else "unchanged: ") + given)
+    if generate:
+        report.append("generated: " + ", ".join(sorted(generate)))
+    sys.stdout.write("; ".join(report) + "\n")
     sys.exit(0)
 
 if action == "ship":
@@ -1101,10 +1284,13 @@ docker compose exec -T pgbackrest /usr/local/bin/backup.sh incr"
 # key pair is generated here on first call (RSA-4096, root 0600 / 0644, never printed,
 # never leaves the box). The operator commits the certificate as
 # infra/deploy/keys/data-secret-recipient.pem; `pnpm prod:data-secret` encrypts to it.
+# <cn>: the certificate's subject, the box's own (ds-api-prod's api-secret-recipient,
+# #4153, commits infra/deploy/keys/api-secret-recipient.pem).
 secret_recipient() {
+  local cn=$1
   if ! sudo test -s "$SECRET_INTAKE_KEY" || ! sudo test -s "$SECRET_INTAKE_CERT"; then
     sudo install -d -m 0700 -o root -g root "$SECRET_INTAKE_DIR"
-    sudo openssl req -x509 -newkey rsa:4096 -nodes -days 3650 -subj /CN=ds-data-prod-secret-intake \
+    sudo openssl req -x509 -newkey rsa:4096 -nodes -days 3650 -subj "/CN=$cn" \
       -keyout "$SECRET_INTAKE_KEY" -out "$SECRET_INTAKE_CERT" >/dev/null 2>&1 ||
       refuse "openssl could not generate the intake key"
     sudo chmod 0600 "$SECRET_INTAKE_KEY"
@@ -1162,30 +1348,47 @@ secret_apply() {
     refuse "the data-prod compose has no recorded image overlay (a release's data-env writes it)"
   # Refused while any ds-prod-* unit runs, before anything is staged.
   sudo "$DS_RELEASE" check prod </dev/null >/dev/null
+  secret_decrypt_stage "$SECRET_STAGED" data "$sha" "$SECRET_APPLIED" "$SECRET_PENDING" \
+    data "$DATA_ENV" "$SECRET_STAGED"
+  secret_start_unit data-secret "$sha" "$SECRET_STAGED" "$(secret_script)"
+}
+
+# <staged files> <secret-stage args…>, stdin {"ciphertext": …}: decrypt with this box's
+# intake key straight into DATA_PY secret-stage. Shared by secret-apply and
+# api-secret-apply (#4153). A re-run of the last applied ciphertext exits 0 here.
+secret_decrypt_stage() {
+  local staged=$1 out rc=0
+  shift
   secret_work=$(sudo mktemp -d) # global: the EXIT trap outlives this function; root-only
   step_file=
   trap 'sudo rm -rf -- "${secret_work:-}"; sudo rm -f -- "${step_file:-}"' EXIT
   data_py secret-cipher "$secret_work/secret.cms" >/dev/null
   out=$(sudo openssl cms -decrypt -binary -inform DER -in "$secret_work/secret.cms" \
     -inkey "$SECRET_INTAKE_KEY" -recip "$SECRET_INTAKE_CERT" 2>/dev/null |
-    sudo python3 -I -X utf8 -c "$DATA_PY" secret-stage "$DATA_ENV" "$SECRET_STAGED" "$sha" \
-      "$SECRET_APPLIED" "$SECRET_PENDING") || rc=$?
+    sudo python3 -I -X utf8 -c "$DATA_PY" secret-stage "$@") || rc=$?
   case $rc in
     0) printf '%s: %s\n' "$TAG" "$out" ;;
     # The last applied ciphertext again (a re-run): nothing is staged or started;
     # the caller reads the recorded verdict with status.
     4) printf '%s: %s\n' "$TAG" "$out"; exit 0 ;;
-    # Any refusal leaves neither a staged data.env nor a pending record behind.
-    2) sudo rm -f -- "$SECRET_STAGED" "$SECRET_PENDING"; reject "${out:-the secret was refused}" ;;
-    *) sudo rm -f -- "$SECRET_STAGED" "$SECRET_PENDING"; refuse "${out:-the secret could not be staged}" ;;
+    # Any refusal leaves neither a staged copy nor a pending record behind.
+    # shellcheck disable=SC2086 # the staged paths are fixed and space-free
+    2) sudo rm -f -- $staged "$SECRET_PENDING"; reject "${out:-the secret was refused}" ;;
+    # shellcheck disable=SC2086
+    *) sudo rm -f -- $staged "$SECRET_PENDING"; refuse "${out:-the secret could not be staged}" ;;
   esac
+}
+
+# <step> <sha> <staged files> <script>: the durable unit ds-prod-<sha12>-<step>.
+secret_start_unit() {
+  local step=$1 sha=$2 staged=$3 script=$4 out rc=0
   step_file=$(sudo mktemp)
-  secret_script | sudo tee -- "$step_file" >/dev/null
-  rc=0
-  out=$(sudo "$DS_RELEASE" release prod "$sha" data-secret "$step_file" </dev/null) || rc=$?
+  printf '%s\n' "$script" | sudo tee -- "$step_file" >/dev/null
+  out=$(sudo "$DS_RELEASE" release prod "$sha" "$step" "$step_file" </dev/null) || rc=$?
   [[ -z $out ]] || printf '%s\n' "$out"
   # No unit started (a recorded verdict, a refusal): nothing will consume the staged copy.
-  [[ $rc == 0 && $out == *" started"* ]] || sudo rm -f -- "$SECRET_STAGED" "$SECRET_PENDING"
+  # shellcheck disable=SC2086
+  [[ $rc == 0 && $out == *" started"* ]] || sudo rm -f -- $staged "$SECRET_PENDING"
   exit "$rc"
 }
 
@@ -1546,7 +1749,7 @@ data_verb() {
     recovery-latest) recovery_latest </dev/null ;;
     # #4144: no release check — the host state answers during a release too.
     read-host-state) exec sudo python3 -I -X utf8 -c "$HOST_STATE_PY" data "$ROOT" "$DATA_COMPOSE" </dev/null ;;
-    secret-recipient) secret_recipient </dev/null ;;
+    secret-recipient) secret_recipient ds-data-prod-secret-intake </dev/null ;;
     secret-apply) secret_apply "${words[1]}" ;;
     postgres-load) postgres_load "${words[1]}" "${words[2]}" "${words[3]}" ;;
   esac
@@ -2064,6 +2267,9 @@ case "$verb" in
   data-secret-recipient | data-secret-apply | data-secret-status | data-secret-finish)
     data_secret_relay
     ;;
+  api-secret-recipient | api-secret-apply | api-secret-status | api-secret-finish)
+    api_secret
+    ;;
   postgres-artifact)
     postgres_artifact
     ;;
@@ -2088,6 +2294,6 @@ case "$verb" in
     data_verb
     ;;
   *)
-    reject "unknown command (allowed: status, release, rollback, rollback-status, redeploy, data-secret-recipient, data-secret-apply, data-secret-status, data-secret-finish, postgres-artifact, upload-report, observe; on the data box also: ${DATA_VERBS// /, })"
+    reject "unknown command (allowed: status, release, rollback, rollback-status, redeploy, data-secret-recipient, data-secret-apply, data-secret-status, data-secret-finish, api-secret-recipient, api-secret-apply, api-secret-status, api-secret-finish, postgres-artifact, upload-report, observe; on the data box also: ${DATA_VERBS// /, })"
     ;;
 esac

@@ -582,12 +582,14 @@ The refusal reads:
   «unrecognised … probe output» means the check itself could not prove the file —
   also fail-closed. The previous release keeps serving: nothing was backed up,
   shipped, pulled or swapped.
-- **Recovery.** The owner adds the variable on the box as in «Apply order» step 6
-  (out-of-band secrets): `sudo cp /etc/ds-platform/api.env /etc/ds-platform/api.env.bak-<ts>`,
-  edit as root, keep `root:root 0600`, generate a secret on the box (the template
-  comment names the command, e.g. `openssl rand -hex 32`), never in git or chat.
-  Evidence is a count, e.g. `sudo grep -c '^LIFECYCLE_IMPACT_TOKEN_SECRET=' /etc/ds-platform/api.env` → `1`.
-  Then re-dispatch the same `deploy-prod.yml` run (same SHA, same mode).
+- **Recovery.** Add the variable through «Changing an api.env or compose .env
+  line» below, at the SHA production still runs: a secret the box can generate goes
+  as `NAME=<generate>` (e.g. `LIFECYCLE_IMPACT_TOKEN_SECRET=<generate>`), so its
+  value exists only on the box, never in git, chat or on the workstation; any other
+  value is encrypted on the workstation. The green `data-secret.yml` run is the
+  evidence. Then re-dispatch the same `deploy-prod.yml` run (same SHA, same mode). A
+  name the box does not accept yet joins its list in the PR that adds it to the
+  contract.
 - **A new required variable** goes into the contract in the PR that makes the
   code need it: tests fail when an api fail-closed throw names a variable the
   contract lacks, and when `api.env.example`'s REQUIRED marks differ from it.
@@ -596,6 +598,75 @@ The refusal reads:
 the **Zitadel first-boot bootstrap** §9) stays the manual runbook below — those are
 one-time, not per-release. Run them once; from then on every release is a
 `deploy-prod.yml` run.
+
+### Changing an api.env or compose .env line (#4153)
+
+A runtime secret or variable of ds-api-prod — a line of `/etc/ds-platform/api.env`
+or of the compose `.env` beside `compose/api-prod/compose.yml` — changes without the
+break-glass key and without a hand edit on the box (release pipeline spec §5
+«Api-prod secret verbs.»). It is the data box's key rotation («Apply order» step 6
+→ «Rotating the box's pgBackRest S3 key») on ds-api-prod's own files: the values are
+encrypted on the workstation to ds-api-prod's intake certificate, only the box holds
+the key that decrypts them, and they never enter GitHub (no input, secret or log
+line).
+
+The names the box accepts, each pinned to its file and value shape (`BOXES.api` in
+`tools/deploy/data-secret.mjs`, equal to the entrypoint's `API_SECRETS`):
+
+| File           | Names                                                                                                                                             |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api.env`      | `DATABASE_URL`, `AUDIT_IDENTIFIER_PEPPER`, `LIFECYCLE_IMPACT_TOKEN_SECRET`, `SIGN_IN_RECORD_KEY`, `ACADEMY_PUBLIC_ORIGIN`, `DOCTOR_PUBLIC_ORIGIN` |
+| `api.env`      | `IDP_SERVICE_TOKEN`, `IDP_CLIENT_ID`, `IDP_CLIENT_SECRET`, `IDP_PROJECT_ID` (an IdP re-provision)                                                 |
+| `api.env`      | `BOT_PROTECTION_ENABLED`, `SMARTCAPTCHA_SERVER_KEY` (the captcha toggle; the key may be empty)                                                    |
+| `api.env`      | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_WEBHOOK_URL` (048's connector)                                                         |
+| compose `.env` | `SMARTCAPTCHA_SITE_KEY` (may be empty)                                                                                                            |
+
+A name off this list is refused; it joins the list in the PR that needs it (both
+tables and the test that pins them equal). Values never carry whitespace or quotes:
+`api.env` is sourced by bash.
+
+1. **Once per box: the intake certificate.** ds-api-prod's certificate is committed
+   as `infra/deploy/keys/api-secret-recipient.pem`; without it `pnpm prod:api-secret`
+   refuses. After the release that installs the `api-secret-*` verbs, dispatch
+   `gh workflow run data-secret.yml --ref main -f box=api -f action=recipient`:
+   ds-api-prod generates its intake key pair on the first call (root 0600 under
+   `/etc/ds-platform/secret-intake/`, never printed, never leaves the box) and the run
+   log prints the certificate and its SHA-256 fingerprint. Commit the certificate in
+   a PR. A rebuilt box generates a new pair: dispatch it again and commit the new
+   certificate.
+2. **Encrypt the lines** on the workstation, from a file that holds exactly the lines
+   to set:
+
+   ```bash
+   pnpm prod:api-secret <live sha> < lines.txt   # e.g. TELEGRAM_BOT_TOKEN=… / TELEGRAM_WEBHOOK_SECRET=<generate>
+   ```
+
+   `NAME=<generate>` has the box generate the value of a generatable name
+   (`AUDIT_IDENTIFIER_PEPPER`, `LIFECYCLE_IMPACT_TOKEN_SECRET`, `SIGN_IN_RECORD_KEY`,
+   `TELEGRAM_WEBHOOK_SECRET`) that is absent or empty; the value is never printed. A
+   name that already has a value is refused — to replace it, pass the new value. It
+   prints one base64 line and the dispatch command; the line is good once, for that
+   SHA, for 6 h, exactly as the data box's. Delete `lines.txt` afterwards.
+
+3. **Apply it on the owner's word**, as for an env-change redeploy, with the live
+   prod SHA:
+   `gh workflow run data-secret.yml --ref main -f box=api -f action=apply -f sha=<live sha> -f owner_quote="<the owner's words>" -f ciphertext=<the line>`.
+   Refused while any `ds-prod-*` unit runs (a release, a redeploy, a rollback, a
+   rotation), ds-api-prod decrypts, checks the names and value shapes, and runs the
+   durable unit `ds-prod-<sha12>-api-secret`: each changed file backed up, the lines
+   replaced (an absent one appended; mode and owner kept), every container recreated
+   on the live images as a redeploy does, then the api must answer `/v1/health` at
+   the live SHA and `/v1/ready` with every check `ok` (Postgres, pgvector, object
+   storage — the prod smoke's reading), so a broken `DATABASE_URL` is caught even
+   though liveness stays green. A failed recreate, health or readiness check puts
+   both files back and recreates again; the run ends red. The check proves the
+   process, its SHA, and DB and storage reachability. It does not prove the IdP
+   client credentials, the SMS and mail providers or a Telegram token: nothing
+   exercises them at startup, so a wrong value surfaces on first use (a sign-in,
+   a code delivery, a bot update) and is changed again through this path. The run log carries names and status lines
+   only. No separate redeploy is needed: the unit recreated the stack.
+
+Evidence is the green run and `/v1/health`, never a value.
 
 ## Apply order
 
@@ -1016,6 +1087,7 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
      sudo docker compose up -d                              # now the rest: api + portal + sms-adapter + zitadel-login + caddy
      # put IDP_SERVICE_TOKEN=<that PAT> in api.env AFTER DNS + provision.sh (below);
      # pre-DNS, leave it unset so the api boots on its in-memory fake for local smoke.
+     # On a live box a new token goes through «Changing an api.env or compose .env line».
      ```
 
    - **Provision the OIDC app + activate the real providers** (idempotent; SMTP creds
@@ -1046,8 +1118,11 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
        IDP_DOCTOR_POST_LOGOUT_URI=https://new.doctor.school/ \
        EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real \
        ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
-     # copy the emitted IDP_CLIENT_ID / IDP_CLIENT_SECRET / IDP_PROJECT_ID into api.env,
-     # then: docker compose up -d api   (restart to pick up the OIDC creds)
+     # The emitted IDP_CLIENT_ID / IDP_CLIENT_SECRET / IDP_PROJECT_ID go into api.env:
+     # on a first build (no release has run yet) edit it as root, then
+     # `docker compose up -d api`; on a live box (a re-provision) set them, and a new
+     # IDP_SERVICE_TOKEN, with «Changing an api.env or compose .env line» (Release
+     # section) on the owner's word — no hand edit, the unit recreates the stack.
      # Step 3.bis also converges the two storefront clients (003 EARS-60, ADR-0015 §4:
      # private_key_jwt, one exact callback + post-logout URI each, base_uri = the
      # sign-in host) and prints IDP_ACADEMY_CLIENT_ID / IDP_DOCTOR_CLIENT_ID — ids
@@ -1264,37 +1339,32 @@ deploy.
    SMARTCAPTCHA_SITE_KEY=<site-key-from-step-3>
    ```
 
-   **Flipping the toggle (either direction).** Back up both files on the box
-   first, naming the state the flip moves TO —
-   `sudo cp /etc/ds-platform/api.env /etc/ds-platform/api.env.bak-captcha-<on|off>-<ts>`
-   and the same pattern for the compose `.env`. Then, in order:
+   **Flipping the toggle (either direction)** goes through «Changing an api.env or
+   compose .env line» (Release section, #4153), on the owner's word, at the live
+   SHA — no hand edit and no backup by hand: the unit backs both files up, recreates
+   every container (the api and the storefronts that read the site key at runtime
+   included) and puts both files back if `/v1/health` or `/v1/ready` fails.
 
-   - **OFF** — `BOT_PROTECTION_ENABLED=false` and comment out
-     `SMARTCAPTCHA_SERVER_KEY` in `api.env`; empty `SMARTCAPTCHA_SITE_KEY=` in
-     the compose `.env`; then, on the owner's word, the redeploy of the live SHA
-     (it recreates every container, the api and the storefronts that read the key at
-     runtime included); the clients then submit tokenless and the api guard stays wired
-     and no-ops (003 design §10.1 fallback).
-   - **ON** — restore `BOT_PROTECTION_ENABLED=true` plus the `ysc2_` server half
-     in `api.env` and `SMARTCAPTCHA_SITE_KEY=ysc1_…` in the compose `.env`, run
-     the keypair-identifier checks in step 3, then the same redeploy.
-
-   The redeploy is the Actions route (#3354): the live SHA is the one the latest
-   successful production Deployment names (`/v1/health` `version` agrees), and the
-   owner's word is passed verbatim —
+   - **OFF** — encrypt `BOT_PROTECTION_ENABLED=false`, `SMARTCAPTCHA_SERVER_KEY=`
+     and `SMARTCAPTCHA_SITE_KEY=` (both keys emptied, not commented out); the clients
+     then submit tokenless and the api guard stays wired and no-ops (003 design
+     §10.1 fallback).
+   - **ON** — run the keypair-identifier checks in step 3 first, then encrypt
+     `BOT_PROTECTION_ENABLED=true`, `SMARTCAPTCHA_SERVER_KEY=ysc2_…` and
+     `SMARTCAPTCHA_SITE_KEY=ysc1_…`.
 
    ```bash
-   gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f owner_quote="<owner word>"
+   pnpm prod:api-secret <live sha> < captcha.txt
+   gh workflow run data-secret.yml --ref main -f box=api -f action=apply -f sha=<live sha> -f owner_quote="<owner word>" -f ciphertext=<the line>
    ```
 
-   It re-runs that SHA's app-tier release steps on the box as a fresh attempt (no
-   box-tooling install, no ds-data-prod phase), with every container of the api
-   compose recreated (`up -d --force-recreate`), and writes a new Deployment record;
-   no Release, no digest (`tools/deploy/README.md` «Redeploy mode»). Break-glass
-   `pnpm deploy:prod` over the `breakglass` key stays the fallback when Actions or
-   the box driver is unavailable. The Actions redeploy needs a live prod SHA that
-   contains #3354; before that release ships, or after a rollback to an older SHA,
-   the route is break-glass `pnpm deploy:prod`.
+   The live SHA is the one the latest successful production Deployment names
+   (`/v1/health` `version` agrees). The path needs a live prod SHA whose box
+   entrypoint serves the `api-secret-*` verbs (#4153) and the committed api-box
+   certificate; before then, or after a rollback to an older SHA, the flip is a
+   break-glass edit of both files followed by the Actions redeploy of the live SHA
+   (`gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f owner_quote="<owner word>"`,
+   `tools/deploy/README.md` «Redeploy mode»).
 
 5. **Ship source + pull images.** Ship the merged `origin/main` tree to the boxes
    (Apply order step 5 / a `deploy-prod.yml` release does this), then bring that SHA's

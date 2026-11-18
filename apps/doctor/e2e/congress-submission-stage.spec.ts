@@ -18,7 +18,8 @@ test("046 EARS-9: a doctor registers for an event and submits an oral talk from 
   browser,
   page,
 }) => {
-  test.setTimeout(120_000);
+  // The remote slot serves the sign-in host and the storefront in this journey.
+  test.setTimeout(240_000);
   const slug = process.env.E2E_DOCTOR_CONGRESS_SLUG!;
   const eventPath = "/events/" + encodeURIComponent(slug);
   const eventUrl = new URL(eventPath, DOCTOR_BASE).href;
@@ -31,7 +32,7 @@ test("046 EARS-9: a doctor registers for an event and submits an oral talk from 
   await provisionConfirmedAccount(browser, "doctor", DOCTOR_BASE, account);
   await signInPageThroughHost(page, DOCTOR_BASE, account);
 
-  await page.goto(congressUrl);
+  await page.goto(congressUrl, { waitUntil: "domcontentloaded" });
   const eventLink = page.getByRole("link", { name: /Страница Конгресса/ });
   const oral = page.getByTestId("congress-pick-oral");
   const needsRegistration = page.getByText(
@@ -50,7 +51,7 @@ test("046 EARS-9: a doctor registers for an event and submits an oral talk from 
   await expect(page.getByText("Вы записаны", { exact: true })).toBeVisible();
   await expect(register).toHaveCount(0);
 
-  await page.goto(congressUrl);
+  await page.goto(congressUrl, { waitUntil: "domcontentloaded" });
   await expect(eventLink).toHaveAttribute("href", eventPath);
   await expect(needsRegistration).toHaveCount(0);
   await oral.getByRole("button", { name: "Начать заявку →" }).click();
@@ -90,7 +91,7 @@ test("046 EARS-9: a doctor registers for an event and submits an oral talk from 
   await page.getByRole("button", { name: "Да, отправить" }).click();
   await expect(status).toHaveText("Отправлена");
 
-  await page.goto(congressUrl);
+  await page.goto(congressUrl, { waitUntil: "domcontentloaded" });
   const submission = page
     .getByTestId("congress-row")
     .filter({ hasText: title });

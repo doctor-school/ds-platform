@@ -18,6 +18,7 @@ import type {
 } from "../../schema/congress-submission-settings.js";
 import type { NewEventRecording } from "../../schema/event-recordings.js";
 import type { NewFeedEntry, NewMaterial } from "../../schema/materials.js";
+import { buildGoldenLearning, type GoldenLearning } from "./learning.js";
 import type { NewEvent, NewStreamConfigRow } from "../../schema/events.js";
 import type { NewRegistration } from "../../schema/registrations.js";
 import type {
@@ -129,6 +130,16 @@ export interface GoldenDataset {
   /** 048 (#3705) — the own materials and the feed cards they publish. */
   materials: NewMaterial[];
   feedEntries: NewFeedEntry[];
+  /** 024 (#4059) — the one published learning course (`learning.ts`). */
+  learningSchools: GoldenLearning["learningSchools"];
+  learningCourses: GoldenLearning["learningCourses"];
+  learningModules: GoldenLearning["learningModules"];
+  learningLessons: GoldenLearning["learningLessons"];
+  learningSteps: GoldenLearning["learningSteps"];
+  learningTests: GoldenLearning["learningTests"];
+  learningQuestions: GoldenLearning["learningQuestions"];
+  learningOptions: GoldenLearning["learningOptions"];
+  learningRuleLayers: GoldenLearning["learningRuleLayers"];
 }
 
 /** Raised when the dataset itself is inconsistent — a fixture defect, not a run defect. */
@@ -885,6 +896,7 @@ export function buildGoldenDataset(
     projectPartners,
     projectResults: buildProjectResults(projects, created),
     ...buildMaterials(at({ days: -20 }), created),
+    ...buildGoldenLearning(created),
   };
 }
 

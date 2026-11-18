@@ -5,9 +5,11 @@ import { listDocuments } from "@ds/legal-content";
 import {
   UNKNOWN_ADDRESS_SEGMENT,
   directVisitAnswer,
+  resolvePattern,
   resolveRoute,
   routeParams,
 } from "./route-params.js";
+import { golden } from "@ds/db/seed/golden";
 
 describe("resolveRoute", () => {
   it("substitutes the golden slug into a dynamic pattern", () => {
@@ -64,6 +66,25 @@ describe("resolveRoute", () => {
       cite: "#2478",
     });
     expect(routeParams.doctor["/[...catchAll]"]).toBeUndefined();
+  });
+
+  it("#4059: resolves the doctor course routes to the golden published course, each segment by its name", () => {
+    // 024 — the course path and a step screen render DB rows (the golden
+    // course); the step route names two segments, each answered separately.
+    expect(resolveRoute("doctor", "/courses/[courseSlug]")).toBe(
+      "/courses/golden-course-path",
+    );
+    expect(resolveRoute("doctor", "/courses/[courseSlug]/steps/[stepId]")).toBe(
+      `/courses/golden-course-path/steps/${golden.learning.steps.firstVideo.id}`,
+    );
+    // The Academy answers `/courses/*` with its not-found page (024 EARS-27).
+    expect(routeParams.academy["/courses/[courseSlug]"]).toBeUndefined();
+  });
+
+  it("refuses a multi-segment entry that does not answer a segment", () => {
+    expect(() => resolvePattern("/a/[x]/b/[y]", () => ({ x: "1" }))).toThrow(
+      /\[y\]/,
+    );
   });
 
   it("returns undefined for a route no entity renders", () => {

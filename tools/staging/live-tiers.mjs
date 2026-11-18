@@ -81,6 +81,13 @@ export const GOLDEN_SLUGS = Object.freeze({
 /** `golden.materials.published` — the one published Academy news item (048). */
 export const GOLDEN_MATERIAL_SLUG = "golden-material-published";
 
+/**
+ * `golden.learning.course` — the one published learning course (024, #4059):
+ * two modules, lesson 1 video → download → exit test, lesson 2 video → exit
+ * test, «Путь (Duolingo)» applied. The `live/doctor/learning` journey opens it.
+ */
+export const GOLDEN_LEARNING_COURSE_SLUG = "golden-course-path";
+
 const URL_DOCTOR = "E2E_DOCTOR_URL";
 const URL_ACADEMY = "E2E_PORTAL_URL";
 const ACCOUNT = ["E2E_DOCTOR_EMAIL", "E2E_DOCTOR_PASSWORD"];
@@ -307,11 +314,14 @@ export const LIVE_TIERS = Object.freeze([
     pkg: "@ds/doctor",
     config: "playwright.learning-live.config.ts",
     rootDir: "e2e",
+    // #4059: the journey reads the golden course. It registers a FRESH doctor,
+    // so the course's progress on a slot is never shared between runs.
+    seededEnv: {
+      E2E_LEARNING_COURSE_SLUG: GOLDEN_LEARNING_COURSE_SLUG,
+    },
     gated: [
       {
         file: "e2e/learning-path-live.spec.ts",
-        slotReason:
-          "the golden dataset seeds no published learning course, so a slot has no course slug for the journey to open",
         requires: [
           URL_DOCTOR,
           URL_ACADEMY,

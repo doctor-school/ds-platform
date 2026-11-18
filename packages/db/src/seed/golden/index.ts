@@ -112,6 +112,15 @@ export {
   type StoredGoldenMediaObject,
 } from "./media.js";
 export {
+  buildGoldenLearning,
+  GOLDEN_COURSE_MEMO_CONTENT_TYPE,
+  GOLDEN_COURSE_MEMO_KEY,
+  GOLDEN_COURSE_PRESET_NAME,
+  goldenCourseMemoPdf,
+  type GoldenLearning,
+  type GoldenLearningPresetLayer,
+} from "./learning.js";
+export {
   composeDescription,
   specialtiesWithoutParagraphBank,
   volumeEventTitle,
@@ -128,11 +137,14 @@ export {
   goldenReferentialIssues,
   resolveDirectionSpecialtyRows,
   resolveDoctorSpecialtyRows,
+  resolveLearningRuleLayerRows,
+  type GoldenLearningPresetRow,
   type GoldenSeedStep,
   type GoldenVolumeChild,
 } from "./plan.js";
 export {
   applyGoldenStep,
+  loadLearningPresetByName,
   loadSpecialtyIdByName,
   seedGolden,
   type GoldenSeedResult,

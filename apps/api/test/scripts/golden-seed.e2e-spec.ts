@@ -5,6 +5,10 @@ import {
   eventDirections,
   eventRecordings,
   events,
+  learningCourses,
+  learningPresets,
+  learningRuleLayers,
+  learningSteps,
   projectResults,
   projects,
   registrationAttendance,
@@ -495,6 +499,52 @@ describe("golden seed project results (030 EARS-17)", () => {
           .values(held.map(({ id: _id, ...row }) => row));
         await seedGolden(tx, { subjects, env: { GOLDEN_NOW: pin } });
         expect((await publicSlugs()).sort()).toEqual(expected);
+        throw rollback;
+      })
+      .catch((error) => {
+        if (error !== rollback) throw error.cause ?? error;
+      });
+  }, 120_000);
+
+  it("#4059: seeds the published golden course with «Путь (Duolingo)» applied from the migration's preset row, idempotently", async () => {
+    const L = golden.learning;
+    await db
+      .transaction(async (tx) => {
+        await seedGolden(tx, { subjects, env: { GOLDEN_NOW: pin } });
+        // A re-run a day later rewrites the same course in place.
+        await seedGolden(tx, {
+          subjects,
+          env: { GOLDEN_NOW: "2026-10-14T08:00:00.000Z" },
+        });
+        const [course] = await tx
+          .select()
+          .from(learningCourses)
+          .where(eq(learningCourses.slug, L.course.slug));
+        expect(course).toMatchObject({ id: L.course.id, state: "published" });
+        const [preset] = await tx
+          .select()
+          .from(learningPresets)
+          .where(eq(learningPresets.name, "Путь (Duolingo)"));
+        const layers = await tx
+          .select()
+          .from(learningRuleLayers)
+          .where(eq(learningRuleLayers.scopeId, L.course.id));
+        expect(layers).toEqual([
+          expect.objectContaining({
+            scopeKind: "course",
+            appliedPresetId: preset!.id,
+            values: preset!.values,
+          }),
+        ]);
+        const steps = await tx
+          .select()
+          .from(learningSteps)
+          .where(eq(learningSteps.lessonId, L.lessons.first.id));
+        expect(steps.map((s) => s.type).sort()).toEqual([
+          "download",
+          "test",
+          "video",
+        ]);
         throw rollback;
       })
       .catch((error) => {

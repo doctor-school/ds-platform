@@ -30,6 +30,9 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * lesson, «Путь (Duolingo)» applied, published): lesson 1 = video (youtube,
  * 60 s) → download → exit test of 2 questions («Верно» is right); lesson 2 =
  * video → test.
+ * On a stage slot the course is the golden one (`golden.learning.course`,
+ * #4059: the same shape, lesson 2 in a second module), handed to the leg as
+ * `E2E_LEARNING_COURSE_SLUG` by `tools/staging/live-tiers.mjs`.
  *
  * Harness (production builds; api :3000, doctor :3004 bound to 127.0.0.1,
  * sign-in host :3005, portal :3001):

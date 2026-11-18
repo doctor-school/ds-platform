@@ -70,6 +70,9 @@ import {
   renderProgrammePdf,
   resolveDirectionSpecialtyRows,
   resolveDoctorSpecialtyRows,
+  resolveLearningRuleLayerRows,
+  GOLDEN_COURSE_MEMO_KEY,
+  goldenCourseMemoPdf,
   specialtiesWithoutParagraphBank,
   VOLUME_EXPERTS,
   VOLUME_PROGRAMME,
@@ -90,6 +93,24 @@ const subjects = resolveGoldenSubjects(SUBJECT_ENV) as GoldenSubjectMap;
 const specialtyIdByName = new Map(
   RAZDEL_I_NAMES.map((name, index) => [name, goldenUuid(0x00ff, index + 1)]),
 );
+
+// Migration 0065 inserts the presets with generated ids; the plan resolves the
+// golden course's layer against the rows. The «Путь (Duolingo)» values here are
+// the migration's literal.
+const PATH_PRESET_VALUES = {
+  order: "strict",
+  unlock: { kind: "after-previous" },
+  "testOut.allowed": true,
+  "repeat.allowed": true,
+  lockedVisibility: "locked",
+  "test.exitRequired": true,
+};
+const learningPresetByName = new Map([
+  [
+    "Путь (Duolingo)",
+    { id: goldenUuid(0x00fe, 1), values: PATH_PRESET_VALUES },
+  ],
+]);
 
 // Every dataset assertion below is deterministic, so the suite pins the instant
 // explicitly rather than inheriting the run-time default.
@@ -472,12 +493,20 @@ describe("#2063 golden seed plan", () => {
   const dataset = buildGoldenDataset(now, subjects);
 
   it("writes parents before children", () => {
-    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    );
     expect(plan.map((s) => s.name)).toEqual([...GOLDEN_SEED_ORDER]);
   });
 
   it("conflicts on the pinned identity of every step", () => {
-    for (const step of buildGoldenSeedPlan(dataset, specialtyIdByName)) {
+    for (const step of buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    )) {
       expect(step.conflictKeys.length).toBeGreaterThan(0);
       for (const key of step.conflictKeys) {
         expect(step.updateKeys).not.toContain(key);
@@ -491,7 +520,11 @@ describe("#2063 golden seed plan", () => {
     // `registration_attendance` references `registrations` ON DELETE RESTRICT
     // (#1278), so the replaced range's marks are an ordered child cleanup the
     // plan declares — never a cascade and never a restrict failure mid-seed.
-    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    );
     const registrationsStep = plan.find((s) => s.name === "registrations");
     expect(
       registrationsStep?.volumeNamespaceChildren?.map((child) => [
@@ -510,14 +543,20 @@ describe("#2063 golden seed plan", () => {
   });
 
   it("keys stream_config on its event, not on a surrogate id", () => {
-    const step = buildGoldenSeedPlan(dataset, specialtyIdByName).find(
-      (s) => s.name === "stream_config",
-    );
+    const step = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    ).find((s) => s.name === "stream_config");
     expect(step?.conflictKeys).toEqual(["eventId"]);
   });
 
   it("046 EARS-1 (#2432): keys the congress intake settings on the event, and each kind on (event, kind)", () => {
-    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    );
     expect(
       plan.find((s) => s.name === "congress_submission_settings")?.conflictKeys,
     ).toEqual(["eventId"]);
@@ -602,12 +641,14 @@ describe("#2212 a re-run rewrites the dates", () => {
     buildGoldenSeedPlan(
       buildGoldenDataset(at, subjects),
       specialtyIdByName,
+      learningPresetByName,
     ).find((s) => s.name === "events")!;
 
   const stepNamed = (name: string, at: Date) =>
     buildGoldenSeedPlan(
       buildGoldenDataset(at, subjects),
       specialtyIdByName,
+      learningPresetByName,
     ).find((s) => s.name === name)!;
 
   it("#2212: the events upsert refreshes every date-bearing column", () => {
@@ -729,7 +770,11 @@ describe("#2063 golden step execution", () => {
   const dataset = buildGoldenDataset(now, subjects);
 
   it("upserts on the conflict target and refreshes from `excluded`", async () => {
-    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    );
     const step = plan.find((s) => s.name === "users")!;
     const calls: {
       rows: unknown;
@@ -764,7 +809,11 @@ describe("#2063 golden step execution", () => {
     // `organisation_role_assignments` rows carry nothing but their composite
     // key, so there is no column to refresh: an empty `ON CONFLICT DO UPDATE
     // SET` is not valid SQL, and the re-run must leave the held link alone.
-    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    );
     const step = plan.find((s) => s.name === "organisation_role_assignments")!;
     expect(step.rows.length).toBeGreaterThan(0);
     expect(step.updateKeys).toEqual([]);
@@ -789,7 +838,11 @@ describe("#2063 golden step execution", () => {
   });
 
   it("refuses a plan key that is not a column of the table", async () => {
-    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    );
     const step = { ...plan[0]!, updateKeys: ["notAColumn"] };
     await expect(applyGoldenStep({ insert: () => ({}) }, step)).rejects.toThrow(
       GoldenPlanError,
@@ -1530,9 +1583,11 @@ describe("#2213 golden dataset at volume", () => {
     // seed transaction back on a re-run if a publication instant is updated —
     // and the volume half multiplies the rows that carry one.
     for (const name of ["experts", "projects", "event_recordings"]) {
-      const step = buildGoldenSeedPlan(dataset, specialtyIdByName).find(
-        (s) => s.name === name,
-      )!;
+      const step = buildGoldenSeedPlan(
+        dataset,
+        specialtyIdByName,
+        learningPresetByName,
+      ).find((s) => s.name === name)!;
       const published = step.rows.filter(
         (row) => row.firstPublishedAt instanceof Date,
       );
@@ -2079,7 +2134,11 @@ describe("#2213 golden taxonomy and targeting", () => {
   });
 
   it("#2213: writes the taxonomy parents before the links that reference them", () => {
-    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    );
     const order = plan.map((step) => step.name);
     const at = (name: string) => {
       const index = order.indexOf(name);
@@ -2147,7 +2206,11 @@ describe("#2213 golden taxonomy and targeting", () => {
   });
 
   it("030 EARS-17: writes project results after their project, keyed on the per-project position", () => {
-    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    );
     const order = plan.map((step) => step.name);
     expect(order.indexOf("project_results")).toBeGreaterThan(
       order.indexOf("projects"),
@@ -2267,6 +2330,9 @@ describe("#2213 golden volume content and media", () => {
         .filter((key): key is string => Boolean(key)),
       ...dataset.partners
         .map((p) => p.logoRef)
+        .filter((key): key is string => Boolean(key)),
+      ...dataset.learningSteps
+        .map((s) => s.mediaRef)
         .filter((key): key is string => Boolean(key)),
     ]);
     expect(new Set(keys)).toEqual(promised);
@@ -2632,7 +2698,11 @@ describe("#3705 golden material", () => {
   });
 
   it("writes the material after its references and the card after the material", () => {
-    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    );
     const order = plan.map((s) => s.name);
     expect(order.indexOf("materials")).toBeGreaterThan(
       order.indexOf("experts"),
@@ -2647,7 +2717,11 @@ describe("#3705 golden material", () => {
     // `materials_first_published_at_set_once` refuses to move the instant, and
     // the card date IS that instant: refreshing one without the other would
     // make the card and its material disagree on a re-seeded slot.
-    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    );
     const materials = plan.find((s) => s.name === "materials")!;
     expect(materials.conflictKeys).toEqual(["id"]);
     expect(materials.updateKeys).not.toContain("firstPublishedAt");
@@ -2662,4 +2736,125 @@ describe("#3705 golden material", () => {
     expect(cards.updateKeys).toContain("title");
     expect(cards.updateKeys).toContain("updatedAt");
   });
+});
+
+describe("#4059 golden learning course", () => {
+  // 024 — the doctor course routes render a published course only, and the
+  // `live/doctor/learning` slot leg opens one; a slot is a clone of `ds_golden`.
+  const dataset = buildGoldenDataset(now, subjects);
+  const L = golden.learning;
+
+  it("catalogues the course under its own id groups with a stable slug", () => {
+    expect(L.course.id).toBe(goldenUuid(GOLDEN_GROUP.learningCourses, 1));
+    expect(L.course.slug).toBe("golden-course-path");
+    expect(L.steps.firstVideo.id).toBe(
+      goldenUuid(GOLDEN_GROUP.learningSteps, 1),
+    );
+  });
+
+  it("seeds one published course: two modules, lesson 1 video → download → exit test, lesson 2 video → exit test", () => {
+    expect(dataset.learningCourses).toEqual([
+      expect.objectContaining({
+        id: L.course.id,
+        slug: L.course.slug,
+        state: "published",
+        schoolId: L.school.id,
+      }),
+    ]);
+    expect(dataset.learningModules.map((m) => [m.id, m.position])).toEqual([
+      [L.modules.first.id, 1],
+      [L.modules.second.id, 2],
+    ]);
+    expect(dataset.learningLessons.map((l) => [l.moduleId, l.state])).toEqual([
+      [L.modules.first.id, "published"],
+      [L.modules.second.id, "published"],
+    ]);
+    const typesOf = (lessonId: string) =>
+      dataset.learningSteps
+        .filter((s) => s.lessonId === lessonId)
+        .sort((a, b) => a.position - b.position)
+        .map((s) => s.type);
+    expect(typesOf(L.lessons.first.id)).toEqual(["video", "download", "test"]);
+    expect(typesOf(L.lessons.second.id)).toEqual(["video", "test"]);
+    expect(
+      dataset.learningSteps
+        .filter((s) => s.type === "video")
+        .map((s) => s.provider),
+    ).toEqual(["youtube", "youtube"]);
+    // A test step's row keeps only its kind; the questions are rows (`writeTest`).
+    expect(dataset.learningTests.map((t) => t.kind)).toEqual(["exit", "exit"]);
+    expect(dataset.learningQuestions).toHaveLength(4);
+    expect(dataset.learningOptions).toHaveLength(8);
+    for (const q of dataset.learningQuestions) {
+      const options = dataset.learningOptions.filter(
+        (o) => o.questionId === q.id,
+      );
+      expect(options.filter((o) => o.correct).map((o) => o.text)).toEqual([
+        "Верно",
+      ]);
+    }
+  });
+
+  it("is referentially sound, and names a dangling question", () => {
+    expect(goldenReferentialIssues(dataset)).toEqual([]);
+    const broken = {
+      ...dataset,
+      learningQuestions: [
+        {
+          ...dataset.learningQuestions[0]!,
+          testId: goldenUuid(GOLDEN_GROUP.learningSteps, 999),
+        },
+      ],
+    };
+    expect(goldenReferentialIssues(broken)).toContain(
+      `learning_questions.testId references an unknown row: ${goldenUuid(GOLDEN_GROUP.learningSteps, 999)}`,
+    );
+  });
+
+  it("applies «Путь (Duolingo)» on the course from the preset row, as `applyPreset` writes the layer", () => {
+    const step = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    ).find((s) => s.name === "learning_rule_layers")!;
+    expect(step.conflictKeys).toEqual(["scopeKind", "scopeId"]);
+    expect(step.rows).toEqual([
+      expect.objectContaining({
+        id: L.courseRules.id,
+        scopeKind: "course",
+        scopeId: L.course.id,
+        values: PATH_PRESET_VALUES,
+        appliedPresetId: goldenUuid(0x00fe, 1),
+      }),
+    ]);
+  });
+
+  it("refuses to plan without the preset row, naming it", () => {
+    expect(() =>
+      resolveLearningRuleLayerRows(dataset.learningRuleLayers, new Map()),
+    ).toThrow(/learning_presets does not carry: Путь \(Duolingo\)/);
+  });
+
+  it("writes parents before children", () => {
+    const order = [...GOLDEN_SEED_ORDER];
+    const at = (name: string) => order.indexOf(name);
+    expect(at("learning_schools")).toBeGreaterThan(at("directions"));
+    expect(at("learning_courses")).toBe(at("learning_schools") + 1);
+    expect(at("learning_options")).toBeGreaterThan(at("learning_questions"));
+    expect(at("learning_rule_layers")).toBeGreaterThan(at("learning_courses"));
+  });
+
+  it("owns the download's object: the media plan carries the memo PDF the step row sizes", async () => {
+    const download = dataset.learningSteps.find(
+      (s) => s.id === L.steps.firstDownload.id,
+    )!;
+    expect(download.mediaRef).toBe(GOLDEN_COURSE_MEMO_KEY);
+    const plan = await buildGoldenMediaPlan(dataset);
+    const memo = plan.find((o) => o.key === GOLDEN_COURSE_MEMO_KEY)!;
+    expect(memo.contentType).toBe("application/pdf");
+    expect(memo.bytes.byteLength).toBe(download.mediaSizeBytes);
+    expect(memo.bytes).toEqual(goldenCourseMemoPdf());
+    const pdf = await PDFDocument.load(memo.bytes);
+    expect(pdf.getPageCount()).toBe(1);
+  }, 120_000);
 });

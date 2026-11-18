@@ -14,13 +14,14 @@
 # write this path, and this file never execs or sources ds-deploy-entrypoint; the only
 # box programs it runs are `ds-release check prod` (fixed words) and, over the hop key,
 # the data entrypoint's `check`, `read-schema`, `read-observe`, `rehearse`, `rehearse-restore`,
-# `rehearsal-status` and the
+# `rehearsal-status`, `read-host-state` and the
 # recovery verbs (an older data entrypoint rejects them: fail-closed), ds-recovery
-# (#3662) and, for `release-journal` (#4067), `journalctl` on fixed unit names.
+# (#3662), for `release-journal` (#4067) `journalctl` on fixed unit names and, for
+# `host-state` (#4144), the fixed probe commands of HOST_STATE_PY.
 #
 # It serves READ_VERBS below on the prod box only and rejects every other verb with
-# exit 2. `schema`, `observe`, `rehearse`, `rehearse-restore`, `rehearsal-status` and
-# `release-journal` leave as CMS ciphertext to the recipient certificate installed
+# exit 2. `schema`, `observe`, `rehearse`, `rehearse-restore`, `rehearsal-status`,
+# `release-journal` and `host-state` leave as CMS ciphertext to the recipient certificate installed
 # with the tooling tree (READ_RECIPIENT), never plaintext: the client's stdout is a
 # public Actions artifact. `capabilities` answers its verb list; `recovery-bundle` and
 # `recovery-check` (#3662) answer status lines only (RECOVERY_LINE_RE): no value, no
@@ -32,7 +33,9 @@
 # and its measured headroom, on demand, with nothing pending. `release-journal <sha>`
 # (#4067) answers the bounded journal tail of the release's driver unit and of every
 # step unit this box's status file records as not succeeded, with the failure note: a
-# failed release is read without the break-glass key.
+# failed release is read without the break-glass key. `host-state` (#4144) answers
+# both prod boxes' resolver, self-hostname, disk and uptime, and ds-data-prod's WAL
+# archiver and pgBackRest version: a closed field list, without the break-glass key.
 #
 # Installed as /usr/local/bin/ds-read-entrypoint beside ds-release and
 # ds-deploy-entrypoint, by the same install step (tools/deploy/lib/remote.mjs).
@@ -76,7 +79,7 @@ accepted() { logger -t "$TAG" -p auth.info "accepted: $(sanitised)" || true; }
 # The verbs it serves (spec §8 (g): S1 serves `capabilities` and `schema`; #3662 adds
 # the key custody); prod-observe.yml / recovery-custody.yml refuse a verb
 # `capabilities` does not name.
-READ_VERBS='capabilities schema observe rehearse rehearse-restore rehearsal-status release-journal recovery-bundle recovery-check'
+READ_VERBS='capabilities schema observe rehearse rehearse-restore rehearsal-status release-journal host-state recovery-bundle recovery-check'
 # #3647: `observe <name>` — the name of a PROD_OBSERVATIONS entry (the data entrypoint's
 # catalogue checks it and every parameter again), the parameters one JSON object of at
 # most MAX_OBSERVE_PARAMS_BYTES on stdin. The data box's rejections of a name or a
@@ -407,6 +410,227 @@ release_journal() {
   encrypt_answer
 }
 
+# --- the host state (Issue #4144; spec §5 «Prod read verbs.») -----------------------
+# HOST_STATE_PY is one probe for both prod boxes: ds-deploy-entrypoint carries the same
+# text for ds-data-prod's half, the data verb `read-host-state` (pinned equal by the
+# tests). argv: role (api|data), the root prefix, the data compose dir (unused here).
+read -r -d '' HOST_STATE_PY <<'PY' || true
+import datetime, ipaddress, json, os, re, shutil, subprocess, sys
+role, root, compose = sys.argv[1], sys.argv[2], sys.argv[3]
+FILES = {"uptime": "/proc/uptime", "resolv": "/etc/resolv.conf", "hosts": "/etc/hosts"}
+PROBE_NAME = "s3.twcstorage.ru"
+PG_VOLUME = "ds-data-prod_pgdata"
+HOST_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}")
+ISO_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
+WAL_RE = re.compile(r"[0-9A-F]{8}(\.history|[0-9A-F]{16}(\.partial|\.[0-9A-F]{8}\.backup)?)")
+VERSION_RE = re.compile(r"pgBackRest [0-9][0-9A-Za-z.-]{0,31}")
+UTC = "AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'"
+ARCHIVER_SQL = (
+    "SELECT archived_count, failed_count, "
+    "coalesce(to_char(last_archived_time %s), ''), coalesce(to_char(last_failed_time %s), ''), "
+    "coalesce(last_failed_wal, '') FROM pg_stat_archiver" % (UTC, UTC)
+)
+
+def err(reason):
+    return {"error": reason}
+
+def text(name, limit=1 << 20):
+    with open(root + FILES[name], "rb") as f:
+        return f.read(limit).decode("utf-8", "replace")
+
+def run(argv, timeout, cwd=None):
+    try:
+        p = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, timeout=timeout, cwd=cwd)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return p.stdout[:65536].decode("utf-8", "replace") if p.returncode == 0 else None
+
+def ips(tokens):
+    out = []
+    for token in tokens:
+        try:
+            ip = str(ipaddress.ip_address(token.split("#")[0]))
+        except ValueError:
+            continue
+        if ip not in out:
+            out.append(ip)
+    return out[:16]
+
+def uptime():
+    try:
+        return {"seconds": int(float(text("uptime").split()[0]))}
+    except (OSError, ValueError, IndexError):
+        return err("uptime unreadable")
+
+def resolver():
+    try:
+        ns = ips(w[1] for w in (l.split() for l in text("resolv").splitlines()) if len(w) >= 2 and w[0] == "nameserver")
+    except OSError:
+        ns = err("resolv.conf unreadable")
+    up = None
+    if shutil.which("resolvectl"):
+        out = run(["resolvectl", "dns"], 5)
+        up = err("resolvectl failed") if out is None else ips(out.split())
+    resolves = run(["getent", "hosts", PROBE_NAME], 5) is not None
+    return {"nameservers": ns, "upstream": up, "probeName": PROBE_NAME, "probeResolves": resolves}
+
+def self_hostname():
+    name = (run(["hostname"], 5) or "").strip()
+    if not HOST_RE.fullmatch(name):
+        return err("hostname unusable")
+    try:
+        lines = text("hosts").splitlines()
+        in_hosts = any(name in l.split("#", 1)[0].split()[1:] for l in lines)
+    except OSError:
+        in_hosts = err("/etc/hosts unreadable")
+    return {"hostname": name, "getentResolves": run(["getent", "hosts", name], 5) is not None, "inEtcHosts": in_hosts}
+
+def volume(path):
+    try:
+        st = os.statvfs(path)
+        mount = os.path.realpath(path)
+        while not os.path.ismount(mount):
+            mount = os.path.dirname(mount)
+    except OSError:
+        return err("statvfs failed")
+    return {
+        "mount": mount,
+        "bytesTotal": st.f_blocks * st.f_frsize,
+        "bytesUsed": (st.f_blocks - st.f_bfree) * st.f_frsize,
+        "bytesFree": st.f_bavail * st.f_frsize,
+        "inodesTotal": st.f_files,
+        "inodesUsed": st.f_files - st.f_ffree,
+        "inodesFree": st.f_favail,
+    }
+
+def disk():
+    out = {"root": volume(root + "/")}
+    if role == "data":
+        path = (run(["docker", "volume", "inspect", "--format", "{{.Mountpoint}}", PG_VOLUME], 30) or "").strip()
+        out["postgresData"] = volume(path) if path.startswith("/") and "\n" not in path else err("postgres volume not found")
+    return out
+
+def archiver():
+    out = run(["docker", "compose", "exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-qAt",
+               "-U", "ds", "-d", "ds_prod", "-c", ARCHIVER_SQL], 30, compose)
+    f = (out or "").strip().split("|")
+    if out is None or len(f) != 5 or not (f[0].isdigit() and f[1].isdigit()):
+        return err("pg_stat_archiver read failed")
+    when = lambda v: v if ISO_RE.fullmatch(v) else None
+    return {
+        "archivedCount": int(f[0]),
+        "failedCount": int(f[1]),
+        "lastArchivedTime": when(f[2]),
+        "lastFailedTime": when(f[3]),
+        "lastFailedWal": f[4] if WAL_RE.fullmatch(f[4]) else None,
+    }
+
+def pgbackrest():
+    lines = (run(["docker", "compose", "exec", "-T", "postgres", "pgbackrest", "version"], 30, compose) or "").strip().splitlines()
+    return {"version": lines[0]} if lines and VERSION_RE.fullmatch(lines[0]) else err("pgbackrest version failed")
+
+def safe(probe):
+    try:
+        return probe()
+    except Exception:
+        return err("probe failed")
+
+answer = {
+    "role": role,
+    "takenAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "uptime": safe(uptime),
+    "resolver": safe(resolver),
+    "selfHostname": safe(self_hostname),
+    "disk": safe(disk),
+}
+if role == "data":
+    answer["archiver"] = safe(archiver)
+    answer["pgbackrest"] = safe(pgbackrest)
+json.dump(answer, sys.stdout, separators=(",", ":"))
+PY
+
+# The answer (argv: the work dir, the hop's exit code): ds-api-prod's half from
+# api.json, ds-data-prod's from data.json. Each half is held to the closed field list
+# (prod-read.mjs HOST_STATE_FIELDS) with every value to its own pattern and every error
+# to the probe's fixed set; a half that is not passes as one fixed reason, so nothing
+# but the listed fields leaves.
+read -r -d '' HOST_STATE_JOIN_PY <<'PY' || true
+import datetime, json, os, re, sys
+work, rc = sys.argv[1], int(sys.argv[2])
+NOT_SERVED = "ds-data-prod does not serve read-host-state (the next release installs it)"
+HOP_REASONS = {2: NOT_SERVED, 3: NOT_SERVED, 124: "the read timed out", 255: "ds-data-prod is unreachable"}
+ERRORS = {
+    "uptime unreadable", "resolv.conf unreadable", "resolvectl failed", "hostname unusable",
+    "/etc/hosts unreadable", "statvfs failed", "postgres volume not found",
+    "pg_stat_archiver read failed", "pgbackrest version failed", "probe failed",
+}
+def pattern(rx):
+    rx = re.compile(rx)
+    return lambda v: isinstance(v, str) and rx.fullmatch(v) is not None
+nat = lambda v: isinstance(v, int) and not isinstance(v, bool) and v >= 0
+flag = lambda v: isinstance(v, bool)
+opt = lambda check: (lambda v: v is None or check(v))
+ip = pattern(r"[0-9A-Fa-f:.]{2,45}")
+ips = lambda v: isinstance(v, list) and len(v) <= 16 and all(ip(x) for x in v)
+iso = pattern(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
+VOLUME = {"mount": pattern(r"/[\x20-\x7e]{0,254}"), "bytesTotal": nat, "bytesUsed": nat, "bytesFree": nat,
+          "inodesTotal": nat, "inodesUsed": nat, "inodesFree": nat}
+BOX = {
+    "uptime": {"seconds": nat},
+    "resolver": {"nameservers": ips, "upstream": opt(ips), "probeName": lambda v: v == "s3.twcstorage.ru",
+                 "probeResolves": flag},
+    "selfHostname": {"hostname": pattern(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}"), "getentResolves": flag,
+                     "inEtcHosts": flag},
+}
+SCHEMA = {
+    "api": dict(BOX, disk={"root": VOLUME}),
+    "data": dict(BOX, disk={"root": VOLUME, "postgresData": VOLUME},
+                 archiver={"archivedCount": nat, "failedCount": nat, "lastArchivedTime": opt(iso),
+                           "lastFailedTime": opt(iso), "lastFailedWal": opt(pattern(r"[0-9A-Za-z.]{8,64}"))},
+                 pgbackrest={"version": pattern(r"pgBackRest [0-9][0-9A-Za-z.-]{0,31}")}),
+}
+def ok(value, spec):
+    if isinstance(value, dict) and set(value) == {"error"} and value["error"] in ERRORS:
+        return True
+    if isinstance(spec, dict):
+        return isinstance(value, dict) and set(value) == set(spec) and all(ok(value[k], spec[k]) for k in spec)
+    return spec(value)
+def half(role, name, fallback):
+    try:
+        with open(os.path.join(work, name), "rb") as f:
+            doc = json.loads(f.read(65536))
+    except (OSError, ValueError, UnicodeDecodeError):
+        doc = None
+    spec = SCHEMA[role]
+    if (isinstance(doc, dict) and set(doc) == set(spec) | {"role", "takenAt"} and doc["role"] == role
+            and iso(doc["takenAt"]) and all(ok(doc[k], spec[k]) for k in spec)):
+        return doc
+    return {"reachable": False, "reason": fallback}
+data = (half("data", "data.json", "the data box answer is not a host-state answer") if rc == 0
+        else {"reachable": False, "reason": HOP_REASONS.get(rc, "the read failed")})
+json.dump({
+    "verb": "host-state",
+    "takenAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "api": half("api", "api.json", "the probe failed"),
+    "data": data,
+}, sys.stdout, separators=(",", ":"))
+PY
+
+# Both boxes' host state: ds-api-prod's half here, ds-data-prod's over the hop (a VPC
+# address: it answers while the box resolver is down). No release check: it reads no
+# app data, so it answers during a running or failed release.
+host_state() {
+  local rc=0
+  read_workdir
+  sudo python3 -I -X utf8 -c "$HOST_STATE_PY" api "$ROOT" "" >"$read_work/api.json" 2>/dev/null </dev/null || true
+  data_prod_hop read-host-state >"$read_work/data.json" 2>/dev/null || rc=$?
+  python3 -I -X utf8 -c "$HOST_STATE_JOIN_PY" "$read_work" "$rc" >"$read_work/answer.json" 2>/dev/null </dev/null ||
+    read_fail "the read failed"
+  [[ -s $read_work/answer.json ]] || read_fail "the read failed"
+  encrypt_answer
+}
+
 # --- the key custody (Issue #3662; spec §5 «Prod read verbs.») ----------------------
 recovery_lines() { grep -E "$RECOVERY_LINE_RE" "$1" || true; }
 # The last ds-recovery reason of a file, or the fallback.
@@ -500,7 +724,7 @@ IFS=' ' read -r -a words <<<"$request"
 verb=${words[0]-}
 
 case "$verb" in
-  capabilities | schema | recovery-bundle | recovery-check) [[ ${#words[@]} -eq 1 ]] || reject "usage: $verb" ;;
+  capabilities | schema | host-state | recovery-bundle | recovery-check) [[ ${#words[@]} -eq 1 ]] || reject "usage: $verb" ;;
   observe)
     [[ ${#words[@]} -eq 2 && ${words[1]} =~ $OBSERVE_NAME_RE ]] || reject "usage: observe <name>" ;;
   rehearse | rehearse-restore | rehearsal-status | release-journal)
@@ -536,6 +760,10 @@ case "$verb" in
     # Reads no database: no release check; a running release's journal is read too.
     sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
     release_journal "${words[1]}" </dev/null ;;
+  host-state)
+    # Reads no app data: no release check; it answers during a running or failed release.
+    sudo test -f "$READ_RECIPIENT" || refuse "the read-result recipient certificate is not installed"
+    host_state </dev/null ;;
   recovery-bundle | recovery-check)
     read_release_check
     recovery_verb "${verb#recovery-}" </dev/null ;;

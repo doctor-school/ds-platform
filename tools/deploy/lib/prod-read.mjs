@@ -31,6 +31,8 @@ export const READ_VERBS = [
   "rehearse-restore",
   "rehearsal-status",
   "release-journal",
+  // #4144: both prod boxes' host state (spec §5 «Prod read verbs.» → `host-state`).
+  "host-state",
 ];
 /** #3648: the verbs whose answer carries a rehearsal state word. */
 export const REHEARSAL_VERBS = [
@@ -113,9 +115,9 @@ export function checkInputs({ verb = "", name = "", params = "", sha = "" }) {
   }
   if (name !== "") return fail(`${verb} takes no name`);
   if (!empty) return fail(`${verb} takes no params`);
-  if (verb === "schema") {
-    if (sha !== "") return fail("schema takes no sha");
-    return { ok: true, command: "schema", stdin: null };
+  if (verb === "schema" || verb === "host-state") {
+    if (sha !== "") return fail(`${verb} takes no sha`);
+    return { ok: true, command: verb, stdin: null };
   }
   if (!SHA_RE.test(sha)) return fail(`${verb} needs the full 40-hex sha`);
   return { ok: true, command: `${verb} ${sha}`, stdin: null };
@@ -341,6 +343,117 @@ export function releaseJournalLines(answer) {
       `== ${unit?.unit} (${lines.length} lines${unit?.truncated ? ", the tail only" : ""})`,
       ...lines,
     );
+  }
+  // every box-sourced text passes one filter: an escape sequence never reaches the terminal
+  return out.map(printable);
+}
+
+/**
+ * #4144: the closed field list of a `host-state` answer (spec §5 «Prod read verbs.»).
+ * Every object carries exactly these keys; a probe that failed is `{error}` in its
+ * place. ds-read-entrypoint holds the data box's half to the same list.
+ */
+export const HOST_STATE_FIELDS = Object.freeze({
+  answer: ["verb", "takenAt", "api", "data"],
+  box: {
+    api: ["role", "takenAt", "uptime", "resolver", "selfHostname", "disk"],
+    data: ["role", "takenAt", "uptime", "resolver", "selfHostname", "disk", "archiver", "pgbackrest"],
+  },
+  unreachable: ["reachable", "reason"],
+  uptime: ["seconds"],
+  resolver: ["nameservers", "upstream", "probeName", "probeResolves"],
+  selfHostname: ["hostname", "getentResolves", "inEtcHosts"],
+  disk: { api: ["root"], data: ["root", "postgresData"] },
+  volume: ["mount", "bytesTotal", "bytesUsed", "bytesFree", "inodesTotal", "inodesUsed", "inodesFree"],
+  archiver: ["archivedCount", "failedCount", "lastArchivedTime", "lastFailedTime", "lastFailedWal"],
+  pgbackrest: ["version"],
+});
+
+const sameKeys = (o, keys) =>
+  o !== null &&
+  typeof o === "object" &&
+  !Array.isArray(o) &&
+  Object.keys(o).length === keys.length &&
+  keys.every((k) => Object.hasOwn(o, k));
+const isError = (o) => sameKeys(o, ["error"]) && typeof o.error === "string";
+
+function checkHostState(answer) {
+  const F = HOST_STATE_FIELDS;
+  const bad = () => {
+    throw new ReadError("the answer is not a host-state answer: unlisted or missing field");
+  };
+  const probe = (value, keys) => isError(value) || sameKeys(value, keys) || bad();
+  if (!sameKeys(answer, F.answer)) bad();
+  for (const role of ["api", "data"]) {
+    const box = answer[role];
+    if (sameKeys(box, F.unreachable) && box.reachable === false) continue;
+    if (!sameKeys(box, F.box[role]) || box.role !== role) bad();
+    for (const field of ["uptime", "resolver", "selfHostname", "archiver", "pgbackrest"])
+      if (field in box) probe(box[field], F[field]);
+    if (!isError(box.disk)) {
+      probe(box.disk, F.disk[role]);
+      for (const v of Object.values(box.disk)) probe(v, F.volume);
+    }
+  }
+}
+
+const yesNo = (b) => (b === true ? "yes" : b === false ? "NO" : "?");
+const errOr = (v, f) => (isError(v) ? `error — ${v.error}` : f(v));
+const gib = (n) => `${(Number(n) / 1024 ** 3).toFixed(1)} GiB`;
+const volumeLine = (v) =>
+  errOr(
+    v,
+    (x) =>
+      `${gib(x.bytesUsed)} used of ${gib(x.bytesTotal)} (${x.bytesTotal ? Math.round((100 * x.bytesUsed) / x.bytesTotal) : 0}%), ` +
+      `${gib(x.bytesFree)} free; inodes ${x.inodesUsed} used of ${x.inodesTotal}, ${x.inodesFree} free (mount ${x.mount})`,
+  );
+
+/**
+ * #4144: the operator's view of a decrypted `host-state` answer — one line per probe
+ * and box, control characters dropped; an unlisted field rejects the whole answer.
+ * Printed on the operator's terminal only, never in a job log.
+ * @returns {string[]}
+ */
+export function hostStateLines(answer) {
+  if (answer?.verb !== "host-state") throw new ReadError("the answer is not a host-state answer");
+  checkHostState(answer);
+  const out = [`host state, taken ${answer.takenAt}`];
+  for (const [role, name] of [["api", "ds-api-prod"], ["data", "ds-data-prod"]]) {
+    const b = answer[role];
+    out.push("");
+    if (b.reachable === false) {
+      out.push(`== ${name}: not read — ${b.reason}`);
+      continue;
+    }
+    out.push(`== ${name} (taken ${b.takenAt})`);
+    out.push(
+      `uptime: ${errOr(b.uptime, (u) => `${u.seconds} s (${Math.floor(u.seconds / 86400)} d ${Math.floor((u.seconds % 86400) / 3600)} h)`)}`,
+    );
+    out.push(
+      `resolver: ${errOr(b.resolver, (r) => {
+        const list = (v) => errOr(v, (l) => (v === null ? "none" : l.join(", ") || "none"));
+        return `nameservers ${list(r.nameservers)}; upstream ${list(r.upstream)}; ${r.probeName} resolves: ${yesNo(r.probeResolves)}`;
+      })}`,
+    );
+    out.push(
+      `self-hostname: ${errOr(b.selfHostname, (h) => `${h.hostname}; getent: ${yesNo(h.getentResolves)}; /etc/hosts: ${yesNo(h.inEtcHosts)}`)}`,
+    );
+    if (isError(b.disk)) out.push(`disk: error — ${b.disk.error}`);
+    else {
+      out.push(`disk /: ${volumeLine(b.disk.root)}`);
+      if (role === "data") out.push(`disk postgres data: ${volumeLine(b.disk.postgresData)}`);
+    }
+    if (role === "data") {
+      out.push(
+        `pg_stat_archiver: ${errOr(
+          b.archiver,
+          (a) =>
+            `archived ${a.archivedCount}, last ${a.lastArchivedTime ?? "never"}; failed ${a.failedCount}, last ${a.lastFailedTime ?? "never"}` +
+            (a.lastFailedWal ? ` (${a.lastFailedWal})` : ""),
+        )}`,
+      );
+      out.push(`pgbackrest: ${errOr(b.pgbackrest, (v) => v.version)}`);
+    }
   }
   // every box-sourced text passes one filter: an escape sequence never reaches the terminal
   return out.map(printable);

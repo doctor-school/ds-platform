@@ -24,6 +24,7 @@ import {
   checkCapabilities,
   checkInputs,
   failureReason,
+  hostStateLines,
   READ_REASONS,
   REHEARSAL_POLL_CAP_SEC,
   REHEARSAL_STATES,
@@ -94,6 +95,7 @@ describe("3646: the runner-side input shape check", () => {
       command: `release-journal ${SHA}`,
       stdin: null,
     });
+    assert.deepEqual(checkInputs({ verb: "host-state" }), { ok: true, command: "host-state", stdin: null });
   });
   for (const [what, inputs] of [
     ["an unknown verb", { verb: "release" }],
@@ -102,6 +104,9 @@ describe("3646: the runner-side input shape check", () => {
     ["release-journal with a short sha", { verb: "release-journal", sha: SHA.slice(0, 12) }],
     ["release-journal with a name", { verb: "release-journal", name: "x", sha: SHA }],
     ["schema with a sha", { verb: "schema", sha: SHA }],
+    ["host-state with a sha", { verb: "host-state", sha: SHA }],
+    ["host-state with a name", { verb: "host-state", name: "x" }],
+    ["host-state with params", { verb: "host-state", params: '{"a":1}' }],
     ["schema with params", { verb: "schema", params: '{"a":1}' }],
     ["observe without a name", { verb: "observe" }],
     ["observe with a shell name", { verb: "observe", name: "x; rm -rf /" }],
@@ -195,6 +200,82 @@ describe("4067: release-journal — the job prints status lines only, the operat
     ]);
     assert.throws(() => releaseJournalLines({ verb: "schema" }), /not a release-journal answer/);
   });
+});
+
+describe("4144: host-state — the operator reads both boxes' host state", () => {
+  const GiB = 1024 ** 3;
+  const vol = (mount, total, used) => ({
+    mount,
+    bytesTotal: total * GiB,
+    bytesUsed: used * GiB,
+    bytesFree: (total - used) * GiB,
+    inodesTotal: 1000,
+    inodesUsed: 250,
+    inodesFree: 750,
+  });
+  const box = (role, extra = {}) => ({
+    role,
+    takenAt: "2026-11-18T00:00:00Z",
+    uptime: { seconds: 90061 },
+    resolver: { nameservers: ["127.0.0.53"], upstream: ["1.1.1.1", "8.8.8.8"], probeName: "s3.twcstorage.ru", probeResolves: true },
+    selfHostname: { hostname: `${role}-host`, getentResolves: true, inEtcHosts: true },
+    disk: { root: vol("/", 40, 10) },
+    ...extra,
+  });
+  const answer = {
+    verb: "host-state",
+    takenAt: "2026-11-18T00:00:01Z",
+    api: box("api"),
+    data: box("data", {
+      selfHostname: { hostname: "8529185-kw435155.twc1.net", getentResolves: false, inEtcHosts: false },
+      resolver: { nameservers: ["1.1.1.1"], upstream: { error: "resolvectl failed" }, probeName: "s3.twcstorage.ru", probeResolves: false },
+      disk: { root: vol("/", 40, 10), postgresData: vol("/", 40, 10) },
+      archiver: { archivedCount: 42, failedCount: 1, lastArchivedTime: "2026-11-17T18:59:01Z", lastFailedTime: "2026-11-17T10:20:00Z", lastFailedWal: "00000001000000000000002A" },
+      pgbackrest: { version: "pgBackRest 2.60.0" },
+    }),
+  };
+  it("prints each box's fields, one line per probe", () => {
+    assert.deepEqual(hostStateLines(answer), [
+      "host state, taken 2026-11-18T00:00:01Z",
+      "",
+      "== ds-api-prod (taken 2026-11-18T00:00:00Z)",
+      "uptime: 90061 s (1 d 1 h)",
+      "resolver: nameservers 127.0.0.53; upstream 1.1.1.1, 8.8.8.8; s3.twcstorage.ru resolves: yes",
+      "self-hostname: api-host; getent: yes; /etc/hosts: yes",
+      "disk /: 10.0 GiB used of 40.0 GiB (25%), 30.0 GiB free; inodes 250 used of 1000, 750 free (mount /)",
+      "",
+      "== ds-data-prod (taken 2026-11-18T00:00:00Z)",
+      "uptime: 90061 s (1 d 1 h)",
+      "resolver: nameservers 1.1.1.1; upstream error — resolvectl failed; s3.twcstorage.ru resolves: NO",
+      "self-hostname: 8529185-kw435155.twc1.net; getent: NO; /etc/hosts: NO",
+      "disk /: 10.0 GiB used of 40.0 GiB (25%), 30.0 GiB free; inodes 250 used of 1000, 750 free (mount /)",
+      "disk postgres data: 10.0 GiB used of 40.0 GiB (25%), 30.0 GiB free; inodes 250 used of 1000, 750 free (mount /)",
+      "pg_stat_archiver: archived 42, last 2026-11-17T18:59:01Z; failed 1, last 2026-11-17T10:20:00Z (00000001000000000000002A)",
+      "pgbackrest: pgBackRest 2.60.0",
+    ]);
+  });
+  it("prints a probe's error and an unreachable data box by their fixed reasons", () => {
+    const lines = hostStateLines({
+      ...answer,
+      api: { ...answer.api, uptime: { error: "uptime unreadable" } },
+      data: { reachable: false, reason: "ds-data-prod is unreachable" },
+    });
+    assert.ok(lines.includes("uptime: error — uptime unreadable"));
+    assert.equal(lines.at(-1), "== ds-data-prod: not read — ds-data-prod is unreachable");
+  });
+  for (const [what, bad] of [
+    ["a top-level field", { ...answer, env: "x" }],
+    ["a box field", { ...answer, api: { ...answer.api, environment: {} } }],
+    ["a Postgres field on the api box", { ...answer, api: { ...answer.api, archiver: answer.data.archiver } }],
+    ["a probe field", { ...answer, data: { ...answer.data, archiver: { ...answer.data.archiver, password: "x" } } }],
+    ["a disk field", { ...answer, api: { ...answer.api, disk: { ...answer.api.disk, home: vol("/home", 1, 0) } } }],
+    ["a field beside an error", { ...answer, api: { ...answer.api, uptime: { error: "x", seconds: 1 } } }],
+  ]) {
+    it(`rejects an answer with an unlisted field: ${what}`, () =>
+      assert.throws(() => hostStateLines(bad), /not a host-state answer: unlisted or missing field/));
+  }
+  it("rejects a non-host-state answer", () =>
+    assert.throws(() => hostStateLines({ verb: "schema" }), /not a host-state answer/));
 });
 
 describe("3646: status lines only — verb, rc, size and sha256, or one fixed reason", () => {
@@ -328,6 +409,7 @@ describe("3646: prod-observe.yml", () => {
       "rehearse-restore",
       "rehearsal-status",
       "release-journal",
+      "host-state",
     ]);
     assert.equal(inputs.params.default, "{}");
     assert.deepEqual(Object.keys(inputs), ["verb", "name", "params", "sha"]);

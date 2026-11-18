@@ -34,8 +34,8 @@
       "gap": 4117
     },
     "D8": {
-      "status": "PARTIAL",
-      "gap": 4114
+      "status": "FULL",
+      "gap": null
     },
     "D9": {
       "status": "PARTIAL",
@@ -2140,6 +2140,17 @@
         [
           "021 EARS-13 / 003 EARS-23: a duplicate registration on the doctor host",
           "003 EARS-23/41/42: duplicate register → the same code step + a code mail (no link), an identical resend acknowledgement, and the code signs the owner in"
+        ]
+      ]
+    },
+    {
+      "rows": ["D8"],
+      "leg": "live/doctor/room",
+      "file": "room-player-chat-live.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "006 EARS-2 and 006 EARS-3: registered doctors see the live player and receive a chat message without a reload"
         ]
       ]
     },

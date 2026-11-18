@@ -30,6 +30,7 @@ import { gzipSync } from "node:zlib";
 import { SECRET_KEYS, SECRET_MAX_AGE_SEC, SECRET_VALUE } from "./data-secret.mjs";
 import { DATA_READ_VERBS, DATA_SECRET_VERBS, DATA_VERBS, POSTGRES_ARTIFACT_VERBS } from "./lib/data-prod.mjs";
 import { BOX_ENTRYPOINTS, DATA_BOX_ENTRYPOINTS, DS_READ_ENTRYPOINT_BIN } from "./lib/remote.mjs";
+import { HOST_STATE_FIELDS } from "./lib/prod-read.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ENTRYPOINT = resolve(here, "../../infra/deploy/bin/ds-deploy-entrypoint");
@@ -100,6 +101,22 @@ test("2984: the entrypoint checks env and sha with ds-release's own regexes", ()
   for (const name of ["ENV_RE", "SHA_RE"]) {
     assert.equal(pick(ENTRYPOINT, name), pick(DS_RELEASE, name), `${name} is one definition`);
   }
+});
+
+test("4144: both boxes run one host-state probe, which reads three fixed files and no secret, env or config", () => {
+  const probe = (file) => {
+    const m = readFileSync(file, "utf8").match(/^read -r -d '' HOST_STATE_PY <<'PY' \|\| true\n([\s\S]*?)\nPY$/m);
+    assert.ok(m, `${file} defines HOST_STATE_PY`);
+    return m[1];
+  };
+  const src = probe(ENTRYPOINT);
+  assert.equal(probe(READ_ENTRYPOINT), src, "ds-read-entrypoint and ds-deploy-entrypoint carry the same probe");
+  // one open(), on one of FILES only
+  assert.equal(src.match(/\bopen\(/g)?.length, 1);
+  assert.match(src, /^FILES = \{"uptime": "\/proc\/uptime", "resolv": "\/etc\/resolv\.conf", "hosts": "\/etc\/hosts"\}$/m);
+  assert.match(src, /with open\(root \+ FILES\[name\]/);
+  for (const banned of [/environ/, /getenv/, /\/etc\/ds-platform/, /\.env\b/, /sys\.stdin/, /shell=True/, /pathlib/, /\bglob\b/])
+    assert.doesNotMatch(src, banned);
 });
 
 test("3313, 3646, 4068, 4089: the data verbs are one list: DATA_VERBS, the case arm, the client's release, read, secret and artifact verbs", () => {
@@ -1909,7 +1926,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     readBoxes({ cert: false });
     const r = readRun("capabilities");
     assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema", "observe", "rehearse", "rehearse-restore", "rehearsal-status", "release-journal", "recovery-bundle", "recovery-check"] });
+    assert.deepEqual(JSON.parse(String(r.stdout)), { role: "prod", mode: "read", verbs: ["capabilities", "schema", "observe", "rehearse", "rehearse-restore", "rehearsal-status", "release-journal", "host-state", "recovery-bundle", "recovery-check"] });
     assert.match(log("logger"), /auth\.info accepted: capabilities/);
   });
 
@@ -1947,7 +1964,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     `release-journal ${SHA.slice(0, 12)}`,
     `release-journal ${SHA} now`,
     `release-journal ../${SHA}`,
+    "host-state now",
+    `host-state ${SHA}`,
     "read-schema",
+    "read-host-state",
     "check",
     `converge ${SHA}`,
     "schema now",
@@ -2421,6 +2441,205 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     setRole("data");
     assert.equal(readRun(`release-journal ${SHA}`).status, 3);
     assert.equal(log("journalctl"), "");
+  });
+
+  // --- 4144: the prod boxes' host state, key-free --------------------------------------
+  // Both halves run the same probe: ds-api-prod's locally under `root`, ds-data-prod's
+  // through the hop under `dataRoot()`. The stubs tell the boxes apart by the basename
+  // of DS_ENTRYPOINT_ROOT (`root` / `data-root`).
+  const PG_VOLUME = () => join(dataRoot(), "var/lib/docker/volumes/ds-data-prod_pgdata/_data");
+  const hostBox = ({
+    names = { root: "ds-api-prod-host", "data-root": "ds-data-prod-host" },
+    hosts = { root: true, "data-root": true },
+    resolves = { root: ["s3.twcstorage.ru", "ds-api-prod-host"], "data-root": ["s3.twcstorage.ru", "ds-data-prod-host"] },
+    upstream = { root: "Global: 1.1.1.1 8.8.8.8\nLink 2 (eth0): 1.1.1.1\n", "data-root": "Global: 1.1.1.1\n" },
+    archiver = "42|0|2026-11-17T18:59:01Z||",
+  } = {}) => {
+    readBoxes();
+    const box = 'box=$(basename "$DS_ENTRYPOINT_ROOT")';
+    for (const [b, r] of [["root", root], ["data-root", dataRoot()]]) {
+      mkdirSync(join(r, "proc"), { recursive: true });
+      writeFileSync(join(r, "proc/uptime"), "12345.67 99999.00\n");
+      writeFileSync(join(r, "etc/resolv.conf"), "# managed\nnameserver 127.0.0.53\nnameserver not-an-ip\noptions edns0\n");
+      writeFileSync(
+        join(r, "etc/hosts"),
+        `127.0.0.1 localhost\n${hosts[b] ? `127.0.1.1 ${names[b]} ${names[b].split(".")[0]}\n` : ""}`,
+      );
+      writeFileSync(join(dir, `hostname.${b}`), `${names[b]}\n`);
+      writeFileSync(join(dir, `resolves.${b}`), resolves[b].map((n) => `${n}\n`).join(""));
+      if (upstream[b] !== null) writeFileSync(join(dir, `resolvectl.${b}`), upstream[b]);
+    }
+    mkdirSync(PG_VOLUME(), { recursive: true });
+    const stub = (name, lines) => {
+      writeFileSync(join(stubs, name), ["#!/usr/bin/env bash", `echo "$*" >> "$STUB_DIR/${name}.log"`, box, ...lines].join("\n") + "\n");
+      chmodSync(join(stubs, name), 0o755);
+    };
+    stub("hostname", ['[[ $# -eq 0 ]] || exit 2', 'cat "$STUB_DIR/hostname.$box"']);
+    stub("getent", ['[[ $1 == hosts && $# -eq 2 ]] || exit 2', 'grep -qxF -- "$2" "$STUB_DIR/resolves.$box" || exit 2', 'echo "10.0.0.1 $2"']);
+    stub("resolvectl", ['[[ $* == dns ]] || exit 2', '[[ -f $STUB_DIR/resolvectl.$box ]] || exit 1', 'cat "$STUB_DIR/resolvectl.$box"']);
+    stub("docker", [
+      `[[ $box == data-root ]] || exit 9`,
+      'case " $* " in',
+      `  *" volume inspect "*) echo "${PG_VOLUME()}" ;;`,
+      `  *" psql "*) ${archiver === null ? "exit 1" : `echo '${archiver}'`} ;;`,
+      '  *" pgbackrest version "*) echo "pgBackRest 2.60.0" ;;',
+      "  *) exit 7 ;;",
+      "esac",
+    ]);
+  };
+  const KEYS = (o) => Object.keys(o).sort();
+  // The closed list: every object of the answer carries exactly HOST_STATE_FIELDS' keys.
+  const closed = (answer) => {
+    assert.deepEqual(KEYS(answer), [...HOST_STATE_FIELDS.answer].sort());
+    for (const role of ["api", "data"]) {
+      const b = answer[role];
+      if (b.reachable === false) {
+        assert.deepEqual(KEYS(b), [...HOST_STATE_FIELDS.unreachable].sort());
+        continue;
+      }
+      assert.deepEqual(KEYS(b), [...HOST_STATE_FIELDS.box[role]].sort(), role);
+      for (const [field, value] of Object.entries(b)) {
+        if (field === "role" || field === "takenAt") continue;
+        if ("error" in value) {
+          assert.deepEqual(KEYS(value), ["error"], `${role}.${field}`);
+          continue;
+        }
+        if (field === "disk") {
+          assert.deepEqual(KEYS(value), [...HOST_STATE_FIELDS.disk[role]].sort());
+          for (const v of Object.values(value))
+            if (!("error" in v)) assert.deepEqual(KEYS(v), [...HOST_STATE_FIELDS.volume].sort());
+          continue;
+        }
+        assert.deepEqual(KEYS(value), [...HOST_STATE_FIELDS[field]].sort(), `${role}.${field}`);
+      }
+    }
+  };
+
+  it("4144: host-state answers both boxes' resolver, self-hostname, disk and uptime, and the data box's archiver and pgBackRest, encrypted", () => {
+    hostBox();
+    const r = readRun("host-state");
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, "", "status lines only: the host state leaves encrypted");
+    assert.doesNotMatch(r.stdout.toString("latin1"), /ds-data-prod-host|pgBackRest/);
+    const answer = decrypt(r.stdout);
+    closed(answer);
+    assert.equal(answer.verb, "host-state");
+    const { api, data } = answer;
+    assert.equal(api.role, "api");
+    assert.equal(data.role, "data");
+    assert.deepEqual(api.uptime, { seconds: 12345 });
+    assert.deepEqual(api.resolver, {
+      nameservers: ["127.0.0.53"],
+      upstream: ["1.1.1.1", "8.8.8.8"],
+      probeName: "s3.twcstorage.ru",
+      probeResolves: true,
+    });
+    assert.deepEqual(data.resolver.upstream, ["1.1.1.1"]);
+    assert.deepEqual(api.selfHostname, { hostname: "ds-api-prod-host", getentResolves: true, inEtcHosts: true });
+    assert.deepEqual(data.selfHostname, { hostname: "ds-data-prod-host", getentResolves: true, inEtcHosts: true });
+    for (const v of [api.disk.root, data.disk.root, data.disk.postgresData]) {
+      for (const k of ["bytesTotal", "bytesUsed", "bytesFree", "inodesTotal", "inodesUsed", "inodesFree"])
+        assert.ok(Number.isSafeInteger(v[k]) && v[k] >= 0, k);
+      assert.ok(v.bytesTotal > 0);
+      assert.match(v.mount, /^\//);
+    }
+    assert.deepEqual(data.archiver, {
+      archivedCount: 42,
+      failedCount: 0,
+      lastArchivedTime: "2026-11-17T18:59:01Z",
+      lastFailedTime: null,
+      lastFailedWal: null,
+    });
+    assert.deepEqual(data.pgbackrest, { version: "pgBackRest 2.60.0" });
+    assert.equal(log("ds-release"), "", "no release check: it answers during a release");
+    assert.equal(log("ssh").trim().split("\n").at(-1).split(" ").at(-1), "read-host-state");
+    assert.match(log("docker"), /^volume inspect --format \{\{\.Mountpoint\}\} ds-data-prod_pgdata$/m);
+    assert.match(log("docker"), /^compose exec -T postgres psql -v ON_ERROR_STOP=1 -qAt -U ds -d ds_prod -c SELECT .* FROM pg_stat_archiver$/m);
+    assert.match(log("docker"), /^compose exec -T postgres pgbackrest version$/m);
+  });
+
+  it("4144: host-state reports a dead resolver as measured values, never an aborted answer", () => {
+    hostBox({ resolves: { root: [], "data-root": [] }, upstream: { root: "Global: 1.1.1.1\n", "data-root": null } });
+    const r = readRun("host-state");
+    assert.equal(r.status, 0, r.stderr);
+    const { api, data } = decrypt(r.stdout);
+    assert.equal(api.resolver.probeResolves, false);
+    assert.equal(data.resolver.probeResolves, false);
+    assert.deepEqual(data.resolver.upstream, { error: "resolvectl failed" });
+    assert.equal(api.selfHostname.getentResolves, false);
+    assert.deepEqual(data.pgbackrest, { version: "pgBackRest 2.60.0" }, "the other probes still answer");
+  });
+
+  it("4144: host-state shows a self-hostname missing from /etc/hosts and getent; a failed probe gives its own error", () => {
+    hostBox({
+      names: { root: "ds-api-prod-host", "data-root": "8529185-kw435155.twc1.net" },
+      hosts: { root: true, "data-root": false },
+      resolves: { root: ["s3.twcstorage.ru", "ds-api-prod-host"], "data-root": ["s3.twcstorage.ru"] },
+      archiver: null,
+    });
+    const r = readRun("host-state");
+    assert.equal(r.status, 0, r.stderr);
+    const answer = decrypt(r.stdout);
+    closed(answer);
+    assert.deepEqual(answer.data.selfHostname, {
+      hostname: "8529185-kw435155.twc1.net",
+      getentResolves: false,
+      inEtcHosts: false,
+    });
+    assert.deepEqual(answer.data.archiver, { error: "pg_stat_archiver read failed" });
+    assert.deepEqual(answer.data.pgbackrest, { version: "pgBackRest 2.60.0" });
+    assert.deepEqual(answer.api.selfHostname, { hostname: "ds-api-prod-host", getentResolves: true, inEtcHosts: true });
+  });
+
+  for (const [what, body, reason] of [
+    ["an unreachable data box", 'echo "ssh: connect to host: secret detail" >&2\nexit 255', "ds-data-prod is unreachable"],
+    ["a hop that times out", "exit 124", "the read timed out"],
+    ["a data box that predates the verb", 'echo "ds-deploy-entrypoint: rejected: unknown command" >&2\nexit 2', "ds-data-prod does not serve read-host-state (the next release installs it)"],
+  ]) {
+    it(`4144: host-state with ${what} answers the api half and a fixed reason for the data half`, () => {
+      hostBox();
+      writeFileSync(join(stubs, "ssh"), `#!/usr/bin/env bash\n${body}\n`);
+      const r = readRun("host-state");
+      assert.equal(r.status, 0, r.stderr);
+      const answer = decrypt(r.stdout);
+      closed(answer);
+      assert.deepEqual(answer.data, { reachable: false, reason });
+      assert.equal(answer.api.selfHostname.hostname, "ds-api-prod-host");
+      assert.doesNotMatch(JSON.stringify(answer), /secret detail/);
+    });
+  }
+
+  it("4144: host-state rejects a data half that carries an unlisted field — nothing of it leaves", () => {
+    hostBox();
+    const r0 = readRun("host-state");
+    const good = decrypt(r0.stdout).data;
+    for (const bad of [
+      { ...good, env: "DS_SECRET=x" },
+      { ...good, archiver: { ...good.archiver, password: "DS_SECRET=x" } },
+      { ...good, resolver: { ...good.resolver, nameservers: ["DS_SECRET=x"] } },
+      { ...good, selfHostname: { ...good.selfHostname, hostname: "DS_SECRET=x" } },
+      { ...good, uptime: { error: "DS_SECRET=x".repeat(40) } },
+    ]) {
+      writeFileSync(join(dir, "bad.json"), JSON.stringify(bad));
+      writeFileSync(join(stubs, "ssh"), `#!/usr/bin/env bash\ncat "${join(dir, "bad.json")}"\n`);
+      const r = readRun("host-state");
+      assert.equal(r.status, 0, r.stderr);
+      const answer = decrypt(r.stdout);
+      closed(answer);
+      assert.deepEqual(answer.data, { reachable: false, reason: "the data box answer is not a host-state answer" });
+      assert.doesNotMatch(JSON.stringify(answer), /DS_SECRET/);
+    }
+  });
+
+  it("4144: host-state refuses (exit 3) with no recipient certificate; read-host-state is the data box's verb only", () => {
+    hostBox();
+    rmSync(recipient());
+    const r = readRun("host-state");
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /the read-result recipient certificate is not installed/);
+    assert.equal(log("ssh"), "");
+    assert.equal(readRun("read-host-state", { bin: ENTRYPOINT }).status, 3, "not on the prod box");
+    assert.equal(readRun("read-host-state now", { bin: ENTRYPOINT }).status, 2);
   });
 
   it("3648: the data box's rehearse rejects (exit 2) an archive over 16 MiB; elsewhere it is the data box's verb", () => {

@@ -137,17 +137,19 @@ test("Staff attaches and publishes a recording and it plays on both storefronts"
   const slug = encodeURIComponent(
     await eventSlugFromDetail(admin, ownedEvent.id!),
   );
-  const context = await browser.newContext({
-    locale: "ru-RU",
-    httpCredentials: standHttpCredentials(),
-  });
-  try {
-    const doctor = await context.newPage();
-    for (const [storefront, origin, path] of [
-      ["Academy", academyOrigin, `/webinars/${slug}`],
-      ["doctor.school", doctorOrigin, `/events/${slug}`],
-    ] as const) {
-      await test.step(`The recording plays on the ${storefront} event page`, async () => {
+  for (const [storefront, origin, path] of [
+    ["Academy", academyOrigin, `/webinars/${slug}`],
+    ["doctor.school", doctorOrigin, `/events/${slug}`],
+  ] as const) {
+    await test.step(`The recording plays on the ${storefront} event page`, async () => {
+      // A fresh context per storefront: the password sign-in expects the
+      // sign-in host's form, which an earlier session in the same context skips.
+      const context = await browser.newContext({
+        locale: "ru-RU",
+        httpCredentials: standHttpCredentials(),
+      });
+      try {
+        const doctor = await context.newPage();
         try {
           await signInPageThroughHost(doctor, origin, doctorCredentials);
         } catch {
@@ -161,9 +163,9 @@ test("Staff attaches and publishes a recording and it plays on both storefronts"
           title,
           embedRef,
         );
-      });
-    }
-  } finally {
-    await context.close();
+      } finally {
+        await context.close();
+      }
+    });
   }
 });

@@ -38,6 +38,7 @@ import {
   AXE_LEG_CONFIGS,
   GOLDEN_MATERIAL_SLUG,
   GOLDEN_LEARNING_COURSE_SLUG,
+  GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS,
   GOLDEN_SLUGS,
   HERMETIC_CONFIGS,
   GOLDEN_EVENT_SLUGS,
@@ -2144,6 +2145,22 @@ describe("golden live env (#3191) — derived from the dataset every slot is clo
     );
     const journey = leg.gated.find(
       (g) => g.file === "e2e/learning-path-live.spec.ts",
+    );
+    assert.equal(journey.slotReason, undefined);
+  });
+
+  it("hands the doctor learning leg the golden volume schools (#4017)", () => {
+    const ids = repoFile("packages/db/src/seed/golden/ids.ts");
+    for (const slug of GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS) {
+      assert.ok(ids.includes(`slug: "${slug}"`), slug);
+    }
+    const leg = LIVE_TIERS.find((t) => t.name === "live/doctor/learning");
+    assert.equal(
+      leg.seededEnv.E2E_LEARNING_VOLUME_SCHOOL_SLUGS,
+      GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS.join(","),
+    );
+    const journey = leg.gated.find(
+      (g) => g.file === "e2e/school-volume-live.spec.ts",
     );
     assert.equal(journey.slotReason, undefined);
   });

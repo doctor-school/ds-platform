@@ -20,9 +20,11 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  *
  * Seed: published schools of N courses whose 2nd course has a download step
  * first and whose 6th course is one download under a rule layer with no exit
- * test and no club (the PR drive seeds 3, 22 and 62 on the branch DB). Run:
+ * test and no club — the golden volume schools (`learning-volume.ts`; a slot
+ * gets the 22 / 62 / 200 slugs from `tools/staging/live-tiers.mjs`). Every
+ * count and the search query come from the school read, never a literal. Run:
  *   E2E_DOCTOR_URL=http://localhost:3004 \
- *   E2E_LEARNING_VOLUME_SCHOOL_SLUGS=volume-school-3,volume-school-22,volume-school-62 \
+ *   E2E_LEARNING_VOLUME_SCHOOL_SLUGS=golden-school-endocrinology,golden-school-orthobiology,golden-school-neurology,golden-school-therapy \
  *   MAILPIT_URL=… IDP_ISSUER=… E2E_SHOT_DIR=.github/ui-evidence/4017 \
  *   pnpm --filter @ds/doctor exec playwright test --config=playwright.learning-live.config.ts school-volume
  */
@@ -70,13 +72,23 @@ async function noSideScroll(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
 }
 
-/** The read's course count, from the school read the page itself serves. */
-async function courseSlugs(page: Page, slug: string): Promise<string[]> {
+/** The school's courses in school order, from the school read the page itself serves. */
+async function schoolCourses(page: Page, slug: string): Promise<{ slug: string; title: string }[]> {
   return page.evaluate(async (s) => {
     const res = await fetch(`/v1/learning/schools/${s}`, { credentials: "include", cache: "no-store" });
-    const body = (await res.json()) as { courses: { slug: string }[] };
-    return body.courses.map((c) => c.slug);
+    const body = (await res.json()) as { courses: { slug: string; title: string }[] };
+    return body.courses.map((c) => ({ slug: c.slug, title: c.title }));
   }, slug);
+}
+
+async function courseSlugs(page: Page, slug: string): Promise<string[]> {
+  return (await schoolCourses(page, slug)).map((c) => c.slug);
+}
+
+/** A query from the data: the longest word of the last course's title (past the first page). */
+function searchWord(titles: string[]): string {
+  const words = titles.at(-1)!.toLowerCase().match(/[\p{L}]{4,}/gu) ?? [];
+  return words.sort((a, b) => b.length - a.length)[0]!;
 }
 
 test.describe("023 — the school screen at volume", () => {
@@ -90,7 +102,8 @@ test.describe("023 — the school screen at volume", () => {
       await page.setViewportSize(DESKTOP);
       await page.goto(`${DOCTOR_URL}/schools/${slug}`);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-      const all = await courseSlugs(page, slug);
+      const courses = await schoolCourses(page, slug);
+      const all = courses.map((c) => c.slug);
       const n = all.length;
       const search = page.getByRole("searchbox", { name: "Найти курс" });
       await expect(page.getByText("Вы учитесь", { exact: true })).toHaveCount(0);
@@ -127,11 +140,14 @@ test.describe("023 — the school screen at volume", () => {
       await expect(page.getByRole("button", { name: /^Показать ещё/ })).toHaveCount(0);
 
       // «Найти курс» over the whole list, then a query with no match.
-      await search.fill("ахиллова");
+      const word = searchWord(courses.map((c) => c.title));
+      const matching = courses.filter((c) => c.title.toLowerCase().includes(word)).length;
+      await search.fill(word);
+      await expect(page.locator(ROWS)).toHaveCount(matching);
       const found = await page.locator(ROWS).allTextContents();
       expect(found.length).toBeGreaterThan(0);
-      for (const t of found) expect(t.toLowerCase()).toContain("ахиллова");
-      await expect(page.getByText(`Все курсы школы · ${found.length}`, { exact: true })).toBeVisible();
+      for (const t of found) expect(t.toLowerCase()).toContain(word);
+      await expect(page.getByText(`Все курсы школы · ${matching}`, { exact: true })).toBeVisible();
       await shoot(page, `school-volume-${n}-search-1280`);
       await search.fill("гастро");
       await expect(page.locator(ROWS)).toHaveCount(0);
@@ -155,8 +171,6 @@ test.describe("023 — the school screen at volume", () => {
 
   test("EARS-5: a doctor's started and done courses are cards under «Вы учитесь», the rest rows", async ({ browser }) => {
     test.setTimeout(240_000);
-    const many = SLUGS.filter((s) => !/-[1-6]$/.test(s));
-    test.skip(many.length === 0, "no school of more than six courses in E2E_LEARNING_VOLUME_SCHOOL_SLUGS");
     const doctor = {
       email: `e2e-4017-vol-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`,
       password: `Doc-${Date.now()}-aA1!`,
@@ -167,10 +181,13 @@ test.describe("023 — the school screen at volume", () => {
     const page = await context.newPage();
     await signInPageThroughHost(page, DOCTOR_URL, doctor);
 
-    for (const slug of many) {
+    let many = 0;
+    for (const slug of SLUGS) {
       await page.goto(`${DOCTOR_URL}/schools/${slug}`);
       const all = await courseSlugs(page, slug);
       const n = all.length;
+      if (n <= 6) continue;
+      many += 1;
       // Open the first download of courses 2 and 6 through the doctor's own fact endpoint.
       for (const course of [all[1]!, all[5]!]) {
         const status = await page.evaluate(
@@ -222,5 +239,6 @@ test.describe("023 — the school screen at volume", () => {
       await expect(page.getByRole("link", { name: "Продолжить — урок 1" }).first()).toBeVisible();
     }
     await context.close();
+    expect(many, "a school of more than six courses in E2E_LEARNING_VOLUME_SCHOOL_SLUGS").toBeGreaterThan(0);
   });
 });

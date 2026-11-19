@@ -96,6 +96,17 @@ export const GOLDEN_LEARNING_COURSE_SLUG = "golden-course-path";
  */
 export const GOLDEN_LEARNING_SCHOOL_SLUG = "golden-school-cardiology";
 
+/**
+ * `golden.learning.volumeSchools` over six courses (023 EARS-5, #4017): the
+ * schools of 22, 62 and 200 published courses. The school-volume journey reads
+ * rows, «Показать ещё 10», «Найти курс» and «Вы учитесь» on each.
+ */
+export const GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS = [
+  "golden-school-orthobiology",
+  "golden-school-neurology",
+  "golden-school-therapy",
+];
+
 const URL_DOCTOR = "E2E_DOCTOR_URL";
 const URL_ACADEMY = "E2E_PORTAL_URL";
 const ACCOUNT = ["E2E_DOCTOR_EMAIL", "E2E_DOCTOR_PASSWORD"];
@@ -327,6 +338,9 @@ export const LIVE_TIERS = Object.freeze([
     seededEnv: {
       E2E_LEARNING_COURSE_SLUG: GOLDEN_LEARNING_COURSE_SLUG,
       E2E_LEARNING_SCHOOL_SLUG: GOLDEN_LEARNING_SCHOOL_SLUG,
+      // #4017: the school-volume journey also registers a FRESH doctor.
+      E2E_LEARNING_VOLUME_SCHOOL_SLUGS:
+        GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS.join(","),
     },
     gated: [
       {
@@ -346,10 +360,8 @@ export const LIVE_TIERS = Object.freeze([
         requires: [URL_DOCTOR, ...IDP_MAIL, "E2E_LEARNING_MULTI_COURSE_SLUG"],
       },
       {
-        // 023 EARS-5 (#4017): the school screen at the canvas volume switch 3 / 22 / 62.
+        // 023 EARS-5 (#4017): the school screen at the golden volume schools 22 / 62 / 200.
         file: "e2e/school-volume-live.spec.ts",
-        slotReason:
-          "the golden dataset seeds one published school of one course, so a slot has no school at the canvas volume (over six courses) for the volume journey",
         requires: [URL_DOCTOR, ...IDP_MAIL, "E2E_LEARNING_VOLUME_SCHOOL_SLUGS"],
       },
     ],

@@ -6,6 +6,7 @@ interface LiveTiersModule {
   readonly GOLDEN_MATERIAL_SLUG: string;
   readonly GOLDEN_LEARNING_COURSE_SLUG: string;
   readonly GOLDEN_LEARNING_SCHOOL_SLUG: string;
+  readonly GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS: readonly string[];
   readonly GOLDEN_EVENT_SLUGS: { readonly live: string };
   readonly LIVE_TIERS: readonly {
     readonly name: string;
@@ -21,6 +22,7 @@ const {
   GOLDEN_MATERIAL_SLUG,
   GOLDEN_LEARNING_COURSE_SLUG,
   GOLDEN_LEARNING_SCHOOL_SLUG,
+  GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS,
   GOLDEN_EVENT_SLUGS,
   LIVE_TIERS,
 } = (await import(
@@ -172,6 +174,8 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
   const LEARNING_ENV = new Set(["E2E_LEARNING_COURSE_SLUG"]);
   // …and the one whose value addresses a learning school (023 EARS-4).
   const SCHOOL_ENV = new Set(["E2E_LEARNING_SCHOOL_SLUG"]);
+  // …and the one whose value lists the schools at volume (023 EARS-5).
+  const VOLUME_SCHOOL_ENV = new Set(["E2E_LEARNING_VOLUME_SCHOOL_SLUGS"]);
   // The seeded env names whose value addresses a specialty (018 EARS-8), proven
   // against the golden adjacency by `stage-feed-adjacent-env.spec.ts`.
   const SPECIALTY_ENV = new Set([
@@ -202,6 +206,7 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
           MATERIAL_ENV.has(name) ||
           LEARNING_ENV.has(name) ||
           SCHOOL_ENV.has(name) ||
+          VOLUME_SCHOOL_ENV.has(name) ||
           SPECIALTY_ENV.has(name)
         )
           continue;
@@ -261,10 +266,10 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
 
   it("024 EARS-14: every seeded learning-course reference is the published golden course", () => {
     const ds = buildGoldenDataset(new Date("2026-10-22T09:00:00Z"), subjects);
-    const published = ds.learningCourses
-      .filter((c) => c.state === "published")
-      .map((c) => c.slug);
-    expect(published).toEqual([GOLDEN_LEARNING_COURSE_SLUG]);
+    const course = ds.learningCourses.find(
+      (c) => c.slug === GOLDEN_LEARNING_COURSE_SLUG,
+    );
+    expect(course?.state).toBe("published");
     expect(ds.events.map((e) => e.slug)).not.toContain(
       GOLDEN_LEARNING_COURSE_SLUG,
     );
@@ -281,10 +286,14 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
 
   it("023 EARS-4: every seeded learning-school reference is the published golden school of the golden course", () => {
     const ds = buildGoldenDataset(new Date("2026-10-22T09:00:00Z"), subjects);
-    const published = ds.learningSchools.filter((s) => s.state === "published");
-    expect(published.map((s) => s.slug)).toEqual([GOLDEN_LEARNING_SCHOOL_SLUG]);
-    const course = ds.learningCourses.find((c) => c.slug === GOLDEN_LEARNING_COURSE_SLUG);
-    expect(course?.schoolId).toBe(published[0]!.id);
+    const school = ds.learningSchools.find(
+      (s) => s.slug === GOLDEN_LEARNING_SCHOOL_SLUG,
+    );
+    expect(school?.state).toBe("published");
+    const course = ds.learningCourses.find(
+      (c) => c.slug === GOLDEN_LEARNING_COURSE_SLUG,
+    );
+    expect(course?.schoolId).toBe(school!.id);
     expect(Object.values(slugs)).not.toContain(GOLDEN_LEARNING_SCHOOL_SLUG);
     const refs = LIVE_TIERS.flatMap((tier) =>
       Object.entries(tier.seededEnv ?? {})
@@ -293,6 +302,37 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
     );
     expect(refs).toEqual([
       `live/doctor/learning E2E_LEARNING_SCHOOL_SLUG=${GOLDEN_LEARNING_SCHOOL_SLUG}`,
+    ]);
+  });
+
+  it("023 EARS-5: the seeded volume schools are exactly the published golden schools of more than six published courses", () => {
+    for (const now of [
+      new Date("2026-10-22T09:00:00Z"),
+      new Date("2026-10-23T16:45:00Z"),
+    ]) {
+      const ds = buildGoldenDataset(now, subjects);
+      const over = ds.learningSchools
+        .filter((s) => s.state === "published")
+        .filter(
+          (s) =>
+            ds.learningCourses.filter(
+              (c) => c.schoolId === s.id && c.state === "published",
+            ).length > 6,
+        )
+        .map((s) => s.slug)
+        .sort();
+      expect(over).toEqual([...GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS].sort());
+    }
+    for (const slug of GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS) {
+      expect(Object.values(slugs)).not.toContain(slug);
+    }
+    const refs = LIVE_TIERS.flatMap((tier) =>
+      Object.entries(tier.seededEnv ?? {})
+        .filter(([name]) => VOLUME_SCHOOL_ENV.has(name))
+        .map(([name, value]) => `${tier.name} ${name}=${value}`),
+    );
+    expect(refs).toEqual([
+      `live/doctor/learning E2E_LEARNING_VOLUME_SCHOOL_SLUGS=${GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS.join(",")}`,
     ]);
   });
 });

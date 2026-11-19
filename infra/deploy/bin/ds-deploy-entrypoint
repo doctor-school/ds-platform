@@ -322,6 +322,7 @@ OBSERVATIONS = {
         None,
         "partnership",
     ),
+    "academy-partnership-fault-count": ({}, None, "partnership-fault"),
     "mirror-count": (
         {"email": ("email", text(owned("register-2704")))},
         "SELECT count(*)::int AS count FROM users WHERE email = :'email'",
@@ -426,6 +427,17 @@ def emit(value):
 if output == "host":
     emit({"academy": "academy-main." + stage_env()[1]})
 
+if output == "partnership-fault":
+    try:
+        done = subprocess.run(
+            ["docker", "logs", "--tail", "200", "main-portal-partnership-unavailable"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=20,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        stop(1, "the observation read failed")
+    if done.returncode != 0:
+        stop(1, "the observation read failed")
+    emit(done.stdout.splitlines().count(b"[academy-partnership] persistence_failed"))
 if output == "partnership":
     try:
         done = subprocess.run(
@@ -2367,7 +2379,8 @@ case "$verb" in
     [[ ${#words[@]} -eq 2 ]] || reject "usage: observe <name>"
     case "${words[1]}" in
       academy-host | password-policy | mirror-count | auth-consent | phone-account-count | \
-        congress-snapshot | wrong-verification | academy-partnership) ;;
+        congress-snapshot | wrong-verification | academy-partnership | \
+        academy-partnership-fault-count) ;;
       *) reject "unknown observation" ;;
     esac
     accepted

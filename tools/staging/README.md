@@ -319,6 +319,39 @@ worktree needs no hand-built `packages/db/dist` or `packages/legal-content/dist`
 does not answer — a suite pointed at a half-raised slot reports topology as product
 regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
 
+### Academy partnership storage failure (#4121)
+
+The Academy live tier submits the real form on the guest portal. Its acceptance
+case checks that a retry after a lost response leaves one private synthetic
+record. For the failure case the slot runs the same portal image as
+`<slot>-portal-partnership-unavailable` with `ACADEMY_SUBMISSIONS_DIR=/dev/null`
+and no submissions volume or credentials. Its own healthcheck requires the guest
+home to respond and the storage target to be a character device. The normal slot
+health gate checks both portals against the same SHA-tagged image.
+
+The shared stage edge routes `academy-partnership-unavailable-<slot>.<domain>`
+through the usual staging gate for the home and its assets. All other routes
+return 404. The browser test observes an actual POST response, checks retained
+form values, and requires one new persistence failure in the fixture. The normal
+portal's store must have zero records for that run's synthetic contact both
+before and after. The fixture observation returns an exact fixed-marker count
+from at most 200 recent log lines with a 20-second CI read timeout.
+
+A PR preview does not update the shared edge. Before the new static edge config
+is on stage, an authorized operator can verify the preview's real fixture over
+an SSH tunnel. Read the fixture container's address on the owned slot network
+and keep the local port bound to IPv4 loopback:
+
+```sh
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:<port>:<fixture-ip>:3001 ds-stage-1
+```
+
+Set `E2E_ACADEMY_PARTNERSHIP_UNAVAILABLE_LOOPBACK=http://127.0.0.1:<port>` only
+for that PR slot's `pnpm e2e:stage pr-<N>` run. This exercises the real preview
+portal and owning-layer observations. The shared TLS, gate and path checks use
+the normal HTTPS route after main converge. The release run refuses the override
+for `main`.
+
 ### The release check: `--expect-sha`
 
 `pnpm e2e:stage main --expect-sha <40-char sha>` is the release check (tech spec C7,

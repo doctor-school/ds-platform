@@ -991,6 +991,20 @@ const SLOT_COMPOSE_TEXT = readFileSync(
   new URL("../../infra/deploy/compose/slot/compose.yml", import.meta.url),
   "utf8",
 );
+test("4121: the stage partnership fixture reuses the running portal image with no volume or credentials", () => {
+  const set = slotServiceSet(SLOT_COMPOSE_TEXT);
+  const fixture = set.longRunning.find((service) => service.name === "portal-partnership-unavailable");
+  const portal = set.longRunning.find((service) => service.name === "portal");
+  assert.ok(fixture, "fixture participates in the live health gate");
+  assert.equal(fixture.image, portal.image);
+  assert.equal(fixture.port, portal.port);
+  const block = SLOT_COMPOSE_TEXT.match(/^ {2}portal-partnership-unavailable:\r?\n((?:^ {4}.*\r?\n)*)/m)?.[1];
+  assert.ok(block);
+  assert.match(block, /ACADEMY_SUBMISSIONS_DIR: \/dev\/null/);
+  assert.match(block, /lstatSync\(process.env.ACADEMY_SUBMISSIONS_DIR\)\.isCharacterDevice\(\)/);
+  assert.doesNotMatch(block, /\b(?:volumes|env_file|ports|networks|INTERNAL_API_TOKEN):/);
+});
+
 const STAGE_ENV_EXAMPLE_KEYS = envKeys(
   readFileSync(new URL("../../infra/deploy/stage.env.example", import.meta.url), "utf8"),
 );

@@ -33,6 +33,33 @@ export function stageAcademyAddress(baseUrl: string | undefined) {
     : undefined;
 }
 
+type StageAddress = NonNullable<ReturnType<typeof stageAcademyAddress>>;
+
+/** PR previews can verify the real fixture through the operator's loopback tunnel. */
+export function stagePartnershipUnavailableOrigin(
+  stage: StageAddress,
+  loopback = process.env.E2E_ACADEMY_PARTNERSHIP_UNAVAILABLE_LOOPBACK,
+): string {
+  if (!loopback)
+    return stage.origin.replace(
+      "https://academy-",
+      "https://academy-partnership-unavailable-",
+    );
+  const url = URL.parse(loopback);
+  if (
+    stage.slot === "main" ||
+    !url ||
+    url.protocol !== "http:" ||
+    url.hostname !== "127.0.0.1" ||
+    !url.port ||
+    url.origin !== loopback.replace(/\/$/, "")
+  ) {
+    throw new Error(
+      "The partnership fixture tunnel requires a PR slot and a plain IPv4 loopback origin",
+    );
+  }
+  return url.origin;
+}
 function resultOf(output: string): PartnershipObservation {
   const result = JSON.parse(output) as Partial<PartnershipObservation> | null;
   if (
@@ -49,23 +76,20 @@ function resultOf(output: string): PartnershipObservation {
   return { count: result.count, privateRecord: result.privateRecord };
 }
 
-async function readWithOperator(
-  slot: string,
-  host: string,
-  contact: string,
-): Promise<string> {
+async function stageOperator(stage: StageAddress) {
   const staging = await import(
     new URL("../../../tools/staging/slot.mjs", import.meta.url).href
   );
   const { sshCapture } = await import(
     new URL("../../../tools/deploy/lib/remote.mjs", import.meta.url).href
   );
-  const capture = (argv: string[]) =>
-    sshCapture(staging.STAGE_1, staging.quoteCommand(argv), {
+  const captureScript = (script: string) =>
+    sshCapture(staging.STAGE_1, script, {
       sshOptions: ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"],
       signal: AbortSignal.timeout(25_000),
       stderr: "pipe",
     });
+  const capture = (argv: string[]) => captureScript(staging.quoteCommand(argv));
   const env = staging.parseEnvFile(
     await capture([
       "sudo",
@@ -76,11 +100,19 @@ async function readWithOperator(
     ]),
   );
   if (
-    host !==
-    staging.slotHostnames(slot, staging.requiredBaseDomain(env)).academy
+    stage.hostname !==
+    staging.slotHostnames(stage.slot, staging.requiredBaseDomain(env)).academy
   ) {
     throw new Error(FAILURE);
   }
+  return { capture, captureScript, quoteCommand: staging.quoteCommand };
+}
+
+async function readWithOperator(
+  stage: StageAddress,
+  contact: string,
+): Promise<string> {
+  const { capture } = await stageOperator(stage);
   // The CI key uses the box-global installed entrypoint. PR slots deliberately
   // never install it (#3125); the operator executes this same fixed predicate
   // from the checked-out source inside that one slot's portal.
@@ -98,7 +130,7 @@ async function readWithOperator(
     "sudo",
     "docker",
     "exec",
-    `${slot}-portal`,
+    `${stage.slot}-portal`,
     "node",
     "-e",
     script,
@@ -124,11 +156,47 @@ export async function readStagePartnershipObservation(
       await assertObservedMainOrigin(observe, stage.origin, stage.slot);
       return resultOf(await observe("academy-partnership", { contact }));
     }
-    return resultOf(
-      await readWithOperator(stage.slot, stage.hostname, contact),
-    );
+    return resultOf(await readWithOperator(stage, contact));
   } catch {
     // Never expose a transport reply or stderr in an Actions report.
+    throw new Error(FAILURE);
+  }
+}
+
+export async function readStagePartnershipFaultCount(
+  academyBaseUrl: string,
+): Promise<number> {
+  try {
+    const stage = stageAcademyAddress(academyBaseUrl);
+    if (!stage) throw new Error(FAILURE);
+    const observe = chooseStageObserve();
+    let output: string;
+    if (observe) {
+      await assertObservedMainOrigin(observe, stage.origin, stage.slot);
+      output = await observe("academy-partnership-fault-count", {});
+    } else {
+      const { captureScript, quoteCommand } = await stageOperator(stage);
+      const logs = quoteCommand([
+        "sudo",
+        "docker",
+        "logs",
+        "--tail",
+        "200",
+        `${stage.slot}-portal-partnership-unavailable`,
+      ]);
+      const count = quoteCommand([
+        "awk",
+        '$0 == "[academy-partnership] persistence_failed" { n++ } END { print n + 0 }',
+      ]);
+      output = await captureScript(`set -o pipefail\n${logs} 2>&1 | ${count}`);
+    }
+    const digits = output.trim();
+    const count = Number(digits);
+    if (!/^\d{1,3}$/.test(digits) || count > 200) {
+      throw new Error(FAILURE);
+    }
+    return count;
+  } catch {
     throw new Error(FAILURE);
   }
 }

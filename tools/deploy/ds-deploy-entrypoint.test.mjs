@@ -91,6 +91,36 @@ exec(base64.b64decode(observer))
   assert.equal(rejected.status, 1);
   assert.doesNotMatch(rejected.stdout + rejected.stderr, /private@/);
 });
+test("4121: the fault observer returns only exact persistence-failure marker counts", { skip: !PYTHON }, () => {
+  const entrypoint = readFileSync(ENTRYPOINT, "utf8").replace(/\r\n/g, "\n");
+  const observer = entrypoint.match(/\nread -r -d '' OBSERVE_PY <<'PY' \|\| true\n([\s\S]*?)\nPY\n/)[1];
+  const bridge = `
+import base64, subprocess, sys
+observer, effect = sys.argv[1:3]
+def docker(argv, **kwargs):
+    assert argv == ["docker", "logs", "--tail", "200", "main-portal-partnership-unavailable"], argv
+    assert kwargs["stderr"] == subprocess.STDOUT and kwargs["timeout"] == 20
+    logs = b"private@partner.example\\n[academy-partnership] persistence_failed\\nother persistence_failed"
+    return subprocess.CompletedProcess(argv, 1 if effect == "failed" else 0, logs)
+subprocess.run = docker
+sys.argv = ["observer", "academy-partnership-fault-count", "", "", "4096", "", ""]
+exec(base64.b64decode(observer))
+`;
+  const run = (effect, input = "{}") =>
+    spawnSync(PYTHON, ["-c", bridge, Buffer.from(observer).toString("base64"), effect], {
+      encoding: "utf8",
+      input,
+    });
+  const accepted = run("ok");
+  assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+  assert.equal(accepted.stdout.trim(), "1");
+  const failed = run("failed");
+  assert.equal(failed.status, 1);
+  assert.doesNotMatch(failed.stdout + failed.stderr, /private@/);
+  const rejected = run("ok", '{"slot":"pr-1"}');
+  assert.equal(rejected.status, 2);
+  assert.match(rejected.stdout, /bad parameters/);
+});
 /** Run `code` with READ_OBSERVE_PY imported as `m` (its entry point does not run); its JSON stdout. */
 function readObservePy(code) {
   const text = readFileSync(ENTRYPOINT, "utf8").replace(/\r\n/g, "\n");
@@ -702,7 +732,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     const table = text.match(/OBSERVATIONS = \{([\s\S]*?)\n\}/)[1];
     const names = [...table.matchAll(/^ {4}"([a-z-]+)": \(/gm)].map((m) => m[1]).sort();
     assert.deepEqual(allow, names);
-    assert.equal(names.length, 8);
+    assert.equal(names.length, 9);
   });
 
   it("3119: observe refuses (exit 3) on any box but the stage box", () => {

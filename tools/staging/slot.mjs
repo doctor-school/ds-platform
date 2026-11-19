@@ -94,17 +94,18 @@ import {
   GOLDEN_SUBJECT_ENV_VARS,
   IDP_PAT_FILE,
   STAGE_AGENT_ADMIN,
+  STAGE_AGENT_COMMITTEE,
   agentAdminCode,
-  convergeAgentAdmin,
+  convergeStageStaff,
   convergeGoldenIdentities,
   convergeRedirectUris,
   convergeStorefrontClients,
   createIdpClient,
   ensureStorefrontClientKeys,
   slotStorefrontClientIds,
-  parseAgentAdminSecrets,
+  parseStageStaffSecrets,
   parsePinnedUris,
-  renderAgentAdminSecrets,
+  renderStageStaffSecrets,
   renderGoldenSubjectsEnv,
   unionUris,
 } from "./idp.mjs";
@@ -1322,7 +1323,7 @@ export function slotBucketRemoveCommand(slot) {
  * the host it was signed for (`apps/api/src/storage/storage.s3.ts`), so a browser
  * fetching the image has to reach the very host the api signed for.
  */
-export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }) {
+export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects, committeeSubject }) {
   assertSlotName(slot);
   shortSha(sha);
   const hosts = slotHostnames(slot, baseDomain);
@@ -1380,9 +1381,15 @@ export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }
     // MinIO serves buckets as a PATH, not as a `<bucket>.` sub-domain: the edge routes
     // exactly one `s3.` host and no wildcard beneath it.
     "S3_FORCE_PATH_STYLE=true",
+    // #4159 — the URL 048's `setWebhook` (apps/api/scripts/telegram-set-webhook.ts)
+    // registers: the slot's OWN public api, which the edge exempts for exactly this
+    // method + path. Non-secret; the bot token and the webhook secret are box-wide
+    // stand secrets that reach the api from stage.env (absent = connector off).
+    `TELEGRAM_WEBHOOK_URL=https://${hosts.api}/v1/integrations/telegram/webhook`,
     // Tool-managed and non-secret (`idp.mjs`): the golden fixture's subject ids, which
     // `seed:golden` needs. The golden PASSWORDS are secrets and stay in stage.env.
     ...GOLDEN_SUBJECT_ENV_VARS.map((name) => `${name}=${goldenSubjects[name]}`),
+    ...(committeeSubject ? [`${STAGE_AGENT_COMMITTEE.subjectEnvVar}=${committeeSubject}`] : []),
     "",
   ].join("\n");
 }
@@ -1690,6 +1697,7 @@ export function planSlotUp({
   action = "up",
   databaseExists,
   subjects,
+  committeeSubject,
   actor,
   shaInMain = false,
   now = new Date(),
@@ -1747,6 +1755,7 @@ export function planSlotUp({
         baseDomain,
         redisDb,
         goldenSubjects: subjects,
+        committeeSubject,
       }),
       mode: 0o640,
     },
@@ -1946,6 +1955,7 @@ export function planSlotReset({
   baseDomain,
   actor,
   subjects,
+  committeeSubject,
   shaInMain = false,
   now = new Date(),
 }) {
@@ -1968,6 +1978,7 @@ export function planSlotReset({
     action: "up",
     databaseExists: true,
     subjects,
+    committeeSubject,
     actor,
     shaInMain,
     now,
@@ -2262,11 +2273,19 @@ export async function runSlotCommand({
   });
   // #2531: the stage-only agent admin and its TOTP factor, on every identity converge,
   // so a fresh box and a drifted one both end with an admin an agent can sign in as.
-  await effects.idp({
+  const admin = await effects.idp({
     op: "agent-admin",
     label: "converge the agent admin and its TOTP",
     goldenSubjects: subjects,
   });
+  if (!admin?.subject) throw new SlotError("the stage agent admin did not resolve to a subject");
+  const committee = await effects.idp({
+    op: "agent-committee",
+    label: "converge the agent committee member and its TOTP",
+    goldenSubjects: subjects,
+    adminSubject: admin.subject,
+  });
+  if (!committee?.subject) throw new SlotError("the stage agent committee member did not resolve to a subject");
 
   if (options.command === "reset-identities") {
     const plan = planResetIdentities({
@@ -2290,6 +2309,7 @@ export async function runSlotCommand({
       baseDomain,
       actor: options.actor,
       subjects,
+      committeeSubject: committee.subject,
       shaInMain: await mainContainsShaVerdict(options, mainContainsSha),
     });
     await runConverge(plan, effects);
@@ -2315,6 +2335,7 @@ export async function runSlotCommand({
     action: options.command,
     databaseExists,
     subjects,
+    committeeSubject: committee.subject,
     actor: options.actor,
     shaInMain: await mainContainsShaVerdict(options, mainContainsSha),
   });
@@ -3383,31 +3404,34 @@ function realEffects(
           log,
         });
       }
-      if (step.op === "agent-admin") {
-        // The agent admin's secrets are tool-minted into their own root-only file —
-        // read with `sudo cat`, written through the same heredoc writer as every
-        // other box file, and never echoed.
-        await convergeAgentAdmin({
+      if (step.op === "agent-admin" || step.op === "agent-committee") {
+        const actor = step.op === "agent-admin" ? "admin" : "committee";
+        const account = actor === "admin" ? STAGE_AGENT_ADMIN : STAGE_AGENT_COMMITTEE;
+        const { secretsPath } = account;
+        // Tool-minted credentials stay in the actor's own root-only file.
+        return convergeStageStaff({
           client,
+          actor,
           goldenSubjects: step.goldenSubjects,
+          adminSubject: step.adminSubject,
           readSecrets: async () =>
-            parseAgentAdminSecrets(
+            parseStageStaffSecrets(
               await sshCapture(
                 STAGE_1,
-                `if sudo test -e ${AGENT_ADMIN_SECRETS_PATH}; then sudo cat ${AGENT_ADMIN_SECRETS_PATH}; fi`,
+                `if sudo test -e ${secretsPath}; then sudo cat ${secretsPath}; fi`,
               ),
+              account,
             ),
           writeSecrets: (secrets) =>
             sshScript(
               STAGE_1,
-              remoteWriteScript(AGENT_ADMIN_SECRETS_PATH, renderAgentAdminSecrets(secrets), 0o600),
-              { label: `write ${AGENT_ADMIN_SECRETS_PATH}` },
+              remoteWriteScript(secretsPath, renderStageStaffSecrets(secrets, account), 0o600),
+              { label: `write ${secretsPath}` },
             ),
           env: boxEnv,
           projectName,
           log,
         });
-        return undefined;
       }
       if (step.op === "sign-in-host") {
         const result = await convergeStorefrontClients({
@@ -3497,7 +3521,7 @@ async function main() {
   if (options.command === "agent-admin-code") {
     // Reads the root-only secrets file and prints to THIS terminal only — never into
     // the slot log, a PR or a comment.
-    const secrets = parseAgentAdminSecrets(
+    const secrets = parseStageStaffSecrets(
       await sshCapture(
         STAGE_1,
         `if sudo test -e ${AGENT_ADMIN_SECRETS_PATH}; then sudo cat ${AGENT_ADMIN_SECRETS_PATH}; fi`,

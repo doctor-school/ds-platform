@@ -143,6 +143,54 @@ real API auth email through the normal CAPTCHA-protected flow and find the new
 slot-tagged message in Mailpit; repeat after API recreation. Opening Mailpit or
 reading an old message alone does not prove delivery.
 
+## Telegram webhook on a slot (#4159)
+
+A slot api runs the 048 Telegram connector against the stand's own test bot, never a
+production bot. Three variables, two origins:
+
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` are box-wide stand secrets in
+  `/etc/ds-platform/stage.env` (`infra/deploy/stage.env.example` → «Telegram
+  connector»). Both absent ⇒ every slot's connector is off: the source admin shows
+  «Telegram не подключён на сервере» and the webhook answers 404 — nothing fails.
+- `TELEGRAM_WEBHOOK_URL` is derived per slot by `renderSlotEnv`:
+  `https://api-<slot>.<base domain>/v1/integrations/telegram/webhook`. A slot raised
+  (or `sync`ed) with an older renderer has no such line.
+
+The edge exempts exactly `POST /v1/integrations/telegram/webhook` on `api-<slot>` from
+basic auth (`@stage_telegram_webhook`, spec §3 exemption 3): Telegram sends no browser
+credentials, and the endpoint authenticates every call by the
+`X-Telegram-Bot-Api-Secret-Token` header before it reads the body (048 EARS-24/25).
+
+**One bot has one webhook, so one slot receives the channel posts at a time.**
+Registering on slot B moves delivery away from whichever slot held it; the EARS-31
+source check on the other slots then reports the webhook mismatch. Registration is the
+048 EARS-24 operator step (`apps/api/scripts/telegram-set-webhook.ts`): `setWebhook`
+with the env's URL and secret, `allowed_updates` = channel posts, then what Telegram
+holds is printed — never the token or the secret. The runtime image carries the
+compiled `dist/` only (no `scripts/`, no `tsx`), so on a slot the same three calls run
+from the compiled modules inside the slot's api container, which already holds all
+three variables:
+
+```bash
+SLOT=pr-<N>   # or main
+docker exec -w /app "$SLOT-api" node --input-type=module -e '
+const { telegramConfigFromEnv } = await import("./dist/materials/telegram/telegram-config.js");
+const { TelegramBotApiClient } = await import("./dist/materials/telegram/telegram-bot-api.client.js");
+const { registerTelegramWebhook } = await import("./dist/materials/telegram/telegram-webhook-registration.js");
+const config = telegramConfigFromEnv();
+console.log(JSON.stringify(await registerTelegramWebhook(config, new TelegramBotApiClient(config?.botToken ?? null))));
+'
+```
+
+The printed `url` must be that slot's `TELEGRAM_WEBHOOK_URL`; a refusal (connector off,
+or the URL unset) exits non-zero and changes nothing at Telegram. Then check the edge
+from outside: an unauthenticated
+`curl -si -X POST https://api-$SLOT.stage.doctor.school/v1/integrations/telegram/webhook`
+answers the api's own refusal (no secret header), never `Www-Authenticate: Basic`;
+any other unauthenticated path on the host keeps the Caddy 401. Before tearing the
+receiving slot down, register another slot (or accept that Telegram retries into a
+dead host until the next registration).
+
 ## The box must stay logged into Docker Hub (#2240)
 
 `up`/`sync` no longer builds product images — those come from the project registry
@@ -271,6 +319,39 @@ worktree needs no hand-built `packages/db/dist` or `packages/legal-content/dist`
 does not answer — a suite pointed at a half-raised slot reports topology as product
 regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
 
+### Academy partnership storage failure (#4121)
+
+The Academy live tier submits the real form on the guest portal. Its acceptance
+case checks that a retry after a lost response leaves one private synthetic
+record. For the failure case the slot runs the same portal image as
+`<slot>-portal-partnership-unavailable` with `ACADEMY_SUBMISSIONS_DIR=/dev/null`
+and no submissions volume or credentials. Its own healthcheck requires the guest
+home to respond and the storage target to be a character device. The normal slot
+health gate checks both portals against the same SHA-tagged image.
+
+The shared stage edge routes `academy-partnership-unavailable-<slot>.<domain>`
+through the usual staging gate for the home and its assets. All other routes
+return 404. The browser test observes an actual POST response, checks retained
+form values, and requires one new persistence failure in the fixture. The normal
+portal's store must have zero records for that run's synthetic contact both
+before and after. The fixture observation returns an exact fixed-marker count
+from at most 200 recent log lines with a 20-second CI read timeout.
+
+A PR preview does not update the shared edge. Before the new static edge config
+is on stage, an authorized operator can verify the preview's real fixture over
+an SSH tunnel. Read the fixture container's address on the owned slot network
+and keep the local port bound to IPv4 loopback:
+
+```sh
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:<port>:<fixture-ip>:3001 ds-stage-1
+```
+
+Set `E2E_ACADEMY_PARTNERSHIP_UNAVAILABLE_LOOPBACK=http://127.0.0.1:<port>` only
+for that PR slot's `pnpm e2e:stage pr-<N>` run. This exercises the real preview
+portal and owning-layer observations. The shared TLS, gate and path checks use
+the normal HTTPS route after main converge. The release run refuses the override
+for `main`.
+
 ### The release check: `--expect-sha`
 
 `pnpm e2e:stage main --expect-sha <40-char sha>` is the release check (tech spec C7,
@@ -320,17 +401,28 @@ Every successful `runtime-images.yml` run of a push to `main` triggers
    four golden passwords) exported — the no-SSH mode above, so `e2e-stage.mjs` itself
    never reads the box — plus `CI=1` and **`E2E_PUBLIC_LOG=1`**. The box-observing
    scenarios (the owned mirror count, consent, phone, congress and wrong-verification
-   snapshots, the live password policy) read stage `main` only through the CI key's
+   snapshots, the live password policy, the synthetic partnership submission) read
+   stage `main` only through the CI key's
    forced command, `observe <name>`: the job writes the key and the pinned host key into
    `$RUNNER_TEMP/stage-ssh/` before the suite and exports `E2E_STAGE_OBSERVE_SSH`
    (`deploy@<box>`), `E2E_STAGE_OBSERVE_KEY` and `E2E_STAGE_OBSERVE_KNOWN_HOSTS` (two
    paths, never the key), and `packages/e2e/lib/stage-observe.ts` then sends each read as
    one named, read-only observation with its parameters as JSON on stdin. The box runs
    only the observations defined in `infra/deploy/bin/ds-deploy-entrypoint`, validates
-   every parameter, reads the `main` database in a `BEGIN READ ONLY` transaction and
-   answers only what the lib parses (release-pipeline spec §5, «Stage suite box reads»).
+   every parameter and answers only what the lib parses. Database observations use
+   a `BEGIN READ ONLY` transaction (release-pipeline spec §5, «Stage suite box reads»).
+   The existing Academy slot URL selects the partnership browser test. The observer
+   verifies the configured stage domain before the form is opened.
+   The partnership observation runs in the stage portal as its runtime user. It returns
+   only the synthetic contact's matching record count and whether the sole match
+   has the expected fields and private file metadata. It bounds reads to 10,000
+   directory entries, 16 KiB per record and 20 seconds per CI observation. Each
+   completed test uses one synthetic record in its slot's volume.
    Without those three variables the same libs read the box with the operator's own
-   ssh. In public-log mode the console reporter is
+   ssh. A preview reads its own portal with the same fixed partnership predicate
+   from the checked-out source. A preview never installs the box-wide entrypoint
+   (#3125); the first stage-main converge on the merged SHA installs the CI observation.
+   In public-log mode the console reporter is
    `packages/e2e/reporters/summary.ts` (one line per test: status, project, title path,
    duration, retry — no error text, no test output, no URL), the two axe legs get the
    same reporter, and the HTML + JSON report is written only into the report dir. The
@@ -399,7 +491,7 @@ them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 
 | Leg                          | Config (`apps/<app>/…`)                                                                                         | Release check |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------- |
-| `live/admin/event-lifecycle` | `admin/playwright.flows.config.ts` (`stage-event-lifecycle.spec.ts`)                                            | yes           |
+| `live/admin/event-lifecycle` | `admin/playwright.flows.config.ts` (`stage-event-lifecycle.spec.ts`, `stage-congress-review.spec.ts`)           | yes           |
 | `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                                                   | yes           |
 | `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                                                      | yes           |
 | `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)                                  | yes           |
@@ -439,17 +531,23 @@ names, and no other box key is handed over); an operator export wins over each v
   `live-tiers.mjs`, held against `packages/db/src/seed/golden/ids.ts`), and
   `E2E_API_URL` = the slot's api origin.
 
-The admin leg signs in as the dedicated stage agent admin and completes its
-pre-enrolled TOTP challenge. It requires `DS_STAGE_AGENT_ADMIN_PASSWORD` and
-`DS_STAGE_AGENT_ADMIN_TOTP_SECRET` in the existing Actions **Stage suite** step or
-the operator's in-memory environment. The runner forwards those two inputs only
-to the admin leg. The Playwright case keeps trace, screenshot and video capture off.
-The runner also sets `PLAYWRIGHT_NO_COPY_PROMPT=1` for the admin leg to keep the
-MFA form out of Playwright's error-time accessibility snapshot.
-The test also uses the golden verified doctor to register for the event it just
-created, watch the room open, and observe its closure on the authenticated heartbeat.
-Fixture teardown hides the run's event via the existing admin lifecycle on success
-or failure. A draft that was never published remains private.
+The admin leg uses dedicated stage staff with pre-enrolled TOTP. Pass these keys
+through the existing Actions **Stage suite** step or the operator's in-memory
+environment:
+
+- `DS_STAGE_AGENT_ADMIN_PASSWORD` and `DS_STAGE_AGENT_ADMIN_TOTP_SECRET` for event
+  lifecycle and roster access.
+- `DS_STAGE_AGENT_COMMITTEE_PASSWORD` and `DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET` for
+  the committee decision on the doctor congress.
+
+The runner forwards the staff keys only to the admin leg. Both specs disable
+trace, screenshot and video capture. The runner sets
+`PLAYWRIGHT_NO_COPY_PROMPT=1` to keep the MFA form out of Playwright's error-time
+accessibility snapshot.
+
+The event lifecycle spec retires the event it creates through the admin
+lifecycle. The congress review spec creates a fresh doctor and submission,
+checks the decision in the doctor's cabinet, and finds that doctor on the roster.
 
 Event slugs come from the golden set the slot was seeded with (#2996): a tier's
 `seededEnv` (`live-tiers.mjs` → `GOLDEN_SLUGS`) names the golden event carrying each shape
@@ -680,28 +778,35 @@ One run does four things, in order (plus the agent admin, below):
    assigns), so no session or rate-limit key survives an identity reset.
 4. **Append one audit line** to `/var/log/ds-platform/slot.log`.
 
-The same run converges one more account that is not part of the golden dataset: the
-**agent admin** `golden.admin.agent@example.test` (`STAGE_AGENT_ADMIN` in `idp.mjs`), with
-the golden admin's roles (`doctor_guest`, `platform_admin`), so an agent can sign in to a
-slot's admin without the owner's authenticator. Its account goes through the same
-create / password / email / grant verbs as the golden five; then its **TOTP factor** is
-converged, probe → act → re-read:
+The same run converges two dedicated stage staff accounts through the golden
+identity writers. The **agent admin** `golden.admin.agent@example.test` holds
+`doctor_guest` and `platform_admin`. The **agent committee member**
+`golden.committee.agent@example.test` holds `doctor_guest` and
+`congress-program-committee`. Before changing the committee account, converge
+checks that its subject differs from the golden subjects and the agent admin.
+An existing email hit must be the expected human with the exact username and
+email in the stage organization. Converge also refuses unexpected stage-project
+roles.
+
+Both accounts' TOTP factors follow the same probe, write and read-back sequence:
 
 | Factor at the IdP                       | Secret stored on the box | Action                                                                                                                        |
 | --------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
 | absent, or provisional (never verified) | any                      | register (`POST /v2/users/{id}/totp`), store the secret, verify with the derived code, re-read READY                          |
-| READY                                   | yes                      | keep — logs `TOTP already enrolled for golden.admin.agent@example.test`                                                       |
+| READY                                   | yes                      | keep — logs `TOTP already enrolled` for that account                                                                          |
 | READY                                   | no                       | remove THIS account's factor (`DELETE /management/v1/users/{id}/auth_factors/otp`, proven by re-read), then register as above |
 
-Its password and TOTP secret are tool-minted into `/etc/ds-platform/stage-agent-admin.env`
-(root, 0600) — the password before the first IdP write, the secret before its verify, so a
-run that dies halfway is put right by the next one. Neither is ever logged. No mirror row
-is seeded for it: the api heals a missing mirror row for an authenticated subject on the
-first request and marks its staff role from the session's claims, so the sign-in survives
-every `sync` that re-seeds the slot database. The file is tool-owned: never hand-edit it,
-except after a factor reset outside the tool (for example an admin MFA reset in the
-console) — then delete its TOTP line and re-run `reset-identities`, which replaces the
-factor; otherwise the `keep` row would hold on to a dead secret.
+The tool mints the credentials in root-owned `0600` files under
+`/etc/ds-platform/`: `stage-agent-admin.env` and
+`stage-agent-committee.env`. The password is stored before the first IdP write
+and the TOTP secret before verification, so converge can resume after a failure.
+After an external factor reset, remove that account's stored TOTP line and rerun
+`reset-identities` to re-enroll it.
+
+The API heals the agent admin's mirror on first sign-in. Slot converge passes the
+committee's opaque `DS_STAGE_AGENT_COMMITTEE_SUB` to `seed:golden`, which writes
+its mirror and one event-role grant for the golden doctor congress. The ordinary
+golden seed omits both rows when the subject is absent.
 
 The TOTP factors of the golden `doctorMfa` and `admin` are NOT converged and never touched
 by this command: they are enrolled in the owner's authenticator. The command guarantees

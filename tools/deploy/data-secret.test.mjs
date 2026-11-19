@@ -446,3 +446,47 @@ describe("4153: the api box", () => {
     assert.equal(v.stdout, "succeeded\n");
   });
 });
+
+// Issue #4153: the certificate ds-api-prod answered to data-secret.yml -f box=api
+// action=recipient (run 44455451390, after release-2026.11.19-1). A rebuilt box
+// generates a new pair: commit its certificate and its fingerprint here together.
+const API_BOX_FINGERPRINT =
+  "98:9A:5D:E1:D4:2F:53:98:83:99:3D:01:41:60:00:C3:80:98:8D:E7:38:50:64:77:4B:02:56:DB:DD:8B:61:C1";
+
+describe("4153: the committed api intake certificate", () => {
+  it("is ds-api-prod's: it parses and its fingerprint is the one the box printed", () => {
+    requireRecipient(BOXES.api.recipient, "api");
+    const pem = readFileSync(BOXES.api.recipient, "utf8");
+    assert.ok(
+      !pem.includes("\r"),
+      "LF line endings, byte-exact to the run log",
+    );
+    assert.equal(
+      new X509Certificate(pem).subject,
+      "CN=ds-api-prod-secret-intake",
+    );
+    assert.equal(certFingerprint(pem), API_BOX_FINGERPRINT);
+  });
+
+  it(
+    "pnpm prod:api-secret encrypts to it: one base64 line, its fingerprint on stderr",
+    { skip: !opensslPresent && "needs openssl" },
+    () => {
+      const r = spawnSync(
+        process.execPath,
+        [join(import.meta.dirname, "data-secret.mjs"), "--box", "api", SHA],
+        {
+          input: "BOT_PROTECTION_ENABLED=true\nTELEGRAM_WEBHOOK_SECRET=<generate>\n",
+          encoding: "utf8",
+        },
+      );
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(r.stdout, /^[A-Za-z0-9+/]+={0,2}\n$/);
+      assert.ok(
+        r.stderr.includes(`encrypted to ${API_BOX_FINGERPRINT} (ds-api-prod)`),
+        r.stderr,
+      );
+      assert.match(r.stderr, /-f box=api -f action=apply/);
+    },
+  );
+});

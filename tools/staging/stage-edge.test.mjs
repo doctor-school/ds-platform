@@ -73,7 +73,7 @@ test("the routing matcher and the ask responder use the same app alternation", (
 });
 
 test("every host matcher uses the same slot alternation", () => {
-  for (const name of ["stage_slot", "stage_ask", "stage_centrifugo", "stage_back_channel_logout"]) {
+  for (const name of ["stage_slot", "stage_ask", "stage_centrifugo", "stage_back_channel_logout", "stage_telegram_webhook"]) {
     const pattern = matcherRegexp(name);
     assert.ok(
       pattern.includes(SLOT_ALTERNATION),
@@ -94,6 +94,27 @@ test("the edge admits exactly the slot names the tool can create", () => {
   }
 });
 
+test("4121: Academy partnership fault routes accept only gated home and asset traffic", () => {
+  const fixture = matcherRegexp("stage_partnership_unavailable");
+  assert.equal(fixture, `^academy-partnership-unavailable-${SLOT_ALTERNATION}[.]`);
+  const ask = new RegExp(matcherRegexp("stage_ask").replace("{$STAGE_BASE_DOMAIN}", "stage\\.test"));
+  assert.ok(ask.source.includes(`academy-partnership-unavailable-${SLOT_ALTERNATION}`));
+  for (const slot of ["main", "pr-42"]) {
+    assert.ok(ask.test(`/ask/academy-partnership-unavailable-${slot}.stage.test`));
+  }
+  assert.ok(!ask.test("/ask/academy-partnership-unavailable-pr-0.stage.test"));
+  const block = text.match(/\n\thandle @stage_partnership_unavailable \{([\s\S]*?)\n\t\}/)?.[1];
+  assert.ok(block, "fixture route exists");
+  assert.match(block, /@fixture_post\s*\{\s*method POST\s*path \/\s*\}/);
+  assert.match(block, /@fixture_get\s*\{\s*method GET HEAD\s*path \/ \/_next\/static\/\* \/_next\/image \/brand\/\* \/experts\/\* \/icon.svg \/favicon.ico\s*\}/);
+  const upstream = "import staging_gate {re.partnership_unavailable.1}-portal-partnership-unavailable:3001";
+  for (const matcher of ["fixture_post", "fixture_get"]) {
+    assert.ok(block.includes(`handle @${matcher} {\n\t\t\t${upstream}`));
+  }
+  assert.equal(block.split(upstream).length - 1, 2);
+  assert.match(block, /handle\s*\{\s*respond 404\s*\}/);
+  assert.doesNotMatch(block, /\/v1\/|reverse_proxy/);
+});
 test("the ask responder answers for the shared IdP host too", () => {
   assert.match(matcherRegexp("stage_ask"), /\|id\|/);
 });
@@ -220,6 +241,64 @@ test("3545: the back-channel logout exemption admits only POST of the one logout
     lines.indexOf("handle @stage_back_channel_logout {") < lines.indexOf("handle @stage_slot {"),
     "the exemption precedes the gated slot handler",
   );
+});
+
+test("4159: the Telegram webhook exemption admits only POST of the one webhook path on api-<slot>", () => {
+  // Telegram posts channel updates to the PUBLIC
+  // `https://api-<slot>.<base>/v1/integrations/telegram/webhook` (TELEGRAM_WEBHOOK_URL,
+  // tools/staging/slot.mjs) with no browser credentials; the endpoint authenticates
+  // every call by the `X-Telegram-Bot-Api-Secret-Token` header before reading the
+  // body (048 EARS-24/25), and production has no gate in front of `api.`.
+  const body = blockBody("@stage_telegram_webhook {");
+  const hostLine = body.find((line) => line.startsWith("header_regexp "));
+  assert.ok(hostLine, "the exemption is scoped by a Host regexp");
+  const hostRe = hostLine.match(/^header_regexp slot Host "([^"]+)"$/);
+  assert.ok(hostRe, `the Host regexp shares the \`slot\` capture name, got ${hostLine}`);
+  assert.equal(hostRe[1], `^(api)-${SLOT_ALTERNATION}[.]`);
+  assert.deepEqual(
+    body.filter((line) => line !== hostLine),
+    ["method POST", "path /v1/integrations/telegram/webhook"],
+    "no other matcher widens or narrows the exemption",
+  );
+
+  const host = new RegExp(hostRe[1]);
+  const exempt = (h, method, path) =>
+    host.test(h) && method === "POST" && path.toLowerCase() === "/v1/integrations/telegram/webhook";
+  assert.ok(exempt("api-pr-7.stage.test", "POST", "/v1/integrations/telegram/webhook"));
+  assert.ok(exempt("api-main.stage.test", "POST", "/v1/integrations/telegram/webhook"));
+  assert.ok(!exempt("api-pr-7.stage.test", "GET", "/v1/integrations/telegram/webhook"), "GET stays gated");
+  assert.ok(!exempt("api-pr-7.stage.test", "POST", "/v1/integrations/telegram/webhook/x"), "no sub-path");
+  assert.ok(!exempt("api-pr-7.stage.test", "POST", "/v1/integrations/telegram"), "no parent path");
+  assert.ok(!exempt("api-pr-7.stage.test", "POST", "/v1/health"), "no other api path");
+  for (const other of ["academy", "doctor", "admin", "login"]) {
+    assert.ok(!exempt(`${other}-pr-7.stage.test`, "POST", "/v1/integrations/telegram/webhook"), `${other} stays gated`);
+  }
+
+  const [, service, port] = mapRows().find((row) => row.startsWith("api ")).split(" ");
+  assert.deepEqual(blockBody("handle @stage_telegram_webhook {"), [
+    `reverse_proxy {re.slot.2}-${service}:${port}`,
+  ]);
+  const lines = text.split(NEWLINE).map((line) => line.trim());
+  assert.ok(
+    lines.indexOf("handle @stage_telegram_webhook {") < lines.indexOf("handle @stage_slot {"),
+    "the exemption precedes the gated slot handler",
+  );
+});
+
+test("4159: the edge header and the staging spec both count five basic-auth exemptions", () => {
+  assert.match(text, /Basic-auth exemptions — exactly five \(spec §3\)/);
+  assert.doesNotMatch(text, /exactly four/);
+  const spec = readFileSync(
+    fileURLToPath(
+      new URL(
+        "../../apps/docs/content/specs/tech/2026-09-08-staging-previews-and-regression-contour-en.md",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  );
+  assert.match(spec, /with exactly five exemptions/);
+  assert.match(spec, /POST \/v1\/integrations\/telegram\/webhook/);
 });
 
 test("every public app label has an upstream in the map table", () => {

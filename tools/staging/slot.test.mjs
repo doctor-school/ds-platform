@@ -949,6 +949,23 @@ test("#3147: a slot's storefront footer crossings stay on the slot's own sibling
   assert.ok(lines.includes(`DOCTOR_PUBLIC_ORIGIN=https://doctor-pr-7.${BASE}`));
 });
 
+test("4159: a slot api's Telegram webhook URL is its own public api host; the bot secrets stay in stage.env", () => {
+  const text = renderSlotEnv({
+    slot: "pr-7",
+    sha: SHA,
+    baseDomain: BASE,
+    redisDb: 4,
+    goldenSubjects: SUBJECTS,
+  });
+  // 048 EARS-24: `setWebhook` registers TELEGRAM_WEBHOOK_URL, so it must name the
+  // slot's OWN public api — the one the edge exempts for this method + path.
+  assert.ok(
+    text.split("\n").includes(`TELEGRAM_WEBHOOK_URL=https://api-pr-7.${BASE}/v1/integrations/telegram/webhook`),
+  );
+  // The token and the secret are box-wide stand secrets (stage.env), never copied here.
+  assert.doesNotMatch(text, /TELEGRAM_BOT_TOKEN|TELEGRAM_WEBHOOK_SECRET/);
+});
+
 test("a teardown renders only what compose needs to ADDRESS the project", () => {
   const text = renderSlotDownEnv({ slot: "pr-7" });
   assert.match(text, /^SLOT=pr-7$/m);
@@ -974,6 +991,20 @@ const SLOT_COMPOSE_TEXT = readFileSync(
   new URL("../../infra/deploy/compose/slot/compose.yml", import.meta.url),
   "utf8",
 );
+test("4121: the stage partnership fixture reuses the running portal image with no volume or credentials", () => {
+  const set = slotServiceSet(SLOT_COMPOSE_TEXT);
+  const fixture = set.longRunning.find((service) => service.name === "portal-partnership-unavailable");
+  const portal = set.longRunning.find((service) => service.name === "portal");
+  assert.ok(fixture, "fixture participates in the live health gate");
+  assert.equal(fixture.image, portal.image);
+  assert.equal(fixture.port, portal.port);
+  const block = SLOT_COMPOSE_TEXT.match(/^ {2}portal-partnership-unavailable:\r?\n((?:^ {4}.*\r?\n)*)/m)?.[1];
+  assert.ok(block);
+  assert.match(block, /ACADEMY_SUBMISSIONS_DIR: \/dev\/null/);
+  assert.match(block, /lstatSync\(process.env.ACADEMY_SUBMISSIONS_DIR\)\.isCharacterDevice\(\)/);
+  assert.doesNotMatch(block, /\b(?:volumes|env_file|ports|networks|INTERNAL_API_TOKEN):/);
+});
+
 const STAGE_ENV_EXAMPLE_KEYS = envKeys(
   readFileSync(new URL("../../infra/deploy/stage.env.example", import.meta.url), "utf8"),
 );
@@ -1729,6 +1760,14 @@ test("`reset` refuses without `--yes`, and only `main` is resettable", () => {
 
 // --- the command layer -------------------------------------------------------
 
+function staffEffectResult(step) {
+  if (step.op === "golden-identities") return SUBJECTS;
+  if (step.op === "agent-admin" || step.op === "agent-committee") {
+    return { subject: `${step.op}-subject` };
+  }
+  return undefined;
+}
+
 test("`up` converges the golden identities FIRST — its subjects are the plan's input", async () => {
   const seen = [];
   const effects = {
@@ -1739,7 +1778,11 @@ test("`up` converges the golden identities FIRST — its subjects are the plan's
     probe: async () => ({ ok: true, stdout: `{"a":{"Name":"${CADDY_CONTAINER}"}}` }),
     idp: async (step) => {
       seen.push(["idp", step.op]);
-      return step.op === "golden-identities" ? SUBJECTS : undefined;
+      if (step.op === "agent-committee") {
+        assert.equal(step.adminSubject, "agent-admin-subject");
+        assert.deepEqual(step.goldenSubjects, SUBJECTS);
+      }
+      return staffEffectResult(step);
     },
     ship: async () => {},
     verifyImages: async () => {},
@@ -1758,9 +1801,12 @@ test("`up` converges the golden identities FIRST — its subjects are the plan's
   assert.equal(seen[0][1], "golden-identities");
   // #2531: the agent admin (account + TOTP) converges right behind the golden five.
   assert.equal(seen[1][1], "agent-admin");
+  assert.equal(seen[2][1], "agent-committee");
   const env = seen.find(([path]) => path === slotEnvPath("pr-7"));
   assert.ok(env, "the slot env was written");
   assert.match(env[1], new RegExp(`${GOLDEN_SUBJECT_ENV_VARS[0]}=${SUBJECTS[GOLDEN_SUBJECT_ENV_VARS[0]]}`));
+  assert.match(env[1], /^DS_STAGE_AGENT_COMMITTEE_SUB=agent-committee-subject$/m);
+  assert.doesNotMatch(env[1], /DS_STAGE_AGENT_COMMITTEE_(PASSWORD|TOTP_SECRET)/);
   assert.match(line, /slot pr-7 converged/);
 });
 
@@ -1773,7 +1819,7 @@ async function shippedStep(options, shaInMain) {
     write: async () => {},
     append: async () => {},
     probe: async () => ({ ok: true, stdout: `{"a":{"Name":"${CADDY_CONTAINER}"}}` }),
-    idp: async (step) => (step.op === "golden-identities" ? SUBJECTS : undefined),
+    idp: async (step) => staffEffectResult(step),
     ship: async (step) => {
       shipped = step;
     },
@@ -1832,7 +1878,7 @@ test("`reset-identities` converges the agent admin too (#2531)", async () => {
     idp: async (step) => {
       ops.push(step.op);
       if (step.op === "agent-admin") assert.deepEqual(step.goldenSubjects, SUBJECTS);
-      return step.op === "golden-identities" ? SUBJECTS : undefined;
+      return staffEffectResult(step);
     },
   };
   await runSlotCommand({
@@ -1841,7 +1887,7 @@ test("`reset-identities` converges the agent admin too (#2531)", async () => {
     baseDomain: BASE,
     effects,
   });
-  assert.deepEqual(ops, ["golden-identities", "agent-admin"]);
+  assert.deepEqual(ops, ["golden-identities", "agent-admin", "agent-committee"]);
 });
 
 test("`agent-admin-code` parses with an optional `--json` and nothing else", () => {
@@ -2463,7 +2509,7 @@ test("2982: a converge that fails closes its release as failed, then rethrows", 
     write: async () => {},
     append: async () => {},
     probe: async () => ({ ok: true, stdout: "" }),
-    idp: async (step) => (step.op === "golden-identities" ? SUBJECTS : undefined),
+    idp: async (step) => staffEffectResult(step),
     ship: async () => {},
     verifyImages: async () => {
       throw new SlotError("boot probe failed");

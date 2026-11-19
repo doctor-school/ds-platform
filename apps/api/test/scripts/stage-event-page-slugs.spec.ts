@@ -193,6 +193,7 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
     expect(tiers.map((t) => t.name).sort()).toEqual([
       "live/academy/default",
       "live/academy/event-page",
+      "live/admin/event-lifecycle",
       "live/doctor/congress",
       "live/doctor/event-page",
       "live/doctor/event-register",
@@ -223,6 +224,8 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
     const tier = LIVE_TIERS.find((t) => t.name === "live/doctor/congress");
     const slug = tier?.seededEnv?.E2E_DOCTOR_CONGRESS_SLUG;
     expect(slug).toBeTruthy();
+    const adminTier = LIVE_TIERS.find((t) => t.name === "live/admin/event-lifecycle");
+    expect(adminTier?.seededEnv?.E2E_DOCTOR_CONGRESS_SLUG).toBe(slug);
     const event = dataset.events.find((e) => e.slug === slug);
     expect(event).toMatchObject({
       state: "published",

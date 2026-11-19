@@ -11,6 +11,7 @@
 // the same values into the same rows and changes nothing observable.
 
 import { doctorSpecialties } from "../../schema/doctor-specialties.js";
+import { eventRoleGrants } from "../../schema/event-role-grants.js";
 import { eventRecordings } from "../../schema/event-recordings.js";
 import { events, streamConfig } from "../../schema/events.js";
 import { feedEntries, materials } from "../../schema/materials.js";
@@ -144,6 +145,7 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "organisations",
   "organisation_role_assignments",
   "events",
+  "event_role_grants",
   "stream_config",
   "event_experts",
   "event_projects",
@@ -324,6 +326,13 @@ export function buildGoldenSeedPlan(
       ["organisationId", "roleId"],
     ),
     step("events", events, dataset.events, ["id"]),
+    step(
+      "event_role_grants",
+      eventRoleGrants,
+      dataset.eventRoleGrants ?? [],
+      ["userId", "role", "eventId"],
+      { setOnceKeys: ["id", "createdAt"] },
+    ),
     // `stream_config` is keyed by its event, not by a surrogate id.
     step("stream_config", streamConfig, dataset.streamConfig, ["eventId"]),
     step("event_experts", eventExperts, dataset.eventExperts, ["id"]),
@@ -541,6 +550,8 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
     }
   };
 
+  check("event_role_grants", dataset.eventRoleGrants ?? [], "userId", userIds);
+  check("event_role_grants", dataset.eventRoleGrants ?? [], "eventId", eventIds);
   check("registrations", dataset.registrations, "userId", userIds);
   check("registrations", dataset.registrations, "eventId", eventIds);
   check("consent_records", dataset.consentRecords, "userId", userIds);

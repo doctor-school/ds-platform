@@ -494,6 +494,34 @@ describe("#2063 golden dataset", () => {
 describe("#2063 golden seed plan", () => {
   const dataset = buildGoldenDataset(now, subjects);
 
+  it("#4127: seeds the optional stage committee subject only for the doctor congress", () => {
+    const subject = "stage-committee-subject";
+    const committee = buildGoldenDataset(now, subjects, subject);
+    const user = committee.users.find((row) => row.zitadelSub === subject);
+    expect(user).toMatchObject({
+      email: "golden.committee.agent@example.test",
+      role: "congress-program-committee",
+    });
+    expect(dataset.users.some((row) => row.email === user?.email)).toBe(false);
+    const steps = buildGoldenSeedPlan(committee, specialtyIdByName, learningPresetByName);
+    const grantIndex = steps.findIndex((step) => step.name === "event_role_grants");
+    expect(grantIndex).toBeGreaterThan(steps.findIndex((step) => step.name === "events"));
+    expect(steps[grantIndex]).toMatchObject({
+      rows: [{
+        userId: user?.id,
+        eventId: golden.events.doctorCongress.id,
+        role: "congress-program-committee",
+      }],
+      conflictKeys: ["userId", "role", "eventId"],
+    });
+    expect(
+      buildGoldenSeedPlan(dataset, specialtyIdByName, learningPresetByName)
+        .find((step) => step.name === "event_role_grants")?.rows ?? [],
+    ).toEqual([]);
+    expect(() => buildGoldenDataset(now, subjects, subjects.admin)).toThrow(/already used/);
+    expect(goldenReferentialIssues(committee)).toEqual([]);
+  });
+
   it("writes parents before children", () => {
     const plan = buildGoldenSeedPlan(
       dataset,

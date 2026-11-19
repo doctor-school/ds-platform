@@ -16,6 +16,7 @@ import type {
   congressSubmissionKindSettings,
   congressSubmissionSettings,
 } from "../../schema/congress-submission-settings.js";
+import type { EventRoleGrant } from "../../schema/event-role-grants.js";
 import type { NewEventRecording } from "../../schema/event-recordings.js";
 import type { NewFeedEntry, NewMaterial } from "../../schema/materials.js";
 import {
@@ -54,6 +55,7 @@ import {
   goldenUuid,
   SEED_EVENT_KINDS,
   SEED_PROJECT_OUTPUT_KINDS,
+  stageAgentCommittee,
 } from "./ids.js";
 import type { GoldenSubjectMap } from "./idp.js";
 import { GOLDEN_IDP_ACCOUNTS } from "./idp.js";
@@ -109,6 +111,7 @@ export interface GoldenDirectionSpecialtyLink {
 }
 
 export interface GoldenDataset {
+  eventRoleGrants?: EventRoleGrant[];
   users: NewUser[];
   experts: NewExpert[];
   projects: NewProject[];
@@ -178,16 +181,19 @@ const VERIFIED_REGISTRATION_TEMPLATE = [
 /**
  * Builds every golden row for the resolved «now» (see `now.ts`).
  *
- * Deterministic in both arguments: the same `now` and the same subject map
- * always yield byte-identical rows.
+ * The same timestamp and subjects always yield byte-identical rows.
  */
 export function buildGoldenDataset(
   now: Date,
   subjects: GoldenSubjectMap,
+  committeeSubject?: string,
 ): GoldenDataset {
   const at = (offset: Parameters<typeof shiftFromNow>[1]) =>
     shiftFromNow(now, offset);
   const created = at({ days: -90 });
+  if (committeeSubject && Object.values(subjects).includes(committeeSubject)) {
+    throw new GoldenDatasetError("stage committee subject is already used by a golden account");
+  }
 
   const subjectOf = (key: keyof GoldenSubjectMap): string => {
     const subject = subjects[key];
@@ -216,6 +222,7 @@ export function buildGoldenDataset(
   // scenario compiled against the named dataset sees exactly what it saw before.
   const volume = buildGoldenVolume(now);
 
+  const committeeRole = "congress-program-committee";
   const users: NewUser[] = [
     mirrorUser(doctors.unverified, subjectOf("doctorUnverified"), {
       role: accountOf("doctorUnverified").role,
@@ -265,6 +272,27 @@ export function buildGoldenDataset(
     ),
     ...volume.users,
   ];
+  if (committeeSubject) {
+    users.push(
+      mirrorUser(stageAgentCommittee, committeeSubject, {
+        role: committeeRole,
+        emailVerified: true,
+        created,
+        updated: created,
+      }),
+    );
+  }
+  const eventRoleGrants: EventRoleGrant[] = committeeSubject
+    ? [
+        {
+          id: goldenUuid(GOLDEN_GROUP.eventRoleGrants, 1),
+          userId: stageAgentCommittee.id,
+          eventId: golden.events.doctorCongress.id,
+          role: committeeRole,
+          createdAt: created,
+        },
+      ]
+    : [];
 
   const experts: NewExpert[] = [
     {
@@ -923,6 +951,7 @@ export function buildGoldenDataset(
 
   return {
     users,
+    eventRoleGrants,
     experts,
     projects,
     events,

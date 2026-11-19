@@ -172,7 +172,7 @@ describe("023 — the school screen", () => {
     expect(done).toHaveTextContent("Открыть путь курса →");
     // A started card names the doctor's next lesson; never a percent (023-design §4).
     expect(started).toHaveTextContent("Продолжить — урок 3 →");
-    expect(started.textContent).not.toMatch(/%/);
+    expect(started?.textContent).not.toMatch(/%/);
   });
 
   it("023 EARS-22: the partner mark appears only on a course with a partner", () => {

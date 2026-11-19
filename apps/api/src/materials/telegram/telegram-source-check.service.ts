@@ -10,13 +10,15 @@ import {
   type TelegramChatRef,
 } from "./telegram-bot-api.types.js";
 import { TELEGRAM_CONFIG, type TelegramConfig } from "./telegram-config.js";
+import { TelegramUpdateCursorRepository } from "./telegram-update-cursor.repository.js";
 
 // 048 EARS-31 (#3994) — the source check (048-design «Source check
 // (EARS-31)»): hourly for every switched-on Telegram source, and at once on
 // add / address edit / switch-on (EARS-21, run by `FeedSourcesService` after
-// its transaction commits). It reads the webhook state (`getWebhookInfo`),
-// the channel (`getChat` — by the bound id, else `@<address>`) and the bot's
-// membership (`getChatMember(chat, getMe().id)`), and writes «Работает» or
+// its transaction commits). It reads the channel (`getChat` — by the bound
+// id, else `@<address>`), the bot's membership (`getChatMember(chat,
+// getMe().id)`) and the update poller's last successful `getUpdates` of that
+// bot (`telegram_update_cursor.polled_at`, EARS-24), and writes «Работает» or
 // «Ошибка» with ONE reason, in the table's order, plus the check time. While
 // the source has no bound Telegram id, a channel whose `username` equals the
 // address ignoring case binds its id in the same write as the status, so a
@@ -29,7 +31,6 @@ export const SOURCE_CHECK_REASONS = {
   notConfigured: "Telegram не подключён на сервере",
   channelNotFound: "Канал не найден или бот не добавлен в канал",
   notAMember: "Бот не состоит в канале",
-  webhookNotRegistered: "Вебхук Telegram не зарегистрирован",
   cannotDeliver: "Telegram не может доставить новые посты",
   unreachable: "Telegram недоступен",
 } as const;
@@ -42,8 +43,8 @@ export function addressChangedReason(username: string): string {
 /** The membership statuses that receive channel posts (Lead decision 5). */
 const MEMBER_STATUSES = new Set(["administrator", "member"]);
 
-/** «within the last hour» of `getWebhookInfo.last_error_date`. */
-const DELIVERY_ERROR_WINDOW_MS = 60 * 60 * 1000;
+/** The poller must have answered a `getUpdates` within the last hour. */
+const POLL_FRESHNESS_MS = 60 * 60 * 1000;
 
 export interface SourceCheckVerdict {
   status: "ok" | "failing";
@@ -84,6 +85,8 @@ export class TelegramSourceCheck {
     @Inject(TELEGRAM_BOT_API) private readonly telegram: TelegramBotApi,
     @Inject(FeedSourcesRepository)
     private readonly sources: FeedSourcesRepository,
+    @Inject(TelegramUpdateCursorRepository)
+    private readonly cursor: TelegramUpdateCursorRepository,
   ) {}
 
   /** EARS-31 — the hourly check of every switched-on Telegram source. */
@@ -144,13 +147,11 @@ export class TelegramSourceCheck {
 
   /** The verdict of the check table, first failing row wins. */
   private async judge(source: FeedSource): Promise<SourceCheckVerdict> {
-    const config = this.config;
-    if (config === null) return failing(SOURCE_CHECK_REASONS.notConfigured);
+    if (this.config === null) {
+      return failing(SOURCE_CHECK_REASONS.notConfigured);
+    }
     try {
-      const webhook = await this.telegram.getWebhookInfo();
-      if (config.webhookUrl === null || webhook.url !== config.webhookUrl) {
-        return failing(SOURCE_CHECK_REASONS.webhookNotRegistered);
-      }
+      const me = await this.telegram.getMe();
       const bound =
         source.telegramChatId === null ? null : Number(source.telegramChatId);
       const ref: TelegramChatRef = bound ?? `@${source.address}`;
@@ -166,7 +167,6 @@ export class TelegramSourceCheck {
       // Bind only while unbound, and only a channel answering to the address.
       const bindChatId =
         bound === null && name === source.address ? chat.id : null;
-      const me = await this.telegram.getMe();
       let memberStatus: string | null;
       try {
         memberStatus = (await this.telegram.getChatMember(chat.id, me.id))
@@ -186,9 +186,10 @@ export class TelegramSourceCheck {
       if (name !== source.address) {
         return failing(addressChangedReason(name), bindChatId);
       }
+      const polledAt = await this.cursor.polledAt(me.id);
       if (
-        webhook.last_error_date !== undefined &&
-        Date.now() - webhook.last_error_date * 1000 < DELIVERY_ERROR_WINDOW_MS
+        polledAt === null ||
+        Date.now() - polledAt.getTime() >= POLL_FRESHNESS_MS
       ) {
         return failing(SOURCE_CHECK_REASONS.cannotDeliver, bindChatId);
       }
@@ -196,7 +197,7 @@ export class TelegramSourceCheck {
     } catch (error) {
       this.note(source.id, error);
       if (unreachable(error)) return failing(SOURCE_CHECK_REASONS.unreachable);
-      // `getWebhookInfo` / `getMe` refused: the token is not accepted.
+      // `getMe` refused: the token is not accepted.
       if (refused(error)) return failing(SOURCE_CHECK_REASONS.notConfigured);
       throw error;
     }

@@ -44,6 +44,12 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deliverByPoll,
+  dropCursor,
+  markPolled,
+  stopPolling,
+} from "./telegram-ingress.js";
 
 // 048 V-16, V-19 (#3994) — the preview copy and the source check over the
 // REAL stack (Fastify + Postgres + the 012 normalizer + object storage)
@@ -53,7 +59,8 @@ import {
 // sets it; the last attempt leaves it `failed`; the source status is never
 // touched (EARS-29). V-19: each failing reason of EARS-31 from the double's
 // answers, «Telegram недоступен» on an outage, «Работает» with the id bound
-// otherwise; nothing logged carries the token or the secret (EARS-36).
+// otherwise; nothing logged carries the token (EARS-36). Posts arrive the
+// production way, through one poll of the update poller (EARS-24).
 //
 // The scheduled jobs are driven through their units (`duePreviewIds` +
 // `copy`, `check`) so this suite never touches rows of a parallel suite.
@@ -61,13 +68,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
   "048 Telegram preview copy and source check (e2e)",
   () => {
     const TOKEN = "123456:E2E-preview_token-value";
-    const SECRET = "e2e_preview-secret_0123";
-    const HOOK = "https://api.example.test/v1/integrations/telegram/webhook";
-    const config: TelegramConfig = {
-      botToken: TOKEN,
-      webhookSecret: SECRET,
-      webhookUrl: HOOK,
-    };
+    const config: TelegramConfig = { botToken: TOKEN };
     const telegram = new FakeTelegramBotApi();
     let app: NestFastifyApplication;
     let offApp: NestFastifyApplication;
@@ -99,6 +100,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       a.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
       await a.init();
       await a.getHttpAdapter().getInstance().ready();
+      await stopPolling(a);
       return a;
     }
 
@@ -120,24 +122,31 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }
     type Src = Awaited<ReturnType<typeof source>>;
 
-    function deliver(src: Src, messageId: number, extra: object) {
-      return app.inject({
-        method: "POST",
-        url: "/v1/integrations/telegram/webhook",
-        headers: {
-          "content-type": "application/json",
-          "x-telegram-bot-api-secret-token": SECRET,
+    /**
+     * One channel post, delivered through one poll. The poll's own calls
+     * (`getMe`, `deleteWebhook`, `getUpdates`) are not this suite's subject
+     * (`telegram-update-poller.e2e-spec.ts`), so they leave the record.
+     */
+    async function deliver(
+      src: Src,
+      messageId: number,
+      extra: object,
+      kind: "channel_post" | "edited_channel_post" = "channel_post",
+    ) {
+      const outcome = await deliverByPoll(app, telegram, {
+        update_id: ++updateSeq,
+        [kind]: {
+          message_id: messageId,
+          date: base + messageId,
+          chat: { id: src.chatId, type: "channel", username: src.address },
+          ...extra,
         },
-        payload: JSON.stringify({
-          update_id: ++updateSeq,
-          channel_post: {
-            message_id: messageId,
-            date: base + messageId,
-            chat: { id: src.chatId, type: "channel", username: src.address },
-            ...extra,
-          },
-        }),
       });
+      const kept = telegram.calls.filter(
+        (c) => !["getMe", "deleteWebhook", "getUpdates"].includes(c.method),
+      );
+      telegram.calls.splice(0, telegram.calls.length, ...kept);
+      return outcome;
     }
 
     const sizes = (id: string, widths: number[]) =>
@@ -206,9 +215,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
         .toBuffer();
     });
 
-    beforeEach(() => {
+    beforeEach(async () => {
       logged.length = 0;
       telegram.reset();
+      // The poller answered a moment ago: delivery works (EARS-31).
+      await markPolled(pool, telegram);
       for (const level of [
         "log",
         "warn",
@@ -232,7 +243,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // EARS-36 — no log line carries the token or the secret.
       const all = logged.join("\n");
       expect(all).not.toContain(TOKEN);
-      expect(all).not.toContain(SECRET);
       expect(all).not.toContain("api.telegram.org");
       vi.restoreAllMocks();
       for (const id of sourceIds.splice(0)) {
@@ -248,6 +258,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     afterAll(async () => {
+      await dropCursor(pool, telegram);
       await offApp?.close();
       await app?.close();
     });
@@ -261,7 +272,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         caption: "Фото",
         photo: sizes("p1", [90, 800, 1280, 2560]),
       });
-      expect(res.statusCode).toBe(200);
+      expect(res.kind).toBe("polled");
       const row = await entryOf(src);
       expect(row.preview_state).toBe("done");
       expect(row.image_url).toBeNull();
@@ -335,7 +346,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         caption: "Большое",
         photo: sizes("big", [1280]),
       });
-      expect(res.statusCode).toBe(200);
+      expect(res.kind).toBe("polled");
       expect(methods()).toEqual(["getFile"]);
       expect(await entryOf(src)).toMatchObject({
         image_ref: null,
@@ -350,7 +361,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         caption: "Позже",
         photo: sizes("late", [800]),
       });
-      expect(res.statusCode).toBe(200);
+      expect(res.kind).toBe("polled");
       const first = await entryOf(src);
       expect(first).toMatchObject({
         image_ref: null,
@@ -412,25 +423,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
         .jpeg()
         .toBuffer();
       serve("two-800", other);
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/integrations/telegram/webhook",
-        headers: {
-          "content-type": "application/json",
-          "x-telegram-bot-api-secret-token": SECRET,
-        },
-        payload: JSON.stringify({
-          update_id: ++updateSeq,
-          edited_channel_post: {
-            message_id: 60,
-            date: base + 60,
-            chat: { id: src.chatId, type: "channel", username: src.address },
-            caption: "Раз",
-            photo: sizes("two", [800]),
-          },
-        }),
-      });
-      expect(res.statusCode).toBe(200);
+      const res = await deliver(
+        src,
+        60,
+        { caption: "Раз", photo: sizes("two", [800]) },
+        "edited_channel_post",
+      );
+      expect(res.kind).toBe("polled");
       const row = await entryOf(src);
       expect(row.preview_state).toBe("done");
       expect(row.image_ref).not.toBe(old);
@@ -466,10 +465,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       telegram.members.set(`${src.chatId}:${telegram.me.id}`, {
         status: opts.status ?? "administrator",
       });
-      telegram.webhook = { url: HOOK, pending_update_count: 0 };
     }
 
-    it("048 EARS-31: when the check finds the channel, the bot a member and the webhook registered, the system shall set «Работает» with the time and bind the id of a channel whose username equals the address ignoring case", async () => {
+    it("048 EARS-31: when the check finds the channel, the bot a member and the poller answering, the system shall set «Работает» with the time and bind the id of a channel whose username equals the address ignoring case", async () => {
       for (const status of ["administrator", "member"]) {
         telegram.reset();
         const src = await source();
@@ -486,10 +484,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
           version: before.version,
         });
         expect(after.checked_at).not.toBeNull();
-        expect(telegram.calls[0]).toEqual({
-          method: "getWebhookInfo",
-          args: [],
-        });
+        expect(telegram.calls[0]).toEqual({ method: "getMe", args: [] });
         expect(telegram.calls[1]).toEqual({
           method: "getChat",
           args: [`@${src.address}`],
@@ -506,19 +501,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("048 EARS-31: the system shall set «Ошибка» with exactly one reason for each failing check", async () => {
       const cases: Array<[string, (src: Src) => void | Promise<void>]> = [
-        [
-          SOURCE_CHECK_REASONS.webhookNotRegistered,
-          (src) => {
-            channel(src);
-            telegram.webhook = { url: "", pending_update_count: 0 };
-          },
-        ],
-        [
-          SOURCE_CHECK_REASONS.channelNotFound,
-          () => {
-            telegram.webhook = { url: HOOK, pending_update_count: 0 };
-          },
-        ],
+        [SOURCE_CHECK_REASONS.channelNotFound, () => undefined],
         [
           SOURCE_CHECK_REASONS.notAMember,
           (src) => channel(src, { status: "left" }),
@@ -531,20 +514,29 @@ describe.skipIf(!process.env.DATABASE_URL)(
           },
         ],
         [
+          // The poller's last answered getUpdates is over an hour old.
           SOURCE_CHECK_REASONS.cannotDeliver,
-          (src) => {
+          async (src) => {
             channel(src);
-            telegram.webhook = {
-              url: HOOK,
-              pending_update_count: 3,
-              last_error_date: Math.floor(Date.now() / 1000) - 600,
-              last_error_message: "Wrong response from the webhook: 502",
-            };
+            await markPolled(
+              pool,
+              telegram,
+              new Date(Date.now() - 61 * 60 * 1000),
+            );
+          },
+        ],
+        [
+          // The poller has never answered for this bot.
+          SOURCE_CHECK_REASONS.cannotDeliver,
+          async (src) => {
+            channel(src);
+            await dropCursor(pool, telegram);
           },
         ],
       ];
       for (const [reason, arrange] of cases) {
         telegram.reset();
+        await markPolled(pool, telegram);
         const src = await source();
         await arrange(src);
         await check.check(src.id);
@@ -552,10 +544,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
           status: "failing",
           status_reason: reason,
         });
-        // Telegram's own error text goes nowhere near the admin.
-        expect(JSON.stringify(await sourceRow(src))).not.toContain(
-          "Wrong response",
-        );
       }
     });
 
@@ -593,7 +581,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(await snapshot()).toEqual(before);
     });
 
-    it("048 EARS-31: while the bot token or the webhook secret is not configured, the check shall set «Telegram не подключён на сервере» calling nothing; a switched-off source is not checked", async () => {
+    it("048 EARS-31: while the bot token is not configured, the check shall set «Telegram не подключён на сервере» calling nothing; a switched-off source is not checked", async () => {
       const src = await source();
       await offApp.get(TelegramSourceCheck).check(src.id);
       expect(await sourceRow(src)).toMatchObject({

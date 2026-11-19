@@ -9,7 +9,7 @@ import { z } from "zod";
 /** DI token of the {@link TelegramBotApi}. */
 export const TELEGRAM_BOT_API = Symbol("TELEGRAM_BOT_API");
 
-/** The update types the webhook is registered for (EARS-24). */
+/** The update types the poller asks `getUpdates` for (EARS-24). */
 export const TELEGRAM_ALLOWED_UPDATES = [
   "channel_post",
   "edited_channel_post",
@@ -26,13 +26,22 @@ export const TelegramChatRefSchema = z.union([
 ]);
 export type TelegramChatRef = z.infer<typeof TelegramChatRefSchema>;
 
-export const SetWebhookParamsSchema = z.strictObject({
-  url: z.url({ protocol: /^https$/ }),
-  secret_token: z.string().regex(/^[A-Za-z0-9_-]{1,256}$/),
+/**
+ * `getUpdates` (EARS-24): the long poll. `timeout` is Telegram's long-poll
+ * wait in seconds (at most 50 here); the HTTP timeout of the call exceeds it.
+ */
+export const GetUpdatesParamsSchema = z.strictObject({
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().min(1).max(100),
+  timeout: z.number().int().min(0).max(50),
   allowed_updates: z.array(z.enum(TELEGRAM_ALLOWED_UPDATES)).min(1),
-  drop_pending_updates: z.boolean(),
 });
-export type SetWebhookParams = z.infer<typeof SetWebhookParamsSchema>;
+export type GetUpdatesParams = z.infer<typeof GetUpdatesParamsSchema>;
+
+/** `deleteWebhook` (EARS-24): pending updates are always kept. */
+export const DeleteWebhookParamsSchema = z.strictObject({
+  drop_pending_updates: z.literal(false),
+});
 
 export const FileIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,256}$/);
 
@@ -46,14 +55,16 @@ export const FilePathSchema = z
 
 // ── Responses (validated; unknown fields stripped) ──────────────────────────
 
-export const WebhookInfoSchema = z.object({
-  url: z.string(),
-  pending_update_count: z.number().int().nonnegative(),
-  last_error_date: z.number().int().optional(),
-  last_error_message: z.string().optional(),
-  allowed_updates: z.array(z.string()).optional(),
-});
-export type WebhookInfo = z.infer<typeof WebhookInfoSchema>;
+/**
+ * One `Update` as `getUpdates` returns it: only its `update_id` is checked
+ * here — the offset needs it; the rest is the feed source's own validation
+ * (`telegram-update.schema.ts`, EARS-25), so a malformed body is dropped
+ * there and still confirmed.
+ */
+export const RawUpdateSchema = z
+  .object({ update_id: z.number().int().nonnegative() })
+  .passthrough();
+export type RawUpdate = z.infer<typeof RawUpdateSchema>;
 
 export const BotUserSchema = z.object({
   id: z.number().int(),
@@ -110,7 +121,7 @@ export class TelegramBotApiError extends Error {
   }
 }
 
-/** The connector is off: no token or secret is configured (the kill switch). */
+/** The connector is off: no bot token is configured (the kill switch). */
 export class TelegramNotConfiguredError extends Error {
   constructor() {
     super("Telegram connector is not configured");
@@ -118,9 +129,18 @@ export class TelegramNotConfiguredError extends Error {
   }
 }
 
+/** Per-call options of the long poll: its HTTP timeout and a stop signal. */
+export interface TelegramCallOptions {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
 export interface TelegramBotApi {
-  setWebhook(params: SetWebhookParams): Promise<void>;
-  getWebhookInfo(): Promise<WebhookInfo>;
+  getUpdates(
+    params: GetUpdatesParams,
+    options?: TelegramCallOptions,
+  ): Promise<RawUpdate[]>;
+  deleteWebhook(): Promise<void>;
   getMe(): Promise<BotUser>;
   getChat(chat: TelegramChatRef): Promise<ChatInfo>;
   getChatMember(chat: TelegramChatRef, userId: number): Promise<ChatMemberInfo>;

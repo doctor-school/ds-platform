@@ -6,22 +6,24 @@ import {
   ChatMemberSchema,
   FileIdSchema,
   FilePathSchema,
-  SetWebhookParamsSchema,
+  DeleteWebhookParamsSchema,
+  GetUpdatesParamsSchema,
+  RawUpdateSchema,
   TELEGRAM_FILE_MAX_BYTES,
   TelegramBotApiError,
   TelegramChatRefSchema,
   TelegramFileSchema,
   TelegramNotConfiguredError,
-  WebhookInfoSchema,
   type BotUser,
   type ChatInfo,
   type ChatMemberInfo,
-  type SetWebhookParams,
+  type GetUpdatesParams,
+  type RawUpdate,
   type TelegramBotApi,
+  type TelegramCallOptions,
   type TelegramCallOutcome,
   type TelegramChatRef,
   type TelegramFile,
-  type WebhookInfo,
 } from "./telegram-bot-api.types.js";
 
 // 048 slice 2 — ADR-0011 §2.2 channel #10 «Telegram Bot API». THE ONLY code
@@ -90,13 +92,19 @@ export class TelegramBotApiClient implements TelegramBotApi {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
-  async setWebhook(params: SetWebhookParams): Promise<void> {
-    const body = SetWebhookParamsSchema.parse(params);
-    await this.call("setWebhook", body, z.literal(true));
+  async getUpdates(
+    params: GetUpdatesParams,
+    options: TelegramCallOptions = {},
+  ): Promise<RawUpdate[]> {
+    const body = GetUpdatesParamsSchema.parse(params);
+    return this.call("getUpdates", body, z.array(RawUpdateSchema), options);
   }
 
-  async getWebhookInfo(): Promise<WebhookInfo> {
-    return this.call("getWebhookInfo", {}, WebhookInfoSchema);
+  async deleteWebhook(): Promise<void> {
+    const body = DeleteWebhookParamsSchema.parse({
+      drop_pending_updates: false,
+    });
+    await this.call("deleteWebhook", body, z.literal(true));
   }
 
   async getMe(): Promise<BotUser> {
@@ -166,8 +174,10 @@ export class TelegramBotApiClient implements TelegramBotApi {
     method: string,
     params: Record<string, unknown>,
     resultSchema: z.ZodType<T>,
+    options: TelegramCallOptions = {},
   ): Promise<T> {
     const token = this.requireToken();
+    const timeout = AbortSignal.timeout(options.timeoutMs ?? this.timeoutMs);
     const started = Date.now();
     let status: number | null = null;
     let payload: unknown;
@@ -176,7 +186,9 @@ export class TelegramBotApiClient implements TelegramBotApi {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(params),
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: options.signal
+          ? AbortSignal.any([timeout, options.signal])
+          : timeout,
       });
       status = res.status;
       payload = await res.json().catch(() => undefined);

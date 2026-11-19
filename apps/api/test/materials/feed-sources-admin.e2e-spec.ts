@@ -33,6 +33,12 @@ import {
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js";
+import {
+  deliverByPoll,
+  dropCursor,
+  markPolled,
+  stopPolling,
+} from "./telegram-ingress.js";
 
 // 048 V-14 (#3993) — the «Источники» admin API over the REAL stack (Fastify +
 // the 011 admin session + Postgres): add with the address normalized and the
@@ -48,12 +54,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
   "048 feed sources admin API (e2e)",
   () => {
     let app: NestFastifyApplication;
-    const HOOK = "https://api.example.test/v1/integrations/telegram/webhook";
-    /** The Telegram double: the webhook registered, no channel known. */
+    /** The Telegram double: no channel known. */
     const telegram = new FakeTelegramBotApi();
     const resetTelegram = () => {
       telegram.reset();
-      telegram.webhook = { url: HOOK, pending_update_count: 0 };
     };
     resetTelegram();
     const NOT_FOUND = SOURCE_CHECK_REASONS.channelNotFound;
@@ -314,11 +318,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           .overrideProvider(RATE_LIMIT_THRESHOLDS)
           .useValue(RELAXED_RATE_LIMIT)
           .overrideProvider(TELEGRAM_CONFIG)
-          .useValue({
-            botToken: "123456:E2E-sources_token",
-            webhookSecret: "e2e_sources-secret",
-            webhookUrl: HOOK,
-          })
+          .useValue({ botToken: "123456:E2E-sources_token" })
           .overrideProvider(TELEGRAM_BOT_API)
           .useValue(telegram),
       ).compile();
@@ -328,7 +328,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
       await app.init();
       await app.getHttpAdapter().getInstance().ready();
+      await stopPolling(app);
       pool = app.get<pg.Pool>(DRIZZLE_POOL);
+      // The update poller answered a moment ago: delivery works (EARS-31).
+      await markPolled(pool, telegram);
       ({ sid: adminSid, sub: adminSub } = await adminSession());
     });
 
@@ -355,6 +358,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       for (const email of createdEmails.splice(0)) {
         await deleteUserFixture(pool, "email", email);
       }
+      await dropCursor(pool, telegram);
       await app.close();
     });
 
@@ -789,9 +793,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.headers.etag).toBe('W/"1"');
       expect(await boundId(body.id)).toBe(String(chatId));
       expect(telegram.calls.map((c) => c.method)).toEqual([
-        "getWebhookInfo",
-        "getChat",
         "getMe",
+        "getChat",
         "getChatMember",
       ]);
     });
@@ -878,24 +881,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       };
     }
 
-    /** Deliver one update to the webhook with the configured secret. */
+    /** Deliver one update through one poll of the update poller. */
     async function deliverUpdate(
       kind: "channel_post" | "edited_channel_post",
       msg: unknown,
     ): Promise<void> {
-      const res = await app.inject({
-        method: "POST",
-        url: "/v1/integrations/telegram/webhook",
-        headers: {
-          "content-type": "application/json",
-          "x-telegram-bot-api-secret-token": "e2e_sources-secret",
-        },
-        payload: JSON.stringify({ update_id: ++updateSeq, [kind]: msg }),
+      const outcome = await deliverByPoll(app, telegram, {
+        update_id: ++updateSeq,
+        [kind]: msg,
       });
-      expect(res.statusCode, res.payload).toBe(200);
+      expect(outcome).toEqual({ kind: "polled", processed: 1 });
     }
 
-    /** A source with posts delivered through the real webhook path. */
+    /** A source with posts delivered through the real ingress path. */
     async function sourceWithPosts(
       posts: [number, string][],
     ): Promise<Source & { chatId: number }> {

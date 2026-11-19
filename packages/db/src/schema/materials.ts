@@ -377,3 +377,34 @@ export const feedEntryMessages = pgTable(
 );
 
 export type FeedEntryMessage = typeof feedEntryMessages.$inferSelect;
+
+/**
+ * 048 slice 2 (#4165) — where the Telegram update poller stands (048-design
+ * §Ingress (slice 2); EARS-24, EARS-25): one row per bot, keyed by the bot's
+ * Telegram id (`getMe`), so a new bot token starts from Telegram's own queue
+ * instead of another bot's offset. `next_offset` is the `offset` of the next
+ * `getUpdates` — the last processed or deliberately dropped `update_id` + 1 —
+ * and moves only after that update's own transaction has committed, so a
+ * failure fetches the update again. `polled_at` is the time of the last
+ * successful `getUpdates`, which the EARS-31 source check reads.
+ */
+export const telegramUpdateCursor = pgTable(
+  "telegram_update_cursor",
+  {
+    botId: bigint("bot_id", { mode: "number" }).primaryKey(),
+    nextOffset: bigint("next_offset", { mode: "number" }).notNull().default(0),
+    polledAt: timestamp("polled_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check("telegram_update_cursor_bot_id_positive", sql`${t.botId} > 0`),
+    check(
+      "telegram_update_cursor_next_offset_nonnegative",
+      sql`${t.nextOffset} >= 0`,
+    ),
+  ],
+);
+
+export type TelegramUpdateCursor = typeof telegramUpdateCursor.$inferSelect;

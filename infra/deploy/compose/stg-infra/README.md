@@ -252,7 +252,7 @@ network `slot-<slot>`, which `slot up` attaches this Caddy container to; the sam
 names are derived and unit-tested as `containerAliases()` in `tools/staging/slot.mjs`.
 Changing either side alone silently 502s the whole slot.
 
-**The four basic-auth exemptions** — and only four, all because the caller carries no
+**The five basic-auth exemptions** — and only five, all because the caller carries no
 browser credentials and authenticates by its own mechanism:
 
 1. the two Centrifugo path families on `api-<slot>` (`/connection/websocket` and
@@ -267,13 +267,20 @@ browser credentials and authenticates by its own mechanism:
    the slot. The endpoint verifies the signed logout token and is rate-limited
    (ADR-0015 §4 req. 9), and production has no gate in front of `api.` at all, so the
    exemption exposes nothing prod does not;
-3. the whole shared IdP host `id.stage.doctor.school`. Every slot api reaches the IdP
+3. `POST /v1/integrations/telegram/webhook` on `api-<slot>` — that method and that exact
+   path only (`@stage_telegram_webhook`, #4159). Telegram posts channel updates to the
+   slot's public `TELEGRAM_WEBHOOK_URL` (`renderSlotEnv` in `tools/staging/slot.mjs`)
+   with no browser credentials; the endpoint authenticates every call by the
+   `X-Telegram-Bot-Api-Secret-Token` header before reading the body (048 EARS-24/25),
+   and production has no gate in front of `api.`. Registering the stand bot's webhook on
+   one slot: `tools/staging/README.md` → «Telegram webhook on a slot»;
+4. the whole shared IdP host `id.stage.doctor.school`. Every slot api reaches the IdP
    machine-to-machine through the PUBLIC issuer origin (`IDP_ISSUER` is the public URL
    in production too, `infra/deploy/api.env.example`), and converge form (b) does the
    same. A challenge there breaks OIDC discovery and token exchange while protecting
    nothing — Zitadel authenticates every caller on its own. `noindex` still applies to
    `id`;
-4. the shared object-storage host `s3.stage.doctor.school` (#2223), routed to MinIO's
+5. the shared object-storage host `s3.stage.doctor.school` (#2223), routed to MinIO's
    S3 port only: a presigned SigV4 GET is its own authorization and an `<img src>` sends
    no basic-auth credentials.
 
@@ -299,7 +306,7 @@ curl -sI https://academy-main.stage.doctor.school/
 #   route, NOT a Caddy 401 — the slot is not up yet, #2065)
 
 curl -sI https://id.stage.doctor.school/.well-known/openid-configuration
-# observed: 200 with X-Robots-Tag: noindex, nofollow and NO basic auth (exemption 3)
+# observed: 200 with X-Robots-Tag: noindex, nofollow and NO basic auth (exemption 4)
 
 openssl s_client -connect academy-main.stage.doctor.school:443 \
   -servername academy-main.stage.doctor.school </dev/null 2>/dev/null | \
@@ -347,7 +354,7 @@ sudo docker inspect pr-2216-api --format '{{json .Config.Env}}'
 
 curl -sI https://s3.stage.doctor.school/
 # observed: HTTP/2 400, server: MinIO, via: 1.1 Caddy,
-#           x-robots-tag: noindex, nofollow — and NO 401, i.e. no gate (exemption 4)
+#           x-robots-tag: noindex, nofollow — and NO 401, i.e. no gate (exemption 5)
 ```
 
 Round trip from an operator machine against the slot bucket, using the api's own

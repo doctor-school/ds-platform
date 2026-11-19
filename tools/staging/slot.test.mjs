@@ -949,6 +949,23 @@ test("#3147: a slot's storefront footer crossings stay on the slot's own sibling
   assert.ok(lines.includes(`DOCTOR_PUBLIC_ORIGIN=https://doctor-pr-7.${BASE}`));
 });
 
+test("4159: a slot api's Telegram webhook URL is its own public api host; the bot secrets stay in stage.env", () => {
+  const text = renderSlotEnv({
+    slot: "pr-7",
+    sha: SHA,
+    baseDomain: BASE,
+    redisDb: 4,
+    goldenSubjects: SUBJECTS,
+  });
+  // 048 EARS-24: `setWebhook` registers TELEGRAM_WEBHOOK_URL, so it must name the
+  // slot's OWN public api — the one the edge exempts for this method + path.
+  assert.ok(
+    text.split("\n").includes(`TELEGRAM_WEBHOOK_URL=https://api-pr-7.${BASE}/v1/integrations/telegram/webhook`),
+  );
+  // The token and the secret are box-wide stand secrets (stage.env), never copied here.
+  assert.doesNotMatch(text, /TELEGRAM_BOT_TOKEN|TELEGRAM_WEBHOOK_SECRET/);
+});
+
 test("a teardown renders only what compose needs to ADDRESS the project", () => {
   const text = renderSlotDownEnv({ slot: "pr-7" });
   assert.match(text, /^SLOT=pr-7$/m);

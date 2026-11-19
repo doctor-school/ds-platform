@@ -143,6 +143,54 @@ real API auth email through the normal CAPTCHA-protected flow and find the new
 slot-tagged message in Mailpit; repeat after API recreation. Opening Mailpit or
 reading an old message alone does not prove delivery.
 
+## Telegram webhook on a slot (#4159)
+
+A slot api runs the 048 Telegram connector against the stand's own test bot, never a
+production bot. Three variables, two origins:
+
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` are box-wide stand secrets in
+  `/etc/ds-platform/stage.env` (`infra/deploy/stage.env.example` → «Telegram
+  connector»). Both absent ⇒ every slot's connector is off: the source admin shows
+  «Telegram не подключён на сервере» and the webhook answers 404 — nothing fails.
+- `TELEGRAM_WEBHOOK_URL` is derived per slot by `renderSlotEnv`:
+  `https://api-<slot>.<base domain>/v1/integrations/telegram/webhook`. A slot raised
+  (or `sync`ed) with an older renderer has no such line.
+
+The edge exempts exactly `POST /v1/integrations/telegram/webhook` on `api-<slot>` from
+basic auth (`@stage_telegram_webhook`, spec §3 exemption 3): Telegram sends no browser
+credentials, and the endpoint authenticates every call by the
+`X-Telegram-Bot-Api-Secret-Token` header before it reads the body (048 EARS-24/25).
+
+**One bot has one webhook, so one slot receives the channel posts at a time.**
+Registering on slot B moves delivery away from whichever slot held it; the EARS-31
+source check on the other slots then reports the webhook mismatch. Registration is the
+048 EARS-24 operator step (`apps/api/scripts/telegram-set-webhook.ts`): `setWebhook`
+with the env's URL and secret, `allowed_updates` = channel posts, then what Telegram
+holds is printed — never the token or the secret. The runtime image carries the
+compiled `dist/` only (no `scripts/`, no `tsx`), so on a slot the same three calls run
+from the compiled modules inside the slot's api container, which already holds all
+three variables:
+
+```bash
+SLOT=pr-<N>   # or main
+docker exec -w /app "$SLOT-api" node --input-type=module -e '
+const { telegramConfigFromEnv } = await import("./dist/materials/telegram/telegram-config.js");
+const { TelegramBotApiClient } = await import("./dist/materials/telegram/telegram-bot-api.client.js");
+const { registerTelegramWebhook } = await import("./dist/materials/telegram/telegram-webhook-registration.js");
+const config = telegramConfigFromEnv();
+console.log(JSON.stringify(await registerTelegramWebhook(config, new TelegramBotApiClient(config?.botToken ?? null))));
+'
+```
+
+The printed `url` must be that slot's `TELEGRAM_WEBHOOK_URL`; a refusal (connector off,
+or the URL unset) exits non-zero and changes nothing at Telegram. Then check the edge
+from outside: an unauthenticated
+`curl -si -X POST https://api-$SLOT.stage.doctor.school/v1/integrations/telegram/webhook`
+answers the api's own refusal (no secret header), never `Www-Authenticate: Basic`;
+any other unauthenticated path on the host keeps the Caddy 401. Before tearing the
+receiving slot down, register another slot (or accept that Telegram retries into a
+dead host until the next registration).
+
 ## The box must stay logged into Docker Hub (#2240)
 
 `up`/`sync` no longer builds product images — those come from the project registry

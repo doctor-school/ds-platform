@@ -626,14 +626,14 @@ tables and the test that pins them equal). Values never carry whitespace or quot
 `api.env` is sourced by bash.
 
 1. **Once per box: the intake certificate.** ds-api-prod's certificate is committed
-   as `infra/deploy/keys/api-secret-recipient.pem`; without it `pnpm prod:api-secret`
-   refuses. After the release that installs the `api-secret-*` verbs, dispatch
-   `gh workflow run data-secret.yml --ref main -f box=api -f action=recipient`:
-   ds-api-prod generates its intake key pair on the first call (root 0600 under
-   `/etc/ds-platform/secret-intake/`, never printed, never leaves the box) and the run
-   log prints the certificate and its SHA-256 fingerprint. Commit the certificate in
-   a PR. A rebuilt box generates a new pair: dispatch it again and commit the new
-   certificate.
+   as `infra/deploy/keys/api-secret-recipient.pem` (SHA-256
+   `98:9A:5D:E1:D4:2F:53:98:83:99:3D:01:41:60:00:C3:80:98:8D:E7:38:50:64:77:4B:02:56:DB:DD:8B:61:C1`,
+   pinned in `tools/deploy/data-secret.test.mjs`); without it `pnpm prod:api-secret`
+   refuses. `gh workflow run data-secret.yml --ref main -f box=api -f action=recipient`
+   prints it: ds-api-prod generates its intake key pair on the first call (root 0600
+   under `/etc/ds-platform/secret-intake/`, never printed, never leaves the box) and the
+   run log prints the certificate and its SHA-256 fingerprint. A rebuilt box generates
+   a new pair: dispatch it again and commit the new certificate and its fingerprint.
 2. **Encrypt the lines** on the workstation, from a file that holds exactly the lines
    to set:
 

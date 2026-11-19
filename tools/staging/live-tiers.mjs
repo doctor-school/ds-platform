@@ -118,7 +118,11 @@ export const LIVE_TIERS = Object.freeze([
     pkg: "@ds/admin",
     config: "playwright.flows.config.ts",
     rootDir: "e2e",
-    include: ["e2e/stage-event-lifecycle.spec.ts", "e2e/stage-congress-review.spec.ts"],
+    include: [
+      "e2e/stage-event-lifecycle.spec.ts",
+      "e2e/stage-congress-review.spec.ts",
+      "e2e/stage-recording-publish.spec.ts",
+    ],
     seededEnv: { E2E_DOCTOR_CONGRESS_SLUG: GOLDEN_SLUGS.doctorCongress },
     gated: [],
   },

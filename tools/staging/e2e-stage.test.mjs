@@ -411,7 +411,7 @@ describe("parseE2eArgs", () => {
 });
 
 describe("slotE2eEnv", () => {
-  it("derives the admin and storefront URLs from the slot name and carries the basic-auth pair", () => {
+  it("derives the storefront URLs from the slot name, carries the basic-auth pair and names no admin origin (#4157)", () => {
     assert.deepEqual(
       slotE2eEnv({
         slot: "main",
@@ -423,7 +423,6 @@ describe("slotE2eEnv", () => {
         E2E_PORTAL_URL: "https://academy-main.stage.doctor.school",
         E2E_DOCTOR_URL: "https://doctor-main.stage.doctor.school",
         E2E_LOGIN_URL: "https://login-main.stage.doctor.school",
-        E2E_ADMIN_URL: "https://admin-main.stage.doctor.school",
         E2E_HTTP_USER: "stage",
         E2E_HTTP_PASS: "s3cret",
         E2E_SMS_SINK_URL: "https://sms-sink.stage.doctor.school",
@@ -1336,6 +1335,9 @@ describe("runE2eStage — the live legs", () => {
     );
     assert.equal(admin.env.PLAYWRIGHT_NO_COPY_PROMPT, "1");
     for (const call of calls.filter((call) => call !== admin)) {
+      // A set E2E_ADMIN_URL tells the read-only BDD suite it owns an admin
+      // origin, so its @editor-write scenarios run and fail (#4157).
+      assert.equal(call.env.E2E_ADMIN_URL, undefined);
       assert.equal(call.env.DS_STAGE_AGENT_ADMIN_PASSWORD, undefined);
       assert.equal(call.env.DS_STAGE_AGENT_ADMIN_TOTP_SECRET, undefined);
       assert.equal(call.env.PLAYWRIGHT_NO_COPY_PROMPT, undefined);

@@ -258,6 +258,9 @@ export function publicAxeLeg(env, reportDir, host) {
  * The SMS sink is one shared host per stand (like Mailpit), read through the
  * same basic-auth pair (`packages/e2e/lib/sms-sink.ts`), so the `@sms-reset`
  * scenarios run on a slot instead of naming their skip (#2878).
+ * No admin origin: the BDD suite reads a set `E2E_ADMIN_URL` as "this run owns
+ * an admin origin" and runs its write scenarios against the shared slot, so only
+ * the admin live leg receives it (#4157).
  */
 export function slotE2eEnv({ slot, baseDomain, user, password }) {
   const hosts = slotHostnames(slot, baseDomain);
@@ -265,7 +268,6 @@ export function slotE2eEnv({ slot, baseDomain, user, password }) {
     E2E_PORTAL_URL: `https://${hosts.academy}`,
     E2E_DOCTOR_URL: `https://${hosts.doctor}`,
     E2E_LOGIN_URL: `https://${hosts.login}`,
-    E2E_ADMIN_URL: `https://${hosts.admin}`,
     E2E_HTTP_USER: user,
     E2E_HTTP_PASS: password,
     E2E_SMS_SINK_URL: `https://sms-sink.${baseDomain}`,
@@ -1002,6 +1004,7 @@ export async function runE2eStage(
         ...reporting.env,
       };
       if (tier.host === "admin") {
+        legEnv.E2E_ADMIN_URL = `https://${slotHostnames(slot, baseDomain).admin}`;
         legEnv.E2E_STAGE_ADMIN_EMAIL = STAGE_AGENT_ADMIN.username;
         // Playwright's error-time ARIA snapshot is independent of trace and
         // screenshot settings. Keep the MFA form out of published reports.

@@ -266,7 +266,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
   @EARS-24 @EARS-25 @EARS-26 @EARS-29 @EARS-33 @EARS-34
   Scenario: A new channel post becomes a Telegram card that links to the original
     Given the switched-on Telegram source "t.me/bbmacademy"
-    When Telegram delivers with the right secret a photo post 1201 of "bbmacademy" captioned "Сегодня в 19:00 МСК — эфир о показаниях к PRP"
+    When the poller fetches a photo post 1201 of "bbmacademy" captioned "Сегодня в 19:00 МСК — эфир о показаниях к PRP"
     And a visitor who is not signed in opens the Academy home
     Then the rail has a card reading "Сегодня в 19:00 МСК — эфир о показаниях к PRP", «BBM Academy · Telegram» and «Telegram ↗» with the post's preview
     And that card is a link to "https://t.me/bbmacademy/1201" with a new-tab target and rel "noopener noreferrer"
@@ -274,7 +274,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
   @EARS-26 @EARS-34
   Scenario: A video post shows its preview and duration and plays nothing
     Given the switched-on Telegram source "t.me/bbmacademy"
-    When Telegram delivers with the right secret a video post 1202 of "bbmacademy" of 72 seconds captioned "PRP при гонартрозе — фрагмент эфира"
+    When the poller fetches a video post 1202 of "bbmacademy" of 72 seconds captioned "PRP при гонартрозе — фрагмент эфира"
     And a visitor opens the Academy home
     Then the card "PRP при гонартрозе — фрагмент эфира" shows a play mark and «1:12»
     And no video plays on the Academy home
@@ -282,35 +282,65 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
   @EARS-27 @rule @proof:api
   Scenario: An album is one card
     Given the switched-on Telegram source "t.me/bbmacademy"
-    When Telegram delivers with the right secret three photo parts 1203, 1204 and 1205 of one album of "bbmacademy", the part 1204 captioned "Кадры со съёмок подкаста"
+    When the poller fetches three photo parts 1203, 1204 and 1205 of one album of "bbmacademy", the part 1204 captioned "Кадры со съёмок подкаста"
     Then the feed has exactly one card reading "Кадры со съёмок подкаста"
     And that card is a link to "https://t.me/bbmacademy/1203"
 
   @EARS-24 @rule @proof:api
-  Scenario: A webhook call with a wrong secret token is refused
+  Scenario: The poller removes a webhook and fetches the posts queued for it
+    Given the bot has a webhook set and Telegram holds a text post 1200 of "bbmacademy" for it
+    And the switched-on Telegram source "t.me/bbmacademy"
+    When the API starts with the bot token configured
+    Then the poller deletes the webhook keeping its pending updates
+    And the feed has a card of post 1200
+    And the stored offset is past the update of post 1200
+
+  @EARS-24 @rule @proof:api
+  Scenario: A lost poll is retried from the same offset and loses no post
     Given the switched-on Telegram source "t.me/bbmacademy"
-    When a request carrying the header X-Telegram-Bot-Api-Secret-Token "wrong" posts a channel post of "bbmacademy" to the Telegram webhook
-    Then the webhook answers 401
-    And the feed has no new card
+    And Telegram holds a text post 1208 of "bbmacademy"
+    When the first getUpdates call times out
+    Then the poller waits a backoff of at most 60 seconds and calls getUpdates again from the same offset
+    And the feed has a card of post 1208
+
+  @EARS-24 @rule @proof:api
+  Scenario: Only one API instance polls a bot
+    Given two API instances run with the same bot token
+    Then exactly one of them calls getUpdates
+
+  @EARS-24 @rule @proof:api
+  Scenario: No poller runs without a bot token
+    Given the bot token is not configured
+    When the API starts
+    Then nothing calls the Telegram Bot API
 
   @EARS-25 @rule @proof:api
   Scenario: A post from a channel that is not in the source list is dropped
     Given the switched-on Telegram source "t.me/bbmacademy"
-    When Telegram delivers with the right secret a text post 77 of the channel "somebodyelse"
-    Then the webhook answers 200
-    And the feed has no new card
+    When the poller fetches a text post 77 of the channel "somebodyelse"
+    Then the feed has no new card
     And the log records the update as dropped for an unlisted channel without its text
+    And the stored offset is past that update
+
+  @EARS-25 @rule @proof:api
+  Scenario: A database failure leaves the update to be fetched again, and the refetch writes one card
+    Given the switched-on Telegram source "t.me/bbmacademy"
+    And the database is unavailable
+    When the poller fetches a text post 1209 of "bbmacademy"
+    Then the feed has no card of post 1209 and the stored offset has not moved
+    When the database is available again and the poller fetches the same update again
+    Then the feed has exactly one card of post 1209
 
   @EARS-26 @rule @proof:api
   Scenario: A forwarded post and a poll are not cards
     Given the switched-on Telegram source "t.me/bbmacademy"
-    When Telegram delivers with the right secret a forwarded post 1206 and a poll 1207 of "bbmacademy"
+    When the poller fetches a forwarded post 1206 and a poll 1207 of "bbmacademy"
     Then the feed has no new card
 
   @EARS-28 @rule @proof:api
   Scenario: An edited post updates its card in place
     Given the switched-on Telegram source "t.me/bbmacademy" has the card of post 1201 dated 12 November
-    When Telegram delivers with the right secret an edit of post 1201 captioned "Эфир переносится на 20:00 МСК"
+    When the poller fetches an edit of post 1201 captioned "Эфир переносится на 20:00 МСК"
     Then the card of post 1201 reads "Эфир переносится на 20:00 МСК"
     And the card of post 1201 is still dated 12 November and keeps its place in the rail
 
@@ -321,7 +351,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the administrator switches the source "t.me/bbmacademy" off and confirms
     Then the rail on the Academy home has no card of "t.me/bbmacademy"
     And «Публикации» of "t.me/bbmacademy" still lists post 1201 as «Источник выключен»
-    When Telegram delivers with the right secret a text post 1210 of "bbmacademy"
+    When the poller fetches a text post 1210 of "bbmacademy"
     Then the feed has no card of post 1210
     When the administrator switches the source "t.me/bbmacademy" on
     Then the rail again has the card of post 1201 at its own date
@@ -333,7 +363,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the administrator chooses «Скрыть из ленты» on post 1202 in «Публикации» and confirms
     Then the rail on the Academy home has the card of post 1201 and no card of post 1202
     And «Публикации» lists post 1202 as «Скрыт»
-    When Telegram delivers with the right secret an edit of post 1202
+    When the poller fetches an edit of post 1202
     Then the rail still has no card of post 1202
     When the administrator chooses «Вернуть в ленту» on post 1202
     Then the rail again has the card of post 1202 at its own date
@@ -342,7 +372,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
   Scenario: A failed preview download keeps the card without an image
     Given the switched-on Telegram source "t.me/bbmacademy"
     And the Telegram file download fails
-    When Telegram delivers with the right secret a photo post 1211 of "bbmacademy" captioned "Новый набор в программу"
+    When the poller fetches a photo post 1211 of "bbmacademy" captioned "Новый набор в программу"
     Then the rail has the card "Новый набор в программу" in its no-image layout with the field mark «Telegram»
     And the source "t.me/bbmacademy" keeps the status «Работает»
     When the Telegram file download works again and the preview retry runs
@@ -350,7 +380,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
 
   @EARS-30 @rule @proof:api
   Scenario: The one-off import brings in earlier posts and a re-run duplicates nothing
-    Given the Telegram source "t.me/bbmacademy" has the card of post 1201 delivered by the webhook
+    Given the Telegram source "t.me/bbmacademy" has the card of post 1201 fetched by the poller
     And a Telegram Desktop JSON export of "bbmacademy" holds the text posts 900, 901 and 1201 and a service message 902
     When the operator runs the history import with that export for "t.me/bbmacademy"
     Then the feed has cards of posts 900 and 901 at their Telegram dates and one card of post 1201
@@ -377,7 +407,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
   Scenario: Adding a source binds its channel id through the source check
     Given a platform administrator is signed in to the admin with a second factor
     And the Telegram connector is configured and the bot is a member of the channel "bbmacademy"
-    And the webhook has delivered no post of "bbmacademy"
+    And the poller has fetched no post of "bbmacademy"
     When the administrator adds a source of platform «Telegram» with the address "t.me/bbmacademy"
     Then the source list shows "t.me/bbmacademy" with the status «Работает»
     And the source "t.me/bbmacademy" is bound to the channel id Telegram returns for "@bbmacademy"
@@ -390,6 +420,13 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the source list shows "t.me/bbmacademy" with «Ошибка: Telegram недоступен»
     When a visitor opens the Academy home
     Then the rail shows the card of post 1201 and the other cards with no error state
+
+  @EARS-31 @rule @proof:api
+  Scenario: A poller with no answered call for an hour shows the source as failing
+    Given the switched-on Telegram source "t.me/bbmacademy" bound to its Telegram channel id
+    And no getUpdates call of the bot has been answered within the last hour
+    When the hourly source check runs
+    Then the source list shows "t.me/bbmacademy" with «Ошибка: Telegram не может доставить новые посты»
 
   @EARS-31 @rule @proof:api
   Scenario: A renamed channel shows as failing until its address is edited
@@ -405,10 +442,10 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     And a request to add a feed source is refused
 
   @EARS-36 @rule @proof:api
-  Scenario: No secret or post author is stored or logged
+  Scenario: No bot token or post author is stored or logged
     Given the switched-on Telegram source "t.me/bbmacademy"
-    When Telegram delivers with the right secret a text post 1212 of "bbmacademy" signed by its author
-    Then no stored row and no log line carries the bot token, the webhook secret, the raw update or the author signature
+    When the poller fetches a text post 1212 of "bbmacademy" signed by its author
+    Then no stored row and no log line carries the bot token, the raw update or the author signature
 
   @EARS-37
   Scenario: The source pages work on a phone

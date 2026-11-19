@@ -1,6 +1,6 @@
 ---
 title: "048 — Materials feed: own materials, the reading page, the rail on the Academy home and the Telegram and VK connectors (Design, slices 1–3)"
-description: "Where the materials feed lives, what exists today, the material and feed-entry model and why the feed is one store of entries that later connectors also write, the read-time expert and partner projection, the rich-text body document and its allowlist, the publish / edit / unpublish cascades, the public feed and material reads with their keyset cursor, the endpoints, the capability owner of the shared feed card and rail, the canvas, Stage-A and approved-non-canvas UI composition, the room left for network connectors, retention, the dependencies, the delivery slices and the lead decisions; slice 2 adds the source list, the Telegram Bot API webhook with its secret-token check, the post and album mapping onto the common card, edits in place, the preview copy, the hourly source check, the one-off history import, hiding one post, the ADR-0011 egress channel and ingress, retention of Telegram card data, its rollout and its lead decisions; slice 3 adds the VK Callback API route with its body-secret check and confirmation, the wall post and VK Видео mapping with one card per publication, the hourly wall reconcile for edits and removals, referenced previews, the VK source check and call budget, the one-off wall import, the ADR-0011 channel #11 and its ingress, retention of VK card data, its rollout and its lead decisions."
+description: "Where the materials feed lives, what exists today, the material and feed-entry model and why the feed is one store of entries that later connectors also write, the read-time expert and partner projection, the rich-text body document and its allowlist, the publish / edit / unpublish cascades, the public feed and material reads with their keyset cursor, the endpoints, the capability owner of the shared feed card and rail, the canvas, Stage-A and approved-non-canvas UI composition, the room left for network connectors, retention, the dependencies, the delivery slices and the lead decisions; slice 2 adds the source list, the Telegram Bot API long poll of `getUpdates` with its stored offset and single-instance lock, the post and album mapping onto the common card, edits in place, the preview copy, the hourly source check, the one-off history import, hiding one post, the ADR-0011 egress channel with no ingress, retention of Telegram card data, its rollout and its lead decisions; slice 3 adds the VK Callback API route with its body-secret check and confirmation, the wall post and VK Видео mapping with one card per publication, the hourly wall reconcile for edits and removals, referenced previews, the VK source check and call budget, the one-off wall import, the ADR-0011 channel #11 and its ingress, retention of VK card data, its rollout and its lead decisions."
 slug: 048-materials-feed
 lang: en
 ---
@@ -279,7 +279,7 @@ Requirements: [`048-requirements-en.md`](./048-requirements-en.md) «Slice 2 —
 ### Placement (slice 2)
 
 - **Schema** `packages/db/src/schema/materials.ts` gains `feed_sources`, `feed_entry_messages`, the enum values `feed_source_platform = telegram`, `feed_entry_kind = post`, the enum `feed_source_status` and the slice-2 columns of `feed_entries`; one forward migration in `apps/api/drizzle/` with the 010 audit triggers on `feed_sources` and on the hide columns of `feed_entries`.
-- **API** in `apps/api/src/materials/`: `feed-sources.admin.controller.ts` + `feed-sources.service.ts` + `feed-sources.repository.ts` (EARS-20…EARS-23, EARS-32); `telegram/telegram-bot-api.client.ts` — the only code that calls `api.telegram.org` (ADR-0011 channel #10), with its types `telegram-bot-api.types.ts` and the test double `telegram-bot-api.fake.ts`; `telegram/telegram-config.ts` (token, secret, webhook URL); `telegram/telegram-webhook.middleware.ts` (the config check and the secret check, before the body is read) + `telegram/telegram-webhook.controller.ts` + `telegram/telegram-update.schema.ts` (EARS-24, EARS-25); `telegram/telegram-post-mapping.ts` — the mapping (EARS-26…EARS-28) — and `telegram/telegram.feed-source.ts` — the writer of Telegram entries, the only writer of Telegram rows of `feed_entries` through `feed-entries.repository.ts`; `telegram/telegram-preview.service.ts` with its `@Cron` retry (EARS-29); `telegram/telegram-source-check.service.ts` with its hourly `@Cron` (EARS-31); `telegram/telegram-webhook-registration.ts` run by the operator script `apps/api/scripts/telegram-set-webhook.ts`, and `telegram/telegram-history-import.command.ts` (EARS-30) — committed one-off operator commands run with the API image (AGENTS.md §6: a one-off action needs no new subsystem). The public feed read gains the `post` member and the two row-local predicates; `public-materials.controller.ts` is unchanged.
+- **API** in `apps/api/src/materials/`: `feed-sources.admin.controller.ts` + `feed-sources.service.ts` + `feed-sources.repository.ts` (EARS-20…EARS-23, EARS-32); `telegram/telegram-bot-api.client.ts` — the only code that calls `api.telegram.org` (ADR-0011 channel #10), with its types `telegram-bot-api.types.ts` and the test double `telegram-bot-api.fake.ts`; `telegram/telegram-config.ts` (the bot token); `telegram/telegram-update-poller.service.ts` — the long poll of `getUpdates`, its single-instance lock and its backoff — with `telegram/telegram-update-cursor.repository.ts` over the `telegram_update_cursor` offset table, and `telegram/telegram-update.schema.ts` (EARS-24, EARS-25); `telegram/telegram-post-mapping.ts` — the mapping (EARS-26…EARS-28) — and `telegram/telegram.feed-source.ts` — the writer of Telegram entries, the only writer of Telegram rows of `feed_entries` through `feed-entries.repository.ts`; `telegram/telegram-preview.service.ts` with its `@Cron` retry (EARS-29); `telegram/telegram-source-check.service.ts` with its hourly `@Cron` (EARS-31); and `telegram/telegram-history-import.command.ts` (EARS-30) — a committed one-off operator command run with the API image (AGENTS.md §6: a one-off action needs no new subsystem). The public feed read gains the `post` member and the two row-local predicates; `public-materials.controller.ts` is unchanged.
 - **Contract** `packages/schemas/src/materials/feed.ts` gains `FeedPostCardSchema` in the `FeedCardSchema` union (the `news` and `column` members untouched); `feed-source.ts` (admin source list, address normalization, status reasons, the posts list).
 - **Admin** `apps/admin/app/materials/sources/page.tsx` («Источники») and `apps/admin/app/materials/sources/[id]/page.tsx` («Публикации»), reached from the «Материалы» section; no new navigation entry beyond the section (EARS-23).
 - **Design system** the `post` variant of `FeedCard` (`packages/design-system/src/blocks/feed-card.tsx`); `FeedRail` is unchanged.
@@ -322,53 +322,51 @@ erDiagram
 ```
 
 - **A Telegram entry** is a `feed_entries` row with `source_platform = telegram`, `kind = post`, `feed_source_id` set, `title` holding the post text of EARS-26 (the column the ER of slice 1 already describes as «card title or first lines»), `image_ref` the copied preview (EARS-29), `image_url` null, `source_name` «BBM Academy · Telegram», `partner_organisation_id` null, `href` `https://t.me/<address>/<smallest message id>`, `published_at` the post's `date`. `source_ref` is `<feed_source_id>:<smallest message id>`, keeping slice 1's unique `(source_platform, source_ref)`.
-- **`feed_entry_messages` is the dedup key.** Every Telegram message id that went into an entry — one for a single post, each part of an album — is a row keyed `(feed_source_id, message_id)`. The webhook upserts through it, an edit finds its entry through it, and the import skips any message id it already holds (`ON CONFLICT DO NOTHING`), so a re-run and a webhook-delivered post can never meet as two entries (EARS-25, EARS-27, EARS-28, EARS-30). An album is found by `(feed_source_id, media_group_id)` unique.
+- **`feed_entry_messages` is the dedup key.** Every Telegram message id that went into an entry — one for a single post, each part of an album — is a row keyed `(feed_source_id, message_id)`. The poller upserts through it, an edit finds its entry through it, and the import skips any message id it already holds (`ON CONFLICT DO NOTHING`), so a re-run, a refetched update and a polled post can never meet as two entries (EARS-25, EARS-27, EARS-28, EARS-30). An album is found by `(feed_source_id, media_group_id)` unique.
 - **Row-local public predicate.** The feed read adds `hidden_at IS NULL AND NOT source_off` to the slice-1 predicate. `source_off` is written onto every entry of the source in the transaction of «Выключить» / «Включить» and `href` is rewritten in the transaction of an address change, so the read joins nothing beyond what EARS-10 names and never touches `feed_sources` — the same write-side denormalization slice 1 applies to own materials (EARS-10, EARS-22, EARS-33). Index `feed_entries (feed_source_id, published_at DESC)` serves «Публикации» and the bulk mark.
 - **CHECKs**: `(source_platform = 'academy') = (feed_source_id IS NULL)`; `kind = 'post'` only for a network platform; `duration_seconds IS NULL OR duration_seconds >= 0`. Every FK is `ON DELETE RESTRICT` except `feed_entry_messages.feed_entry_id`. `feed_entries.image_ref` of a Telegram entry uses the slot already registered in the 012 media-slot registry by slice 1, so no sweep deletes a preview a card still references; a preview replaced on edit is queued on `media_cleanup_jobs`.
 - **Address** is the normalized public username (EARS-21). The channel's Telegram id is bound by the source check — `getChat(@<address>)`, run at once on add and hourly after, binds the returned `id` when the returned `username` equals the address ignoring case — or else on the first update whose `chat.username` equals it; the import refuses a source with no bound id (EARS-30, EARS-31); from then on the id decides, so a channel rename keeps delivering and the source check reports «Адрес канала изменился на t.me/<имя>» until the administrator edits the address, which rewrites `href` (EARS-21, EARS-31).
 
-### Webhook (EARS-24, EARS-25)
+### Long poll (EARS-24, EARS-25)
+
+The production and stage hosts sit in the RF hosting network, which Telegram cannot open a connection to (a webhook delivery never arrives, #4165), while the reverse direction — the API calling `api.telegram.org` — works. So the API fetches the updates itself with `getUpdates`; there is no inbound Telegram route.
 
 ```mermaid
 sequenceDiagram
-  participant TG as Telegram Bot API
-  participant N as nginx (api host, 443)
-  participant W as telegram-webhook.controller
-  participant S as telegram.feed-source
+  participant L as telegram-update-poller
   participant DB as Postgres
+  participant TG as Telegram Bot API
+  participant S as telegram.feed-source
   participant P as telegram-preview.service
-  TG->>N: POST /v1/integrations/telegram/webhook + X-Telegram-Bot-Api-Secret-Token
-  N->>W: proxy (body limit 1 MB)
-  alt connector not configured
-    W-->>TG: 404
-  else secret absent or wrong (constant-time compare, body unread)
-    W-->>TG: 401
-  else authenticated
-    W->>W: parse JSON; not JSON → 400
-    W->>W: parse Update (Zod); schema-invalid / other type → log drop, 200
-    W->>DB: BEGIN; lock source row found by chat.id, else by chat.username (bind id)
-    alt unlisted or switched off
-      W-->>TG: 200 (log: update_id, chat id, message_id, reason)
-    else listed and on
-      W->>S: map(post)
-      alt dropped type (forward, poll, service, other, empty)
-        S-->>W: dropped(reason) → log, 200
-      else card
-        S->>DB: upsert entry via feed_entry_messages / media_group_id; COMMIT
-        S->>P: copy preview (bounded 10 s)
+  L->>DB: pg_try_advisory_lock (dedicated session); not taken → wait 30 s, retry
+  L->>TG: getMe (bot id), deleteWebhook(drop_pending_updates=false) — first poll only
+  loop while the token is set and the module runs
+    L->>DB: next_offset of the bot (telegram_update_cursor)
+    L->>TG: getUpdates(offset, timeout=50, allowed_updates=[channel_post, edited_channel_post])
+    alt timeout / network error / Telegram error
+      L->>L: wait 1 s, 2 s, 4 s … capped at 60 s; retry from the same offset
+    else 409 (a webhook is set)
+      L->>TG: deleteWebhook; retry
+    else updates (in update_id order)
+      L->>DB: polled_at = now
+      L->>S: receive(update)
+      alt database failure
+        S-->>L: throw → offset not advanced, backoff, refetch (the writes are idempotent)
+      else written / dropped (logged: update_id, chat id, message_id, reason)
+        L->>DB: next_offset = update_id + 1
+        L->>P: copy preview when pending (bounded 10 s)
         P->>TG: getFile(file_id) → GET /file/bot‹token›/‹path›
-        P->>DB: image_ref = normalized key, preview_state = done (or pending on failure)
-        W-->>TG: 200
       end
     end
   end
-  Note over W,TG: a database failure answers 500 → Telegram redelivers (at-least-once; the writes are idempotent)
 ```
 
-- The secret is compared before the body is parsed, and the comparison is constant-time: the check is a route-scoped Nest middleware (`TelegramWebhookMiddleware`, registered for the webhook controller only), which runs in Fastify's `onRequest` phase, before the body is read. It answers `404` while the connector is not configured (no bot token or no webhook secret) and `401` when the secret header is absent or different. Only after it passes does the app's global JSON body parser — the same one every route uses, with no path exclusion — parse the body, bounded by nginx's 1 MB limit. A body declared JSON that does not parse, sent with the right secret, is answered `400` by the framework's parser — Telegram never sends one; a JSON body that fails the `Update` schema is the logged `200` drop. The route is anonymous for the platform's auth (`access: public` in the `endpoint-authz` matrix, the secret header being its credential), carries no CSRF or session, and is rate-limited by nginx like any public route. No IP allowlist is kept: the secret plus TLS authenticate Telegram ([setWebhook](https://core.telegram.org/bots/api#setwebhook) `secret_token`).
-- The source match, the binding of `telegram_chat_id` and the entry write run in one transaction under the lock of the source row, so a concurrent switch-off, re-address or source check cannot interleave with a delivery.
-- A webhook needs HTTPS on port 443, 80, 88 or 8443 with a valid certificate and no redirect ([Bots FAQ](https://core.telegram.org/bots/faq)); the public API host already terminates TLS in nginx on `api-prod` (ADR-0012), so the route is one more location on the existing virtual host.
-- Registration (`telegram/telegram-webhook-registration.ts`, run by the operator script `apps/api/scripts/telegram-set-webhook.ts`, EARS-24) calls `setWebhook` with `url` = `TELEGRAM_WEBHOOK_URL`, `secret_token` = `TELEGRAM_WEBHOOK_SECRET`, `allowed_updates` = `["channel_post","edited_channel_post"]`, `drop_pending_updates` = false, and prints `getWebhookInfo` (URL, pending count, last error) with the token redacted. It is run once per environment and again only when the URL or the secret changes. Each environment has its own bot (production: the BBM Academy bot; stage: a test bot in a test channel), so no two environments compete for one webhook.
+- **One poller at a time.** The poller takes a session-level Postgres advisory lock (`pg_try_advisory_lock(hashtextextended('telegram-update-poller', 0))`) on a dedicated pool connection; a second API instance does not get it and retries every 30 seconds, so it takes over when the holder stops or its connection is lost (a lost connection releases the lock with it). On module destroy the loop is aborted, cutting the pending long poll short, and the lock is released.
+- **Offset.** `telegram_update_cursor` (`bot_id` primary key, `next_offset`, `polled_at`) keeps one row per bot, so a restart resumes where the last processed update ended, and a token of another bot starts its own row. The offset passes an update only after `receive` returns — written or deliberately dropped — so a crash or a database failure leaves the update to be fetched again; Telegram confirms the updates below the offset and keeps the rest for 24 hours ([getUpdates](https://core.telegram.org/bots/api#getupdates)). `polled_at` is the time of the last answered `getUpdates`, read by the source check (EARS-31).
+- **Timeouts and retries.** The long poll asks Telegram to wait up to 50 seconds and gives the HTTP call 65 seconds; every other call keeps the 10-second timeout of the client. A failed or timed-out call is retried from the same offset after 1, 2, 4 … seconds, capped at 60 seconds, and the backoff resets on the first answered call — egress from the RF hosting to `api.telegram.org` drops a share of connections (#4159), so a lost call is routine, not an incident.
+- **Webhook exclusion.** `getUpdates` and a webhook are mutually exclusive (`getUpdates` answers `409` while a webhook is set), so the poller calls `deleteWebhook` with `drop_pending_updates` = false before its first poll and again on a `409`; the updates Telegram queued for a webhook stay and are fetched.
+- The source match, the binding of `telegram_chat_id` and the entry write run in one transaction under the lock of the source row, so a concurrent switch-off, re-address or source check cannot interleave with a processed update.
+- Each environment has its own bot (production: the BBM Academy bot; stage: a test bot in a test channel), so no two environments compete for one bot's updates.
 
 ### Post mapping (EARS-26…EARS-28)
 
@@ -401,15 +399,14 @@ Hourly (`@Cron`) and on add / edit / switch-on, for each switched-on Telegram so
 
 | Check (Bot API)                                                    | Failing reason                                |
 | ------------------------------------------------------------------ | --------------------------------------------- |
-| token or secret not configured                                     | «Telegram не подключён на сервере»            |
-| `getWebhookInfo.url` ≠ `TELEGRAM_WEBHOOK_URL`                      | «Вебхук Telegram не зарегистрирован»          |
+| token not configured                                               | «Telegram не подключён на сервере»            |
 | `getChat` (bound id, else `@address`) errors                       | «Канал не найден или бот не добавлен в канал» |
 | `getChatMember(chat, getMe().id).status` ∉ {administrator, member} | «Бот не состоит в канале»                     |
 | `getChat.username` ≠ address                                       | «Адрес канала изменился на t.me/<имя>»        |
-| `getWebhookInfo.last_error_date` within the last hour              | «Telegram не может доставить новые посты»     |
+| no `getUpdates` answered within the last hour (`polled_at`)        | «Telegram не может доставить новые посты»     |
 | timeout / network error                                            | «Telegram недоступен»                         |
 
-The check writes `status`, `status_reason` and `checked_at` of the source and, while `telegram_chat_id` is null, binds it from `getChat(@<address>)` when the returned `username` equals the address ignoring case (EARS-31), so a source added under EARS-21, which runs the check at once, is bound before any import; Telegram's own error text goes to the log, not to the admin. The rows are checked in the table's order and the first failing one is the reason, except «timeout / network error», which is the reason as soon as any call times out or fails on the network. Cases the table does not name map as follows: `TELEGRAM_WEBHOOK_URL` unset → «Вебхук Telegram не зарегистрирован»; `getWebhookInfo` or `getMe` refused by Telegram (the token is not accepted) → «Telegram не подключён на сервере»; `getChatMember` refused → «Бот не состоит в канале»; the channel has no public username any more → «Канал не найден или бот не добавлен в канал». The admin-requirement question is answered in «Lead decisions (slice 2)» item 5.
+The check writes `status`, `status_reason` and `checked_at` of the source and, while `telegram_chat_id` is null, binds it from `getChat(@<address>)` when the returned `username` equals the address ignoring case (EARS-31), so a source added under EARS-21, which runs the check at once, is bound before any import; Telegram's own error text goes to the log, not to the admin. The rows are checked in the table's order and the first failing one is the reason, except «timeout / network error», which is the reason as soon as any call times out or fails on the network. Cases the table does not name map as follows: `getMe` refused by Telegram (the token is not accepted) → «Telegram не подключён на сервере»; `getChatMember` refused → «Бот не состоит в канале»; the channel has no public username any more → «Канал не найден или бот не добавлен в канал». The admin-requirement question is answered in «Lead decisions (slice 2)» item 5.
 
 ### One-off history import (EARS-30)
 
@@ -426,7 +423,7 @@ sequenceDiagram
   else valid
     loop each message (date order)
       C->>C: map (EARS-26): skip service, forward, no-text, other content
-      C->>DB: BEGIN, lock the source row (as the webhook does), skip if the message id is held
+      C->>DB: BEGIN, lock the source row (as the poller does), skip if the message id is held
       C->>DB: INSERT feed_entries (source_off from the source, hidden_at null) and its feed_entry_messages row, COMMIT
       C->>ST: after the commit, normalize and store the exported photo / thumbnail file (when present)
     end
@@ -439,8 +436,8 @@ sequenceDiagram
 - **Albums**: the export carries no `media_group_id` — the writer serializes no grouped id for a message (`SerializeMessage`, above: no such field is written); the import keeps only messages that carry text, so an album imports as its captioned message with that message's own medium as the preview. A media-only message — an album part or a single photo or video with no caption — is skipped and counted on its own line of the totals (requirements Constraints, known limit).
 - **Previews**: the exported photo, or a video's exported `thumbnail`, is read from the export folder (a path leaving that folder, also through a link inside it, is refused), held to the 20 MB bound of EARS-29 and normalized and stored like a Bot API preview, with no Bot API call. With no `file_id` to fetch again there is no retry: a missing, unreadable or non-image file leaves the entry in its no-image layout and is counted as a failed preview.
 - **Unbound source**: the channel comparison needs the source's bound id; a source whose check has not yet bound it (Telegram was unreachable at the add) is refused with «the source has no bound Telegram id; run the source check (EARS-31)», never imported unchecked.
-- **Idempotency**: every write goes through `feed_entry_messages`; a held message id is skipped, so a re-run, an overlap with webhook-delivered posts and a hidden entry are never touched. The command writes each message — the entry and its `feed_entry_messages` row — in its own transaction under the source-row lock the webhook takes, so the two never interleave and an interrupted run is completed by running it again.
-- **Gap recovery**: posts published while a source was off, or during a webhook outage longer than Telegram's 24-hour window, are brought back by a fresh export and a re-run.
+- **Idempotency**: every write goes through `feed_entry_messages`; a held message id is skipped, so a re-run, an overlap with polled posts and a hidden entry are never touched. The command writes each message — the entry and its `feed_entry_messages` row — in its own transaction under the source-row lock the poller takes, so the two never interleave and an interrupted run is completed by running it again.
+- **Gap recovery**: posts published while a source was off, or during a poller outage longer than Telegram's 24-hour window, are brought back by a fresh export and a re-run.
 
 ### Card contract and UI composition (slice 2)
 
@@ -459,24 +456,23 @@ The admin screens are approved-non-canvas (the admin-screen default, slice 1 «A
 
 ### Endpoints (slice 2)
 
-| Method + path                                                       | Purpose                                                 | EARS             |
-| ------------------------------------------------------------------- | ------------------------------------------------------- | ---------------- |
-| `GET /v1/admin/feed-sources`                                        | source list with status and post counts                 | EARS-20          |
-| `POST /v1/admin/feed-sources` · `PATCH /v1/admin/feed-sources/{id}` | add / edit the address (with the `href` rewrite)        | EARS-21          |
-| `POST /v1/admin/feed-sources/{id}/disable` · `/enable`              | switch off / on with the entry marks                    | EARS-22          |
-| `GET /v1/admin/feed-sources/{id}/entries`                           | the source's posts, newest first, cursor                | EARS-32          |
-| `POST /v1/admin/feed-entries/{id}/hide` · `/unhide`                 | hide / return one network entry (own materials refused) | EARS-32          |
-| `POST /v1/integrations/telegram/webhook`                            | Telegram updates (secret header)                        | EARS-24, EARS-25 |
-| `GET /v1/public/feed`                                               | unchanged route; gains the `post` member                | EARS-33          |
+| Method + path                                                       | Purpose                                                 | EARS    |
+| ------------------------------------------------------------------- | ------------------------------------------------------- | ------- |
+| `GET /v1/admin/feed-sources`                                        | source list with status and post counts                 | EARS-20 |
+| `POST /v1/admin/feed-sources` · `PATCH /v1/admin/feed-sources/{id}` | add / edit the address (with the `href` rewrite)        | EARS-21 |
+| `POST /v1/admin/feed-sources/{id}/disable` · `/enable`              | switch off / on with the entry marks                    | EARS-22 |
+| `GET /v1/admin/feed-sources/{id}/entries`                           | the source's posts, newest first, cursor                | EARS-32 |
+| `POST /v1/admin/feed-entries/{id}/hide` · `/unhide`                 | hide / return one network entry (own materials refused) | EARS-32 |
+| `GET /v1/public/feed`                                               | unchanged route; gains the `post` member                | EARS-33 |
 
 Every admin route: `roles: [platform_admin]`, the MFA admin session, CSRF, `Idempotency-Key` and `If-Match` on writes (EARS-23). Hide and unhide refuse an `academy` entry with `409` — an own material leaves the feed by unpublish (EARS-6). The `If-Match` of a hide or unhide is the entry's `updated_at` in microseconds — every writer of `feed_entries` moves it, so a hide issued against a row that an edit or a switch-off moved since the list was read is refused with `412`, and the page reloads; a hide on a hidden entry and an unhide on a shown one are `409`. «Публикации» shows the stored post text (one line after EARS-26's whitespace collapse) cut to the row width.
 
 ### Egress, ingress and configuration (ADR-0011)
 
-- **Egress** — ADR-0011 §2.2 channel #10 «Telegram Bot API»: only `telegram-bot-api.client.ts` calls `https://api.telegram.org`, with the methods `setWebhook`, `getWebhookInfo`, `getMe`, `getChat`, `getChatMember`, `getFile` and the file download. What is sent: the bot token (in the URL path), our webhook URL and secret (registration only), the channel username or id, the bot's id, a `file_id`. No personal data is sent. Sanitizer: the client exposes only these typed methods with Zod-validated parameters built from server config and the source list, validates every response with Zod, and redacts the token from every URL it logs or throws. Audit: one structured log line per call (method, HTTP status, duration, outcome). Kill switch: unset `TELEGRAM_BOT_TOKEN` / `TELEGRAM_WEBHOOK_SECRET` (environment-level — the webhook answers `404` and the check reports «Telegram не подключён на сервере») or switch the source off (per channel).
-- **Ingress** — the webhook is a public route on the API host behind the existing nginx TLS termination (ADR-0012), authenticated by the secret token; nothing else Telegram sends is accepted.
-- **Configuration** — `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` (1–256 characters `A-Za-z0-9_-`, the `setWebhook` rule) and `TELEGRAM_WEBHOOK_URL` are server-side runtime secrets of `apps/api`, absent from every client bundle, response and log (EARS-36). Both secrets are optional at boot: their absence turns the connector off rather than failing the API.
-- **Reachability** of `api.telegram.org` from the production network (Timeweb ru-3) is not established by a primary source; the rollout checks it from `api-prod` before the webhook is registered (Rollout step 1). Nothing found shows the Bot API unreachable from the RF hosting network.
+- **Egress** — ADR-0011 §2.2 channel #10 «Telegram Bot API»: only `telegram-bot-api.client.ts` calls `https://api.telegram.org`, with the methods `getUpdates`, `deleteWebhook`, `getMe`, `getChat`, `getChatMember`, `getFile` and the file download. What is sent: the bot token (in the URL path), the poll offset and the update types, the channel username or id, the bot's id, a `file_id`. No personal data is sent. Sanitizer: the client exposes only these typed methods with Zod-validated parameters built from server config and the source list, validates every response with Zod, and redacts the token from every URL it logs or throws. Audit: one structured log line per call (method, HTTP status, duration, outcome). Kill switch: unset `TELEGRAM_BOT_TOKEN` (environment-level — no poller runs, nothing is called and the check reports «Telegram не подключён на сервере») or switch the source off (per channel).
+- **Ingress** — none: Telegram never connects to the platform; the updates arrive as answers to the API's own `getUpdates` calls over channel #10.
+- **Configuration** — `TELEGRAM_BOT_TOKEN` is a server-side runtime secret of `apps/api`, absent from every client bundle, response and log (EARS-36). It is optional at boot: its absence turns the connector off rather than failing the API. One token is polled by one environment only (Lead decisions item 18).
+- **Reachability** of `api.telegram.org` from the production network (Timeweb ru-3) is not established by a primary source; the rollout checks it from `api-prod` before the token is set (Rollout step 1). Stage evidence (#4159) shows the outbound direction working with a share of connect timeouts, which the poller's retry absorbs, and the inbound direction closed — the reason for the long poll.
 
 ### Retention (slice 2)
 
@@ -510,7 +506,7 @@ flowchart LR
 ```
 
 - **Source list** first: the connector matches updates to its rows and every Telegram entry references one.
-- **Telegram connector** carries the egress client, the webhook, the mapping, the preview and the check together, so no release accepts updates it cannot map.
+- **Telegram connector** carries the egress client, the poller, the mapping, the preview and the check together, so no release accepts updates it cannot map.
 - **Telegram card on the Academy** ships the `post` member of the read and its card together, so the read never serves a kind the card cannot render.
 - **Rollout in production** last: it turns the built connector on for `t.me/bbmacademy`.
 
@@ -520,14 +516,14 @@ Its own Issue (repo-conventions «Deferred prod action»), executed after the co
 
 1. The lead checks from `api-prod` that `https://api.telegram.org` answers (`getMe` with the production token) — evidence: the redacted response.
 2. Owner / marketing (a Telegram account that administers `t.me/bbmacademy`): create the production bot with @BotFather and hand the token to the lead through the secret channel; add the bot to `t.me/bbmacademy` as an administrator with no posting rights needed; make the Telegram Desktop JSON export of the channel with photos and video thumbnails.
-3. The lead puts `TELEGRAM_BOT_TOKEN`, a generated `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_WEBHOOK_URL` into the production runtime config (an env change, redeployed on the owner's word), runs the registration command — evidence: `getWebhookInfo` with the production URL, `pending_update_count` and no `last_error_date` (token redacted).
+3. The lead puts `TELEGRAM_BOT_TOKEN` into the production runtime config (an env change, redeployed on the owner's word); the poller starts with it and deletes any webhook the bot had — evidence: `telegram_bot_api_call` log lines of `deleteWebhook` and answered `getUpdates` calls (token redacted).
 4. A platform administrator adds `t.me/bbmacademy` in «Источники»; the check run at the add binds the channel id (EARS-21, EARS-31) — evidence: status «Работает».
 5. Only after step 4 shows «Работает», the lead runs the history import once with the export (an unbound source is refused, EARS-30) — evidence: the printed counts; a second run printing `written: 0`.
 6. Post-release acceptance: a fresh channel post appears in the Academy rail and opens `t.me` in a new tab — evidence: a capture.
 
 ### Lead decisions (slice 2)
 
-1. **Mechanism — Bot API webhook** with `secret_token` and `allowed_updates` limited to `channel_post` and `edited_channel_post`; `getUpdates` polling is not used because a webhook delivers in seconds and needs no long-running poller. Only posts of an enabled listed channel are accepted; others are dropped and logged (EARS-24, EARS-25).
+1. **Mechanism — Bot API long polling** of `getUpdates` with `allowed_updates` limited to `channel_post` and `edited_channel_post`, one poller per environment under an advisory lock, the offset stored in the database; a webhook is not used because Telegram cannot open a connection to the RF hosting network (#4165), while the API's outbound calls reach it, and a long poll still delivers in seconds. Only posts of an enabled listed channel are accepted; others are dropped and logged (EARS-24, EARS-25).
 2. **Edited posts** update the existing entry in place, keeping its date and hidden state (EARS-28).
 3. **Deleted posts** — no deletion update exists for channels ([Update](https://core.telegram.org/bots/api#update): only `deleted_business_messages`, for business accounts); a deleted post leaves the rail only when the administrator hides it. A known limit, stated in the requirements Constraints (EARS-32).
 4. **Media size** — `getFile` serves files up to 20 MB and its link is valid for at least one hour ([getFile](https://core.telegram.org/bots/api#getfile)); previews are therefore copied into our storage, videos are never fetched, and a preview over 20 MB is not taken (EARS-29).
@@ -536,15 +532,15 @@ Its own Issue (repo-conventions «Deferred prod action»), executed after the co
 7. **Card shape** — a Telegram post is the common card's kind «network post» (`post`): its first lines, the platform's date, the copied preview, the video duration, the `t.me` permalink, the source «BBM Academy · Telegram» (the PRD's source line, drawn on the canvas), no partner (EARS-26, EARS-33).
 8. **Post types** — text, photo, video and albums become cards; an album is one card; forwards, polls and every other content type, service messages and empty posts are dropped (mapping table; EARS-26, EARS-27).
 9. **Stored data** — card data only (ToS §4.3); no raw update, no `author_signature`, no video file, no Telegram file link (EARS-36); retention as «Retention (slice 2)».
-10. **Secrets** — the bot token and the webhook secret are server-side config only, redacted from every logged URL, never in the admin UI (EARS-36).
+10. **Secrets** — the bot token is server-side config only, redacted from every logged URL, never in the admin UI (EARS-36).
 11. **Switched-off and hidden are row-local marks** written in the change's transaction, so the feed read keeps the EARS-10 join set and never reads `feed_sources` (EARS-22, EARS-33).
 12. **Failing source** — an hourly check with the fixed reasons of EARS-31; a failed preview is a per-post matter and never fails the source.
-13. **Egress** — the Telegram Bot API is ADR-0011 §2.2 channel #10 with its sanitizer, audit and kill switch, and the webhook is ingress on the API host; ADR-0011 is revised inline with this spec.
+13. **Egress** — the Telegram Bot API is ADR-0011 §2.2 channel #10 with its sanitizer, audit and kill switch, with no ingress — the long poll is outbound only; ADR-0011 is revised inline with this spec.
 14. **Admin** — «Источники» and «Публикации» under «Материалы», `platform_admin` with the second factor, approved-non-canvas, copy by the lead (EARS-20…EARS-23, EARS-32).
 15. **Academy** — the `post` variant renders inside the slice-1 `FeedCard` and rail (ADR-0013 §A1); it is drawn on `unit-feed-card.dc.html` but not covered by the 2026-11-11 Stage-A approval, so its package waits for the owner's Stage-A pick of that variant.
 16. **Storefronts** — `academy-only`: the doctor storefront shows nothing of the feed (EARS-17 holds).
 17. **Text length** — 500 characters cut at a word boundary: enough for every line the card holds at any width, short enough to keep card data minimal (ToS §4.3).
-18. **One bot per environment** — production and stage each run their own bot and channel, so no environment's `setWebhook` displaces another's.
+18. **One bot per environment** — production and stage each run their own bot and channel, so no environment polls another's updates; within stage, one slot holds the token at a time (`tools/staging/README.md` «Telegram connector on a slot»).
 19. **Add is a page, edit is a dialog** — «Добавить источник» opens the full-page form `/materials/sources/create`, as every admin create does (`AdminDataList` offers create only as a link); «Изменить адрес» changes one field in place, so it stays a `Dialog` (EARS-20, EARS-21).
 
 ## Slice 3 — VK connector (wall posts and VK Видео)
@@ -632,7 +628,7 @@ sequenceDiagram
   Note over C,VK: a database failure answers 500 → VK retries at 10 s, 3 min, 10 min, 30 min, 1 h; the writes are idempotent
 ```
 
-- The secret is in the body («В поле Секретный ключ вы можете указать произвольную строку, которая будет передаваться» in the `secret` field — [Callback API](https://dev.vk.com/ru/api/callback/getting-started)), so the route parses the body first, bounded by nginx's 1 MB limit, and compares `secret` in constant time before any database read. It is `access: public` in the `endpoint-authz` matrix with the secret as its credential, like the Telegram webhook, with no CSRF or session.
+- The secret is in the body («В поле Секретный ключ вы можете указать произвольную строку, которая будет передаваться» in the `secret` field — [Callback API](https://dev.vk.com/ru/api/callback/getting-started)), so the route parses the body first, bounded by nginx's 1 MB limit, and compares `secret` in constant time before any database read. It is `access: public` in the `endpoint-authz` matrix with the secret as its credential, with no CSRF or session.
 - **Confirmation**: «Ваш сервер должен вернуть заданную строку» — the string shown in the community's Callback settings, held as `VK_CALLBACK_CONFIRMATION`. Whether VK sends `secret` with the `confirmation` event is **UNCONFIRMED**; the route therefore accepts a confirmation with no `secret` or the right one, and answers the string only for a `group_id` bound to a listed source, so it never confirms a server for another community. VK changes the string «время от времени»; a changed string means editing the config (Rollout).
 - **Answers**: «должен возвращать строку `ok` и статус HTTP 200»; anything else is retried, and repeated errors make VK pause sending, so every accepted or dropped event answers `ok` and only our own failure answers `500`. `event_id` has no documented dedup semantics (**UNCONFIRMED**): it is logged, and dedup is by object key.
 - **API version** is set in the community's Callback settings («Поддерживается версия 5.81 и более поздние») to the same pinned version as `vk-api.client.ts`, so the Callback and `wall.get` objects validate against one schema.

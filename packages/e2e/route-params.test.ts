@@ -81,6 +81,15 @@ describe("resolveRoute", () => {
     expect(routeParams.academy["/courses/[courseSlug]"]).toBeUndefined();
   });
 
+  it("#4017: resolves the doctor school route to the golden learning school", () => {
+    // 023 EARS-4 — the school screen renders a learning-school row: the school
+    // of the golden course, not an Academy project.
+    expect(resolveRoute("doctor", "/schools/[schoolSlug]")).toBe(
+      "/schools/golden-school-cardiology",
+    );
+    expect(routeParams.academy["/schools/[schoolSlug]"]).toBeUndefined();
+  });
+
   it("refuses a multi-segment entry that does not answer a segment", () => {
     expect(() => resolvePattern("/a/[x]/b/[y]", () => ({ x: "1" }))).toThrow(
       /\[y\]/,

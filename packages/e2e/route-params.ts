@@ -107,6 +107,11 @@ export const routeParams: RouteParamsMap = Object.freeze({
      * book, which every environment seeds whole (ADR-0016 §5).
      */
     "/feed/[specialty]": () => "kardiologiya",
+    /**
+     * 023 EARS-4 — the school screen of the golden learning school, the one
+     * that publishes the golden course (#4017).
+     */
+    "/schools/[schoolSlug]": () => golden.learning.school.slug,
     /** 024 EARS-14 — the course path of the golden published course (#4059). */
     "/courses/[courseSlug]": () => golden.learning.course.slug,
     /**

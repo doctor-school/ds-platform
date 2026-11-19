@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { StreamProviderSchema } from "../events/events.schema.js";
 import { LearningElementTypeSchema } from "./settings.js";
+import {
+  LearningDocumentKindSchema,
+  LearningSchoolFactSchema,
+} from "./structure.js";
 
 // 024 EARS-10, EARS-11, EARS-13, EARS-15, EARS-17, EARS-18 — the doctor-side
 // reads and writes, served alike to the website and the mobile app (EARS-25).
@@ -102,6 +106,16 @@ export const LearningPathAuthorSchema = z.strictObject({
   /** Issued at read time from the stored photo; null without one. */
   photoUrl: z.string().nullable(),
 });
+export type LearningPathAuthor = z.infer<typeof LearningPathAuthorSchema>;
+
+/** 023 EARS-22 — a course's partner: the 032 organisation's name, only WHILE it is shown publicly. */
+export const LearningCoursePartnerSchema = z.strictObject({ name: z.string() });
+
+/** 023 EARS-1 — the document a course leads to and what it needs. */
+export const LearningCourseDocumentSchema = z.strictObject({
+  kind: LearningDocumentKindSchema,
+  prerequisites: z.string(),
+});
 
 export const LearningCoursePathSchema = z.strictObject({
   course: z.strictObject({
@@ -109,6 +123,18 @@ export const LearningCoursePathSchema = z.strictObject({
     slug: z.string(),
     title: z.string(),
     state: LearningNodeStateSchema,
+    /** 023 EARS-11 — the course header's data (023 EARS-1). */
+    description: z.string(),
+    academicHours: z.number().int(),
+    /** Published lessons of the course. */
+    lessonCount: z.number().int(),
+    document: LearningCourseDocumentSchema,
+    partner: LearningCoursePartnerSchema.nullable(),
+    /**
+     * 023 EARS-11, EARS-13 — the 024 sentence builder's sentence for the course
+     * scope from its resolved completion rule; never a preset's name.
+     */
+    rulesSummary: z.string(),
   }),
   /** The breadcrumb above the course: its direction (null unless public) and its school (EARS-14). */
   direction: LearningPathPlaceSchema.nullable(),
@@ -123,6 +149,59 @@ export const LearningCoursePathSchema = z.strictObject({
   current: z.strictObject({ stepId: z.uuid(), lessonId: z.uuid() }).nullable(),
 });
 export type LearningCoursePath = z.infer<typeof LearningCoursePathSchema>;
+
+// ── The school (023 EARS-3) ─────────────────────────────────────────────────
+
+/** 023 EARS-3 — a doctor's state of one course (023-design §4); no percent. */
+export const LearningCourseProgressSchema = z.enum([
+  "not-started",
+  "started",
+  "done",
+]);
+export type LearningCourseProgress = z.infer<typeof LearningCourseProgressSchema>;
+
+/** 023 EARS-3 — one published course of the school, in school order. */
+export const LearningSchoolCourseSchema = z.strictObject({
+  id: z.uuid(),
+  slug: z.string(),
+  title: z.string(),
+  description: z.string(),
+  lessonCount: z.number().int(),
+  academicHours: z.number().int(),
+  document: LearningCourseDocumentSchema,
+  partner: LearningCoursePartnerSchema.nullable(),
+  /** The signed-in doctor's state of the course; null for a guest. */
+  state: LearningCourseProgressSchema.nullable(),
+});
+export type LearningSchoolCourse = z.infer<typeof LearningSchoolCourseSchema>;
+
+/** `GET /v1/learning/schools/{schoolSlug}` (023 EARS-3). */
+export const LearningSchoolReadSchema = z.strictObject({
+  school: z.strictObject({
+    id: z.uuid(),
+    slug: z.string(),
+    title: z.string(),
+    description: z.string(),
+    facts: z.array(LearningSchoolFactSchema),
+    soonNote: z.string().nullable(),
+    communityUrl: z.string().nullable(),
+    mentoringOffer: z.string().nullable(),
+    internshipOffer: z.string().nullable(),
+    /** `soon` WHILE the school has no published course. */
+    status: z.enum(["open", "soon"]),
+    /** Published courses and the published lessons of those courses. */
+    courseCount: z.number().int(),
+    lessonCount: z.number().int(),
+  }),
+  /** The school's direction; null unless published. */
+  direction: LearningPathPlaceSchema.nullable(),
+  /** The school's leading expert; null unless public and named. */
+  expert: LearningPathAuthorSchema.nullable(),
+  /** false = a guest; every course `state` is then null. */
+  signedIn: z.boolean(),
+  courses: z.array(LearningSchoolCourseSchema),
+});
+export type LearningSchoolRead = z.infer<typeof LearningSchoolReadSchema>;
 
 // ── The lesson (EARS-15, EARS-17) ───────────────────────────────────────────
 
@@ -145,6 +224,8 @@ export const LearningLessonReadSchema = z.strictObject({
     stepCount: z.number().int(),
     state: LearningNodeStateSchema,
     completionSentence: z.string(),
+    /** 023 EARS-21 — the lesson's first step on the path, so any lesson link opens the 024 step route; null without one. */
+    firstStepId: z.uuid().nullable(),
   }),
   signedIn: z.boolean(),
   steps: z.array(LearningLessonStepSchema),

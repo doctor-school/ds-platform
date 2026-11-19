@@ -12,7 +12,9 @@ import {
   learningSchools,
   learningSteps,
   expertPubliclyVisible,
+  organisations,
   type LearningCourseRow,
+  type LearningSchoolRow,
   type LearningLessonRow,
   type LearningModuleRow,
   type LearningStepRow,
@@ -364,6 +366,62 @@ export async function coursePlaces(db: Handle, schoolId: string) {
     )
     .where(eq(learningSchools.id, schoolId));
   return row;
+}
+
+/** 023 EARS-3 — a school by its slug, whatever its state. */
+export async function schoolBySlug(
+  db: Handle,
+  slug: string,
+): Promise<LearningSchoolRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(learningSchools)
+    .where(eq(learningSchools.slug, slug));
+  return row;
+}
+
+/** 023 EARS-3 — the school's published courses in school order. */
+export async function publishedCoursesOfSchool(
+  db: Handle,
+  schoolId: string,
+): Promise<LearningCourseRow[]> {
+  return db
+    .select()
+    .from(learningCourses)
+    .where(
+      and(
+        eq(learningCourses.schoolId, schoolId),
+        eq(learningCourses.state, "published"),
+      ),
+    )
+    .orderBy(
+      asc(learningCourses.position),
+      asc(learningCourses.createdAt),
+      asc(learningCourses.id),
+    );
+}
+
+/**
+ * 023 EARS-22 — the 032 names of the given partner organisations, only for
+ * an organisation that is published, not retired and shows its name publicly.
+ */
+export async function publicPartnerNames(
+  db: Handle,
+  ids: readonly string[],
+): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({ id: organisations.id, title: organisations.title })
+    .from(organisations)
+    .where(
+      and(
+        inArray(organisations.id, [...new Set(ids)]),
+        eq(organisations.status, "published"),
+        isNull(organisations.deletedAt),
+        eq(organisations.publicNameVisible, true),
+      ),
+    );
+  return new Map(rows.map((r) => [r.id, r.title]));
 }
 
 /** The course a lesson / step / module belongs to. */

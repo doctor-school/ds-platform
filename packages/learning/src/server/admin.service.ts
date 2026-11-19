@@ -11,6 +11,7 @@ import {
   learningSchools,
   learningSteps,
   learningTests,
+  organisations,
   projects,
   type LearningCourseRow,
   type LearningLessonRow,
@@ -139,6 +140,12 @@ const toSchool = (r: LearningSchoolRow): LearningSchoolAdmin => ({
   slug: r.slug,
   title: r.title,
   state: r.state,
+  description: r.description,
+  facts: r.facts,
+  soonNote: r.soonNote,
+  communityUrl: r.communityUrl,
+  mentoringOffer: r.mentoringOffer,
+  internshipOffer: r.internshipOffer,
   version: r.version,
 });
 
@@ -149,6 +156,12 @@ const toCourse = (r: LearningCourseRow): LearningCourseAdmin => ({
   slug: r.slug,
   title: r.title,
   state: r.state,
+  description: r.description,
+  academicHours: r.academicHours,
+  documentKind: r.documentKind,
+  documentPrerequisites: r.documentPrerequisites,
+  partnerOrganisationId: r.partnerOrganisationId,
+  position: r.position,
   version: r.version,
 });
 
@@ -230,7 +243,11 @@ export class LearningAdminService {
       .select()
       .from(learningCourses)
       .where(schoolId ? eq(learningCourses.schoolId, schoolId) : undefined)
-      .orderBy(asc(learningCourses.title));
+      .orderBy(
+        ...(schoolId
+          ? [asc(learningCourses.position), asc(learningCourses.createdAt)]
+          : [asc(learningCourses.title)]),
+      );
     return rows.map(toCourse);
   }
 
@@ -249,15 +266,37 @@ export class LearningAdminService {
         if (!school)
           issues.push({ path: "schoolId", message: "unknown school" });
         await this.assertProject(tx, input.projectId, issues);
+        // 023 EARS-22 — a partner is a live row of the 032 registry.
+        if (input.partnerOrganisationId !== null) {
+          const [partner] = await tx
+            .select({ id: organisations.id })
+            .from(organisations)
+            .where(
+              and(
+                eq(organisations.id, input.partnerOrganisationId),
+                isNull(organisations.deletedAt),
+              ),
+            );
+          if (!partner)
+            issues.push({
+              path: "partnerOrganisationId",
+              message: "unknown organisation",
+            });
+        }
         if (issues.length > 0)
           throw new LearningServerError(
             "VALIDATION_FAILED",
             "the course references unknown rows",
             issues,
           );
+        // 023 EARS-1 — a new course is placed last in its school.
+        const [{ last } = { last: null }] = await tx
+          .select({ last: max(learningCourses.position) })
+          .from(learningCourses)
+          .where(eq(learningCourses.schoolId, input.schoolId));
         const [row] = await tx
           .insert(learningCourses)
-          .values(input)
+          .values({ ...input, position: (last ?? 0) + 1 })
           .returning();
         const result = {
           status: 201 as const,

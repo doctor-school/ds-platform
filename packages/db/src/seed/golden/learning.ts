@@ -18,8 +18,11 @@
 //     migration 0065 with generated ids, so the layer names its preset and the
 //     plan resolves the row (id AND values) at seed time — never a copy of the
 //     preset's contents in this file;
-//   * the school stays `draft`: the admin API has no school publish, and no
-//     doctor read gates on it;
+//   * the school is `published` with its 023 EARS-1 data, so the 023 school
+//     read (`GET /v1/learning/schools/{slug}`) answers it on a slot; the admin
+//     school publish lands with #4018, so this row sets the state directly;
+//   * the course carries its 023 EARS-1 data and `position` 1 in the school, as
+//     the admin course create writes it;
 //   * the download step's file is a golden media object (`media.ts`), so the
 //     signed link the step read hands out answers with a real PDF.
 //
@@ -226,7 +229,13 @@ export function buildGoldenLearning(created: Date): GoldenLearning {
         projectId,
         slug: L.school.slug,
         title: "Школа кардиологии",
-        state: "draft",
+        state: "published",
+        description:
+          "Школа о диагностике и лечении сердечно-сосудистых заболеваний для практикующих врачей.",
+        facts: [
+          { label: "Формат", text: "Видеоуроки, памятки и тесты" },
+          { label: "Ведущий эксперт", text: "Практикующий кардиолог" },
+        ],
         ...stamps,
       },
     ],
@@ -238,6 +247,12 @@ export function buildGoldenLearning(created: Date): GoldenLearning {
         slug: L.course.slug,
         title: "Артериальная гипертензия: от измерения к терапии",
         state: "published",
+        description:
+          "Как правильно измерить давление, поставить диагноз и выбрать стартовую терапию.",
+        academicHours: 2,
+        documentKind: "certificate",
+        documentPrerequisites: "",
+        position: 1,
         ...stamps,
       },
     ],

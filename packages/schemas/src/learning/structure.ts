@@ -155,23 +155,62 @@ export const LEARNING_STEP_INPUTS: Readonly<
 
 // ── Requests ────────────────────────────────────────────────────────────────
 
+// 023 EARS-1 — the school's and the course's descriptive data over the 024 rows.
+
+/** The most «О школе» facts a school carries (023 EARS-1). */
+export const LEARNING_SCHOOL_FACTS_MAX = 4;
+
+/** One «О школе» fact: a label and a text. */
+export const LearningSchoolFactSchema = z.strictObject({
+  label: z.string().trim().min(1).max(80),
+  text: z.string().trim().min(1).max(300),
+});
+export type LearningSchoolFact = z.infer<typeof LearningSchoolFactSchema>;
+
+export const LearningSchoolFactsSchema = z
+  .array(LearningSchoolFactSchema)
+  .max(LEARNING_SCHOOL_FACTS_MAX);
+
+/** The document a course leads to (023 EARS-1). */
+export const LearningDocumentKindSchema = z.enum([
+  "certificate",
+  "certificate-nmo",
+]);
+export type LearningDocumentKind = z.infer<typeof LearningDocumentKindSchema>;
+
+const optionalText = text.min(1).nullable().default(null);
+const httpsUrl = z
+  .url({ protocol: /^https$/ })
+  .max(2000);
+
 export const CreateLearningSchoolRequestSchema = z.strictObject({
   directionId: z.uuid(),
   leadExpertId: z.uuid(),
   projectId: z.uuid(),
   slug,
   title,
+  description: text.default(""),
+  facts: LearningSchoolFactsSchema.default([]),
+  soonNote: optionalText,
+  communityUrl: httpsUrl.nullable().default(null),
+  mentoringOffer: optionalText,
+  internshipOffer: optionalText,
 });
 export type CreateLearningSchoolRequest = z.infer<
   typeof CreateLearningSchoolRequestSchema
 >;
 
-/** EARS-1 — a course always names its school. */
+/** EARS-1 — a course always names its school; 023 EARS-1 adds its data, placed last in the school. */
 export const CreateLearningCourseRequestSchema = z.strictObject({
   schoolId: z.uuid(),
   projectId: z.uuid(),
   slug,
   title,
+  description: text.default(""),
+  academicHours: z.number().int().min(0).max(10_000).default(0),
+  documentKind: LearningDocumentKindSchema.default("certificate"),
+  documentPrerequisites: text.default(""),
+  partnerOrganisationId: z.uuid().nullable().default(null),
 });
 export type CreateLearningCourseRequest = z.infer<
   typeof CreateLearningCourseRequestSchema
@@ -260,6 +299,12 @@ export const LearningSchoolAdminSchema = z.strictObject({
   slug: z.string(),
   title: z.string(),
   state: LearningStateSchema,
+  description: z.string(),
+  facts: z.array(LearningSchoolFactSchema),
+  soonNote: z.string().nullable(),
+  communityUrl: z.string().nullable(),
+  mentoringOffer: z.string().nullable(),
+  internshipOffer: z.string().nullable(),
   version: z.number().int(),
 });
 export type LearningSchoolAdmin = z.infer<typeof LearningSchoolAdminSchema>;
@@ -271,6 +316,13 @@ export const LearningCourseAdminSchema = z.strictObject({
   slug: z.string(),
   title: z.string(),
   state: LearningStateSchema,
+  description: z.string(),
+  academicHours: z.number().int(),
+  documentKind: LearningDocumentKindSchema,
+  documentPrerequisites: z.string(),
+  partnerOrganisationId: z.uuid().nullable(),
+  /** The course's place in its school, from 1. */
+  position: z.number().int(),
   version: z.number().int(),
 });
 export type LearningCourseAdmin = z.infer<typeof LearningCourseAdminSchema>;

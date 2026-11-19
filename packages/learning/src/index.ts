@@ -4,6 +4,7 @@ export * from "./catalog/element-types.js";
 export * from "./catalog/condition-types.js";
 export * from "./evaluator/context.js";
 export * from "./evaluator/evaluator.js";
+export * from "./evaluator/course-progress.js";
 export * from "./rules/resolver.js";
 export * from "./rules/seed.js";
 export * from "./rules/validate.js";

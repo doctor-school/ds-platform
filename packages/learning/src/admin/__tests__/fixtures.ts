@@ -110,6 +110,12 @@ export function course(
     slug: "ekg",
     title: "ЭКГ с нуля",
     state: "draft",
+    description: "",
+    academicHours: 0,
+    documentKind: "certificate",
+    documentPrerequisites: "",
+    partnerOrganisationId: null,
+    position: 1,
     version: 2,
     modules: [
       {

@@ -2404,6 +2404,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/learning/schools/{schoolSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LearningPublicController_school"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/birth-date": {
         parameters: {
             query?: never;
@@ -4333,8 +4349,15 @@ export interface components {
             threshold: number;
         };
         LearningCourseAdminDto: {
+            academicHours: number;
+            description: string;
+            /** @enum {string} */
+            documentKind: "certificate" | "certificate-nmo";
+            documentPrerequisites: string;
             /** Format: uuid */
             id: string;
+            partnerOrganisationId: string | null;
+            position: number;
             /** Format: uuid */
             projectId: string;
             /** Format: uuid */
@@ -4346,6 +4369,11 @@ export interface components {
             version: number;
         };
         LearningCourseCompositionDto: {
+            academicHours: number;
+            description: string;
+            /** @enum {string} */
+            documentKind: "certificate" | "certificate-nmo";
+            documentPrerequisites: string;
             /** Format: uuid */
             id: string;
             modules: {
@@ -4373,6 +4401,8 @@ export interface components {
                 title: string;
                 version: number;
             }[];
+            partnerOrganisationId: string | null;
+            position: number;
             /** Format: uuid */
             projectId: string;
             /** Format: uuid */
@@ -4385,8 +4415,15 @@ export interface components {
         };
         LearningCourseListDto: {
             data: {
+                academicHours: number;
+                description: string;
+                /** @enum {string} */
+                documentKind: "certificate" | "certificate-nmo";
+                documentPrerequisites: string;
                 /** Format: uuid */
                 id: string;
+                partnerOrganisationId: string | null;
+                position: number;
                 /** Format: uuid */
                 projectId: string;
                 /** Format: uuid */
@@ -4408,8 +4445,20 @@ export interface components {
                 slug: string;
             } | null;
             course: {
+                academicHours: number;
+                description: string;
+                document: {
+                    /** @enum {string} */
+                    kind: "certificate" | "certificate-nmo";
+                    prerequisites: string;
+                };
                 /** Format: uuid */
                 id: string;
+                lessonCount: number;
+                partner: {
+                    name: string;
+                } | null;
+                rulesSummary: string;
                 slug: string;
                 state: {
                     /** @constant */
@@ -4712,6 +4761,7 @@ export interface components {
                 completionSentence: string;
                 description: string;
                 durationMin: number;
+                firstStepId: string | null;
                 /** Format: uuid */
                 id: string;
                 number: number;
@@ -4881,15 +4931,24 @@ export interface components {
             };
         };
         LearningSchoolAdminDto: {
+            communityUrl: string | null;
+            description: string;
             /** Format: uuid */
             directionId: string;
+            facts: {
+                label: string;
+                text: string;
+            }[];
             /** Format: uuid */
             id: string;
+            internshipOffer: string | null;
             /** Format: uuid */
             leadExpertId: string;
+            mentoringOffer: string | null;
             /** Format: uuid */
             projectId: string;
             slug: string;
+            soonNote: string | null;
             /** @enum {string} */
             state: "draft" | "published";
             title: string;
@@ -4897,20 +4956,81 @@ export interface components {
         };
         LearningSchoolListDto: {
             data: {
+                communityUrl: string | null;
+                description: string;
                 /** Format: uuid */
                 directionId: string;
+                facts: {
+                    label: string;
+                    text: string;
+                }[];
                 /** Format: uuid */
                 id: string;
+                internshipOffer: string | null;
                 /** Format: uuid */
                 leadExpertId: string;
+                mentoringOffer: string | null;
                 /** Format: uuid */
                 projectId: string;
                 slug: string;
+                soonNote: string | null;
                 /** @enum {string} */
                 state: "draft" | "published";
                 title: string;
                 version: number;
             }[];
+        };
+        LearningSchoolReadDto: {
+            courses: {
+                academicHours: number;
+                description: string;
+                document: {
+                    /** @enum {string} */
+                    kind: "certificate" | "certificate-nmo";
+                    prerequisites: string;
+                };
+                /** Format: uuid */
+                id: string;
+                lessonCount: number;
+                partner: {
+                    name: string;
+                } | null;
+                slug: string;
+                state: ("not-started" | "started" | "done") | null;
+                title: string;
+            }[];
+            direction: {
+                slug: string;
+                title: string;
+            } | null;
+            expert: {
+                affiliation: string | null;
+                credentials: string | null;
+                name: string;
+                photoUrl: string | null;
+                role: string | null;
+                slug: string;
+            } | null;
+            school: {
+                communityUrl: string | null;
+                courseCount: number;
+                description: string;
+                facts: {
+                    label: string;
+                    text: string;
+                }[];
+                /** Format: uuid */
+                id: string;
+                internshipOffer: string | null;
+                lessonCount: number;
+                mentoringOffer: string | null;
+                slug: string;
+                soonNote: string | null;
+                /** @enum {string} */
+                status: "open" | "soon";
+                title: string;
+            };
+            signedIn: boolean;
         };
         LearningScopeRulesDto: {
             appliedPreset: string | null;
@@ -9425,6 +9545,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LearningLessonReadDto"];
+                };
+            };
+        };
+    };
+    LearningPublicController_school: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                schoolSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSchoolReadDto"];
                 };
             };
         };

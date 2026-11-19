@@ -4215,10 +4215,42 @@
       "LearningCourseAdminDto": {
         "additionalProperties": false,
         "properties": {
+          "academicHours": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "documentKind": {
+            "enum": ["certificate", "certificate-nmo"],
+            "type": "string"
+          },
+          "documentPrerequisites": {
+            "type": "string"
+          },
           "id": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
             "type": "string"
+          },
+          "partnerOrganisationId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "position": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
           },
           "projectId": {
             "format": "uuid",
@@ -4253,6 +4285,12 @@
           "slug",
           "title",
           "state",
+          "description",
+          "academicHours",
+          "documentKind",
+          "documentPrerequisites",
+          "partnerOrganisationId",
+          "position",
           "version"
         ],
         "type": "object"
@@ -4260,6 +4298,21 @@
       "LearningCourseCompositionDto": {
         "additionalProperties": false,
         "properties": {
+          "academicHours": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "documentKind": {
+            "enum": ["certificate", "certificate-nmo"],
+            "type": "string"
+          },
+          "documentPrerequisites": {
+            "type": "string"
+          },
           "id": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -4369,6 +4422,23 @@
             },
             "type": "array"
           },
+          "partnerOrganisationId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "position": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
           "projectId": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -4402,6 +4472,12 @@
           "slug",
           "title",
           "state",
+          "description",
+          "academicHours",
+          "documentKind",
+          "documentPrerequisites",
+          "partnerOrganisationId",
+          "position",
           "version",
           "modules"
         ],
@@ -4414,10 +4490,42 @@
             "items": {
               "additionalProperties": false,
               "properties": {
+                "academicHours": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "documentKind": {
+                  "enum": ["certificate", "certificate-nmo"],
+                  "type": "string"
+                },
+                "documentPrerequisites": {
+                  "type": "string"
+                },
                 "id": {
                   "format": "uuid",
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                   "type": "string"
+                },
+                "partnerOrganisationId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "position": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
                 },
                 "projectId": {
                   "format": "uuid",
@@ -4452,6 +4560,12 @@
                 "slug",
                 "title",
                 "state",
+                "description",
+                "academicHours",
+                "documentKind",
+                "documentPrerequisites",
+                "partnerOrganisationId",
+                "position",
                 "version"
               ],
               "type": "object"
@@ -4535,9 +4649,56 @@
           "course": {
             "additionalProperties": false,
             "properties": {
+              "academicHours": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "description": {
+                "type": "string"
+              },
+              "document": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": ["certificate", "certificate-nmo"],
+                    "type": "string"
+                  },
+                  "prerequisites": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "prerequisites"],
+                "type": "object"
+              },
               "id": {
                 "format": "uuid",
                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "lessonCount": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "partner": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["name"],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "rulesSummary": {
                 "type": "string"
               },
               "slug": {
@@ -4659,7 +4820,18 @@
                 "type": "string"
               }
             },
-            "required": ["id", "slug", "title", "state"],
+            "required": [
+              "id",
+              "slug",
+              "title",
+              "state",
+              "description",
+              "academicHours",
+              "lessonCount",
+              "document",
+              "partner",
+              "rulesSummary"
+            ],
             "type": "object"
           },
           "current": {
@@ -5726,6 +5898,18 @@
                 "minimum": -9007199254740991,
                 "type": "integer"
               },
+              "firstStepId": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "id": {
                 "format": "uuid",
                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -5869,7 +6053,8 @@
               "durationMin",
               "stepCount",
               "state",
-              "completionSentence"
+              "completionSentence",
+              "firstStepId"
             ],
             "type": "object"
           },
@@ -6407,20 +6592,73 @@
       "LearningSchoolAdminDto": {
         "additionalProperties": false,
         "properties": {
+          "communityUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
           "directionId": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
             "type": "string"
+          },
+          "facts": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "text": {
+                  "maxLength": 300,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["label", "text"],
+              "type": "object"
+            },
+            "type": "array"
           },
           "id": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
             "type": "string"
           },
+          "internshipOffer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "leadExpertId": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
             "type": "string"
+          },
+          "mentoringOffer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "projectId": {
             "format": "uuid",
@@ -6429,6 +6667,16 @@
           },
           "slug": {
             "type": "string"
+          },
+          "soonNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "state": {
             "enum": ["draft", "published"],
@@ -6451,6 +6699,12 @@
           "slug",
           "title",
           "state",
+          "description",
+          "facts",
+          "soonNote",
+          "communityUrl",
+          "mentoringOffer",
+          "internshipOffer",
           "version"
         ],
         "type": "object"
@@ -6462,20 +6716,73 @@
             "items": {
               "additionalProperties": false,
               "properties": {
+                "communityUrl": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "description": {
+                  "type": "string"
+                },
                 "directionId": {
                   "format": "uuid",
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                   "type": "string"
+                },
+                "facts": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "label": {
+                        "maxLength": 80,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "text": {
+                        "maxLength": 300,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": ["label", "text"],
+                    "type": "object"
+                  },
+                  "type": "array"
                 },
                 "id": {
                   "format": "uuid",
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                   "type": "string"
                 },
+                "internshipOffer": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "leadExpertId": {
                   "format": "uuid",
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                   "type": "string"
+                },
+                "mentoringOffer": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "projectId": {
                   "format": "uuid",
@@ -6484,6 +6791,16 @@
                 },
                 "slug": {
                   "type": "string"
+                },
+                "soonNote": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "state": {
                   "enum": ["draft", "published"],
@@ -6506,6 +6823,12 @@
                 "slug",
                 "title",
                 "state",
+                "description",
+                "facts",
+                "soonNote",
+                "communityUrl",
+                "mentoringOffer",
+                "internshipOffer",
                 "version"
               ],
               "type": "object"
@@ -6514,6 +6837,297 @@
           }
         },
         "required": ["data"],
+        "type": "object"
+      },
+      "LearningSchoolReadDto": {
+        "additionalProperties": false,
+        "properties": {
+          "courses": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "academicHours": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "document": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "enum": ["certificate", "certificate-nmo"],
+                      "type": "string"
+                    },
+                    "prerequisites": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind", "prerequisites"],
+                  "type": "object"
+                },
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "lessonCount": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                },
+                "partner": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["name"],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "slug": {
+                  "type": "string"
+                },
+                "state": {
+                  "anyOf": [
+                    {
+                      "enum": ["not-started", "started", "done"],
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "slug",
+                "title",
+                "description",
+                "lessonCount",
+                "academicHours",
+                "document",
+                "partner",
+                "state"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "slug": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": ["slug", "title"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expert": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "affiliation": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "credentials": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "photoUrl": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "slug": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "slug",
+                  "name",
+                  "role",
+                  "credentials",
+                  "affiliation",
+                  "photoUrl"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "school": {
+            "additionalProperties": false,
+            "properties": {
+              "communityUrl": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "courseCount": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "description": {
+                "type": "string"
+              },
+              "facts": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "label": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "text": {
+                      "maxLength": 300,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["label", "text"],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "internshipOffer": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lessonCount": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "mentoringOffer": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "slug": {
+                "type": "string"
+              },
+              "soonNote": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "enum": ["open", "soon"],
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "slug",
+              "title",
+              "description",
+              "facts",
+              "soonNote",
+              "communityUrl",
+              "mentoringOffer",
+              "internshipOffer",
+              "status",
+              "courseCount",
+              "lessonCount"
+            ],
+            "type": "object"
+          },
+          "signedIn": {
+            "type": "boolean"
+          }
+        },
+        "required": ["school", "direction", "expert", "signedIn", "courses"],
         "type": "object"
       },
       "LearningScopeRulesDto": {
@@ -14415,6 +15029,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LearningLessonReadDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningPublic"]
+      }
+    },
+    "/v1/learning/schools/{schoolSlug}": {
+      "get": {
+        "operationId": "LearningPublicController_school",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schoolSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSchoolReadDto"
                 }
               }
             },

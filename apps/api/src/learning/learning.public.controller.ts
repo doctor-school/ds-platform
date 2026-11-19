@@ -14,17 +14,23 @@ import {
   CANONICAL_UUID_REGEX,
   type LearningCoursePath,
   type LearningLessonRead,
+  type LearningSchoolRead,
 } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { ApiOkResponse } from "@nestjs/swagger";
-import { LearningCoursePathDto, LearningLessonReadDto } from "./learning.dto.js";
+import {
+  LearningCoursePathDto,
+  LearningLessonReadDto,
+  LearningSchoolReadDto,
+} from "./learning.dto.js";
 import { LearningProblemFilter } from "./learning.errors.js";
 import { optionalPersonId } from "./learning.person.js";
 
 // 024 EARS-13, EARS-15, EARS-17, EARS-22 (#4011) — the public reads: the course
 // path and a lesson, for a guest (every state from no facts) and a signed-in
 // doctor (states from their facts) alike. No step payload is ever served here.
+// 023 EARS-3 (#4017) — the school read, its course states per session.
 
 @Controller({ path: "learning", version: "1" })
 @UseFilters(LearningProblemFilter)
@@ -34,6 +40,27 @@ export class LearningPublicController {
     private readonly learning: LearningDoctorService,
     @Inject(DRIZZLE_DB) private readonly db: DrizzleHandle["db"],
   ) {}
+
+  @Get("schools/:schoolSlug")
+  @Public()
+  @Header("Cache-Control", "private, no-store")
+  @Header("Vary", "Cookie")
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-3"],
+  })
+  @ApiOkResponse({ type: LearningSchoolReadDto })
+  async school(
+    @Param("schoolSlug") schoolSlug: string,
+    @Req() req: FastifyRequest,
+  ): Promise<LearningSchoolRead> {
+    return this.learning.school(
+      schoolSlug,
+      await optionalPersonId(this.db, req),
+    );
+  }
 
   @Get("courses/:courseSlug/path")
   @Public()

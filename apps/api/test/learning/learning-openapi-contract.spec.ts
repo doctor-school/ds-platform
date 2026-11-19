@@ -40,7 +40,8 @@ const operations = Object.entries(snapshot.paths)
 
 describe("024 learning contract", () => {
   it("EARS-25: the learning routes are in the generated contract", () => {
-    expect(operations.length).toBe(29);
+    // 024's 29 + the 023 school read (#4017).
+    expect(operations.length).toBe(30);
   });
 
   it("EARS-25: every learning route types its success response body", () => {

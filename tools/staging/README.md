@@ -739,8 +739,10 @@ identity writers. The **agent admin** `golden.admin.agent@example.test` holds
 `doctor_guest` and `platform_admin`. The **agent committee member**
 `golden.committee.agent@example.test` holds `doctor_guest` and
 `congress-program-committee`. Before changing the committee account, converge
-checks that its subject differs from the golden subjects and the agent admin,
-and refuses unexpected roles on the stage project.
+checks that its subject differs from the golden subjects and the agent admin.
+An existing email hit must be the expected human with the exact username and
+email in the stage organization. Converge also refuses unexpected stage-project
+roles.
 
 Both accounts' TOTP factors follow the same probe, write and read-back sequence:
 

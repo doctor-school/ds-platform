@@ -961,12 +961,17 @@ async function findUserByUsername(client, username, unique = false) {
     queries: [{ emailQuery: { emailAddress: username } }],
   });
   const matches = data?.result ?? [];
-  if (unique && matches.length > 1) throw new IdpError(`ambiguous IdP account: ${username}`);
   const hit = matches[0];
+  if (unique && (matches.length > 1 || (matches.length === 1 && !hit?.userId))) {
+    throw new IdpError(`ambiguous IdP account: ${username}`);
+  }
   if (!hit?.userId) return null;
   return {
     userId: hit.userId,
     emailVerified: Boolean(hit.human?.email?.isVerified),
+    username: hit.username,
+    resourceOwner: hit.details?.resourceOwner,
+    humanEmail: hit.human?.email?.email,
   };
 }
 
@@ -1023,6 +1028,7 @@ export async function convergeGoldenIdentities({
   client,
   accounts = GOLDEN_IDP_ACCOUNTS,
   validateAccount,
+  beforeWrite,
   passwords = {},
   env = {},
   // The box names its own project (`IDP_PROJECT_NAME` in stage.env — `ds-platform-stage`
@@ -1069,10 +1075,11 @@ export async function convergeGoldenIdentities({
           }),
         }
       : live;
-    validateAccount?.(existing[account.username]);
+    validateAccount?.(existing[account.username], { live: true });
   }
 
   const { steps, subjects } = planGoldenIdentities({ accounts, existing });
+  await beforeWrite?.();
   const byKey = new Map(accounts.map((account) => [account.key, account]));
   const granted = new Set();
   let orgId;
@@ -1103,7 +1110,7 @@ export async function convergeGoldenIdentities({
       const userId = created?.id ?? created?.userId;
       if (!userId) throw new IdpError(`creating ${step.username} returned no user id`);
       existing[step.username] = { userId, emailVerified: account.emailVerified };
-      validateAccount?.(existing[step.username]);
+      validateAccount?.(existing[step.username], { live: false });
       subjects[account.subjectEnvVar] = userId;
       log(`  ↳ created ${step.username} (verified: ${account.emailVerified})`);
     } else if (step.op === "set-password") {
@@ -1367,7 +1374,8 @@ export async function convergeStageStaff({
   if (GOLDEN_IDP_ACCOUNTS.some((golden) => golden.username === account.username)) {
     throw new IdpError(`${account.username} is a golden account — refusing to converge its factor`);
   }
-  const validateAccount = ({ userId, grant }) => {
+  const committeeOrg = committee ? await resolveOrgId(client, env) : undefined;
+  const validateSubject = (userId) => {
     const golden = Object.entries(goldenSubjects).find(([, id]) => id === userId);
     const clash = golden ? `golden subject ${golden[0]}` : userId === adminSubject ? "agent admin" : null;
     if (!userId || clash) {
@@ -1375,28 +1383,40 @@ export async function convergeStageStaff({
         `${account.username} resolved to ${clash ?? "no subject"} — refusing to modify it`,
       );
     }
-    if (committee && grant?.roleKeys.some((role) => !account.roleKeys.includes(role))) {
+  };
+  const validateCommitteeAccount = ({ userId, grant, username, resourceOwner, humanEmail }, { live }) => {
+    validateSubject(userId);
+    // User v2 ListUsers searches by email, which can match a different account.
+    if (live && (username !== account.username || humanEmail !== account.username || resourceOwner !== committeeOrg)) {
+      throw new IdpError(`${account.username} did not resolve to the expected stage human — refusing to modify it`);
+    }
+    if (grant?.roleKeys.some((role) => !account.roleKeys.includes(role))) {
       throw new IdpError(`${account.username} has an unexpected role — refusing to modify it`);
     }
   };
+
   let secrets = { ...((await readSecrets()) ?? {}) };
-  if (!secrets[account.passwordEnvVar]) {
-    secrets = { ...secrets, [account.passwordEnvVar]: randomPassword() };
+  const minted = !secrets[account.passwordEnvVar];
+  if (minted) secrets = { ...secrets, [account.passwordEnvVar]: randomPassword() };
+  const persistPassword = async () => {
+    if (!minted) return;
     await writeSecrets(secrets);
     log(`  ↳ minted a password for ${account.username} (stored in ${account.secretsPath})`);
-  }
+  };
+  if (!committee) await persistPassword();
 
   const subjects = await convergeGoldenIdentities({
     client,
     accounts: [account],
-    validateAccount,
+    validateAccount: committee ? validateCommitteeAccount : undefined,
+    beforeWrite: committee ? persistPassword : undefined,
     passwords: { [account.passwordEnvVar]: secrets[account.passwordEnvVar] },
-    env,
+    env: committee ? { ...env, IDP_ORG_ID: committeeOrg } : env,
     projectName,
     log,
   });
   const userId = subjects[account.subjectEnvVar];
-  validateAccount({ userId });
+  validateSubject(userId);
 
   const factor = await readTotpFactorState(client, userId);
   const action = planAgentAdminTotp({

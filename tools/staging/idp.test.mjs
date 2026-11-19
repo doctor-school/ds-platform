@@ -1113,6 +1113,15 @@ function agentRoutes({ factorReads, extra = {} }) {
   };
 }
 
+const COMMITTEE_HUMAN = {
+  userId: "id-agent",
+  username: "golden.committee.agent@example.test",
+  details: { resourceOwner: "org-stage" },
+  human: {
+    email: { email: "golden.committee.agent@example.test", isVerified: true },
+  },
+};
+
 function agentHarness({ routes, secrets = {}, goldenSubjects = {}, actor, adminSubject }) {
   const calls = [];
   const writes = [];
@@ -1135,6 +1144,7 @@ function agentHarness({ routes, secrets = {}, goldenSubjects = {}, actor, adminS
       goldenSubjects,
       actor,
       adminSubject,
+      env: actor === "committee" ? { IDP_ORG_ID: "org-stage" } : undefined,
     });
   return { calls, writes, lines, run };
 }
@@ -1231,6 +1241,7 @@ test("the committee actor is granted only the committee and base guest roles", a
     routes: agentRoutes({
       factorReads: ["AUTH_FACTOR_STATE_READY"],
       extra: {
+        "POST /v2/users": { body: { result: [COMMITTEE_HUMAN] } },
         "POST /management/v1/users/grants/_search": {
           body: { result: [{ id: "g-1", projectId: "p1", roleKeys: ["doctor_guest"] }] },
         },
@@ -1259,10 +1270,38 @@ test("the committee actor refuses an admin, golden subject, or unexpected role b
       adminSubject,
       goldenSubjects,
       secrets: { DS_STAGE_AGENT_COMMITTEE_PASSWORD: "stored-test-password" },
-      routes: agentRoutes({ factorReads: ["AUTH_FACTOR_STATE_READY"] }),
+      routes: agentRoutes({
+        factorReads: ["AUTH_FACTOR_STATE_READY"],
+        extra: { "POST /v2/users": { body: { result: [COMMITTEE_HUMAN] } } },
+      }),
     });
     await assert.rejects(h.run(), error);
     assert.ok(!h.calls.some((call) => /\/password|\/totp|\/auth_factors|^(PUT|DELETE) /.test(call.key)));
+    assert.equal(h.writes.length, 0);
+  }
+});
+
+test("a singleton committee email hit must be the exact stage human before any write", async () => {
+  for (const hit of [
+    { ...COMMITTEE_HUMAN, username: "unrelated-doctor" },
+    { ...COMMITTEE_HUMAN, details: { resourceOwner: "org-foreign" } },
+    { ...COMMITTEE_HUMAN, human: undefined, machine: { name: "foreign" } },
+    { ...COMMITTEE_HUMAN, human: { email: { email: "foreign@example.test" } } },
+  ]) {
+    const h = agentHarness({
+      actor: "committee",
+      adminSubject: "id-admin",
+      routes: agentRoutes({
+        factorReads: [],
+        extra: {
+          "POST /v2/users": { body: { result: [hit] } },
+          "POST /management/v1/users/grants/_search": { body: { result: [] } },
+          "POST /management/v1/users/id-agent/grants": { body: {} },
+        },
+      }),
+    });
+    await assert.rejects(h.run(), /expected stage human/);
+    assert.ok(h.calls.every((call) => !/\/password|\/totp|\/auth_factors|\/grants$|^(PUT|DELETE) /.test(call.key)));
     assert.equal(h.writes.length, 0);
   }
 });

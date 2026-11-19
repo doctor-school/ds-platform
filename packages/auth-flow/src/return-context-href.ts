@@ -59,7 +59,8 @@ export function resolveCoursesReturnTarget(
  * #2258 / rule S3 - the value that rides ONWARD across an auth hop, covering
  * every shape a visitor may legitimately be coming back to: this host account
  * family (`routes.account`, segment boundary enforced), this host learning
- * family (`routes.courses`, 024 EARS-22), this host room (`routes.room`) and
+ * family (`routes.courses`, 024 EARS-22, and `routes.schools`, 023 EARS-8),
+ * this host room (`routes.room`) and
  * the эфир vocabulary.
  * Deliberately NOT `resolveReturnTargetPath`, which must stay эфир-only.
  */

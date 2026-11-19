@@ -53,17 +53,20 @@ import {
   slotHostnames,
 } from "./slot.mjs";
 import {
-  AGENT_ADMIN_TOTP_ENV_VAR,
   GOLDEN_IDP_ACCOUNTS,
   GOLDEN_PASSWORD_ENV_VARS,
   STAGE_AGENT_ADMIN,
+  STAGE_AGENT_COMMITTEE,
 } from "./idp.mjs";
 import { GOLDEN_LIVE_ENV, LIVE_TIERS } from "./live-tiers.mjs";
 
-const AGENT_ADMIN_SECRET_NAMES = [
-  STAGE_AGENT_ADMIN.passwordEnvVar,
-  AGENT_ADMIN_TOTP_ENV_VAR,
-];
+const STAGE_STAFF_SECRET_NAMES = [STAGE_AGENT_ADMIN, STAGE_AGENT_COMMITTEE].flatMap(
+  ({ passwordEnvVar, totpEnvVar }) => [passwordEnvVar, totpEnvVar],
+);
+
+function isStageStaffEnv(name) {
+  return /^DS_STAGE_AGENT_(ADMIN|COMMITTEE)_/i.test(name);
+}
 
 /** The repo root — every leg runs from there, like the scripts in `package.json`. */
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -797,7 +800,7 @@ export const realEffects = {
   },
   run: (argv, { env }) => {
     const inherited = { ...process.env };
-    for (const name of AGENT_ADMIN_SECRET_NAMES) delete inherited[name];
+    for (const name of Object.keys(inherited).filter(isStageStaffEnv)) delete inherited[name];
     return spawnSync(assertShellInert(argv), {
       cwd: REPO_ROOT,
       stdio: "inherit",
@@ -1006,10 +1009,11 @@ export async function runE2eStage(
       if (tier.host === "admin") {
         legEnv.E2E_ADMIN_URL = `https://${slotHostnames(slot, baseDomain).admin}`;
         legEnv.E2E_STAGE_ADMIN_EMAIL = STAGE_AGENT_ADMIN.username;
+        legEnv.E2E_STAGE_COMMITTEE_EMAIL = STAGE_AGENT_COMMITTEE.username;
         // Playwright's error-time ARIA snapshot is independent of trace and
         // screenshot settings. Keep the MFA form out of published reports.
         legEnv.PLAYWRIGHT_NO_COPY_PROMPT = "1";
-        for (const name of AGENT_ADMIN_SECRET_NAMES) legEnv[name] = env[name];
+        for (const name of STAGE_STAFF_SECRET_NAMES) legEnv[name] = env[name];
       }
       const plan = planLiveLeg(tier, { ...env, ...legEnv });
       if (!plan.run) {
@@ -1098,10 +1102,8 @@ export function runE2eStageCommand(argv, options) {
   // Keep staff credentials out of every ambient child environment (including
   // the SSH box read and gh lookup). Only the admin leg receives them explicitly.
   const env = { ...process.env };
-  for (const name of Object.keys(process.env)) {
-    if (name.toUpperCase().startsWith("DS_STAGE_AGENT_ADMIN_")) {
-      delete process.env[name];
-    }
+  for (const name of Object.keys(process.env).filter(isStageStaffEnv)) {
+    delete process.env[name];
   }
   return runE2eStage(argv, { ...options, env });
 }

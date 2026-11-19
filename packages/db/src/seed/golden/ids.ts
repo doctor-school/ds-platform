@@ -91,6 +91,7 @@ export const GOLDEN_GROUP = Object.freeze({
   learningQuestions: 0x001a,
   learningOptions: 0x001b,
   learningRuleLayers: 0x001c,
+  eventRoleGrants: 0x001d,
 });
 
 /**
@@ -160,9 +161,14 @@ function verifiedCardiologistCopy(worker: number) {
   });
 }
 
-/**
- * The published catalogue. Read it, never re-derive an id or a slug by hand.
- */
+// Dedicated staging-only subject, omitted from the ordinary golden identity map.
+export const stageAgentCommittee = {
+  id: goldenUuid(GOLDEN_GROUP.users, 6),
+  email: "golden.committee.agent@example.test",
+  displayName: "Golden Stage Committee",
+} as const;
+
+/** The published catalogue. Read it, never re-derive an id or a slug by hand. */
 export const golden = Object.freeze({
   doctors: Object.freeze({
     /** Signed up, never confirmed the address — the «подтвердите почту» state. */

@@ -290,7 +290,7 @@ export async function seedGolden(
   const now = resolveGoldenNow(env);
   const subjects = options.subjects ?? resolveGoldenSubjects(env);
 
-  const dataset = buildGoldenDataset(now, subjects);
+  const dataset = buildGoldenDataset(now, subjects, env.DS_STAGE_AGENT_COMMITTEE_SUB?.trim());
   const issues = goldenReferentialIssues(dataset);
   if (issues.length > 0) {
     throw new GoldenDatasetError(

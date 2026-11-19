@@ -79,7 +79,7 @@ export async function congressAuthor(
 
 /** A same-origin JSON call in the author's own session. */
 async function call(
-  author: CongressAuthor,
+  author: Pick<CongressAuthor, "page">,
   method: string,
   url: string,
   json?: unknown,
@@ -108,7 +108,7 @@ async function call(
 
 /** An oral submission written and sent (046 EARS-6/7/9); returns its id. */
 export async function sendOralSubmission(
-  author: CongressAuthor,
+  author: Pick<CongressAuthor, "page">,
   eventId: string,
   title: string,
 ): Promise<string> {

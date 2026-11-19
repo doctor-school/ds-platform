@@ -33,16 +33,15 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  * the ceilings themselves are proven by `abuse-limits.e2e` + `mfa-challenge.e2e`,
  * not here.
  */
-const stageLifecycle = Boolean(process.env.E2E_STAGE_ADMIN_EMAIL);
+const stage = Boolean(process.env.E2E_STAGE_ADMIN_EMAIL);
+const stageSpecs = ["stage-event-lifecycle.spec.ts", "stage-congress-review.spec.ts"];
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: stageLifecycle ? "stage-event-lifecycle.spec.ts" : "*.spec.ts",
+  testMatch: stage ? stageSpecs : "*.spec.ts",
   // The a11y scan is its own gate with its own config and its own meaning of
   // "green"; picking it up here would report a WCAG failure as a flow failure.
-  testIgnore: stageLifecycle
-    ? "a11y/**"
-    : ["a11y/**", "stage-event-lifecycle.spec.ts"],
+  testIgnore: stage ? "a11y/**" : ["a11y/**", ...stageSpecs],
   fullyParallel: false,
   workers: 1,
   // One CI retry (sibling convention: portal/doctor ci configs) — the tier

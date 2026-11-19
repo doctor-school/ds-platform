@@ -27,10 +27,10 @@ import {
   AGENT_ADMIN_SECRETS_PATH,
   STAGE_AGENT_ADMIN,
   agentAdminCode,
-  convergeAgentAdmin,
-  parseAgentAdminSecrets,
+  convergeStageStaff,
+  parseStageStaffSecrets,
   planAgentAdminTotp,
-  renderAgentAdminSecrets,
+  renderStageStaffSecrets,
   totpCode,
 } from "./idp.mjs";
 
@@ -1075,19 +1075,19 @@ test("the TOTP plan: absent → enrol, provisional → enrol, ready+secret → k
 });
 
 test("the agent secrets file round-trips and never carries anything else", () => {
-  const text = renderAgentAdminSecrets({
+  const text = renderStageStaffSecrets({
     DS_STAGE_AGENT_ADMIN_PASSWORD: "Pw-1!x",
     DS_STAGE_AGENT_ADMIN_TOTP_SECRET: RFC_SECRET,
     STRAY: "nope",
   });
   assert.ok(text.endsWith("\n"));
   assert.doesNotMatch(text, /STRAY/);
-  assert.deepEqual(parseAgentAdminSecrets(text), {
+  assert.deepEqual(parseStageStaffSecrets(text), {
     DS_STAGE_AGENT_ADMIN_PASSWORD: "Pw-1!x",
     DS_STAGE_AGENT_ADMIN_TOTP_SECRET: RFC_SECRET,
   });
   // A secret not yet minted is omitted, not written blank.
-  assert.doesNotMatch(renderAgentAdminSecrets({ DS_STAGE_AGENT_ADMIN_PASSWORD: "p" }), /TOTP_SECRET=/);
+  assert.doesNotMatch(renderStageStaffSecrets({ DS_STAGE_AGENT_ADMIN_PASSWORD: "p" }), /TOTP_SECRET=/);
 });
 
 /** A live agent admin (id-agent) plus a scripted factor-read sequence. */
@@ -1113,7 +1113,7 @@ function agentRoutes({ factorReads, extra = {} }) {
   };
 }
 
-function agentHarness({ routes, secrets = {}, goldenSubjects = {} }) {
+function agentHarness({ routes, secrets = {}, goldenSubjects = {}, actor, adminSubject }) {
   const calls = [];
   const writes = [];
   const lines = [];
@@ -1123,7 +1123,7 @@ function agentHarness({ routes, secrets = {}, goldenSubjects = {} }) {
     pat: "pat-value",
   });
   const run = () =>
-    convergeAgentAdmin({
+    convergeStageStaff({
       client,
       readSecrets: async () => ({ ...secrets }),
       writeSecrets: async (next) => {
@@ -1133,6 +1133,8 @@ function agentHarness({ routes, secrets = {}, goldenSubjects = {} }) {
       randomPassword: () => "Generated-Pw-1!",
       log: (line) => lines.push(line),
       goldenSubjects,
+      actor,
+      adminSubject,
     });
   return { calls, writes, lines, run };
 }
@@ -1216,6 +1218,53 @@ test("an agent search that resolves to a golden subject id is refused before any
   });
   await assert.rejects(h.run(), /golden subject DS_GOLDEN_SUB_ADMIN/);
   assert.ok(!h.calls.some((c) => /totp|auth_factors/.test(c.key)));
+});
+
+test("the committee actor is granted only the committee and base guest roles", async () => {
+  const h = agentHarness({
+    actor: "committee",
+    adminSubject: "id-admin",
+    secrets: {
+      DS_STAGE_AGENT_COMMITTEE_PASSWORD: "stored-test-password",
+      DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET: RFC_SECRET,
+    },
+    routes: agentRoutes({
+      factorReads: ["AUTH_FACTOR_STATE_READY"],
+      extra: {
+        "POST /management/v1/users/grants/_search": {
+          body: { result: [{ id: "g-1", projectId: "p1", roleKeys: ["doctor_guest"] }] },
+        },
+        "PUT /management/v1/users/id-agent/grants/g-1": { body: {} },
+      },
+    }),
+  });
+  assert.deepEqual(await h.run(), { subject: "id-agent", totp: "kept" });
+  assert.deepEqual(h.calls.find((call) => call.key.startsWith("PUT ")).body, {
+    roleKeys: ["doctor_guest", "congress-program-committee"],
+  });
+  assert.equal(h.calls.find((call) => call.key.endsWith("/password")).body.newPassword.password,
+    "stored-test-password");
+  assert.ok(!h.calls.some((call) => call.key.startsWith("DELETE")));
+  assert.equal(h.writes.length, 0);
+});
+
+test("the committee actor refuses an admin, golden subject, or unexpected role before mutation", async () => {
+  for (const [adminSubject, goldenSubjects, error] of [
+    ["id-agent", {}, /agent admin/],
+    ["id-admin", { DS_GOLDEN_SUB_ADMIN: "id-agent" }, /golden subject/],
+    ["id-admin", {}, /unexpected role/],
+  ]) {
+    const h = agentHarness({
+      actor: "committee",
+      adminSubject,
+      goldenSubjects,
+      secrets: { DS_STAGE_AGENT_COMMITTEE_PASSWORD: "stored-test-password" },
+      routes: agentRoutes({ factorReads: ["AUTH_FACTOR_STATE_READY"] }),
+    });
+    await assert.rejects(h.run(), error);
+    assert.ok(!h.calls.some((call) => /\/password|\/totp|\/auth_factors|^(PUT|DELETE) /.test(call.key)));
+    assert.equal(h.writes.length, 0);
+  }
 });
 
 test("the live factor shape (state beside an empty `otp`) reads as READY and is kept", async () => {

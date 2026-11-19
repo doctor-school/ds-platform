@@ -1252,11 +1252,12 @@ describe("runE2eStage — the live legs", () => {
         import { spawnSync } from "node:child_process";
         import { runE2eStageCommand } from ${JSON.stringify(module)};
 
-        const keys = ["DS_STAGE_AGENT_ADMIN_PASSWORD", "DS_STAGE_AGENT_ADMIN_TOTP_SECRET"];
+        const keys = ["DS_STAGE_AGENT_ADMIN_PASSWORD", "DS_STAGE_AGENT_ADMIN_TOTP_SECRET",
+          "DS_STAGE_AGENT_COMMITTEE_PASSWORD", "DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET"];
         const probe = (overrides = {}) => {
           const child = spawnSync(process.execPath, [
             "-e",
-            "console.log(JSON.stringify(Object.keys(process.env).filter(key => key.startsWith('DS_STAGE_AGENT_ADMIN_')).sort()))"
+            "console.log(JSON.stringify(Object.keys(process.env).filter(key => /^DS_STAGE_AGENT_(ADMIN|COMMITTEE)_/.test(key)).sort()))"
           ], { encoding: "utf8", env: { ...process.env, ...overrides } });
           assert.equal(child.status, 0, child.stderr);
           return JSON.parse(child.stdout);
@@ -1297,6 +1298,9 @@ describe("runE2eStage — the live legs", () => {
           DS_STAGE_AGENT_ADMIN_PASSWORD: "test-password",
           DS_STAGE_AGENT_ADMIN_TOTP_SECRET: "test-factor",
           DS_STAGE_AGENT_ADMIN_SUB: "test-subject",
+          DS_STAGE_AGENT_COMMITTEE_PASSWORD: "committee-password",
+          DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET: "committee-factor",
+          DS_STAGE_AGENT_COMMITTEE_SUB: "committee-subject",
         },
       },
     );

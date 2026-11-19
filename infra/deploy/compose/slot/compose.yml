@@ -82,6 +82,14 @@ services:
       # storefront client ids + private_key_jwt keys, SIGN_IN_RECORD_KEY and
       # INTERNAL_API_TOKEN — the sign-in host's secret half. The api ALONE mounts it.
       - /etc/ds-platform/slots/${SLOT:?}.sign-in.env
+      # OPTIONAL, hand-placed, root-only (#4165): the stand test bot's
+      # TELEGRAM_BOT_TOKEN for THIS slot only. A bot token may be long-polled by
+      # one process at a time and every slot has its own database (so the api's
+      # single-poller lock cannot span slots): exactly one slot holds this file.
+      # Absent ⇒ the slot's Telegram connector is off. tools/staging/README.md →
+      # «Telegram connector on a slot».
+      - path: /etc/ds-platform/slots/${SLOT:?}.telegram.env
+        required: false
     environment:
       # Assembled here, NOT written into the per-slot env file: that would copy
       # POSTGRES_PASSWORD into a second on-box file. `SLOT_DB` is the slot's clone

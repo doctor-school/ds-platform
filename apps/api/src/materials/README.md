@@ -31,26 +31,32 @@ one-off history import (EARS-30).
   (`FeedSourcesService.checkAtOnce`, bounded at 15 s): the response carries
   the checked status, and a failed or unreachable check never fails the
   write. The check binds the channel id; a source still unbound (Telegram was
-  unreachable) is bound by the first webhook update whose `chat.username`
+  unreachable) is bound by the first polled update whose `chat.username`
   equals its address.
 - `feed_entry_messages` (slice 2, #3994) — the dedup key of Telegram
   entries: every message id that went into an entry (one per post, each part
   of an album), keyed `(feed_source_id, message_id)`.
 - `telegram/` (slice 2, #3994) — the Telegram connector:
   - `telegram-bot-api.client.ts` — the ONLY caller of `api.telegram.org`
-    (ADR-0011 §2.2 channel #10): `setWebhook`, `getWebhookInfo`, `getMe`,
+    (ADR-0011 §2.2 channel #10): `getUpdates`, `deleteWebhook`, `getMe`,
     `getChat`, `getChatMember`, `getFile` and the file download, Zod-checked
     parameters and responses, the token never in a logged or thrown string,
     one log line per call (method, HTTP status, duration, outcome).
     `telegram-bot-api.fake.ts` is its test double (`TELEGRAM_BOT_API`).
-  - `telegram-config.ts` — `TELEGRAM_BOT_TOKEN` / `TELEGRAM_WEBHOOK_SECRET` /
-    `TELEGRAM_WEBHOOK_URL`; `null` (connector off) unless token and secret
-    are both set.
-  - `telegram-webhook.middleware.ts` + `telegram-webhook.controller.ts` —
-    `POST /v1/integrations/telegram/webhook`: 404 while off, 401 on an absent
-    or wrong secret (constant time, in Fastify's `onRequest` phase, before the
-    body is read), 200 for every processed or dropped update, 500 on our own
-    failure so Telegram redelivers.
+  - `telegram-config.ts` — `TELEGRAM_BOT_TOKEN`; `null` (connector off)
+    while it is unset.
+  - `telegram-update-poller.service.ts` + `telegram-update-cursor.repository.ts`
+    — the EARS-24/25 ingress (no inbound route: Telegram cannot reach the
+    hosting). While the token is set, one loop per process long-polls
+    `getUpdates` (`channel_post`, `edited_channel_post`; 50 s wait, 65 s HTTP
+    timeout); only the process holding a session-level Postgres advisory lock
+    polls. Before its first poll, and on a 409, it calls `deleteWebhook`
+    (pending updates kept). Each update runs `TelegramFeedSource.receive`, then
+    the offset in `telegram_update_cursor` (one row per bot id) moves past it,
+    then a pending preview gets one copy attempt; a processing failure stops
+    the batch without moving the offset, so the update is fetched again. A
+    failed call is retried after a 1 s → 60 s backoff; `polled_at` records the
+    last answered poll for the EARS-31 check. Stops on module destroy.
   - `telegram-post-mapping.ts` — the pure EARS-26 mapping (text cut, preview
     size, drop reasons); `telegram.feed-source.ts` — the only writer of
     Telegram entries: one transaction per update (source matched and locked,
@@ -58,7 +64,7 @@ one-off history import (EARS-30).
     preview candidate is written `preview_state = pending` with its
     `preview_file_id`, no `image_ref`; the copy is the preview service's.
   - `telegram-preview.service.ts` — the EARS-29 preview copy, run once by the
-    webhook after its transaction commits and retried by a `@Cron` every 10
+    poller after the update's transaction commits and retried by a `@Cron` every 10
     minutes (backoff `previewRetryDelayMinutes` in
     `feed-entries.repository.ts`, counted in `preview_attempts`, spanning at
     least 24 h, then `failed`): a fresh `getFile`, a file over 20 MB refused
@@ -78,8 +84,8 @@ messages }`, `id` bare and compared as `-(10^12 + id)` with the bound
     file, a non-channel export, another channel or an unbound source; each
     message mapped through the shared `cardFromContent` of
     `telegram-post-mapping.ts` and written in its own transaction under the
-    webhook's source lock, a message id already in `feed_entry_messages`
-    skipped (re-run / webhook overlap / hidden entry untouched); the preview
+    feed source's lock, a message id already in `feed_entry_messages`
+    skipped (re-run / polled-post overlap / hidden entry untouched); the preview
     from the exported photo / video thumbnail file through the preview
     service's `storeExported` (normalize + PUT, no Bot API call, no retry —
     a failure leaves the entry imageless and is counted). Prints read /
@@ -87,17 +93,13 @@ messages }`, `id` bare and compared as `-(10^12 + id)` with the bound
     by reason / previews failed.
   - `telegram-source-check.service.ts` — the EARS-31 check: hourly
     (`@Cron`) for every switched-on Telegram source and at once on add / edit
-    / switch-on. `getWebhookInfo`, `getChat` (bound id, else `@<address>`),
-    `getMe` + `getChatMember`; one fixed reason in the design table's order
+    / switch-on. `getMe`, `getChat` (bound id, else `@<address>`),
+    `getChatMember` and the poller's `polled_at` of that bot (none within the
+    last hour → «Telegram не может доставить новые посты»); one fixed reason in the design table's order
     (`SOURCE_CHECK_REASONS`), «Telegram недоступен» on a timeout or network
     failure; binds the id in the same write when the channel's username
     equals the address ignoring case. The verdict is written only while the
     source is still on at the judged address, and never bumps `version`.
-  - `telegram-webhook-registration.ts` + `scripts/telegram-set-webhook.ts`
-    (`pnpm --filter @ds/api telegram:set-webhook`) — the operator's EARS-24
-    registration: `setWebhook` with `TELEGRAM_WEBHOOK_URL`, the secret and
-    `allowed_updates = ["channel_post", "edited_channel_post"]`; prints the
-    URL and update types Telegram holds, never the token or the secret.
 
 ## Properties worth stating
 

@@ -8,7 +8,7 @@ import {
 // 048 EARS-30 (#3995) — the pure half of the one-off history import: the
 // whole-file validation of the machine-readable JSON of Telegram Desktop's
 // «Export chat history» of one channel, and the mapping of an exported
-// message onto the SAME card rule as a webhook post (EARS-26,
+// message onto the SAME card rule as a polled post (EARS-26,
 // `cardFromContent`). The export shape is the tdesktop JSON writer's
 // (048-design «One-off history import (EARS-30)», each fact with its source
 // line): a single-chat export is one object `{ name, type, id, messages }`,
@@ -149,7 +149,7 @@ function previewFile(value: string): ExportPreviewFile {
 /**
  * EARS-30 — one exported message → a card under EARS-26, a skip of media with
  * no text (Constraints: an album or a captionless photo or video), or a drop
- * with the reason the webhook would give.
+ * with the reason the poller would give.
  */
 export function mapExportMessage(
   message: TelegramExportMessage,

@@ -489,21 +489,21 @@ is their registry, and `e2e-stage.test.mjs` holds it against the tree: every
 an **axe** leg, or **hermetic** (owns a `webServer`, CI's), and a config in none of
 them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 
-| Leg                          | Config (`apps/<app>/…`)                                                                                         | Release check |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------- |
-| `live/admin/event-lifecycle` | `admin/playwright.flows.config.ts` (`stage-event-lifecycle.spec.ts`, `stage-congress-review.spec.ts`)           | yes           |
-| `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                                                   | yes           |
-| `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                                                      | yes           |
-| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)                                  | yes           |
-| `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                                                     | yes           |
-| `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                                                          | yes           |
-| `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                                                        | yes           |
-| `live/doctor/event-register` | `doctor/playwright.event-register.config.ts`                                                                    | yes           |
-| `live/doctor/events-live`    | `doctor/playwright.events-live.config.ts`                                                                       | yes           |
-| `live/doctor/learning`       | `doctor/playwright.learning-live.config.ts` (`learning-path-live.spec.ts`, golden course)                       | yes           |
-| `live/doctor/feed-live`      | `doctor/playwright.feed-live.config.ts` (`feed-adjacent.spec.ts`, golden specialties)                           | yes           |
-| `live/doctor/room`           | `doctor/playwright.room.config.ts` (`room-player-chat-live`, `room-canvas-structure-live`; axe runs separately) | yes           |
-| `live/doctor/shell`          | `doctor/playwright.shell.config.ts`                                                                             | yes           |
+| Leg                          | Config (`apps/<app>/…`)                                                                                                                  | Release check |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `live/admin/event-lifecycle` | `admin/playwright.flows.config.ts` (`stage-event-lifecycle.spec.ts`, `stage-congress-review.spec.ts`, `stage-recording-publish.spec.ts`) | yes           |
+| `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                                                                            | yes           |
+| `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                                                                               | yes           |
+| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)                                                           | yes           |
+| `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                                                                              | yes           |
+| `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                                                                                   | yes           |
+| `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                                                                                 | yes           |
+| `live/doctor/event-register` | `doctor/playwright.event-register.config.ts`                                                                                             | yes           |
+| `live/doctor/events-live`    | `doctor/playwright.events-live.config.ts`                                                                                                | yes           |
+| `live/doctor/learning`       | `doctor/playwright.learning-live.config.ts` (`learning-path-live.spec.ts`, golden course)                                                | yes           |
+| `live/doctor/feed-live`      | `doctor/playwright.feed-live.config.ts` (`feed-adjacent.spec.ts`, golden specialties)                                                    | yes           |
+| `live/doctor/room`           | `doctor/playwright.room.config.ts` (`room-player-chat-live`, `room-canvas-structure-live`; axe runs separately)                          | yes           |
+| `live/doctor/shell`          | `doctor/playwright.shell.config.ts`                                                                                                      | yes           |
 
 Each leg gets the suite env plus `IDP_ISSUER=https://id.<base domain>` and
 `MAILPIT_URL=https://mailpit.<base domain>` (hostnames, never `127.0.0.1`: Playwright
@@ -546,7 +546,9 @@ trace, screenshot and video capture. The runner sets
 accessibility snapshot.
 
 The event lifecycle spec retires the event it creates through the admin
-lifecycle. The congress review spec creates a fresh doctor and submission,
+lifecycle. The recording publish spec takes its own event to ended, attaches
+and publishes a recording, checks it plays for the signed-in stage doctor on
+both storefronts, and retires that event the same way. The congress review spec creates a fresh doctor and submission,
 checks the decision in the doctor's cabinet, and finds that doctor on the roster.
 
 Event slugs come from the golden set the slot was seeded with (#2996): a tier's

@@ -98,8 +98,8 @@
       "gap": 4125
     },
     "S4": {
-      "status": "NONE",
-      "gap": 4126
+      "status": "FULL",
+      "gap": null
     },
     "S5": {
       "status": "FULL",
@@ -2262,6 +2262,17 @@
       "titles": [
         [
           "A program committee member accepts a speaker application and staff find its author on the roster"
+        ]
+      ]
+    },
+    {
+      "rows": ["S4"],
+      "leg": "live/admin/event-lifecycle",
+      "file": "stage-recording-publish.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "Staff attaches and publishes a recording and it plays on both storefronts"
         ]
       ]
     }

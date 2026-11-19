@@ -34,7 +34,11 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  * not here.
  */
 const stage = Boolean(process.env.E2E_STAGE_ADMIN_EMAIL);
-const stageSpecs = ["stage-event-lifecycle.spec.ts", "stage-congress-review.spec.ts"];
+const stageSpecs = [
+  "stage-event-lifecycle.spec.ts",
+  "stage-congress-review.spec.ts",
+  "stage-recording-publish.spec.ts",
+];
 
 export default defineConfig({
   testDir: "./e2e",

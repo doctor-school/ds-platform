@@ -1252,11 +1252,12 @@ describe("runE2eStage — the live legs", () => {
         import { spawnSync } from "node:child_process";
         import { runE2eStageCommand } from ${JSON.stringify(module)};
 
-        const keys = ["DS_STAGE_AGENT_ADMIN_PASSWORD", "DS_STAGE_AGENT_ADMIN_TOTP_SECRET"];
+        const keys = ["DS_STAGE_AGENT_ADMIN_PASSWORD", "DS_STAGE_AGENT_ADMIN_TOTP_SECRET",
+          "DS_STAGE_AGENT_COMMITTEE_PASSWORD", "DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET"];
         const probe = (overrides = {}) => {
           const child = spawnSync(process.execPath, [
             "-e",
-            "console.log(JSON.stringify(Object.keys(process.env).filter(key => key.startsWith('DS_STAGE_AGENT_ADMIN_')).sort()))"
+            "console.log(JSON.stringify(Object.keys(process.env).filter(key => /^DS_STAGE_AGENT_(ADMIN|COMMITTEE)_/.test(key)).sort()))"
           ], { encoding: "utf8", env: { ...process.env, ...overrides } });
           assert.equal(child.status, 0, child.stderr);
           return JSON.parse(child.stdout);
@@ -1297,6 +1298,9 @@ describe("runE2eStage — the live legs", () => {
           DS_STAGE_AGENT_ADMIN_PASSWORD: "test-password",
           DS_STAGE_AGENT_ADMIN_TOTP_SECRET: "test-factor",
           DS_STAGE_AGENT_ADMIN_SUB: "test-subject",
+          DS_STAGE_AGENT_COMMITTEE_PASSWORD: "committee-password",
+          DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET: "committee-factor",
+          DS_STAGE_AGENT_COMMITTEE_SUB: "committee-subject",
         },
       },
     );
@@ -1308,6 +1312,8 @@ describe("runE2eStage — the live legs", () => {
       ...ENV,
       DS_STAGE_AGENT_ADMIN_PASSWORD: "staff-password",
       DS_STAGE_AGENT_ADMIN_TOTP_SECRET: "staff-factor",
+      DS_STAGE_AGENT_COMMITTEE_PASSWORD: "committee-password",
+      DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET: "committee-factor",
     };
     const { calls, effects, writes } = harness();
     await runE2eStage(["pr-4122"], { env, effects });
@@ -1318,7 +1324,7 @@ describe("runE2eStage — the live legs", () => {
     assert.ok(selection);
     assert.equal(
       writes.find(({ file }) => selection === `--test-list=${file}`)?.content,
-      "stage-event-lifecycle.spec.ts\n",
+      "stage-event-lifecycle.spec.ts\nstage-congress-review.spec.ts\n",
     );
     assert.ok(!admin.argv.includes("--pass-with-no-tests"));
     assert.equal(
@@ -1333,6 +1339,10 @@ describe("runE2eStage — the live legs", () => {
       admin.env.DS_STAGE_AGENT_ADMIN_TOTP_SECRET,
       env.DS_STAGE_AGENT_ADMIN_TOTP_SECRET,
     );
+    assert.equal(admin.env.E2E_STAGE_COMMITTEE_EMAIL, "golden.committee.agent@example.test");
+    assert.equal(admin.env.E2E_DOCTOR_CONGRESS_SLUG, "golden-doctor-congress");
+    assert.equal(admin.env.DS_STAGE_AGENT_COMMITTEE_PASSWORD, env.DS_STAGE_AGENT_COMMITTEE_PASSWORD);
+    assert.equal(admin.env.DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET, env.DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET);
     assert.equal(admin.env.PLAYWRIGHT_NO_COPY_PROMPT, "1");
     for (const call of calls.filter((call) => call !== admin)) {
       // A set E2E_ADMIN_URL tells the read-only BDD suite it owns an admin
@@ -1340,6 +1350,8 @@ describe("runE2eStage — the live legs", () => {
       assert.equal(call.env.E2E_ADMIN_URL, undefined);
       assert.equal(call.env.DS_STAGE_AGENT_ADMIN_PASSWORD, undefined);
       assert.equal(call.env.DS_STAGE_AGENT_ADMIN_TOTP_SECRET, undefined);
+      assert.equal(call.env.DS_STAGE_AGENT_COMMITTEE_PASSWORD, undefined);
+      assert.equal(call.env.DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET, undefined);
       assert.equal(call.env.PLAYWRIGHT_NO_COPY_PROMPT, undefined);
     }
 

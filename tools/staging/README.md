@@ -447,7 +447,7 @@ them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 
 | Leg                          | Config (`apps/<app>/…`)                                                                                         | Release check |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------- |
-| `live/admin/event-lifecycle` | `admin/playwright.flows.config.ts` (`stage-event-lifecycle.spec.ts`)                                            | yes           |
+| `live/admin/event-lifecycle` | `admin/playwright.flows.config.ts` (`stage-event-lifecycle.spec.ts`, `stage-congress-review.spec.ts`)           | yes           |
 | `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                                                   | yes           |
 | `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                                                      | yes           |
 | `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)                                  | yes           |
@@ -487,17 +487,23 @@ names, and no other box key is handed over); an operator export wins over each v
   `live-tiers.mjs`, held against `packages/db/src/seed/golden/ids.ts`), and
   `E2E_API_URL` = the slot's api origin.
 
-The admin leg signs in as the dedicated stage agent admin and completes its
-pre-enrolled TOTP challenge. It requires `DS_STAGE_AGENT_ADMIN_PASSWORD` and
-`DS_STAGE_AGENT_ADMIN_TOTP_SECRET` in the existing Actions **Stage suite** step or
-the operator's in-memory environment. The runner forwards those two inputs only
-to the admin leg. The Playwright case keeps trace, screenshot and video capture off.
-The runner also sets `PLAYWRIGHT_NO_COPY_PROMPT=1` for the admin leg to keep the
-MFA form out of Playwright's error-time accessibility snapshot.
-The test also uses the golden verified doctor to register for the event it just
-created, watch the room open, and observe its closure on the authenticated heartbeat.
-Fixture teardown hides the run's event via the existing admin lifecycle on success
-or failure. A draft that was never published remains private.
+The admin leg uses dedicated stage staff with pre-enrolled TOTP. Pass these keys
+through the existing Actions **Stage suite** step or the operator's in-memory
+environment:
+
+- `DS_STAGE_AGENT_ADMIN_PASSWORD` and `DS_STAGE_AGENT_ADMIN_TOTP_SECRET` for event
+  lifecycle and roster access.
+- `DS_STAGE_AGENT_COMMITTEE_PASSWORD` and `DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET` for
+  the committee decision on the doctor congress.
+
+The runner forwards the staff keys only to the admin leg. Both specs disable
+trace, screenshot and video capture. The runner sets
+`PLAYWRIGHT_NO_COPY_PROMPT=1` to keep the MFA form out of Playwright's error-time
+accessibility snapshot.
+
+The event lifecycle spec retires the event it creates through the admin
+lifecycle. The congress review spec creates a fresh doctor and submission,
+checks the decision in the doctor's cabinet, and finds that doctor on the roster.
 
 Event slugs come from the golden set the slot was seeded with (#2996): a tier's
 `seededEnv` (`live-tiers.mjs` → `GOLDEN_SLUGS`) names the golden event carrying each shape
@@ -728,28 +734,35 @@ One run does four things, in order (plus the agent admin, below):
    assigns), so no session or rate-limit key survives an identity reset.
 4. **Append one audit line** to `/var/log/ds-platform/slot.log`.
 
-The same run converges one more account that is not part of the golden dataset: the
-**agent admin** `golden.admin.agent@example.test` (`STAGE_AGENT_ADMIN` in `idp.mjs`), with
-the golden admin's roles (`doctor_guest`, `platform_admin`), so an agent can sign in to a
-slot's admin without the owner's authenticator. Its account goes through the same
-create / password / email / grant verbs as the golden five; then its **TOTP factor** is
-converged, probe → act → re-read:
+The same run converges two dedicated stage staff accounts through the golden
+identity writers. The **agent admin** `golden.admin.agent@example.test` holds
+`doctor_guest` and `platform_admin`. The **agent committee member**
+`golden.committee.agent@example.test` holds `doctor_guest` and
+`congress-program-committee`. Before changing the committee account, converge
+checks that its subject differs from the golden subjects and the agent admin.
+An existing email hit must be the expected human with the exact username and
+email in the stage organization. Converge also refuses unexpected stage-project
+roles.
+
+Both accounts' TOTP factors follow the same probe, write and read-back sequence:
 
 | Factor at the IdP                       | Secret stored on the box | Action                                                                                                                        |
 | --------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
 | absent, or provisional (never verified) | any                      | register (`POST /v2/users/{id}/totp`), store the secret, verify with the derived code, re-read READY                          |
-| READY                                   | yes                      | keep — logs `TOTP already enrolled for golden.admin.agent@example.test`                                                       |
+| READY                                   | yes                      | keep — logs `TOTP already enrolled` for that account                                                                          |
 | READY                                   | no                       | remove THIS account's factor (`DELETE /management/v1/users/{id}/auth_factors/otp`, proven by re-read), then register as above |
 
-Its password and TOTP secret are tool-minted into `/etc/ds-platform/stage-agent-admin.env`
-(root, 0600) — the password before the first IdP write, the secret before its verify, so a
-run that dies halfway is put right by the next one. Neither is ever logged. No mirror row
-is seeded for it: the api heals a missing mirror row for an authenticated subject on the
-first request and marks its staff role from the session's claims, so the sign-in survives
-every `sync` that re-seeds the slot database. The file is tool-owned: never hand-edit it,
-except after a factor reset outside the tool (for example an admin MFA reset in the
-console) — then delete its TOTP line and re-run `reset-identities`, which replaces the
-factor; otherwise the `keep` row would hold on to a dead secret.
+The tool mints the credentials in root-owned `0600` files under
+`/etc/ds-platform/`: `stage-agent-admin.env` and
+`stage-agent-committee.env`. The password is stored before the first IdP write
+and the TOTP secret before verification, so converge can resume after a failure.
+After an external factor reset, remove that account's stored TOTP line and rerun
+`reset-identities` to re-enroll it.
+
+The API heals the agent admin's mirror on first sign-in. Slot converge passes the
+committee's opaque `DS_STAGE_AGENT_COMMITTEE_SUB` to `seed:golden`, which writes
+its mirror and one event-role grant for the golden doctor congress. The ordinary
+golden seed omits both rows when the subject is absent.
 
 The TOTP factors of the golden `doctorMfa` and `admin` are NOT converged and never touched
 by this command: they are enrolled in the owner's authenticator. The command guarantees

@@ -102,8 +102,8 @@
       "gap": 4126
     },
     "S5": {
-      "status": "NONE",
-      "gap": 4127
+      "status": "FULL",
+      "gap": null
     }
   },
   "tests": [
@@ -2244,6 +2244,17 @@
       "project": "chromium",
       "titles": [
         ["Staff publishes an event on both storefronts and ends its open room"]
+      ]
+    },
+    {
+      "rows": ["S5"],
+      "leg": "live/admin/event-lifecycle",
+      "file": "stage-congress-review.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "A program committee member accepts a speaker application and staff find its author on the roster"
+        ]
       ]
     }
   ]

@@ -94,46 +94,33 @@ describe("stage.yml", () => {
     assert.match(ship.run, /upload-report \$SHA/);
   });
 
-  it("scopes the stage-admin credentials to the timed suite invocation", () => {
+  it("scopes staff credentials to the timed suite invocation", () => {
     const suite = stage.jobs.suite.steps.find((step) => step.id === "suite");
     const commands = suite.run
       .split("\n")
       .filter((line) => line && !line.startsWith("#"));
-    const password = "DS_STAGE_AGENT_ADMIN_PASSWORD";
-    const factor = "DS_STAGE_AGENT_ADMIN_TOTP_SECRET";
-    for (const key of [password, factor]) {
-      assert.equal(suite.env[key], "${{ secrets." + key + " }}");
+    const pairs = ["admin", "committee"].flatMap((actor) => [
+      [`DS_STAGE_AGENT_${actor.toUpperCase()}_PASSWORD`, `stage_suite_${actor}_password`],
+      [`DS_STAGE_AGENT_${actor.toUpperCase()}_TOTP_SECRET`, `stage_suite_${actor}_totp`],
+    ]);
+    for (const [key] of pairs) {
+      assert.equal(suite.env[key], "$" + "{{ secrets." + key + " }}");
     }
-    assert.deepEqual(commands.slice(0, 3), [
-      `declare +x stage_suite_admin_password="$${password}"`,
-      `declare +x stage_suite_admin_totp="$${factor}"`,
-      `unset ${password} ${factor}`,
+    assert.deepEqual(commands.slice(0, 5), [
+      ...pairs.map(([key, local]) => `declare +x ${local}="$${key}"`),
+      `unset ${pairs.map(([key]) => key).join(" ")}`,
     ]);
-    const launch = commands.findIndex((line) =>
-      line.startsWith("/usr/bin/time "),
+    const launch = commands.findIndex((line) => line.startsWith("/usr/bin/time "));
+    assert.ok(launch > 5, "the credentials must leave the ambient environment before launch");
+    assert.deepEqual(
+      commands.slice(launch - pairs.length, launch),
+      pairs.map(([key, local]) => `${key}="$${local}" \\`),
     );
-    assert.ok(
-      launch > 3,
-      "the suite runs after the credentials leave the ambient environment",
-    );
-    assert.deepEqual(commands.slice(launch - 2, launch), [
-      `${password}="$stage_suite_admin_password" \\`,
-      `${factor}="$stage_suite_admin_totp" \\`,
-    ]);
     const status = commands.indexOf("rc=$?");
     assert.ok(status > launch);
-    assert.equal(
-      commands[status + 1],
-      "unset stage_suite_admin_password stage_suite_admin_totp",
-    );
-    const copies = commands.filter((line) =>
-      /DS_STAGE_AGENT_ADMIN_|stage_suite_admin_/.test(line),
-    );
-    assert.equal(
-      copies.length,
-      6,
-      "no other command references the staff credential pair",
-    );
+    assert.equal(commands[status + 1], `unset ${pairs.map(([, local]) => local).join(" ")}`);
+    const copies = commands.filter((line) => /DS_STAGE_AGENT_(ADMIN|COMMITTEE)_|stage_suite_(admin|committee)_/.test(line));
+    assert.equal(copies.length, 10, "no other command references a staff credential");
   });
 
   it("3119: the suite reads the box through the CI key's observe verb, written before it runs", () => {

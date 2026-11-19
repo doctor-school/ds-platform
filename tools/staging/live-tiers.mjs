@@ -72,6 +72,8 @@ export const GOLDEN_SLUGS = Object.freeze({
   doctorUpcoming: "golden-volume-event-418",
   /** Ended online `doctors` event with a published montage (the doctor event page's «прошло»). */
   doctorEndedRecorded: "golden-volume-event-145",
+  /** Ended online doctor event with two playable cuts (014 EARS-6/8, #4119). */
+  doctorEndedBothCuts: "golden-volume-event-151",
   /** `golden.events.hidden` — an `experts` event in the `hidden` state. */
   academyHidden: "golden-event-hidden",
   /** Published online `experts` event with speakers — the 005 one-tap journey's second event. */
@@ -386,13 +388,14 @@ export const LIVE_TIERS = Object.freeze([
     pkg: "@ds/doctor",
     config: "playwright.event-page.config.ts",
     rootDir: "e2e",
-    // Both specs `test.skip` with a reason when their slug / api URL is absent.
+    // The specs `test.skip` with a reason when their stand inputs are absent.
     gated: [],
     // #2996: a `published` online doctors-audience event with speakers.
     // #3889: an ended online doctors-audience event with a published montage.
     seededEnv: {
       E2E_WEBINAR_SLUG: GOLDEN_SLUGS.doctorUpcoming,
       E2E_WEBINAR_SLUG_ENDED: GOLDEN_SLUGS.doctorEndedRecorded,
+      E2E_DOCTOR_RECORDING_BOTH_CUTS_SLUG: GOLDEN_SLUGS.doctorEndedBothCuts,
     },
   },
   {

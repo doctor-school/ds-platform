@@ -38,8 +38,8 @@
       "gap": null
     },
     "D9": {
-      "status": "PARTIAL",
-      "gap": 4119
+      "status": "FULL",
+      "gap": null
     },
     "D10": {
       "status": "PARTIAL",
@@ -1969,6 +1969,17 @@
         [
           "#3889 doctor event page ≡ event-page canvas · guest · 1440",
           "прошло · монтаж: the recording player has the canvas structure"
+        ]
+      ]
+    },
+    {
+      "rows": ["D9"],
+      "leg": "live/doctor/event-page",
+      "file": "event-page.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "014 EARS-6/8: a doctor returns to the past event, plays the montage and opens the original"
         ]
       ]
     },

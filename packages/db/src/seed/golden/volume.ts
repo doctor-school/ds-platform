@@ -1068,6 +1068,7 @@ function buildRecordings(
 ): NewEventRecording[] {
   const rows: NewEventRecording[] = [];
   const nowMs = now.getTime();
+  let supplementalRaw: NewEventRecording | undefined;
   let ordinal = GOLDEN_VOLUME_ORDINAL_BASE;
   let r = 0;
 
@@ -1088,15 +1089,20 @@ function buildRecordings(
     // it gets exactly one, published, and none of the variety below.
     const ended = plan.state === "ended";
     const draftEdited = plan.draftOnlyRecording === true;
+    // #4119 / 014 EARS-8: the public teaser and full original of the same
+    // BBM broadcast give the doctor stage journey two real playable cuts.
+    const stageBothCuts = plan.index === 150;
 
     const edited: NewEventRecording = {
       id: goldenUuid(GOLDEN_GROUP.eventRecordings, ordinal),
       eventId,
       kind: "edited",
       provider: "rutube",
-      embedRef: `golden-volume-recording-edited-${plan.index + 1}`,
+      embedRef: stageBothCuts
+        ? "1766d2bce7049428166252d02a41f8da"
+        : `golden-volume-recording-edited-${plan.index + 1}`,
       posterRef: `golden-volume-recording-poster-${plan.index + 1}`,
-      durationSec: 1800 + (r % 5) * 600,
+      durationSec: stageBothCuts ? 20 : 1800 + (r % 5) * 600,
       status: draftEdited ? "draft" : "published",
       version: 1,
       createdAt,
@@ -1106,20 +1112,29 @@ function buildRecordings(
     rows.push(edited);
     ordinal += 1;
 
-    if (ended && r % 3 === 0) {
-      rows.push({
+    const plannedRaw = ended && r % 3 === 0;
+    if (plannedRaw || stageBothCuts) {
+      const raw: NewEventRecording = {
         id: goldenUuid(GOLDEN_GROUP.eventRecordings, ordinal),
         eventId,
         kind: "raw",
         provider: "rutube",
-        embedRef: `golden-volume-recording-raw-${plan.index + 1}`,
-        durationSec: 2400 + (r % 4) * 600,
-        status: "draft",
+        embedRef: stageBothCuts
+          ? "a682bead10b37ce96beef4f3a6d59b08"
+          : `golden-volume-recording-raw-${plan.index + 1}`,
+        durationSec: stageBothCuts ? 6692 : 2400 + (r % 4) * 600,
+        status: stageBothCuts ? "published" : "draft",
         version: 1,
         createdAt,
-        updatedAt: createdAt,
-      });
-      ordinal += 1;
+        updatedAt: stageBothCuts ? publishedAt : createdAt,
+      };
+      if (stageBothCuts) raw.firstPublishedAt = publishedAt;
+      if (plannedRaw) {
+        rows.push(raw);
+        ordinal += 1;
+      } else {
+        supplementalRaw = raw;
+      }
     }
 
     if (ended && r % 4 === 0) {
@@ -1145,6 +1160,14 @@ function buildRecordings(
     r += 1;
   }
 
+  // On pins without a generated raw for #151, append it to keep the existing
+  // recording IDs in place.
+  if (supplementalRaw) {
+    rows.push({
+      ...supplementalRaw,
+      id: goldenUuid(GOLDEN_GROUP.eventRecordings, ordinal),
+    });
+  }
   return rows;
 }
 

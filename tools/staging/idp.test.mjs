@@ -1220,14 +1220,14 @@ test("a ready factor WITHOUT a stored secret is removed on the agent account onl
   );
 });
 
-test("an agent search that resolves to a golden subject id is refused before any factor call", async () => {
+test("an agent admin search that resolves to a golden subject is refused before any write", async () => {
   const h = agentHarness({
-    secrets: { DS_STAGE_AGENT_ADMIN_PASSWORD: "Stored-Pw-1!" },
     goldenSubjects: { DS_GOLDEN_SUB_ADMIN: "id-agent", DS_GOLDEN_SUB_DOCTOR_MFA: "id-mfa" },
     routes: agentRoutes({ factorReads: ["AUTH_FACTOR_STATE_READY"] }),
   });
   await assert.rejects(h.run(), /golden subject DS_GOLDEN_SUB_ADMIN/);
-  assert.ok(!h.calls.some((c) => /totp|auth_factors/.test(c.key)));
+  assert.equal(h.writes.length, 0);
+  assert.ok(!h.calls.some((call) => /\/password|\/totp|\/auth_factors|\/grants$|^(PUT|DELETE) /.test(call.key)));
 });
 
 test("the committee actor is granted only the committee and base guest roles", async () => {
@@ -1359,8 +1359,10 @@ test("a missing password is generated and persisted BEFORE the first IdP write",
   });
   await h.run();
   assert.equal(h.writes[0].DS_STAGE_AGENT_ADMIN_PASSWORD, "Generated-Pw-1!");
-  assert.equal(h.writes[0].afterCalls, 0);
-  const pw = h.calls.find((c) => c.key === "POST /v2/users/id-agent/password");
+  const passwordWrite = h.calls.findIndex((c) => c.key === "POST /v2/users/id-agent/password");
+  assert.ok(passwordWrite >= 0);
+  assert.equal(h.writes[0].afterCalls, passwordWrite);
+  const pw = h.calls[passwordWrite];
   assert.equal(pw.body.newPassword.password, "Generated-Pw-1!");
 });
 

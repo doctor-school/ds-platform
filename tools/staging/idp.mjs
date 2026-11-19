@@ -1384,13 +1384,18 @@ export async function convergeStageStaff({
       );
     }
   };
-  const validateCommitteeAccount = ({ userId, grant, username, resourceOwner, humanEmail }, { live }) => {
-    validateSubject(userId);
+  const validateAccount = (resolved, { live }) => {
+    validateSubject(resolved.userId);
+    if (!committee || !live) return;
     // User v2 ListUsers searches by email, which can match a different account.
-    if (live && (username !== account.username || humanEmail !== account.username || resourceOwner !== committeeOrg)) {
+    if (
+      resolved.username !== account.username ||
+      resolved.humanEmail !== account.username ||
+      resolved.resourceOwner !== committeeOrg
+    ) {
       throw new IdpError(`${account.username} did not resolve to the expected stage human — refusing to modify it`);
     }
-    if (grant?.roleKeys.some((role) => !account.roleKeys.includes(role))) {
+    if (resolved.grant?.roleKeys.some((role) => !account.roleKeys.includes(role))) {
       throw new IdpError(`${account.username} has an unexpected role — refusing to modify it`);
     }
   };
@@ -1403,13 +1408,11 @@ export async function convergeStageStaff({
     await writeSecrets(secrets);
     log(`  ↳ minted a password for ${account.username} (stored in ${account.secretsPath})`);
   };
-  if (!committee) await persistPassword();
-
   const subjects = await convergeGoldenIdentities({
     client,
     accounts: [account],
-    validateAccount: committee ? validateCommitteeAccount : undefined,
-    beforeWrite: committee ? persistPassword : undefined,
+    validateAccount,
+    beforeWrite: persistPassword,
     passwords: { [account.passwordEnvVar]: secrets[account.passwordEnvVar] },
     env: committee ? { ...env, IDP_ORG_ID: committeeOrg } : env,
     projectName,

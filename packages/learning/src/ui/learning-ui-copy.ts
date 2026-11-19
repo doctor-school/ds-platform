@@ -32,6 +32,11 @@ export const stepCountText = (n: number): string =>
   `${n} ${plural(n, "шаг", "шага", "шагов")}`;
 export const lessonCountText = (n: number): string =>
   `${n} ${plural(n, "урок", "урока", "уроков")}`;
+/** 023 EARS-5, EARS-11 — «36 академических часов», from the course row. */
+export const academicHoursText = (n: number): string =>
+  `${n} ${plural(n, "академический час", "академических часа", "академических часов")}`;
+export const courseCountText = (n: number): string =>
+  `${n} ${plural(n, "курс", "курса", "курсов")}`;
 
 const DATE = new Intl.DateTimeFormat("ru-RU", {
   day: "numeric",
@@ -138,8 +143,16 @@ export const LEARNING_UI_COPY = {
   /** Canvas `sec.meta`: «6 уроков и клуб · …» — the club named when the module has one. */
   moduleMeta: (lessons: number, club: boolean, min: number) =>
     `${lessonCountText(lessons)}${club ? " и клуб" : ""} · ${durationText(min)}`,
-  courseEyebrow: (modules: number, lessons: number) =>
-    `Курс · ${modules} ${plural(modules, "модуль", "модуля", "модулей")} · ${lessonCountText(lessons)}`,
+  /** Canvas v16 eyebrow; one module (023 EARS-12) — no module count. */
+  courseEyebrow: (modules: number, lessons: number, hours: number) =>
+    [
+      "Курс",
+      modules > 1 ? `${modules} ${plural(modules, "модуль", "модуля", "модулей")}` : null,
+      lessonCountText(lessons),
+      hours > 0 ? academicHoursText(hours) : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
   progress: (done: number, total: number, modulePosition?: number) =>
     `Пройдено ${done} ${plural(done, "урок", "урока", "уроков")} из ${total}` +
     (modulePosition ? ` · модуль ${modulePosition}` : ""),
@@ -216,4 +229,45 @@ export const LEARNING_UI_COPY = {
   retryTest: "Повторить тест",
   unavailableTest: "Новая попытка сейчас недоступна.",
   actionFailed: "Не получилось. Попробуйте ещё раз.",
+} as const;
+
+/** 023 EARS-5, EARS-10 — what a course leads to, by its document kind. */
+export const DOCUMENT_LABEL = {
+  certificate: "Сертификат",
+  "certificate-nmo": "Сертификат и НМО",
+} as const;
+
+/**
+ * 023 EARS-4…8, EARS-11, EARS-22, EARS-23 — the RU copy of the school screen and
+ * the course header. Every count and duration is a parameter from the read; no
+ * text names money, who pays, «проект», «сериал» or a rules preset.
+ */
+export const SCHOOL_UI_COPY = {
+  eyebrow: "Школа",
+  loading: "Школа загружается",
+  /** Canvas `heroBadge`: «3 курса · 18 уроков». */
+  counts: (courses: number, lessons: number) =>
+    `${courseCountText(courses)} · ${lessonCountText(lessons)}`,
+  expert: "Ведущий эксперт",
+  aboutHeading: "О школе",
+  coursesHeading: "Курсы школы",
+  courseKicker: "Курс",
+  lessonsWord: (n: number) => plural(n, "урок", "урока", "уроков"),
+  cta: {
+    done: "Открыть снова →",
+    started: "Продолжить →",
+    open: "Открыть путь курса →",
+  },
+  gate: {
+    title: "Начать урок — нужна регистрация. Вернём вас сюда.",
+    text: "Описание школы, курсы и их путь открыты. Достаточно почты с подтверждением — диплом на входе не нужен.",
+    action: "Зарегистрироваться",
+  },
+} as const;
+
+export const COURSE_HEADER_COPY = {
+  author: "Ведущий эксперт",
+  document: "Документ по итогам",
+  prerequisites: "Что нужно для документа",
+  rules: "Как проходить курс",
 } as const;

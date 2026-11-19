@@ -28,6 +28,20 @@ export const LEARNING_COPY_RU = {
     /** The sentence when every condition of the rule is switched off by its setting. */
     always: "он открыт",
   },
+  /**
+   * 023 EARS-11 — «what opens when» at the course scope: one sentence per
+   * unlock rule (and test-out), from the resolved values; never a preset name.
+   */
+  unlockSentence: {
+    immediate: "Все уроки открыты сразу",
+    afterPrevious: "Следующий урок открывается, когда пройден предыдущий",
+    fromDate: (date: string) => `Уроки открываются с ${date}`,
+    expression: (clause: string) => `Уроки открываются, когда ${clause}`,
+    testOut: "Урок можно засчитать досрочно, сдав его тест",
+  },
+  /** 023 EARS-13 — the certificate needs the whole course, from its completion rule. */
+  certificateSentence: (clause: string | null) =>
+    clause ? `Сертификат выдаётся за весь курс — когда ${clause}` : "Сертификат выдаётся за весь курс",
   and: " и ",
   or: " или ",
   /** EARS-14 — a locked node's reason in the doctor's words. */

@@ -178,8 +178,11 @@ export const LEARNING_CONDITION_CATALOG: Readonly<Record<LearningConditionType, 
       const lessons = ctx.index.modules.get(scope.id)?.lessons ?? [];
       return lessons.length > 0 && lessons.every((l) => ctx.done({ kind: "lesson", id: l.id }));
     },
-    phrase: (_node, scope) =>
-      scope.kind === "course" ? LEARNING_COPY_RU.phrase.modulesDone : LEARNING_COPY_RU.phrase.lessonsDone,
+    // 023 EARS-12 — a one-module course has no module level on any doctor screen.
+    phrase: (_node, scope, ctx) =>
+      scope.kind === "course" && ctx.index.course.modules.length > 1
+        ? LEARNING_COPY_RU.phrase.modulesDone
+        : LEARNING_COPY_RU.phrase.lessonsDone,
   },
 };
 

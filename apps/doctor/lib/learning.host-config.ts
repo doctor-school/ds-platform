@@ -4,6 +4,7 @@ import type { LearningHostConfig } from "@ds/learning/ui";
 export const DOCTOR_LEARNING = {
   routes: {
     courses: "/courses",
+    schools: "/schools",
     register: "/register",
   },
 } satisfies LearningHostConfig;

@@ -525,10 +525,25 @@ describe("024 EARS-22: the learning family lands and carries on the doctor host 
   });
 
   it.each([
+    ["the package fixture", DOCTOR_FIXTURE],
+    ["the shipped doctor host", DOCTOR_AUTH_FLOW],
+  ])("023 EARS-8: on %s the school screen lands and carries as itself, segment-bounded", (_label, host) => {
+    expect(resolveReturnLandingPath(host, "/schools/orto")).toBe("/schools/orto");
+    expect(resolveCarriedReturnTarget(host, "/schools/orto")).toBe("/schools/orto");
+    expect(isCoursesReturnTarget(host, "/schools/orto")).toBe(true);
+    expect(resolveReturnTargetPath("/schools/orto")).toBeNull();
+    expect(resolveCarriedReturnTarget(host, "/schoolsX/orto")).toBeNull();
+    expect(resolveCarriedReturnTarget(host, "//evil.example/schools/orto")).toBeNull();
+  });
+
+  it.each([
     ["the package fixture", ACADEMY_FIXTURE],
     ["the shipped Academy host", ACADEMY_AUTH_FLOW],
   ])("024 EARS-27: %s declares no learning family and admits none", (_label, host) => {
     expect("courses" in host.routes).toBe(false);
+    // 023 EARS-24 — nor the school screen.
+    expect("schools" in host.routes).toBe(false);
+    expect(resolveCarriedReturnTarget(host, "/schools/orto")).toBeNull();
     expect(resolveReturnLandingPath(host, "/courses/osnovy-prp")).toBeNull();
     expect(resolveCarriedReturnTarget(host, STEP)).toBeNull();
     expect(isCoursesReturnTarget(host, STEP)).toBe(false);

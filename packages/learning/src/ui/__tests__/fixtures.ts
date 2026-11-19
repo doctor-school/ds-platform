@@ -11,7 +11,7 @@ import type { LearningHostConfig } from "../host-config";
 // one module, three lessons — done · «Вы здесь» · locked behind the previous.
 
 export const CONFIG: LearningHostConfig = {
-  routes: { courses: "/courses", register: "/register" },
+  routes: { courses: "/courses", schools: "/schools", register: "/register" },
 };
 
 export const ID = {

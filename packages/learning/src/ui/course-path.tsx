@@ -24,6 +24,7 @@ import {
   registerHref,
   stepHref,
 } from "./host-config";
+import { CourseHeader } from "./course-header";
 import { NodeSummary, summaryAction } from "./node-summary";
 import { LEARNING_UI_COPY as C } from "./learning-ui-copy";
 import {
@@ -307,34 +308,7 @@ export function CoursePath({ courseSlug, config, initial, points }: CoursePathPr
 
   return (
     <div className="bg-background pb-16 text-foreground">
-      {path ? (
-        <section className="px-gutter pt-10">
-          <div className="mx-auto flex max-w-content flex-col gap-4">
-            <nav
-              aria-label={C.breadcrumbLabel}
-              className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
-            >
-              {[path.direction?.title, path.school.title]
-                .filter((t): t is string => Boolean(t))
-                .map((t) => (
-                  <span key={t} className="contents">
-                    <span>{t}</span>
-                    <span aria-hidden="true">›</span>
-                  </span>
-                ))}
-              <span aria-current="page" className="font-semibold text-foreground">
-                {path.course.title}
-              </span>
-            </nav>
-            <div className="text-eyebrow font-extrabold uppercase tracking-eyebrow text-primary-action">
-              {C.courseEyebrow(path.modules.length, view?.lessonCount ?? 0)}
-            </div>
-            <h1 className="m-0 text-panel-headline font-extrabold leading-display">
-              {path.course.title}
-            </h1>
-          </div>
-        </section>
-      ) : null}
+      {path ? <CourseHeader path={path} config={config} /> : null}
 
       {path?.signedIn && view && !view.empty && view.current ? (
         <section className="px-gutter pt-8">

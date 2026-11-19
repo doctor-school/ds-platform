@@ -104,6 +104,35 @@ export class LearningCourseEvaluator implements LearningEvalContext {
     return `${LEARNING_COPY_RU.sentencePrefix[ref.kind]} ${clause ?? LEARNING_COPY_RU.phrase.always}`;
   }
 
+  /**
+   * 023 EARS-11, EARS-13 — the course header's rules summary: what opens when
+   * (one sentence per unlock rule, plus test-out), what counts as done, and
+   * that the certificate needs the whole course. Built from resolved values
+   * only, so a preset's name never appears.
+   */
+  rulesSummary(ref: LearningItemRef): string {
+    const U = LEARNING_COPY_RU.unlockSentence;
+    const unlock = this.setting("unlock", ref);
+    const opens =
+      unlock.kind === "immediate"
+        ? U.immediate
+        : unlock.kind === "after-previous"
+          ? U.afterPrevious
+          : unlock.kind === "from-date"
+            ? U.fromDate(formatSummaryDate(unlock.instant))
+            : U.expression(this.clause(unlock.rule, ref) ?? LEARNING_COPY_RU.phrase.always);
+    const completion = this.clause(this.setting(`completion.${ref.kind}`, ref), ref);
+    return [
+      opens,
+      this.setting("testOut.allowed", ref) ? U.testOut : null,
+      this.sentence(ref),
+      LEARNING_COPY_RU.certificateSentence(completion),
+    ]
+      .filter((s): s is string => s !== null)
+      .map((s) => `${s}.`)
+      .join(" ");
+  }
+
   private clause(node: LearningRuleNode, scope: LearningItemRef): string | null {
     if ("all" in node || "any" in node) {
       const children = ("all" in node ? node.all : node.any)
@@ -253,4 +282,19 @@ export function evaluateCourse(input: LearningEvaluationInput): {
 } {
   const evaluator = new LearningCourseEvaluator(input);
   return { evaluator, evaluation: evaluator.evaluate() };
+}
+
+const SUMMARY_DATE = new Intl.DateTimeFormat("ru-RU", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "Europe/Moscow",
+});
+
+/** «1 декабря 2026» — Moscow calendar date, no «г.» abbreviation inside a sentence. */
+function formatSummaryDate(instant: string): string {
+  return SUMMARY_DATE.formatToParts(new Date(instant))
+    .filter((p) => p.type === "day" || p.type === "month" || p.type === "year")
+    .map((p) => p.value)
+    .join(" ");
 }

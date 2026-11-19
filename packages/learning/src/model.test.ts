@@ -325,3 +325,45 @@ describe("024 learning model", () => {
     for (const banned of ["бесплат", "оплат", "деньг", "рубл", "проект", "₽"]) expect(text).not.toContain(banned);
   });
 });
+
+describe("023 course rules summary", () => {
+  const course = { kind: "course", id: COURSE } as const;
+  const atCourse = (values: Partial<LearningSettingValues>, preset: string | null = null) =>
+    run([], layers({ scopeKind: "course", scopeId: COURSE, values, preset })).evaluator;
+
+  it("023 EARS-11: the course rules summary says what opens when — one sentence per unlock rule — and what counts as done", () => {
+    expect(run([]).evaluator.rulesSummary(course)).toBe(
+      "Следующий урок открывается, когда пройден предыдущий. Курс засчитывается, когда пройдены все модули. Сертификат выдаётся за весь курс — когда пройдены все модули.",
+    );
+    expect(atCourse({ unlock: { kind: "immediate" } }).rulesSummary(course)).toMatch(/^Все уроки открыты сразу\. Курс засчитывается/);
+    expect(atCourse({ unlock: { kind: "from-date", instant: "2026-12-01T09:00:00Z" } }).rulesSummary(course)).toMatch(
+      /^Уроки открываются с 1 декабря 2026\. Курс засчитывается/,
+    );
+    expect(
+      atCourse({ unlock: { kind: "expression", rule: { condition: "lessons-done" } } }).rulesSummary(course),
+    ).toMatch(/^Уроки открываются, когда пройдены все модули\. /);
+    expect(atCourse({ "testOut.allowed": true }).rulesSummary(course)).toContain(
+      "Следующий урок открывается, когда пройден предыдущий. Урок можно засчитать досрочно, сдав его тест. Курс засчитывается",
+    );
+  });
+
+  it("023 EARS-11: the summary never names a rules preset", () => {
+    for (const preset of LEARNING_PRESET_SEEDS) {
+      const summary = atCourse(preset.values, preset.name).rulesSummary(course);
+      for (const name of Object.values(LEARNING_PRESET_NAMES)) expect(summary).not.toContain(name);
+    }
+  });
+
+  it("023 EARS-12: a one-module course's sentences speak of its lessons, never of «все модули»", () => {
+    const single = { ...COURSE_MODEL, modules: [COURSE_MODEL.modules[0]!] };
+    const { evaluator } = evaluateCourse({ course: single, layers: layers(), facts: [], now: NOW });
+    const summary = evaluator.rulesSummary(course);
+    expect(summary).toContain("Курс засчитывается, когда пройдены все уроки.");
+    expect(summary).not.toMatch(/модул/);
+  });
+
+  it("023 EARS-13: the certificate sentence is built from the course's resolved completion rule", () => {
+    const marked = atCourse({ "completion.course": { condition: "manual-mark" } });
+    expect(marked.rulesSummary(course)).toMatch(/Сертификат выдаётся за весь курс — когда куратор отметил прохождение\.$/);
+  });
+});

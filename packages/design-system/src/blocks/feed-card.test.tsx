@@ -2,7 +2,12 @@ import { render, screen } from "@testing-library/react";
 import type { FeedCard as FeedCardData } from "@ds/schemas";
 import { describe, expect, it } from "vitest";
 
-import { FeedCard, FeedCardSkeleton } from "./feed-card";
+import {
+  FEED_CARD_COPY,
+  FeedCard,
+  FeedCardSkeleton,
+  type FeedContentCardData,
+} from "./feed-card";
 
 // 048 V-7 (feed-card half) — the shared feed card of
 // `design-source/unit-feed-card.dc.html`, slice 1 (EARS-13, EARS-19).
@@ -157,5 +162,52 @@ describe("FeedCard", () => {
       "true",
     );
     expect(container.querySelector("a")).toBeNull();
+  });
+});
+
+/**
+ * 023 EARS-5, EARS-22 — the doctor content card, variant Б (`kind: "content"`,
+ * `design-source/unit-content-card.dc.html`): a metric column, the kicker and
+ * scope, the title, the description, the facts line, the done mark, the
+ * partner mark and the call to action — one same-tab link.
+ */
+describe("FeedCard — doctor content card (variant Б)", () => {
+  const content = (over: Partial<FeedContentCardData> = {}): FeedContentCardData => ({
+    kind: "content",
+    href: "/courses/osnovy",
+    kicker: "Курс",
+    scope: "Школа ортобиологии",
+    title: "Ортобиология. Базовый",
+    description: "Три модуля по шесть уроков.",
+    metric: { value: "18", label: "уроков" },
+    facts: ["36 академических часов", "Сертификат НМО"],
+    state: null,
+    partner: null,
+    cta: "Открыть путь курса →",
+    ...over,
+  });
+
+  it("023 EARS-5: system shall render the course as one link with its metric, facts and call to action", () => {
+    render(<FeedCard card={content()} />);
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]?.getAttribute("href")).toBe("/courses/osnovy");
+    expect(links[0]?.textContent).toContain("18");
+    expect(links[0]?.textContent).toContain("уроков");
+    expect(links[0]?.textContent).toContain("36 академических часов · Сертификат НМО");
+    expect(links[0]?.textContent).toContain("Открыть путь курса →");
+    expect(screen.queryByText(FEED_CARD_COPY.done)).toBeNull();
+  });
+
+  it("023 EARS-5: a done course shows the done mark", () => {
+    render(<FeedCard card={content({ state: "done" })} />);
+    expect(screen.getByText(FEED_CARD_COPY.done)).toBeTruthy();
+  });
+
+  it("023 EARS-22: system shall show the partner mark only WHILE the course carries a partner", () => {
+    const { rerender } = render(<FeedCard card={content()} />);
+    expect(screen.queryByText(/Партнёрский материал/)).toBeNull();
+    rerender(<FeedCard card={content({ partner: { name: "Партнёр А" } })} />);
+    expect(screen.getByText("Партнёрский материал · Партнёр А")).toBeTruthy();
   });
 });

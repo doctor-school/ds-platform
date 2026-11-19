@@ -358,7 +358,7 @@ export class LearningDoctorService {
         state: this.stateOf(e, course.id),
         ...this.courseData(course, e.loaded.lessons.length, partners),
         // 023 EARS-11, EARS-13 — the 024 builder over resolved values; no preset name.
-        rulesSummary: e.evaluator.sentence({ kind: "course", id: course.id }),
+        rulesSummary: e.evaluator.rulesSummary({ kind: "course", id: course.id }),
       },
       direction: places.direction,
       school: places.school,

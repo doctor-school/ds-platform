@@ -2,6 +2,8 @@
 export type { LearningHostConfig } from "./host-config";
 export { CoursePath, type CoursePathProps } from "./course-path";
 export { StepScreen, type StepScreenProps } from "./step-screen";
-export { CoursePathPage, StepPage } from "./pages";
+export { CoursePathPage, SchoolPage, StepPage } from "./pages";
+export { SchoolScreen, SchoolScreenSkeleton, type SchoolScreenProps } from "./school-screen";
+export { CourseHeader } from "./course-header";
 export { buildPathView } from "./path-view";
-export { LEARNING_UI_COPY } from "./learning-ui-copy";
+export { LEARNING_UI_COPY, SCHOOL_UI_COPY } from "./learning-ui-copy";

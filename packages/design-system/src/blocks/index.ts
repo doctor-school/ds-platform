@@ -373,7 +373,7 @@ export {
   FEED_CARD_COPY,
   formatFeedCardDate,
 } from "./feed-card";
-export type { FeedCardProps } from "./feed-card";
+export type { FeedCardProps, FeedContentCardData } from "./feed-card";
 // 048 EARS-14 / EARS-15 / EARS-16 (#3516) — the Academy home rail
 // «Новости, блог и видео» (`design-source/academy-home.dc.html`).
 export { FeedRail, FEED_RAIL_COPY, FEED_RAIL_SIZES } from "./feed-rail";

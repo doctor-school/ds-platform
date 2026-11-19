@@ -83,6 +83,9 @@ export const DOCTOR_AUTH_FLOW = {
     // 024 EARS-22 — the learning path a gated guest returns to (the same
     // literal `lib/learning.host-config.ts` states; pinned by the test).
     courses: "/courses",
+    // 023 EARS-8 — the school screen a gated guest returns to (the same
+    // literal `lib/learning.host-config.ts` states; pinned by the test).
+    schools: "/schools",
   },
   // 021 EARS-3 / LD-4 — a remembered specialty lands on ITS 018 feed
   // (`/feed/<code>`, the route `app/(storefront)/feed/[specialty]` serves); no

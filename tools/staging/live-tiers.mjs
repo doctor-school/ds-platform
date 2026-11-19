@@ -90,6 +90,12 @@ export const GOLDEN_MATERIAL_SLUG = "golden-material-published";
  */
 export const GOLDEN_LEARNING_COURSE_SLUG = "golden-course-path";
 
+/**
+ * `golden.learning.school` — the published school of that course (023, #4017):
+ * the `live/doctor/learning` journey enters the course from its school screen.
+ */
+export const GOLDEN_LEARNING_SCHOOL_SLUG = "golden-school-cardiology";
+
 const URL_DOCTOR = "E2E_DOCTOR_URL";
 const URL_ACADEMY = "E2E_PORTAL_URL";
 const ACCOUNT = ["E2E_DOCTOR_EMAIL", "E2E_DOCTOR_PASSWORD"];
@@ -320,6 +326,7 @@ export const LIVE_TIERS = Object.freeze([
     // so the course's progress on a slot is never shared between runs.
     seededEnv: {
       E2E_LEARNING_COURSE_SLUG: GOLDEN_LEARNING_COURSE_SLUG,
+      E2E_LEARNING_SCHOOL_SLUG: GOLDEN_LEARNING_SCHOOL_SLUG,
     },
     gated: [
       {
@@ -329,6 +336,7 @@ export const LIVE_TIERS = Object.freeze([
           URL_ACADEMY,
           ...IDP_MAIL,
           "E2E_LEARNING_COURSE_SLUG",
+          "E2E_LEARNING_SCHOOL_SLUG",
         ],
       },
       {

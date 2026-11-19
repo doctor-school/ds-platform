@@ -29,7 +29,36 @@ export const FEED_CARD_COPY = {
   /** The news source line (canvas `SRC['академия'].name`). */
   academy: "Академия",
   partner: (name: string) => `Партнёрский материал · ${name}`,
+  /** The doctor content card's done mark (canvas `unit-content-card` «✓ Завершено»). */
+  done: "✓ Завершено",
 } as const;
+
+/**
+ * The doctor content card, variant Б «типографская» of
+ * `design-source/unit-content-card.dc.html` (018 #1497; first used by the 023
+ * school's course list): a metric column (a count and its label), the kicker
+ * and scope, the title, the description, a facts line, the done mark, the
+ * partner mark and the call to action. Every text is the caller's data or
+ * copy; the card prints no number of its own.
+ */
+export interface FeedContentCardData {
+  kind: "content";
+  href: string;
+  /** «Курс», «Урок» … — the content's kind word. */
+  kicker: string;
+  /** Where it belongs (the school); null for none. */
+  scope: string | null;
+  title: string;
+  description: string | null;
+  /** The metric column: a count and its word («18» «уроков»). */
+  metric: { value: string; label: string };
+  /** Extra facts in one line, joined with « · ». */
+  facts: readonly string[];
+  /** The viewer's state; null for a guest or not started. */
+  state: "done" | "started" | null;
+  partner: { name: string } | null;
+  cta: string;
+}
 
 const MSK = "Europe/Moscow";
 const MSK_DAY_MONTH = new Intl.DateTimeFormat("ru-RU", {
@@ -84,8 +113,8 @@ function FeedCardFrame({ children }: { children: React.ReactNode }) {
 const BODY = "flex h-66 flex-col gap-3 overflow-hidden p-4";
 
 export interface FeedCardProps {
-  /** One card of the public feed page (`FeedCardSchema`). */
-  card: FeedCardData;
+  /** One card of the public feed page (`FeedCardSchema`), or a doctor content card. */
+  card: FeedCardData | FeedContentCardData;
   /** «Now» for the year rule; injectable for tests. */
   now?: Date | undefined;
   /**
@@ -97,6 +126,9 @@ export interface FeedCardProps {
 }
 
 export function FeedCard({ card, now, logo, className }: FeedCardProps) {
+  if (card.kind === "content") {
+    return <FeedContentCard card={card} className={className} />;
+  }
   const isNews = card.kind === "news";
   const kindMark = FEED_CARD_COPY.kinds[card.kind];
   const sourceName = isNews ? FEED_CARD_COPY.academy : card.source.name;
@@ -185,6 +217,74 @@ export function FeedCard({ card, now, logo, className }: FeedCardProps) {
           </div>
         </div>
       </FeedCardFrame>
+    </a>
+  );
+}
+
+/** Variant Б: metric column beside the body from `sm`, stacked above it on a phone. */
+function FeedContentCard({
+  card,
+  className,
+}: {
+  card: FeedContentCardData;
+  className?: string | undefined;
+}) {
+  return (
+    <a
+      href={card.href}
+      data-feed-card="content"
+      className={cn(
+        "group flex flex-col border-2 border-border bg-card text-inherit no-underline shadow-lg transition duration-150 hover:translate-x-px hover:translate-y-px hover:shadow-md focus-visible:shadow-focus focus-visible:outline-none sm:flex-row",
+        card.state === "done" && "opacity-80",
+        className,
+      )}
+    >
+      <div className="flex items-baseline gap-3 bg-tint px-4 py-3 sm:w-36 sm:flex-none sm:flex-col sm:justify-center sm:gap-2 sm:border-r-2 sm:border-border sm:px-4 sm:py-5">
+        <span className="text-3xl leading-none font-extrabold tracking-tight text-tint-foreground tabular-nums">
+          {card.metric.value}
+        </span>
+        <span className="text-eyebrow font-extrabold tracking-eyebrow text-tint-foreground uppercase">
+          {card.metric.label}
+        </span>
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-3 p-4 sm:px-6 sm:py-5">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-extrabold tracking-eyebrow text-primary-action uppercase">
+            {card.kicker}
+          </span>
+          {card.scope ? (
+            <span className="font-bold text-faint">· {card.scope}</span>
+          ) : null}
+          {card.state === "done" ? (
+            <span className="ml-auto text-sm font-extrabold whitespace-nowrap text-success-text">
+              {FEED_CARD_COPY.done}
+            </span>
+          ) : null}
+        </div>
+        <div className="text-lg leading-title font-extrabold tracking-tight text-pretty text-foreground group-hover:text-primary-action">
+          {card.title}
+        </div>
+        {card.description ? (
+          <p className="m-0 max-w-prose text-sm text-muted-foreground">
+            {card.description}
+          </p>
+        ) : null}
+        {card.facts.length > 0 ? (
+          <div className="text-sm font-bold text-tint-foreground">
+            {card.facts.join(" · ")}
+          </div>
+        ) : null}
+        <div className="mt-auto flex flex-wrap items-center gap-3 pt-2">
+          {card.partner ? (
+            <span className="border border-hairline px-2 py-1 text-xs font-extrabold tracking-wide text-faint uppercase">
+              {FEED_CARD_COPY.partner(card.partner.name)}
+            </span>
+          ) : null}
+          <span className="ml-auto text-sm font-extrabold whitespace-nowrap text-primary-action underline decoration-2 underline-offset-4">
+            {card.cta}
+          </span>
+        </div>
+      </div>
     </a>
   );
 }

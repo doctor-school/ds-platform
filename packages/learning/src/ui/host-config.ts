@@ -8,6 +8,8 @@ export type LearningHostConfig = {
   routes: {
     /** The course route prefix: `${courses}/${slug}` and `${courses}/${slug}/steps/${id}`. */
     courses: string;
+    /** 023 EARS-4 — the school route prefix: `${schools}/${slug}`. */
+    schools: string;
     /** The sign-up door of the guest gate (it returns the doctor to `?from=`). */
     register: string;
   };
@@ -15,6 +17,10 @@ export type LearningHostConfig = {
 
 export const coursePathHref = (c: LearningHostConfig, slug: string): string =>
   `${c.routes.courses}/${encodeURIComponent(slug)}`;
+
+/** 023 EARS-4 — the school screen; the course header's breadcrumb leads back to it. */
+export const schoolHref = (c: LearningHostConfig, slug: string): string =>
+  `${c.routes.schools}/${encodeURIComponent(slug)}`;
 
 export const stepHref = (
   c: LearningHostConfig,

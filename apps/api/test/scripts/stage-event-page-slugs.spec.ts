@@ -5,6 +5,7 @@ interface LiveTiersModule {
   readonly GOLDEN_SLUGS: Readonly<Record<string, string>>;
   readonly GOLDEN_MATERIAL_SLUG: string;
   readonly GOLDEN_LEARNING_COURSE_SLUG: string;
+  readonly GOLDEN_LEARNING_SCHOOL_SLUG: string;
   readonly GOLDEN_EVENT_SLUGS: { readonly live: string };
   readonly LIVE_TIERS: readonly {
     readonly name: string;
@@ -19,6 +20,7 @@ const {
   GOLDEN_SLUGS,
   GOLDEN_MATERIAL_SLUG,
   GOLDEN_LEARNING_COURSE_SLUG,
+  GOLDEN_LEARNING_SCHOOL_SLUG,
   GOLDEN_EVENT_SLUGS,
   LIVE_TIERS,
 } = (await import(
@@ -168,6 +170,8 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
   // The seeded env names whose value addresses a learning course (024 EARS-14),
   // not an event.
   const LEARNING_ENV = new Set(["E2E_LEARNING_COURSE_SLUG"]);
+  // …and the one whose value addresses a learning school (023 EARS-4).
+  const SCHOOL_ENV = new Set(["E2E_LEARNING_SCHOOL_SLUG"]);
   // The seeded env names whose value addresses a specialty (018 EARS-8), proven
   // against the golden adjacency by `stage-feed-adjacent-env.spec.ts`.
   const SPECIALTY_ENV = new Set([
@@ -197,6 +201,7 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
         if (
           MATERIAL_ENV.has(name) ||
           LEARNING_ENV.has(name) ||
+          SCHOOL_ENV.has(name) ||
           SPECIALTY_ENV.has(name)
         )
           continue;
@@ -271,6 +276,23 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
     );
     expect(refs).toEqual([
       `live/doctor/learning E2E_LEARNING_COURSE_SLUG=${GOLDEN_LEARNING_COURSE_SLUG}`,
+    ]);
+  });
+
+  it("023 EARS-4: every seeded learning-school reference is the published golden school of the golden course", () => {
+    const ds = buildGoldenDataset(new Date("2026-10-22T09:00:00Z"), subjects);
+    const published = ds.learningSchools.filter((s) => s.state === "published");
+    expect(published.map((s) => s.slug)).toEqual([GOLDEN_LEARNING_SCHOOL_SLUG]);
+    const course = ds.learningCourses.find((c) => c.slug === GOLDEN_LEARNING_COURSE_SLUG);
+    expect(course?.schoolId).toBe(published[0]!.id);
+    expect(Object.values(slugs)).not.toContain(GOLDEN_LEARNING_SCHOOL_SLUG);
+    const refs = LIVE_TIERS.flatMap((tier) =>
+      Object.entries(tier.seededEnv ?? {})
+        .filter(([name]) => SCHOOL_ENV.has(name))
+        .map(([name, value]) => `${tier.name} ${name}=${value}`),
+    );
+    expect(refs).toEqual([
+      `live/doctor/learning E2E_LEARNING_SCHOOL_SLUG=${GOLDEN_LEARNING_SCHOOL_SLUG}`,
     ]);
   });
 });

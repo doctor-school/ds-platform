@@ -21,3 +21,20 @@ export function courseProgress(
   if (current !== undefined && current !== steps[0]?.id) return "started";
   return "not-started";
 }
+
+/**
+ * WHILE the course is `started`, the course-wide ordinal (from 1) of the
+ * lesson holding the doctor's current step — the card's «Продолжить — урок N
+ * →» (023-design §4); null otherwise.
+ */
+export function nextLessonNumber(
+  course: LearningCourseModel,
+  evaluation: Pick<LearningEvaluation, "states" | "current">,
+): number | null {
+  const lessonId = evaluation.current?.lessonId;
+  if (lessonId === undefined || courseProgress(course, evaluation) !== "started")
+    return null;
+  const lessons = course.modules.flatMap((m) => m.lessons);
+  const i = lessons.findIndex((l) => l.id === lessonId);
+  return i < 0 ? null : i + 1;
+}

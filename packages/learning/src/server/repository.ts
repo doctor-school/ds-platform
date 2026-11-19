@@ -58,10 +58,30 @@ export async function loadCourseTree(
   course: LearningCourseRow,
   doctorView: boolean,
 ): Promise<LoadedCourse> {
+  const [loaded] = await loadCourseTrees(db, [course], doctorView);
+  return loaded!;
+}
+
+/**
+ * The trees of several courses in three reads (modules, lessons, steps), in
+ * the order given — the 023 school read loads all its courses at once
+ * (023-design §4 «One batched read»).
+ */
+export async function loadCourseTrees(
+  db: Handle,
+  courses: readonly LearningCourseRow[],
+  doctorView: boolean,
+): Promise<LoadedCourse[]> {
+  if (courses.length === 0) return [];
   const modules = await db
     .select()
     .from(learningModules)
-    .where(eq(learningModules.courseId, course.id))
+    .where(
+      inArray(
+        learningModules.courseId,
+        courses.map((c) => c.id),
+      ),
+    )
     .orderBy(asc(learningModules.position), asc(learningModules.createdAt));
   const moduleIds = modules.map((m) => m.id);
   const lessons =
@@ -95,24 +115,37 @@ export async function loadCourseTree(
           )
           .orderBy(asc(learningSteps.position), asc(learningSteps.createdAt));
 
-  const model: LearningCourseModel = {
-    id: course.id,
-    schoolId: course.schoolId,
-    modules: modules
-      .map((m) => ({
-        id: m.id,
-        title: m.title,
-        lessons: lessons
-          .filter((l) => l.moduleId === m.id)
-          .map((l) => ({
-            id: l.id,
-            title: l.title,
-            steps: steps.filter((s) => s.lessonId === l.id).map(toStepModel),
-          })),
-      }))
-      .filter((m) => !doctorView || m.lessons.length > 0),
-  };
-  return { row: course, model, modules, lessons, steps };
+  return courses.map((course) => {
+    const ownModules = modules.filter((m) => m.courseId === course.id);
+    const ownModuleIds = new Set(ownModules.map((m) => m.id));
+    const ownLessons = lessons.filter((l) => ownModuleIds.has(l.moduleId));
+    const ownLessonIds = new Set(ownLessons.map((l) => l.id));
+    const ownSteps = steps.filter((s) => ownLessonIds.has(s.lessonId));
+    const model: LearningCourseModel = {
+      id: course.id,
+      schoolId: course.schoolId,
+      modules: ownModules
+        .map((m) => ({
+          id: m.id,
+          title: m.title,
+          lessons: ownLessons
+            .filter((l) => l.moduleId === m.id)
+            .map((l) => ({
+              id: l.id,
+              title: l.title,
+              steps: ownSteps.filter((s) => s.lessonId === l.id).map(toStepModel),
+            })),
+        }))
+        .filter((m) => !doctorView || m.lessons.length > 0),
+    };
+    return {
+      row: course,
+      model,
+      modules: ownModules,
+      lessons: ownLessons,
+      steps: ownSteps,
+    };
+  });
 }
 
 export function toStepModel(s: LearningStepRow): LearningStepModel {
@@ -194,13 +227,32 @@ export async function loadFacts(
   personId: string,
   loaded: LoadedCourse,
 ): Promise<LearningFactModel[]> {
-  const stepIds = loaded.steps.map((s) => s.id);
-  const itemIds = [
-    loaded.row.id,
-    ...loaded.modules.map((m) => m.id),
-    ...loaded.lessons.map((l) => l.id),
-    ...stepIds,
-  ];
+  const [facts] = await loadFactsOfCourses(db, personId, [loaded]);
+  return facts!;
+}
+
+/**
+ * A doctor's facts on several courses in one read, split per course in the
+ * order given (023-design §4 «One batched read»).
+ */
+export async function loadFactsOfCourses(
+  db: Handle,
+  personId: string,
+  courses: readonly LoadedCourse[],
+): Promise<LearningFactModel[][]> {
+  if (courses.length === 0) return [];
+  const owner = new Map<string, number>();
+  courses.forEach((loaded, i) => {
+    for (const id of [
+      loaded.row.id,
+      ...loaded.modules.map((m) => m.id),
+      ...loaded.lessons.map((l) => l.id),
+      ...loaded.steps.map((s) => s.id),
+    ])
+      owner.set(id, i);
+  });
+  const stepIds = courses.flatMap((c) => c.steps.map((s) => s.id));
+  const itemIds = [...owner.keys()];
   const rows = await db
     .select({
       kind: learningFacts.kind,
@@ -220,41 +272,53 @@ export async function loadFacts(
         ),
       ),
     );
-  const facts: LearningFactModel[] = [];
+  const perCourse: LearningFactModel[][] = courses.map(() => []);
   for (const r of rows) {
-    const data = (r.data ?? {}) as Record<string, unknown>;
-    switch (r.kind) {
-      case "position":
-        if (r.stepId)
-          facts.push({
+    const i =
+      (r.stepId !== null ? owner.get(r.stepId) : undefined) ??
+      (r.itemRef !== null ? owner.get(r.itemRef) : undefined);
+    if (i === undefined) continue;
+    const fact = toFact(r);
+    if (fact) perCourse[i]!.push(fact);
+  }
+  return perCourse;
+}
+
+function toFact(r: {
+  kind: string;
+  stepId: string | null;
+  itemRef: string | null;
+  data: unknown;
+}): LearningFactModel | null {
+  const data = (r.data ?? {}) as Record<string, unknown>;
+  switch (r.kind) {
+    case "position":
+      return r.stepId
+        ? {
             kind: "position",
             stepId: r.stepId,
             positionSec: Number(data["positionSec"] ?? 0),
-          });
-        break;
-      case "opened":
-        if (r.stepId) facts.push({ kind: "opened", stepId: r.stepId });
-        break;
-      case "attempt-submitted":
-        if (r.stepId)
-          facts.push({
+          }
+        : null;
+    case "opened":
+      return r.stepId ? { kind: "opened", stepId: r.stepId } : null;
+    case "attempt-submitted":
+      return r.stepId
+        ? {
             kind: "attempt-submitted",
             stepId: r.stepId,
             score: Number(data["score"] ?? 0),
-          });
-        break;
-      case "manual-mark":
-      case "completion-kept":
-      case "test-out-passed":
-        if (r.itemRef) facts.push({ kind: r.kind, itemId: r.itemRef });
-        break;
-      case "club-attended":
-        if (r.itemRef)
-          facts.push({ kind: "club-attended", moduleId: r.itemRef });
-        break;
-    }
+          }
+        : null;
+    case "manual-mark":
+    case "completion-kept":
+    case "test-out-passed":
+      return r.itemRef ? { kind: r.kind, itemId: r.itemRef } : null;
+    case "club-attended":
+      return r.itemRef ? { kind: "club-attended", moduleId: r.itemRef } : null;
+    default:
+      return null;
   }
-  return facts;
 }
 
 /** EARS-13 — each test's live question count, in one read (tests with none are absent). */

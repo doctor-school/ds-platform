@@ -173,6 +173,12 @@ export const LearningSchoolCourseSchema = z.strictObject({
   partner: LearningCoursePartnerSchema.nullable(),
   /** The signed-in doctor's state of the course; null for a guest. */
   state: LearningCourseProgressSchema.nullable(),
+  /**
+   * WHILE `state` is `started`, the course-wide ordinal (from 1) of the lesson
+   * holding the doctor's current step — the card's «Продолжить — урок N →»;
+   * null otherwise (023-design §4). No percent is sent.
+   */
+  nextLessonNumber: z.number().int().positive().nullable(),
 });
 export type LearningSchoolCourse = z.infer<typeof LearningSchoolCourseSchema>;
 

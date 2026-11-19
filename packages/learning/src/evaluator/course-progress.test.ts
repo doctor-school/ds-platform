@@ -1,7 +1,7 @@
 import type { LearningNodeState } from "@ds/schemas";
 import { describe, expect, it } from "vitest";
 import type { LearningCourseModel } from "../model.js";
-import { courseProgress } from "./course-progress.js";
+import { courseProgress, nextLessonNumber } from "./course-progress.js";
 
 // 023 EARS-3 (023-design §4) — the per-course state on a school card:
 // `done` = the 024 evaluator's course status; `started` = any done step, or a
@@ -95,5 +95,44 @@ describe("023 course progress on a school card", () => {
         evaluation({ course: "open" }, null),
       ),
     ).toBe("not-started");
+  });
+});
+
+describe("023 the next lesson number on a started school card", () => {
+  const twoModules: LearningCourseModel = {
+    ...course,
+    modules: [
+      ...course.modules,
+      {
+        id: "m2",
+        title: "m2",
+        lessons: [{ id: "l3", title: "l3", steps: [step("s4")] }],
+      },
+    ],
+  };
+  const at = (lessonId: string, stepId: string) => ({
+    states: new Map<string, LearningNodeState>([
+      ["s1", { status: "done" }],
+    ]),
+    current: { stepId, lessonId },
+  });
+
+  it("023 EARS-5: a started course names the course-wide ordinal of the lesson holding the current step", () => {
+    expect(nextLessonNumber(twoModules, at("l1", "s2"))).toBe(1);
+    expect(nextLessonNumber(twoModules, at("l2", "s3"))).toBe(2);
+    // Numbering runs across modules: the first lesson of module 2 is lesson 3.
+    expect(nextLessonNumber(twoModules, at("l3", "s4"))).toBe(3);
+  });
+
+  it("023 EARS-5: a course that is not started, or done, has no next lesson number", () => {
+    expect(
+      nextLessonNumber(twoModules, { states: new Map(), current: { stepId: "s1", lessonId: "l1" } }),
+    ).toBeNull();
+    expect(
+      nextLessonNumber(twoModules, {
+        states: new Map([["course", { status: "done" } as LearningNodeState]]),
+        current: null,
+      }),
+    ).toBeNull();
   });
 });

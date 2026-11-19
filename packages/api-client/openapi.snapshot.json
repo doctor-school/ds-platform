@@ -6878,6 +6878,18 @@
                   "minimum": -9007199254740991,
                   "type": "integer"
                 },
+                "nextLessonNumber": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "partner": {
                   "anyOf": [
                     {
@@ -6922,7 +6934,8 @@
                 "academicHours",
                 "document",
                 "partner",
-                "state"
+                "state",
+                "nextLessonNumber"
               ],
               "type": "object"
             },

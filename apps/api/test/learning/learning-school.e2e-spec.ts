@@ -47,6 +47,7 @@ type SchoolRead = {
     document: { kind: string; prerequisites: string };
     partner: { name: string } | null;
     state: "not-started" | "started" | "done" | null;
+    nextLessonNumber: number | null;
   }[];
 };
 
@@ -211,6 +212,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         academicHours: 18,
         document: { kind: "certificate-nmo", prerequisites: "Подтверждённые документы" },
         state: null,
+        nextLessonNumber: null,
       });
       // EARS-22 — the 032 name, only WHILE the organisation shows it publicly.
       expect(r.body.courses[0]!.partner).toEqual({ name: partnerName });
@@ -247,6 +249,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       h.advanceClock(VIDEO_SEC / 2);
       expect((await position(VIDEO_SEC)).status).toBe(200);
       expect(await states()).toEqual(["started", "not-started"]);
+      // 023-design §4 — a started card names the doctor's next lesson, never a percent.
+      const started = (await read(schoolSlug, d.headers)).body.courses;
+      expect(started.map((c) => c.nextLessonNumber)).toEqual([1, null]);
+      expect(Object.keys(started[0]!)).not.toContain("percent");
 
       expect(
         (await fact({ stepId: first.downloadId, kind: "opened", data: {} })).status,
@@ -267,6 +273,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(submitted.status, JSON.stringify(submitted.body)).toBe(200);
       expect(await states()).toEqual(["done", "not-started"]);
+      expect(
+        (await read(schoolSlug, d.headers)).body.courses.map((c) => c.nextLessonNumber),
+      ).toEqual([null, null]);
     });
 
     it("023 EARS-11: the course read carries the course data, the school breadcrumb and the expert", async () => {

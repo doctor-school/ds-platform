@@ -36,7 +36,7 @@ import {
   type LearningCourseEvaluator,
   type LearningEvaluation,
 } from "../evaluator/evaluator.js";
-import { courseProgress } from "../evaluator/course-progress.js";
+import { courseProgress, nextLessonNumber } from "../evaluator/course-progress.js";
 import {
   LearningServerError,
   SERVER_EVENT_PREFIX,
@@ -55,7 +55,9 @@ import {
   courseOfLesson,
   courseOfStep,
   loadCourseTree,
+  loadCourseTrees,
   loadFacts,
+  loadFactsOfCourses,
   loadLayersFor,
   loadQuestions,
   publicPartnerNames,
@@ -268,17 +270,37 @@ export class LearningDoctorService {
       db,
       rows.flatMap((r) => (r.partnerOrganisationId ? [r.partnerOrganisationId] : [])),
     );
-    const courses = [];
-    for (const row of rows) {
-      const e = await this.evaluate(db, row, personId);
-      courses.push({
+    // 023-design §4 «One batched read»: every course's tree, the rule layers
+    // of all their items and the doctor's facts are loaded once; each course
+    // is then evaluated in memory.
+    const trees = await loadCourseTrees(db, rows, true);
+    const scopes = new Map(
+      trees.flatMap(scopesOf).map((sc) => [`${sc.kind}:${sc.id}`, sc] as const),
+    );
+    const layers = await loadLayersFor(db, [...scopes.values()]);
+    const facts = personId
+      ? await loadFactsOfCourses(db, personId, trees)
+      : trees.map(() => []);
+    const now = this.now();
+    const courses = trees.map((loaded, i) => {
+      const { row } = loaded;
+      const { evaluation } = evaluateCourse({
+        course: loaded.model,
+        layers,
+        facts: facts[i]!,
+        now,
+      });
+      return {
         id: row.id,
         slug: row.slug,
         title: row.title,
-        ...this.courseData(row, e.loaded.lessons.length, partners),
-        state: personId ? courseProgress(e.loaded.model, e.evaluation) : null,
-      });
-    }
+        ...this.courseData(row, loaded.lessons.length, partners),
+        state: personId ? courseProgress(loaded.model, evaluation) : null,
+        nextLessonNumber: personId
+          ? nextLessonNumber(loaded.model, evaluation)
+          : null,
+      };
+    });
     return {
       school: {
         id: school.id,

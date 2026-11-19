@@ -4992,6 +4992,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 lessonCount: number;
+                nextLessonNumber: number | null;
                 partner: {
                     name: string;
                 } | null;

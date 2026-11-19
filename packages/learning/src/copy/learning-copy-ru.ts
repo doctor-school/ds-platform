@@ -29,8 +29,9 @@ export const LEARNING_COPY_RU = {
     always: "он открыт",
   },
   /**
-   * 023 EARS-11 — «what opens when» at the course scope: one sentence per
-   * unlock rule (and test-out), from the resolved values; never a preset name.
+   * 023 EARS-11 — «what opens when» on the course header: one sentence per
+   * unlock rule (and test-out), the expression clause phrased at the lesson
+   * scope, from the resolved values; never a preset name.
    */
   unlockSentence: {
     immediate: "Все уроки открыты сразу",
@@ -39,9 +40,11 @@ export const LEARNING_COPY_RU = {
     expression: (clause: string) => `Уроки открываются, когда ${clause}`,
     testOut: "Урок можно засчитать досрочно, сдав его тест",
   },
-  /** 023 EARS-13 — the certificate needs the whole course, from its completion rule. */
-  certificateSentence: (clause: string | null) =>
-    clause ? `Сертификат выдаётся за весь курс — когда ${clause}` : "Сертификат выдаётся за весь курс",
+  /**
+   * 023 EARS-13 — the certificate needs the whole course; the completion
+   * clause it rests on is the done sentence just before it, not repeated.
+   */
+  certificateSentence: "Сертификат выдаётся за весь курс",
   and: " и ",
   or: " или ",
   /** EARS-14 — a locked node's reason in the doctor's words. */

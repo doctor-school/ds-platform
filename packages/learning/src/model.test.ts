@@ -333,15 +333,21 @@ describe("023 course rules summary", () => {
 
   it("023 EARS-11: the course rules summary says what opens when — one sentence per unlock rule — and what counts as done", () => {
     expect(run([]).evaluator.rulesSummary(course)).toBe(
-      "Следующий урок открывается, когда пройден предыдущий. Курс засчитывается, когда пройдены все модули. Сертификат выдаётся за весь курс — когда пройдены все модули.",
+      "Следующий урок открывается, когда пройден предыдущий. Курс засчитывается, когда пройдены все модули. Сертификат выдаётся за весь курс.",
     );
     expect(atCourse({ unlock: { kind: "immediate" } }).rulesSummary(course)).toMatch(/^Все уроки открыты сразу\. Курс засчитывается/);
     expect(atCourse({ unlock: { kind: "from-date", instant: "2026-12-01T09:00:00Z" } }).rulesSummary(course)).toMatch(
       /^Уроки открываются с 1 декабря 2026\. Курс засчитывается/,
     );
+    // The unlock clause speaks at the lesson scope — the item it opens — never «все модули».
+    const byExpression = atCourse({ unlock: { kind: "expression", rule: { condition: "lessons-done" } } }).rulesSummary(
+      course,
+    );
+    expect(byExpression).toMatch(/^Уроки открываются, когда пройдены все уроки\. /);
+    expect(byExpression).not.toContain("Уроки открываются, когда пройдены все модули");
     expect(
-      atCourse({ unlock: { kind: "expression", rule: { condition: "lessons-done" } } }).rulesSummary(course),
-    ).toMatch(/^Уроки открываются, когда пройдены все модули\. /);
+      atCourse({ unlock: { kind: "expression", rule: { condition: "manual-mark" } } }).rulesSummary(course),
+    ).toMatch(/^Уроки открываются, когда куратор отметил прохождение\. /);
     expect(atCourse({ "testOut.allowed": true }).rulesSummary(course)).toContain(
       "Следующий урок открывается, когда пройден предыдущий. Урок можно засчитать досрочно, сдав его тест. Курс засчитывается",
     );
@@ -364,6 +370,23 @@ describe("023 course rules summary", () => {
 
   it("023 EARS-13: the certificate sentence is built from the course's resolved completion rule", () => {
     const marked = atCourse({ "completion.course": { condition: "manual-mark" } });
-    expect(marked.rulesSummary(course)).toMatch(/Сертификат выдаётся за весь курс — когда куратор отметил прохождение\.$/);
+    // The completion clause is said once — in the done sentence — never repeated in the certificate one.
+    expect(marked.rulesSummary(course)).toMatch(
+      /Курс засчитывается, когда куратор отметил прохождение\. Сертификат выдаётся за весь курс\.$/,
+    );
+    expect(marked.rulesSummary(course).match(/куратор отметил прохождение/g)).toHaveLength(1);
+  });
+
+  it("023 EARS-13: WHILE the rules open every lesson immediately, a doctor opens any lesson directly and the earlier lessons stay not done", () => {
+    const open = LEARNING_PRESET_SEEDS.find((p) => p.name === LEARNING_PRESET_NAMES.open)!;
+    const l = layers({ scopeKind: "course", scopeId: COURSE, values: open.values, preset: open.name });
+    // No fact at all: the last lesson is reachable straight away.
+    const fresh = run([], l).evaluation;
+    for (const lesson of [L1, L2, L3]) expect(fresh.states.get(lesson)?.status).not.toBe("locked");
+    for (const s of [S_VIDEO, S2_VIDEO, S3_VIDEO]) expect(fresh.states.get(s)?.status).not.toBe("locked");
+    // The doctor works in lesson 3 only: lessons 1 and 2 stay not done on the path.
+    const jumped = run([{ kind: "position", stepId: S3_VIDEO, positionSec: 600 }], l).evaluation;
+    expect(jumped.states.get(S3_VIDEO)?.status).toBe("done");
+    for (const earlier of [L1, L2, S_VIDEO, S2_VIDEO]) expect(jumped.states.get(earlier)?.status).not.toBe("done");
   });
 });

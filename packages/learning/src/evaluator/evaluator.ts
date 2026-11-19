@@ -120,17 +120,29 @@ export class LearningCourseEvaluator implements LearningEvalContext {
           ? U.afterPrevious
           : unlock.kind === "from-date"
             ? U.fromDate(formatSummaryDate(unlock.instant))
-            : U.expression(this.clause(unlock.rule, ref) ?? LEARNING_COPY_RU.phrase.always);
-    const completion = this.clause(this.setting(`completion.${ref.kind}`, ref), ref);
+            : U.expression(this.clause(unlock.rule, this.unlockScope(ref)) ?? LEARNING_COPY_RU.phrase.always);
     return [
       opens,
       this.setting("testOut.allowed", ref) ? U.testOut : null,
+      // The done sentence carries the completion clause; the certificate
+      // sentence does not repeat it.
       this.sentence(ref),
-      LEARNING_COPY_RU.certificateSentence(completion),
+      LEARNING_COPY_RU.certificateSentence,
     ]
       .filter((s): s is string => s !== null)
       .map((s) => `${s}.`)
       .join(" ");
+  }
+
+  /**
+   * The scope an unlock clause speaks at: the items it opens are the lessons,
+   * so a course-scope summary phrases it at the course's first lesson (never
+   * «пройдены все модули» for a lesson's unlock); the item itself otherwise.
+   */
+  private unlockScope(ref: LearningItemRef): LearningItemRef {
+    if (ref.kind !== "course") return ref;
+    const first = this.index.course.modules[0]?.lessons[0];
+    return first ? { kind: "lesson", id: first.id } : ref;
   }
 
   private clause(node: LearningRuleNode, scope: LearningItemRef): string | null {

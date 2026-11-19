@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { LearningSchoolCourse, LearningSchoolRead } from "@ds/schemas";
 
@@ -27,6 +27,7 @@ function course(
     document: { kind: "certificate", prerequisites: "" },
     partner: null,
     state: null,
+    nextLessonNumber: null,
     ...over,
   };
 }
@@ -158,7 +159,7 @@ describe("023 — the school screen", () => {
         read={school({
           courses: [
             course(1, { state: "done" }),
-            course(2, { state: "started" }),
+            course(2, { state: "started", nextLessonNumber: 3 }),
           ],
         })}
       />,
@@ -167,8 +168,11 @@ describe("023 — the school screen", () => {
       .getAllByRole("link")
       .filter((a) => a.getAttribute("href")?.startsWith("/courses/"));
     expect(done).toHaveTextContent("✓ Завершено");
-    expect(done).toHaveTextContent("Открыть снова →");
-    expect(started).toHaveTextContent("Продолжить →");
+    // Canvas `doctor-school.dc.html`: a done card opens the course path again.
+    expect(done).toHaveTextContent("Открыть путь курса →");
+    // A started card names the doctor's next lesson; never a percent (023-design §4).
+    expect(started).toHaveTextContent("Продолжить — урок 3 →");
+    expect(started.textContent).not.toMatch(/%/);
   });
 
   it("023 EARS-22: the partner mark appears only on a course with a partner", () => {
@@ -235,5 +239,90 @@ describe("023 — the school screen", () => {
     ]) {
       expect(text).not.toContain(banned);
     }
+  });
+
+  describe("023 EARS-5: more than six courses", () => {
+    const many = (n: number, over: (i: number) => Partial<LearningSchoolCourse> = () => ({})) =>
+      Array.from({ length: n }, (_, i) =>
+        course(i + 1, { title: i === 4 ? "Тендинопатии" : `Курс номер ${i + 1}`, ...over(i + 1) }),
+      );
+    const rows = (container: HTMLElement) =>
+      [...container.querySelectorAll('[data-feed-card="content-row"]')] as HTMLAnchorElement[];
+    const cards = (container: HTMLElement) =>
+      [...container.querySelectorAll('[data-feed-card="content"]')] as HTMLAnchorElement[];
+
+    it("023 EARS-5: at six courses every course is a card and there is no search", () => {
+      const { container } = render(<SchoolScreen config={CONFIG} read={school({ courses: many(6) })} />);
+      expect(cards(container)).toHaveLength(6);
+      expect(rows(container)).toHaveLength(0);
+      expect(screen.queryByRole("searchbox", { name: "Найти курс" })).toBeNull();
+    });
+
+    it("023 EARS-5: a guest sees no «Вы учитесь» — every course is a row in school order, ten at a time", () => {
+      const { container } = render(
+        <SchoolScreen config={CONFIG} read={school({ signedIn: false, courses: many(22) })} />,
+      );
+      expect(screen.queryByText("Вы учитесь")).toBeNull();
+      expect(cards(container)).toHaveLength(0);
+      expect(screen.getByText("Все курсы школы · 22")).toBeInTheDocument();
+      expect(rows(container).map((a) => a.getAttribute("href"))).toEqual(
+        Array.from({ length: 10 }, (_, i) => `/courses/course-${i + 1}`),
+      );
+      expect(rows(container)[0]).toHaveTextContent("Курс");
+      expect(rows(container)[0]).toHaveTextContent("5 уроков");
+    });
+
+    it("023 EARS-5: «Показать ещё 10» reveals the next ten rows until none is left", () => {
+      const { container } = render(<SchoolScreen config={CONFIG} read={school({ courses: many(22) })} />);
+      fireEvent.click(screen.getByRole("button", { name: "Показать ещё 10 · осталось 12" }));
+      expect(rows(container)).toHaveLength(20);
+      fireEvent.click(screen.getByRole("button", { name: "Показать ещё 2 · осталось 2" }));
+      expect(rows(container)).toHaveLength(22);
+      expect(screen.queryByRole("button", { name: /Показать ещё/ })).toBeNull();
+    });
+
+    it("023 EARS-5: the doctor's started and done courses are cards under «Вы учитесь», the rest are rows", () => {
+      const { container } = render(
+        <SchoolScreen
+          config={CONFIG}
+          read={school({
+            courses: many(22, (i) =>
+              i === 2 ? { state: "started", nextLessonNumber: 8 } : i === 6 ? { state: "done" } : { state: "not-started" },
+            ),
+          })}
+        />,
+      );
+      expect(screen.getByRole("heading", { level: 3, name: "Вы учитесь" })).toBeInTheDocument();
+      const mine = cards(container);
+      expect(mine.map((a) => a.getAttribute("href"))).toEqual(["/courses/course-2", "/courses/course-6"]);
+      expect(mine[0]).toHaveTextContent("Продолжить — урок 8 →");
+      expect(mine[1]).toHaveTextContent("Открыть путь курса →");
+      expect(screen.getByText("Остальные курсы школы · 20")).toBeInTheDocument();
+      const hrefs = rows(container).map((a) => a.getAttribute("href"));
+      expect(hrefs).toHaveLength(10);
+      expect(hrefs).not.toContain("/courses/course-2");
+      expect(hrefs).not.toContain("/courses/course-6");
+    });
+
+    it("023 EARS-5: «Найти курс» filters the rows by title over the whole list", () => {
+      const { container } = render(<SchoolScreen config={CONFIG} read={school({ courses: many(62) })} />);
+      const search = screen.getByRole("searchbox", { name: "Найти курс" });
+      fireEvent.change(search, { target: { value: "тенд" } });
+      expect(rows(container).map((a) => a.textContent)).toEqual([expect.stringContaining("Тендинопатии")]);
+      expect(screen.getByText("Все курсы школы · 1")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Показать ещё/ })).toBeNull();
+      // A title past the first ten rows is found too: the search runs over the whole list.
+      fireEvent.change(search, { target: { value: "номер 61" } });
+      expect(rows(container).map((a) => a.getAttribute("href"))).toEqual(["/courses/course-61"]);
+    });
+
+    it("023 EARS-5: a search with no match names the query", () => {
+      const { container } = render(<SchoolScreen config={CONFIG} read={school({ courses: many(22) })} />);
+      fireEvent.change(screen.getByRole("searchbox", { name: "Найти курс" }), { target: { value: "гастро" } });
+      expect(rows(container)).toHaveLength(0);
+      expect(
+        screen.getByText("По запросу «гастро» курсов в этой школе нет. Попробуйте другое слово."),
+      ).toBeInTheDocument();
+    });
   });
 });

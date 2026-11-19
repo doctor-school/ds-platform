@@ -254,9 +254,23 @@ export const SCHOOL_UI_COPY = {
   courseKicker: "Курс",
   lessonsWord: (n: number) => plural(n, "урок", "урока", "уроков"),
   cta: {
-    done: "Открыть снова →",
-    started: "Продолжить →",
+    /** Canvas `doctor-school.dc.html`: a done card opens the course path. */
+    done: "Открыть путь курса →",
+    /** The doctor's next lesson (023-design §4); never a percent. */
+    started: (lesson: number | null) =>
+      lesson === null ? "Продолжить →" : `Продолжить — урок ${lesson} →`,
     open: "Открыть путь курса →",
+  },
+  /** 023 EARS-5 — more than six courses (canvas «много курсов»). */
+  list: {
+    mine: "Вы учитесь",
+    all: (n: number) => `Все курсы школы · ${n}`,
+    rest: (n: number) => `Остальные курсы школы · ${n}`,
+    search: "Найти курс",
+    searchPlaceholder: "Название или тема",
+    noMatch: (q: string) =>
+      `По запросу «${q}» курсов в этой школе нет. Попробуйте другое слово.`,
+    more: (next: number, left: number) => `Показать ещё ${next} · осталось ${left}`,
   },
   gate: {
     title: "Начать урок — нужна регистрация. Вернём вас сюда.",

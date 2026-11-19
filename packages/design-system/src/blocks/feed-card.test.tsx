@@ -7,6 +7,7 @@ import {
   FeedCard,
   FeedCardSkeleton,
   type FeedContentCardData,
+  type FeedContentRowData,
 } from "./feed-card";
 
 // 048 V-7 (feed-card half) — the shared feed card of
@@ -215,5 +216,54 @@ describe("FeedCard — doctor content card (variant Б)", () => {
     expect(screen.queryByText(/Партнёрский материал/)).toBeNull();
     rerender(<FeedCard card={content({ partner: { name: "Партнёр А" } })} />);
     expect(screen.getByText("Партнёрский материал · Партнёр А")).toBeTruthy();
+  });
+
+  it("023 EARS-5: on a phone the card has no frame — no border, no offset shadow (canvas `m`: border:0; box-shadow:none); from the layout breakpoint it is framed", () => {
+    const { container } = render(<FeedCard card={content()} />);
+    const card = container.querySelector('[data-feed-card="content"]');
+    const classes = (card?.className ?? "").split(/\s+/);
+    expect(classes).toContain("border-0");
+    expect(classes).toContain("shadow-none");
+    expect(classes).toContain("layout:border-2");
+    expect(classes).toContain("layout:shadow-lg");
+    expect(classes).not.toContain("border-2");
+    expect(classes).not.toContain("shadow-lg");
+  });
+});
+
+/**
+ * 023 EARS-5 — the course row, variant В «строка» of
+ * `design-source/unit-content-card.dc.html` (`kind: "content-row"`): the
+ * kicker, the title, the meta and the arrow — one same-tab link.
+ */
+describe("FeedCard — doctor content row (variant В)", () => {
+  const row = (over: Partial<FeedContentRowData> = {}): FeedContentRowData => ({
+    kind: "content-row",
+    href: "/courses/tendinopatii",
+    kicker: "Курс",
+    title: "Тендинопатии",
+    meta: "6 уроков",
+    ...over,
+  });
+
+  it("023 EARS-5: system shall render a course row as one link with its kicker, title, meta and arrow", () => {
+    const { container } = render(<FeedCard card={row()} />);
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]?.getAttribute("href")).toBe("/courses/tendinopatii");
+    expect(links[0]?.textContent).toContain("Курс");
+    expect(links[0]?.textContent).toContain("Тендинопатии");
+    expect(links[0]?.textContent).toContain("6 уроков");
+    expect(links[0]?.textContent).toContain("→");
+    expect(container.querySelector('[data-feed-card="content-row"]')).toBe(links[0]);
+  });
+
+  it("023 EARS-5: on a phone a row is separated by a hairline; from the layout breakpoint it is framed", () => {
+    const { container } = render(<FeedCard card={row()} />);
+    const classes = (container.querySelector('[data-feed-card="content-row"]')?.className ?? "").split(/\s+/);
+    expect(classes).toContain("border-b");
+    expect(classes).toContain("border-hairline");
+    expect(classes).toContain("layout:border-2");
+    expect(classes).toContain("layout:border-border");
   });
 });

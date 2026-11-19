@@ -60,6 +60,20 @@ export interface FeedContentCardData {
   cta: string;
 }
 
+/**
+ * The doctor content row, variant В «строка» of
+ * `design-source/unit-content-card.dc.html` (023 school's over-six list): the
+ * kicker, the title, one meta line and the arrow. Every text is the caller's.
+ */
+export interface FeedContentRowData {
+  kind: "content-row";
+  href: string;
+  kicker: string;
+  title: string;
+  /** One meta line («6 уроков»). */
+  meta: string;
+}
+
 const MSK = "Europe/Moscow";
 const MSK_DAY_MONTH = new Intl.DateTimeFormat("ru-RU", {
   timeZone: MSK,
@@ -113,8 +127,8 @@ function FeedCardFrame({ children }: { children: React.ReactNode }) {
 const BODY = "flex h-66 flex-col gap-3 overflow-hidden p-4";
 
 export interface FeedCardProps {
-  /** One card of the public feed page (`FeedCardSchema`), or a doctor content card. */
-  card: FeedCardData | FeedContentCardData;
+  /** One card of the public feed page (`FeedCardSchema`), or a doctor content card or row. */
+  card: FeedCardData | FeedContentCardData | FeedContentRowData;
   /** «Now» for the year rule; injectable for tests. */
   now?: Date | undefined;
   /**
@@ -128,6 +142,9 @@ export interface FeedCardProps {
 export function FeedCard({ card, now, logo, className }: FeedCardProps) {
   if (card.kind === "content") {
     return <FeedContentCard card={card} className={className} />;
+  }
+  if (card.kind === "content-row") {
+    return <FeedContentRow card={card} className={className} />;
   }
   const isNews = card.kind === "news";
   const kindMark = FEED_CARD_COPY.kinds[card.kind];
@@ -221,7 +238,11 @@ export function FeedCard({ card, now, logo, className }: FeedCardProps) {
   );
 }
 
-/** Variant Б: metric column beside the body from `sm`, stacked above it on a phone. */
+/**
+ * Variant Б: the metric column beside the body from the `layout` breakpoint
+ * (the canvas `m` switch, 900px), stacked above it below; below it the card
+ * has no frame — no border and no offset shadow (canvas `border:0;box-shadow:none`).
+ */
 function FeedContentCard({
   card,
   className,
@@ -234,11 +255,11 @@ function FeedContentCard({
       href={card.href}
       data-feed-card="content"
       className={cn(
-        "group flex flex-col border-2 border-border bg-card text-inherit no-underline shadow-lg transition duration-150 hover:translate-x-px hover:translate-y-px hover:shadow-md focus-visible:shadow-focus focus-visible:outline-none sm:flex-row",
+        "group flex flex-col border-0 border-border bg-card text-inherit no-underline shadow-none transition duration-150 focus-visible:shadow-focus focus-visible:outline-none layout:flex-row layout:border-2 layout:shadow-lg layout:hover:translate-x-px layout:hover:translate-y-px layout:hover:shadow-md",
         className,
       )}
     >
-      <div className="flex items-baseline gap-3 bg-tint px-4 py-3 sm:w-36 sm:flex-none sm:flex-col sm:justify-center sm:gap-2 sm:border-r-2 sm:border-border sm:px-4 sm:py-5">
+      <div className="flex items-baseline gap-3 bg-tint px-4 py-3 layout:w-36 layout:flex-none layout:flex-col layout:justify-center layout:gap-2 layout:border-r-2 layout:border-border layout:px-4 layout:py-5">
         <span className="text-3xl leading-none font-extrabold tracking-tight text-tint-foreground tabular-nums">
           {card.metric.value}
         </span>
@@ -246,7 +267,7 @@ function FeedContentCard({
           {card.metric.label}
         </span>
       </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-3 p-4 sm:px-6 sm:py-5">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 p-4 layout:px-6 layout:py-5">
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="font-extrabold tracking-eyebrow text-primary-action uppercase">
             {card.kicker}
@@ -284,6 +305,42 @@ function FeedContentCard({
           </span>
         </div>
       </div>
+    </a>
+  );
+}
+
+/**
+ * Variant В: one row, the whole row the link. On a phone rows are separated by
+ * a hairline; from the `layout` breakpoint each row is framed (canvas `vRow`).
+ */
+function FeedContentRow({
+  card,
+  className,
+}: {
+  card: FeedContentRowData;
+  className?: string | undefined;
+}) {
+  return (
+    <a
+      href={card.href}
+      data-feed-card="content-row"
+      className={cn(
+        "group flex items-center gap-3.5 border-b border-hairline bg-card px-3.5 py-3 text-inherit no-underline transition-colors duration-150 hover:bg-section focus-visible:shadow-focus focus-visible:outline-none layout:border-2 layout:border-border layout:px-4.5",
+        className,
+      )}
+    >
+      <span className="w-20 flex-none text-eyebrow font-extrabold tracking-eyebrow text-primary-action uppercase">
+        {card.kicker}
+      </span>
+      <span className="min-w-0 flex-1 text-sm leading-snug font-bold tracking-tight text-foreground group-hover:text-primary-action group-hover:underline group-hover:underline-offset-4">
+        {card.title}
+      </span>
+      <span className="flex-none text-xs font-bold whitespace-nowrap text-faint tabular-nums">
+        {card.meta}
+      </span>
+      <span aria-hidden="true" className="flex-none text-sm font-extrabold text-primary-action">
+        →
+      </span>
     </a>
   );
 }

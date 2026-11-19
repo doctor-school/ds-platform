@@ -1,64 +1,30 @@
-import type { LearningSchoolCourse, LearningSchoolRead } from "@ds/schemas";
+import type { LearningSchoolRead } from "@ds/schemas";
 import { Button, Skeleton } from "@ds/design-system";
-import { FeedCard, type FeedContentCardData } from "@ds/design-system/blocks";
 
+import { CourseCards, courseCard } from "./school-cards";
+import { SchoolCourseList } from "./school-course-list";
 import {
-  coursePathHref,
   registerHref,
   schoolHref,
   type LearningHostConfig,
 } from "./host-config";
-import {
-  DOCUMENT_LABEL,
-  LEARNING_UI_COPY,
-  SCHOOL_UI_COPY as C,
-  academicHoursText,
-} from "./learning-ui-copy";
+import { LEARNING_UI_COPY, SCHOOL_UI_COPY as C } from "./learning-ui-copy";
 
 // 023 EARS-4, EARS-5, EARS-8, EARS-22, EARS-23 — the school screen of
 // `design-source/doctor-school.dc.html` (Stage A «Го» 2026-11-12): the poster
-// header, «О школе», the school's courses as the doctor content card
-// (`FeedCard` variant Б) and, for a guest, the registration gate. The over-six
-// list, the «скоро» state, events, the document block, mentoring, reviews and
-// the community land in their own slices — this slice renders nothing for them.
+// header, «О школе», the school's courses — up to six as the doctor content
+// card (`FeedCard` variant Б), more as «Вы учитесь» cards + searchable rows
+// (`SchoolCourseList`) — and, for a guest, the registration gate. The «скоро»
+// state, events, the document block, mentoring, reviews and the community land
+// in their own slices — this slice renders nothing for them.
 
 const MAX_FACTS = 4;
+/** 023 EARS-5 — up to six courses are all cards; more switch to the list. */
+const MAX_CARDS = 6;
 
 export interface SchoolScreenProps {
   config: LearningHostConfig;
   read: LearningSchoolRead;
-}
-
-function courseCard(
-  config: LearningHostConfig,
-  schoolTitle: string,
-  c: LearningSchoolCourse,
-): FeedContentCardData {
-  const state = c.state === "done" || c.state === "started" ? c.state : null;
-  return {
-    kind: "content",
-    href: coursePathHref(config, c.slug),
-    kicker: C.courseKicker,
-    scope: schoolTitle,
-    title: c.title,
-    description: c.description || null,
-    metric: {
-      value: String(c.lessonCount),
-      label: C.lessonsWord(c.lessonCount),
-    },
-    facts: [
-      c.academicHours > 0 ? academicHoursText(c.academicHours) : null,
-      DOCUMENT_LABEL[c.document.kind],
-    ].filter((f): f is string => f !== null),
-    state,
-    partner: c.partner,
-    cta:
-      state === "done"
-        ? C.cta.done
-        : state === "started"
-          ? C.cta.started
-          : C.cta.open,
-  };
 }
 
 function SectionHeading({ id, children }: { id: string; children: string }) {
@@ -119,13 +85,17 @@ export function SchoolScreen({ config, read }: SchoolScreenProps) {
             <SectionHeading id="school-courses">
               {C.coursesHeading}
             </SectionHeading>
-            <ul className="m-0 flex list-none flex-col gap-5 p-0">
-              {courses.map((c) => (
-                <li key={c.id}>
-                  <FeedCard card={courseCard(config, school.title, c)} />
-                </li>
-              ))}
-            </ul>
+            {courses.length > MAX_CARDS ? (
+              <SchoolCourseList
+                config={config}
+                schoolTitle={school.title}
+                courses={courses}
+              />
+            ) : (
+              <CourseCards
+                cards={courses.map((c) => courseCard(config, school.title, c))}
+              />
+            )}
             {!signedIn ? (
               <div className="mt-6 flex flex-wrap items-center gap-4 border-2 border-border bg-tint p-5 shadow-lg sm:p-6">
                 <div className="min-w-0 flex-1 basis-60">

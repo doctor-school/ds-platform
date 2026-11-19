@@ -58,6 +58,12 @@ test("A program committee member accepts a speaker application and staff find it
   });
 
   try {
+    // Authenticate before the browser journey so the next spec sharing this
+    // staff account does not immediately challenge the same TOTP window.
+    await test.step("Sign in as roster staff", async () => {
+      await staff.setViewportSize({ width: 1440, height: 900 });
+      await signInAsAdmin(staff, admin);
+    });
     const doctor = await authorContext.newPage();
     const member = await committeeContext.newPage();
     const eventId =
@@ -131,8 +137,6 @@ test("A program committee member accepts a speaker application and staff find it
     });
 
     await test.step("Find the same doctor in the event roster as staff", async () => {
-      await staff.setViewportSize({ width: 1440, height: 900 });
-      await signInAsAdmin(staff, admin);
       expect(await eventSlugFromDetail(staff, eventId)).toBe(slug);
       await staff.goto(`/events/${eventId}`, { waitUntil: "domcontentloaded" });
       await staff.getByTestId("event-roster-link").click();

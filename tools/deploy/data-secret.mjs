@@ -251,7 +251,7 @@ export function requireRecipient(certPath = RECIPIENT_PATH, box = "data") {
   throw new SecretError(
     [
       `${certPath} is missing, so there is nothing to encrypt to.`,
-      `Restore it from main; for a rebuilt ${host}, or before its first rotation, dispatch`,
+      `Restore it from main; for a rebuilt ${host} dispatch`,
       `\`gh workflow run data-secret.yml --ref main${flag} -f action=recipient\` and commit the`,
       `certificate it prints (${runbook}).`,
     ].join(" "),

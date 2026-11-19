@@ -65,8 +65,17 @@ async function plannedCalls(options, shaInMain = () => true) {
     // The audit line's wall-clock stamp is the one value two runs cannot share.
     const stable = JSON.stringify(args).replace(/\d{4}-\d\d-\d\dT[0-9:.]+Z/g, "<now>");
     calls.push([kind, JSON.parse(stable)]);
-    if (kind === "idp" && args[0].op === "golden-identities") return SUBJECTS;
-    return undefined;
+    if (kind !== "idp") return undefined;
+    switch (args[0].op) {
+      case "golden-identities":
+        return SUBJECTS;
+      case "agent-admin":
+        return { subject: "slot-agent-admin" };
+      case "agent-committee":
+        return { subject: "slot-agent-committee" };
+      default:
+        return undefined;
+    }
   };
   const effects = Object.fromEntries(
     ["sql", "sh", "write", "append", "idp", "ship", "verifyImages", "verifyRunning", "health", "prune", "diskFloor", "edgeConfig"].map(
@@ -101,6 +110,12 @@ test("2985: the local converge plans exactly the operator's steps, in order", as
   const floor = operator.calls.findIndex(([kind]) => kind === "diskFloor");
   assert.ok(floor >= 0 && floor < operator.calls.findIndex(([kind]) => kind === "ship"));
   assert.equal(operator.calls[floor][1][0].refuse, true);
+  const identitySteps = local.calls
+    .filter(([kind]) => kind === "idp")
+    .slice(0, 3)
+    .map(([, [step]]) => step);
+  assert.deepEqual(identitySteps.map(({ op }) => op), ["golden-identities", "agent-admin", "agent-committee"]);
+  assert.equal(identitySteps[2].adminSubject, "slot-agent-admin");
   assert.deepEqual(local.calls, operator.calls);
   assert.equal(local.line, operator.line);
 });

@@ -368,17 +368,26 @@ Every successful `runtime-images.yml` run of a push to `main` triggers
    four golden passwords) exported — the no-SSH mode above, so `e2e-stage.mjs` itself
    never reads the box — plus `CI=1` and **`E2E_PUBLIC_LOG=1`**. The box-observing
    scenarios (the owned mirror count, consent, phone, congress and wrong-verification
-   snapshots, the live password policy) read stage `main` only through the CI key's
+   snapshots, the live password policy, the synthetic partnership submission) read
+   stage `main` only through the CI key's
    forced command, `observe <name>`: the job writes the key and the pinned host key into
    `$RUNNER_TEMP/stage-ssh/` before the suite and exports `E2E_STAGE_OBSERVE_SSH`
    (`deploy@<box>`), `E2E_STAGE_OBSERVE_KEY` and `E2E_STAGE_OBSERVE_KNOWN_HOSTS` (two
    paths, never the key), and `packages/e2e/lib/stage-observe.ts` then sends each read as
    one named, read-only observation with its parameters as JSON on stdin. The box runs
    only the observations defined in `infra/deploy/bin/ds-deploy-entrypoint`, validates
-   every parameter, reads the `main` database in a `BEGIN READ ONLY` transaction and
-   answers only what the lib parses (release-pipeline spec §5, «Stage suite box reads»).
+   every parameter and answers only what the lib parses. Database observations use
+   a `BEGIN READ ONLY` transaction (release-pipeline spec §5, «Stage suite box reads»).
+   The partnership observation runs in the stage portal as its runtime user. It returns
+   only the synthetic contact's matching record count and whether the sole match
+   has the expected fields and private file metadata. It bounds reads to 10,000
+   directory entries, 16 KiB per record and 20 seconds per CI observation. Each
+   completed test uses one synthetic record in its slot's volume.
    Without those three variables the same libs read the box with the operator's own
-   ssh. In public-log mode the console reporter is
+   ssh. A preview reads its own portal with the same fixed partnership predicate
+   from the checked-out source. A preview never installs the box-wide entrypoint
+   (#3125); the first stage-main converge on the merged SHA installs the CI observation.
+   In public-log mode the console reporter is
    `packages/e2e/reporters/summary.ts` (one line per test: status, project, title path,
    duration, retry — no error text, no test output, no URL), the two axe legs get the
    same reporter, and the HTML + JSON report is written only into the report dir. The

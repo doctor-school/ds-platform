@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   readFile,
   readdir,
@@ -11,7 +12,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
-import { MAIN_LANDMARK_RULES } from "@ds/e2e";
+import { MAIN_LANDMARK_RULES, readStagePartnershipObservation } from "@ds/e2e";
 import { expect, test, type Page } from "@playwright/test";
 
 const SECTION_ORDER = [
@@ -72,8 +73,8 @@ function isShellRequest(url: string): boolean {
 }
 
 const SUBMISSIONS_DIRECTORY = process.env.ACADEMY_SUBMISSIONS_DIR;
-const PERSISTENCE_E2E_SAFE =
-  process.env.ACADEMY_PARTNERSHIP_E2E_SAFE === "1";
+const PERSISTENCE_E2E_SAFE = process.env.ACADEMY_PARTNERSHIP_E2E_SAFE === "1";
+const STAGE_PARTNERSHIP = process.env.E2E_ACADEMY_PARTNERSHIP_STAGE === "1";
 const SAFE_SUBMISSIONS_PREFIX = "academy-partnership-e2e-";
 
 function normalized(path: string): string {
@@ -126,11 +127,17 @@ async function jsonRecords(): Promise<string[]> {
     .sort();
 }
 
-async function fillValidPartnershipForm(page: Page) {
+async function fillValidPartnershipForm(page: Page, stageContact?: string) {
   const form = page.locator("#partner-form form");
-  await form.getByLabel(/^Имя/).fill("  Анна Соколова  ");
-  await form.getByLabel("Компания или клиника").fill("  Клиника  ");
-  await form.getByLabel(/^Email или Telegram/).fill("  @anna_sokolova  ");
+  await form
+    .getByLabel(/^Имя/)
+    .fill(stageContact ? "  Stage E2E 4121  " : "  Анна Соколова  ");
+  await form
+    .getByLabel("Компания или клиника")
+    .fill(stageContact ? "  Stage fixture  " : "  Клиника  ");
+  await form
+    .getByLabel(/^Email или Telegram/)
+    .fill(stageContact ? `  ${stageContact}  ` : "  @anna_sokolova  ");
   await form.getByLabel(/^Роль/).selectOption("Партнёр");
   const consent = form.getByRole("checkbox", {
     name: /Согласен\(а\) на обработку/i,
@@ -488,15 +495,32 @@ test.describe("Feature 013 — static public Academy home", () => {
   });
 
   test("EARS-6/7: accepted retry after a lost response shall create one exact private JSON record and then show success", async ({
+    baseURL,
     page,
   }) => {
-    test.skip(!PERSISTENCE_E2E_SAFE, "requires the isolated CI persistence fixture");
-    if (!SUBMISSIONS_DIRECTORY) throw new Error("missing submissions directory");
-    const safeDirectory = await assertSafeRealPath(
-      SUBMISSIONS_DIRECTORY,
-      "directory",
+    test.skip(
+      !STAGE_PARTNERSHIP && !PERSISTENCE_E2E_SAFE,
+      "requires the Academy stage leg or isolated CI persistence fixture",
     );
-    const recordsBefore = new Set(await jsonRecords());
+    const stageContact = STAGE_PARTNERSHIP
+      ? `partnership-4121-${randomUUID()}@example.test`
+      : undefined;
+    if (stageContact && !baseURL) throw new Error("missing Academy stage URL");
+    const observe =
+      stageContact && baseURL
+        ? () => readStagePartnershipObservation(baseURL, stageContact)
+        : undefined;
+    let local: { directory: string; before: Set<string> } | undefined;
+    if (observe) {
+      expect(await observe()).toEqual({ count: 0, privateRecord: false });
+    } else {
+      if (!SUBMISSIONS_DIRECTORY)
+        throw new Error("missing submissions directory");
+      local = {
+        directory: await assertSafeRealPath(SUBMISSIONS_DIRECTORY, "directory"),
+        before: new Set(await jsonRecords()),
+      };
+    }
     const mutationUrls: string[] = [];
     page.on("request", (request) => {
       if (request.method() === "POST") mutationUrls.push(request.url());
@@ -505,7 +529,12 @@ test.describe("Feature 013 — static public Academy home", () => {
     let intercepted = false;
     let firstWriteReachedServer = false;
     await page.route("**/*", async (route) => {
-      if (!intercepted && route.request().method() === "POST") {
+      const request = route.request();
+      if (
+        !intercepted &&
+        request.method() === "POST" &&
+        (!stageContact || request.postData()?.includes(stageContact))
+      ) {
         intercepted = true;
         const response = await route.fetch();
         firstWriteReachedServer = response.ok();
@@ -516,59 +545,71 @@ test.describe("Feature 013 — static public Academy home", () => {
     });
 
     await page.goto("/#partner-form");
-    const form = await fillValidPartnershipForm(page);
+    const form = await fillValidPartnershipForm(page, stageContact);
     await form.getByRole("button", { name: "Обсудить партнёрство" }).click();
     await expect(
       form.getByText("Не удалось сохранить заявку. Попробуйте ещё раз."),
     ).toBeVisible();
     expect(firstWriteReachedServer).toBe(true);
-    await expect.poll(async () => (await jsonRecords()).length).toBe(
-      recordsBefore.size + 1,
-    );
+    if (observe) {
+      expect(await observe()).toEqual({ count: 1, privateRecord: true });
+    } else if (local) {
+      await expect
+        .poll(async () => (await jsonRecords()).length)
+        .toBe(local.before.size + 1);
+    }
 
     await page.unrouteAll({ behavior: "wait" });
     await form.getByRole("button", { name: "Обсудить партнёрство" }).click();
     await expect(page.getByText("Спасибо! Заявка сохранена.")).toBeVisible();
 
-    const recordsAfter = await jsonRecords();
-    const created = recordsAfter.filter((file) => !recordsBefore.has(file));
-    expect(created).toHaveLength(1);
-    const recordPath = join(safeDirectory, created[0]!);
-    const record = JSON.parse(await readFile(recordPath, "utf8")) as {
-      id: string;
-      acceptedAt: string;
-      idempotencyKey: string;
-      name: string;
-      companyOrClinic: string;
-      contact: string;
-      role: string;
-      consent: Record<string, unknown>;
-    };
-    expect(created[0]).toBe(`${record.id}.json`);
-    expect(record).toMatchObject({
-      idempotencyKey: record.id,
-      name: "Анна Соколова",
-      companyOrClinic: "Клиника",
-      contact: "@anna_sokolova",
-      role: "Партнёр",
-      consent: {
-        purpose: "academy_partnership_contact",
-        versionTag: "academy-partnership-v1",
-        text: "Согласен(а) на обработку персональных данных в соответствии со 152-ФЗ.",
-        accepted: true,
-        acceptedAt: record.acceptedAt,
-        policyUrl: "https://doctor.school/index/privacy-pay",
-      },
-    });
-    expect(record.consent.textSha256).toMatch(/^[a-f0-9]{64}$/);
-    if (process.platform !== "win32") {
-      expect((await stat(recordPath)).mode & 0o777).toBe(0o600);
+    if (observe) {
+      expect(await observe()).toEqual({ count: 1, privateRecord: true });
+    } else if (local) {
+      const recordsAfter = await jsonRecords();
+      const created = recordsAfter.filter((file) => !local.before.has(file));
+      expect(created).toHaveLength(1);
+      const recordPath = join(local.directory, created[0]!);
+      const record = JSON.parse(await readFile(recordPath, "utf8")) as {
+        id: string;
+        acceptedAt: string;
+        idempotencyKey: string;
+        name: string;
+        companyOrClinic: string;
+        contact: string;
+        role: string;
+        consent: Record<string, unknown>;
+      };
+      expect(created[0]).toBe(`${record.id}.json`);
+      expect(record).toMatchObject({
+        idempotencyKey: record.id,
+        name: "Анна Соколова",
+        companyOrClinic: "Клиника",
+        contact: "@anna_sokolova",
+        role: "Партнёр",
+        consent: {
+          purpose: "academy_partnership_contact",
+          versionTag: "academy-partnership-v1",
+          text: "Согласен(а) на обработку персональных данных в соответствии со 152-ФЗ.",
+          accepted: true,
+          acceptedAt: record.acceptedAt,
+          policyUrl: "https://doctor.school/index/privacy-pay",
+        },
+      });
+      expect(record.consent.textSha256).toMatch(/^[a-f0-9]{64}$/);
+      if (process.platform !== "win32") {
+        expect((await stat(recordPath)).mode & 0o777).toBe(0o600);
+      }
     }
     expect(mutationUrls).not.toHaveLength(0);
     expect(
-      mutationUrls.every((url) => new URL(url).origin === new URL(page.url()).origin),
+      mutationUrls.every(
+        (url) => new URL(url).origin === new URL(page.url()).origin,
+      ),
     ).toBe(true);
-    expect((await page.request.get("/api/academy-partnership")).status()).toBe(404);
+    expect((await page.request.get("/api/academy-partnership")).status()).toBe(
+      404,
+    );
   });
 
   test("EARS-7: an actual unavailable persistence path shall preserve browser values and create no partial record", async ({

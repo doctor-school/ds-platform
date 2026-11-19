@@ -145,6 +145,7 @@ export const LIVE_TIERS = Object.freeze([
       E2E_JOURNEY_SLUG_HIDDEN: GOLDEN_SLUGS.academyHidden,
       // #3829: the reading page's canvas check reads the golden material.
       E2E_MATERIAL_SLUG: GOLDEN_MATERIAL_SLUG,
+      E2E_ACADEMY_PARTNERSHIP_STAGE: "1",
     },
     gated: [
       {

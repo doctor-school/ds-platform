@@ -207,15 +207,78 @@ except Exception:
     stop(3, "the report could not be extracted")
 PY
 
+# 4121: the named stage observation and the authenticated preview operator both
+# run this fixed, read-only predicate as the portal container's runtime user.
+read -r -d '' OBSERVE_PARTNERSHIP_JS <<'JS' || true
+const { createHash } = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
+const directory = "/var/lib/ds-platform/academy-submissions";
+const contact = process.argv[1];
+const uuid = "[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}";
+const marker = new RegExp("^partnership-4121-" + uuid + "@example\\.test$");
+const id = new RegExp("^" + uuid + "$");
+const maxRecordSize = 16 * 1024;
+const maxEntries = 10_000;
+const consentText = "Согласен(а) на обработку персональных данных в соответствии со 152-ФЗ.";
+const consentHash = createHash("sha256").update(consentText).digest("hex");
+try {
+  if (!marker.test(contact) || contact !== contact.trim() || process.env.ACADEMY_SUBMISSIONS_DIR !== directory) {
+    throw new Error();
+  }
+  const root = fs.lstatSync(directory);
+  if (!root.isDirectory() || fs.realpathSync(directory) !== directory ||
+      (root.mode & 0o777) !== 0o700 || root.uid !== process.getuid()) {
+    throw new Error();
+  }
+  let count = 0;
+  let privateRecord = false;
+  let seen = 0;
+  const entries = fs.opendirSync(directory);
+  try {
+    for (let entry = entries.readSync(); entry; entry = entries.readSync()) {
+      if (++seen > maxEntries) throw new Error();
+      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+      const fd = fs.openSync(path.join(directory, entry.name), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+      try {
+        const file = fs.fstatSync(fd);
+        if (!file.isFile() || file.size > maxRecordSize) throw new Error();
+        const bytes = Buffer.alloc(maxRecordSize + 1);
+        const size = fs.readSync(fd, bytes, 0, bytes.length, 0);
+        if (size !== file.size) throw new Error();
+        const row = JSON.parse(bytes.toString("utf8", 0, size));
+        if (row?.contact !== contact) continue;
+        count += 1;
+        const consent = row.consent;
+        privateRecord = (file.mode & 0o777) === 0o600 && file.uid === root.uid &&
+          id.test(row.id) && row.id === row.idempotencyKey && entry.name === row.id + ".json" &&
+          row.name === "Stage E2E 4121" && row.companyOrClinic === "Stage fixture" && row.role === "Партнёр" &&
+          typeof row.acceptedAt === "string" && Number.isFinite(Date.parse(row.acceptedAt)) &&
+          consent?.accepted === true && consent.acceptedAt === row.acceptedAt &&
+          consent.purpose === "academy_partnership_contact" && consent.versionTag === "academy-partnership-v1" &&
+          consent.text === consentText && consent.textSha256 === consentHash &&
+          consent.policyUrl === "https://doctor.school/index/privacy-pay";
+      } finally {
+        fs.closeSync(fd);
+      }
+    }
+  } finally {
+    entries.closeSync();
+  }
+  process.stdout.write(JSON.stringify({ count, privateRecord: count === 1 && privateRecord }));
+} catch {
+  process.exitCode = 1;
+}
+JS
 # The named read-only observations of `observe` (Issue #3119). argv: name env_file
-# pat_file max_params_bytes idp_origin_override; stdin: the JSON parameters. Exit
+# pat_file max_params_bytes idp_origin_override partnership_js; stdin: the JSON parameters. Exit
 # 0 = the observation on stdout · 2 = an unknown name or bad parameters · 3 = the
 # box cannot serve it · 1 = the read failed. A failure prints one fixed short
 # reason, never a diagnostic: the client's stderr is a public Actions log.
 read -r -d '' OBSERVE_PY <<'PY' || true
 import json, re, subprocess, sys, urllib.request
 
-name, env_file, pat_file, max_params, idp_override = sys.argv[1:6]
+name, env_file, pat_file, max_params, idp_override, partnership_js = sys.argv[1:7]
 CONTAINER = "stg-infra-postgres-1"
 DATABASE = "ds_main"
 
@@ -254,6 +317,11 @@ def phone_array(v):
 OBSERVATIONS = {
     "academy-host": ({}, None, "host"),
     "password-policy": ({}, None, "policy"),
+    "academy-partnership": (
+        {"contact": ("contact", text(owned("partnership-4121")))},
+        None,
+        "partnership",
+    ),
     "mirror-count": (
         {"email": ("email", text(owned("register-2704")))},
         "SELECT count(*)::int AS count FROM users WHERE email = :'email'",
@@ -358,6 +426,22 @@ def emit(value):
 if output == "host":
     emit({"academy": "academy-main." + stage_env()[1]})
 
+if output == "partnership":
+    try:
+        done = subprocess.run(
+            ["docker", "exec", "main-portal", "node", "-e", partnership_js, params["contact"]],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20,
+        )
+        result = json.loads(done.stdout.decode("utf-8")) if done.returncode == 0 else None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        stop(1, "the observation read failed")
+    if (not isinstance(result, dict) or set(result) != {"count", "privateRecord"}
+            or type(result["count"]) is not int or result["count"] < 0
+            or type(result["privateRecord"]) is not bool
+            or (result["privateRecord"] and result["count"] != 1)):
+        stop(1, "the observation read failed")
+    emit(result)
+
 if output == "policy":
     env, domain = stage_env()
     # The resolution of tools/staging/slot.mjs resolveIdpBaseUrl.
@@ -437,7 +521,7 @@ observe() {
   rc=0
   out=$(head -c "$((MAX_OBSERVE_PARAMS_BYTES + 1))" |
     sudo python3 -I -X utf8 -c "$OBSERVE_PY" "$name" "$STAGE_ENV_FILE" "$IDP_PAT_FILE" \
-      "$MAX_OBSERVE_PARAMS_BYTES" "$OBSERVE_IDP_ORIGIN") || rc=$?
+      "$MAX_OBSERVE_PARAMS_BYTES" "$OBSERVE_IDP_ORIGIN" "$OBSERVE_PARTNERSHIP_JS") || rc=$?
   case $rc in
     0) printf '%s\n' "$out" ;;
     2) reject "${out:-bad observation parameters}" ;;
@@ -2283,7 +2367,7 @@ case "$verb" in
     [[ ${#words[@]} -eq 2 ]] || reject "usage: observe <name>"
     case "${words[1]}" in
       academy-host | password-policy | mirror-count | auth-consent | phone-account-count | \
-        congress-snapshot | wrong-verification) ;;
+        congress-snapshot | wrong-verification | academy-partnership) ;;
       *) reject "unknown observation" ;;
     esac
     accepted

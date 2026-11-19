@@ -4,11 +4,12 @@ import {
   type TelegramCallOutcome,
   type ChatInfo,
   type ChatMemberInfo,
-  type SetWebhookParams,
+  type GetUpdatesParams,
+  type RawUpdate,
   type TelegramBotApi,
+  type TelegramCallOptions,
   type TelegramChatRef,
   type TelegramFile,
-  type WebhookInfo,
 } from "./telegram-bot-api.types.js";
 
 /**
@@ -24,8 +25,23 @@ export class FakeTelegramBotApi implements TelegramBotApi {
   readonly members = new Map<string, ChatMemberInfo>();
   readonly files = new Map<string, TelegramFile>();
   readonly downloads = new Map<string, Buffer>();
-  me: BotUser = { id: 7_000_000_001, is_bot: true, username: "ds_test_bot" };
-  webhook: WebhookInfo = { url: "", pending_update_count: 0 };
+  /**
+   * A bot id of its own per double, so the poller's stored offset of one
+   * suite (keyed by the bot id) never hides another suite's updates.
+   */
+  me: BotUser = {
+    id: 7_000_000_000 + Math.floor(Math.random() * 999_999_999),
+    is_bot: true,
+    username: "ds_test_bot",
+  };
+  /**
+   * The updates Telegram holds for the bot (kept until a `getUpdates` with a
+   * higher `offset` confirms them), as a suite queues them with {@link push}.
+   */
+  readonly pending: RawUpdate[] = [];
+  /** A webhook is set: `getUpdates` answers 409 until `deleteWebhook`. */
+  webhookUrl = "";
+  private wake: (() => void) | null = null;
   /**
    * While set, every call fails with this transport outcome after being
    * recorded — "Telegram is unreachable" (EARS-31).
@@ -40,23 +56,53 @@ export class FakeTelegramBotApi implements TelegramBotApi {
     this.members.clear();
     this.files.clear();
     this.downloads.clear();
-    this.webhook = { url: "", pending_update_count: 0 };
+    this.pending.length = 0;
+    this.webhookUrl = "";
   }
 
-  async setWebhook(params: SetWebhookParams): Promise<void> {
-    this.calls.push({ method: "setWebhook", args: [params] });
-    this.down("setWebhook");
-    this.webhook = {
-      url: params.url,
-      pending_update_count: 0,
-      allowed_updates: [...params.allowed_updates],
-    };
+  /** Telegram receives new updates for the bot. */
+  push(...updates: RawUpdate[]): void {
+    this.pending.push(...updates);
+    this.wake?.();
   }
 
-  async getWebhookInfo(): Promise<WebhookInfo> {
-    this.calls.push({ method: "getWebhookInfo", args: [] });
-    this.down("getWebhookInfo");
-    return this.webhook;
+  /**
+   * Telegram's long poll: confirms every held update below `offset`, then
+   * answers the rest at once, or — none held — waits until one arrives or the
+   * call is stopped (an empty answer), as the real long poll does.
+   */
+  async getUpdates(
+    params: GetUpdatesParams,
+    options: TelegramCallOptions = {},
+  ): Promise<RawUpdate[]> {
+    this.calls.push({ method: "getUpdates", args: [params] });
+    this.down("getUpdates");
+    if (this.webhookUrl !== "") {
+      throw new TelegramBotApiError(
+        "getUpdates",
+        "api_error",
+        409,
+        "Conflict: can't use getUpdates method while webhook is active; use deleteWebhook to delete the webhook first",
+      );
+    }
+    const kept = this.pending.filter((u) => u.update_id >= params.offset);
+    this.pending.splice(0, this.pending.length, ...kept);
+    if (this.pending.length === 0 && params.timeout > 0 && options.signal) {
+      const signal = options.signal;
+      await new Promise<void>((resolve) => {
+        if (signal.aborted) return resolve();
+        this.wake = resolve;
+        signal.addEventListener("abort", () => resolve(), { once: true });
+      });
+      this.wake = null;
+    }
+    return this.pending.slice(0, params.limit);
+  }
+
+  async deleteWebhook(): Promise<void> {
+    this.calls.push({ method: "deleteWebhook", args: [] });
+    this.down("deleteWebhook");
+    this.webhookUrl = "";
   }
 
   async getMe(): Promise<BotUser> {

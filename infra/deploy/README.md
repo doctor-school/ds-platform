@@ -618,7 +618,7 @@ The names the box accepts, each pinned to its file and value shape (`BOXES.api` 
 | `api.env`      | `DATABASE_URL`, `AUDIT_IDENTIFIER_PEPPER`, `LIFECYCLE_IMPACT_TOKEN_SECRET`, `SIGN_IN_RECORD_KEY`, `ACADEMY_PUBLIC_ORIGIN`, `DOCTOR_PUBLIC_ORIGIN` |
 | `api.env`      | `IDP_SERVICE_TOKEN`, `IDP_CLIENT_ID`, `IDP_CLIENT_SECRET`, `IDP_PROJECT_ID` (an IdP re-provision)                                                 |
 | `api.env`      | `BOT_PROTECTION_ENABLED`, `SMARTCAPTCHA_SERVER_KEY` (the captcha toggle; the key may be empty)                                                    |
-| `api.env`      | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_WEBHOOK_URL` (048's connector)                                                         |
+| `api.env`      | `TELEGRAM_BOT_TOKEN` (048's connector)                                                                                                            |
 | compose `.env` | `SMARTCAPTCHA_SITE_KEY` (may be empty)                                                                                                            |
 
 A name off this list is refused; it joins the list in the PR that needs it (both
@@ -638,12 +638,12 @@ tables and the test that pins them equal). Values never carry whitespace or quot
    to set:
 
    ```bash
-   pnpm prod:api-secret <live sha> < lines.txt   # e.g. TELEGRAM_BOT_TOKEN=… / TELEGRAM_WEBHOOK_SECRET=<generate>
+   pnpm prod:api-secret <live sha> < lines.txt   # e.g. TELEGRAM_BOT_TOKEN=… / LIFECYCLE_IMPACT_TOKEN_SECRET=<generate>
    ```
 
    `NAME=<generate>` has the box generate the value of a generatable name
-   (`AUDIT_IDENTIFIER_PEPPER`, `LIFECYCLE_IMPACT_TOKEN_SECRET`, `SIGN_IN_RECORD_KEY`,
-   `TELEGRAM_WEBHOOK_SECRET`) that is absent or empty; the value is never printed. A
+   (`AUDIT_IDENTIFIER_PEPPER`, `LIFECYCLE_IMPACT_TOKEN_SECRET`, `SIGN_IN_RECORD_KEY`)
+   that is absent or empty; the value is never printed. A
    name that already has a value is refused — to replace it, pass the new value. It
    prints one base64 line and the dispatch command; the line is good once, for that
    SHA, for 6 h, exactly as the data box's. Delete `lines.txt` afterwards.

@@ -24,7 +24,7 @@ export interface TelegramPreviewCandidate {
 
 /**
  * The card data of one post, over the medium its preview comes from: a Bot
- * API file (webhook) or an exported file (the one-off import, EARS-30).
+ * API file (polled post) or an exported file (the one-off import, EARS-30).
  */
 export interface TelegramCardOf<P> {
   messageId: number;
@@ -51,7 +51,7 @@ export interface TelegramPostContent<P> {
 /**
  * EARS-26 — the card fields of a post's content: the text cut, and `null`
  * (dropped as `empty`) when the post has neither text nor an image. Shared
- * by the webhook mapping and the export mapping of EARS-30.
+ * by the polled-post mapping and the export mapping of EARS-30.
  */
 export function cardFromContent<P>(
   content: TelegramPostContent<P>,

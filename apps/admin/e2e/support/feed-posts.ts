@@ -3,8 +3,8 @@ import pg from "pg";
 /**
  * 048 EARS-32 — the posts of a Telegram source on the stand database
  * (`DATABASE_URL` — the branch database locally, the job database in the
- * `admin-e2e` CI job). The stand's API has no bot connected, so no update
- * ever reaches its webhook; these rows are exactly what the connector's writer
+ * `admin-e2e` CI job). The stand's API has no bot token, so its update
+ * poller never runs (048 EARS-24); these rows are exactly what the connector's writer
  * (`telegram/telegram.feed-source.ts`) stores for a text post — kind `post`,
  * `source_ref` `<source id>:<message id>`, the `t.me` permalink, the post's
  * date — whose mapping is proven against the Telegram double by the API e2e

@@ -22,9 +22,9 @@ import { TelegramPreviewService } from "./telegram-preview.service.js";
 // names another channel than the source's bound id, or a source with no bound
 // id. Then each message, in date order, is mapped under EARS-26 (the shared
 // `cardFromContent`) and written in its own transaction through
-// `feed_entry_messages`: the source row is locked like the webhook's (so the
+// `feed_entry_messages`: the source row is locked like the poller's (so the
 // two never interleave) and a message id already held is skipped — a re-run,
-// a webhook-delivered post and a hidden entry are never touched. The preview
+// a polled post and a hidden entry are never touched. The preview
 // comes from the exported file, after the entry has committed (EARS-29's
 // normalize-and-store half, no Bot API call). Logs carry message ids and
 // reasons only, never a text (EARS-36).

@@ -17,13 +17,13 @@ import { TelegramUpdateSchema } from "./telegram-update.schema.js";
 
 // 048 slice 2 (#3994) — the Telegram feed source: the ONLY writer of Telegram
 // rows of `feed_entries` (048-design §Placement (slice 2)), through
-// `feed-entries.repository.ts`. One webhook update is one transaction: the
+// `feed-entries.repository.ts`. One polled update is one transaction: the
 // source is matched and locked (EARS-25, so a «Выключить» never interleaves),
 // its Telegram id bound on the first match, the post mapped (EARS-26) and the
 // entry written with the album and edit rules (EARS-27, EARS-28). A database
-// failure rolls the whole update back — nothing partial — and the controller
-// answers 500 so Telegram delivers it again; every write is idempotent on
-// `feed_entry_messages`, so a re-delivery changes nothing.
+// failure rolls the whole update back — nothing partial — and the poller
+// leaves its offset, so the update is fetched again; every write is
+// idempotent on `feed_entry_messages`, so a refetch changes nothing.
 
 /** The card's source line (048 Lead decision 7). */
 export const TELEGRAM_SOURCE_NAME = "BBM Academy · Telegram";
@@ -57,7 +57,7 @@ interface WriteResult {
 
 @Injectable()
 export class TelegramFeedSource {
-  private readonly logger = new Logger("TelegramWebhook");
+  private readonly logger = new Logger("TelegramIngress");
 
   constructor(
     @Inject(FeedSourcesRepository)
@@ -66,7 +66,7 @@ export class TelegramFeedSource {
     private readonly entries: FeedEntriesRepository,
   ) {}
 
-  /** EARS-25…EARS-28 — process one authenticated webhook body. */
+  /** EARS-25…EARS-28 — process one update fetched by the poller (EARS-24). */
   async receive(body: unknown): Promise<TelegramReceiveOutcome> {
     const parsed = TelegramUpdateSchema.safeParse(body);
     if (!parsed.success) {

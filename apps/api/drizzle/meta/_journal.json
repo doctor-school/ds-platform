@@ -463,6 +463,13 @@
       "when": 1794826004735,
       "tag": "0065_learning_path",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1795062787936,
+      "tag": "0066_telegram_update_cursor",
+      "breakpoints": true
     }
   ]
 }

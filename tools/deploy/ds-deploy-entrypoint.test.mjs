@@ -1813,10 +1813,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
   it("4153: <generate> fills an absent name on the box and never prints it; it refuses a name that already has a value", async () => {
     apiBox();
     const { GENERATE } = await import("./data-secret.mjs");
-    const r = run(`api-secret-apply prod ${SHA}`, { input: await apiCipher({ TELEGRAM_WEBHOOK_SECRET: GENERATE }) });
+    const r = run(`api-secret-apply prod ${SHA}`, { input: await apiCipher({ LIFECYCLE_IMPACT_TOKEN_SECRET: GENERATE }) });
     assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /generated: TELEGRAM_WEBHOOK_SECRET/);
-    const secret = readFileSync(apiStaged(), "utf8").match(/^TELEGRAM_WEBHOOK_SECRET=([0-9a-f]{64})$/m);
+    assert.match(r.stdout, /generated: LIFECYCLE_IMPACT_TOKEN_SECRET/);
+    const secret = readFileSync(apiStaged(), "utf8").match(/^LIFECYCLE_IMPACT_TOKEN_SECRET=([0-9a-f]{64})$/m);
     assert.ok(secret, "a 64-hex value appended");
     assert.ok(!(r.stdout + r.stderr).includes(secret[1]));
     assert.ok(!existsSync(composeStaged()), "the compose .env is not touched");

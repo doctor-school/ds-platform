@@ -351,7 +351,7 @@ export type NewFeedEntry = typeof feedEntries.$inferInsert;
  * 048 slice 2 (#3994) — the dedup key of network posts (048-design §Data
  * model (slice 2)): every Telegram message id that went into an entry — one
  * for a single post, each part of an album — keyed `(feed_source_id,
- * message_id)`. The webhook upserts through it, an edit finds its entry
+ * message_id)`. The update poller upserts through it, an edit finds its entry
  * through it, and the import skips any id it already holds, so no delivery,
  * edit or re-run makes a second entry (EARS-25, EARS-27, EARS-28, EARS-30).
  */
@@ -377,3 +377,40 @@ export const feedEntryMessages = pgTable(
 );
 
 export type FeedEntryMessage = typeof feedEntryMessages.$inferSelect;
+
+/**
+ * 048 slice 2 (#4165) — where the Telegram update poller stands (048-design
+ * §Ingress (slice 2); EARS-24, EARS-25): one row per bot, keyed by the bot's
+ * Telegram id (`getMe`), so a new bot token starts from Telegram's own queue
+ * instead of another bot's offset. `next_offset` is the `offset` of the next
+ * `getUpdates` — the last processed or deliberately dropped `update_id` + 1 —
+ * and moves only after that update's own transaction has committed, so a
+ * failure fetches the update again. `polled_at` is the time of the last
+ * successful `getUpdates`; `failing_update_id` / `failing_since` name the
+ * update whose processing keeps failing and since when, cleared once the
+ * offset passes it. The EARS-31 source check reads all three.
+ */
+export const telegramUpdateCursor = pgTable(
+  "telegram_update_cursor",
+  {
+    botId: bigint("bot_id", { mode: "number" }).primaryKey(),
+    nextOffset: bigint("next_offset", { mode: "number" }).notNull().default(0),
+    polledAt: timestamp("polled_at", { withTimezone: true }),
+    /** The update processing keeps failing on (EARS-25), else null. */
+    failingUpdateId: bigint("failing_update_id", { mode: "number" }),
+    /** When processing first failed on it without a break — EARS-31. */
+    failingSince: timestamp("failing_since", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check("telegram_update_cursor_bot_id_positive", sql`${t.botId} > 0`),
+    check(
+      "telegram_update_cursor_next_offset_nonnegative",
+      sql`${t.nextOffset} >= 0`,
+    ),
+  ],
+);
+
+export type TelegramUpdateCursor = typeof telegramUpdateCursor.$inferSelect;

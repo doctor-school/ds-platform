@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// 048 EARS-25 (#3994) — the subset of the Bot API `Update` the webhook reads
+// 048 EARS-25 (#3994) — the subset of the Bot API `Update` the poller reads
 // (https://core.telegram.org/bots/api#update). The message object stays loose
 // so the mapping can see a key it must drop on (a poll, a forward, a service
 // field); only the fields named here are ever read, and nothing of the raw

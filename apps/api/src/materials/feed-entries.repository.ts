@@ -146,7 +146,8 @@ export interface TelegramEntryInsert {
   previewState: "pending" | null;
   /**
    * The source's switched-off mark (EARS-22). Only the history import writes
-   * into a switched-off source (EARS-30); the webhook drops its posts.
+   * into a switched-off source (EARS-30); the update poller drops its posts
+   * (EARS-24, EARS-25).
    */
   sourceOff?: boolean;
 }
@@ -312,8 +313,8 @@ export class FeedEntriesRepository {
   }
 
   // ── 048 slice 2 — Telegram entries (#3994, EARS-25…EARS-28) ─────────────
-  // Written only by `telegram/telegram.feed-source.ts`, inside the webhook
-  // update's transaction. `feed_entry_messages` is the dedup key: every
+  // Written only by `telegram/telegram.feed-source.ts`, inside the
+  // transaction of one update the poller fetched (EARS-24, EARS-25). `feed_entry_messages` is the dedup key: every
   // message id that went into an entry is a row of it (048-design §Data model
   // (slice 2)).
 
@@ -420,8 +421,8 @@ export class FeedEntriesRepository {
   }
 
   // ── 048 slice 2 — Telegram preview copy (#3994, EARS-29) ───────────────
-  // Written only by `telegram/telegram-preview.service.ts`, after the webhook
-  // transaction has committed. Each settle is conditional on the medium the
+  // Written only by `telegram/telegram-preview.service.ts`, after the
+  // polled update's transaction has committed (EARS-24, EARS-25). Each settle is conditional on the medium the
   // copy started from, so an edit that changed the medium meanwhile is never
   // overwritten by a stale copy.
 

@@ -926,8 +926,6 @@ API_SECRETS = {
     "SMARTCAPTCHA_SERVER_KEY": ("api", r"(ysc2_[A-Za-z0-9_-]{20,250})?", None),
     "SMARTCAPTCHA_SITE_KEY": ("compose", r"(ysc1_[A-Za-z0-9_-]{20,250})?", None),
     "TELEGRAM_BOT_TOKEN": ("api", r"[0-9]{1,20}:[A-Za-z0-9_-]{30,100}", None),
-    "TELEGRAM_WEBHOOK_SECRET": ("api", r"[A-Za-z0-9_-]{1,256}", "hex32"),
-    "TELEGRAM_WEBHOOK_URL": ("api", r"https://api[.]doctor[.]school/v1/integrations/telegram/webhook", None),
 }
 # secret-stage's boxes: NAME → (file tag, compiled shape, generator).
 SECRET_BOXES = {

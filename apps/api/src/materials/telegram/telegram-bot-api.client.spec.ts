@@ -111,17 +111,66 @@ describe("048 Telegram Bot API client", () => {
     }
   });
 
+  it("048 EARS-24: when the poller stops and cuts its long poll short, the system shall log the call as aborted at info level, not as a timeout warning", async () => {
+    const infos: Record<string, unknown>[] = [];
+    const warnings: Record<string, unknown>[] = [];
+    const stop = new AbortController();
+    const client = new TelegramBotApiClient(TOKEN, {
+      fetchImpl: (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("This operation was aborted", "AbortError")),
+          );
+        }),
+      logger: {
+        log: (line) => infos.push(line),
+        warn: (line) => warnings.push(line),
+      },
+      timeoutMs: 1000,
+    });
+    const polling = client
+      .getUpdates(
+        {
+          offset: 0,
+          limit: 100,
+          timeout: 50,
+          allowed_updates: ["channel_post", "edited_channel_post"],
+        },
+        { timeoutMs: 65_000, signal: stop.signal },
+      )
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    stop.abort();
+    const error = await polling;
+    expect(error).toBeInstanceOf(TelegramBotApiError);
+    expect((error as TelegramBotApiError).outcome).toBe("aborted");
+    expect(warnings).toEqual([]);
+    expect(infos).toEqual([
+      expect.objectContaining({ method: "getUpdates", outcome: "aborted" }),
+    ]);
+  });
+
   it("048 EARS-36: when parameters are not of the typed shape, the system shall refuse before calling", async () => {
     const { client, calls } = harness(() => ok(true));
     await expect(client.getChat("@x" as never)).rejects.toThrow();
     await expect(client.getFile("../etc")).rejects.toThrow();
     await expect(client.downloadFile("photos/../../x")).rejects.toThrow();
     await expect(
-      client.setWebhook({
-        url: "http://insecure.example/hook",
-        secret_token: "s",
+      client.getUpdates({
+        offset: 0,
+        limit: 100,
+        timeout: 51,
         allowed_updates: ["channel_post"],
-        drop_pending_updates: false,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      client.getUpdates({
+        offset: 0,
+        limit: 100,
+        timeout: 50,
+        allowed_updates: ["message" as never],
       }),
     ).rejects.toThrow();
     expect(calls).toEqual([]);
@@ -135,23 +184,53 @@ describe("048 Telegram Bot API client", () => {
     expect(calls).toEqual([]);
   });
 
-  it("048 EARS-24: setWebhook sends the URL, the secret and the two update types", async () => {
-    const { client, calls } = harness(() => ok(true));
-    await client.setWebhook({
-      url: "https://api.example.test/v1/integrations/telegram/webhook",
-      secret_token: "s3cr3t_-",
-      allowed_updates: ["channel_post", "edited_channel_post"],
-      drop_pending_updates: false,
-    });
-    expect(calls[0]).toEqual({
-      url: `https://api.telegram.org/bot${TOKEN}/setWebhook`,
-      body: {
-        url: "https://api.example.test/v1/integrations/telegram/webhook",
-        secret_token: "s3cr3t_-",
+  it("048 EARS-24: getUpdates long-polls from the offset for the two update types, with an HTTP timeout past Telegram's wait", async () => {
+    const { client, calls } = harness(() =>
+      ok([{ update_id: 41, channel_post: { message_id: 1 } }]),
+    );
+    const signal = new AbortController().signal;
+    const updates = await client.getUpdates(
+      {
+        offset: 41,
+        limit: 100,
+        timeout: 50,
         allowed_updates: ["channel_post", "edited_channel_post"],
-        drop_pending_updates: false,
+      },
+      { timeoutMs: 65_000, signal },
+    );
+    expect(updates).toEqual([
+      { update_id: 41, channel_post: { message_id: 1 } },
+    ]);
+    expect(calls[0]).toEqual({
+      url: `https://api.telegram.org/bot${TOKEN}/getUpdates`,
+      body: {
+        offset: 41,
+        limit: 100,
+        timeout: 50,
+        allowed_updates: ["channel_post", "edited_channel_post"],
       },
     });
+  });
+
+  it("048 EARS-24: deleteWebhook always keeps the pending updates", async () => {
+    const { client, calls } = harness(() => ok(true));
+    await client.deleteWebhook();
+    expect(calls[0]).toEqual({
+      url: `https://api.telegram.org/bot${TOKEN}/deleteWebhook`,
+      body: { drop_pending_updates: false },
+    });
+  });
+
+  it("048 EARS-24: a getUpdates answer without an update id is refused as an invalid response", async () => {
+    const { client } = harness(() => ok([{ channel_post: {} }]));
+    await expect(
+      client.getUpdates({
+        offset: 0,
+        limit: 100,
+        timeout: 0,
+        allowed_updates: ["channel_post"],
+      }),
+    ).rejects.toMatchObject({ outcome: "invalid_response" });
   });
 
   it("048 EARS-29: the file download refuses a body over the limit", async () => {

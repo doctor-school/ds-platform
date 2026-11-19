@@ -152,15 +152,6 @@ export const BOXES = Object.freeze({
         shape: "[0-9]{1,20}:[A-Za-z0-9_-]{30,100}",
         hint: "<digits>:<30-100 characters of A-Z a-z 0-9 _ ->",
       }),
-      TELEGRAM_WEBHOOK_SECRET: inApiEnv({
-        shape: "[A-Za-z0-9_-]{1,256}",
-        hint: "1-256 characters of A-Z a-z 0-9 _ -",
-        generate: "hex32",
-      }),
-      TELEGRAM_WEBHOOK_URL: inApiEnv({
-        shape: "https://api[.]doctor[.]school/v1/integrations/telegram/webhook",
-        hint: "https://api.doctor.school/v1/integrations/telegram/webhook",
-      }),
     }),
   }),
 });

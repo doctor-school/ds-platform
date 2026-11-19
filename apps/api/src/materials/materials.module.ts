@@ -1,10 +1,4 @@
-import {
-  Inject,
-  Module,
-  type MiddlewareConsumer,
-  type NestModule,
-  type OnModuleInit,
-} from "@nestjs/common";
+import { Inject, Module, type OnModuleInit } from "@nestjs/common";
 import { feedEntries, materials } from "@ds/db";
 import { MediaSlotRegistry } from "../taxonomy/index.js";
 import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
@@ -36,8 +30,8 @@ import { TelegramFeedSource } from "./telegram/telegram.feed-source.js";
 import { TelegramHistoryImport } from "./telegram/telegram-history-import.command.js";
 import { TelegramPreviewService } from "./telegram/telegram-preview.service.js";
 import { TelegramSourceCheck } from "./telegram/telegram-source-check.service.js";
-import { TelegramWebhookController } from "./telegram/telegram-webhook.controller.js";
-import { TelegramWebhookMiddleware } from "./telegram/telegram-webhook.middleware.js";
+import { TelegramUpdateCursorRepository } from "./telegram/telegram-update-cursor.repository.js";
+import { TelegramUpdatePoller } from "./telegram/telegram-update-poller.service.js";
 
 /**
  * 048 — the materials feed, slice 1 (#3512 opens it with the admin authoring
@@ -59,7 +53,6 @@ import { TelegramWebhookMiddleware } from "./telegram/telegram-webhook.middlewar
     FeedEntriesAdminController,
     PublicFeedController,
     PublicMaterialsController,
-    TelegramWebhookController,
   ],
   providers: [
     MaterialsRepository,
@@ -80,9 +73,11 @@ import { TelegramWebhookMiddleware } from "./telegram/telegram-webhook.middlewar
     TelegramHistoryImport,
     TelegramPreviewService,
     TelegramSourceCheck,
+    TelegramUpdateCursorRepository,
+    TelegramUpdatePoller,
   ],
 })
-export class MaterialsModule implements OnModuleInit, NestModule {
+export class MaterialsModule implements OnModuleInit {
   constructor(
     @Inject(MediaSlotRegistry) private readonly slots: MediaSlotRegistry,
   ) {}
@@ -96,15 +91,5 @@ export class MaterialsModule implements OnModuleInit, NestModule {
    */
   onModuleInit(): void {
     this.slots.register(materials.coverRef, feedEntries.imageRef);
-  }
-
-  /**
-   * 048 EARS-24 — the Telegram webhook's secret check runs as middleware, in
-   * Fastify's `onRequest` phase, before the body is read.
-   */
-  configure(consumer: MiddlewareConsumer): void {
-    consumer
-      .apply(TelegramWebhookMiddleware)
-      .forRoutes(TelegramWebhookController);
   }
 }

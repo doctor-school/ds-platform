@@ -3094,6 +3094,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     ["an email for an id", "observe registrations-by-mail-status", JSON.stringify({ eventId: "a@example.test" }), /bad parameters for/],
     ["a number for an id", "observe registrations-by-mail-status", JSON.stringify({ eventId: 7 }), /bad parameters for/],
     ["a table outside the entry's list", "observe table-rows", JSON.stringify({ table: "pg_authid" }), /bad parameters for table-rows/],
+    ["a table outside the emptiness list", "observe table-empty", JSON.stringify({ table: "pg_authid" }), /bad parameters for table-empty/],
     ["an impossible date", "observe event-registrations", JSON.stringify({ eventId: EVENT, since: "2026-02-31" }), /bad parameters for/],
     ["a JSON array", "observe table-rows", "[1]", /the parameters are not one JSON object/],
     ["not JSON", "observe table-rows", "{table", /the parameters are not one JSON object/],
@@ -3168,6 +3169,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         "CREATE TABLE users (id uuid PRIMARY KEY, email text)",
         "CREATE TABLE events (id uuid PRIMARY KEY)",
         "CREATE TABLE consent_records (id serial PRIMARY KEY)",
+        "CREATE TABLE experts (id uuid PRIMARY KEY)",
         "CREATE TABLE registrations (id serial PRIMARY KEY, user_id uuid NOT NULL, event_id uuid NOT NULL, registered_at timestamptz NOT NULL, deleted_at timestamptz, confirmation_mail_status confirmation_mail_status)",
         `INSERT INTO users SELECT ${id("i")}, 'doctor' || i || '@example.test' FROM generate_series(1, 25) i`,
         `INSERT INTO events VALUES ('${EVENT}'), (${id(99)})`,
@@ -3196,6 +3198,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         ["table-rows", { table: "consent_records" }, { rows: "<10" }],
         ["table-rows", { table: "registrations" }, { rows: 26 }],
         ["table-rows", { table: "events" }, { rows: "<10" }],
+        // 0 and 1 both read <10 above; the emptiness read tells them apart (#4176).
+        ["table-empty", { table: "experts" }, { empty: true }],
+        ["table-empty", { table: "consent_records" }, { empty: false }],
+        ["table-empty", { table: "users" }, { empty: false }],
         ["event-registrations", { eventId: EVENT, since: "2026-01-01" }, { registrations: 19, doctors: 16 }],
         ["event-registrations", { eventId: EVENT, since: "2026-10-02" }, { registrations: "<10", doctors: "<10" }],
         ["registrations-by-mail-status", { eventId: EVENT }, { buckets: [{ bucket: "sent", count: 12 }, { bucket: "suppressed", count: "<10" }] }],
@@ -3247,7 +3253,7 @@ describe("3647: PROD_OBSERVATIONS", { skip: !PYTHON && "needs python3" }, () => 
       assert.match(name, /^[a-z][a-z0-9-]{0,39}$/, name);
       if (result !== "bucket") {
         assert.ok(Object.keys(result).length > 0, name);
-        for (const kind of Object.values(result)) assert.ok(["count", "distinct"].includes(kind), `${name}: ${kind}`);
+        for (const kind of Object.values(result)) assert.ok(["count", "distinct", "flag"].includes(kind), `${name}: ${kind}`);
       }
       assert.ok(!sql.includes(";"), `${name}: one statement, inside the envelope`);
       const values = new Set([...sql.matchAll(/:'([a-z_]+)'/g)].map((m) => m[1]));
@@ -3272,7 +3278,7 @@ describe("3647: PROD_OBSERVATIONS", { skip: !PYTHON && "needs python3" }, () => 
     assert.deepEqual(admitted, []);
   });
 
-  it("3647: buckets under 10 fold into one suppressed bucket; counts under 10 read <10; anything undeclared is refused", () => {
+  it("3647: buckets under 10 fold into one suppressed bucket; counts under 10 read <10; flags read true/false; anything undeclared is refused", () => {
     const cases = [
       ["bucket", [{ bucket: "a", count: 12 }, { bucket: "b", count: 3 }, { bucket: "c", count: 9 }], { buckets: [{ bucket: "a", count: 12 }, { bucket: "suppressed", count: 12 }] }],
       ["bucket", [{ bucket: "b", count: 10 }, { bucket: "a", count: 40 }], { buckets: [{ bucket: "a", count: 40 }, { bucket: "b", count: 10 }] }],
@@ -3292,6 +3298,17 @@ describe("3647: PROD_OBSERVATIONS", { skip: !PYTHON && "needs python3" }, () => 
       ["bucket", [{ bucket: null, count: 12 }], null],
       ["bucket", [{ bucket: "suppressed", count: 12 }], null],
       ["bucket", [{ bucket: "a", count: 12.5 }], null],
+      // A flag answers exactly true or false and is never folded (#4176).
+      [{ e: "flag" }, [{ e: true }], { e: true }],
+      [{ e: "flag" }, [{ e: false }], { e: false }],
+      [{ e: "flag" }, [{ e: 0 }], null],
+      [{ e: "flag" }, [{ e: 1 }], null],
+      [{ e: "flag" }, [{ e: "true" }], null],
+      [{ e: "flag" }, [{ e: null }], null],
+      [{ e: "flag" }, [{ e: true, n: 3 }], null],
+      [{ e: "flag" }, [{ e: true }, { e: false }], null],
+      [{ e: "flag" }, [], null],
+      [{ e: "nope" }, [{ e: 12 }], null],
     ];
     const got = readObservePy(`print(json.dumps([m.shape(r, rows) for r, rows, _ in json.loads(${JSON.stringify(JSON.stringify(cases))})]))`);
     assert.deepEqual(got, cases.map(([, , want]) => want));

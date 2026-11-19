@@ -2092,14 +2092,25 @@ def value(var, pattern):
 def identifier(var, *names):
     return ("identifier", var, names)
 
-# name -> {params, sql, result}. `result` is {column: "count" | "distinct"} for one
-# row, or "bucket" for rows {bucket, count}; every value an integer count.
+# name -> {params, sql, result}. `result` is {column: "count" | "distinct" | "flag"}
+# for one row — a count or a distinct count an integer, a flag exactly true or false —
+# or "bucket" for rows {bucket, count}, every count an integer.
 PROD_OBSERVATIONS = {
     # How many rows a migration on one of these tables touches.
     "table-rows": {
         "params": {"table": identifier("table", "users", "registrations", "consent_records", "events")},
         "sql": 'SELECT count(*)::int AS "rows" FROM :"table"',
         "result": {"rows": "count"},
+    },
+    # Whether a whole table is empty: the precondition of a contract migration that
+    # refuses or drops on rows (run-prod-deploy item 4), where table-rows reads both 0
+    # and 1 as <10. Nothing beyond zero vs non-zero. A contract migration's PR adds its
+    # guarded table here (spec §5 «Prod read verbs.»).
+    "table-empty": {
+        "params": {"table": identifier("table", "users", "registrations", "consent_records", "events",
+                                       "experts")},
+        "sql": 'SELECT NOT EXISTS (SELECT 1 FROM :"table") AS "empty"',
+        "result": {"empty": "flag"},
     },
     # The live registrations of one event since a date, and the doctors behind them.
     "event-registrations": {
@@ -2138,6 +2149,11 @@ def checked(param, v):
 def is_count(v):
     return type(v) is int and v >= 0
 
+def is_flag(v):
+    return type(v) is bool
+
+AGGREGATES = {"count": is_count, "distinct": is_count, "flag": is_flag}
+
 def small(n):
     return SMALL if n < MIN_BUCKET else n
 
@@ -2164,9 +2180,9 @@ def shape(result, rows):
         return {"buckets": kept}
     if len(rows) != 1 or not isinstance(rows[0], dict) or set(rows[0]) != set(result):
         return None
-    if not all(is_count(rows[0][k]) for k in result):
+    if not all(kind in AGGREGATES and AGGREGATES[kind](rows[0][k]) for k, kind in result.items()):
         return None
-    return {k: small(rows[0][k]) for k in result}
+    return {k: rows[0][k] if kind == "flag" else small(rows[0][k]) for k, kind in result.items()}
 
 def envelope_sql(select):
     # The rows are built only inside a read-only transaction on ds_prod; the check

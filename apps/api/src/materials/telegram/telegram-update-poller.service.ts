@@ -1,11 +1,5 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  type OnApplicationBootstrap,
-  type OnModuleDestroy,
-} from "@nestjs/common";
-import type pg from "pg";
+import { Inject, Injectable, Logger, type OnModuleDestroy } from "@nestjs/common";
+import pg from "pg";
 import { DRIZZLE_POOL } from "../../database/database.tokens.js";
 import { TelegramFeedSource } from "./telegram.feed-source.js";
 import {
@@ -23,10 +17,13 @@ import { TelegramUpdateCursorRepository } from "./telegram-update-cursor.reposit
 // §2.2 channel #10: egress only, no inbound route). The hosting cannot be
 // reached by Telegram, so the API asks for updates instead of receiving them:
 //
-//  - WHILE the bot token is configured, one loop per process long-polls
-//    `getUpdates` for channel posts and their edits. Only the process holding
-//    a session-level Postgres advisory lock polls, so one API instance at a
-//    time does; the others wait and retry the lock.
+//  - WHILE the bot token is configured, the HTTP server process runs one
+//    loop (`listenApiServer` starts it; a one-off command's application
+//    context never does) that long-polls `getUpdates` for channel posts and
+//    their edits. Only the process holding a session-level Postgres advisory
+//    lock polls, so one API instance at a time does; the others wait and
+//    retry the lock. The lock lives on a dedicated connection outside the
+//    request pool, so polling takes no request capacity.
 //  - Before its first poll the poller deletes any webhook (`getUpdates` and
 //    a webhook are mutually exclusive), keeping the pending updates; a 409
 //    from `getUpdates` deletes it again.
@@ -34,7 +31,11 @@ import { TelegramUpdateCursorRepository } from "./telegram-update-cursor.reposit
 //    transaction), then the stored offset moves past it, then a pending
 //    preview gets its one copy attempt (EARS-29). A processing failure stops
 //    the batch WITHOUT moving the offset, so the next poll fetches the update
-//    again; every write is idempotent, so a refetch changes nothing.
+//    again; every write is idempotent, so a refetch changes nothing. The
+//    cursor keeps the failing update id and when it first failed, which the
+//    EARS-31 source check reports after an hour; the update is never skipped.
+//  - A stop is honoured between two updates of a batch, so shutdown waits
+//    for the update in hand only.
 //  - A failed or timed-out call is retried after a capped exponential
 //    backoff. WHILE the token is unset no loop runs and nothing is called.
 // Log lines carry ids, stages and error names only — never a payload or the
@@ -66,11 +67,9 @@ export type TelegramPollOutcome =
   | { kind: "failed"; stage: "telegram" | "processing"; processed: number };
 
 @Injectable()
-export class TelegramUpdatePoller
-  implements OnApplicationBootstrap, OnModuleDestroy
-{
+export class TelegramUpdatePoller implements OnModuleDestroy {
   private readonly logger = new Logger("TelegramUpdatePoller");
-  private lockClient: pg.PoolClient | null = null;
+  private lockClient: pg.Client | null = null;
   private botId: number | null = null;
   private abort = new AbortController();
   private loop: Promise<void> | null = null;
@@ -89,10 +88,6 @@ export class TelegramUpdatePoller
     @Inject(DRIZZLE_POOL) private readonly pool: pg.Pool,
   ) {}
 
-  onApplicationBootstrap(): void {
-    this.start();
-  }
-
   async onModuleDestroy(): Promise<void> {
     await this.stop();
   }
@@ -102,7 +97,10 @@ export class TelegramUpdatePoller
     return this.loop !== null;
   }
 
-  /** Start the loop — a no-op while the token is unset or it already runs. */
+  /**
+   * Start the loop — a no-op while the token is unset or it already runs.
+   * Only the HTTP server entry calls it (`listenApiServer`).
+   */
   start(): void {
     if (!this.config || this.loop) return;
     this.stopping = false;
@@ -117,6 +115,7 @@ export class TelegramUpdatePoller
     this.loop = null;
     this.abort = new AbortController();
     await this.releaseLock();
+    this.stopping = false;
   }
 
   /**
@@ -169,12 +168,18 @@ export class TelegramUpdatePoller
         }
       } catch (error) {
         this.fail("processing", error, update.update_id);
+        // Report-only (EARS-31): the update stays next in line.
+        await this.cursor
+          .markFailing(botId, update.update_id, new Date())
+          .catch(() => undefined);
         return { kind: "failed", stage: "processing", processed };
       }
       processed += 1;
       // After the commit and the offset (EARS-29); never throws — a failed
       // copy is retried by the schedule.
       if (entryToCopy !== null) await this.previews.copy(entryToCopy);
+      // The offset is past every processed update: the rest is refetched.
+      if (this.stopping) return { kind: "stopped" };
     }
     return { kind: "polled", processed };
   }
@@ -197,8 +202,9 @@ export class TelegramUpdatePoller
   }
 
   /**
-   * Take the single-poller lock on a dedicated pool connection, or confirm
-   * the one held is still alive (a lost connection loses the lock with it).
+   * Take the single-poller lock on a dedicated connection outside the
+   * request pool, or confirm the one held is still alive (a lost connection
+   * loses the lock with it). Only the lock holder keeps a connection open.
    */
   private async holdLock(): Promise<boolean> {
     if (this.lockClient) {
@@ -206,26 +212,33 @@ export class TelegramUpdatePoller
         await this.lockClient.query("select 1");
         return true;
       } catch {
-        this.lockClient.release(true);
+        await this.lockClient.end().catch(() => undefined);
         this.lockClient = null;
         this.botId = null;
       }
     }
-    const client = await this.pool.connect();
+    const { connectionString, connectionTimeoutMillis, statement_timeout } =
+      this.pool.options;
+    const client = new pg.Client({
+      connectionString,
+      connectionTimeoutMillis,
+      statement_timeout,
+    });
     client.on("error", () => {
       // The connection dropped; the next `holdLock` notices and re-takes it.
     });
     try {
+      await client.connect();
       const { rows } = await client.query<{ locked: boolean }>(
         "select pg_try_advisory_lock(hashtextextended($1, 0)) as locked",
         [LOCK_KEY],
       );
       if (rows[0]?.locked !== true) {
-        client.release();
+        await client.end();
         return false;
       }
     } catch (error) {
-      client.release(true);
+      await client.end().catch(() => undefined);
       throw error;
     }
     this.lockClient = client;
@@ -237,14 +250,8 @@ export class TelegramUpdatePoller
     if (!client) return;
     this.lockClient = null;
     this.botId = null;
-    try {
-      await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [
-        LOCK_KEY,
-      ]);
-      client.release();
-    } catch {
-      client.release(true);
-    }
+    // Closing the session releases the lock with it.
+    await client.end().catch(() => undefined);
   }
 
   private sleep(ms: number): Promise<void> {

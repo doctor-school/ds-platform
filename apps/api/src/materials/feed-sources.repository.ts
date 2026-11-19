@@ -86,8 +86,8 @@ export class FeedSourcesRepository {
 
   /**
    * 048 EARS-25 (#3994) — the Telegram source a channel update belongs to,
-   * locked for the update's transaction (so a «Выключить» and a webhook write
-   * never interleave): by the bound Telegram id once bound, else by the
+   * locked for the update's transaction (so a «Выключить» and the write of a
+   * polled update never interleave — EARS-24, EARS-25): by the bound Telegram id once bound, else by the
    * channel username equal to the address, ignoring case, of a source with no
    * id bound yet. A source bound to another id never matches by name.
    */

@@ -37,7 +37,6 @@ import {
   deliverByPoll,
   dropCursor,
   markPolled,
-  stopPolling,
 } from "./telegram-ingress.js";
 
 // 048 V-14 (#3993) — the «Источники» admin API over the REAL stack (Fastify +
@@ -328,7 +327,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
       await app.init();
       await app.getHttpAdapter().getInstance().ready();
-      await stopPolling(app);
       pool = app.get<pg.Pool>(DRIZZLE_POOL);
       // The update poller answered a moment ago: delivery works (EARS-31).
       await markPolled(pool, telegram);

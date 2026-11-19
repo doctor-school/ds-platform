@@ -111,6 +111,47 @@ describe("048 Telegram Bot API client", () => {
     }
   });
 
+  it("048 EARS-24: when the poller stops and cuts its long poll short, the system shall log the call as aborted at info level, not as a timeout warning", async () => {
+    const infos: Record<string, unknown>[] = [];
+    const warnings: Record<string, unknown>[] = [];
+    const stop = new AbortController();
+    const client = new TelegramBotApiClient(TOKEN, {
+      fetchImpl: (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("This operation was aborted", "AbortError")),
+          );
+        }),
+      logger: {
+        log: (line) => infos.push(line),
+        warn: (line) => warnings.push(line),
+      },
+      timeoutMs: 1000,
+    });
+    const polling = client
+      .getUpdates(
+        {
+          offset: 0,
+          limit: 100,
+          timeout: 50,
+          allowed_updates: ["channel_post", "edited_channel_post"],
+        },
+        { timeoutMs: 65_000, signal: stop.signal },
+      )
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    stop.abort();
+    const error = await polling;
+    expect(error).toBeInstanceOf(TelegramBotApiError);
+    expect((error as TelegramBotApiError).outcome).toBe("aborted");
+    expect(warnings).toEqual([]);
+    expect(infos).toEqual([
+      expect.objectContaining({ method: "getUpdates", outcome: "aborted" }),
+    ]);
+  });
+
   it("048 EARS-36: when parameters are not of the typed shape, the system shall refuse before calling", async () => {
     const { client, calls } = harness(() => ok(true));
     await expect(client.getChat("@x" as never)).rejects.toThrow();

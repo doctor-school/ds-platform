@@ -17,8 +17,10 @@ import { TelegramUpdateCursorRepository } from "./telegram-update-cursor.reposit
 // add / address edit / switch-on (EARS-21, run by `FeedSourcesService` after
 // its transaction commits). It reads the channel (`getChat` — by the bound
 // id, else `@<address>`), the bot's membership (`getChatMember(chat,
-// getMe().id)`) and the update poller's last successful `getUpdates` of that
-// bot (`telegram_update_cursor.polled_at`, EARS-24), and writes «Работает» or
+// getMe().id)`) and the update poller's state for that bot — its last
+// successful `getUpdates` (`telegram_update_cursor.polled_at`, EARS-24) and
+// since when its processing keeps failing on one update (`failing_since`,
+// EARS-25) — and writes «Работает» or
 // «Ошибка» with ONE reason, in the table's order, plus the check time. While
 // the source has no bound Telegram id, a channel whose `username` equals the
 // address ignoring case binds its id in the same write as the status, so a
@@ -43,8 +45,11 @@ export function addressChangedReason(username: string): string {
 /** The membership statuses that receive channel posts (Lead decision 5). */
 const MEMBER_STATUSES = new Set(["administrator", "member"]);
 
-/** The poller must have answered a `getUpdates` within the last hour. */
-const POLL_FRESHNESS_MS = 60 * 60 * 1000;
+/**
+ * The poller must have answered a `getUpdates` within the last hour, and not
+ * have failed on one update for longer than that.
+ */
+const DELIVERY_WINDOW_MS = 60 * 60 * 1000;
 
 export interface SourceCheckVerdict {
   status: "ok" | "failing";
@@ -186,10 +191,13 @@ export class TelegramSourceCheck {
       if (name !== source.address) {
         return failing(addressChangedReason(name), bindChatId);
       }
-      const polledAt = await this.cursor.polledAt(me.id);
+      const { polledAt, failingSince } = await this.cursor.health(me.id);
+      const now = Date.now();
       if (
         polledAt === null ||
-        Date.now() - polledAt.getTime() >= POLL_FRESHNESS_MS
+        now - polledAt.getTime() >= DELIVERY_WINDOW_MS ||
+        (failingSince !== null &&
+          now - failingSince.getTime() >= DELIVERY_WINDOW_MS)
       ) {
         return failing(SOURCE_CHECK_REASONS.cannotDeliver, bindChatId);
       }

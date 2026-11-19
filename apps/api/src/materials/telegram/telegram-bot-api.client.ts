@@ -193,7 +193,10 @@ export class TelegramBotApiClient implements TelegramBotApi {
       status = res.status;
       payload = await res.json().catch(() => undefined);
     } catch (error) {
-      throw this.fail(method, transportOutcome(error), status, null, started);
+      const outcome = options.signal?.aborted
+        ? "aborted"
+        : transportOutcome(error);
+      throw this.fail(method, outcome, status, null, started);
     }
     const envelope = EnvelopeSchema.safeParse(payload);
     if (!envelope.success) {
@@ -257,7 +260,8 @@ export class TelegramBotApiClient implements TelegramBotApi {
       durationMs: Date.now() - started,
       outcome,
     };
-    if (outcome === "ok") this.logger.log(line);
+    // A call the caller stopped on purpose is no failure worth a warning.
+    if (outcome === "ok" || outcome === "aborted") this.logger.log(line);
     else this.logger.warn(line);
   }
 

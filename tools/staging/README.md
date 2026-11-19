@@ -171,7 +171,8 @@ sudoedit /etc/ds-platform/slots/$SLOT.telegram.env   # TELEGRAM_BOT_TOKEN=<the s
 Moving the connector to another slot: remove the file from the old slot and recreate
 its api first, then place it on the new slot. On its first poll the api deletes any
 webhook the bot still has (keeping its pending updates), so no separate registration
-step exists. A slot teardown leaves the file behind; remove it with the slot.
+step exists. `slot down` of a preview removes the file with the slot's other env
+files; `main` keeps its own across a down.
 
 ## The box must stay logged into Docker Hub (#2240)
 

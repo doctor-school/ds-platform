@@ -428,6 +428,15 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the hourly source check runs
     Then the source list shows "t.me/bbmacademy" with «Ошибка: Telegram не может доставить новые посты»
 
+  @EARS-25 @EARS-31 @rule @proof:api
+  Scenario: An update that keeps failing for an hour shows the source as failing
+    Given the switched-on Telegram source "t.me/bbmacademy" bound to its Telegram channel id
+    And the poller's getUpdates calls are answered
+    And processing the same update of "bbmacademy" has failed without a break for over an hour
+    When the hourly source check runs
+    Then the source list shows "t.me/bbmacademy" with «Ошибка: Telegram не может доставить новые посты»
+    And the stored offset still stands at that update
+
   @EARS-31 @rule @proof:api
   Scenario: A renamed channel shows as failing until its address is edited
     Given the Telegram source "t.me/bbmacademy" bound to its Telegram channel id

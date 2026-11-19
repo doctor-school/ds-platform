@@ -105,6 +105,7 @@ import {
   slotEnvPath,
   slotSignInEnvPath,
   slotInternalEnvPath,
+  slotTelegramEnvPath,
   slotHostnames,
   slotNetworkName,
   slotServiceSet,
@@ -428,6 +429,14 @@ test("3171: up converges the slot's storefront clients and writes the sign-in en
   assert.equal(signIn.op, "sign-in-host");
   assert.equal(signIn.membership, "include");
   assert.ok(labels(plan).indexOf(label) < labels(plan).indexOf("up -d"));
+});
+
+test("4165: down of a preview removes the slot's Telegram connector env; main keeps its own", () => {
+  assert.equal(slotTelegramEnvPath("pr-7"), "/etc/ds-platform/slots/pr-7.telegram.env");
+  const plan = planSlotDown({ slot: "pr-7", liveSlots: {}, baseDomain: BASE });
+  assert.deepEqual(stepOf(plan, "remove telegram env").command, ["sudo", "rm", "-f", slotTelegramEnvPath("pr-7")]);
+  assert.ok(labels(plan).indexOf("compose down") < labels(plan).indexOf("remove telegram env"));
+  assert.ok(!labels(planSlotDown({ slot: "main", liveSlots: {}, baseDomain: BASE })).includes("remove telegram env"));
 });
 
 test("3171: down keeps compose loadable without the sign-in env and removes a preview's", () => {
@@ -1384,6 +1393,7 @@ test("down: env → detach → compose down → network → database → bucket 
     "remove the slot tree",
     "remove slot env",
     "remove sign-in env",
+    "remove telegram env",
     "converge the shared IdP redirect set",
   ]);
   assert.ok(stepOf(plan, "compose down").command.includes("-v"));

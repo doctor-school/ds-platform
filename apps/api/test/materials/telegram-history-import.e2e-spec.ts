@@ -26,7 +26,7 @@ import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { FakeTelegramBotApi } from "../../src/materials/telegram/telegram-bot-api.fake.js";
 import { TELEGRAM_BOT_API } from "../../src/materials/telegram/telegram-bot-api.types.js";
-import { deliverByPoll, dropCursor, stopPolling } from "./telegram-ingress.js";
+import { deliverByPoll, dropCursor } from "./telegram-ingress.js";
 import {
   TELEGRAM_CONFIG,
   type TelegramConfig,
@@ -188,7 +188,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
       await app.init();
       await app.getHttpAdapter().getInstance().ready();
-      await stopPolling(app);
       pool = app.get<pg.Pool>(DRIZZLE_POOL);
       importer = app.get(TelegramHistoryImport);
       storage = app.get<ObjectStorage>(OBJECT_STORAGE);

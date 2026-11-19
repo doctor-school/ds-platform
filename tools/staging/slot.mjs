@@ -429,6 +429,16 @@ export function slotInternalEnvPath(slot) {
   return `${SLOT_ENV_DIR}/${assertSlotName(slot)}.internal.env`;
 }
 
+/**
+ * The slot's optional Telegram connector env (048 EARS-24, #4165): root-only,
+ * placed by hand on the ONE slot whose api may poll the stand bot's token
+ * (`TELEGRAM_BOT_TOKEN`). The slot compose loads it with `required: false`, so a
+ * slot without it runs the connector off. `down` of a preview removes it.
+ */
+export function slotTelegramEnvPath(slot) {
+  return `${SLOT_ENV_DIR}/${assertSlotName(slot)}.telegram.env`;
+}
+
 const RECORD_KEY_BYTES = 32;
 const INTERNAL_TOKEN_BYTES = 32;
 /** The storefront client keys a sign-in env already holds: `{ academy, doctor }`. */
@@ -1900,6 +1910,11 @@ export function planSlotDown({ slot, liveSlots, baseDomain, now = new Date() }) 
         kind: "sh",
         label: "remove sign-in env",
         command: ["sudo", "rm", "-f", slotSignInEnvPath(slot), slotInternalEnvPath(slot)],
+      },
+      {
+        kind: "sh",
+        label: "remove telegram env",
+        command: ["sudo", "rm", "-f", slotTelegramEnvPath(slot)],
       },
     );
   }

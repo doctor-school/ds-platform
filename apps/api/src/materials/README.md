@@ -47,16 +47,22 @@ one-off history import (EARS-30).
     while it is unset.
   - `telegram-update-poller.service.ts` + `telegram-update-cursor.repository.ts`
     — the EARS-24/25 ingress (no inbound route: Telegram cannot reach the
-    hosting). While the token is set, one loop per process long-polls
-    `getUpdates` (`channel_post`, `edited_channel_post`; 50 s wait, 65 s HTTP
-    timeout); only the process holding a session-level Postgres advisory lock
-    polls. Before its first poll, and on a 409, it calls `deleteWebhook`
+    hosting). While the token is set, the HTTP server process runs one loop
+    (`listenApiServer` in `api-application.ts` starts it; a CLI application
+    context never does) that long-polls `getUpdates` (`channel_post`,
+    `edited_channel_post`; 50 s wait, 65 s HTTP timeout); only the process
+    holding a session-level Postgres advisory lock polls, and the lock lives
+    on its own `pg.Client`, outside the request pool. Before its first poll, and on a 409, it calls `deleteWebhook`
     (pending updates kept). Each update runs `TelegramFeedSource.receive`, then
     the offset in `telegram_update_cursor` (one row per bot id) moves past it,
     then a pending preview gets one copy attempt; a processing failure stops
-    the batch without moving the offset, so the update is fetched again. A
-    failed call is retried after a 1 s → 60 s backoff; `polled_at` records the
-    last answered poll for the EARS-31 check. Stops on module destroy.
+    the batch without moving the offset, so the update is fetched again, and
+    records `failing_update_id` / `failing_since` (cleared once the offset
+    passes it). A failed call is retried after a 1 s → 60 s backoff;
+    `polled_at` records the last answered poll. The EARS-31 check reads
+    `polled_at` and `failing_since` (over an hour either way: «Telegram не
+    может доставить новые посты»). Stops on module destroy, between two
+    updates of a batch.
   - `telegram-post-mapping.ts` — the pure EARS-26 mapping (text cut, preview
     size, drop reasons); `telegram.feed-source.ts` — the only writer of
     Telegram entries: one transaction per update (source matched and locked,

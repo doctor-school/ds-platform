@@ -5452,6 +5452,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "failing_update_id": {
+          "name": "failing_update_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failing_since": {
+          "name": "failing_since",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp with time zone",

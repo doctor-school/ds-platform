@@ -99,6 +99,8 @@ export type TelegramCallOutcome =
   | "api_error"
   | "http_error"
   | "timeout"
+  /** The caller's own signal cut the call short (the poller stopping). */
+  | "aborted"
   | "network_error"
   | "invalid_response"
   | "too_large";

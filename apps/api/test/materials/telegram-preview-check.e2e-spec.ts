@@ -48,7 +48,7 @@ import {
   deliverByPoll,
   dropCursor,
   markPolled,
-  stopPolling,
+  markStuck,
 } from "./telegram-ingress.js";
 
 // 048 V-16, V-19 (#3994) — the preview copy and the source check over the
@@ -100,7 +100,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       a.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
       await a.init();
       await a.getHttpAdapter().getInstance().ready();
-      await stopPolling(a);
       return a;
     }
 
@@ -545,6 +544,30 @@ describe.skipIf(!process.env.DATABASE_URL)(
           status_reason: reason,
         });
       }
+    });
+
+    it("048 EARS-31: when the poller has failed on the same update for over an hour while its polls are answered, the check shall set «Telegram не может доставить новые посты»; under an hour it stays «Работает»", async () => {
+      const cases: Array<[number, "ok" | "failing", string | null]> = [
+        [61, "failing", SOURCE_CHECK_REASONS.cannotDeliver],
+        [5, "ok", null],
+      ];
+      for (const [minutes, status, reason] of cases) {
+        telegram.reset();
+        const src = await source();
+        channel(src);
+        await markStuck(
+          pool,
+          telegram,
+          4_165_000,
+          new Date(Date.now() - minutes * 60 * 1000),
+        );
+        await check.check(src.id);
+        expect(await sourceRow(src), `${minutes} min`).toMatchObject({
+          status,
+          status_reason: reason,
+        });
+      }
+      await markPolled(pool, telegram);
     });
 
     it("048 EARS-31: when the bound channel's username changed, the system shall set «Адрес канала изменился на t.me/<имя>»", async () => {

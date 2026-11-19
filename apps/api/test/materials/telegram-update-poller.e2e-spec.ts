@@ -15,11 +15,13 @@ import {
   vi,
 } from "vitest";
 import type pg from "pg";
+import { listenApiServer } from "../../src/api-application.js";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { FeedEntriesRepository } from "../../src/materials/feed-entries.repository.js";
+import { TelegramFeedSource } from "../../src/materials/telegram/telegram.feed-source.js";
 import { FakeTelegramBotApi } from "../../src/materials/telegram/telegram-bot-api.fake.js";
 import {
   TELEGRAM_BOT_API,
@@ -50,8 +52,9 @@ import {
 // the mapping (EARS-26), albums (EARS-27), edits (EARS-28) and the EARS-36
 // hygiene of every log line and stored row. The double holds no file here,
 // so each preview copy attempt (EARS-29, `telegram-preview-check.e2e-spec.ts`)
-// fails, is counted and leaves the card imageless. Each app's own polling
-// loop is stopped after boot, so a test drives one poll at a time.
+// fails, is counted and leaves the card imageless. Only the HTTP server entry
+// starts the polling loop, so a test app runs none and a test drives one poll
+// at a time.
 describe.skipIf(!process.env.DATABASE_URL)("048 Telegram update poller (e2e)", () => {
   const TOKEN = "123456:E2E-bot_token-value";
   const SIGNATURE = "Иван Подписантов";
@@ -65,8 +68,8 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram update poller (e2e)", (
   let updateSeq = 900_000_000 + Math.floor(Math.random() * 1_000_000);
   const base = Math.floor(Date.now() / 1000) - 3600;
 
-  async function boot(cfg: TelegramConfig | null) {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+  function compile(cfg: TelegramConfig | null) {
+    return Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(IDP_CLIENT)
       .useValue(new FakeIdpClient())
       .overrideProvider(RATE_LIMIT_THRESHOLDS)
@@ -76,14 +79,17 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram update poller (e2e)", (
       .overrideProvider(TELEGRAM_BOT_API)
       .useValue(telegram)
       .compile();
+  }
+
+  /** An initialised app that is not listening: no polling loop runs. */
+  async function boot(cfg: TelegramConfig | null) {
+    const moduleRef = await compile(cfg);
     const a = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),
     );
     a.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
     await a.init();
     await a.getHttpAdapter().getInstance().ready();
-    // The test drives each poll itself.
-    await a.get(TelegramUpdatePoller).stop();
     return a;
   }
 
@@ -152,6 +158,21 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram update poller (e2e)", (
       [telegram.me.id],
     );
     return rows[0] ? Number(rows[0].next_offset) : null;
+  }
+
+  /** The update the poller keeps failing on, and since when. */
+  async function failure(): Promise<{
+    failing_update_id: string | null;
+    failing_since: Date | null;
+  }> {
+    const { rows } = await pool.query<{
+      failing_update_id: string | null;
+      failing_since: Date | null;
+    }>(
+      "SELECT failing_update_id, failing_since FROM telegram_update_cursor WHERE bot_id = $1",
+      [telegram.me.id],
+    );
+    return rows[0]!;
   }
 
   const post = (msg: unknown) => ({
@@ -391,6 +412,58 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram update poller (e2e)", (
     }
   });
 
+  it("048 EARS-24: the system shall poll only in the HTTP server process, never in a one-off command's application context", async () => {
+    // A CLI (`NestFactory.createApplicationContext`) boots the same graph.
+    const command = await compile(config);
+    await command.init();
+    try {
+      expect(command.get(TelegramUpdatePoller).running).toBe(false);
+    } finally {
+      await command.close();
+    }
+    const server = await boot(config);
+    try {
+      expect(poller(server).running).toBe(false);
+      await listenApiServer(server, 0);
+      expect(poller(server).running).toBe(true);
+    } finally {
+      await poller(server).stop();
+      await server.close();
+    }
+  });
+
+  it("048 EARS-24: when the poller stops in the middle of a batch, the system shall stop after the update in hand, leaving the offset past the last processed update", async () => {
+    const src = await source();
+    await deliver(post(message(src, 1140, { text: "До" })));
+    const first = post(message(src, 1141, { text: "Первый" }));
+    const second = post(message(src, 1142, { text: "Второй" }));
+    const third = post(message(src, 1143, { text: "Третий" }));
+    telegram.push(first, second, third);
+    const receive = TelegramFeedSource.prototype.receive;
+    let stopped: Promise<void> | undefined;
+    const spy = vi
+      .spyOn(TelegramFeedSource.prototype, "receive")
+      .mockImplementation(async function (this: TelegramFeedSource, update) {
+        const outcome = await receive.call(this, update);
+        // The process is asked to stop while the batch is in hand.
+        stopped ??= poller().stop();
+        return outcome;
+      });
+    try {
+      poller().start();
+      await vi.waitFor(() => expect(stopped).toBeDefined());
+      await stopped;
+    } finally {
+      spy.mockRestore();
+    }
+    expect(poller().running).toBe(false);
+    expect(await storedOffset()).toBe(first.update_id + 1);
+    expect((await entries(src)).map((e) => e.title)).toEqual(["До", "Первый"]);
+    // The rest is fetched again by the next poll.
+    expect(await poller().pollOnce()).toEqual({ kind: "polled", processed: 2 });
+    expect(await storedOffset()).toBe(third.update_id + 1);
+  });
+
   it("048 EARS-24: while the bot token is not configured, the system shall run no poller and call nothing", async () => {
     const src = await source();
     expect(poller(offApp).running).toBe(false);
@@ -526,6 +599,41 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram update poller (e2e)", (
       "После",
     ]);
     expect(await storedOffset()).toBe(later.update_id + 1);
+  });
+
+  it("048 EARS-25: while the same update keeps failing on our side, the system shall keep the time of its first failure and never skip it, and clear it once the update is processed", async () => {
+    const src = await source();
+    await deliver(post(message(src, 40, { text: "До" })));
+    const offset = await storedOffset();
+    vi.spyOn(FeedEntriesRepository.prototype, "attachTelegramMessage")
+      .mockRejectedValueOnce(new Error("check constraint"))
+      .mockRejectedValueOnce(new Error("check constraint"));
+    const stuck = post(message(src, 41, { text: "Застрял" }));
+    expect(await deliver(stuck)).toEqual({
+      kind: "failed",
+      stage: "processing",
+      processed: 0,
+    });
+    const firstFailure = await failure();
+    expect(firstFailure.failing_update_id).toBe(String(stuck.update_id));
+    expect(firstFailure.failing_since).not.toBeNull();
+    expect(await poller().pollOnce()).toEqual({
+      kind: "failed",
+      stage: "processing",
+      processed: 0,
+    });
+    // The same update again: the first-failure time is kept, nothing skipped.
+    expect(await failure()).toEqual(firstFailure);
+    expect(await storedOffset()).toBe(offset);
+    expect(await poller().pollOnce()).toEqual({ kind: "polled", processed: 1 });
+    expect(await failure()).toEqual({
+      failing_update_id: null,
+      failing_since: null,
+    });
+    expect((await entries(src)).map((e) => e.title)).toEqual([
+      "До",
+      "Застрял",
+    ]);
   });
 
   // ── EARS-26: the mapping ─────────────────────────────────────────────

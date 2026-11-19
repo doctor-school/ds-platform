@@ -2771,7 +2771,14 @@ describe("#4059 golden learning course", () => {
   });
 
   it("seeds one published course: two modules, lesson 1 video → download → exit test, lesson 2 video → exit test", () => {
-    expect(dataset.learningCourses).toEqual([
+    const ofCourse = new Set(
+      dataset.learningModules
+        .filter((m) => m.courseId === L.course.id)
+        .map((m) => m.id),
+    );
+    expect(
+      dataset.learningCourses.filter((c) => c.schoolId === L.school.id),
+    ).toEqual([
       expect.objectContaining({
         id: L.course.id,
         slug: L.course.slug,
@@ -2779,11 +2786,19 @@ describe("#4059 golden learning course", () => {
         schoolId: L.school.id,
       }),
     ]);
-    expect(dataset.learningModules.map((m) => [m.id, m.position])).toEqual([
+    expect(
+      dataset.learningModules
+        .filter((m) => ofCourse.has(m.id))
+        .map((m) => [m.id, m.position]),
+    ).toEqual([
       [L.modules.first.id, 1],
       [L.modules.second.id, 2],
     ]);
-    expect(dataset.learningLessons.map((l) => [l.moduleId, l.state])).toEqual([
+    expect(
+      dataset.learningLessons
+        .filter((l) => ofCourse.has(l.moduleId))
+        .map((l) => [l.moduleId, l.state]),
+    ).toEqual([
       [L.modules.first.id, "published"],
       [L.modules.second.id, "published"],
     ]);
@@ -2795,9 +2810,11 @@ describe("#4059 golden learning course", () => {
     expect(typesOf(L.lessons.first.id)).toEqual(["video", "download", "test"]);
     expect(typesOf(L.lessons.second.id)).toEqual(["video", "test"]);
     expect(
-      dataset.learningSteps
-        .filter((s) => s.type === "video")
-        .map((s) => s.provider),
+      [L.lessons.first.id, L.lessons.second.id].flatMap((id) =>
+        dataset.learningSteps
+          .filter((s) => s.lessonId === id && s.type === "video")
+          .map((s) => s.provider),
+      ),
     ).toEqual(["youtube", "youtube"]);
     // A test step's row keeps only its kind; the questions are rows (`writeTest`).
     expect(dataset.learningTests.map((t) => t.kind)).toEqual(["exit", "exit"]);
@@ -2836,7 +2853,7 @@ describe("#4059 golden learning course", () => {
       learningPresetByName,
     ).find((s) => s.name === "learning_rule_layers")!;
     expect(step.conflictKeys).toEqual(["scopeKind", "scopeId"]);
-    expect(step.rows).toEqual([
+    expect(step.rows.filter((r) => r.scopeId === L.course.id)).toEqual([
       expect.objectContaining({
         id: L.courseRules.id,
         scopeKind: "course",
@@ -2875,4 +2892,206 @@ describe("#4059 golden learning course", () => {
     const pdf = await PDFDocument.load(memo.bytes);
     expect(pdf.getPageCount()).toBe(1);
   }, 120_000);
+});
+
+describe("023 EARS-5 (#4017) golden schools at volume", () => {
+  // The school screen past six courses (rows, «Показать ещё 10», «Найти курс»)
+  // and the canvas volume switch 3 / 22 / 62 — plus 200 — on a slot, which runs
+  // only `seed:golden`.
+  const dataset = buildGoldenDataset(now, subjects);
+  const V = golden.learning.volumeSchools;
+  const coursesOf = (schoolId: string) =>
+    dataset.learningCourses
+      .filter((c) => c.schoolId === schoolId)
+      .sort((a, b) => a.position! - b.position!);
+  const lessonsOf = (courseId: string) => {
+    const modules = dataset.learningModules.filter(
+      (m) => m.courseId === courseId,
+    );
+    return {
+      modules,
+      lessons: dataset.learningLessons
+        .filter((l) => modules.some((m) => m.id === l.moduleId))
+        .sort((a, b) => a.position - b.position),
+    };
+  };
+  const stepsOf = (lessonId: string) =>
+    dataset.learningSteps
+      .filter((s) => s.lessonId === lessonId)
+      .sort((a, b) => a.position - b.position);
+
+  it("publishes four schools of 3, 22, 62 and 200 published courses under their catalogue ids and slugs", () => {
+    expect(V.map((s) => [s.slug, s.courseCount])).toEqual([
+      ["golden-school-endocrinology", 3],
+      ["golden-school-orthobiology", 22],
+      ["golden-school-neurology", 62],
+      ["golden-school-therapy", 200],
+    ]);
+    for (const school of V) {
+      const row = dataset.learningSchools.find((s) => s.id === school.id);
+      expect(row, school.slug).toMatchObject({
+        slug: school.slug,
+        state: "published",
+      });
+      const courses = coursesOf(school.id);
+      expect(courses).toHaveLength(school.courseCount);
+      expect(courses.every((c) => c.state === "published")).toBe(true);
+      expect(courses.map((c) => c.position)).toEqual(
+        courses.map((_, i) => i + 1),
+      );
+      expect(new Set(courses.map((c) => c.title)).size).toBe(courses.length);
+    }
+    // The golden course and its school stay as they were.
+    expect(coursesOf(golden.learning.school.id).map((c) => c.slug)).toEqual([
+      golden.learning.course.slug,
+    ]);
+    const slugs = dataset.learningCourses.map((c) => c.slug);
+    expect(new Set(slugs).size).toBe(slugs.length);
+  });
+
+  it("each course is one module of 1–6 published lessons, download then video, course 6 one download", () => {
+    const counts = new Set<number>();
+    for (const school of V) {
+      coursesOf(school.id).forEach((course, c) => {
+        const { modules, lessons } = lessonsOf(course.id!);
+        expect(modules, course.slug).toHaveLength(1);
+        expect(lessons.length).toBeGreaterThanOrEqual(1);
+        expect(lessons.length).toBeLessThanOrEqual(6);
+        counts.add(lessons.length);
+        expect(lessons.every((l) => l.state === "published")).toBe(true);
+        for (const lesson of lessons) {
+          expect(
+            stepsOf(lesson.id!).map((s) => s.type),
+            course.slug,
+          ).toEqual(c === 5 ? ["download"] : ["download", "video"]);
+        }
+      });
+    }
+    expect([...counts].sort()).toEqual([1, 2, 3, 4, 5, 6]);
+    // No new media: every download is the golden memo.
+    const keys = new Set(
+      dataset.learningSteps.filter((s) => s.mediaRef).map((s) => s.mediaRef),
+    );
+    expect([...keys]).toEqual([GOLDEN_COURSE_MEMO_KEY]);
+  });
+
+  it("varies hours, document kinds and partners; partners are published golden organisations", () => {
+    const all = V.flatMap((s) => coursesOf(s.id));
+    expect(new Set(all.map((c) => c.documentKind))).toEqual(
+      new Set(["certificate", "certificate-nmo"]),
+    );
+    expect(new Set(all.map((c) => c.academicHours)).size).toBeGreaterThan(3);
+    const partnered = all.filter((c) => c.partnerOrganisationId);
+    expect(partnered.length).toBeGreaterThan(10);
+    const published = new Set(
+      dataset.partners.filter((p) => p.status === "published").map((p) => p.id),
+    );
+    for (const c of partnered) {
+      expect(published.has(c.partnerOrganisationId!), c.slug).toBe(true);
+    }
+  });
+
+  it("no volume course title matches the school-volume live spec's no-match query «гастро»", () => {
+    for (const school of V) {
+      for (const c of coursesOf(school.id)) {
+        expect(c.title.toLowerCase()).not.toContain("гастро");
+      }
+    }
+  });
+
+  it("every volume course carries an own rule layer completing a lesson on its steps, no exit test, no preset", () => {
+    const rows = resolveLearningRuleLayerRows(
+      dataset.learningRuleLayers,
+      learningPresetByName,
+    );
+    for (const school of V) {
+      for (const c of coursesOf(school.id)) {
+        expect(
+          rows.filter((r) => r.scopeId === c.id),
+          c.slug,
+        ).toEqual([
+          expect.objectContaining({
+            scopeKind: "course",
+            appliedPresetId: null,
+            values: {
+              "test.exitRequired": false,
+              "completion.lesson": { condition: "all-steps-done" },
+              "completion.module": { condition: "lessons-done" },
+            },
+          }),
+        ]);
+      }
+    }
+  });
+
+  it("gives the verified doctor and its worker-pool copies started and done courses on every school over six", () => {
+    const doctors = golden.workerPool.verifiedCardiologist.map((d) => d.id);
+    const stepToCourse = new Map<string, string>();
+    for (const l of dataset.learningLessons) {
+      const m = dataset.learningModules.find((x) => x.id === l.moduleId)!;
+      for (const s of stepsOf(l.id!)) stepToCourse.set(s.id!, m.courseId);
+    }
+    expect(new Set(dataset.learningFacts.map((f) => f.personId))).toEqual(
+      new Set(doctors),
+    );
+    for (const school of V) {
+      const courses = coursesOf(school.id);
+      const touched = new Set(
+        dataset.learningFacts
+          .filter((f) =>
+            courses.some((c) => c.id === stepToCourse.get(f.stepId!)),
+          )
+          .map((f) => stepToCourse.get(f.stepId!)),
+      );
+      expect(touched, school.slug).toEqual(
+        school.courseCount > 6
+          ? new Set([courses[2]!.id, courses[3]!.id, courses[4]!.id])
+          : new Set(),
+      );
+    }
+    for (const f of dataset.learningFacts) {
+      expect(["opened", "position"]).toContain(f.kind);
+      expect(f.source).toBe("web");
+      expect((f.occurredAt as Date).getTime()).toBeLessThan(now.getTime());
+    }
+    const keys = dataset.learningFacts.map((f) => `${f.personId}|${f.eventId}`);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("inserts the facts once: append-only, keyed on the doctor's event id, nothing updated on a re-run", () => {
+    const step = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+    ).find((s) => s.name === "learning_facts")!;
+    expect(step.conflictKeys).toEqual(["personId", "eventId"]);
+    expect(step.updateKeys).toEqual([]);
+    expect(step.rows.length).toBe(dataset.learningFacts.length);
+    const order = [...GOLDEN_SEED_ORDER];
+    expect(order.indexOf("learning_facts")).toBeGreaterThan(
+      order.indexOf("learning_steps"),
+    );
+  });
+
+  it("plans the shared memo object once", async () => {
+    const plan = await buildGoldenMediaPlan(dataset);
+    expect(plan.filter((o) => o.key === GOLDEN_COURSE_MEMO_KEY)).toHaveLength(
+      1,
+    );
+  }, 120_000);
+
+  it("names a fact whose step the dataset does not carry", () => {
+    const broken = {
+      ...dataset,
+      learningFacts: [
+        {
+          ...dataset.learningFacts[0]!,
+          stepId: goldenUuid(GOLDEN_GROUP.learningSteps, 999),
+        },
+      ],
+    };
+    expect(goldenReferentialIssues(broken)).toContain(
+      `learning_facts.stepId references an unknown row: ${goldenUuid(GOLDEN_GROUP.learningSteps, 999)}`,
+    );
+  });
 });

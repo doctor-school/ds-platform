@@ -40,6 +40,7 @@ import {
 import { users } from "../../schema/users.js";
 import {
   learningCourses,
+  learningFacts,
   learningLessons,
   learningModules,
   learningOptions,
@@ -50,6 +51,7 @@ import {
   learningTests,
 } from "../../schema/learning.js";
 import type { GoldenLearningPresetLayer } from "./learning.js";
+import type { GoldenLearningOwnLayer } from "./learning-volume.js";
 import { GOLDEN_GROUP, SEED_EVENT_KINDS } from "./ids.js";
 import type {
   GoldenDataset,
@@ -172,6 +174,8 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "learning_questions",
   "learning_options",
   "learning_rule_layers",
+  // 023 EARS-5 (#4017) — the golden doctor's facts, after the steps and users.
+  "learning_facts",
 ]);
 
 /**
@@ -261,11 +265,11 @@ export interface GoldenLearningPresetRow {
  * hard stop — the migrations that insert the three presets did not run.
  */
 export function resolveLearningRuleLayerRows(
-  layers: readonly GoldenLearningPresetLayer[],
+  layers: readonly (GoldenLearningPresetLayer | GoldenLearningOwnLayer)[],
   presetByName: ReadonlyMap<string, GoldenLearningPresetRow>,
 ): Record<string, unknown>[] {
   const missing = layers
-    .map((layer) => layer.presetName)
+    .flatMap((layer) => ("presetName" in layer ? [layer.presetName] : []))
     .filter((name) => !presetByName.has(name));
   if (missing.length > 0) {
     throw new GoldenPlanError(
@@ -273,6 +277,20 @@ export function resolveLearningRuleLayerRows(
     );
   }
   return layers.map((layer) => {
+    // 023 (#4017) — a layer with its own values and no preset, as the admin
+    // rule editor writes it.
+    if (!("presetName" in layer)) {
+      return {
+        id: layer.id,
+        scopeKind: layer.scopeKind,
+        scopeId: layer.scopeId,
+        values: structuredClone(layer.values),
+        appliedPresetId: null,
+        version: 1,
+        createdAt: layer.createdAt,
+        updatedAt: layer.updatedAt,
+      };
+    }
     const preset = presetByName.get(layer.presetName)!;
     return {
       id: layer.id,
@@ -416,6 +434,15 @@ export function buildGoldenSeedPlan(
       ),
       ["scopeKind", "scopeId"],
     ),
+    // 023 EARS-5 (#4017) — `learning_facts` is append-only (a trigger refuses
+    // UPDATE): a re-run meets a fact on its client event key and leaves it.
+    step(
+      "learning_facts",
+      learningFacts,
+      dataset.learningFacts,
+      ["personId", "eventId"],
+      { appendOnly: true },
+    ),
   ];
 
   const planned = steps.map((s) => s.name);
@@ -451,6 +478,8 @@ function step(
     volumeNamespaceChildren?: GoldenVolumeChild[];
     /** Step-specific columns a re-run keeps, on top of {@link SET_ONCE_KEYS}. */
     setOnceKeys?: string[];
+    /** An append-only table: a re-run inserts what is missing and updates nothing. */
+    appendOnly?: boolean;
   } = {},
 ): GoldenSeedStep {
   const setOnce = new Set<string>([
@@ -474,9 +503,11 @@ function step(
     // publication instants. Columns the dataset never sets are left alone
     // rather than reset to a default: the seed owns what it writes, not the
     // whole row.
-    updateKeys: [...keys].filter(
-      (key) => !conflictKeys.includes(key) && !setOnce.has(key),
-    ),
+    updateKeys: options.appendOnly
+      ? []
+      : [...keys].filter(
+          (key) => !conflictKeys.includes(key) && !setOnce.has(key),
+        ),
   };
 }
 
@@ -664,6 +695,18 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
     dataset.learningRuleLayers,
     "scopeId",
     courseIds,
+  );
+  check(
+    "learning_facts",
+    dataset.learningFacts,
+    "stepId",
+    idSet(dataset.learningSteps),
+  );
+  check(
+    "learning_facts",
+    dataset.learningFacts,
+    "personId",
+    idSet(dataset.users),
   );
 
   return issues;

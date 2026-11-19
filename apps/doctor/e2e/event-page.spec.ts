@@ -166,6 +166,56 @@ const BOTH_CUTS = process.env.E2E_DOCTOR_RECORDING_BOTH_CUTS_SLUG;
 const EDITED_ONLY = process.env.E2E_WEBINAR_SLUG_ENDED;
 const DOCTOR_EMAIL = process.env.E2E_DOCTOR_EMAIL;
 const DOCTOR_PASSWORD = process.env.E2E_DOCTOR_PASSWORD;
+// The playable montage from the golden both-cuts fixture (#4119).
+const MONTAGE_ID = "1766d2bce7049428166252d02a41f8da";
+const RUTUBE_ORIGIN = "https://rutube.ru";
+
+function observeRutubeRecording({
+  origin,
+  videoId,
+}: {
+  origin: string;
+  videoId: string;
+}) {
+  if (window !== window.top) return;
+  window.addEventListener("message", (event) => {
+    if (event.origin !== origin) return;
+    const frame = document.querySelector<HTMLIFrameElement>(
+      'iframe[data-testid="recording-player-rutube"]',
+    );
+    if (!frame || event.source !== frame.contentWindow) return;
+
+    // The RuTube embed API reports distinct content and ad events.
+    // https://rutube.ru/info/embed/
+    let message: {
+      type?: string;
+      data?: { videoId?: string; video_id?: string; time?: number };
+    } | null;
+    try {
+      message =
+        typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+    } catch {
+      return;
+    }
+    if (message?.type === "player:ready" && message.data?.videoId === videoId) {
+      frame.dataset.e2eRecordingReady = videoId;
+    }
+    if (
+      message?.type === "player:playStart" &&
+      message.data?.video_id === videoId
+    ) {
+      frame.dataset.e2eRecordingStarted = videoId;
+    }
+    if (
+      frame.dataset.e2eRecordingStarted === videoId &&
+      message?.type === "player:currentTime" &&
+      typeof message.data?.time === "number" &&
+      message.data.time > 0
+    ) {
+      frame.dataset.e2eRecordingPlaying = videoId;
+    }
+  });
+}
 
 test("014 EARS-6/8: a doctor returns to the past event, plays the montage and opens the original", async ({
   page,
@@ -187,6 +237,11 @@ test("014 EARS-6/8: a doctor returns to the past event, plays the montage and op
     .and(page.getByTestId(/^recording-player-/));
 
   await context.clearCookies();
+  // Subscribe before hydration mounts the cross-origin iframe after sign-in.
+  await page.addInitScript(observeRutubeRecording, {
+    origin: RUTUBE_ORIGIN,
+    videoId: MONTAGE_ID,
+  });
   const response = await page.goto(eventUrl.href, {
     waitUntil: "domcontentloaded",
   });
@@ -217,7 +272,10 @@ test("014 EARS-6/8: a doctor returns to the past event, plays the montage and op
     /^https:\/\/rutube\.ru\/play\/embed\/[\da-f]{32}\/?(?:\?.*)?$/;
   await expect(montage).toBeVisible();
   await expect(montage).toHaveAttribute("title", / — Монтаж$/);
-  await expect(montage).toHaveAttribute("src", rutubeEmbed);
+  await expect(montage).toHaveAttribute(
+    "src",
+    `${RUTUBE_ORIGIN}/play/embed/${MONTAGE_ID}`,
+  );
   const montageSrc = await montage.getAttribute("src");
 
   const summary = spoiler.locator("summary");
@@ -225,41 +283,58 @@ test("014 EARS-6/8: a doctor returns to the past event, plays the montage and op
   await expect(spoiler).not.toHaveAttribute("open");
   await expect(spoiler.locator("iframe")).toHaveCount(0);
 
-  // Play the actual provider video and wait for Chromium to present a frame
-  // after time zero. An iframe, a poster or player readiness alone can pass
-  // even if the media never plays.
-  const mediaTime = await montage
+  // Use RuTube's published embed controls, then prove content progress from
+  // this iframe and a presented frame on the montage's own media timeline.
+  await expect(montage).toHaveAttribute(
+    "data-e2e-recording-ready",
+    MONTAGE_ID,
+    {
+      timeout: 20_000,
+    },
+  );
+  await montage.evaluate((frame: HTMLIFrameElement, origin) => {
+    frame.contentWindow!.postMessage(
+      JSON.stringify({ type: "player:mute", data: {} }),
+      origin,
+    );
+    frame.contentWindow!.postMessage(
+      JSON.stringify({ type: "player:play", data: {} }),
+      origin,
+    );
+  }, RUTUBE_ORIGIN);
+  await expect(montage).toHaveAttribute(
+    "data-e2e-recording-playing",
+    MONTAGE_ID,
+    {
+      timeout: 30_000,
+    },
+  );
+  const presented = await montage
     .contentFrame()
-    .locator("video:visible")
+    .getByTestId("video")
     .evaluate(
       (video: HTMLVideoElement) => {
-        video.muted = true;
-        return new Promise<number>((resolve, reject) => {
-          let frame = 0;
-          const timeout = window.setTimeout(() => {
-            video.cancelVideoFrameCallback(frame);
-            reject(new Error("RuTube did not present a playing video frame"));
-          }, 20_000);
-          const presented: VideoFrameRequestCallback = (_now, metadata) => {
-            if (metadata.mediaTime > 0) {
+        return new Promise<{ mediaTime: number; duration: number }>(
+          (resolve, reject) => {
+            const timeout = window.setTimeout(() => {
+              video.cancelVideoFrameCallback(frame);
+              reject(new Error("RuTube did not present a playing video frame"));
+            }, 10_000);
+            const frame = video.requestVideoFrameCallback((_now, metadata) => {
               window.clearTimeout(timeout);
-              resolve(metadata.mediaTime);
-            } else {
-              frame = video.requestVideoFrameCallback(presented);
-            }
-          };
-          frame = video.requestVideoFrameCallback(presented);
-          void video.play().catch((error: unknown) => {
-            window.clearTimeout(timeout);
-            video.cancelVideoFrameCallback(frame);
-            reject(error);
-          });
-        });
+              resolve({
+                mediaTime: metadata.mediaTime,
+                duration: video.duration,
+              });
+            });
+          },
+        );
       },
       undefined,
-      { timeout: 20_000 },
+      { timeout: 10_000 },
     );
-  expect(mediaTime).toBeGreaterThan(0);
+  expect(presented.mediaTime).toBeGreaterThan(0);
+  expect(Math.round(presented.duration)).toBe(20);
 
   await summary.press("Enter");
   await expect(spoiler).toHaveAttribute("open", "");

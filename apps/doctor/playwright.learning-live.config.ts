@@ -2,14 +2,15 @@ import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
 
 /**
- * 024 (#4011) — the doctor course path / step screens LIVE tier. Starts
+ * 024 (#4011) — the doctor course path / step screens LIVE tier, with the
+ * 023 school screen at volume (#4017, `e2e/school-volume-live.spec.ts`). Starts
  * nothing: the stand (api, doctor, sign-in host, portal) is the operator's;
  * every test skips when the env is absent, so a bare CI invocation is inert.
  * Run recipe: `e2e/learning-path-live.spec.ts` docblock.
  */
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /learning-path(-volume)?-live\.spec\.ts$/,
+  testMatch: /(learning-path(-volume)?|school-volume)-live\.spec\.ts$/,
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

@@ -345,6 +345,13 @@ export const LIVE_TIERS = Object.freeze([
           "the golden dataset seeds no published multi-module learning course, so a slot has no course slug for the volume journey",
         requires: [URL_DOCTOR, ...IDP_MAIL, "E2E_LEARNING_MULTI_COURSE_SLUG"],
       },
+      {
+        // 023 EARS-5 (#4017): the school screen at the canvas volume switch 3 / 22 / 62.
+        file: "e2e/school-volume-live.spec.ts",
+        slotReason:
+          "the golden dataset seeds one published school of one course, so a slot has no school at the canvas volume (over six courses) for the volume journey",
+        requires: [URL_DOCTOR, ...IDP_MAIL, "E2E_LEARNING_VOLUME_SCHOOL_SLUGS"],
+      },
     ],
   },
   {

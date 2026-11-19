@@ -262,6 +262,10 @@ export const golden = Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.events, 7),
       slug: "golden-event-live-academy",
     }),
+    doctorCongress: Object.freeze({
+      id: goldenUuid(GOLDEN_GROUP.events, 8),
+      slug: "golden-doctor-congress",
+    }),
     hidden: Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.events, 4),
       slug: "golden-event-hidden",
@@ -359,6 +363,10 @@ export const golden = Object.freeze({
     /** verifiedCardiologist → academyLive (the Academy room roster). */
     verifiedOnAcademyLive: Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.registrations, 5),
+    }),
+    /** verifiedCardiologist → doctorCongress (the cabinet kind picker). */
+    verifiedOnDoctorCongress: Object.freeze({
+      id: goldenUuid(GOLDEN_GROUP.registrations, 6),
     }),
     /** verifiedCardiologist → pastWithRecording (the «моя запись» path). */
     verifiedOnPast: Object.freeze({

@@ -52,6 +52,8 @@
  * event starting near it flips to ended) — the spec checks several instants.
  */
 export const GOLDEN_SLUGS = Object.freeze({
+  /** The doctor congress with an open oral intake (046). */
+  doctorCongress: "golden-doctor-congress",
   /** `golden.events.upcoming` — published, online, `experts`, one speaker. */
   academyUpcoming: "golden-event-upcoming",
   /** `golden.events.pastWithRecording` — ended, one published montage, one speaker. */
@@ -344,7 +346,12 @@ export const LIVE_TIERS = Object.freeze([
     pkg: "@ds/doctor",
     config: "playwright.congress.config.ts",
     rootDir: "e2e",
+    seededEnv: { E2E_DOCTOR_CONGRESS_SLUG: GOLDEN_SLUGS.doctorCongress },
     gated: [
+      {
+        file: "e2e/congress-submission-stage.spec.ts",
+        requires: [URL_DOCTOR, "MAILPIT_URL", "E2E_DOCTOR_CONGRESS_SLUG"],
+      },
       {
         file: "e2e/congress-submissions.spec.ts",
         slotReason:

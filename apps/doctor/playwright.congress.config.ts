@@ -24,6 +24,9 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
 export default defineConfig({
   testDir: "./e2e",
   testMatch: [
+    ...(process.env.E2E_DOCTOR_CONGRESS_SLUG
+      ? [/(^|[/\\])congress-submission-stage\.spec\.ts$/]
+      : []),
     /(^|[/\\])congress-submissions\.spec\.ts$/,
     /a11y[/\\]congress-axe\.e2e\.spec\.ts$/,
     // 003 EARS-44 — the Congress hand-off: a real sign-up mints the reference.

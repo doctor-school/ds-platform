@@ -185,6 +185,7 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
     expect(tiers.map((t) => t.name).sort()).toEqual([
       "live/academy/default",
       "live/academy/event-page",
+      "live/doctor/congress",
       "live/doctor/event-page",
       "live/doctor/event-register",
       "live/doctor/feed-live",
@@ -204,6 +205,35 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
         }
       }
     }
+  });
+
+  it("046 EARS-9: the doctor's stage congress is the cabinet event and accepts oral submissions at the seed instant", () => {
+    const now = new Date("2026-11-18T12:00:00Z");
+    const dataset = buildGoldenDataset(now, subjects);
+    const tier = LIVE_TIERS.find((t) => t.name === "live/doctor/congress");
+    const slug = tier?.seededEnv?.E2E_DOCTOR_CONGRESS_SLUG;
+    expect(slug).toBeTruthy();
+    const event = dataset.events.find((e) => e.slug === slug);
+    expect(event).toMatchObject({
+      state: "published",
+      audience: "doctors",
+      participationFormat: "offline",
+      seatsLeft: null,
+    });
+    expect(event!.startsAt.getTime()).toBeGreaterThan(now.getTime());
+    const congressIds = new Set(
+      dataset.congressSubmissionSettings.map((s) => s.eventId),
+    );
+    const cabinetEvent = dataset.events
+      .filter((e) => congressIds.has(e.id!))
+      .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0];
+    expect(cabinetEvent?.id).toBe(event!.id);
+    const oral = dataset.congressSubmissionKindSettings.find(
+      (s) => s.eventId === event!.id && s.kind === "oral",
+    );
+    expect(oral).toMatchObject({ submitLimit: null, maxAgeYears: null });
+    expect(oral!.opensAt!.getTime()).toBeLessThan(now.getTime());
+    expect(oral!.closesAt!.getTime()).toBeGreaterThan(now.getTime());
   });
 
   it("048 EARS-11: every seeded material reference is the published golden material", () => {

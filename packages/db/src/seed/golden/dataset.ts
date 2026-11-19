@@ -159,6 +159,7 @@ const VERIFIED_REGISTRATION_TEMPLATE = [
   { eventId: golden.events.live.id, registeredAt: { days: -5 } },
   { eventId: golden.events.academyLive.id, registeredAt: { days: -5 } },
   { eventId: golden.events.pastWithRecording.id, registeredAt: { days: -40 } },
+  { eventId: golden.events.doctorCongress.id, registeredAt: { days: -5 } },
 ] as const;
 
 /**
@@ -435,6 +436,24 @@ export function buildGoldenDataset(
       origin: "legacy",
       liveAt: at({ days: -365 }),
     },
+    {
+      ...baseEvent({
+        id: golden.events.doctorCongress.id,
+        slug: golden.events.doctorCongress.slug,
+        title: "Конгресс для врачей (эталон)",
+        // The cabinet selects the configured congress with the latest start (046 EARS-4).
+        startsAt: at({ days: 15 }),
+        state: "published",
+        created,
+        updated: created,
+        specialties: ["Кардиология", "Терапия"],
+      }),
+      kindId: SEED_EVENT_KINDS.kongress.id,
+      audience: "doctors",
+      participationFormat: "offline",
+      durationMin: 480,
+      venue: "Москва, тестовая площадка (эталон)",
+    },
     ...volume.events,
   ];
 
@@ -472,6 +491,11 @@ export function buildGoldenDataset(
         registrationUrl: "https://orthobio.ru/congress/registration",
         firstAuthorCounts: false,
       },
+      {
+        eventId: golden.events.doctorCongress.id,
+        registrationUrl: null,
+        firstAuthorCounts: false,
+      },
     ];
   const congressSubmissionKindSettings: GoldenDataset["congressSubmissionKindSettings"] =
     [
@@ -497,6 +521,14 @@ export function buildGoldenDataset(
         opensAt: mskDay(8),
         closesAt: mskDay(29),
         submitLimit: 3,
+        maxAgeYears: null,
+      },
+      {
+        eventId: golden.events.doctorCongress.id,
+        kind: "oral",
+        opensAt: mskDay(-7),
+        closesAt: mskDay(14),
+        submitLimit: null,
         maxAgeYears: null,
       },
     ];
@@ -609,9 +641,15 @@ export function buildGoldenDataset(
       registeredAt: at({ days: -40 }),
       recordStatus: "active",
     },
-    // #2805 — every pool copy holds the verified doctor's four registrations, so
-    // a worker's «Мои события», live room and recording paths see what worker 0
-    // sees. Ordinals 100 + 10·n + k stay in the named range and clear of 1..5.
+    {
+      id: golden.registrations.verifiedOnDoctorCongress.id,
+      userId: doctors.verifiedCardiologist.id,
+      eventId: golden.events.doctorCongress.id,
+      registeredAt: at({ days: -5 }),
+      recordStatus: "active",
+    },
+    // #2805 — every pool copy holds the verified doctor's named registrations.
+    // Ordinals 100 + 10·n + k stay in the named range and clear of 1..6.
     ...verifiedPool.flatMap((copy, poolIndex) =>
       VERIFIED_REGISTRATION_TEMPLATE.map((template, k) => ({
         id: goldenUuid(
@@ -731,6 +769,7 @@ export function buildGoldenDataset(
     [golden.events.pastWithRecording.id, "general-practice"],
     [golden.events.archived.id, "general-practice"],
     [golden.events.academyLive.id, "cardiology"],
+    [golden.events.doctorCongress.id, "cardiology"],
   ];
   const eventDirections: NewEventDirection[] = [
     ...namedEventDirections.map(([eventId, slug], index) => ({

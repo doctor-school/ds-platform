@@ -378,6 +378,8 @@ Every successful `runtime-images.yml` run of a push to `main` triggers
    only the observations defined in `infra/deploy/bin/ds-deploy-entrypoint`, validates
    every parameter and answers only what the lib parses. Database observations use
    a `BEGIN READ ONLY` transaction (release-pipeline spec §5, «Stage suite box reads»).
+   The existing Academy slot URL selects the partnership browser test. The observer
+   verifies the configured stage domain before the form is opened.
    The partnership observation runs in the stage portal as its runtime user. It returns
    only the synthetic contact's matching record count and whether the sole match
    has the expected fields and private file metadata. It bounds reads to 10,000

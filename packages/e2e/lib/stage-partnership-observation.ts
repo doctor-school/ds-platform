@@ -12,8 +12,26 @@ interface PartnershipObservation {
 
 const SYNTHETIC_CONTACT =
   /^partnership-4121-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}@example\.test$/;
-const STAGE_ACADEMY = /^academy-(main|pr-[1-9]\d{0,9})\./;
+const STAGE_ACADEMY = /^academy-(main|pr-[1-9]\d{0,9})\.[a-z0-9.-]+$/;
 const FAILURE = "Stage partnership observation failed";
+
+/** Recognizes the slot URL shape. The observer separately verifies the box domain. */
+export function stageAcademyAddress(baseUrl: string | undefined) {
+  if (!baseUrl) return undefined;
+  const url = URL.parse(baseUrl);
+  if (
+    !url ||
+    url.protocol !== "https:" ||
+    url.port ||
+    url.origin !== baseUrl.replace(/\/$/, "")
+  ) {
+    return undefined;
+  }
+  const slot = STAGE_ACADEMY.exec(url.hostname)?.[1];
+  return slot
+    ? { slot, origin: url.origin, hostname: url.hostname }
+    : undefined;
+}
 
 function resultOf(output: string): PartnershipObservation {
   const result = JSON.parse(output) as Partial<PartnershipObservation> | null;
@@ -93,13 +111,9 @@ export async function readStagePartnershipObservation(
   contact: string,
 ): Promise<PartnershipObservation> {
   try {
-    const url = new URL(academyBaseUrl);
-    const slot = STAGE_ACADEMY.exec(url.hostname)?.[1];
+    const stage = stageAcademyAddress(academyBaseUrl);
     if (
-      !slot ||
-      url.protocol !== "https:" ||
-      url.origin !== academyBaseUrl.replace(/\/$/, "") ||
-      url.port ||
+      !stage ||
       contact !== contact.trim() ||
       !SYNTHETIC_CONTACT.test(contact)
     ) {
@@ -107,10 +121,12 @@ export async function readStagePartnershipObservation(
     }
     const observe = chooseStageObserve();
     if (observe) {
-      await assertObservedMainOrigin(observe, url.origin, slot);
+      await assertObservedMainOrigin(observe, stage.origin, stage.slot);
       return resultOf(await observe("academy-partnership", { contact }));
     }
-    return resultOf(await readWithOperator(slot, url.hostname, contact));
+    return resultOf(
+      await readWithOperator(stage.slot, stage.hostname, contact),
+    );
   } catch {
     // Never expose a transport reply or stderr in an Actions report.
     throw new Error(FAILURE);

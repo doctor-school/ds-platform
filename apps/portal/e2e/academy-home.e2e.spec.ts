@@ -12,7 +12,11 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
-import { MAIN_LANDMARK_RULES, readStagePartnershipObservation } from "@ds/e2e";
+import {
+  MAIN_LANDMARK_RULES,
+  readStagePartnershipObservation,
+  stageAcademyAddress,
+} from "@ds/e2e";
 import { expect, test, type Page } from "@playwright/test";
 
 const SECTION_ORDER = [
@@ -74,7 +78,6 @@ function isShellRequest(url: string): boolean {
 
 const SUBMISSIONS_DIRECTORY = process.env.ACADEMY_SUBMISSIONS_DIR;
 const PERSISTENCE_E2E_SAFE = process.env.ACADEMY_PARTNERSHIP_E2E_SAFE === "1";
-const STAGE_PARTNERSHIP = process.env.E2E_ACADEMY_PARTNERSHIP_STAGE === "1";
 const SAFE_SUBMISSIONS_PREFIX = "academy-partnership-e2e-";
 
 function normalized(path: string): string {
@@ -498,17 +501,17 @@ test.describe("Feature 013 — static public Academy home", () => {
     baseURL,
     page,
   }) => {
+    const stage = stageAcademyAddress(baseURL);
     test.skip(
-      !STAGE_PARTNERSHIP && !PERSISTENCE_E2E_SAFE,
+      !stage && !PERSISTENCE_E2E_SAFE,
       "requires the Academy stage leg or isolated CI persistence fixture",
     );
-    const stageContact = STAGE_PARTNERSHIP
+    const stageContact = stage
       ? `partnership-4121-${randomUUID()}@example.test`
       : undefined;
-    if (stageContact && !baseURL) throw new Error("missing Academy stage URL");
     const observe =
-      stageContact && baseURL
-        ? () => readStagePartnershipObservation(baseURL, stageContact)
+      stage && stageContact
+        ? () => readStagePartnershipObservation(stage.origin, stageContact)
         : undefined;
     let local: { directory: string; before: Set<string> } | undefined;
     if (observe) {

@@ -41,4 +41,7 @@ export {
   eventPageHonestyFindings,
   offlineSoldOutFindings,
 } from "./lib/event-page-honesty.js";
-export { readStagePartnershipObservation } from "./lib/stage-partnership-observation.js";
+export {
+  readStagePartnershipObservation,
+  stageAcademyAddress,
+} from "./lib/stage-partnership-observation.js";

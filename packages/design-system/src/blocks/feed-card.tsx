@@ -235,7 +235,6 @@ function FeedContentCard({
       data-feed-card="content"
       className={cn(
         "group flex flex-col border-2 border-border bg-card text-inherit no-underline shadow-lg transition duration-150 hover:translate-x-px hover:translate-y-px hover:shadow-md focus-visible:shadow-focus focus-visible:outline-none sm:flex-row",
-        card.state === "done" && "opacity-80",
         className,
       )}
     >

@@ -131,8 +131,9 @@ export const LearningCoursePathSchema = z.strictObject({
     document: LearningCourseDocumentSchema,
     partner: LearningCoursePartnerSchema.nullable(),
     /**
-     * 023 EARS-11, EARS-13 — the 024 sentence builder's sentence for the course
-     * scope from its resolved completion rule; never a preset's name.
+     * 023 EARS-11, EARS-13 — the 024 sentence builder's summary for the course
+     * scope from its resolved rules: what opens when, what counts as done and
+     * that the certificate needs the whole course; never a preset's name.
      */
     rulesSummary: z.string(),
   }),

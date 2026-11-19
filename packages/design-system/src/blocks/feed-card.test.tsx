@@ -204,6 +204,12 @@ describe("FeedCard — doctor content card (variant Б)", () => {
     expect(screen.getByText(FEED_CARD_COPY.done)).toBeTruthy();
   });
 
+  it("023 EARS-5: a done card is not dimmed — its texts keep WCAG AA contrast (axe color-contrast)", () => {
+    const { container } = render(<FeedCard card={content({ state: "done" })} />);
+    const card = container.querySelector('[data-feed-card="content"]');
+    expect(card?.className).not.toMatch(/\bopacity-/);
+  });
+
   it("023 EARS-22: system shall show the partner mark only WHILE the course carries a partner", () => {
     const { rerender } = render(<FeedCard card={content()} />);
     expect(screen.queryByText(/Партнёрский материал/)).toBeNull();

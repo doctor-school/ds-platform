@@ -19,8 +19,8 @@ import {
  * source are absent; the source is failing (Telegram unreachable) and the rail
  * still shows its cards with no error state; axe finds nothing in the rail.
  *
- * The stand's API has no bot connected, so no update ever reaches its
- * webhook: the posts are stored as the connector stores them
+ * The stand's API has no bot token, so its update poller never runs (048
+ * EARS-24): the posts are stored as the connector stores them
  * (`support/feed-posts.ts`); the update → entry mapping is proven against the
  * Telegram double by the API e2e (V-15, V-18).
  *

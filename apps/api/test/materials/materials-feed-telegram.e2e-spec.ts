@@ -28,9 +28,9 @@ import {
 // stack (Fastify + Postgres): `post` cards in the EARS-9 order and cursor
 // among own materials, the preview signed at the read, hidden and
 // switched-off entries absent and back once returned (EARS-33), and the read
-// served from the stored entries with the Telegram double down, the webhook
-// never delivered, the source failing or the connector not configured — the
-// read never calls Telegram (EARS-35). Entries are seeded as the connector
+// served from the stored entries with the Telegram double down, the poller
+// unable to fetch updates, the source failing or the connector not configured
+// — the read never calls Telegram (EARS-35). Entries are seeded as the connector
 // writes them (its write path is the #3994 suite's subject) inside a
 // far-future instant window unique to this run, and every page walk starts
 // just above that window, so rows other suites write never interleave.
@@ -41,12 +41,8 @@ const outages: {
   config: TelegramConfig | null;
 }[] = [
   {
-    name: "Telegram unreachable, the webhook never delivered, the source failing",
-    config: {
-      botToken: "123456:E2E-feed_token",
-      webhookSecret: "e2e_feed-secret",
-      webhookUrl: null,
-    },
+    name: "Telegram unreachable, the poller unable to fetch updates, the source failing",
+    config: { botToken: "123456:E2E-feed_token" },
   },
   { name: "the connector not configured", config: null },
 ];
@@ -342,7 +338,7 @@ describe.skipIf(!process.env.DATABASE_URL).each(outages)(
       expect(await ids()).toEqual([shown.id, hidden.id, ofOff.id]);
     });
 
-    it("048 EARS-35: while Telegram is unreachable, the webhook is not delivered, the source is failing or the connector is not configured, the system shall serve the feed from the stored entries with every other card as usual and never call Telegram", async () => {
+    it("048 EARS-35: while Telegram is unreachable, the poller cannot fetch updates, a source is failing or the connector is not configured, the system shall serve the feed read from the stored entries with no error state for that source and every other card as usual, never calling Telegram", async () => {
       const s = await source();
       const a = await post(s, {
         messageId: 41,

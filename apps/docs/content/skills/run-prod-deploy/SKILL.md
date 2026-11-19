@@ -30,16 +30,18 @@ The gate covers the **whole deploy range** (`deployedSha..<target>`): a failing 
 
    **Contract-migration gate.** A migration dropping a column/constraint, or guarding itself with a `RAISE EXCEPTION` on non-empty data, runs INSIDE the release (the box-side `migrate` step) — a violated precondition aborts the **release**. Always **escalate**. All of the following hold, or the release **HOLDS**:
 
-   - **(a) Precondition re-verified on prod immediately before the dispatch** — not earlier; the number moves under you. Read-only, from a break-glass session (§6):
+   - **(a) Precondition re-verified on prod immediately before the dispatch** — not earlier; the answer moves under you. Read-only, with no break-glass key and no owner word, through the keyless `observe` entry `table-empty` (tech spec 2026-10-16 §5 «Prod read verbs.»):
      ```bash
-     ssh ds-data-prod "sudo docker exec ds-data-prod-postgres-1 psql -U ds -d ds_prod -Atc 'select count(*) from experts'"
+     gh workflow run prod-observe.yml --ref main -f verb=observe -f name=table-empty -f params='{"table":"experts"}'
+     pnpm prod:read <run-id>   # result {"empty": true} | {"empty": false}
      ```
-   - **(b) Authoring freeze for the release window** — announce to the admin operators that the affected entity is not created or edited from the count until the health verify (§3) passes, then **re-run the count after that announcement**: the second read gates the dispatch.
+     The read answers only empty vs non-empty, for a table on the entry's list; `table-rows` cannot answer the gate (it reads both 0 and 1 as `<10`). **A contract migration's PR adds its guarded table to the `table-empty` list** in `PROD_OBSERVATIONS` (`infra/deploy/bin/ds-deploy-entrypoint`), so the read is installed before the release that needs it. Only while the verb is unavailable (the live tree predates the entry, or `prod-observe.yml` is down) does the read fall back to a break-glass session (§6): `ssh ds-data-prod "sudo docker exec ds-data-prod-postgres-1 psql -U ds -d ds_prod -Atc 'select count(*) from <table>'"`.
+   - **(b) Authoring freeze for the release window** — announce to the admin operators that the affected entity is not created or edited from the read until the health verify (§3) passes, then **re-run the read (a) after that announcement**: the second read gates the dispatch.
    - **(c) Pre-migrate restore point recorded** — the release takes a pgbackrest pre-migrate `incr` backup (`infra/deploy/README.md` → step 4, DSO-129); confirm it in the driver unit's journal, record its label/timestamp in the release record comment. (Dev-stand counterpart: `.claude/rules/dev-stand.md` → «Snapshot before migrate»; never `dev:snapshot` on prod.)
 
    Unmet ⇒ hold the range; never weaken the migration, never delete prod rows to satisfy it — open the spec-mandated data path as its own Issue, then ship. Named instances (add a line, not a section):
 
-   - **0028 — `experts` structured-name contract (#1642).** `apps/api/drizzle/0028_cultured_princess_powerful.sql` drops three `experts_*` constraints and `experts.name` irreversibly, raising `EARS-20: … explicit reviewed per-id mapping` on ANY `experts` row. Gate = (a); `count > 0` ⇒ hold + open the per-id mapping (012-requirements EARS-20).
+   - **0028 — `experts` structured-name contract (#1642).** `apps/api/drizzle/0028_cultured_princess_powerful.sql` drops three `experts_*` constraints and `experts.name` irreversibly, raising `EARS-20: … explicit reviewed per-id mapping` on ANY `experts` row. Gate = (a) with `params='{"table":"experts"}'`; `{"empty": false}` ⇒ hold + open the per-id mapping (012-requirements EARS-20).
 
 5. **Rollback ready** — the previous release is a target of the rollback mode (§4): one of the latest 3 `release-*` Releases, its `images-<sha>.json` recorded, and the DB untouched by an app rollback (guaranteed by item 4).
 6. **Target on `main`** — a full 40-hex SHA contained in `main`. The workflow ships exactly that commit's codeload tree and runs the record code of `main`; no workstation checkout takes part. The pre-flight refuses any other SHA.

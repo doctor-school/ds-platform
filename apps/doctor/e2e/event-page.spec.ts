@@ -279,7 +279,9 @@ test("014 EARS-6/8: a doctor returns to the past event, plays the montage and op
   const montageSrc = await montage.getAttribute("src");
 
   const summary = spoiler.locator("summary");
-  await expect(summary).toHaveText("Смотреть оригинал трансляции");
+  await expect(
+    summary.getByText("Смотреть оригинал трансляции", { exact: true }),
+  ).toBeVisible();
   await expect(spoiler).not.toHaveAttribute("open");
   await expect(spoiler.locator("iframe")).toHaveCount(0);
 

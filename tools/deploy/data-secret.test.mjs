@@ -475,7 +475,7 @@ describe("4153: the committed api intake certificate", () => {
         process.execPath,
         [join(import.meta.dirname, "data-secret.mjs"), "--box", "api", SHA],
         {
-          input: "BOT_PROTECTION_ENABLED=true\nTELEGRAM_WEBHOOK_SECRET=<generate>\n",
+          input: "BOT_PROTECTION_ENABLED=true\nLIFECYCLE_IMPACT_TOKEN_SECRET=<generate>\n",
           encoding: "utf8",
         },
       );

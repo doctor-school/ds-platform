@@ -61,6 +61,66 @@ const PYTHON = ["python3", "python"].find(
   (p) => spawnSync(p, ["-c", "import sys; assert sys.version_info >= (3, 8)"]).status === 0,
 );
 
+test("4121: the stage observer emits only the private synthetic-record result", { skip: !PYTHON }, () => {
+  const entrypoint = readFileSync(ENTRYPOINT, "utf8").replace(/\r\n/g, "\n");
+  const observer = entrypoint.match(/\nread -r -d '' OBSERVE_PY <<'PY' \|\| true\n([\s\S]*?)\nPY\n/)[1];
+  const bridge = `
+import base64, json, subprocess, sys
+observer, effect = sys.argv[1:3]
+contact = "partnership-4121-185808fb-4392-4452-b012-7d31647970e4@example.test"
+def docker(argv, **kwargs):
+    assert argv[:4] == ["docker", "exec", "main-portal", "node"], argv
+    assert argv[-1] == contact
+    result = {"count": 1, "privateRecord": True}
+    if effect == "foreign-field":
+        result["contact"] = "private@partner.example"
+    return subprocess.CompletedProcess(argv, 0, json.dumps(result).encode())
+subprocess.run = docker
+sys.argv = ["observer", "academy-partnership", "", "", "4096", "", "node observer"]
+exec(base64.b64decode(observer))
+`;
+  const run = (effect) =>
+    spawnSync(PYTHON, ["-c", bridge, Buffer.from(observer).toString("base64"), effect], {
+      encoding: "utf8",
+      input: JSON.stringify({ contact: "partnership-4121-185808fb-4392-4452-b012-7d31647970e4@example.test" }),
+    });
+  const accepted = run("ok");
+  assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+  assert.deepEqual(JSON.parse(accepted.stdout), { count: 1, privateRecord: true });
+  const rejected = run("foreign-field");
+  assert.equal(rejected.status, 1);
+  assert.doesNotMatch(rejected.stdout + rejected.stderr, /private@/);
+});
+test("4121: the fault observer returns only exact persistence-failure marker counts", { skip: !PYTHON }, () => {
+  const entrypoint = readFileSync(ENTRYPOINT, "utf8").replace(/\r\n/g, "\n");
+  const observer = entrypoint.match(/\nread -r -d '' OBSERVE_PY <<'PY' \|\| true\n([\s\S]*?)\nPY\n/)[1];
+  const bridge = `
+import base64, subprocess, sys
+observer, effect = sys.argv[1:3]
+def docker(argv, **kwargs):
+    assert argv == ["docker", "logs", "--tail", "200", "main-portal-partnership-unavailable"], argv
+    assert kwargs["stderr"] == subprocess.STDOUT and kwargs["timeout"] == 20
+    logs = b"private@partner.example\\n[academy-partnership] persistence_failed\\nother persistence_failed"
+    return subprocess.CompletedProcess(argv, 1 if effect == "failed" else 0, logs)
+subprocess.run = docker
+sys.argv = ["observer", "academy-partnership-fault-count", "", "", "4096", "", ""]
+exec(base64.b64decode(observer))
+`;
+  const run = (effect, input = "{}") =>
+    spawnSync(PYTHON, ["-c", bridge, Buffer.from(observer).toString("base64"), effect], {
+      encoding: "utf8",
+      input,
+    });
+  const accepted = run("ok");
+  assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+  assert.equal(accepted.stdout.trim(), "1");
+  const failed = run("failed");
+  assert.equal(failed.status, 1);
+  assert.doesNotMatch(failed.stdout + failed.stderr, /private@/);
+  const rejected = run("ok", '{"slot":"pr-1"}');
+  assert.equal(rejected.status, 2);
+  assert.match(rejected.stdout, /bad parameters/);
+});
 /** Run `code` with READ_OBSERVE_PY imported as `m` (its entry point does not run); its JSON stdout. */
 function readObservePy(code) {
   const text = readFileSync(ENTRYPOINT, "utf8").replace(/\r\n/g, "\n");
@@ -672,7 +732,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     const table = text.match(/OBSERVATIONS = \{([\s\S]*?)\n\}/)[1];
     const names = [...table.matchAll(/^ {4}"([a-z-]+)": \(/gm)].map((m) => m[1]).sort();
     assert.deepEqual(allow, names);
-    assert.equal(names.length, 7);
+    assert.equal(names.length, 9);
   });
 
   it("3119: observe refuses (exit 3) on any box but the stage box", () => {
@@ -777,6 +837,43 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(bad.status, 2);
   });
 
+  it("4121: observe reads only synthetic partnership metadata from main portal", () => {
+    setRole("stage");
+    const contact = `partnership-4121-${OWNED}@example.test`;
+    stubDocker(JSON.stringify({ count: 1, privateRecord: true }));
+    const r = run("observe academy-partnership", { input: json({ contact }) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), { count: 1, privateRecord: true });
+    const argv = log("docker-argv").trimEnd().split("\n");
+    assert.deepEqual(argv.slice(0, 4), ["exec", "main-portal", "node", "-e"]);
+    assert.equal(argv.at(-1), contact);
+    assert.doesNotMatch(r.stdout + r.stderr, /example\.test|secret diagnostics/);
+  });
+
+  it("4121: observe rejects foreign fields and contact before running the container read", () => {
+    setRole("stage");
+    stubDocker("{}");
+    for (const params of [
+      { contact: "real@partner.example" },
+      { contact: `partnership-4121-${OWNED}@example.test`, slot: "pr-1" },
+    ]) {
+      const r = run("observe academy-partnership", { input: json(params) });
+      assert.equal(r.status, 2);
+      assert.match(r.stderr, /bad parameters for academy-partnership/);
+      assert.ok(!existsSync(join(dir, "docker-argv.log")), "no read");
+    }
+  });
+
+  it("4121: observe rejects a malformed reply without logging data from the portal", () => {
+    setRole("stage");
+    stubDocker(JSON.stringify({ count: 1, privateRecord: true, contact: "private@partner.example" }));
+    const r = run("observe academy-partnership", {
+      input: json({ contact: `partnership-4121-${OWNED}@example.test` }),
+    });
+    assert.equal(r.status, 1);
+    assert.equal(r.stdout, "");
+    assert.doesNotMatch(r.stderr, /private@|secret diagnostics/);
+  });
   it("3119: observe mirror-count prints only the count", () => {
     setRole("stage");
     stubDocker(envelope([{ count: 1 }]));

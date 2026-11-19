@@ -13,6 +13,8 @@ import { isAbsolute } from "node:path";
  */
 export const STAGE_OBSERVATIONS = [
   "academy-host",
+  "academy-partnership",
+  "academy-partnership-fault-count",
   "password-policy",
   "mirror-count",
   "auth-consent",

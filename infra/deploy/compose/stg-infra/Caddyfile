@@ -133,7 +133,8 @@
 # §3 convention — no registry read, no file under /etc/ds-platform/caddy. A
 # well-formed name with nothing behind it therefore gets a certificate and then a
 # 502 behind the basic-auth challenge; a malformed name is refused before any ACME
-# order starts.
+# order starts. The Academy partnership fault host uses the same slot suffix
+# and a separate restricted handler.
 #
 # THE ALTERNATIONS BELOW MUST AGREE WITH THE `@stage_slot` / `@stage_centrifugo` /
 # `@stage_back_channel_logout` / `@stage_telegram_webhook` MATCHERS IN THE HTTPS SITE AT THE BOTTOM OF THIS FILE.
@@ -161,7 +162,7 @@ http://127.0.0.1:2020 {
 	# `path_regexp` can judge it.
 	rewrite * /ask/{query.domain}
 
-	@stage_ask path_regexp ask "^/ask/((academy|doctor|admin|api|login)-(main|pr-[1-9][0-9]{0,9})|id|s3|mailpit|sms-sink)[.]{$STAGE_BASE_DOMAIN}$"
+	@stage_ask path_regexp ask "^/ask/((academy|doctor|admin|api|login)-(main|pr-[1-9][0-9]{0,9})|academy-partnership-unavailable-(main|pr-[1-9][0-9]{0,9})|id|s3|mailpit|sms-sink)[.]{$STAGE_BASE_DOMAIN}$"
 	handle @stage_ask {
 		respond 200
 	}
@@ -283,6 +284,29 @@ http://127.0.0.1:2020 {
 		reverse_proxy {re.slot.2}-api:3000
 	}
 
+	# Academy partnership EARS-7. The fixture has only the guest home and assets.
+	# Its POST follows the same Next action as the normal portal, against a
+	# non-directory. All other paths, including the internal API, stop at the edge.
+	@stage_partnership_unavailable header_regexp partnership_unavailable Host "^academy-partnership-unavailable-(main|pr-[1-9][0-9]{0,9})[.]"
+	handle @stage_partnership_unavailable {
+		@fixture_post {
+			method POST
+			path /
+		}
+		handle @fixture_post {
+			import staging_gate {re.partnership_unavailable.1}-portal-partnership-unavailable:3001
+		}
+		@fixture_get {
+			method GET HEAD
+			path / /_next/static/* /_next/image /brand/* /experts/* /icon.svg /favicon.ico
+		}
+		handle @fixture_get {
+			import staging_gate {re.partnership_unavailable.1}-portal-partnership-unavailable:3001
+		}
+		handle {
+			respond 404
+		}
+	}
 	# Every slot host, live or not. The domain suffix is already guaranteed by this
 	# site's address, so the regexp only judges the single label in front of it.
 	# MUST AGREE WITH the `@stage_ask` matcher above AND with `SLOT_NAME_RE` in

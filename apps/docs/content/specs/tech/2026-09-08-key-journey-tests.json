@@ -1973,6 +1973,17 @@
       ]
     },
     {
+      "rows": ["D9"],
+      "leg": "live/doctor/event-page",
+      "file": "event-page.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "014 EARS-6/8: a doctor returns to the past event, plays the montage and opens the original"
+        ]
+      ]
+    },
+    {
       "rows": ["D10"],
       "leg": "live/doctor/event-register",
       "file": "a11y/account-axe.e2e.spec.ts",

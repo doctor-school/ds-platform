@@ -541,6 +541,11 @@ wins; it also wins over the host-wide
 `GOLDEN_LIVE_ENV` slug for that leg. `apps/api/test/scripts/stage-event-page-slugs.spec.ts` builds the golden dataset and
 fails when a mirrored slug stops carrying its shape.
 
+The doctor event-page tier uses `E2E_DOCTOR_RECORDING_BOTH_CUTS_SLUG` for the
+signed-in recording journey (014 EARS-6/8). The golden event carries a public
+RuTube montage and its distinct original. The journey follows the recording
+gate through real sign-in and requires a presented video frame from RuTube.
+
 An IdP management token (`IDP_SERVICE_TOKEN`/`IDP_PROJECT_ID`), the api's
 `CONGRESS_SIGNUP_*` block and a `DATABASE_URL` are **not** derived and not added to the
 Actions env (a management token in a public repo's Actions env widens the blast radius;

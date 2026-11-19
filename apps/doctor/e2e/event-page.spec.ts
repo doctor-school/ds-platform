@@ -1,4 +1,5 @@
 import { withoutPresignNonces } from "@ds/e2e";
+import { submitSignInHostForm } from "@ds/e2e/sign-in";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
@@ -159,4 +160,127 @@ test.describe("020 EARS-1 / EARS-18 — cross-host identity", () => {
       JSON.parse(withoutPresignNonces(await res.text())) as unknown;
     expect(await body(doctor)).toEqual(await body(academy));
   });
+});
+
+const BOTH_CUTS = process.env.E2E_DOCTOR_RECORDING_BOTH_CUTS_SLUG;
+const EDITED_ONLY = process.env.E2E_WEBINAR_SLUG_ENDED;
+const DOCTOR_EMAIL = process.env.E2E_DOCTOR_EMAIL;
+const DOCTOR_PASSWORD = process.env.E2E_DOCTOR_PASSWORD;
+
+test("014 EARS-6/8: a doctor returns to the past event, plays the montage and opens the original", async ({
+  page,
+  context,
+}) => {
+  test.skip(
+    !BASE || !BOTH_CUTS || !EDITED_ONLY || !DOCTOR_EMAIL || !DOCTOR_PASSWORD,
+    "requires the live doctor storefront, two ended event shapes and a doctor account",
+  );
+  test.setTimeout(90_000);
+
+  const eventPath = `/events/${BOTH_CUTS}`;
+  const eventUrl = new URL(eventPath, BASE);
+  const gate = page.getByTestId("recording-gate");
+  const signIn = page.getByTestId("recording-gate-signin");
+  const spoiler = page.getByTestId("recording-spoiler");
+  const frames = page
+    .locator("iframe")
+    .and(page.getByTestId(/^recording-player-/));
+
+  await context.clearCookies();
+  const response = await page.goto(eventUrl.href, {
+    waitUntil: "domcontentloaded",
+  });
+  expect(response?.status()).toBe(200);
+  await expect(gate).toBeVisible();
+  await expect(frames).toHaveCount(0);
+  await expect(spoiler).toHaveCount(0);
+
+  const encoded = encodeURIComponent(eventPath);
+  await expect(signIn).toHaveAttribute("href", `/login?returnTo=${encoded}`);
+  await expect(page.getByTestId("recording-gate-signup")).toHaveAttribute(
+    "href",
+    `/register?returnTo=${encoded}`,
+  );
+  await signIn.click();
+  await submitSignInHostForm(
+    page,
+    { loginPath: "/login" },
+    { email: DOCTOR_EMAIL!, password: DOCTOR_PASSWORD! },
+    eventUrl.origin,
+  );
+  await expect(page).toHaveURL(eventUrl.href);
+  await expect(gate).toHaveCount(0);
+
+  await expect(frames).toHaveCount(1);
+  const montage = page.getByTestId("recording-player-rutube");
+  const rutubeEmbed =
+    /^https:\/\/rutube\.ru\/play\/embed\/[\da-f]{32}\/?(?:\?.*)?$/;
+  await expect(montage).toBeVisible();
+  await expect(montage).toHaveAttribute("title", / — Монтаж$/);
+  await expect(montage).toHaveAttribute("src", rutubeEmbed);
+  const montageSrc = await montage.getAttribute("src");
+
+  const summary = spoiler.locator("summary");
+  await expect(summary).toHaveText("Смотреть оригинал трансляции");
+  await expect(spoiler).not.toHaveAttribute("open");
+  await expect(spoiler.locator("iframe")).toHaveCount(0);
+
+  // Play the actual provider video and wait for Chromium to present a frame
+  // after time zero. An iframe, a poster or player readiness alone can pass
+  // even if the media never plays.
+  const mediaTime = await montage
+    .contentFrame()
+    .locator("video:visible")
+    .evaluate(
+      (video: HTMLVideoElement) => {
+        video.muted = true;
+        return new Promise<number>((resolve, reject) => {
+          let frame = 0;
+          const timeout = window.setTimeout(() => {
+            video.cancelVideoFrameCallback(frame);
+            reject(new Error("RuTube did not present a playing video frame"));
+          }, 20_000);
+          const presented: VideoFrameRequestCallback = (_now, metadata) => {
+            if (metadata.mediaTime > 0) {
+              window.clearTimeout(timeout);
+              resolve(metadata.mediaTime);
+            } else {
+              frame = video.requestVideoFrameCallback(presented);
+            }
+          };
+          frame = video.requestVideoFrameCallback(presented);
+          void video.play().catch((error: unknown) => {
+            window.clearTimeout(timeout);
+            video.cancelVideoFrameCallback(frame);
+            reject(error);
+          });
+        });
+      },
+      undefined,
+      { timeout: 20_000 },
+    );
+  expect(mediaTime).toBeGreaterThan(0);
+
+  await summary.press("Enter");
+  await expect(spoiler).toHaveAttribute("open", "");
+  await expect(frames).toHaveCount(2);
+  const original = spoiler.getByTestId("recording-player-rutube");
+  await expect(original).toBeVisible();
+  await expect(original).toHaveAttribute("title", / — Оригинал$/);
+  await expect(original).toHaveAttribute("src", rutubeEmbed);
+  const originalSrc = await original.getAttribute("src");
+  expect(new URL(originalSrc!).pathname).not.toBe(
+    new URL(montageSrc!).pathname,
+  );
+  expect(await frames.first().getAttribute("src")).toBe(montageSrc);
+  await summary.press("Enter");
+  await expect(spoiler).not.toHaveAttribute("open");
+  await expect(frames).toHaveCount(1);
+
+  await page.goto(new URL(`/events/${EDITED_ONLY}`, BASE).href, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(page.getByTestId("recording-meta")).toContainText("Монтаж");
+  await expect(gate).toHaveCount(0);
+  await expect(spoiler).toHaveCount(0);
 });

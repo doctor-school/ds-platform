@@ -1438,6 +1438,12 @@ describe("runE2eStage — the live legs", () => {
       doctor.env.E2E_WEBINAR_SLUG_ENDED,
       GOLDEN_SLUGS.doctorEndedRecorded,
     );
+    assert.equal(
+      doctor.env.E2E_DOCTOR_RECORDING_BOTH_CUTS_SLUG,
+      "golden-volume-event-151",
+    );
+    assert.equal(academy.env.E2E_DOCTOR_RECORDING_BOTH_CUTS_SLUG, undefined);
+    assert.equal(calls[0].env.E2E_DOCTOR_RECORDING_BOTH_CUTS_SLUG, undefined);
     assert.equal(doctor.env.E2E_HYBRID_SLUG, undefined);
     // The default Academy leg and the suite never see a seeded slug.
     const academyDefault = calls.find(

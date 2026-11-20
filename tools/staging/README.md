@@ -484,7 +484,7 @@ them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 | `live/doctor/event-register` | `doctor/playwright.event-register.config.ts`                                                                                             | yes           |
 | `live/doctor/events-live`    | `doctor/playwright.events-live.config.ts`                                                                                                | yes           |
 | `live/doctor/learning`       | `doctor/playwright.learning-live.config.ts` (`learning-path-live.spec.ts`, golden course)                                                | yes           |
-| `live/doctor/feed-live`      | `doctor/playwright.feed-live.config.ts` (`feed-adjacent.spec.ts`, golden specialties)                                                    | yes           |
+| `live/doctor/feed-live`      | `doctor/playwright.feed-live.config.ts` (`feed-adjacent.spec.ts`, `specialty-feed-pick-live.spec.ts` with Mailpit)                       | yes           |
 | `live/doctor/room`           | `doctor/playwright.room.config.ts` (`room-player-chat-live`, `room-canvas-structure-live`; axe runs separately)                          | yes           |
 | `live/doctor/shell`          | `doctor/playwright.shell.config.ts`                                                                                                      | yes           |
 

@@ -26,8 +26,8 @@
       "gap": null
     },
     "D6": {
-      "status": "PARTIAL",
-      "gap": 4116
+      "status": "FULL",
+      "gap": null
     },
     "D7": {
       "status": "FULL",
@@ -2145,6 +2145,20 @@
         ["018 EARS-8: the block renders without overflow · 1440 · dark"],
         ["018 EARS-8: the block renders without overflow · 390 · light"],
         ["018 EARS-8: the block renders without overflow · 390 · dark"]
+      ]
+    },
+    {
+      "rows": ["D6"],
+      "leg": "live/doctor/feed-live",
+      "file": "specialty-feed-pick-live.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "D6: a guest picks a specialty, reads its feed and sees the saved choice on the next visit"
+        ],
+        [
+          "D6: a signed-in doctor picks a specialty, reads its feed and sees the saved choice on the next visit"
+        ]
       ]
     },
     {

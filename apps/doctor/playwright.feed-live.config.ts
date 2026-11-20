@@ -1,9 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
 
-// 018 EARS-8 (#1503) — the adjacent-areas spec against a real stand: a
-// production build of the doctor app, the real api and Postgres with managed
-// direction rows. It never falls back to the route tier's upstream double.
+// The doctor specialty feed against the real app, API and seeded Postgres.
 // See the ENV SET of `e2e/feed-adjacent.spec.ts`.
 const required = [
   "E2E_DOCTOR_URL",
@@ -18,7 +16,12 @@ process.env.E2E_FEED_ADJACENT_REAL = "1";
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "feed-adjacent.spec.ts",
+  testMatch: [
+    "feed-adjacent.spec.ts",
+    ...(process.env.MAILPIT_URL?.trim()
+      ? ["specialty-feed-pick-live.spec.ts"]
+      : []),
+  ],
   workers: 1,
   forbidOnly: true,
   retries: 0,

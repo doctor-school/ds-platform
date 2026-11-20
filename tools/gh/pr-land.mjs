@@ -285,47 +285,74 @@ function runResolveContext(pr) {
   }
 }
 
-/** One git call against the main tree, captured (argv array, no shell). */
-function gitIn(tree, args) {
-  return spawnSync("git", ["-C", tree, ...args], {
-    encoding: "utf8",
-    maxBuffer: GH_MAX_BUFFER,
-  });
-}
+const MAIN_SYNC_PULL_TIMEOUT_MS = 120_000;
+const MAIN_SYNC_PROBE_TIMEOUT_MS = 15_000;
 
 /**
  * Stage 2a (#4181): fast-forward the main tree to `origin/main`. Gathers the
- * evidence for the pure seams above; never deletes anything.
+ * evidence for the pure seams above; never deletes anything. Every git call
+ * is non-interactive and time-bounded: the tail runs unattended in a lander
+ * subagent, where a credential prompt or a hung network call would stall it
+ * with no one to answer. `spawn` is injectable for the guard-test.
  * @param {string} tree
+ * @param {typeof spawnSync} [spawn]
  * @returns {{ok: true, sha: string} | {ok: false, reason: string}}
  */
-function runMainSync(tree) {
-  const lock = join(tree, ".git", "index.lock");
-  const head = gitIn(tree, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
-  if (head.error)
-    return { ok: false, reason: `failed to spawn git: ${head.error.message}` };
-  const status = gitIn(tree, ["status", "--porcelain", "--untracked-files=no"]);
-  if (status.status !== 0) return mainSyncPullOutcome({ pull: status });
-  const refusal = mainSyncRefusal({
-    lockPath: existsSync(lock) ? lock : null,
-    branch: head.status === 0 ? head.stdout.trim() : null,
-    dirty: status.stdout.split(/\r?\n/).filter((line) => line.trim() !== ""),
-  });
-  if (refusal) return { ok: false, reason: refusal };
+export function runMainSync(tree, spawn = spawnSync) {
+  const env = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: "0",
+    GCM_INTERACTIVE: "never",
+  };
+  const refused = (reason) => ({ refused: reason });
+  /** One captured git call (argv array, no shell); a spawn error or timeout aborts the stage. */
+  const git = (args, timeoutMs = MAIN_SYNC_PROBE_TIMEOUT_MS) => {
+    const argv = ["-C", tree, ...args];
+    const res = spawn("git", argv, {
+      encoding: "utf8",
+      maxBuffer: GH_MAX_BUFFER,
+      env,
+      timeout: timeoutMs,
+    });
+    if (res.error?.code === "ETIMEDOUT")
+      throw refused(
+        `git timed out after ${timeoutMs / 1000}s: git ${argv.join(" ")}`,
+      );
+    if (res.error) throw refused(`failed to spawn git: ${res.error.message}`);
+    return res;
+  };
 
-  const pull = gitIn(tree, ["pull", "--ff-only", "origin", "main"]);
-  if (pull.error)
-    return { ok: false, reason: `failed to spawn git: ${pull.error.message}` };
-  if (pull.status !== 0) return mainSyncPullOutcome({ pull });
-  const behind = gitIn(tree, ["rev-list", "--count", "main..origin/main"]);
-  const sha = gitIn(tree, ["rev-parse", "--short=12", "HEAD"]);
-  const n = Number.parseInt(behind.stdout ?? "", 10);
-  return mainSyncPullOutcome({
-    pull,
-    head: sha.status === 0 ? sha.stdout.trim() : null,
-    behindCount: behind.status === 0 && !Number.isNaN(n) ? n : null,
-    behindError: (behind.stderr ?? "").split(/\r?\n/)[0] || undefined,
-  });
+  try {
+    const head = git(["symbolic-ref", "--quiet", "--short", "HEAD"]);
+    const status = git(["status", "--porcelain", "--untracked-files=no"]);
+    if (status.status !== 0) return mainSyncPullOutcome({ pull: status });
+    const lock = join(tree, ".git", "index.lock");
+    const refusal = mainSyncRefusal({
+      lockPath: existsSync(lock) ? lock : null,
+      branch: head.status === 0 ? head.stdout.trim() : null,
+      dirty: status.stdout.split(/\r?\n/).filter((line) => line.trim() !== ""),
+    });
+    if (refusal) return { ok: false, reason: refusal };
+
+    const pull = git(
+      ["pull", "--ff-only", "origin", "main"],
+      MAIN_SYNC_PULL_TIMEOUT_MS,
+    );
+    if (pull.status !== 0) return mainSyncPullOutcome({ pull });
+    const behind = git(["rev-list", "--count", "main..origin/main"]);
+    const sha = git(["rev-parse", "--short=12", "HEAD"]);
+    const n = Number.parseInt(behind.stdout ?? "", 10);
+    return mainSyncPullOutcome({
+      pull,
+      head: sha.status === 0 ? sha.stdout.trim() : null,
+      behindCount: behind.status === 0 && !Number.isNaN(n) ? n : null,
+      behindError: (behind.stderr ?? "").split(/\r?\n/)[0] || undefined,
+    });
+  } catch (e) {
+    if (e && typeof e === "object" && "refused" in e)
+      return { ok: false, reason: e.refused };
+    throw e;
+  }
 }
 
 /** Post-merge: the merged commit SHA for the report (best-effort). */

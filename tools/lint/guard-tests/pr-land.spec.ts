@@ -9,6 +9,7 @@ import {
   landPr,
   mainSyncPullOutcome,
   mainSyncRefusal,
+  runMainSync,
   STAGES,
   stageRemedy,
 } from "../../gh/pr-land.mjs";
@@ -562,6 +563,81 @@ describe("pr-land main-sync stage (#4181)", () => {
         behindCount: 0,
       }),
     ).toEqual({ ok: true, sha: "abc123def456" });
+  });
+
+  /** A fake spawnSync for runMainSync: records every call, answers per git subcommand. */
+  type SpawnOpts = { env: Record<string, string>; timeout: number };
+  function fakeGit(answer: (args: string[]) => Record<string, unknown>) {
+    const calls: { cmd: string; args: string[]; opts: SpawnOpts }[] = [];
+    const spawn = (cmd: string, args: string[], opts: SpawnOpts) => {
+      calls.push({ cmd, args, opts });
+      return answer(args);
+    };
+    return { spawn, calls };
+  }
+  const cleanMain = (args: string[]) => {
+    const sub = args[2];
+    if (sub === "symbolic-ref") return { status: 0, stdout: "main\n" };
+    if (sub === "rev-list") return { status: 0, stdout: "0\n", stderr: "" };
+    if (sub === "rev-parse") return { status: 0, stdout: "abc123def456\n" };
+    return { status: 0, stdout: "", stderr: "" };
+  };
+
+  it("runMainSync: every git call is non-interactive and time-bounded (pull 120 s, probes 15 s)", () => {
+    const { spawn, calls } = fakeGit(cleanMain);
+    expect(runMainSync("/no/such/tree", spawn as never)).toEqual({
+      ok: true,
+      sha: "abc123def456",
+    });
+    expect(calls.map((c) => c.args[2])).toEqual([
+      "symbolic-ref",
+      "status",
+      "pull",
+      "rev-list",
+      "rev-parse",
+    ]);
+    for (const { cmd, args, opts } of calls) {
+      expect(cmd).toBe("git");
+      expect(args.slice(0, 2)).toEqual(["-C", "/no/such/tree"]);
+      expect(opts.env.GIT_TERMINAL_PROMPT).toBe("0");
+      expect(opts.env.GCM_INTERACTIVE).toBe("never");
+      expect(opts.timeout).toBe(args[2] === "pull" ? 120000 : 15000);
+    }
+  });
+
+  it("runMainSync: a timed-out pull is `git timed out after 120s: <cmd>`", () => {
+    const { spawn } = fakeGit((args) =>
+      args[2] === "pull"
+        ? {
+            status: null,
+            signal: "SIGTERM",
+            error: Object.assign(new Error("spawnSync git ETIMEDOUT"), {
+              code: "ETIMEDOUT",
+            }),
+          }
+        : cleanMain(args),
+    );
+    expect(runMainSync("/t", spawn as never)).toEqual({
+      ok: false,
+      reason: "git timed out after 120s: git -C /t pull --ff-only origin main",
+    });
+  });
+
+  it("runMainSync: a timed-out probe is `git timed out after 15s: <cmd>`", () => {
+    const { spawn, calls } = fakeGit((args) =>
+      args[2] === "status"
+        ? {
+            status: null,
+            error: Object.assign(new Error("ETIMEDOUT"), { code: "ETIMEDOUT" }),
+          }
+        : cleanMain(args),
+    );
+    expect(runMainSync("/t", spawn as never)).toEqual({
+      ok: false,
+      reason:
+        "git timed out after 15s: git -C /t status --porcelain --untracked-files=no",
+    });
+    expect(calls.map((c) => c.args[2])).not.toContain("pull");
   });
 
   it("a lock is reported, never deleted: the source removes no file", () => {

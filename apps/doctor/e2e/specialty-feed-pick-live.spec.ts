@@ -16,7 +16,6 @@ requireLiveStandEnv([
   "MAILPIT_URL",
 ]);
 
-const SPECIALTY_NAME = "Пульмонология";
 const SPECIALTY_CODE = process.env.E2E_FEED_ADJACENT_CODE!;
 
 async function pickAndReadFeed(
@@ -26,13 +25,17 @@ async function pickAndReadFeed(
   await page.goto("/");
   const catalog = page.getByTestId("specialty-catalog");
   await expect(catalog).toHaveAttribute("data-state", "open");
-  const search = catalog.getByRole("searchbox");
-  await page.waitForFunction(isReactHydrated, await search.elementHandle());
-  await search.fill(SPECIALTY_NAME);
-  const specialty = catalog.getByRole("button", {
-    name: SPECIALTY_NAME,
-    exact: true,
-  });
+  const expand = catalog.getByTestId("specialty-expand");
+  await page.waitForFunction(isReactHydrated, await expand.elementHandle());
+  await expand.click();
+  const specialty = catalog
+    .getByTestId("specialty-entry")
+    .and(catalog.locator(`[data-code="${SPECIALTY_CODE}"]`));
+  await expect(
+    specialty,
+    `specialty ${SPECIALTY_CODE} is in the full catalog`,
+  ).toBeVisible();
+  const specialtyName = (await specialty.innerText()).trim();
 
   const [saved] = await Promise.all([
     page.waitForResponse(
@@ -45,7 +48,7 @@ async function pickAndReadFeed(
   expect(saved.ok()).toBe(true);
   expect(await saved.json()).toMatchObject({
     storedIn: choice.storedIn,
-    specialty: { code: SPECIALTY_CODE, name: SPECIALTY_NAME },
+    specialty: { code: SPECIALTY_CODE, name: specialtyName },
   });
 
   await expect(page).toHaveURL(
@@ -53,7 +56,7 @@ async function pickAndReadFeed(
   );
   const feed = page.getByTestId("specialty-feed");
   await expect(
-    feed.getByRole("heading", { level: 1, name: SPECIALTY_NAME, exact: true }),
+    feed.getByRole("heading", { level: 1, name: specialtyName, exact: true }),
   ).toBeVisible();
   const events = feed.getByTestId("specialty-feed-events");
   await expect(
@@ -95,7 +98,7 @@ async function pickAndReadFeed(
   await page.goto("/");
   await expect(catalog).toHaveAttribute("data-state", "chosen");
   await expect(catalog.getByTestId("specialty-chosen")).toHaveText(
-    SPECIALTY_NAME,
+    specialtyName,
   );
 }
 

@@ -131,6 +131,20 @@ export {
   type GoldenLearningVolume,
 } from "./learning-volume.js";
 export {
+  buildGoldenLearningPathVolume,
+  GOLDEN_LEARNING_PATH_COURSES,
+  GOLDEN_LEARNING_PATH_SCHOOL,
+  goldenLearningPathLessonCount,
+  type GoldenLearningPathVolume,
+} from "./learning-path-volume.js";
+export {
+  buildGoldenCongressVolume,
+  GOLDEN_VOLUME_CONGRESSES,
+  GoldenCongressVolumeError,
+  type GoldenCongressVolume,
+} from "./congress-volume.js";
+export { buildGoldenFeedVolume, type GoldenFeedVolume } from "./feed-volume.js";
+export {
   composeDescription,
   specialtiesWithoutParagraphBank,
   volumeEventTitle,

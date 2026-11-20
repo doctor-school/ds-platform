@@ -94,6 +94,10 @@ export const GOLDEN_GROUP = Object.freeze({
   eventRoleGrants: 0x001d,
   // 023 EARS-5 (#4017) — the golden doctor's facts on the volume schools.
   learningFacts: 0x001e,
+  // #4172 — the volume families every schema table is held to
+  // (`golden.spec.ts` «#4172 golden volume covers the schema»).
+  congressSubmissions: 0x001f,
+  feedSources: 0x0020,
 });
 
 /**

@@ -11,9 +11,12 @@ import { existsSync } from "node:fs";
 
 import { materialBodySchema } from "@ds/schemas";
 import { PDFDocument } from "pdf-lib";
+import { getTableName, is } from "drizzle-orm";
+import { PgTable } from "drizzle-orm/pg-core";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
+import * as schema from "../../schema/index.js";
 import { SEED_ORGANISATION_ROLES } from "../../schema/taxonomy.js";
 import {
   buildGoldenDataset,
@@ -71,6 +74,8 @@ import {
   resolveDirectionSpecialtyRows,
   resolveDoctorSpecialtyRows,
   resolveLearningRuleLayerRows,
+  GOLDEN_LEARNING_PATH_COURSES,
+  GOLDEN_LEARNING_PATH_SCHOOL,
   GOLDEN_COURSE_MEMO_KEY,
   goldenCourseMemoPdf,
   specialtiesWithoutParagraphBank,
@@ -246,7 +251,12 @@ describe("#2063 golden dataset", () => {
       resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: PINNED_NOW }),
       subjects,
     );
-    expect(JSON.stringify(again)).toBe(JSON.stringify(dataset));
+    // `feed_sources.telegram_chat_id` is a bigint, which JSON cannot carry bare.
+    const bytes = (v: unknown) =>
+      JSON.stringify(v, (_, x: unknown) =>
+        typeof x === "bigint" ? `${x}n` : x,
+      );
+    expect(bytes(again)).toBe(bytes(dataset));
   });
 
   it("moves every timestamp when the pin moves — nothing is hardcoded", () => {
@@ -373,6 +383,9 @@ describe("#2063 golden dataset", () => {
       registrations: [
         { ...dataset.registrations[0]!, userId: goldenUuid(0x0fff, 1) },
       ],
+      // The rows hanging off the dropped registrations go with them (#4172).
+      congressSubmissions: [],
+      registrationAttendance: [],
     };
     expect(goldenReferentialIssues(broken)).toHaveLength(1);
   });
@@ -503,22 +516,37 @@ describe("#2063 golden seed plan", () => {
       role: "congress-program-committee",
     });
     expect(dataset.users.some((row) => row.email === user?.email)).toBe(false);
-    const steps = buildGoldenSeedPlan(committee, specialtyIdByName, learningPresetByName);
-    const grantIndex = steps.findIndex((step) => step.name === "event_role_grants");
-    expect(grantIndex).toBeGreaterThan(steps.findIndex((step) => step.name === "events"));
+    const steps = buildGoldenSeedPlan(
+      committee,
+      specialtyIdByName,
+      learningPresetByName,
+    );
+    const grantIndex = steps.findIndex(
+      (step) => step.name === "event_role_grants",
+    );
+    expect(grantIndex).toBeGreaterThan(
+      steps.findIndex((step) => step.name === "events"),
+    );
     expect(steps[grantIndex]).toMatchObject({
-      rows: [{
-        userId: user?.id,
-        eventId: golden.events.doctorCongress.id,
-        role: "congress-program-committee",
-      }],
+      rows: [
+        {
+          userId: user?.id,
+          eventId: golden.events.doctorCongress.id,
+          role: "congress-program-committee",
+        },
+      ],
       conflictKeys: ["userId", "role", "eventId"],
     });
     expect(
-      buildGoldenSeedPlan(dataset, specialtyIdByName, learningPresetByName)
-        .find((step) => step.name === "event_role_grants")?.rows ?? [],
+      buildGoldenSeedPlan(
+        dataset,
+        specialtyIdByName,
+        learningPresetByName,
+      ).find((step) => step.name === "event_role_grants")?.rows ?? [],
     ).toEqual([]);
-    expect(() => buildGoldenDataset(now, subjects, subjects.admin)).toThrow(/already used/);
+    expect(() => buildGoldenDataset(now, subjects, subjects.admin)).toThrow(
+      /already used/,
+    );
     expect(goldenReferentialIssues(committee)).toEqual([]);
   });
 
@@ -2728,8 +2756,12 @@ describe("#3705 golden material", () => {
   });
 
   it("048 EARS-1, EARS-2: seeds a published news item whose body passes the material body contract", () => {
-    expect(dataset.materials).toHaveLength(1);
-    const row = dataset.materials[0]!;
+    // The named catalogue's one material; the feed volume (#4172) adds more.
+    const named = dataset.materials.filter(
+      (m) => !isGoldenVolumeUuid(m.id as string),
+    );
+    expect(named).toHaveLength(1);
+    const row = named[0]!;
     expect(row.id).toBe(material.id);
     expect(row.slug).toBe(material.slug);
     expect(row.kind).toBe("news");
@@ -2746,8 +2778,11 @@ describe("#3705 golden material", () => {
     // A published material always has its card (the own-materials feed source
     // writes it inside the publish transaction), so the fixture carries both.
     const row = dataset.materials[0]!;
-    expect(dataset.feedEntries).toHaveLength(1);
-    const card = dataset.feedEntries[0]!;
+    const namedCards = dataset.feedEntries.filter(
+      (c) => !isGoldenVolumeUuid(c.id as string),
+    );
+    expect(namedCards).toHaveLength(1);
+    const card = namedCards[0]!;
     expect(card).toMatchObject({
       sourcePlatform: "academy",
       sourceRef: material.id,
@@ -2770,10 +2805,13 @@ describe("#3705 golden material", () => {
   it("flags a feed card whose material the dataset does not carry", () => {
     const broken = {
       ...dataset,
-      feedEntries: dataset.feedEntries.map((card) => ({
-        ...card,
-        materialId: goldenUuid(GOLDEN_GROUP.materials, 999),
-      })),
+      feedEntries: [
+        {
+          ...dataset.feedEntries[0]!,
+          materialId: goldenUuid(GOLDEN_GROUP.materials, 999),
+        },
+      ],
+      feedEntryMessages: [],
     };
     expect(goldenReferentialIssues(broken)).toEqual([
       `feed_entries.materialId references an unknown row: ${goldenUuid(GOLDEN_GROUP.materials, 999)}`,
@@ -2793,7 +2831,9 @@ describe("#3705 golden material", () => {
     expect(order.indexOf("materials")).toBeGreaterThan(
       order.indexOf("organisations"),
     );
-    expect(order.indexOf("feed_entries")).toBe(order.indexOf("materials") + 1);
+    expect(order.indexOf("feed_entries")).toBeGreaterThan(
+      order.indexOf("materials"),
+    );
   });
 
   it("048 EARS-6: a re-run keeps the publication instant of the material and of its card", () => {
@@ -2882,9 +2922,21 @@ describe("#4059 golden learning course", () => {
       ),
     ).toEqual(["youtube", "youtube"]);
     // A test step's row keeps only its kind; the questions are rows (`writeTest`).
-    expect(dataset.learningTests.map((t) => t.kind)).toEqual(["exit", "exit"]);
-    expect(dataset.learningQuestions).toHaveLength(4);
-    expect(dataset.learningOptions).toHaveLength(8);
+    // The named course's rows; the long paths (#4172) carry their own.
+    const namedTests = dataset.learningTests.filter(
+      (t) => !isGoldenVolumeUuid(t.stepId),
+    );
+    expect(namedTests.map((t) => t.kind)).toEqual(["exit", "exit"]);
+    expect(
+      dataset.learningQuestions.filter(
+        (q) => !isGoldenVolumeUuid(q.id as string),
+      ),
+    ).toHaveLength(4);
+    expect(
+      dataset.learningOptions.filter(
+        (o) => !isGoldenVolumeUuid(o.id as string),
+      ),
+    ).toHaveLength(8);
     for (const q of dataset.learningQuestions) {
       const options = dataset.learningOptions.filter(
         (o) => o.questionId === q.id,
@@ -3158,5 +3210,214 @@ describe("023 EARS-5 (#4017) golden schools at volume", () => {
     expect(goldenReferentialIssues(broken)).toContain(
       `learning_facts.stepId references an unknown row: ${goldenUuid(GOLDEN_GROUP.learningSteps, 999)}`,
     );
+  });
+});
+
+describe("#4172 golden volume covers the schema", () => {
+  // A slot runs only `seed:golden`, and production data never reaches staging, so
+  // a table the volume half does not fill renders on a slot as one row or none —
+  // the defect the retro of 2026-11-19 found three times. This walks the Drizzle
+  // schema itself (never a hand list), so a PR that adds a table without volume
+  // rows fails here.
+  //
+  // The marker of a volume row is the smallest honest one the plan already
+  // carries: its `id` answers `isGoldenVolumeUuid`, or the uuid its upsert
+  // conflicts on does — a table keyed by its parent instead of a surrogate id
+  // (`stream_config` → event, `learning_tests` → step, `registration_attendance`
+  // → registration) or by a slot of a volume parent (`project_results` → its
+  // volume project, `feed_entries` → its volume material or source).
+  //
+  // An exemption is a table that carries no list or page data a slot could show
+  // at volume. Each reason is one line; a table that gains a read surface loses
+  // its exemption in the PR that ships it.
+  const EXEMPT: Readonly<Record<string, string>> = {
+    // Technical and audit records, not domain data.
+    idempotency_keys:
+      "request-dedup record (012 §6), a feature-010 technical exclusion; no screen reads it",
+    media_cleanup_jobs:
+      "storage-cleanup obligation leased by a worker, a feature-010 technical exclusion; no screen reads it",
+    audit_ledger:
+      "written by the audit trigger for every seeded row (README «audit_ledger — build bookkeeping»), never by the seed",
+    sign_in_host_records:
+      "one encrypted IdP session per browser cookie (003 EARS-64); a seeded row opens no session",
+    presence_beats:
+      "server-stamped room heartbeats; a seeded beat is stale a minute after the seed and the live count reads only fresh ones",
+    // Reference books owned by migrations or the book seed: production holds
+    // exactly these rows, so golden adds none.
+    event_kinds: "reference book inserted by its migration (SEED_EVENT_KINDS)",
+    organisation_roles:
+      "reference book inserted by migration 0054 (SEED_ORGANISATION_ROLES)",
+    project_output_kinds:
+      "reference book inserted by migration 0055 (SEED_PROJECT_OUTPUT_KINDS)",
+    specialties_minzdrav:
+      "the closed Минздрав book, written by seedSpecialtiesMinzdrav before the golden seed",
+    learning_presets:
+      "reference book inserted by migration 0065; the plan resolves layers against it",
+    points_rule_versions:
+      "the 025 rule book, inserted by its migration and edited only through the rule admin",
+    // Runtime projections and in-flight state.
+    learning_node_status:
+      "rebuildable status projection of learning_facts (023 EARS-11); the next real fact projects it",
+    learning_attempts:
+      "a test attempt in flight until submitted; its outcome is a learning fact",
+    event_role_grants:
+      "an authorization binding read only by the access check; no list screen ships (#2378) — the stage committee grant is the named one",
+    // 025 ledger: no storefront or admin page reads it yet.
+    points_accounts:
+      "025 ledger account; no page reads the ledger yet (API only) — seed with the PR that ships its first page",
+    points_posting_keys: "025 posting idempotency keys, engine-internal",
+    points_facts:
+      "025 ledger facts; no page reads the ledger yet (API only) — seed with the PR that ships its first page",
+    points_postings:
+      "025 ledger postings; no page reads the ledger yet (API only) — seed with the PR that ships its first page",
+    points_prices:
+      "025 prices; no page reads them yet (API only) — seed with the PR that ships its first page",
+    points_reserves: "025 holds, engine-internal",
+    points_obligations: "025 hold obligations, engine-internal",
+    // 023 EARS-23 / EARS-31 records with no reader in any app or package yet.
+    learning_rule_changes:
+      "023 EARS-31 rule-change record; nothing reads it yet — seed with its first read",
+    learning_lesson_ratings:
+      "023 EARS-23 rating; nothing reads it yet — seed with its first read",
+    learning_feedback:
+      "023 EARS-23 feedback; nothing reads it yet — seed with its first read",
+  };
+
+  const tables: PgTable[] = (Object.values(schema) as unknown[]).filter(
+    (x): x is PgTable => is(x, PgTable),
+  );
+  const plan = buildGoldenSeedPlan(
+    buildGoldenDataset(now, subjects),
+    specialtyIdByName,
+    learningPresetByName,
+  );
+  const volumeRowCount = (table: PgTable): number =>
+    plan
+      .filter((s) => s.table === table)
+      .flatMap((s) =>
+        s.rows.filter(
+          (row) =>
+            (typeof row.id === "string" && isGoldenVolumeUuid(row.id)) ||
+            s.conflictKeys.some(
+              (key) =>
+                typeof row[key] === "string" &&
+                isGoldenVolumeUuid(row[key] as string),
+            ),
+        ),
+      ).length;
+
+  it("finds the schema tables to check", () => {
+    expect(tables.length).toBeGreaterThan(50);
+  });
+
+  it("gives every schema table volume-half rows, or an exemption with a reason", () => {
+    const uncovered = tables
+      .map((t) => getTableName(t))
+      .filter((name) => !(name in EXEMPT))
+      .filter(
+        (name) =>
+          volumeRowCount(tables.find((t) => getTableName(t) === name)!) === 0,
+      );
+    expect(
+      uncovered,
+      `tables without volume-half rows (golden README «The volume half»): ${uncovered.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("holds no stale exemption", () => {
+    const names = new Set(tables.map((t) => getTableName(t)));
+    expect(Object.keys(EXEMPT).filter((name) => !names.has(name))).toEqual([]);
+    for (const [name, reason] of Object.entries(EXEMPT)) {
+      expect(reason.trim(), name).not.toBe("");
+    }
+  });
+});
+
+describe("#4172 golden long learning paths", () => {
+  // The canvas path «с десятками шагов и дюжиной модулей» on a slot: a fresh
+  // doctor opens a published course of 12 and one of 30 modules.
+  const dataset = buildGoldenDataset(now, subjects);
+  const school = dataset.learningSchools.find(
+    (s) => s.id === GOLDEN_LEARNING_PATH_SCHOOL.id,
+  );
+
+  it("publishes the long-path school in its volume half", () => {
+    expect(school).toMatchObject({ state: "published" });
+    expect(isGoldenVolumeUuid(GOLDEN_LEARNING_PATH_SCHOOL.id)).toBe(true);
+  });
+
+  it("carries a 12-module and a 30-module published course of several lessons per module and dozens of mixed steps", () => {
+    const counts = GOLDEN_LEARNING_PATH_COURSES.map((ref) => {
+      const course = dataset.learningCourses.find((c) => c.id === ref.id)!;
+      expect(course).toMatchObject({
+        state: "published",
+        schoolId: GOLDEN_LEARNING_PATH_SCHOOL.id,
+      });
+      const modules = dataset.learningModules.filter(
+        (m) => m.courseId === ref.id,
+      );
+      const lessons = dataset.learningLessons.filter((l) =>
+        modules.some((m) => m.id === l.moduleId),
+      );
+      for (const m of modules) {
+        expect(
+          lessons.filter((l) => l.moduleId === m.id).length,
+        ).toBeGreaterThanOrEqual(2);
+      }
+      expect(lessons.every((l) => l.state === "published")).toBe(true);
+      const steps = dataset.learningSteps.filter((s) =>
+        lessons.some((l) => l.id === s.lessonId),
+      );
+      expect(new Set(steps.map((s) => s.type))).toEqual(
+        new Set(["video", "download", "test"]),
+      );
+      // Every lesson closes with an exit test whose questions are rows.
+      for (const l of lessons) {
+        const last = steps
+          .filter((s) => s.lessonId === l.id)
+          .sort((a, b) => b.position - a.position)[0]!;
+        expect(last.type).toBe("test");
+        expect(dataset.learningTests.some((t) => t.stepId === last.id)).toBe(
+          true,
+        );
+        expect(
+          dataset.learningQuestions.filter((q) => q.testId === last.id),
+        ).toHaveLength(2);
+      }
+      // The course carries a rule layer, so its lessons are publishable.
+      expect(dataset.learningRuleLayers.some((r) => r.scopeId === ref.id)).toBe(
+        true,
+      );
+      return [modules.length, steps.length];
+    });
+    expect(counts.map(([m]) => m)).toEqual([12, 30]);
+    for (const [, steps] of counts) expect(steps).toBeGreaterThan(24);
+  });
+
+  it("gives a fresh doctor no fact on the long paths", () => {
+    const pathSteps = new Set(
+      dataset.learningSteps
+        .filter((s) => isGoldenVolumeUuid(s.id as string))
+        .map((s) => s.id),
+    );
+    const ids = new Set(
+      dataset.learningLessons
+        .filter((l) =>
+          dataset.learningModules.some(
+            (m) =>
+              m.id === l.moduleId &&
+              GOLDEN_LEARNING_PATH_COURSES.some((c) => c.id === m.courseId),
+          ),
+        )
+        .map((l) => l.id),
+    );
+    const longSteps = dataset.learningSteps.filter((s) => ids.has(s.lessonId));
+    expect(longSteps.length).toBeGreaterThan(0);
+    expect(
+      dataset.learningFacts.filter((f) =>
+        longSteps.some((s) => s.id === f.stepId),
+      ),
+    ).toEqual([]);
+    expect(pathSteps.size).toBeGreaterThan(0);
   });
 });

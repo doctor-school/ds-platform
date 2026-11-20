@@ -30,6 +30,28 @@ import {
 
 const rows = buildGoldenLearningVolume(new Date("2026-01-15T12:00:00.000Z"));
 
+/**
+ * The admin-written payload of a step: a test's is rebuilt from its rows
+ * (`storedTestPayload`), as `golden-course.test.ts` does — the long paths
+ * (#4172) close every lesson with an exit test.
+ */
+function storedPayload(step: (typeof rows.learningSteps)[number]): unknown {
+  if (step.type !== "test") return step.payload;
+  return {
+    kind: (step.payload as Record<string, unknown>)["kind"],
+    questions: rows.learningQuestions
+      .filter((q) => q.testId === step.id)
+      .sort((a, b) => a.position - b.position)
+      .map((q) => ({
+        text: q.text,
+        options: rows.learningOptions
+          .filter((o) => o.questionId === q.id)
+          .sort((a, b) => a.position - b.position)
+          .map((o) => ({ text: o.text, correct: o.correct })),
+      })),
+  };
+}
+
 function courseModel(courseId: string): LearningCourseModel {
   const course = rows.learningCourses.find((c) => c.id === courseId)!;
   return {
@@ -111,9 +133,11 @@ describe("023 EARS-5 (#4017) — the golden schools at volume hold the admin pat
             (s) => s.lessonId === lesson.id,
           );
           for (const s of steps)
-            expect(validateStepPayload(s.type, s.payload)).toMatchObject({
-              ok: true,
-            });
+            expect(validateStepPayload(s.type, storedPayload(s))).toMatchObject(
+              {
+                ok: true,
+              },
+            );
           const issues = publishRequirements(
             lesson,
             layers,
@@ -123,7 +147,10 @@ describe("023 EARS-5 (#4017) — the golden schools at volume hold the admin pat
               module: module.id,
               lesson: lesson.id,
             },
-            (id) => steps.find((s) => s.id === id)?.payload,
+            (id) => {
+              const s = steps.find((x) => x.id === id);
+              return s && storedPayload(s);
+            },
             (id) => steps.find((s) => s.id === id)?.mediaRef != null,
             (id) => steps.find((s) => s.id === id)?.embedRef != null,
           );

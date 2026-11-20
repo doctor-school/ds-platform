@@ -122,7 +122,9 @@ export function RecordingPlayer({
   // re-showing the same dead document.
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
-  // Cleared by `load` — the frame answered, so the "nothing ever arrived"
+  // Cleared by the provider's own ready / buffering / playing signal from this
+  // frame (origin- and window-checked), or by `load` for a provider that posts
+  // nothing — either way the frame answered, so the "nothing ever arrived"
   // watchdog has nothing left to watch.
   const [watching, setWatching] = useState(true);
 

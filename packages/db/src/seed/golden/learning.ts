@@ -103,7 +103,7 @@ export interface GoldenLearning {
 }
 
 /** A two-question exit test, «Верно» the right option of each (the live journey answers by text). */
-const EXIT_QUESTIONS = [
+export const GOLDEN_EXIT_QUESTIONS = [
   {
     text: "Какой целевой уровень офисного АД у большинства пациентов с гипертензией?",
     options: [
@@ -191,10 +191,10 @@ export function buildGoldenLearning(created: Date): GoldenLearning {
   const questions: GoldenLearning["learningQuestions"] = [];
   const options: GoldenLearning["learningOptions"] = [];
   tests.forEach((testId, ti) => {
-    EXIT_QUESTIONS.forEach((q, qi) => {
+    GOLDEN_EXIT_QUESTIONS.forEach((q, qi) => {
       const questionId = goldenUuid(
         GOLDEN_GROUP.learningQuestions,
-        ti * EXIT_QUESTIONS.length + qi + 1,
+        ti * GOLDEN_EXIT_QUESTIONS.length + qi + 1,
       );
       questions.push({
         id: questionId,
@@ -208,7 +208,7 @@ export function buildGoldenLearning(created: Date): GoldenLearning {
         options.push({
           id: goldenUuid(
             GOLDEN_GROUP.learningOptions,
-            (ti * EXIT_QUESTIONS.length + qi) * 2 + oi + 1,
+            (ti * GOLDEN_EXIT_QUESTIONS.length + qi) * 2 + oi + 1,
           ),
           questionId,
           position: oi + 1,

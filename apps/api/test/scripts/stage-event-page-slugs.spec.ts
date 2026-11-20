@@ -1,4 +1,8 @@
-import { buildGoldenDataset, type GoldenSubjectMap } from "@ds/db/seed/golden";
+import {
+  buildGoldenDataset,
+  isGoldenVolumeUuid,
+  type GoldenSubjectMap,
+} from "@ds/db/seed/golden";
 import { describe, expect, it } from "vitest";
 
 interface LiveTiersModule {
@@ -224,7 +228,9 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
     const tier = LIVE_TIERS.find((t) => t.name === "live/doctor/congress");
     const slug = tier?.seededEnv?.E2E_DOCTOR_CONGRESS_SLUG;
     expect(slug).toBeTruthy();
-    const adminTier = LIVE_TIERS.find((t) => t.name === "live/admin/event-lifecycle");
+    const adminTier = LIVE_TIERS.find(
+      (t) => t.name === "live/admin/event-lifecycle",
+    );
     expect(adminTier?.seededEnv?.E2E_DOCTOR_CONGRESS_SLUG).toBe(slug);
     const event = dataset.events.find((e) => e.slug === slug);
     expect(event).toMatchObject({
@@ -250,12 +256,17 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
   });
 
   it("048 EARS-11: every seeded material reference is the published golden material", () => {
-    const published = new Set(
-      buildGoldenDataset(new Date("2026-10-22T09:00:00Z"), subjects)
-        .materials.filter((m) => m.status === "published" && !m.deletedAt)
-        .map((m) => m.slug),
-    );
-    expect([...published]).toEqual([GOLDEN_MATERIAL_SLUG]);
+    // The tier addresses the named material; the volume half (#4172) adds
+    // published feed materials that no tier names, so the named catalogue is
+    // judged on its own rows and the reference must be public in the whole set.
+    const published = buildGoldenDataset(
+      new Date("2026-10-22T09:00:00Z"),
+      subjects,
+    ).materials.filter((m) => m.status === "published" && !m.deletedAt);
+    expect(
+      published.filter((m) => !isGoldenVolumeUuid(m.id!)).map((m) => m.slug),
+    ).toEqual([GOLDEN_MATERIAL_SLUG]);
+    expect(published.map((m) => m.slug)).toContain(GOLDEN_MATERIAL_SLUG);
     expect(Object.values(slugs)).not.toContain(GOLDEN_MATERIAL_SLUG);
     const refs = LIVE_TIERS.flatMap((tier) =>
       Object.entries(tier.seededEnv ?? {})

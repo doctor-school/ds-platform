@@ -57,6 +57,15 @@ import {
   SEED_PROJECT_OUTPUT_KINDS,
   stageAgentCommittee,
 } from "./ids.js";
+import {
+  buildGoldenCongressVolume,
+  type GoldenCongressVolume,
+} from "./congress-volume.js";
+import { buildGoldenFeedVolume, type GoldenFeedVolume } from "./feed-volume.js";
+import {
+  buildGoldenPointsLedger,
+  type GoldenPointsLedger,
+} from "./points-ledger.js";
 import type { GoldenSubjectMap } from "./idp.js";
 import { GOLDEN_IDP_ACCOUNTS } from "./idp.js";
 import { goldenDateOnly, goldenMskMidnight, shiftFromNow } from "./now.js";
@@ -119,6 +128,9 @@ export interface GoldenDataset {
   streamConfig: NewStreamConfigRow[];
   congressSubmissionSettings: (typeof congressSubmissionSettings.$inferInsert)[];
   congressSubmissionKindSettings: (typeof congressSubmissionKindSettings.$inferInsert)[];
+  /** 046 / 044 (#4172) — the volume congresses' submissions and desk marks. */
+  congressSubmissions: GoldenCongressVolume["congressSubmissions"];
+  registrationAttendance: GoldenCongressVolume["registrationAttendance"];
   eventExperts: NewEventExpert[];
   eventProjects: NewEventProject[];
   registrations: NewRegistration[];
@@ -142,6 +154,9 @@ export interface GoldenDataset {
   /** 048 (#3705) — the own materials and the feed cards they publish. */
   materials: NewMaterial[];
   feedEntries: NewFeedEntry[];
+  /** 048 slice 2 (#4172) — the connected network sources and their posts' message ids. */
+  feedSources: GoldenFeedVolume["feedSources"];
+  feedEntryMessages: GoldenFeedVolume["feedEntryMessages"];
   /**
    * 024 (#4059) — the golden learning course (`learning.ts`), and 023 (#4017)
    * the schools at volume with the golden doctor's facts (`learning-volume.ts`).
@@ -156,6 +171,8 @@ export interface GoldenDataset {
   learningOptions: GoldenLearning["learningOptions"];
   learningRuleLayers: (GoldenLearningPresetLayer | GoldenLearningOwnLayer)[];
   learningFacts: GoldenLearningVolume["learningFacts"];
+  /** #4172 — the golden doctors' attention-points accruals (`points-ledger.ts`). */
+  pointsLedger: GoldenPointsLedger;
 }
 
 /** Raised when the dataset itself is inconsistent — a fixture defect, not a run defect. */
@@ -192,7 +209,9 @@ export function buildGoldenDataset(
     shiftFromNow(now, offset);
   const created = at({ days: -90 });
   if (committeeSubject && Object.values(subjects).includes(committeeSubject)) {
-    throw new GoldenDatasetError("stage committee subject is already used by a golden account");
+    throw new GoldenDatasetError(
+      "stage committee subject is already used by a golden account",
+    );
   }
 
   const subjectOf = (key: keyof GoldenSubjectMap): string => {
@@ -221,6 +240,8 @@ export function buildGoldenDataset(
   // the catalogue rows keep their ids, their offsets and their position, so a
   // scenario compiled against the named dataset sees exactly what it saw before.
   const volume = buildGoldenVolume(now);
+  // #4172 — the congresses at volume, their registrants, submissions and marks.
+  const congressVolume = buildGoldenCongressVolume(now, volume);
 
   const committeeRole = "congress-program-committee";
   const users: NewUser[] = [
@@ -704,6 +725,7 @@ export function buildGoldenDataset(
       })),
     ),
     ...volume.registrations,
+    ...congressVolume.registrations,
   ];
 
   const eventRecordings: NewEventRecording[] = [
@@ -956,8 +978,16 @@ export function buildGoldenDataset(
     projects,
     events,
     streamConfig,
-    congressSubmissionSettings,
-    congressSubmissionKindSettings,
+    congressSubmissionSettings: [
+      ...congressSubmissionSettings,
+      ...congressVolume.congressSubmissionSettings,
+    ],
+    congressSubmissionKindSettings: [
+      ...congressSubmissionKindSettings,
+      ...congressVolume.congressSubmissionKindSettings,
+    ],
+    congressSubmissions: congressVolume.congressSubmissions,
+    registrationAttendance: congressVolume.registrationAttendance,
     eventExperts,
     eventProjects,
     registrations,
@@ -976,11 +1006,28 @@ export function buildGoldenDataset(
     projectExperts,
     projectPartners,
     projectResults: buildProjectResults(projects, created),
-    ...buildMaterials(at({ days: -20 }), created),
-    ...mergeGoldenLearning(
-      buildGoldenLearning(created),
-      buildGoldenLearningVolume(created),
+    ...withFeedVolume(
+      buildMaterials(at({ days: -20 }), created),
+      buildGoldenFeedVolume(now),
     ),
+    ...withPointsLedger(
+      mergeGoldenLearning(
+        buildGoldenLearning(created),
+        buildGoldenLearningVolume(created),
+      ),
+      at({ days: -75 }),
+    ),
+  };
+}
+
+/** The learning rows and the doctors' ledger their completions accrue (#4172). */
+function withPointsLedger<T extends Parameters<typeof buildGoldenPointsLedger>[0]["learning"]>(
+  learning: T,
+  starterAt: Date,
+): T & { pointsLedger: GoldenPointsLedger } {
+  return {
+    ...learning,
+    pointsLedger: buildGoldenPointsLedger({ learning, starterAt }),
   };
 }
 
@@ -1007,14 +1054,33 @@ function mergeGoldenLearning(
     learningModules: [...course.learningModules, ...volume.learningModules],
     learningLessons: [...course.learningLessons, ...volume.learningLessons],
     learningSteps: [...course.learningSteps, ...volume.learningSteps],
-    learningTests: course.learningTests,
-    learningQuestions: course.learningQuestions,
-    learningOptions: course.learningOptions,
+    learningTests: [...course.learningTests, ...volume.learningTests],
+    learningQuestions: [
+      ...course.learningQuestions,
+      ...volume.learningQuestions,
+    ],
+    learningOptions: [...course.learningOptions, ...volume.learningOptions],
     learningRuleLayers: [
       ...course.learningRuleLayers,
       ...volume.learningOwnRuleLayers,
     ],
     learningFacts: volume.learningFacts,
+  };
+}
+
+/** The named material and its card first, then the feed volume (#4172). */
+function withFeedVolume(
+  named: { materials: NewMaterial[]; feedEntries: NewFeedEntry[] },
+  volume: GoldenFeedVolume,
+): Pick<
+  GoldenDataset,
+  "materials" | "feedEntries" | "feedSources" | "feedEntryMessages"
+> {
+  return {
+    materials: [...named.materials, ...volume.materials],
+    feedEntries: [...named.feedEntries, ...volume.feedEntries],
+    feedSources: volume.feedSources,
+    feedEntryMessages: volume.feedEntryMessages,
   };
 }
 

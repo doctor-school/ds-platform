@@ -31,8 +31,11 @@ import type {
   learningFacts,
   learningLessons,
   learningModules,
+  learningOptions,
+  learningQuestions,
   learningSchools,
   learningSteps,
+  learningTests,
 } from "../../schema/learning.js";
 import {
   golden,
@@ -46,6 +49,7 @@ import {
   GOLDEN_COURSE_MEMO_CONTENT_TYPE,
   GOLDEN_COURSE_MEMO_KEY,
 } from "./learning.js";
+import { buildGoldenLearningPathVolume } from "./learning-path-volume.js";
 import { goldenDirectionId, goldenPartnerId } from "./volume.js";
 
 /** A course rule layer with its own values and no preset (`setLayerValues`). */
@@ -288,6 +292,10 @@ export interface GoldenLearningVolume {
   learningModules: (typeof learningModules.$inferInsert)[];
   learningLessons: (typeof learningLessons.$inferInsert)[];
   learningSteps: (typeof learningSteps.$inferInsert)[];
+  /** #4172 — the exit tests of the long paths (`learning-path-volume.ts`). */
+  learningTests: (typeof learningTests.$inferInsert)[];
+  learningQuestions: (typeof learningQuestions.$inferInsert)[];
+  learningOptions: (typeof learningOptions.$inferInsert)[];
   learningOwnRuleLayers: GoldenLearningOwnLayer[];
   learningFacts: (typeof learningFacts.$inferInsert)[];
 }
@@ -303,6 +311,9 @@ export function buildGoldenLearningVolume(created: Date): GoldenLearningVolume {
     learningModules: [],
     learningLessons: [],
     learningSteps: [],
+    learningTests: [],
+    learningQuestions: [],
+    learningOptions: [],
     learningOwnRuleLayers: [],
     learningFacts: [],
   };
@@ -467,6 +478,31 @@ export function buildGoldenLearningVolume(created: Date): GoldenLearningVolume {
           occurredAt: factAt(30 + v + i / 100),
         });
       });
+    });
+  });
+
+  // #4172 — the long paths (12 and 30 modules), after the school volumes so
+  // every row above keeps its position; their courses take the same own layer.
+  const path = buildGoldenLearningPathVolume(created);
+  out.learningSchools.push(...path.learningSchools);
+  out.learningCourses.push(...path.learningCourses);
+  out.learningModules.push(...path.learningModules);
+  out.learningLessons.push(...path.learningLessons);
+  out.learningSteps.push(...path.learningSteps);
+  out.learningTests.push(...path.learningTests);
+  out.learningQuestions.push(...path.learningQuestions);
+  out.learningOptions.push(...path.learningOptions);
+  path.ownLayerCourseIds.forEach((courseId, c) => {
+    out.learningOwnRuleLayers.push({
+      id: goldenUuid(GOLDEN_GROUP.learningRuleLayers, 5001 + c),
+      scopeKind: "course",
+      scopeId: courseId,
+      values: structuredClone(GOLDEN_VOLUME_COURSE_RULES) as Record<
+        string,
+        unknown
+      >,
+      createdAt: created,
+      updatedAt: created,
     });
   });
   return out;

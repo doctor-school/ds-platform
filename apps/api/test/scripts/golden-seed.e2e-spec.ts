@@ -9,6 +9,7 @@ import {
   learningPresets,
   learningRuleLayers,
   learningSteps,
+  pointsPostings,
   projectResults,
   projects,
   registrationAttendance,
@@ -28,6 +29,7 @@ import {
   seedGolden,
 } from "../../../../packages/db/src/seed/golden/index.js";
 import { and, eq, like, sql } from "drizzle-orm";
+import { PointsLedgerService } from "../../src/points/points-ledger.service.js";
 import { projectPubliclyVisible } from "../../src/taxonomy/project-public-visibility.js";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -61,6 +63,7 @@ describe("golden seed re-pinning (#2262)", () => {
 
   it("EARS-1: re-seeds a day later like a fresh registration plan and retains non-golden data", async () => {
     let fresh: (typeof registrations.$inferSelect)[] = [];
+    let freshAttendance: (typeof registrationAttendance.$inferSelect)[] = [];
     // A fresh seed is the reference, including defaults and null columns.
     await db
       .transaction(async (tx) => {
@@ -68,6 +71,16 @@ describe("golden seed re-pinning (#2262)", () => {
         fresh = (
           await tx.select().from(registrations).orderBy(registrations.id)
         ).filter((row) => isGoldenUuid(row.id));
+        // #4172 — the volume congress carries the desk's attendance marks.
+        freshAttendance = (
+          await tx
+            .select()
+            .from(registrationAttendance)
+            .orderBy(
+              registrationAttendance.registrationId,
+              registrationAttendance.day,
+            )
+        ).filter((row) => isGoldenUuid(row.registrationId));
         throw rollback;
       })
       .catch((error) => {
@@ -203,9 +216,22 @@ describe("golden seed re-pinning (#2262)", () => {
         expect(
           (await tx.select().from(users).where(eq(users.id, unrelatedUser)))[0],
         ).toEqual(userBefore);
-        expect(await tx.select().from(registrationAttendance)).toEqual([
+        const attendance = await tx
+          .select()
+          .from(registrationAttendance)
+          .orderBy(
+            registrationAttendance.registrationId,
+            registrationAttendance.day,
+          );
+        expect(
+          attendance.filter((row) => !isGoldenUuid(row.registrationId)),
+        ).toEqual([
           { registrationId: ordinary[0]!.id, day: "2027-04-23", present: true },
         ]);
+        expect(freshAttendance.length).toBeGreaterThan(0);
+        expect(
+          attendance.filter((row) => isGoldenUuid(row.registrationId)),
+        ).toEqual(freshAttendance);
         const [live] = await tx
           .select()
           .from(events)
@@ -545,6 +571,33 @@ describe("golden seed project results (030 EARS-17)", () => {
           "test",
           "video",
         ]);
+        throw rollback;
+      })
+      .catch((error) => {
+        if (error !== rollback) throw error.cause ?? error;
+      });
+  }, 120_000);
+
+  it("#4172: the golden doctor's Pul reads through GET /v1/me/points' fold, and a re-seed at another pin adds no posting", async () => {
+    const doctor = golden.doctors.verifiedCardiologist.id;
+    await db
+      .transaction(async (tx) => {
+        await seedGolden(tx, { subjects, env: { GOLDEN_NOW: pin } });
+        const ledger = new PointsLedgerService(tx as never);
+        const first = await ledger.readPersonAccount(doctor);
+        const [{ n: postings }] = await tx
+          .select({ n: sql<number>`count(*)::int` })
+          .from(pointsPostings);
+        await seedGolden(tx, {
+          subjects,
+          env: { GOLDEN_NOW: "2026-10-24T08:00:00.000Z" },
+        });
+        expect(first.pul.available).toBeGreaterThan(0);
+        expect(await ledger.readPersonAccount(doctor)).toEqual(first);
+        const [{ n: after }] = await tx
+          .select({ n: sql<number>`count(*)::int` })
+          .from(pointsPostings);
+        expect(after).toBe(postings);
         throw rollback;
       })
       .catch((error) => {

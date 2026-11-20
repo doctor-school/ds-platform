@@ -9,11 +9,14 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 
-import { materialBodySchema } from "@ds/schemas";
+import { materialBodySchema, PointsTraceEntrySchema } from "@ds/schemas";
 import { PDFDocument } from "pdf-lib";
+import { getTableName, is } from "drizzle-orm";
+import { PgTable } from "drizzle-orm/pg-core";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
+import * as schema from "../../schema/index.js";
 import { SEED_ORGANISATION_ROLES } from "../../schema/taxonomy.js";
 import {
   buildGoldenDataset,
@@ -63,6 +66,7 @@ import {
   GoldenPlanError,
   hasProgramme,
   isDatedProgrammeLine,
+  GOLDEN_VOLUME_ORDINAL_BASE,
   isGoldenVolumeUuid,
   ordinalFromExpertPhotoKey,
   programmeLines,
@@ -71,8 +75,16 @@ import {
   resolveDirectionSpecialtyRows,
   resolveDoctorSpecialtyRows,
   resolveLearningRuleLayerRows,
+  GOLDEN_LEARNING_PATH_COURSES,
+  GOLDEN_LEARNING_PATH_SCHOOL,
+  GOLDEN_VOLUME_CONGRESSES,
   GOLDEN_COURSE_MEMO_KEY,
   goldenCourseMemoPdf,
+  GOLDEN_POINTS_RULE_IDS,
+  goldenLedgerEventId,
+  resolveGoldenPointsRows,
+  type GoldenPointsContext,
+  type GoldenPointsLedger,
   specialtiesWithoutParagraphBank,
   VOLUME_EXPERTS,
   VOLUME_PROGRAMME,
@@ -117,6 +129,31 @@ const learningPresetByName = new Map([
 const PINNED_NOW = "2026-01-15T12:00:00.000Z";
 
 const now = resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: PINNED_NOW });
+
+// #4172 — a freshly migrated database as `loadGoldenPointsContext` reads it:
+// the issuance account 0059 opened, the person accounts the seed opened with
+// their golden ids, the 0060 rule versions and nothing recorded yet.
+const ISSUANCE_ACCOUNT_ID = goldenUuid(0x00fd, 1);
+function freshPointsContext(
+  ledger: GoldenPointsLedger,
+  recorded: { eventIds?: Iterable<string>; dedupeKeys?: Iterable<string> } = {},
+): GoldenPointsContext {
+  return {
+    accountIdByRef: new Map([
+      ["s:issuance", ISSUANCE_ACCOUNT_ID],
+      ...ledger.accounts.map((a): [string, string] => [
+        `p:${a.subjectId}`,
+        a.id!,
+      ]),
+    ]),
+    ruleVersionById: new Map(GOLDEN_POINTS_RULE_IDS.map((id) => [id, 2])),
+    recordedEventIds: new Set(recorded.eventIds ?? []),
+    recordedDedupeKeys: new Set(recorded.dedupeKeys ?? []),
+  };
+}
+const pointsContext = freshPointsContext(
+  buildGoldenDataset(now, subjects).pointsLedger,
+);
 
 describe("#2063 golden «now» pin", () => {
   it("#2212: falls back to the seed run time when nothing pins it", () => {
@@ -246,7 +283,12 @@ describe("#2063 golden dataset", () => {
       resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: PINNED_NOW }),
       subjects,
     );
-    expect(JSON.stringify(again)).toBe(JSON.stringify(dataset));
+    // `feed_sources.telegram_chat_id` is a bigint, which JSON cannot carry bare.
+    const bytes = (v: unknown) =>
+      JSON.stringify(v, (_, x: unknown) =>
+        typeof x === "bigint" ? `${x}n` : x,
+      );
+    expect(bytes(again)).toBe(bytes(dataset));
   });
 
   it("moves every timestamp when the pin moves — nothing is hardcoded", () => {
@@ -373,6 +415,9 @@ describe("#2063 golden dataset", () => {
       registrations: [
         { ...dataset.registrations[0]!, userId: goldenUuid(0x0fff, 1) },
       ],
+      // The rows hanging off the dropped registrations go with them (#4172).
+      congressSubmissions: [],
+      registrationAttendance: [],
     };
     expect(goldenReferentialIssues(broken)).toHaveLength(1);
   });
@@ -503,22 +548,39 @@ describe("#2063 golden seed plan", () => {
       role: "congress-program-committee",
     });
     expect(dataset.users.some((row) => row.email === user?.email)).toBe(false);
-    const steps = buildGoldenSeedPlan(committee, specialtyIdByName, learningPresetByName);
-    const grantIndex = steps.findIndex((step) => step.name === "event_role_grants");
-    expect(grantIndex).toBeGreaterThan(steps.findIndex((step) => step.name === "events"));
+    const steps = buildGoldenSeedPlan(
+      committee,
+      specialtyIdByName,
+      learningPresetByName,
+      pointsContext,
+    );
+    const grantIndex = steps.findIndex(
+      (step) => step.name === "event_role_grants",
+    );
+    expect(grantIndex).toBeGreaterThan(
+      steps.findIndex((step) => step.name === "events"),
+    );
     expect(steps[grantIndex]).toMatchObject({
-      rows: [{
-        userId: user?.id,
-        eventId: golden.events.doctorCongress.id,
-        role: "congress-program-committee",
-      }],
+      rows: [
+        {
+          userId: user?.id,
+          eventId: golden.events.doctorCongress.id,
+          role: "congress-program-committee",
+        },
+      ],
       conflictKeys: ["userId", "role", "eventId"],
     });
     expect(
-      buildGoldenSeedPlan(dataset, specialtyIdByName, learningPresetByName)
-        .find((step) => step.name === "event_role_grants")?.rows ?? [],
+      buildGoldenSeedPlan(
+        dataset,
+        specialtyIdByName,
+        learningPresetByName,
+        pointsContext,
+      ).find((step) => step.name === "event_role_grants")?.rows ?? [],
     ).toEqual([]);
-    expect(() => buildGoldenDataset(now, subjects, subjects.admin)).toThrow(/already used/);
+    expect(() => buildGoldenDataset(now, subjects, subjects.admin)).toThrow(
+      /already used/,
+    );
     expect(goldenReferentialIssues(committee)).toEqual([]);
   });
 
@@ -527,6 +589,7 @@ describe("#2063 golden seed plan", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     );
     expect(plan.map((s) => s.name)).toEqual([...GOLDEN_SEED_ORDER]);
   });
@@ -536,6 +599,7 @@ describe("#2063 golden seed plan", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     )) {
       expect(step.conflictKeys.length).toBeGreaterThan(0);
       for (const key of step.conflictKeys) {
@@ -554,6 +618,7 @@ describe("#2063 golden seed plan", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     );
     const registrationsStep = plan.find((s) => s.name === "registrations");
     expect(
@@ -577,6 +642,7 @@ describe("#2063 golden seed plan", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     ).find((s) => s.name === "stream_config");
     expect(step?.conflictKeys).toEqual(["eventId"]);
   });
@@ -586,6 +652,7 @@ describe("#2063 golden seed plan", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     );
     expect(
       plan.find((s) => s.name === "congress_submission_settings")?.conflictKeys,
@@ -688,6 +755,7 @@ describe("#2212 a re-run rewrites the dates", () => {
       buildGoldenDataset(at, subjects),
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     ).find((s) => s.name === "events")!;
 
   const stepNamed = (name: string, at: Date) =>
@@ -695,6 +763,7 @@ describe("#2212 a re-run rewrites the dates", () => {
       buildGoldenDataset(at, subjects),
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     ).find((s) => s.name === name)!;
 
   it("#2212: the events upsert refreshes every date-bearing column", () => {
@@ -820,6 +889,7 @@ describe("#2063 golden step execution", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     );
     const step = plan.find((s) => s.name === "users")!;
     const calls: {
@@ -859,6 +929,7 @@ describe("#2063 golden step execution", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     );
     const step = plan.find((s) => s.name === "organisation_role_assignments")!;
     expect(step.rows.length).toBeGreaterThan(0);
@@ -888,6 +959,7 @@ describe("#2063 golden step execution", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     );
     const step = { ...plan[0]!, updateKeys: ["notAColumn"] };
     await expect(applyGoldenStep({ insert: () => ({}) }, step)).rejects.toThrow(
@@ -1494,7 +1566,9 @@ describe("#2213 golden dataset at volume", () => {
       });
       expect(event?.startsAt.getTime()).toBeLessThan(pin.getTime());
       const cuts = fixture.eventRecordings
-        .filter((row) => row.eventId === event?.id && row.status === "published")
+        .filter(
+          (row) => row.eventId === event?.id && row.status === "published",
+        )
         .sort((a, b) => a.kind.localeCompare(b.kind));
       expect(cuts).toMatchObject([
         {
@@ -1670,6 +1744,7 @@ describe("#2213 golden dataset at volume", () => {
         dataset,
         specialtyIdByName,
         learningPresetByName,
+        pointsContext,
       ).find((s) => s.name === name)!;
       const published = step.rows.filter(
         (row) => row.firstPublishedAt instanceof Date,
@@ -2221,6 +2296,7 @@ describe("#2213 golden taxonomy and targeting", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     );
     const order = plan.map((step) => step.name);
     const at = (name: string) => {
@@ -2293,6 +2369,7 @@ describe("#2213 golden taxonomy and targeting", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     );
     const order = plan.map((step) => step.name);
     expect(order.indexOf("project_results")).toBeGreaterThan(
@@ -2728,8 +2805,12 @@ describe("#3705 golden material", () => {
   });
 
   it("048 EARS-1, EARS-2: seeds a published news item whose body passes the material body contract", () => {
-    expect(dataset.materials).toHaveLength(1);
-    const row = dataset.materials[0]!;
+    // The named catalogue's one material; the feed volume (#4172) adds more.
+    const named = dataset.materials.filter(
+      (m) => !isGoldenVolumeUuid(m.id as string),
+    );
+    expect(named).toHaveLength(1);
+    const row = named[0]!;
     expect(row.id).toBe(material.id);
     expect(row.slug).toBe(material.slug);
     expect(row.kind).toBe("news");
@@ -2746,8 +2827,11 @@ describe("#3705 golden material", () => {
     // A published material always has its card (the own-materials feed source
     // writes it inside the publish transaction), so the fixture carries both.
     const row = dataset.materials[0]!;
-    expect(dataset.feedEntries).toHaveLength(1);
-    const card = dataset.feedEntries[0]!;
+    const namedCards = dataset.feedEntries.filter(
+      (c) => !isGoldenVolumeUuid(c.id as string),
+    );
+    expect(namedCards).toHaveLength(1);
+    const card = namedCards[0]!;
     expect(card).toMatchObject({
       sourcePlatform: "academy",
       sourceRef: material.id,
@@ -2770,10 +2854,13 @@ describe("#3705 golden material", () => {
   it("flags a feed card whose material the dataset does not carry", () => {
     const broken = {
       ...dataset,
-      feedEntries: dataset.feedEntries.map((card) => ({
-        ...card,
-        materialId: goldenUuid(GOLDEN_GROUP.materials, 999),
-      })),
+      feedEntries: [
+        {
+          ...dataset.feedEntries[0]!,
+          materialId: goldenUuid(GOLDEN_GROUP.materials, 999),
+        },
+      ],
+      feedEntryMessages: [],
     };
     expect(goldenReferentialIssues(broken)).toEqual([
       `feed_entries.materialId references an unknown row: ${goldenUuid(GOLDEN_GROUP.materials, 999)}`,
@@ -2785,6 +2872,7 @@ describe("#3705 golden material", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     );
     const order = plan.map((s) => s.name);
     expect(order.indexOf("materials")).toBeGreaterThan(
@@ -2793,7 +2881,9 @@ describe("#3705 golden material", () => {
     expect(order.indexOf("materials")).toBeGreaterThan(
       order.indexOf("organisations"),
     );
-    expect(order.indexOf("feed_entries")).toBe(order.indexOf("materials") + 1);
+    expect(order.indexOf("feed_entries")).toBeGreaterThan(
+      order.indexOf("materials"),
+    );
   });
 
   it("048 EARS-6: a re-run keeps the publication instant of the material and of its card", () => {
@@ -2804,6 +2894,7 @@ describe("#3705 golden material", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     );
     const materials = plan.find((s) => s.name === "materials")!;
     expect(materials.conflictKeys).toEqual(["id"]);
@@ -2882,9 +2973,21 @@ describe("#4059 golden learning course", () => {
       ),
     ).toEqual(["youtube", "youtube"]);
     // A test step's row keeps only its kind; the questions are rows (`writeTest`).
-    expect(dataset.learningTests.map((t) => t.kind)).toEqual(["exit", "exit"]);
-    expect(dataset.learningQuestions).toHaveLength(4);
-    expect(dataset.learningOptions).toHaveLength(8);
+    // The named course's rows; the long paths (#4172) carry their own.
+    const namedTests = dataset.learningTests.filter(
+      (t) => !isGoldenVolumeUuid(t.stepId),
+    );
+    expect(namedTests.map((t) => t.kind)).toEqual(["exit", "exit"]);
+    expect(
+      dataset.learningQuestions.filter(
+        (q) => !isGoldenVolumeUuid(q.id as string),
+      ),
+    ).toHaveLength(4);
+    expect(
+      dataset.learningOptions.filter(
+        (o) => !isGoldenVolumeUuid(o.id as string),
+      ),
+    ).toHaveLength(8);
     for (const q of dataset.learningQuestions) {
       const options = dataset.learningOptions.filter(
         (o) => o.questionId === q.id,
@@ -2916,6 +3019,7 @@ describe("#4059 golden learning course", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     ).find((s) => s.name === "learning_rule_layers")!;
     expect(step.conflictKeys).toEqual(["scopeKind", "scopeId"]);
     expect(step.rows.filter((r) => r.scopeId === L.course.id)).toEqual([
@@ -3128,6 +3232,7 @@ describe("023 EARS-5 (#4017) golden schools at volume", () => {
       dataset,
       specialtyIdByName,
       learningPresetByName,
+      pointsContext,
     ).find((s) => s.name === "learning_facts")!;
     expect(step.conflictKeys).toEqual(["personId", "eventId"]);
     expect(step.updateKeys).toEqual([]);
@@ -3158,5 +3263,427 @@ describe("023 EARS-5 (#4017) golden schools at volume", () => {
     expect(goldenReferentialIssues(broken)).toContain(
       `learning_facts.stepId references an unknown row: ${goldenUuid(GOLDEN_GROUP.learningSteps, 999)}`,
     );
+  });
+});
+
+describe("#4172 golden volume covers the schema", () => {
+  // A slot runs only `seed:golden`, and production data never reaches staging, so
+  // a table the volume half does not fill renders on a slot as one row or none —
+  // the defect the retro of 2026-11-19 found three times. This walks the Drizzle
+  // schema itself (never a hand list), so a PR that adds a table without volume
+  // rows fails here.
+  //
+  // The marker of a volume row is the smallest honest one the plan already
+  // carries: its `id` answers `isGoldenVolumeUuid`, or the uuid its upsert
+  // conflicts on does — a table keyed by its parent instead of a surrogate id
+  // (`stream_config` → event, `learning_tests` → step, `registration_attendance`
+  // → registration) or by a slot of a volume parent (`project_results` → its
+  // volume project, `feed_entries` → its volume material or source).
+  //
+  // An exemption is a table that carries no list or page data a slot could show
+  // at volume. Each reason is one line; a table that gains a read surface loses
+  // its exemption in the PR that ships it.
+  const EXEMPT: Readonly<Record<string, string>> = {
+    // Technical and audit records, not domain data.
+    idempotency_keys:
+      "request-dedup record (012 §6), a feature-010 technical exclusion; no screen reads it",
+    media_cleanup_jobs:
+      "storage-cleanup obligation leased by a worker, a feature-010 technical exclusion; no screen reads it",
+    audit_ledger:
+      "written by the audit trigger for every seeded row (README «audit_ledger — build bookkeeping»), never by the seed",
+    sign_in_host_records:
+      "one encrypted IdP session per browser cookie (003 EARS-64); a seeded row opens no session",
+    presence_beats:
+      "server-stamped room heartbeats; a seeded beat is stale a minute after the seed and the live count reads only fresh ones",
+    // Reference books owned by migrations or the book seed: production holds
+    // exactly these rows, so golden adds none.
+    event_kinds: "reference book inserted by its migration (SEED_EVENT_KINDS)",
+    organisation_roles:
+      "reference book inserted by migration 0054 (SEED_ORGANISATION_ROLES)",
+    project_output_kinds:
+      "reference book inserted by migration 0055 (SEED_PROJECT_OUTPUT_KINDS)",
+    specialties_minzdrav:
+      "the closed Минздрав book, written by seedSpecialtiesMinzdrav before the golden seed",
+    learning_presets:
+      "reference book inserted by migration 0065; the plan resolves layers against it",
+    points_rule_versions:
+      "the 025 rule book, inserted by its migration and edited only through the rule admin",
+    // Runtime projections and in-flight state.
+    learning_node_status:
+      "rebuildable status projection of learning_facts (023 EARS-11); the next real fact projects it",
+    learning_attempts:
+      "a test attempt in flight until submitted; its outcome is a learning fact",
+    telegram_update_cursor:
+      "the poller's own offset per real bot id (048 EARS-24); a seeded offset would make a live bot skip or replay real updates",
+    event_role_grants:
+      "an authorization binding read only by the access check; no list screen ships (#2378) — the stage committee grant is the named one",
+    // 025 holds: a price on a golden event changes its registration on every
+    // slot (Pul and phone required), so they wait for a dedicated priced event.
+    points_prices:
+      "a price on a golden event changes its registration journey on every slot — #4188 adds a dedicated priced event",
+    points_reserves:
+      "a hold needs a priced item and a stable registration — #4188 (the priced golden event with a doctor's Pul on hold)",
+    points_obligations:
+      "an obligation hangs off an advance-covered hold — #4188",
+    // 023 EARS-23 / EARS-31 records with no reader in any app or package yet.
+    learning_rule_changes:
+      "023 EARS-31 rule-change record; nothing reads it yet — seed with its first read",
+    learning_lesson_ratings:
+      "023 EARS-23 rating; nothing reads it yet — seed with its first read",
+    learning_feedback:
+      "023 EARS-23 feedback; nothing reads it yet — seed with its first read",
+  };
+
+  const tables: PgTable[] = (Object.values(schema) as unknown[]).filter(
+    (x): x is PgTable => is(x, PgTable),
+  );
+  const plan = buildGoldenSeedPlan(
+    buildGoldenDataset(now, subjects),
+    specialtyIdByName,
+    learningPresetByName,
+    pointsContext,
+  );
+  const UUID_IN_TEXT =
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
+  const volumeRowCount = (table: PgTable): number =>
+    plan
+      .filter((s) => s.table === table)
+      .flatMap((s) =>
+        s.rows.filter(
+          (row) =>
+            (typeof row.id === "string" && isGoldenVolumeUuid(row.id)) ||
+            // A text key (a 025 event id) names its volume entity inside it.
+            s.conflictKeys.some(
+              (key) =>
+                typeof row[key] === "string" &&
+                ((row[key] as string).match(UUID_IN_TEXT) ?? []).some(
+                  isGoldenVolumeUuid,
+                ),
+            ),
+        ),
+      ).length;
+
+  it("finds the schema tables to check", () => {
+    expect(tables.length).toBeGreaterThan(50);
+  });
+
+  it("gives every schema table volume-half rows, or an exemption with a reason", () => {
+    const uncovered = tables
+      .map((t) => getTableName(t))
+      .filter((name) => !(name in EXEMPT))
+      .filter(
+        (name) =>
+          volumeRowCount(tables.find((t) => getTableName(t) === name)!) === 0,
+      );
+    expect(
+      uncovered,
+      `tables without volume-half rows (golden README «The volume half»): ${uncovered.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("holds no stale exemption", () => {
+    const names = new Set(tables.map((t) => getTableName(t)));
+    expect(Object.keys(EXEMPT).filter((name) => !names.has(name))).toEqual([]);
+    for (const [name, reason] of Object.entries(EXEMPT)) {
+      expect(reason.trim(), name).not.toBe("");
+    }
+  });
+});
+
+describe("#4172 golden long learning paths", () => {
+  // The canvas path «с десятками шагов и дюжиной модулей» on a slot: a fresh
+  // doctor opens a published course of 12 and one of 30 modules.
+  const dataset = buildGoldenDataset(now, subjects);
+  const school = dataset.learningSchools.find(
+    (s) => s.id === GOLDEN_LEARNING_PATH_SCHOOL.id,
+  );
+
+  it("publishes the long-path school in its volume half", () => {
+    expect(school).toMatchObject({ state: "published" });
+    expect(isGoldenVolumeUuid(GOLDEN_LEARNING_PATH_SCHOOL.id)).toBe(true);
+  });
+
+  it("gives every school its own direction and lead expert pair (learning_schools_direction_expert_key)", () => {
+    const pairs = dataset.learningSchools.map(
+      (s) => `${s.directionId}/${s.leadExpertId}`,
+    );
+    expect(pairs.length).toBe(new Set(pairs).size);
+  });
+
+  it("carries a 12-module and a 30-module published course of several lessons per module and dozens of mixed steps", () => {
+    const counts = GOLDEN_LEARNING_PATH_COURSES.map((ref) => {
+      const course = dataset.learningCourses.find((c) => c.id === ref.id)!;
+      expect(course).toMatchObject({
+        state: "published",
+        schoolId: GOLDEN_LEARNING_PATH_SCHOOL.id,
+      });
+      const modules = dataset.learningModules.filter(
+        (m) => m.courseId === ref.id,
+      );
+      const lessons = dataset.learningLessons.filter((l) =>
+        modules.some((m) => m.id === l.moduleId),
+      );
+      for (const m of modules) {
+        expect(
+          lessons.filter((l) => l.moduleId === m.id).length,
+        ).toBeGreaterThanOrEqual(2);
+      }
+      expect(lessons.every((l) => l.state === "published")).toBe(true);
+      const steps = dataset.learningSteps.filter((s) =>
+        lessons.some((l) => l.id === s.lessonId),
+      );
+      expect(new Set(steps.map((s) => s.type))).toEqual(
+        new Set(["video", "download", "test"]),
+      );
+      // Every lesson closes with an exit test whose questions are rows.
+      for (const l of lessons) {
+        const last = steps
+          .filter((s) => s.lessonId === l.id)
+          .sort((a, b) => b.position - a.position)[0]!;
+        expect(last.type).toBe("test");
+        expect(dataset.learningTests.some((t) => t.stepId === last.id)).toBe(
+          true,
+        );
+        expect(
+          dataset.learningQuestions.filter((q) => q.testId === last.id),
+        ).toHaveLength(2);
+      }
+      // The course carries a rule layer, so its lessons are publishable.
+      expect(dataset.learningRuleLayers.some((r) => r.scopeId === ref.id)).toBe(
+        true,
+      );
+      return [modules.length, steps.length];
+    });
+    expect(counts.map(([m]) => m)).toEqual([12, 30]);
+    for (const [, steps] of counts) expect(steps).toBeGreaterThan(24);
+  });
+
+  it("gives a fresh doctor no fact on the long paths", () => {
+    const pathSteps = new Set(
+      dataset.learningSteps
+        .filter((s) => isGoldenVolumeUuid(s.id as string))
+        .map((s) => s.id),
+    );
+    const ids = new Set(
+      dataset.learningLessons
+        .filter((l) =>
+          dataset.learningModules.some(
+            (m) =>
+              m.id === l.moduleId &&
+              GOLDEN_LEARNING_PATH_COURSES.some((c) => c.id === m.courseId),
+          ),
+        )
+        .map((l) => l.id),
+    );
+    const longSteps = dataset.learningSteps.filter((s) => ids.has(s.lessonId));
+    expect(longSteps.length).toBeGreaterThan(0);
+    expect(
+      dataset.learningFacts.filter((f) =>
+        longSteps.some((s) => s.id === f.stepId),
+      ),
+    ).toEqual([]);
+    expect(pathSteps.size).toBeGreaterThan(0);
+  });
+});
+
+describe("#4172 golden volume congresses", () => {
+  // 046 EARS-1: the doctor's congress section is the configured event with the
+  // latest start (`CongressSubmissionsService.congressEventId`). The volume
+  // congresses are grid эфиры anchored on the pin's Monday, so their distance
+  // from «now» drifts with the pin's weekday: at every weekday and hour the named
+  // `golden.events.doctorCongress` must stay the latest, and the volume upcoming
+  // congress must still take submissions.
+  const pins = Array.from(
+    { length: 7 * 4 },
+    (_, i) => new Date(Date.parse(PINNED_NOW) + i * 6 * 3_600_000),
+  );
+
+  it.each(pins.map((p) => [p.toISOString(), p] as const))(
+    "keeps the named doctor congress the cabinet congress at the pin %s",
+    (_label, pin) => {
+      const dataset = buildGoldenDataset(pin, subjects);
+      const configured = new Set(
+        dataset.congressSubmissionSettings.map((s) => s.eventId),
+      );
+      const latest = dataset.events
+        .filter((e) => configured.has(e.id!))
+        .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0];
+      expect(latest?.id).toBe(golden.events.doctorCongress.id);
+
+      const upcoming = dataset.events.find(
+        (e) => e.id === GOLDEN_VOLUME_CONGRESSES.upcoming.id,
+      )!;
+      for (const kind of ["oral", "poster", "abstract"] as const) {
+        const intake = dataset.congressSubmissionKindSettings.find(
+          (s) => s.eventId === upcoming.id && s.kind === kind,
+        )!;
+        expect(intake.closesAt!.getTime(), kind).toBeGreaterThan(pin.getTime());
+        expect(intake.closesAt!.getTime(), kind).toBeLessThanOrEqual(
+          upcoming.startsAt.getTime(),
+        );
+      }
+    },
+  );
+});
+
+describe("#4172 golden attention-points ledger", () => {
+  const dataset = buildGoldenDataset(now, subjects);
+  const ledger = dataset.pointsLedger;
+  const stepRows = (
+    plan: ReturnType<typeof buildGoldenSeedPlan>,
+    name: string,
+  ) => plan.find((s) => s.name === name)!.rows;
+  const planAt = (at: Date, ctx: GoldenPointsContext) =>
+    buildGoldenSeedPlan(
+      buildGoldenDataset(at, subjects),
+      specialtyIdByName,
+      learningPresetByName,
+      ctx,
+    );
+  const plan = planAt(now, pointsContext);
+  const postings = stepRows(plan, "points_postings");
+
+  /** `readPersonAccount`'s fold: Σ credits − Σ debits per (account, denomination). */
+  function fold(
+    rows: readonly Record<string, unknown>[],
+    personId: string,
+    denomination = "pul",
+  ): number {
+    const account = pointsContext.accountIdByRef.get(`p:${personId}`);
+    if (!account) return 0;
+    return rows
+      .filter((p) => p.denomination === denomination)
+      .reduce(
+        (sum, p) =>
+          sum +
+          (p.creditAccountId === account ? Number(p.amount) : 0) -
+          (p.debitAccountId === account ? Number(p.amount) : 0),
+        0,
+      );
+  }
+
+  it("the golden doctor reads a Pul balance above zero, folded as GET /v1/me/points folds it", () => {
+    expect(
+      fold(postings, golden.doctors.verifiedCardiologist.id),
+    ).toBeGreaterThan(0);
+  });
+
+  it("spreads the balances: large on the worker pool, small on half the verified volume doctors, zero elsewhere", () => {
+    const pool = golden.workerPool.verifiedCardiologist.map((d) => d.id);
+    for (const id of pool) expect(fold(postings, id)).toBeGreaterThan(100);
+    const volume = Array.from({ length: 8 }, (_, d) =>
+      goldenUuid(GOLDEN_GROUP.users, GOLDEN_VOLUME_ORDINAL_BASE + d),
+    );
+    expect(volume.map((id) => fold(postings, id))).toEqual([
+      20, 0, 20, 0, 20, 0, 20, 0,
+    ]);
+    expect(pointsContext.accountIdByRef.has(`p:${volume[1]}`)).toBe(false);
+    expect(fold(postings, golden.doctors.unverified.id)).toBe(0);
+  });
+
+  it("writes every posting as the engine does: issuance → person, one accrual leg per denomination, under a cited rule", () => {
+    const keys = new Map(
+      stepRows(plan, "points_posting_keys").map((k) => [k.eventId, k]),
+    );
+    for (const p of postings) {
+      expect(p.debitAccountId).toBe(ISSUANCE_ACCOUNT_ID);
+      expect(p.leg).toBe(`accrual:${p.denomination}`);
+      expect(Number(p.amount)).toBeGreaterThan(0);
+      expect(keys.has(p.eventId as string)).toBe(true);
+      expect(String(p.eventId).endsWith(`#${p.ruleId}`)).toBe(true);
+      expect(GOLDEN_POINTS_RULE_IDS).toContain(p.ruleId);
+      expect(+(p.occurredAt as Date)).toBeLessThanOrEqual(+now);
+    }
+    const postedEvents = new Set(postings.map((p) => p.eventId));
+    for (const key of keys.keys()) expect(postedEvents.has(key)).toBe(true);
+    const dedupe = [...keys.values()].map((k) => k.dedupeKey);
+    expect(new Set(dedupe).size).toBe(dedupe.length);
+  });
+
+  it("journals every fact once with a trace the schema accepts, naming each applied rule's ledger event", () => {
+    const facts = stepRows(plan, "points_facts");
+    const keys = new Set(
+      stepRows(plan, "points_posting_keys").map((k) => k.eventId),
+    );
+    expect(new Set(facts.map((f) => f.eventId)).size).toBe(facts.length);
+    for (const f of facts) {
+      const trace = f.trace as unknown[];
+      for (const t of trace) PointsTraceEntrySchema.parse(t);
+      const applied = (trace as { verdict: string; ledgerEventId?: string }[])
+        .filter((t) => t.verdict === "applied")
+        .map((t) => t.ledgerEventId);
+      expect(applied.length).toBeGreaterThan(0);
+      for (const id of applied) expect(keys.has(id!)).toBe(true);
+    }
+  });
+
+  it("accrues a fact only after its holder exists", () => {
+    const createdAt = new Map(dataset.users.map((u) => [u.id, u.createdAt]));
+    for (const fact of ledger.facts) {
+      expect(+fact.occurredAt).toBeGreaterThanOrEqual(
+        +createdAt.get(fact.personId)!,
+      );
+    }
+  });
+
+  it("a re-seed at another pin adds nothing: the recorded ledger events are skipped, the balance stays", () => {
+    const first = planAt(now, pointsContext);
+    const recorded = freshPointsContext(ledger, {
+      eventIds: stepRows(first, "points_posting_keys").map(
+        (k) => k.eventId as string,
+      ),
+    });
+    const later = planAt(new Date(+now + 9 * 86_400_000), recorded);
+    for (const name of [
+      "points_posting_keys",
+      "points_facts",
+      "points_postings",
+    ])
+      expect(stepRows(later, name), name).toEqual([]);
+    const doctor = golden.doctors.verifiedCardiologist.id;
+    expect(
+      fold(
+        [
+          ...stepRows(first, "points_postings"),
+          ...stepRows(later, "points_postings"),
+        ],
+        doctor,
+      ),
+    ).toBe(fold(stepRows(first, "points_postings"), doctor));
+  });
+
+  it("a fact whose dedupe key the ledger already holds is skipped whole (the engine's oncePer)", () => {
+    const doctor = golden.doctors.verifiedCardiologist.id;
+    const starter = ledger.facts.find(
+      (f) =>
+        f.personId === doctor && f.type === "person.starter-bonus-eligible",
+    )!;
+    const rows = resolveGoldenPointsRows(
+      ledger,
+      freshPointsContext(ledger, {
+        dedupeKeys: [starter.applied[0]!.dedupeKey],
+      }),
+    );
+    expect(rows.pointsPostingKeys.map((k) => k.eventId)).not.toContain(
+      goldenLedgerEventId(starter, "accrual.starter-bonus"),
+    );
+    expect(rows.pointsFacts.map((f) => f.eventId)).not.toContain(
+      starter.eventId,
+    );
+  });
+
+  it("refuses a database without the issuance account or the rule book", () => {
+    const ctx = freshPointsContext(ledger);
+    expect(() =>
+      resolveGoldenPointsRows(ledger, {
+        ...ctx,
+        accountIdByRef: new Map(
+          [...ctx.accountIdByRef].filter(([k]) => k !== "s:issuance"),
+        ),
+      }),
+    ).toThrow(/issuance/);
+    expect(() =>
+      resolveGoldenPointsRows(ledger, { ...ctx, ruleVersionById: new Map() }),
+    ).toThrow(/rule book/);
   });
 });

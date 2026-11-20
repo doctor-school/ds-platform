@@ -131,6 +131,30 @@ export {
   type GoldenLearningVolume,
 } from "./learning-volume.js";
 export {
+  buildGoldenLearningPathVolume,
+  GOLDEN_LEARNING_PATH_COURSES,
+  GOLDEN_LEARNING_PATH_SCHOOL,
+  goldenLearningPathLessonCount,
+  type GoldenLearningPathVolume,
+} from "./learning-path-volume.js";
+export {
+  buildGoldenCongressVolume,
+  GOLDEN_VOLUME_CONGRESSES,
+  GoldenCongressVolumeError,
+  type GoldenCongressVolume,
+} from "./congress-volume.js";
+export { buildGoldenFeedVolume, type GoldenFeedVolume } from "./feed-volume.js";
+export {
+  buildGoldenPointsLedger,
+  GOLDEN_POINTS_RULE_IDS,
+  goldenLearningCompletions,
+  goldenLedgerEventId,
+  resolveGoldenPointsRows,
+  type GoldenPointsContext,
+  type GoldenPointsFact,
+  type GoldenPointsLedger,
+} from "./points-ledger.js";
+export {
   composeDescription,
   specialtiesWithoutParagraphBank,
   volumeEventTitle,
@@ -154,6 +178,7 @@ export {
 } from "./plan.js";
 export {
   applyGoldenStep,
+  loadGoldenPointsContext,
   loadLearningPresetByName,
   loadSpecialtyIdByName,
   seedGolden,

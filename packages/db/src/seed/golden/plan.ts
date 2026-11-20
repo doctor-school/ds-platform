@@ -14,7 +14,12 @@ import { doctorSpecialties } from "../../schema/doctor-specialties.js";
 import { eventRoleGrants } from "../../schema/event-role-grants.js";
 import { eventRecordings } from "../../schema/event-recordings.js";
 import { events, streamConfig } from "../../schema/events.js";
-import { feedEntries, materials } from "../../schema/materials.js";
+import {
+  feedEntries,
+  feedEntryMessages,
+  feedSources,
+  materials,
+} from "../../schema/materials.js";
 import { consentRecords } from "../../schema/consent-records.js";
 import {
   congressSubmissionKindSettings,
@@ -53,6 +58,16 @@ import {
 } from "../../schema/learning.js";
 import type { GoldenLearningPresetLayer } from "./learning.js";
 import type { GoldenLearningOwnLayer } from "./learning-volume.js";
+import {
+  pointsAccounts,
+  pointsFacts,
+  pointsPostingKeys,
+  pointsPostings,
+} from "../../schema/points-ledger.js";
+import {
+  type GoldenPointsContext,
+  resolveGoldenPointsRows,
+} from "./points-ledger.js";
 import { GOLDEN_GROUP, SEED_EVENT_KINDS } from "./ids.js";
 import type {
   GoldenDataset,
@@ -151,9 +166,13 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "event_projects",
   "event_directions",
   "registrations",
+  // #4172 — the desk's day marks on the volume congresses' registrations.
+  "registration_attendance",
   // 046 EARS-1 (#2432) — the event's congress intake settings, then its kinds.
   "congress_submission_settings",
   "congress_submission_kind_settings",
+  // #4172 — the volume congresses' submissions, after their registrations.
+  "congress_submissions",
   "event_recordings",
   "consent_records",
   "doctor_specialties",
@@ -166,7 +185,11 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   // 048 (#3705) — after the experts and organisations a material may reference,
   // then the feed card that references the material.
   "materials",
+  // 048 slice 2 (#4172) — a network card references its source; the message
+  // ids reference their card.
+  "feed_sources",
   "feed_entries",
+  "feed_entry_messages",
   "learning_schools",
   "learning_courses",
   "learning_modules",
@@ -178,6 +201,12 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "learning_rule_layers",
   // 023 EARS-5 (#4017) — the golden doctor's facts, after the steps and users.
   "learning_facts",
+  // #4172 — the doctors' 025 accruals: accounts, then each fact's posting keys
+  // and journal row, then the postings that reference both.
+  "points_accounts",
+  "points_posting_keys",
+  "points_facts",
+  "points_postings",
 ]);
 
 /**
@@ -312,7 +341,9 @@ export function buildGoldenSeedPlan(
   dataset: GoldenDataset,
   specialtyIdByName: ReadonlyMap<string, string>,
   learningPresetByName: ReadonlyMap<string, GoldenLearningPresetRow>,
+  pointsContext: GoldenPointsContext,
 ): GoldenSeedStep[] {
+  const points = resolveGoldenPointsRows(dataset.pointsLedger, pointsContext);
   const steps: GoldenSeedStep[] = [
     step("users", users, dataset.users, ["id"]),
     step("experts", experts, dataset.experts, ["id"]),
@@ -357,6 +388,14 @@ export function buildGoldenSeedPlan(
         },
       ],
     }),
+    // #4172 — a mark is keyed by its registration and day (no surrogate id); a
+    // re-pin clears it with its registration (`volumeNamespaceChildren` above).
+    step(
+      "registration_attendance",
+      registrationAttendance,
+      dataset.registrationAttendance,
+      ["registrationId", "day"],
+    ),
     // Keyed by the event (and the kind), like `stream_config`: one settings
     // row per congress, no surrogate id.
     step(
@@ -370,6 +409,13 @@ export function buildGoldenSeedPlan(
       congressSubmissionKindSettings,
       dataset.congressSubmissionKindSettings,
       ["eventId", "kind"],
+    ),
+    // #4172 — cleared with its registration on a re-pin, like the marks.
+    step(
+      "congress_submissions",
+      congressSubmissions,
+      dataset.congressSubmissions,
+      ["id"],
     ),
     step("event_recordings", eventRecordings, dataset.eventRecordings, ["id"], {
       replacesVolumeNamespace: GOLDEN_GROUP.eventRecordings,
@@ -417,6 +463,7 @@ export function buildGoldenSeedPlan(
     // (`feed_entries_source_key`), not on a golden id the stand may no longer
     // hold. The card date is the material's first publication instant, kept
     // set-once with it so a re-run never makes the two disagree.
+    step("feed_sources", feedSources, dataset.feedSources, ["id"]),
     step(
       "feed_entries",
       feedEntries,
@@ -424,6 +471,12 @@ export function buildGoldenSeedPlan(
       ["sourcePlatform", "sourceRef"],
       { setOnceKeys: ["publishedAt"] },
     ),
+    // 048 EARS-27 — one row per Telegram message id of a card, keyed as the
+    // webhook dedups it.
+    step("feed_entry_messages", feedEntryMessages, dataset.feedEntryMessages, [
+      "feedSourceId",
+      "messageId",
+    ]),
     step("learning_schools", learningSchools, dataset.learningSchools, ["id"]),
     step("learning_courses", learningCourses, dataset.learningCourses, ["id"]),
     step("learning_modules", learningModules, dataset.learningModules, ["id"]),
@@ -450,6 +503,34 @@ export function buildGoldenSeedPlan(
       learningFacts,
       dataset.learningFacts,
       ["personId", "eventId"],
+      { appendOnly: true },
+    ),
+    // #4172 — the 025 ledger is append-only (triggers refuse UPDATE/DELETE):
+    // an account opened before meets its (subject, unit) key and keeps its
+    // id, and the facts the ledger already holds were dropped from `points`
+    // (the engine's dedupe on `points_posting_keys`), so a re-seed adds none.
+    step(
+      "points_accounts",
+      pointsAccounts,
+      dataset.pointsLedger.accounts,
+      ["subjectKind", "subjectId", "unit"],
+      { appendOnly: true },
+    ),
+    step(
+      "points_posting_keys",
+      pointsPostingKeys,
+      points.pointsPostingKeys,
+      ["eventId"],
+      { appendOnly: true },
+    ),
+    step("points_facts", pointsFacts, points.pointsFacts, ["eventId"], {
+      appendOnly: true,
+    }),
+    step(
+      "points_postings",
+      pointsPostings,
+      points.pointsPostings,
+      ["eventId", "leg", "occurredAt"],
       { appendOnly: true },
     ),
   ];
@@ -551,7 +632,12 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
   };
 
   check("event_role_grants", dataset.eventRoleGrants ?? [], "userId", userIds);
-  check("event_role_grants", dataset.eventRoleGrants ?? [], "eventId", eventIds);
+  check(
+    "event_role_grants",
+    dataset.eventRoleGrants ?? [],
+    "eventId",
+    eventIds,
+  );
   check("registrations", dataset.registrations, "userId", userIds);
   check("registrations", dataset.registrations, "eventId", eventIds);
   check("consent_records", dataset.consentRecords, "userId", userIds);
@@ -647,9 +733,51 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
   );
   check(
     "feed_entries",
-    dataset.feedEntries,
+    dataset.feedEntries.filter((row) => row.sourcePlatform === "academy"),
     "materialId",
     idSet(dataset.materials),
+  );
+  // 048 slice 2 (#4172) — a network card and its message ids name their source.
+  const feedSourceIds = idSet(dataset.feedSources);
+  check(
+    "feed_entries",
+    dataset.feedEntries.filter((row) => row.sourcePlatform !== "academy"),
+    "feedSourceId",
+    feedSourceIds,
+  );
+  check(
+    "feed_entry_messages",
+    dataset.feedEntryMessages,
+    "feedSourceId",
+    feedSourceIds,
+  );
+  check(
+    "feed_entry_messages",
+    dataset.feedEntryMessages,
+    "feedEntryId",
+    idSet(dataset.feedEntries),
+  );
+
+  // 046 / 044 (#4172) — a submission and a desk mark hang off a registration.
+  const registrationIds = idSet(dataset.registrations);
+  check(
+    "congress_submissions",
+    dataset.congressSubmissions,
+    "registrationId",
+    registrationIds,
+  );
+  check(
+    "congress_submissions",
+    dataset.congressSubmissions,
+    "eventId",
+    eventIds,
+  );
+  check("congress_submissions", dataset.congressSubmissions, "userId", userIds);
+  check(
+    "registration_attendance",
+    dataset.registrationAttendance,
+    "registrationId",
+    registrationIds,
   );
 
   // 024 (#4059) — the learning course hangs together top to bottom.

@@ -31,7 +31,7 @@
     "@ds/storefront-shell": "workspace:*",
     "@hookform/resolvers": "^5.9.1",
     "lucide-react": "^1.43.0",
-    "next": "16.4.1",
+    "next": "16.4.5",
     "next-intl": "^4.14.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",

@@ -1,5 +1,5 @@
 {
-  "id": "e882c51d-041e-46e0-a547-83d946ad3e44",
+  "id": "9c119119-d205-4fd3-a2bb-db18fa4537c5",
   "prevId": "3531d46d-9e12-409f-8967-c196dacae410",
   "version": "7",
   "dialect": "postgresql",
@@ -5429,6 +5429,66 @@
       },
       "isRLSEnabled": false
     },
+    "public.telegram_update_cursor": {
+      "name": "telegram_update_cursor",
+      "schema": "",
+      "columns": {
+        "bot_id": {
+          "name": "bot_id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "next_offset": {
+          "name": "next_offset",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "polled_at": {
+          "name": "polled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failing_update_id": {
+          "name": "failing_update_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failing_since": {
+          "name": "failing_since",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "telegram_update_cursor_bot_id_positive": {
+          "name": "telegram_update_cursor_bot_id_positive",
+          "value": "\"telegram_update_cursor\".\"bot_id\" > 0"
+        },
+        "telegram_update_cursor_next_offset_nonnegative": {
+          "name": "telegram_update_cursor_next_offset_nonnegative",
+          "value": "\"telegram_update_cursor\".\"next_offset\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.points_accounts": {
       "name": "points_accounts",
       "schema": "",
@@ -6535,48 +6595,6 @@
           "notNull": true,
           "default": "'draft'"
         },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "academic_hours": {
-          "name": "academic_hours",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "document_kind": {
-          "name": "document_kind",
-          "type": "learning_document_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'certificate'"
-        },
-        "document_prerequisites": {
-          "name": "document_prerequisites",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "partner_organisation_id": {
-          "name": "partner_organisation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "version": {
           "name": "version",
           "type": "integer",
@@ -6599,29 +6617,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "learning_courses_school_idx": {
-          "name": "learning_courses_school_idx",
-          "columns": [
-            {
-              "expression": "school_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "position",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "learning_courses_school_id_learning_schools_id_fk": {
           "name": "learning_courses_school_id_learning_schools_id_fk",
@@ -6640,15 +6636,6 @@
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "learning_courses_partner_organisation_id_organisations_id_fk": {
-          "name": "learning_courses_partner_organisation_id_organisations_id_fk",
-          "tableFrom": "learning_courses",
-          "tableTo": "organisations",
-          "columnsFrom": ["partner_organisation_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -6660,12 +6647,7 @@
         }
       },
       "policies": {},
-      "checkConstraints": {
-        "learning_courses_academic_hours_min": {
-          "name": "learning_courses_academic_hours_min",
-          "value": "\"learning_courses\".\"academic_hours\" >= 0"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.learning_facts": {
@@ -7672,44 +7654,6 @@
           "notNull": true,
           "default": "'draft'"
         },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "facts": {
-          "name": "facts",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "soon_note": {
-          "name": "soon_note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "community_url": {
-          "name": "community_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "mentoring_offer": {
-          "name": "mentoring_offer",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "internship_offer": {
-          "name": "internship_offer",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "version": {
           "name": "version",
           "type": "integer",
@@ -7776,12 +7720,7 @@
         }
       },
       "policies": {},
-      "checkConstraints": {
-        "learning_schools_facts_max": {
-          "name": "learning_schools_facts_max",
-          "value": "jsonb_typeof(\"learning_schools\".\"facts\") = 'array' AND jsonb_array_length(\"learning_schools\".\"facts\") <= 4"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.learning_steps": {
@@ -8202,11 +8141,6 @@
       "name": "material_status",
       "schema": "public",
       "values": ["draft", "published"]
-    },
-    "public.learning_document_kind": {
-      "name": "learning_document_kind",
-      "schema": "public",
-      "values": ["certificate", "certificate-nmo"]
     },
     "public.learning_state": {
       "name": "learning_state",

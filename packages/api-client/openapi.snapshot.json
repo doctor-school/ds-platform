@@ -14983,18 +14983,6 @@
         "tags": ["Health"]
       }
     },
-    "/v1/integrations/telegram/webhook": {
-      "post": {
-        "operationId": "TelegramWebhookController_webhook",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": ["TelegramWebhook"]
-      }
-    },
     "/v1/learning/courses/{courseSlug}/path": {
       "get": {
         "operationId": "LearningPublicController_path",

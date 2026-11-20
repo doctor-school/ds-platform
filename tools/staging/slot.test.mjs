@@ -105,6 +105,7 @@ import {
   slotEnvPath,
   slotSignInEnvPath,
   slotInternalEnvPath,
+  slotTelegramEnvPath,
   slotHostnames,
   slotNetworkName,
   slotServiceSet,
@@ -399,6 +400,18 @@ test("3172: in the slot compose only the api mounts the sign-in env; portal and 
   }
 });
 
+test("4165: only the slot api mounts the optional per-slot Telegram env; no rendered env carries the bot token", () => {
+  const compose = readFileSync(new URL("../../infra/deploy/compose/slot/compose.yml", import.meta.url), "utf8");
+  const optional = /- path: \/etc\/ds-platform\/slots\/\$\{SLOT:\?\}\.telegram\.env\n\s+required: false\n/g;
+  const hits = [...compose.matchAll(optional)];
+  assert.equal(hits.length, 1, "exactly one optional Telegram env mount");
+  const apiStart = compose.search(/^ {2}api:$/m);
+  const nextService = compose.slice(apiStart + 1).search(/^ {2}[a-z][a-z0-9-]*:$/m) + apiStart + 1;
+  assert.ok(hits[0].index > apiStart && hits[0].index < nextService, "the api mounts it");
+  const text = renderSlotEnv({ slot: "pr-7", sha: SHA, baseDomain: BASE, redisDb: 4, goldenSubjects: SUBJECTS });
+  assert.doesNotMatch(text, /TELEGRAM_/);
+});
+
 test("3171: up converges the slot's storefront clients and writes the sign-in env BEFORE the api starts", () => {
   const plan = planSlotUp({
     slot: "pr-7",
@@ -416,6 +429,14 @@ test("3171: up converges the slot's storefront clients and writes the sign-in en
   assert.equal(signIn.op, "sign-in-host");
   assert.equal(signIn.membership, "include");
   assert.ok(labels(plan).indexOf(label) < labels(plan).indexOf("up -d"));
+});
+
+test("4165: down of a preview removes the slot's Telegram connector env; main keeps its own", () => {
+  assert.equal(slotTelegramEnvPath("pr-7"), "/etc/ds-platform/slots/pr-7.telegram.env");
+  const plan = planSlotDown({ slot: "pr-7", liveSlots: {}, baseDomain: BASE });
+  assert.deepEqual(stepOf(plan, "remove telegram env").command, ["sudo", "rm", "-f", slotTelegramEnvPath("pr-7")]);
+  assert.ok(labels(plan).indexOf("compose down") < labels(plan).indexOf("remove telegram env"));
+  assert.ok(!labels(planSlotDown({ slot: "main", liveSlots: {}, baseDomain: BASE })).includes("remove telegram env"));
 });
 
 test("3171: down keeps compose loadable without the sign-in env and removes a preview's", () => {
@@ -949,23 +970,6 @@ test("#3147: a slot's storefront footer crossings stay on the slot's own sibling
   assert.ok(lines.includes(`DOCTOR_PUBLIC_ORIGIN=https://doctor-pr-7.${BASE}`));
 });
 
-test("4159: a slot api's Telegram webhook URL is its own public api host; the bot secrets stay in stage.env", () => {
-  const text = renderSlotEnv({
-    slot: "pr-7",
-    sha: SHA,
-    baseDomain: BASE,
-    redisDb: 4,
-    goldenSubjects: SUBJECTS,
-  });
-  // 048 EARS-24: `setWebhook` registers TELEGRAM_WEBHOOK_URL, so it must name the
-  // slot's OWN public api — the one the edge exempts for this method + path.
-  assert.ok(
-    text.split("\n").includes(`TELEGRAM_WEBHOOK_URL=https://api-pr-7.${BASE}/v1/integrations/telegram/webhook`),
-  );
-  // The token and the secret are box-wide stand secrets (stage.env), never copied here.
-  assert.doesNotMatch(text, /TELEGRAM_BOT_TOKEN|TELEGRAM_WEBHOOK_SECRET/);
-});
-
 test("a teardown renders only what compose needs to ADDRESS the project", () => {
   const text = renderSlotDownEnv({ slot: "pr-7" });
   assert.match(text, /^SLOT=pr-7$/m);
@@ -1389,6 +1393,7 @@ test("down: env → detach → compose down → network → database → bucket 
     "remove the slot tree",
     "remove slot env",
     "remove sign-in env",
+    "remove telegram env",
     "converge the shared IdP redirect set",
   ]);
   assert.ok(stepOf(plan, "compose down").command.includes("-v"));

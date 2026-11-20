@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import * as Sentry from "@sentry/node";
-import { createApiApplication } from "./api-application.js";
+import { createApiApplication, listenApiServer } from "./api-application.js";
 import { initSentry } from "./observability/instrument.js";
 import { runBootstrap } from "./observability/run-bootstrap.js";
 
@@ -13,8 +13,8 @@ async function bootstrap(): Promise<void> {
   // Unleash SDK poll timer (FeatureFlagsService) and the delivery-reconcile
   // subscription are cleaned up on a graceful stop (#185).
   app.enableShutdownHooks();
-  const port = Number(process.env.PORT ?? 3000);
-  await app.listen({ port, host: "0.0.0.0" });
+  // Listening also starts the server's Telegram poller (048 EARS-24).
+  await listenApiServer(app, Number(process.env.PORT ?? 3000));
 }
 
 // A failed boot exits non-zero so Docker's restart policy retries it (#3412).

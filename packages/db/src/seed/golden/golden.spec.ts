@@ -1478,6 +1478,43 @@ describe("#2213 golden dataset at volume", () => {
     }
   });
 
+  // On the second pin the volume grid would omit the original row.
+  it.each([PINNED_NOW, "2026-11-02T12:00:00.000Z"])(
+    "014 EARS-8: the stage doctor recording fixture has two published cuts at %s",
+    (timestamp) => {
+      const pin = new Date(timestamp);
+      const fixture = buildGoldenDataset(pin, subjects);
+      const event = fixture.events.find(
+        (row) => row.slug === "golden-volume-event-151",
+      );
+      expect(event).toMatchObject({
+        audience: "doctors",
+        state: "ended",
+        participationFormat: "online",
+      });
+      expect(event?.startsAt.getTime()).toBeLessThan(pin.getTime());
+      const cuts = fixture.eventRecordings
+        .filter((row) => row.eventId === event?.id && row.status === "published")
+        .sort((a, b) => a.kind.localeCompare(b.kind));
+      expect(cuts).toMatchObject([
+        {
+          kind: "edited",
+          provider: "rutube",
+          embedRef: "1766d2bce7049428166252d02a41f8da",
+          durationSec: 20,
+          firstPublishedAt: expect.any(Date),
+        },
+        {
+          kind: "raw",
+          provider: "rutube",
+          embedRef: "a682bead10b37ce96beef4f3a6d59b08",
+          durationSec: 6692,
+          firstPublishedAt: expect.any(Date),
+        },
+      ]);
+    },
+  );
+
   it("#2213: gives every archived эфир the published recording it needs", () => {
     // `hidden -> in_archive` is offered only when a published recording exists
     // (014 EARS-25), so an archived row without one is a shape the product

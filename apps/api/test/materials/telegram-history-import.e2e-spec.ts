@@ -26,6 +26,7 @@ import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { FakeTelegramBotApi } from "../../src/materials/telegram/telegram-bot-api.fake.js";
 import { TELEGRAM_BOT_API } from "../../src/materials/telegram/telegram-bot-api.types.js";
+import { deliverByPoll, dropCursor } from "./telegram-ingress.js";
 import {
   TELEGRAM_CONFIG,
   type TelegramConfig,
@@ -44,7 +45,7 @@ import {
 // (Postgres + the 012 normalizer + object storage): a Telegram Desktop JSON
 // export (hand-made, shaped after the tdesktop JSON writer — no real channel
 // content) is validated whole, then mapped under EARS-26 and written through
-// `feed_entry_messages`, so a re-run and a post the webhook delivered are
+// `feed_entry_messages`, so a re-run and a post the poller delivered are
 // never duplicated; a foreign or unbound channel is refused with nothing
 // written; previews come from the exported files; nothing logged carries a
 // post text (EARS-36). The command runs through its unit — the operator
@@ -53,11 +54,8 @@ import {
 describe.skipIf(!process.env.DATABASE_URL)(
   "048 Telegram history import (e2e)",
   () => {
-    const SECRET = "e2e_import-secret_0123";
     const config: TelegramConfig = {
       botToken: "123456:E2E-import_token-value",
-      webhookSecret: SECRET,
-      webhookUrl: "https://api.example.test/v1/integrations/telegram/webhook",
     };
     const telegram = new FakeTelegramBotApi();
     let app: NestFastifyApplication;
@@ -127,23 +125,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return file;
     }
 
+    /** One channel post, delivered through one poll of the update poller. */
     function deliver(src: Src, messageId: number, text: string) {
-      return app.inject({
-        method: "POST",
-        url: "/v1/integrations/telegram/webhook",
-        headers: {
-          "content-type": "application/json",
-          "x-telegram-bot-api-secret-token": SECRET,
+      return deliverByPoll(app, telegram, {
+        update_id: ++updateSeq,
+        channel_post: {
+          message_id: messageId,
+          date: base + messageId,
+          chat: { id: src.chatId, type: "channel", username: src.address },
+          text,
         },
-        payload: JSON.stringify({
-          update_id: ++updateSeq,
-          channel_post: {
-            message_id: messageId,
-            date: base + messageId,
-            chat: { id: src.chatId, type: "channel", username: src.address },
-            text,
-          },
-        }),
       });
     }
 
@@ -247,14 +238,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     afterAll(async () => {
+      await dropCursor(pool, telegram);
       await app?.close();
       if (dir) await rm(dir, { recursive: true, force: true });
     });
 
-    it("048 EARS-30: when an operator imports an export twice, overlapping a post the webhook delivered, the system shall write each earlier post once at its Telegram date and the re-run shall write nothing", async () => {
+    it("048 EARS-30: when an operator imports an export twice, overlapping a post the poller delivered, the system shall write each earlier post once at its Telegram date and the re-run shall write nothing", async () => {
       const src = await source();
-      expect((await deliver(src, 1201, "Пост из вебхука")).statusCode).toBe(
-        200,
+      expect((await deliver(src, 1201, "Пост из бота")).kind).toBe(
+        "polled",
       );
       const file = await exportOf(src.bare, [
         message(900, { text: "Архив 900" }),
@@ -279,8 +271,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(rows.map((r) => [Number(r.message_id), r.title])).toEqual([
         [900, "Архив 900"],
         [901, "Архив 901"],
-        // The webhook's entry is never overwritten by the export.
-        [1201, "Пост из вебхука"],
+        // The polled entry is never overwritten by the export.
+        [1201, "Пост из бота"],
       ]);
       expect(rows[0]!.published_at.getTime()).toBe((base + 900) * 1000);
       expect(rows[0]!.href).toBe(`https://t.me/${src.address}/900`);

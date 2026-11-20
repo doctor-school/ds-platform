@@ -25,7 +25,7 @@ import {
 import { TELEGRAM_CONFIG, type TelegramConfig } from "./telegram-config.js";
 
 // 048 EARS-29 (#3994) — the copy of a Telegram post's preview into OUR object
-// storage (048-design «Preview (EARS-29)»). The webhook writes the entry with
+// storage (048-design «Preview (EARS-29)»). The poller writes the entry with
 // `preview_state = 'pending'` and the chosen medium's `file_id` (the mapping
 // picks the photo size or the video thumbnail); this service, AFTER that
 // transaction has committed, fetches the file through `getFile` and its
@@ -40,7 +40,7 @@ import { TELEGRAM_CONFIG, type TelegramConfig } from "./telegram-config.js";
 // `previewRetryDelayMinutes` until the attempts span 24 hours, then sets
 // `failed` — the card keeps its no-image layout. A preview is a per-post
 // matter: nothing here touches the source's status (Lead decision 12). The
-// service never throws: the webhook's answer never depends on it.
+// service never throws: the poller's offset never depends on it.
 
 /** The object-storage prefix of copied network-post previews. */
 export const FEED_PREVIEW_PREFIX = "feed-previews";

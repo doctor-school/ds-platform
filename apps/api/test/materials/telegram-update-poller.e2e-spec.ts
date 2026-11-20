@@ -15,40 +15,50 @@ import {
   vi,
 } from "vitest";
 import type pg from "pg";
+import { listenApiServer } from "../../src/api-application.js";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { FeedEntriesRepository } from "../../src/materials/feed-entries.repository.js";
+import { TelegramFeedSource } from "../../src/materials/telegram/telegram.feed-source.js";
 import { FakeTelegramBotApi } from "../../src/materials/telegram/telegram-bot-api.fake.js";
-import { TELEGRAM_BOT_API } from "../../src/materials/telegram/telegram-bot-api.types.js";
+import {
+  TELEGRAM_BOT_API,
+  type RawUpdate,
+} from "../../src/materials/telegram/telegram-bot-api.types.js";
 import {
   TELEGRAM_CONFIG,
   type TelegramConfig,
 } from "../../src/materials/telegram/telegram-config.js";
+import { TelegramUpdateCursorRepository } from "../../src/materials/telegram/telegram-update-cursor.repository.js";
+import {
+  TELEGRAM_POLL_HTTP_TIMEOUT_MS,
+  TELEGRAM_POLL_TIMEOUT_S,
+  TelegramUpdatePoller,
+  telegramPollBackoffMs,
+} from "../../src/materials/telegram/telegram-update-poller.service.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 
-// 048 V-15 (#3994) — the Telegram webhook over the REAL stack (Fastify +
-// Postgres) against the Telegram double: the secret check before the body is
-// read and the 404 kill switch (EARS-24); matching, drops and idempotent
-// re-delivery, 500 with nothing written on our own failure (EARS-25); the
-// mapping (EARS-26), albums (EARS-27), edits (EARS-28) and the EARS-36
-// hygiene of every log line and stored row. The webhook's only Bot API calls
-// are the preview copy's `getFile` / download after the commit (EARS-29,
-// `telegram-preview-check.e2e-spec.ts`); the double holds no file here, so
-// each copy attempt fails, is counted and leaves the card imageless.
-describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
+// 048 V-15 (#3994, #4165) — Telegram ingress by long polling over the REAL
+// stack (Nest + Postgres) against the Telegram double: the poller deletes any
+// webhook, long-polls `getUpdates` from the stored offset, advances it only
+// past a processed or dropped update, retries a lost call, polls in one
+// process at a time and runs not at all without a token (EARS-24); matching,
+// drops, idempotent refetch and no offset move on our own failure (EARS-25);
+// the mapping (EARS-26), albums (EARS-27), edits (EARS-28) and the EARS-36
+// hygiene of every log line and stored row. The double holds no file here,
+// so each preview copy attempt (EARS-29, `telegram-preview-check.e2e-spec.ts`)
+// fails, is counted and leaves the card imageless. Only the HTTP server entry
+// starts the polling loop, so a test app runs none and a test drives one poll
+// at a time.
+describe.skipIf(!process.env.DATABASE_URL)("048 Telegram update poller (e2e)", () => {
   const TOKEN = "123456:E2E-bot_token-value";
-  const SECRET = "e2e_webhook-secret_0123";
   const SIGNATURE = "Иван Подписантов";
-  const config: TelegramConfig = {
-    botToken: TOKEN,
-    webhookSecret: SECRET,
-    webhookUrl: "https://api.example.test/v1/integrations/telegram/webhook",
-  };
+  const config: TelegramConfig = { botToken: TOKEN };
   const telegram = new FakeTelegramBotApi();
   let app: NestFastifyApplication;
   let offApp: NestFastifyApplication;
@@ -58,8 +68,8 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
   let updateSeq = 900_000_000 + Math.floor(Math.random() * 1_000_000);
   const base = Math.floor(Date.now() / 1000) - 3600;
 
-  async function boot(cfg: TelegramConfig | null) {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+  function compile(cfg: TelegramConfig | null) {
+    return Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(IDP_CLIENT)
       .useValue(new FakeIdpClient())
       .overrideProvider(RATE_LIMIT_THRESHOLDS)
@@ -69,6 +79,11 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
       .overrideProvider(TELEGRAM_BOT_API)
       .useValue(telegram)
       .compile();
+  }
+
+  /** An initialised app that is not listening: no polling loop runs. */
+  async function boot(cfg: TelegramConfig | null) {
+    const moduleRef = await compile(cfg);
     const a = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),
     );
@@ -125,22 +140,39 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
       height: w,
     }));
 
+  const poller = (target?: NestFastifyApplication) =>
+    (target ?? app).get(TelegramUpdatePoller);
+
+  /** Telegram receives the update; then one poll of `target` runs. */
   function deliver(
     body: unknown,
-    opts: { secret?: string | null; target?: NestFastifyApplication } = {},
+    opts: { target?: NestFastifyApplication } = {},
   ) {
-    const secret = opts.secret === undefined ? SECRET : opts.secret;
-    return (opts.target ?? app).inject({
-      method: "POST",
-      url: "/v1/integrations/telegram/webhook",
-      headers: {
-        "content-type": "application/json",
-        ...(secret === null
-          ? {}
-          : { "x-telegram-bot-api-secret-token": secret }),
-      },
-      payload: typeof body === "string" ? body : JSON.stringify(body),
-    });
+    telegram.push(body as RawUpdate);
+    return poller(opts.target).pollOnce();
+  }
+
+  async function storedOffset(): Promise<number | null> {
+    const { rows } = await pool.query<{ next_offset: string }>(
+      "SELECT next_offset FROM telegram_update_cursor WHERE bot_id = $1",
+      [telegram.me.id],
+    );
+    return rows[0] ? Number(rows[0].next_offset) : null;
+  }
+
+  /** The update the poller keeps failing on, and since when. */
+  async function failure(): Promise<{
+    failing_update_id: string | null;
+    failing_since: Date | null;
+  }> {
+    const { rows } = await pool.query<{
+      failing_update_id: string | null;
+      failing_since: Date | null;
+    }>(
+      "SELECT failing_update_id, failing_since FROM telegram_update_cursor WHERE bot_id = $1",
+      [telegram.me.id],
+    );
+    return rows[0]!;
   }
 
   const post = (msg: unknown) => ({
@@ -230,12 +262,18 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
     // EARS-36 — no log line of any test carries a secret, the author or a payload.
     const all = logged.join("\n");
     expect(all).not.toContain(TOKEN);
-    expect(all).not.toContain(SECRET);
     expect(all).not.toContain(SIGNATURE);
-    // The webhook calls the Bot API only for the preview copy (EARS-29).
+    // Ingress calls only the poll's own methods and the preview copy (EARS-29).
     expect(
       telegram.calls.filter(
-        (c) => c.method !== "getFile" && c.method !== "downloadFile",
+        (c) =>
+          ![
+            "getMe",
+            "deleteWebhook",
+            "getUpdates",
+            "getFile",
+            "downloadFile",
+          ].includes(c.method),
       ),
     ).toEqual([]);
     vi.restoreAllMocks();
@@ -252,40 +290,195 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
   });
 
   afterAll(async () => {
+    await pool
+      ?.query("DELETE FROM telegram_update_cursor WHERE bot_id = $1", [
+        telegram.me.id,
+      ])
+      .catch(() => undefined);
     await offApp?.close();
     await app?.close();
   });
 
-  // ── EARS-24: the secret and the kill switch ─────────────────────────
+  // ── EARS-24: the poller ─────────────────────────────────────────
 
-  it("048 EARS-24: when a webhook request's secret header is absent or differs, the system shall answer 401 before reading the body and store nothing", async () => {
+  it("048 EARS-24: while the token is configured, the system shall delete any webhook keeping its updates, long-poll getUpdates for channel posts and edits from the stored offset, and advance the offset past each processed update", async () => {
     const src = await source();
-    const body = post(message(src, 1201, { text: "Пост" }));
-    expect((await deliver(body, { secret: null })).statusCode).toBe(401);
-    expect((await deliver(body, { secret: "wrong" })).statusCode).toBe(401);
-    expect((await deliver(body, { secret: `${SECRET}x` })).statusCode).toBe(
-      401,
+    telegram.webhookUrl = "https://old.example.test/hook";
+    const first = post(message(src, 1101, { text: "Первый" }));
+    const second = post(message(src, 1102, { text: "Второй" }));
+    telegram.push(first, second);
+    // A process's first poll clears the webhook before it asks for updates.
+    await poller().stop();
+    expect(await poller().pollOnce()).toEqual({ kind: "polled", processed: 2 });
+    expect(telegram.calls.map((c) => c.method)).toEqual([
+      "getMe",
+      "deleteWebhook",
+      "getUpdates",
+    ]);
+    expect(telegram.webhookUrl).toBe("");
+    expect(telegram.calls[2]!.args[0]).toEqual({
+      offset: expect.any(Number),
+      limit: 100,
+      timeout: TELEGRAM_POLL_TIMEOUT_S,
+      allowed_updates: ["channel_post", "edited_channel_post"],
+    });
+    expect(TELEGRAM_POLL_HTTP_TIMEOUT_MS).toBeGreaterThan(
+      TELEGRAM_POLL_TIMEOUT_S * 1000,
     );
-    // The body is never parsed: a malformed JSON body still gets the 401.
-    const res = await deliver("{not json", { secret: "wrong" });
-    expect(res.statusCode).toBe(401);
-    expect(res.payload).not.toContain(SECRET);
-    expect(await entries(src)).toEqual([]);
-    expect(await boundId(src)).toBeNull();
+    expect(await storedOffset()).toBe(second.update_id + 1);
+    expect((await entries(src)).map((e) => e.title)).toEqual([
+      "Первый",
+      "Второй",
+    ]);
+    // The next poll asks from the stored offset, which confirms both.
+    const third = post(message(src, 1103, { text: "Третий" }));
+    expect(await deliver(third)).toEqual({ kind: "polled", processed: 1 });
+    const polls = telegram.calls.filter((c) => c.method === "getUpdates");
+    expect(polls.at(-1)!.args[0]).toMatchObject({
+      offset: second.update_id + 1,
+    });
+    expect(
+      telegram.calls.filter((c) => c.method === "deleteWebhook"),
+    ).toHaveLength(1);
+    expect(await storedOffset()).toBe(third.update_id + 1);
+    const { rows } = await pool.query<{ polled_at: Date | null }>(
+      "SELECT polled_at FROM telegram_update_cursor WHERE bot_id = $1",
+      [telegram.me.id],
+    );
+    expect(Date.now() - rows[0]!.polled_at!.getTime()).toBeLessThan(60_000);
   });
 
-  it("048 EARS-24: while the bot token or the webhook secret is not configured, the system shall answer 404 on the webhook route", async () => {
+  it("048 EARS-24: when getUpdates answers 409 because a webhook is set, the system shall delete the webhook and poll again without losing an update", async () => {
     const src = await source();
-    const res = await deliver(post(message(src, 1201, { text: "Пост" })), {
-      target: offApp,
+    await deliver(post(message(src, 1110, { text: "До" })));
+    telegram.webhookUrl = "https://someone.example.test/hook";
+    const held = post(message(src, 1111, { text: "Во время вебхука" }));
+    expect(await deliver(held)).toEqual({
+      kind: "failed",
+      stage: "telegram",
+      processed: 0,
     });
-    expect(res.statusCode).toBe(404);
+    expect(telegram.calls.at(-1)!.method).toBe("deleteWebhook");
+    expect(telegram.webhookUrl).toBe("");
+    expect(await poller().pollOnce()).toEqual({ kind: "polled", processed: 1 });
+    expect((await entries(src)).map((e) => e.title)).toEqual([
+      "До",
+      "Во время вебхука",
+    ]);
+  });
+
+  it("048 EARS-24: when a call fails or times out, the system shall retry it after a capped backoff from the same offset, losing nothing", async () => {
+    const src = await source();
+    await deliver(post(message(src, 1120, { text: "До" })));
+    const offset = await storedOffset();
+    telegram.outage = "timeout";
+    const lost = post(message(src, 1121, { text: "После таймаута" }));
+    expect(await deliver(lost)).toEqual({
+      kind: "failed",
+      stage: "telegram",
+      processed: 0,
+    });
+    expect(await storedOffset()).toBe(offset);
+    telegram.outage = null;
+    expect(await poller().pollOnce()).toEqual({ kind: "polled", processed: 1 });
+    expect(await storedOffset()).toBe(lost.update_id + 1);
+    expect(await entries(src)).toHaveLength(2);
+    expect([1, 2, 3, 6, 7, 20].map((n) => telegramPollBackoffMs(n))).toEqual([
+      1000, 2000, 4000, 32_000, 60_000, 60_000,
+    ]);
+  });
+
+  it("048 EARS-24: while one API instance polls, another shall call nothing", async () => {
+    const second = await boot(config);
+    try {
+      const src = await source();
+      await deliver(post(message(src, 1130, { text: "Первый процесс" })));
+      telegram.calls.length = 0;
+      expect(
+        await deliver(post(message(src, 1131, { text: "Второй процесс" })), {
+          target: second,
+        }),
+      ).toEqual({ kind: "not_leader" });
+      expect(telegram.calls).toEqual([]);
+      // The first process releases the lock: the second takes over.
+      await poller().stop();
+      expect(await poller(second).pollOnce()).toEqual({
+        kind: "polled",
+        processed: 1,
+      });
+      await poller(second).stop();
+    } finally {
+      await second.close();
+    }
+  });
+
+  it("048 EARS-24: the system shall poll only in the HTTP server process, never in a one-off command's application context", async () => {
+    // A CLI (`NestFactory.createApplicationContext`) boots the same graph.
+    const command = await compile(config);
+    await command.init();
+    try {
+      expect(command.get(TelegramUpdatePoller).running).toBe(false);
+    } finally {
+      await command.close();
+    }
+    const server = await boot(config);
+    try {
+      expect(poller(server).running).toBe(false);
+      await listenApiServer(server, 0);
+      expect(poller(server).running).toBe(true);
+    } finally {
+      await poller(server).stop();
+      await server.close();
+    }
+  });
+
+  it("048 EARS-24: when the poller stops in the middle of a batch, the system shall stop after the update in hand, leaving the offset past the last processed update", async () => {
+    const src = await source();
+    await deliver(post(message(src, 1140, { text: "До" })));
+    const first = post(message(src, 1141, { text: "Первый" }));
+    const second = post(message(src, 1142, { text: "Второй" }));
+    const third = post(message(src, 1143, { text: "Третий" }));
+    telegram.push(first, second, third);
+    const receive = TelegramFeedSource.prototype.receive;
+    let stopped: Promise<void> | undefined;
+    const spy = vi
+      .spyOn(TelegramFeedSource.prototype, "receive")
+      .mockImplementation(async function (this: TelegramFeedSource, update) {
+        const outcome = await receive.call(this, update);
+        // The process is asked to stop while the batch is in hand.
+        stopped ??= poller().stop();
+        return outcome;
+      });
+    try {
+      poller().start();
+      await vi.waitFor(() => expect(stopped).toBeDefined());
+      await stopped;
+    } finally {
+      spy.mockRestore();
+    }
+    expect(poller().running).toBe(false);
+    expect(await storedOffset()).toBe(first.update_id + 1);
+    expect((await entries(src)).map((e) => e.title)).toEqual(["До", "Первый"]);
+    // The rest is fetched again by the next poll.
+    expect(await poller().pollOnce()).toEqual({ kind: "polled", processed: 2 });
+    expect(await storedOffset()).toBe(third.update_id + 1);
+  });
+
+  it("048 EARS-24: while the bot token is not configured, the system shall run no poller and call nothing", async () => {
+    const src = await source();
+    expect(poller(offApp).running).toBe(false);
+    expect(
+      await deliver(post(message(src, 1201, { text: "Пост" })), {
+        target: offApp,
+      }),
+    ).toEqual({ kind: "off" });
+    expect(telegram.calls).toEqual([]);
     expect(await entries(src)).toEqual([]);
   });
 
   // ── EARS-25: matching, drops, idempotency, our own failure ──────────
 
-  it("048 EARS-25: when an update's channel is unlisted, switched off, of another type or malformed, the system shall answer 200, drop it and log its ids and reason only", async () => {
+  it("048 EARS-25: when an update's channel is unlisted, switched off, of another type or malformed, the system shall drop it, advance past it and log its ids and reason only", async () => {
     const off = await source({ enabled: false });
     const stranger: Src = {
       id: "-",
@@ -305,8 +498,7 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
       ],
     ];
     for (const [body, reason] of cases) {
-      const res = await deliver(body);
-      expect(res.statusCode, res.payload).toBe(200);
+      expect(await deliver(body)).toEqual({ kind: "polled", processed: 1 });
       expect(drops().at(-1)?.reason).toBe(reason);
     }
     for (const line of drops()) {
@@ -314,6 +506,7 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
         ["chatId", "event", "messageId", "reason", "updateId"].sort(),
       );
     }
+    expect(await storedOffset()).toBe(updateSeq + 1);
     expect(drops()[0]).toMatchObject({
       chatId: stranger.chatId,
       messageId: 77,
@@ -329,13 +522,13 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
   it("048 EARS-25: when a listed channel first posts, the system shall match it by username and bind its id; from then on the id decides", async () => {
     const src = await source();
     expect(
-      (await deliver(post(message(src, 10, { text: "Первый" })))).statusCode,
-    ).toBe(200);
+      (await deliver(post(message(src, 10, { text: "Первый" })))).kind,
+    ).toBe("polled");
     expect(await boundId(src)).toBe(String(src.chatId));
     // A rename keeps delivering by the bound id.
     const renamed = message(src, 11, { text: "После переименования" });
     renamed.chat.username = "renamedchannel";
-    expect((await deliver(post(renamed))).statusCode).toBe(200);
+    expect((await deliver(post(renamed))).kind).toBe("polled");
     expect((await entries(src)).map((e) => e.title)).toEqual([
       "Первый",
       "После переименования",
@@ -349,36 +542,98 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
     expect(await entries(src)).toHaveLength(2);
   });
 
-  it("048 EARS-25: when a post already processed is delivered again, the system shall change nothing", async () => {
+  it("048 EARS-25: when a post already processed is fetched again, the system shall change nothing", async () => {
     const src = await source();
     const body = post(message(src, 20, { text: "Один раз" }));
-    expect((await deliver(body)).statusCode).toBe(200);
+    // Written, but the offset write fails: the next poll fetches it again.
+    vi.spyOn(
+      TelegramUpdateCursorRepository.prototype,
+      "advance",
+    ).mockRejectedValueOnce(new Error("Connection terminated unexpectedly"));
+    expect(await deliver(body)).toEqual({
+      kind: "failed",
+      stage: "processing",
+      processed: 0,
+    });
     const [before] = await entries(src);
-    expect((await deliver(body)).statusCode).toBe(200);
+    expect(before).toBeDefined();
+    expect(await poller().pollOnce()).toEqual({ kind: "polled", processed: 1 });
+    expect(await storedOffset()).toBe(body.update_id + 1);
+    // The same post under a new update id changes nothing either.
     expect(
-      (await deliver(post(message(src, 20, { text: "Один раз" })))).statusCode,
-    ).toBe(200);
+      (await deliver(post(message(src, 20, { text: "Один раз" })))).kind,
+    ).toBe("polled");
     const after = await entries(src);
     expect(after).toHaveLength(1);
     expect(after[0]!.updated_at).toEqual(before!.updated_at);
     expect(await messageIds(before!.id)).toEqual([20]);
   });
 
-  it("048 EARS-25: when processing fails on our side, the system shall answer 500 and write nothing partial", async () => {
+  it("048 EARS-25: when processing fails on our side, the system shall not advance the offset and write nothing partial, so the update is fetched again", async () => {
     const src = await source();
+    await deliver(post(message(src, 29, { text: "До сбоя" })));
+    const offset = await storedOffset();
     vi.spyOn(
       FeedEntriesRepository.prototype,
       "attachTelegramMessage",
     ).mockRejectedValueOnce(new Error("Connection terminated unexpectedly"));
-    const body = post(message(src, 30, { text: "Сбой" }));
-    const res = await deliver(body);
-    expect(res.statusCode).toBe(500);
-    expect(res.payload).not.toContain("Сбой");
-    expect(await entries(src)).toEqual([]);
-    expect(await boundId(src)).toBeNull();
-    // Telegram's redelivery then lands once.
-    expect((await deliver(body)).statusCode).toBe(200);
-    expect(await entries(src)).toHaveLength(1);
+    const failing = post(message(src, 30, { text: "Сбой" }));
+    const later = post(message(src, 31, { text: "После" }));
+    telegram.push(failing);
+    expect(await deliver(later)).toEqual({
+      kind: "failed",
+      stage: "processing",
+      processed: 0,
+    });
+    expect(await storedOffset()).toBe(offset);
+    expect((await entries(src)).map((e) => e.title)).toEqual(["До сбоя"]);
+    expect(logged.join("\n")).not.toContain("Сбой");
+    expect(logged.some((l) => l.includes("telegram_update_failed"))).toBe(
+      true,
+    );
+    // The next poll fetches both again, in order, and each lands once.
+    expect(await poller().pollOnce()).toEqual({ kind: "polled", processed: 2 });
+    expect((await entries(src)).map((e) => e.title)).toEqual([
+      "До сбоя",
+      "Сбой",
+      "После",
+    ]);
+    expect(await storedOffset()).toBe(later.update_id + 1);
+  });
+
+  it("048 EARS-25: while the same update keeps failing on our side, the system shall keep the time of its first failure and never skip it, and clear it once the update is processed", async () => {
+    const src = await source();
+    await deliver(post(message(src, 40, { text: "До" })));
+    const offset = await storedOffset();
+    vi.spyOn(FeedEntriesRepository.prototype, "attachTelegramMessage")
+      .mockRejectedValueOnce(new Error("check constraint"))
+      .mockRejectedValueOnce(new Error("check constraint"));
+    const stuck = post(message(src, 41, { text: "Застрял" }));
+    expect(await deliver(stuck)).toEqual({
+      kind: "failed",
+      stage: "processing",
+      processed: 0,
+    });
+    const firstFailure = await failure();
+    expect(firstFailure.failing_update_id).toBe(String(stuck.update_id));
+    expect(firstFailure.failing_since).not.toBeNull();
+    expect(await poller().pollOnce()).toEqual({
+      kind: "failed",
+      stage: "processing",
+      processed: 0,
+    });
+    // The same update again: the first-failure time is kept, nothing skipped.
+    expect(await failure()).toEqual(firstFailure);
+    expect(await storedOffset()).toBe(offset);
+    expect(await poller().pollOnce()).toEqual({ kind: "polled", processed: 1 });
+    expect(await failure()).toEqual({
+      failing_update_id: null,
+      failing_since: null,
+    });
+    expect((await entries(src)).map((e) => e.title)).toEqual([
+      "До",
+      "Застрял",
+    ]);
   });
 
   // ── EARS-26: the mapping ─────────────────────────────────────────────
@@ -480,8 +735,8 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
     ];
     let id = 40;
     for (const [extra, reason] of cases) {
-      expect((await deliver(post(message(src, ++id, extra)))).statusCode).toBe(
-        200,
+      expect((await deliver(post(message(src, ++id, extra)))).kind).toBe(
+        "polled",
       );
       expect(drops().at(-1)?.reason).toBe(reason);
     }
@@ -502,7 +757,7 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
       const res = await deliver(
         post(message(src, id, { media_group_id: group, ...extra })),
       );
-      expect(res.statusCode, res.payload).toBe(200);
+      expect(res.kind).toBe("polled");
     }
     const rows = await entries(src);
     expect(rows).toHaveLength(1);
@@ -610,7 +865,6 @@ describe.skipIf(!process.env.DATABASE_URL)("048 Telegram webhook (e2e)", () => {
     const everything = [...stored, ...audit].map((r) => r.j).join("\n");
     expect(everything).not.toContain(SIGNATURE);
     expect(everything).not.toContain(TOKEN);
-    expect(everything).not.toContain(SECRET);
     expect(everything).not.toContain("api.telegram.org");
     expect(everything).not.toContain("sender_chat");
     expect(everything).not.toContain("update_id");

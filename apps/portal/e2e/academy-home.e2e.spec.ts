@@ -652,21 +652,27 @@ test.describe("Feature 013 — static public Academy home", () => {
   test("EARS-7: an actual unavailable persistence path shall preserve browser values and create no partial record", async ({
     baseURL,
     page,
-    playwright,
   }) => {
     const stage = stageAcademyAddress(baseURL);
     test.skip(!stage && !PERSISTENCE_E2E_SAFE, "requires an Academy stage slot or the isolated CI persistence fixture");
     if (stage) {
       const fixture = stagePartnershipUnavailableOrigin(stage);
       if (fixture.startsWith("https://")) {
-        const anonymous = await playwright.request.newContext();
-        try {
-          expect((await anonymous.get(fixture)).status()).toBe(401);
-          for (const path of ["/v1/internal", "/v1/internal/session", "/v1/auth/session", "/login"]) {
-            expect((await anonymous.get(fixture + path)).status()).toBe(404);
-          }
-        } finally {
-          await anonymous.dispose();
+        // Playwright request contexts inherit the stage project's HTTP credentials.
+        const anonymousRoutes = [
+          ["/", 401],
+          ["/v1/internal", 404],
+          ["/v1/internal/session", 404],
+          ["/v1/auth/session", 404],
+          ["/login", 404],
+        ] as const;
+        for (const [path, status] of anonymousRoutes) {
+          const response = await fetch(new URL(path, fixture), {
+            credentials: "omit",
+            redirect: "manual",
+          });
+          await response.body?.cancel();
+          expect(response.status, path).toBe(status);
         }
       }
       const contact = `partnership-4121-${randomUUID()}@example.test`;

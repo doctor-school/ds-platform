@@ -8,7 +8,7 @@ import {
 import type { TelegramMessage } from "./telegram-update.schema.js";
 
 // 048 EARS-26 (#3994) — the pure mapping of one channel post into card data
-// (048-design §Post mapping). The webhook suite proves the written entries.
+// (048-design §Post mapping). The poller suite proves the written entries.
 
 const base = (extra: Partial<TelegramMessage>): TelegramMessage =>
   ({

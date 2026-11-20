@@ -93,6 +93,11 @@ export const AUDIT_CAPTURE_ALLOWLIST: readonly {
       "ephemeral sign-in-host session state (003 EARS-64), no domain truth: every row is an encrypted Zitadel session handle that lives at most 30 days and is replaced, deleted on mismatch/sign-out or purged when expired — auditing it would copy bearer envelopes into the 3-year ledger; the credential step itself is already in auth_audit (LoginSucceeded)",
   },
   {
+    table: "telegram_update_cursor",
+    rationale:
+      "operational poller state of the 048 Telegram long poll, no domain truth (048-design «Offset», EARS-24/25/31): one row per bot holding the getUpdates `next_offset`, `polled_at` and the failing-update mark, advanced by the poller on every answered poll — no editor or administrator writes it, so the ledger's «which principal changed this» has no answer and auditing every offset advance would be pure churn (the idempotency_keys / presence_beats argument, 010-design §5); the feed entries the poll writes are what an editor acts on",
+  },
+  {
     table: "specialties_minzdrav",
     rationale:
       "seeded reference book with NO actor write path — the only writer is the provenance-stamped boot seed (017-design §2), so every row change has the same WHO (the deploy) and the same WHY (the committed nomenclature order, already in git); no storefront or admin surface can mutate it, and 017 EARS-3 tests that absence. The ledger's question «which principal changed this and when» has no domain answer here (010-design §5)",

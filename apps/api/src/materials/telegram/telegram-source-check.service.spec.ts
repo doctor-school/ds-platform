@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FeedSourcesRepository } from "../feed-sources.repository.js";
+import type { TelegramUpdateCursorRepository } from "./telegram-update-cursor.repository.js";
 import { FakeTelegramBotApi } from "./telegram-bot-api.fake.js";
 import { TelegramSourceCheck } from "./telegram-source-check.service.js";
 
@@ -12,6 +13,7 @@ describe("048 Telegram source check schedule", () => {
       null,
       new FakeTelegramBotApi(),
       repo,
+      {} as TelegramUpdateCursorRepository,
     );
     const seen: string[] = [];
     vi.spyOn(service, "check").mockImplementation(async (id: string) => {

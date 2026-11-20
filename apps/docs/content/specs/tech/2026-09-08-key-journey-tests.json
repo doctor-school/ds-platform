@@ -38,8 +38,8 @@
       "gap": null
     },
     "D9": {
-      "status": "PARTIAL",
-      "gap": 4119
+      "status": "FULL",
+      "gap": null
     },
     "D10": {
       "status": "PARTIAL",
@@ -82,8 +82,8 @@
       "gap": null
     },
     "A7": {
-      "status": "PARTIAL",
-      "gap": 4121
+      "status": "FULL",
+      "gap": null
     },
     "S1": {
       "status": "FULL",
@@ -98,8 +98,8 @@
       "gap": 4125
     },
     "S4": {
-      "status": "NONE",
-      "gap": 4126
+      "status": "FULL",
+      "gap": null
     },
     "S5": {
       "status": "FULL",
@@ -1973,6 +1973,17 @@
       ]
     },
     {
+      "rows": ["D9"],
+      "leg": "live/doctor/event-page",
+      "file": "event-page.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "014 EARS-6/8: a doctor returns to the past event, plays the montage and opens the original"
+        ]
+      ]
+    },
+    {
       "rows": ["D10"],
       "leg": "live/doctor/event-register",
       "file": "a11y/account-axe.e2e.spec.ts",
@@ -2262,6 +2273,17 @@
       "titles": [
         [
           "A program committee member accepts a speaker application and staff find its author on the roster"
+        ]
+      ]
+    },
+    {
+      "rows": ["S4"],
+      "leg": "live/admin/event-lifecycle",
+      "file": "stage-recording-publish.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "Staff attaches and publishes a recording and it plays on both storefronts"
         ]
       ]
     }

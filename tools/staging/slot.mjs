@@ -429,6 +429,16 @@ export function slotInternalEnvPath(slot) {
   return `${SLOT_ENV_DIR}/${assertSlotName(slot)}.internal.env`;
 }
 
+/**
+ * The slot's optional Telegram connector env (048 EARS-24, #4165): root-only,
+ * placed by hand on the ONE slot whose api may poll the stand bot's token
+ * (`TELEGRAM_BOT_TOKEN`). The slot compose loads it with `required: false`, so a
+ * slot without it runs the connector off. `down` of a preview removes it.
+ */
+export function slotTelegramEnvPath(slot) {
+  return `${SLOT_ENV_DIR}/${assertSlotName(slot)}.telegram.env`;
+}
+
 const RECORD_KEY_BYTES = 32;
 const INTERNAL_TOKEN_BYTES = 32;
 /** The storefront client keys a sign-in env already holds: `{ academy, doctor }`. */
@@ -1381,11 +1391,6 @@ export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects, 
     // MinIO serves buckets as a PATH, not as a `<bucket>.` sub-domain: the edge routes
     // exactly one `s3.` host and no wildcard beneath it.
     "S3_FORCE_PATH_STYLE=true",
-    // #4159 — the URL 048's `setWebhook` (apps/api/scripts/telegram-set-webhook.ts)
-    // registers: the slot's OWN public api, which the edge exempts for exactly this
-    // method + path. Non-secret; the bot token and the webhook secret are box-wide
-    // stand secrets that reach the api from stage.env (absent = connector off).
-    `TELEGRAM_WEBHOOK_URL=https://${hosts.api}/v1/integrations/telegram/webhook`,
     // Tool-managed and non-secret (`idp.mjs`): the golden fixture's subject ids, which
     // `seed:golden` needs. The golden PASSWORDS are secrets and stay in stage.env.
     ...GOLDEN_SUBJECT_ENV_VARS.map((name) => `${name}=${goldenSubjects[name]}`),
@@ -1905,6 +1910,11 @@ export function planSlotDown({ slot, liveSlots, baseDomain, now = new Date() }) 
         kind: "sh",
         label: "remove sign-in env",
         command: ["sudo", "rm", "-f", slotSignInEnvPath(slot), slotInternalEnvPath(slot)],
+      },
+      {
+        kind: "sh",
+        label: "remove telegram env",
+        command: ["sudo", "rm", "-f", slotTelegramEnvPath(slot)],
       },
     );
   }

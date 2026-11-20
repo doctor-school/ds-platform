@@ -1325,7 +1325,7 @@ describe("runE2eStage — the live legs", () => {
     assert.ok(selection);
     assert.equal(
       writes.find(({ file }) => selection === `--test-list=${file}`)?.content,
-      "stage-event-lifecycle.spec.ts\nstage-congress-review.spec.ts\n",
+      "stage-event-lifecycle.spec.ts\nstage-congress-review.spec.ts\nstage-recording-publish.spec.ts\n",
     );
     assert.ok(!admin.argv.includes("--pass-with-no-tests"));
     assert.equal(
@@ -1340,10 +1340,19 @@ describe("runE2eStage — the live legs", () => {
       admin.env.DS_STAGE_AGENT_ADMIN_TOTP_SECRET,
       env.DS_STAGE_AGENT_ADMIN_TOTP_SECRET,
     );
-    assert.equal(admin.env.E2E_STAGE_COMMITTEE_EMAIL, "golden.committee.agent@example.test");
+    assert.equal(
+      admin.env.E2E_STAGE_COMMITTEE_EMAIL,
+      "golden.committee.agent@example.test",
+    );
     assert.equal(admin.env.E2E_DOCTOR_CONGRESS_SLUG, "golden-doctor-congress");
-    assert.equal(admin.env.DS_STAGE_AGENT_COMMITTEE_PASSWORD, env.DS_STAGE_AGENT_COMMITTEE_PASSWORD);
-    assert.equal(admin.env.DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET, env.DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET);
+    assert.equal(
+      admin.env.DS_STAGE_AGENT_COMMITTEE_PASSWORD,
+      env.DS_STAGE_AGENT_COMMITTEE_PASSWORD,
+    );
+    assert.equal(
+      admin.env.DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET,
+      env.DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET,
+    );
     assert.equal(admin.env.PLAYWRIGHT_NO_COPY_PROMPT, "1");
     for (const call of calls.filter((call) => call !== admin)) {
       // A set E2E_ADMIN_URL tells the read-only BDD suite it owns an admin
@@ -1430,6 +1439,12 @@ describe("runE2eStage — the live legs", () => {
       doctor.env.E2E_WEBINAR_SLUG_ENDED,
       GOLDEN_SLUGS.doctorEndedRecorded,
     );
+    assert.equal(
+      doctor.env.E2E_DOCTOR_RECORDING_BOTH_CUTS_SLUG,
+      "golden-volume-event-151",
+    );
+    assert.equal(academy.env.E2E_DOCTOR_RECORDING_BOTH_CUTS_SLUG, undefined);
+    assert.equal(calls[0].env.E2E_DOCTOR_RECORDING_BOTH_CUTS_SLUG, undefined);
     assert.equal(doctor.env.E2E_HYBRID_SLUG, undefined);
     // The default Academy leg and the suite never see a seeded slug.
     const academyDefault = calls.find(

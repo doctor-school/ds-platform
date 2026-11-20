@@ -143,53 +143,36 @@ real API auth email through the normal CAPTCHA-protected flow and find the new
 slot-tagged message in Mailpit; repeat after API recreation. Opening Mailpit or
 reading an old message alone does not prove delivery.
 
-## Telegram webhook on a slot (#4159)
+## Telegram connector on a slot (#4159, #4165)
 
 A slot api runs the 048 Telegram connector against the stand's own test bot, never a
-production bot. Three variables, two origins:
+production bot. The connector has one variable, `TELEGRAM_BOT_TOKEN`; with it set the
+api long-polls `getUpdates` (048 EARS-24) — an outbound call only, so the edge needs no
+exemption and Telegram never calls the slot.
 
-- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` are box-wide stand secrets in
-  `/etc/ds-platform/stage.env` (`infra/deploy/stage.env.example` → «Telegram
-  connector»). Both absent ⇒ every slot's connector is off: the source admin shows
-  «Telegram не подключён на сервере» and the webhook answers 404 — nothing fails.
-- `TELEGRAM_WEBHOOK_URL` is derived per slot by `renderSlotEnv`:
-  `https://api-<slot>.<base domain>/v1/integrations/telegram/webhook`. A slot raised
-  (or `sync`ed) with an older renderer has no such line.
-
-The edge exempts exactly `POST /v1/integrations/telegram/webhook` on `api-<slot>` from
-basic auth (`@stage_telegram_webhook`, spec §3 exemption 3): Telegram sends no browser
-credentials, and the endpoint authenticates every call by the
-`X-Telegram-Bot-Api-Secret-Token` header before it reads the body (048 EARS-24/25).
-
-**One bot has one webhook, so one slot receives the channel posts at a time.**
-Registering on slot B moves delivery away from whichever slot held it; the EARS-31
-source check on the other slots then reports the webhook mismatch. Registration is the
-048 EARS-24 operator step (`apps/api/scripts/telegram-set-webhook.ts`): `setWebhook`
-with the env's URL and secret, `allowed_updates` = channel posts, then what Telegram
-holds is printed — never the token or the secret. The runtime image carries the
-compiled `dist/` only (no `scripts/`, no `tsx`), so on a slot the same three calls run
-from the compiled modules inside the slot's api container, which already holds all
-three variables:
+**One slot polls the bot at a time.** Telegram serves a bot's updates to one long poll
+at a time and each poll confirms what it fetched, so two slots polling one token split
+the channel posts between them. The api's single-poller lock is a Postgres advisory
+lock, and every slot has its own database, so it cannot span slots. The token
+therefore never goes into the box-wide `stage.env`: it lives in the optional,
+root-only file `/etc/ds-platform/slots/<slot>.telegram.env` of the ONE slot that runs
+the connector (the slot compose mounts it with `required: false` — absent means the
+connector is off on that slot: the source admin shows «Telegram не подключён на
+сервере», nothing fails).
 
 ```bash
 SLOT=pr-<N>   # or main
-docker exec -w /app "$SLOT-api" node --input-type=module -e '
-const { telegramConfigFromEnv } = await import("./dist/materials/telegram/telegram-config.js");
-const { TelegramBotApiClient } = await import("./dist/materials/telegram/telegram-bot-api.client.js");
-const { registerTelegramWebhook } = await import("./dist/materials/telegram/telegram-webhook-registration.js");
-const config = telegramConfigFromEnv();
-console.log(JSON.stringify(await registerTelegramWebhook(config, new TelegramBotApiClient(config?.botToken ?? null))));
-'
+sudo install -m 600 /dev/null /etc/ds-platform/slots/$SLOT.telegram.env
+sudoedit /etc/ds-platform/slots/$SLOT.telegram.env   # TELEGRAM_BOT_TOKEN=<the stand bot's token>
+# recreate the slot api with the slot's existing compose invocation (above):
+#   ... up -d --no-deps --force-recreate api
 ```
 
-The printed `url` must be that slot's `TELEGRAM_WEBHOOK_URL`; a refusal (connector off,
-or the URL unset) exits non-zero and changes nothing at Telegram. Then check the edge
-from outside: an unauthenticated
-`curl -si -X POST https://api-$SLOT.stage.doctor.school/v1/integrations/telegram/webhook`
-answers the api's own refusal (no secret header), never `Www-Authenticate: Basic`;
-any other unauthenticated path on the host keeps the Caddy 401. Before tearing the
-receiving slot down, register another slot (or accept that Telegram retries into a
-dead host until the next registration).
+Moving the connector to another slot: remove the file from the old slot and recreate
+its api first, then place it on the new slot. On its first poll the api deletes any
+webhook the bot still has (keeping its pending updates), so no separate registration
+step exists. `slot down` of a preview removes the file with the slot's other env
+files; `main` keeps its own across a down.
 
 ## The box must stay logged into Docker Hub (#2240)
 
@@ -489,21 +472,21 @@ is their registry, and `e2e-stage.test.mjs` holds it against the tree: every
 an **axe** leg, or **hermetic** (owns a `webServer`, CI's), and a config in none of
 them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 
-| Leg                          | Config (`apps/<app>/…`)                                                                                         | Release check |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------- |
-| `live/admin/event-lifecycle` | `admin/playwright.flows.config.ts` (`stage-event-lifecycle.spec.ts`, `stage-congress-review.spec.ts`)           | yes           |
-| `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                                                   | yes           |
-| `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                                                      | yes           |
-| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)                                  | yes           |
-| `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                                                     | yes           |
-| `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                                                          | yes           |
-| `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                                                        | yes           |
-| `live/doctor/event-register` | `doctor/playwright.event-register.config.ts`                                                                    | yes           |
-| `live/doctor/events-live`    | `doctor/playwright.events-live.config.ts`                                                                       | yes           |
-| `live/doctor/learning`       | `doctor/playwright.learning-live.config.ts` (`learning-path-live.spec.ts`, golden course)                       | yes           |
-| `live/doctor/feed-live`      | `doctor/playwright.feed-live.config.ts` (`feed-adjacent.spec.ts`, golden specialties)                           | yes           |
-| `live/doctor/room`           | `doctor/playwright.room.config.ts` (`room-player-chat-live`, `room-canvas-structure-live`; axe runs separately) | yes           |
-| `live/doctor/shell`          | `doctor/playwright.shell.config.ts`                                                                             | yes           |
+| Leg                          | Config (`apps/<app>/…`)                                                                                                                  | Release check |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `live/admin/event-lifecycle` | `admin/playwright.flows.config.ts` (`stage-event-lifecycle.spec.ts`, `stage-congress-review.spec.ts`, `stage-recording-publish.spec.ts`) | yes           |
+| `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                                                                            | yes           |
+| `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                                                                               | yes           |
+| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)                                                           | yes           |
+| `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                                                                              | yes           |
+| `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                                                                                   | yes           |
+| `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                                                                                 | yes           |
+| `live/doctor/event-register` | `doctor/playwright.event-register.config.ts`                                                                                             | yes           |
+| `live/doctor/events-live`    | `doctor/playwright.events-live.config.ts`                                                                                                | yes           |
+| `live/doctor/learning`       | `doctor/playwright.learning-live.config.ts` (`learning-path-live.spec.ts`, golden course)                                                | yes           |
+| `live/doctor/feed-live`      | `doctor/playwright.feed-live.config.ts` (`feed-adjacent.spec.ts`, golden specialties)                                                    | yes           |
+| `live/doctor/room`           | `doctor/playwright.room.config.ts` (`room-player-chat-live`, `room-canvas-structure-live`; axe runs separately)                          | yes           |
+| `live/doctor/shell`          | `doctor/playwright.shell.config.ts`                                                                                                      | yes           |
 
 Each leg gets the suite env plus `IDP_ISSUER=https://id.<base domain>` and
 `MAILPIT_URL=https://mailpit.<base domain>` (hostnames, never `127.0.0.1`: Playwright
@@ -546,7 +529,9 @@ trace, screenshot and video capture. The runner sets
 accessibility snapshot.
 
 The event lifecycle spec retires the event it creates through the admin
-lifecycle. The congress review spec creates a fresh doctor and submission,
+lifecycle. The recording publish spec takes its own event to ended, attaches
+and publishes a recording, checks it plays for the signed-in stage doctor on
+both storefronts, and retires that event the same way. The congress review spec creates a fresh doctor and submission,
 checks the decision in the doctor's cabinet, and finds that doctor on the roster.
 
 Event slugs come from the golden set the slot was seeded with (#2996): a tier's
@@ -555,6 +540,11 @@ its specs assert, only that tier's leg receives them, and a value the operator e
 wins; it also wins over the host-wide
 `GOLDEN_LIVE_ENV` slug for that leg. `apps/api/test/scripts/stage-event-page-slugs.spec.ts` builds the golden dataset and
 fails when a mirrored slug stops carrying its shape.
+
+The doctor event-page tier uses `E2E_DOCTOR_RECORDING_BOTH_CUTS_SLUG` for the
+signed-in recording journey (014 EARS-6/8). The golden event carries a public
+RuTube montage and its distinct original. The journey follows the recording
+gate through real sign-in and requires a presented video frame from RuTube.
 
 An IdP management token (`IDP_SERVICE_TOKEN`/`IDP_PROJECT_ID`), the api's
 `CONGRESS_SIGNUP_*` block and a `DATABASE_URL` are **not** derived and not added to the

@@ -33,7 +33,7 @@
 # or 502 (credentials, no upstream) — never a certificate error, never an indexable
 # page.
 #
-# Basic-auth exemptions — exactly five (spec §3), each because the caller carries no browser
+# Basic-auth exemptions — exactly four (spec §3), each because the caller carries no browser
 # credentials and is authenticated by its own mechanism:
 #   1. the two Centrifugo path families on `api-<slot>` (websocket upgrade + the
 #      api's X-API-Key publish path) — protected by Centrifugo's HMAC token / API
@@ -42,17 +42,11 @@
 #      only — Zitadel posts the OIDC back-channel logout to the public slot api
 #      (tools/staging/idp.mjs); the endpoint verifies the signed logout token and is
 #      rate-limited (ADR-0015 §4 req 9), and production has no gate in front of it;
-#   3. `POST /v1/integrations/telegram/webhook` on `api-<slot>`, that method and path
-#      only — Telegram posts channel updates to the slot's public TELEGRAM_WEBHOOK_URL
-#      (tools/staging/slot.mjs) with no browser credentials; the endpoint
-#      authenticates every call by the `X-Telegram-Bot-Api-Secret-Token` header
-#      before reading the body (048 EARS-24/25), and production has no gate in
-#      front of it;
-#   4. the shared IdP host `id.stage.doctor.school` — every slot api reaches it
+#   3. the shared IdP host `id.stage.doctor.school` — every slot api reaches it
 #      machine-to-machine through this public origin (IDP_ISSUER is the public URL,
 #      infra/deploy/api.env.example), and so does the converge form (b)
 #      (README → «Zitadel converge»); Zitadel authenticates on its own;
-#   5. the shared object-storage host `s3.stage.doctor.school` — every object URL the
+#   4. the shared object-storage host `s3.stage.doctor.school` — every object URL the
 #      api hands a browser is a PRESIGNED SigV4 GET (apps/api/src/storage/storage.s3.ts),
 #      which is its own, per-object, time-bounded authorization; an unsigned request
 #      gets MinIO's own 403. The gate could not apply anyway: an `<img src>` never
@@ -137,7 +131,7 @@
 # and a separate restricted handler.
 #
 # THE ALTERNATIONS BELOW MUST AGREE WITH THE `@stage_slot` / `@stage_centrifugo` /
-# `@stage_back_channel_logout` / `@stage_telegram_webhook` MATCHERS IN THE HTTPS SITE AT THE BOTTOM OF THIS FILE.
+# `@stage_back_channel_logout` MATCHERS IN THE HTTPS SITE AT THE BOTTOM OF THIS FILE.
 # That agreement is asserted by tools/staging/stage-edge.test.mjs — change one,
 # change the other.
 #
@@ -207,7 +201,7 @@ http://127.0.0.1:2020 {
 	}
 
 	# Shared object storage — one MinIO, one bucket per slot (`ds-<slot>`, created by
-	# `slot up`). Not behind basic auth: see the header of this file (exemption 5).
+	# `slot up`). Not behind basic auth: see the header of this file (exemption 4).
 	# Path style, so the bucket is the first path segment and this single host serves
 	# every slot; no wildcard beneath it and no console.
 	@s3 host s3.{$STAGE_BASE_DOMAIN}
@@ -240,8 +234,8 @@ http://127.0.0.1:2020 {
 		}
 	}
 
-	# Centrifugo path families on `api-<slot>` — one of the THREE basic-auth
-	# exemptions on a slot host (five stand-wide, with `id` and `s3`; spec §3):
+	# Centrifugo path families on `api-<slot>` — one of the TWO basic-auth
+	# exemptions on a slot host (four stand-wide, with `id` and `s3`; spec §3):
 	# browser websocket + the api's key-gated publish path. The capture name `slot`
 	# is shared with `@stage_slot` below, so `{re.slot.2}` names the slot in either
 	# branch.
@@ -253,7 +247,7 @@ http://127.0.0.1:2020 {
 		reverse_proxy {re.slot.2}-centrifugo:8000
 	}
 
-	# The OIDC back-channel logout on `api-<slot>` — the second slot-host exemption
+	# The OIDC back-channel logout on `api-<slot>` — the other slot-host exemption
 	# (spec §3, #3545): `POST /v1/auth/back-channel-logout` ONLY. Zitadel posts it to the
 	# public slot api (tools/staging/idp.mjs) carrying no browser credentials; the
 	# endpoint verifies the signed logout token and is rate-limited (ADR-0015 §4
@@ -265,22 +259,6 @@ http://127.0.0.1:2020 {
 		path /v1/auth/back-channel-logout
 	}
 	handle @stage_back_channel_logout {
-		reverse_proxy {re.slot.2}-api:3000
-	}
-
-	# The Telegram webhook on `api-<slot>` — the third slot-host exemption (spec §3,
-	# #4159): `POST /v1/integrations/telegram/webhook` ONLY. Telegram posts channel
-	# updates to the slot's public TELEGRAM_WEBHOOK_URL carrying no browser
-	# credentials; the endpoint authenticates every call by the
-	# `X-Telegram-Bot-Api-Secret-Token` header before reading the body (048
-	# EARS-24/25), and production has no gate in front of `api.` at all. Any other
-	# method or path on `api-<slot>` stays behind `staging_gate`.
-	@stage_telegram_webhook {
-		header_regexp slot Host "^(api)-(main|pr-[1-9][0-9]{0,9})[.]"
-		method POST
-		path /v1/integrations/telegram/webhook
-	}
-	handle @stage_telegram_webhook {
 		reverse_proxy {re.slot.2}-api:3000
 	}
 
@@ -307,6 +285,7 @@ http://127.0.0.1:2020 {
 			respond 404
 		}
 	}
+
 	# Every slot host, live or not. The domain suffix is already guaranteed by this
 	# site's address, so the regexp only judges the single label in front of it.
 	# MUST AGREE WITH the `@stage_ask` matcher above AND with `SLOT_NAME_RE` in

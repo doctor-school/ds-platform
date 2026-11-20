@@ -19,6 +19,14 @@
  *                   `--mode-a-exempt "<reason>"`) are forwarded verbatim.
  *   2. merge      — `gh pr merge <N> --squash --delete-branch` (the single
  *                   mandatory Phase-0 merge command, AGENTS.md §6).
+ *   2a.main-sync  — `git -C <main tree> pull --ff-only origin main`, then the
+ *                   `tools/main-sync.ts` behind-check (#4181): sessions load
+ *                   CLAUDE.md and skills from the main tree, so a tree left
+ *                   behind silently serves stale rules. A refusal (index lock,
+ *                   tracked changes, not on `main`, non-ff, other git error) is
+ *                   a `main-sync: FAIL <reason>` line; the rest of the tail
+ *                   still runs (the merge has landed) and the exit is non-zero.
+ *                   A lock is reported, never deleted — its holder may be live.
  *   2b.board-clear— remove the merged PR's OWN board row (dead PR rows auto-leave
  *                   the board; `Closes #N` moves the linked Issue, never the PR
  *                   item). NON-FATAL: a failure is a reported line, not an abort
@@ -63,6 +71,12 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
+  evaluateMainSync,
+  mainSyncMessage,
+  primaryWorktreePath,
+} from "../main-sync.ts";
+
+import {
   buildDeleteItemMutation,
   buildPrProjectItemsQuery,
   ghGraphqlResult,
@@ -94,6 +108,7 @@ const GH_MAX_BUFFER = 64 * 1024 * 1024; // large payloads overflow the 1 MiB def
 export const STAGES = [
   "gate",
   "merge",
+  "main-sync",
   "board-clear",
   "board-done",
   "teardown",
@@ -134,6 +149,8 @@ export function stageRemedy(stage, pr) {
       return `investigate the gate's terminal RED/TIMEOUT line above; do NOT merge (re-run \`pnpm pr:land ${pr}\` once resolved).`;
     case "merge":
       return `inspect the gh output above, then re-run \`pnpm pr:land ${pr}\` (the gate re-confirms before any retry merges).`;
+    case "main-sync":
+      return `merge landed — the main tree was NOT fast-forwarded: clear the cause above (a lock is never auto-deleted: remove it only once no git process runs), then \`git pull --ff-only origin main\` in the main tree.`;
     case "board-clear":
       return `merge landed — the merged PR's board row was NOT removed (non-fatal); delete it by hand from the board if it lingers as a dead row.`;
     case "board-done":
@@ -156,6 +173,65 @@ export function stageRemedy(stage, pr) {
  */
 export function failCode(status) {
   return typeof status === "number" && status !== 0 ? status : 1;
+}
+
+/**
+ * Why the main tree must not be pulled, or null when it may (#4181). Pure: the
+ * evidence is gathered by `runMainSync`. Checked before the pull so the FAIL
+ * line names the cause instead of git's generic refusal.
+ * @param {{lockPath: string|null, branch: string|null, dirty: string[]}} ev
+ * @returns {string|null}
+ */
+export function mainSyncRefusal({ lockPath, branch, dirty }) {
+  if (lockPath) return `index lock present (${lockPath})`;
+  if (branch !== "main")
+    return `main tree not on main (${branch ? `on ${branch}` : "detached HEAD"})`;
+  if (dirty.length > 0)
+    return `tracked changes in the main tree: ${dirty
+      .slice(0, 5)
+      .map((line) => line.trim().replace(/\s+/g, " "))
+      .join(", ")}${dirty.length > 5 ? `, … (${dirty.length} total)` : ""}`;
+  return null;
+}
+
+/**
+ * Outcome of the pull plus the `main-sync.ts` behind-check (#4181). Pure.
+ * @param {{
+ *   pull: {status: number|null, stderr?: string},
+ *   head?: string|null, behindCount?: number|null, behindError?: string,
+ * }} ev
+ * @returns {{ok: true, sha: string} | {ok: false, reason: string}}
+ */
+export function mainSyncPullOutcome({ pull, head, behindCount, behindError }) {
+  if (pull.status !== 0) {
+    const stderr = pull.stderr ?? "";
+    const lines = stderr
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    const first =
+      lines.find((line) => /^(fatal|error):/.test(line)) ?? lines[0];
+    if (/index\.lock/.test(stderr))
+      return { ok: false, reason: `index lock present (${first})` };
+    if (/not possible to fast-forward|diverging branches/i.test(stderr))
+      return {
+        ok: false,
+        reason: "non-fast-forward (local main diverged from origin/main)",
+      };
+    return {
+      ok: false,
+      reason: `git pull failed: ${first ?? `exit ${pull.status}`}`,
+    };
+  }
+  // The pull fetched origin/main itself, so the fetch leg of the probe is met.
+  const status = evaluateMainSync({ fetchOk: true, behindCount, behindError });
+  if (status.kind !== "in-sync")
+    return {
+      ok: false,
+      reason: `still behind after the pull: ${mainSyncMessage(status)}`,
+    };
+  if (!head) return { ok: false, reason: "could not read the main tree HEAD" };
+  return { ok: true, sha: head };
 }
 
 // ── default (impure) runners — injectable so the guard-test stubs them ───────
@@ -206,6 +282,76 @@ function runResolveContext(pr) {
     };
   } catch {
     return { ok: false, message: `could not parse gh pr view JSON for #${pr}` };
+  }
+}
+
+const MAIN_SYNC_PULL_TIMEOUT_MS = 120_000;
+const MAIN_SYNC_PROBE_TIMEOUT_MS = 15_000;
+
+/**
+ * Stage 2a (#4181): fast-forward the main tree to `origin/main`. Gathers the
+ * evidence for the pure seams above; never deletes anything. Every git call
+ * is non-interactive and time-bounded: the tail runs unattended in a lander
+ * subagent, where a credential prompt or a hung network call would stall it
+ * with no one to answer. `spawn` is injectable for the guard-test.
+ * @param {string} tree
+ * @param {typeof spawnSync} [spawn]
+ * @returns {{ok: true, sha: string} | {ok: false, reason: string}}
+ */
+export function runMainSync(tree, spawn = spawnSync) {
+  const env = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: "0",
+    GCM_INTERACTIVE: "never",
+  };
+  const refused = (reason) => ({ refused: reason });
+  /** One captured git call (argv array, no shell); a spawn error or timeout aborts the stage. */
+  const git = (args, timeoutMs = MAIN_SYNC_PROBE_TIMEOUT_MS) => {
+    const argv = ["-C", tree, ...args];
+    const res = spawn("git", argv, {
+      encoding: "utf8",
+      maxBuffer: GH_MAX_BUFFER,
+      env,
+      timeout: timeoutMs,
+    });
+    if (res.error?.code === "ETIMEDOUT")
+      throw refused(
+        `git timed out after ${timeoutMs / 1000}s: git ${argv.join(" ")}`,
+      );
+    if (res.error) throw refused(`failed to spawn git: ${res.error.message}`);
+    return res;
+  };
+
+  try {
+    const head = git(["symbolic-ref", "--quiet", "--short", "HEAD"]);
+    const status = git(["status", "--porcelain", "--untracked-files=no"]);
+    if (status.status !== 0) return mainSyncPullOutcome({ pull: status });
+    const lock = join(tree, ".git", "index.lock");
+    const refusal = mainSyncRefusal({
+      lockPath: existsSync(lock) ? lock : null,
+      branch: head.status === 0 ? head.stdout.trim() : null,
+      dirty: status.stdout.split(/\r?\n/).filter((line) => line.trim() !== ""),
+    });
+    if (refusal) return { ok: false, reason: refusal };
+
+    const pull = git(
+      ["pull", "--ff-only", "origin", "main"],
+      MAIN_SYNC_PULL_TIMEOUT_MS,
+    );
+    if (pull.status !== 0) return mainSyncPullOutcome({ pull });
+    const behind = git(["rev-list", "--count", "main..origin/main"]);
+    const sha = git(["rev-parse", "--short=12", "HEAD"]);
+    const n = Number.parseInt(behind.stdout ?? "", 10);
+    return mainSyncPullOutcome({
+      pull,
+      head: sha.status === 0 ? sha.stdout.trim() : null,
+      behindCount: behind.status === 0 && !Number.isNaN(n) ? n : null,
+      behindError: (behind.stderr ?? "").split(/\r?\n/)[0] || undefined,
+    });
+  } catch (e) {
+    if (e && typeof e === "object" && "refused" in e)
+      return { ok: false, reason: e.refused };
+    throw e;
   }
 }
 
@@ -340,6 +486,7 @@ function runListRemoteBranches() {
  * @param {{
  *   gate?: typeof runGate, merge?: typeof runMerge,
  *   resolveContext?: typeof runResolveContext, mergedSha?: typeof runMergedSha,
+ *   mainTree?: string, mainSync?: typeof runMainSync,
  *   clearBoardItem?: typeof runClearPrBoardItem,
  *   boardDone?: typeof runBoardDone, worktreeExists?: typeof defaultWorktreeExists,
  *   teardown?: typeof runTeardown, listOpenPrs?: typeof runListOpenPrs,
@@ -353,6 +500,8 @@ export function landPr(pr, extraArgs = [], io = {}) {
   const merge = io.merge ?? runMerge;
   const resolveContext = io.resolveContext ?? runResolveContext;
   const mergedSha = io.mergedSha ?? runMergedSha;
+  const mainTree = io.mainTree ?? process.cwd();
+  const mainSync = io.mainSync ?? runMainSync;
   const clearBoardItem = io.clearBoardItem ?? runClearPrBoardItem;
   const boardDone = io.boardDone ?? runBoardDone;
   const worktreeExists = io.worktreeExists ?? defaultWorktreeExists;
@@ -417,6 +566,15 @@ export function landPr(pr, extraArgs = [], io = {}) {
   const sha = mergedSha(pr);
   report.push(
     `merge: OK (squash${sha ? `, ${String(sha).slice(0, 12)}` : ""})`,
+  );
+
+  // Stage 2a — main-sync (#4181). A FAIL is deferred, not an abort: the merge
+  // has landed, so board/teardown/re-sweep still run; the exit is non-zero.
+  const synced = mainSync(mainTree);
+  report.push(
+    synced.ok
+      ? `main-sync: OK ${synced.sha}`
+      : `main-sync: FAIL (${synced.reason})`,
   );
 
   // Stage — board-clear: remove the merged PR's OWN board row so dead PR rows
@@ -500,6 +658,12 @@ export function landPr(pr, extraArgs = [], io = {}) {
   );
 
   printReport();
+  if (!synced.ok) {
+    err(
+      `stage 'main-sync' FAILED for PR #${pr} — ${synced.reason}. Remedy: ${stageRemedy("main-sync", pr)}`,
+    );
+    return exit(1);
+  }
   log(`${TAG} closeout tail COMPLETE for PR #${pr}.\n`);
   return exit(0);
 }
@@ -546,7 +710,7 @@ async function main() {
     process.stdout.write(`${TAG} ${stageWarning}
 `);
 
-  landPr(prNumber, extraArgs);
+  landPr(prNumber, extraArgs, { mainTree: await primaryWorktreePath(cwd) });
 }
 
 // Run main only when invoked directly, so the pure seams are importable in the

@@ -7,6 +7,9 @@ import {
   failCode,
   issueCandidates,
   landPr,
+  mainSyncPullOutcome,
+  mainSyncRefusal,
+  runMainSync,
   STAGES,
   stageRemedy,
 } from "../../gh/pr-land.mjs";
@@ -54,6 +57,10 @@ function makeIo(overrides: Record<string, unknown> = {}) {
       return { status: 0 };
     },
     mergedSha: () => "abcdef1234567890",
+    mainSync: () => {
+      calls.push("main-sync");
+      return { ok: true, sha: "abcdef123456" };
+    },
     clearBoardItem: () => {
       calls.push("board-clear");
       return { status: "deleted", detail: "PVTI_pr" };
@@ -84,10 +91,11 @@ function makeIo(overrides: Record<string, unknown> = {}) {
 }
 
 describe("pr-land pure seams (#1026)", () => {
-  it("STAGES is the canonical closeout order (board-clear between merge and board-done, #1140)", () => {
+  it("STAGES is the canonical closeout order (main-sync right after merge, #4181; board-clear before board-done, #1140)", () => {
     expect(STAGES).toEqual([
       "gate",
       "merge",
+      "main-sync",
       "board-clear",
       "board-done",
       "teardown",
@@ -142,6 +150,7 @@ describe("pr-land landPr() stage ordering (#1026)", () => {
       "resolve",
       "gate",
       "merge",
+      "main-sync",
       "board-clear",
       "board-done:1026",
       "teardown:1026",
@@ -234,6 +243,7 @@ describe("pr-land landPr() abort-on-FAIL (#1026)", () => {
       "resolve",
       "gate",
       "merge",
+      "main-sync",
       "board-clear",
       "board-done:1026",
     ]);
@@ -253,6 +263,7 @@ describe("pr-land landPr() abort-on-FAIL (#1026)", () => {
       "resolve",
       "gate",
       "merge",
+      "main-sync",
       "board-clear",
       "board-done:1026",
       "teardown:1026",
@@ -285,6 +296,7 @@ describe("pr-land landPr() skip semantics (#1026)", () => {
       "resolve",
       "gate",
       "merge",
+      "main-sync",
       "board-clear",
       "board-done:1026",
       "re-sweep:prs",
@@ -309,6 +321,7 @@ describe("pr-land landPr() skip semantics (#1026)", () => {
       "resolve",
       "gate",
       "merge",
+      "main-sync",
       "board-clear",
       "teardown:77",
       "re-sweep:prs",
@@ -358,6 +371,7 @@ describe("pr-land board-clear stage — NON-FATAL (#1140)", () => {
       "resolve",
       "gate",
       "merge",
+      "main-sync",
       "board-clear",
       "board-done:1026",
       "teardown:1026",
@@ -365,6 +379,273 @@ describe("pr-land board-clear stage — NON-FATAL (#1140)", () => {
       "re-sweep:branches",
     ]);
     expect(logs.join("")).toMatch(/board-clear: WARN \(non-fatal/);
+  });
+});
+
+describe("pr-land main-sync stage (#4181)", () => {
+  it("OK: prints `main-sync: OK <sha>` and the tail exits 0", () => {
+    const logs: string[] = [];
+    const { io, state } = makeIo({ log: (msg: string) => logs.push(msg) });
+    expect(() => landPr(55, [], io as never)).toThrow("exit:0");
+    expect(state.code).toBe(0);
+    expect(logs.join("")).toMatch(/main-sync: OK abcdef123456/);
+  });
+
+  it("runs against the resolved main tree, never the cwd guess", () => {
+    let tree = "";
+    const { io } = makeIo({
+      mainTree: "/repos/ds-platform",
+      mainSync: (t: string) => {
+        tree = t;
+        return { ok: true, sha: "abc" };
+      },
+    });
+    expect(() => landPr(55, [], io as never)).toThrow("exit:0");
+    expect(tree).toBe("/repos/ds-platform");
+  });
+
+  it("FAIL: the remaining tail still runs, then a non-zero exit names the reason", () => {
+    const logs: string[] = [];
+    const errors: string[] = [];
+    const { io, calls, state } = makeIo({
+      mainSync: () => {
+        calls.push("main-sync");
+        return {
+          ok: false,
+          reason: "index lock present (/repos/ds-platform/.git/index.lock)",
+        };
+      },
+      log: (msg: string) => logs.push(msg),
+      err: (msg: string) => errors.push(msg),
+    });
+    expect(() => landPr(55, [], io as never)).toThrow("exit:1");
+    expect(calls).toEqual([
+      "resolve",
+      "gate",
+      "merge",
+      "main-sync",
+      "board-clear",
+      "board-done:1026",
+      "teardown:1026",
+      "re-sweep:prs",
+      "re-sweep:branches",
+    ]);
+    expect(state.code).toBe(1);
+    expect(logs.join("")).toMatch(
+      /main-sync: FAIL \(index lock present \(\/repos\/ds-platform\/\.git\/index\.lock\)\)/,
+    );
+    expect(logs.join("")).not.toMatch(/closeout tail COMPLETE/);
+    expect(errors.join("\n")).toMatch(/stage 'main-sync' FAILED/);
+  });
+
+  it("FAIL followed by a failing later stage still exits non-zero with both lines reported", () => {
+    const logs: string[] = [];
+    const { io, state } = makeIo({
+      mainSync: () => ({
+        ok: false,
+        reason: "main tree not on main (on feat/1-x)",
+      }),
+      teardown: () => ({ status: 2 }),
+      log: (msg: string) => logs.push(msg),
+    });
+    expect(() => landPr(55, [], io as never)).toThrow("exit:2");
+    expect(state.code).toBe(2);
+    expect(logs.join("")).toMatch(/main-sync: FAIL/);
+    expect(logs.join("")).toMatch(/teardown: FAIL/);
+  });
+
+  it("mainSyncRefusal: a held index lock refuses before any pull", () => {
+    expect(
+      mainSyncRefusal({
+        lockPath: "/r/.git/index.lock",
+        branch: "main",
+        dirty: [],
+      }),
+    ).toBe("index lock present (/r/.git/index.lock)");
+  });
+
+  it("mainSyncRefusal: not on main / detached HEAD", () => {
+    expect(
+      mainSyncRefusal({ lockPath: null, branch: "feat/9-x", dirty: [] }),
+    ).toBe("main tree not on main (on feat/9-x)");
+    expect(mainSyncRefusal({ lockPath: null, branch: null, dirty: [] })).toBe(
+      "main tree not on main (detached HEAD)",
+    );
+  });
+
+  it("mainSyncRefusal: dirty tracked files are named", () => {
+    expect(
+      mainSyncRefusal({
+        lockPath: null,
+        branch: "main",
+        dirty: [" M AGENTS.md", "M  tools/x.ts"],
+      }),
+    ).toBe("tracked changes in the main tree: M AGENTS.md, M tools/x.ts");
+  });
+
+  it("mainSyncRefusal: a clean idle main tree is not refused", () => {
+    expect(
+      mainSyncRefusal({ lockPath: null, branch: "main", dirty: [] }),
+    ).toBeNull();
+  });
+
+  it("mainSyncPullOutcome: non-fast-forward, lock race and other git errors", () => {
+    expect(
+      mainSyncPullOutcome({
+        pull: {
+          status: 128,
+          stderr:
+            "hint: Diverging branches can't be fast-forwarded, you need to either:\nfatal: Not possible to fast-forward, aborting.\n",
+        },
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "non-fast-forward (local main diverged from origin/main)",
+    });
+    expect(
+      mainSyncPullOutcome({
+        pull: {
+          status: 128,
+          stderr:
+            "fatal: Unable to create '/r/.git/index.lock': File exists.\n\nAnother git process seems to be running",
+        },
+      }),
+    ).toEqual({
+      ok: false,
+      reason:
+        "index lock present (fatal: Unable to create '/r/.git/index.lock': File exists.)",
+    });
+    expect(
+      mainSyncPullOutcome({
+        pull: {
+          status: 1,
+          stderr:
+            "\nfatal: unable to access 'https://github.com/x/': Could not resolve host\nmore",
+        },
+      }),
+    ).toEqual({
+      ok: false,
+      reason:
+        "git pull failed: fatal: unable to access 'https://github.com/x/': Could not resolve host",
+    });
+    expect(mainSyncPullOutcome({ pull: { status: null, stderr: "" } })).toEqual(
+      { ok: false, reason: "git pull failed: exit null" },
+    );
+  });
+
+  it("mainSyncPullOutcome: a pull that leaves main behind origin/main is a FAIL (main-sync.ts behind-check)", () => {
+    expect(
+      mainSyncPullOutcome({
+        pull: { status: 0, stderr: "" },
+        head: "abc123",
+        behindCount: 2,
+      }),
+    ).toEqual({
+      ok: false,
+      reason:
+        "still behind after the pull: local `main` is 2 commit(s) BEHIND `origin/main`",
+    });
+    const unknown = mainSyncPullOutcome({
+      pull: { status: 0, stderr: "" },
+      head: "abc123",
+      behindCount: null,
+      behindError: "fatal: bad revision",
+    });
+    expect(unknown.ok).toBe(false);
+    expect(unknown.reason).toMatch(/fatal: bad revision/);
+  });
+
+  it("mainSyncPullOutcome: in sync after the pull → OK with the head SHA", () => {
+    expect(
+      mainSyncPullOutcome({
+        pull: { status: 0, stderr: "" },
+        head: "abc123def456",
+        behindCount: 0,
+      }),
+    ).toEqual({ ok: true, sha: "abc123def456" });
+  });
+
+  /** A fake spawnSync for runMainSync: records every call, answers per git subcommand. */
+  type SpawnOpts = { env: Record<string, string>; timeout: number };
+  function fakeGit(answer: (args: string[]) => Record<string, unknown>) {
+    const calls: { cmd: string; args: string[]; opts: SpawnOpts }[] = [];
+    const spawn = (cmd: string, args: string[], opts: SpawnOpts) => {
+      calls.push({ cmd, args, opts });
+      return answer(args);
+    };
+    return { spawn, calls };
+  }
+  const cleanMain = (args: string[]) => {
+    const sub = args[2];
+    if (sub === "symbolic-ref") return { status: 0, stdout: "main\n" };
+    if (sub === "rev-list") return { status: 0, stdout: "0\n", stderr: "" };
+    if (sub === "rev-parse") return { status: 0, stdout: "abc123def456\n" };
+    return { status: 0, stdout: "", stderr: "" };
+  };
+
+  it("runMainSync: every git call is non-interactive and time-bounded (pull 120 s, probes 15 s)", () => {
+    const { spawn, calls } = fakeGit(cleanMain);
+    expect(runMainSync("/no/such/tree", spawn as never)).toEqual({
+      ok: true,
+      sha: "abc123def456",
+    });
+    expect(calls.map((c) => c.args[2])).toEqual([
+      "symbolic-ref",
+      "status",
+      "pull",
+      "rev-list",
+      "rev-parse",
+    ]);
+    for (const { cmd, args, opts } of calls) {
+      expect(cmd).toBe("git");
+      expect(args.slice(0, 2)).toEqual(["-C", "/no/such/tree"]);
+      expect(opts.env.GIT_TERMINAL_PROMPT).toBe("0");
+      expect(opts.env.GCM_INTERACTIVE).toBe("never");
+      expect(opts.timeout).toBe(args[2] === "pull" ? 120000 : 15000);
+    }
+  });
+
+  it("runMainSync: a timed-out pull is `git timed out after 120s: <cmd>`", () => {
+    const { spawn } = fakeGit((args) =>
+      args[2] === "pull"
+        ? {
+            status: null,
+            signal: "SIGTERM",
+            error: Object.assign(new Error("spawnSync git ETIMEDOUT"), {
+              code: "ETIMEDOUT",
+            }),
+          }
+        : cleanMain(args),
+    );
+    expect(runMainSync("/t", spawn as never)).toEqual({
+      ok: false,
+      reason: "git timed out after 120s: git -C /t pull --ff-only origin main",
+    });
+  });
+
+  it("runMainSync: a timed-out probe is `git timed out after 15s: <cmd>`", () => {
+    const { spawn, calls } = fakeGit((args) =>
+      args[2] === "status"
+        ? {
+            status: null,
+            error: Object.assign(new Error("ETIMEDOUT"), { code: "ETIMEDOUT" }),
+          }
+        : cleanMain(args),
+    );
+    expect(runMainSync("/t", spawn as never)).toEqual({
+      ok: false,
+      reason:
+        "git timed out after 15s: git -C /t status --porcelain --untracked-files=no",
+    });
+    expect(calls.map((c) => c.args[2])).not.toContain("pull");
+  });
+
+  it("a lock is reported, never deleted: the source removes no file", () => {
+    const source = readFileSync(
+      fileURLToPath(new URL("../../gh/pr-land.mjs", import.meta.url)),
+      "utf8",
+    );
+    expect(source).not.toMatch(/\b(unlinkSync|rmSync|unlink|rm)\(/);
   });
 });
 

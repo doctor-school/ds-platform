@@ -534,7 +534,17 @@ export const LIVE_TIERS = Object.freeze([
       "E2E_FEED_ADJACENT_EXPECT",
       "E2E_FEED_ADJACENT_EMPTY_CODE",
     ],
-    gated: [],
+    gated: [
+      {
+        file: "e2e/specialty-feed-pick-live.spec.ts",
+        requires: [
+          URL_DOCTOR,
+          "E2E_FEED_ADJACENT_CODE",
+          "E2E_FEED_ADJACENT_EXPECT",
+          "MAILPIT_URL",
+        ],
+      },
+    ],
   },
   {
     name: "live/doctor/room",

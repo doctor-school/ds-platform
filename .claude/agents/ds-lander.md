@@ -78,7 +78,7 @@ Append `--mode-a-exempt "<reason>"` only when the dispatching brief passed you t
 
 Run it in the foreground. The gate inside `pr:land` is itself a bounded poll with a mandatory terminal GREEN/RED/TIMEOUT line, so a long CI wait is the command doing its job; backgrounding it (`run_in_background`, `&`, a detached shell) loses the terminal line the return contract is built on. If the wait needs to be longer than the default 15 min, pass `--timeout <sec>` — and only when the dispatching brief told you to.
 
-`pr:land` chains: merge gate (CI + head-pinned Mode (a) verdict) → `gh pr merge --squash --delete-branch` → board Status = Done → `worktree:teardown <N>` → branch/PR re-sweep. The first non-zero stage aborts the tail and prints the stage plus a one-line remedy; report it, do not retry the merge past a non-green gate. The gate does not refuse because `main` advanced past the tested head, so a RED here (red CI, missing Mode (a) verdict, dirty base) is a STOP, not a rebase-and-retry.
+`pr:land` chains: merge gate (CI + head-pinned Mode (a) verdict) → `gh pr merge --squash --delete-branch` → `main-sync` (fast-forwards the main tree; a FAIL names the cause and turns the exit non-zero after the remaining stages run) → board Status = Done → `worktree:teardown <N>` → branch/PR re-sweep. The first non-zero stage aborts the tail and prints the stage plus a one-line remedy; report it, do not retry the merge past a non-green gate. The gate does not refuse because `main` advanced past the tested head, so a RED here (red CI, missing Mode (a) verdict, dirty base) is a STOP, not a rebase-and-retry.
 
 ## Limits
 
@@ -95,6 +95,7 @@ Run it in the foreground. The gate inside `pr:land` is itself a bounded poll wit
 teardown-pre: done <path> | none needed | n-a
 gate: GREEN | RED | TIMEOUT
 merged: <sha> | no
+main-sync: OK <sha> | FAIL <reason> | n-a
 board: Done | <status> | n-a
 teardown: yes | no | n-a
 resweep: ok | <what is still open>

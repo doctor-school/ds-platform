@@ -3260,6 +3260,8 @@ describe("#4172 golden volume covers the schema", () => {
       "rebuildable status projection of learning_facts (023 EARS-11); the next real fact projects it",
     learning_attempts:
       "a test attempt in flight until submitted; its outcome is a learning fact",
+    telegram_update_cursor:
+      "the poller's own offset per real bot id (048 EARS-24); a seeded offset would make a live bot skip or replay real updates",
     event_role_grants:
       "an authorization binding read only by the access check; no list screen ships (#2378) — the stage committee grant is the named one",
     // 025 ledger: no storefront or admin page reads it yet.

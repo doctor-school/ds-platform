@@ -9,6 +9,7 @@ import {
   learningPresets,
   learningRuleLayers,
   learningSteps,
+  pointsPostings,
   projectResults,
   projects,
   registrationAttendance,
@@ -28,6 +29,7 @@ import {
   seedGolden,
 } from "../../../../packages/db/src/seed/golden/index.js";
 import { and, eq, like, sql } from "drizzle-orm";
+import { PointsLedgerService } from "../../src/points/points-ledger.service.js";
 import { projectPubliclyVisible } from "../../src/taxonomy/project-public-visibility.js";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -545,6 +547,33 @@ describe("golden seed project results (030 EARS-17)", () => {
           "test",
           "video",
         ]);
+        throw rollback;
+      })
+      .catch((error) => {
+        if (error !== rollback) throw error.cause ?? error;
+      });
+  }, 120_000);
+
+  it("#4172: the golden doctor's Pul reads through GET /v1/me/points' fold, and a re-seed at another pin adds no posting", async () => {
+    const doctor = golden.doctors.verifiedCardiologist.id;
+    await db
+      .transaction(async (tx) => {
+        await seedGolden(tx, { subjects, env: { GOLDEN_NOW: pin } });
+        const ledger = new PointsLedgerService(tx as never);
+        const first = await ledger.readPersonAccount(doctor);
+        const [{ n: postings }] = await tx
+          .select({ n: sql<number>`count(*)::int` })
+          .from(pointsPostings);
+        await seedGolden(tx, {
+          subjects,
+          env: { GOLDEN_NOW: "2026-10-24T08:00:00.000Z" },
+        });
+        expect(first.pul.available).toBeGreaterThan(0);
+        expect(await ledger.readPersonAccount(doctor)).toEqual(first);
+        const [{ n: after }] = await tx
+          .select({ n: sql<number>`count(*)::int` })
+          .from(pointsPostings);
+        expect(after).toBe(postings);
         throw rollback;
       })
       .catch((error) => {

@@ -145,6 +145,16 @@ export {
 } from "./congress-volume.js";
 export { buildGoldenFeedVolume, type GoldenFeedVolume } from "./feed-volume.js";
 export {
+  buildGoldenPointsLedger,
+  GOLDEN_POINTS_RULE_IDS,
+  goldenLearningCompletions,
+  goldenLedgerEventId,
+  resolveGoldenPointsRows,
+  type GoldenPointsContext,
+  type GoldenPointsFact,
+  type GoldenPointsLedger,
+} from "./points-ledger.js";
+export {
   composeDescription,
   specialtiesWithoutParagraphBank,
   volumeEventTitle,
@@ -168,6 +178,7 @@ export {
 } from "./plan.js";
 export {
   applyGoldenStep,
+  loadGoldenPointsContext,
   loadLearningPresetByName,
   loadSpecialtyIdByName,
   seedGolden,

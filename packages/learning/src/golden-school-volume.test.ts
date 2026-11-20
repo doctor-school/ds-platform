@@ -3,6 +3,7 @@ import {
   buildGoldenLearningVolume,
   golden,
   GOLDEN_VOLUME_FACT_COURSES,
+  goldenLearningCompletions,
 } from "@ds/db/seed/golden";
 import {
   courseProgress,
@@ -235,5 +236,54 @@ describe("023 EARS-5 (#4017) — the golden schools at volume hold the admin pat
         ]).toEqual(expected);
       }
     }
+  });
+
+  // #4172 — the golden ledger accrues `lesson.completed` / `module.completed`
+  // for these completions; the projector sends exactly what the evaluator
+  // marks done, so the two must agree item for item.
+  it("the ledger's completions are exactly the lessons and modules the evaluator marks done", () => {
+    const doctor = golden.doctors.verifiedCardiologist.id;
+    const credited = new Set(
+      goldenLearningCompletions(rows, [doctor]).map((c) => c.id),
+    );
+    const done = new Set<string>();
+    for (const course of rows.learningCourses) {
+      const model = courseModel(course.id!);
+      const stepIds = new Set(
+        model.modules.flatMap((m) =>
+          m.lessons.flatMap((l) => l.steps.map((s) => s.id)),
+        ),
+      );
+      const facts: LearningFactModel[] = rows.learningFacts
+        .filter((f) => f.personId === doctor && stepIds.has(f.stepId!))
+        .map((f) =>
+          f.kind === "opened"
+            ? { kind: "opened", stepId: f.stepId! }
+            : {
+                kind: "position",
+                stepId: f.stepId!,
+                positionSec: Number(
+                  (f.data as Record<string, unknown>)["positionSec"],
+                ),
+              },
+        );
+      if (facts.length === 0) continue;
+      const { evaluation } = evaluateCourse({
+        course: model,
+        layers: layersOf(course.id!),
+        facts,
+        now: new Date("2026-03-01T00:00:00Z"),
+      });
+      for (const [id, state] of evaluation.states) {
+        const kind = evaluation.kinds.get(id);
+        if (
+          state.status === "done" &&
+          (kind === "lesson" || kind === "module")
+        )
+          done.add(id);
+      }
+    }
+    expect(credited.size).toBeGreaterThan(0);
+    expect([...credited].sort()).toEqual([...done].sort());
   });
 });

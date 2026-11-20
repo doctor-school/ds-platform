@@ -58,6 +58,16 @@ import {
 } from "../../schema/learning.js";
 import type { GoldenLearningPresetLayer } from "./learning.js";
 import type { GoldenLearningOwnLayer } from "./learning-volume.js";
+import {
+  pointsAccounts,
+  pointsFacts,
+  pointsPostingKeys,
+  pointsPostings,
+} from "../../schema/points-ledger.js";
+import {
+  type GoldenPointsContext,
+  resolveGoldenPointsRows,
+} from "./points-ledger.js";
 import { GOLDEN_GROUP, SEED_EVENT_KINDS } from "./ids.js";
 import type {
   GoldenDataset,
@@ -191,6 +201,12 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "learning_rule_layers",
   // 023 EARS-5 (#4017) — the golden doctor's facts, after the steps and users.
   "learning_facts",
+  // #4172 — the doctors' 025 accruals: accounts, then each fact's posting keys
+  // and journal row, then the postings that reference both.
+  "points_accounts",
+  "points_posting_keys",
+  "points_facts",
+  "points_postings",
 ]);
 
 /**
@@ -325,7 +341,9 @@ export function buildGoldenSeedPlan(
   dataset: GoldenDataset,
   specialtyIdByName: ReadonlyMap<string, string>,
   learningPresetByName: ReadonlyMap<string, GoldenLearningPresetRow>,
+  pointsContext: GoldenPointsContext,
 ): GoldenSeedStep[] {
+  const points = resolveGoldenPointsRows(dataset.pointsLedger, pointsContext);
   const steps: GoldenSeedStep[] = [
     step("users", users, dataset.users, ["id"]),
     step("experts", experts, dataset.experts, ["id"]),
@@ -485,6 +503,34 @@ export function buildGoldenSeedPlan(
       learningFacts,
       dataset.learningFacts,
       ["personId", "eventId"],
+      { appendOnly: true },
+    ),
+    // #4172 — the 025 ledger is append-only (triggers refuse UPDATE/DELETE):
+    // an account opened before meets its (subject, unit) key and keeps its
+    // id, and the facts the ledger already holds were dropped from `points`
+    // (the engine's dedupe on `points_posting_keys`), so a re-seed adds none.
+    step(
+      "points_accounts",
+      pointsAccounts,
+      dataset.pointsLedger.accounts,
+      ["subjectKind", "subjectId", "unit"],
+      { appendOnly: true },
+    ),
+    step(
+      "points_posting_keys",
+      pointsPostingKeys,
+      points.pointsPostingKeys,
+      ["eventId"],
+      { appendOnly: true },
+    ),
+    step("points_facts", pointsFacts, points.pointsFacts, ["eventId"], {
+      appendOnly: true,
+    }),
+    step(
+      "points_postings",
+      pointsPostings,
+      points.pointsPostings,
+      ["eventId", "leg", "occurredAt"],
       { appendOnly: true },
     ),
   ];

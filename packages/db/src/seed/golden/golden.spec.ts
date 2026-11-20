@@ -9,7 +9,7 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 
-import { materialBodySchema } from "@ds/schemas";
+import { materialBodySchema, PointsTraceEntrySchema } from "@ds/schemas";
 import { PDFDocument } from "pdf-lib";
 import { getTableName, is } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
@@ -66,6 +66,7 @@ import {
   GoldenPlanError,
   hasProgramme,
   isDatedProgrammeLine,
+  GOLDEN_VOLUME_ORDINAL_BASE,
   isGoldenVolumeUuid,
   ordinalFromExpertPhotoKey,
   programmeLines,
@@ -78,6 +79,11 @@ import {
   GOLDEN_LEARNING_PATH_SCHOOL,
   GOLDEN_COURSE_MEMO_KEY,
   goldenCourseMemoPdf,
+  GOLDEN_POINTS_RULE_IDS,
+  goldenLedgerEventId,
+  resolveGoldenPointsRows,
+  type GoldenPointsContext,
+  type GoldenPointsLedger,
   specialtiesWithoutParagraphBank,
   VOLUME_EXPERTS,
   VOLUME_PROGRAMME,
@@ -122,6 +128,31 @@ const learningPresetByName = new Map([
 const PINNED_NOW = "2026-01-15T12:00:00.000Z";
 
 const now = resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: PINNED_NOW });
+
+// #4172 — a freshly migrated database as `loadGoldenPointsContext` reads it:
+// the issuance account 0059 opened, the person accounts the seed opened with
+// their golden ids, the 0060 rule versions and nothing recorded yet.
+const ISSUANCE_ACCOUNT_ID = goldenUuid(0x00fd, 1);
+function freshPointsContext(
+  ledger: GoldenPointsLedger,
+  recorded: { eventIds?: Iterable<string>; dedupeKeys?: Iterable<string> } = {},
+): GoldenPointsContext {
+  return {
+    accountIdByRef: new Map([
+      ["s:issuance", ISSUANCE_ACCOUNT_ID],
+      ...ledger.accounts.map((a): [string, string] => [
+        `p:${a.subjectId}`,
+        a.id!,
+      ]),
+    ]),
+    ruleVersionById: new Map(GOLDEN_POINTS_RULE_IDS.map((id) => [id, 2])),
+    recordedEventIds: new Set(recorded.eventIds ?? []),
+    recordedDedupeKeys: new Set(recorded.dedupeKeys ?? []),
+  };
+}
+const pointsContext = freshPointsContext(
+  buildGoldenDataset(now, subjects).pointsLedger,
+);
 
 describe("#2063 golden «now» pin", () => {
   it("#2212: falls back to the seed run time when nothing pins it", () => {
@@ -519,7 +550,7 @@ describe("#2063 golden seed plan", () => {
     const steps = buildGoldenSeedPlan(
       committee,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     );
     const grantIndex = steps.findIndex(
       (step) => step.name === "event_role_grants",
@@ -541,7 +572,7 @@ describe("#2063 golden seed plan", () => {
       buildGoldenSeedPlan(
         dataset,
         specialtyIdByName,
-        learningPresetByName,
+        learningPresetByName, pointsContext,
       ).find((step) => step.name === "event_role_grants")?.rows ?? [],
     ).toEqual([]);
     expect(() => buildGoldenDataset(now, subjects, subjects.admin)).toThrow(
@@ -554,7 +585,7 @@ describe("#2063 golden seed plan", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     );
     expect(plan.map((s) => s.name)).toEqual([...GOLDEN_SEED_ORDER]);
   });
@@ -563,7 +594,7 @@ describe("#2063 golden seed plan", () => {
     for (const step of buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     )) {
       expect(step.conflictKeys.length).toBeGreaterThan(0);
       for (const key of step.conflictKeys) {
@@ -581,7 +612,7 @@ describe("#2063 golden seed plan", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     );
     const registrationsStep = plan.find((s) => s.name === "registrations");
     expect(
@@ -604,7 +635,7 @@ describe("#2063 golden seed plan", () => {
     const step = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     ).find((s) => s.name === "stream_config");
     expect(step?.conflictKeys).toEqual(["eventId"]);
   });
@@ -613,7 +644,7 @@ describe("#2063 golden seed plan", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     );
     expect(
       plan.find((s) => s.name === "congress_submission_settings")?.conflictKeys,
@@ -715,14 +746,14 @@ describe("#2212 a re-run rewrites the dates", () => {
     buildGoldenSeedPlan(
       buildGoldenDataset(at, subjects),
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     ).find((s) => s.name === "events")!;
 
   const stepNamed = (name: string, at: Date) =>
     buildGoldenSeedPlan(
       buildGoldenDataset(at, subjects),
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     ).find((s) => s.name === name)!;
 
   it("#2212: the events upsert refreshes every date-bearing column", () => {
@@ -847,7 +878,7 @@ describe("#2063 golden step execution", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     );
     const step = plan.find((s) => s.name === "users")!;
     const calls: {
@@ -886,7 +917,7 @@ describe("#2063 golden step execution", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     );
     const step = plan.find((s) => s.name === "organisation_role_assignments")!;
     expect(step.rows.length).toBeGreaterThan(0);
@@ -915,7 +946,7 @@ describe("#2063 golden step execution", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     );
     const step = { ...plan[0]!, updateKeys: ["notAColumn"] };
     await expect(applyGoldenStep({ insert: () => ({}) }, step)).rejects.toThrow(
@@ -1697,7 +1728,7 @@ describe("#2213 golden dataset at volume", () => {
       const step = buildGoldenSeedPlan(
         dataset,
         specialtyIdByName,
-        learningPresetByName,
+        learningPresetByName, pointsContext,
       ).find((s) => s.name === name)!;
       const published = step.rows.filter(
         (row) => row.firstPublishedAt instanceof Date,
@@ -2248,7 +2279,7 @@ describe("#2213 golden taxonomy and targeting", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     );
     const order = plan.map((step) => step.name);
     const at = (name: string) => {
@@ -2320,7 +2351,7 @@ describe("#2213 golden taxonomy and targeting", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     );
     const order = plan.map((step) => step.name);
     expect(order.indexOf("project_results")).toBeGreaterThan(
@@ -2822,7 +2853,7 @@ describe("#3705 golden material", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     );
     const order = plan.map((s) => s.name);
     expect(order.indexOf("materials")).toBeGreaterThan(
@@ -2843,7 +2874,7 @@ describe("#3705 golden material", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     );
     const materials = plan.find((s) => s.name === "materials")!;
     expect(materials.conflictKeys).toEqual(["id"]);
@@ -2967,7 +2998,7 @@ describe("#4059 golden learning course", () => {
     const step = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     ).find((s) => s.name === "learning_rule_layers")!;
     expect(step.conflictKeys).toEqual(["scopeKind", "scopeId"]);
     expect(step.rows.filter((r) => r.scopeId === L.course.id)).toEqual([
@@ -3179,7 +3210,7 @@ describe("023 EARS-5 (#4017) golden schools at volume", () => {
     const step = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName,
+      learningPresetByName, pointsContext,
     ).find((s) => s.name === "learning_facts")!;
     expect(step.conflictKeys).toEqual(["personId", "eventId"]);
     expect(step.updateKeys).toEqual([]);
@@ -3264,18 +3295,14 @@ describe("#4172 golden volume covers the schema", () => {
       "the poller's own offset per real bot id (048 EARS-24); a seeded offset would make a live bot skip or replay real updates",
     event_role_grants:
       "an authorization binding read only by the access check; no list screen ships (#2378) — the stage committee grant is the named one",
-    // 025 ledger: no storefront or admin page reads it yet.
-    points_accounts:
-      "025 ledger account; no page reads the ledger yet (API only) — seed with the PR that ships its first page",
-    points_posting_keys: "025 posting idempotency keys, engine-internal",
-    points_facts:
-      "025 ledger facts; no page reads the ledger yet (API only) — seed with the PR that ships its first page",
-    points_postings:
-      "025 ledger postings; no page reads the ledger yet (API only) — seed with the PR that ships its first page",
+    // 025 holds: a price on a golden event changes its registration on every
+    // slot (Pul and phone required), so they wait for a dedicated priced event.
     points_prices:
-      "025 prices; no page reads them yet (API only) — seed with the PR that ships its first page",
-    points_reserves: "025 holds, engine-internal",
-    points_obligations: "025 hold obligations, engine-internal",
+      "a price on a golden event changes its registration journey on every slot — #4188 adds a dedicated priced event",
+    points_reserves:
+      "a hold needs a priced item and a stable registration — #4188 (the priced golden event with a doctor's Pul on hold)",
+    points_obligations:
+      "an obligation hangs off an advance-covered hold — #4188",
     // 023 EARS-23 / EARS-31 records with no reader in any app or package yet.
     learning_rule_changes:
       "023 EARS-31 rule-change record; nothing reads it yet — seed with its first read",
@@ -3291,8 +3318,10 @@ describe("#4172 golden volume covers the schema", () => {
   const plan = buildGoldenSeedPlan(
     buildGoldenDataset(now, subjects),
     specialtyIdByName,
-    learningPresetByName,
+    learningPresetByName, pointsContext,
   );
+  const UUID_IN_TEXT =
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
   const volumeRowCount = (table: PgTable): number =>
     plan
       .filter((s) => s.table === table)
@@ -3300,10 +3329,13 @@ describe("#4172 golden volume covers the schema", () => {
         s.rows.filter(
           (row) =>
             (typeof row.id === "string" && isGoldenVolumeUuid(row.id)) ||
+            // A text key (a 025 event id) names its volume entity inside it.
             s.conflictKeys.some(
               (key) =>
                 typeof row[key] === "string" &&
-                isGoldenVolumeUuid(row[key] as string),
+                ((row[key] as string).match(UUID_IN_TEXT) ?? []).some(
+                  isGoldenVolumeUuid,
+                ),
             ),
         ),
       ).length;
@@ -3421,5 +3453,151 @@ describe("#4172 golden long learning paths", () => {
       ),
     ).toEqual([]);
     expect(pathSteps.size).toBeGreaterThan(0);
+  });
+});
+
+describe("#4172 golden attention-points ledger", () => {
+  const dataset = buildGoldenDataset(now, subjects);
+  const ledger = dataset.pointsLedger;
+  const stepRows = (plan: ReturnType<typeof buildGoldenSeedPlan>, name: string) =>
+    plan.find((s) => s.name === name)!.rows;
+  const planAt = (at: Date, ctx: GoldenPointsContext) =>
+    buildGoldenSeedPlan(
+      buildGoldenDataset(at, subjects),
+      specialtyIdByName,
+      learningPresetByName,
+      ctx,
+    );
+  const plan = planAt(now, pointsContext);
+  const postings = stepRows(plan, "points_postings");
+
+  /** `readPersonAccount`'s fold: Σ credits − Σ debits per (account, denomination). */
+  function fold(
+    rows: readonly Record<string, unknown>[],
+    personId: string,
+    denomination = "pul",
+  ): number {
+    const account = pointsContext.accountIdByRef.get(`p:${personId}`);
+    if (!account) return 0;
+    return rows
+      .filter((p) => p.denomination === denomination)
+      .reduce(
+        (sum, p) =>
+          sum +
+          (p.creditAccountId === account ? Number(p.amount) : 0) -
+          (p.debitAccountId === account ? Number(p.amount) : 0),
+        0,
+      );
+  }
+
+  it("the golden doctor reads a Pul balance above zero, folded as GET /v1/me/points folds it", () => {
+    expect(fold(postings, golden.doctors.verifiedCardiologist.id)).toBeGreaterThan(0);
+  });
+
+  it("spreads the balances: large on the worker pool, small on half the verified volume doctors, zero elsewhere", () => {
+    const pool = golden.workerPool.verifiedCardiologist.map((d) => d.id);
+    for (const id of pool) expect(fold(postings, id)).toBeGreaterThan(100);
+    const volume = Array.from({ length: 8 }, (_, d) =>
+      goldenUuid(GOLDEN_GROUP.users, GOLDEN_VOLUME_ORDINAL_BASE + d),
+    );
+    expect(volume.map((id) => fold(postings, id))).toEqual([
+      20, 0, 20, 0, 20, 0, 20, 0,
+    ]);
+    expect(pointsContext.accountIdByRef.has(`p:${volume[1]}`)).toBe(false);
+    expect(fold(postings, golden.doctors.unverified.id)).toBe(0);
+  });
+
+  it("writes every posting as the engine does: issuance → person, one accrual leg per denomination, under a cited rule", () => {
+    const keys = new Map(
+      stepRows(plan, "points_posting_keys").map((k) => [k.eventId, k]),
+    );
+    for (const p of postings) {
+      expect(p.debitAccountId).toBe(ISSUANCE_ACCOUNT_ID);
+      expect(p.leg).toBe(`accrual:${p.denomination}`);
+      expect(Number(p.amount)).toBeGreaterThan(0);
+      expect(keys.has(p.eventId as string)).toBe(true);
+      expect(String(p.eventId).endsWith(`#${p.ruleId}`)).toBe(true);
+      expect(GOLDEN_POINTS_RULE_IDS).toContain(p.ruleId);
+      expect(+(p.occurredAt as Date)).toBeLessThanOrEqual(+now);
+    }
+    const postedEvents = new Set(postings.map((p) => p.eventId));
+    for (const key of keys.keys()) expect(postedEvents.has(key)).toBe(true);
+    const dedupe = [...keys.values()].map((k) => k.dedupeKey);
+    expect(new Set(dedupe).size).toBe(dedupe.length);
+  });
+
+  it("journals every fact once with a trace the schema accepts, naming each applied rule's ledger event", () => {
+    const facts = stepRows(plan, "points_facts");
+    const keys = new Set(
+      stepRows(plan, "points_posting_keys").map((k) => k.eventId),
+    );
+    expect(new Set(facts.map((f) => f.eventId)).size).toBe(facts.length);
+    for (const f of facts) {
+      const trace = f.trace as unknown[];
+      for (const t of trace) PointsTraceEntrySchema.parse(t);
+      const applied = (trace as { verdict: string; ledgerEventId?: string }[])
+        .filter((t) => t.verdict === "applied")
+        .map((t) => t.ledgerEventId);
+      expect(applied.length).toBeGreaterThan(0);
+      for (const id of applied) expect(keys.has(id!)).toBe(true);
+    }
+  });
+
+  it("accrues a fact only after its holder exists", () => {
+    const createdAt = new Map(dataset.users.map((u) => [u.id, u.createdAt]));
+    for (const fact of ledger.facts) {
+      expect(+fact.occurredAt).toBeGreaterThanOrEqual(
+        +createdAt.get(fact.personId)!,
+      );
+    }
+  });
+
+  it("a re-seed at another pin adds nothing: the recorded ledger events are skipped, the balance stays", () => {
+    const first = planAt(now, pointsContext);
+    const recorded = freshPointsContext(ledger, {
+      eventIds: stepRows(first, "points_posting_keys").map(
+        (k) => k.eventId as string,
+      ),
+    });
+    const later = planAt(new Date(+now + 9 * 86_400_000), recorded);
+    for (const name of ["points_posting_keys", "points_facts", "points_postings"])
+      expect(stepRows(later, name), name).toEqual([]);
+    const doctor = golden.doctors.verifiedCardiologist.id;
+    expect(
+      fold(
+        [...stepRows(first, "points_postings"), ...stepRows(later, "points_postings")],
+        doctor,
+      ),
+    ).toBe(fold(stepRows(first, "points_postings"), doctor));
+  });
+
+  it("a fact whose dedupe key the ledger already holds is skipped whole (the engine's oncePer)", () => {
+    const doctor = golden.doctors.verifiedCardiologist.id;
+    const starter = ledger.facts.find(
+      (f) => f.personId === doctor && f.type === "person.starter-bonus-eligible",
+    )!;
+    const rows = resolveGoldenPointsRows(
+      ledger,
+      freshPointsContext(ledger, { dedupeKeys: [starter.applied[0]!.dedupeKey] }),
+    );
+    expect(
+      rows.pointsPostingKeys.map((k) => k.eventId),
+    ).not.toContain(goldenLedgerEventId(starter, "accrual.starter-bonus"));
+    expect(rows.pointsFacts.map((f) => f.eventId)).not.toContain(starter.eventId);
+  });
+
+  it("refuses a database without the issuance account or the rule book", () => {
+    const ctx = freshPointsContext(ledger);
+    expect(() =>
+      resolveGoldenPointsRows(ledger, {
+        ...ctx,
+        accountIdByRef: new Map(
+          [...ctx.accountIdByRef].filter(([k]) => k !== "s:issuance"),
+        ),
+      }),
+    ).toThrow(/issuance/);
+    expect(() =>
+      resolveGoldenPointsRows(ledger, { ...ctx, ruleVersionById: new Map() }),
+    ).toThrow(/rule book/);
   });
 });

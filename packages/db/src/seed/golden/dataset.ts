@@ -62,6 +62,10 @@ import {
   type GoldenCongressVolume,
 } from "./congress-volume.js";
 import { buildGoldenFeedVolume, type GoldenFeedVolume } from "./feed-volume.js";
+import {
+  buildGoldenPointsLedger,
+  type GoldenPointsLedger,
+} from "./points-ledger.js";
 import type { GoldenSubjectMap } from "./idp.js";
 import { GOLDEN_IDP_ACCOUNTS } from "./idp.js";
 import { goldenDateOnly, goldenMskMidnight, shiftFromNow } from "./now.js";
@@ -167,6 +171,8 @@ export interface GoldenDataset {
   learningOptions: GoldenLearning["learningOptions"];
   learningRuleLayers: (GoldenLearningPresetLayer | GoldenLearningOwnLayer)[];
   learningFacts: GoldenLearningVolume["learningFacts"];
+  /** #4172 — the golden doctors' attention-points accruals (`points-ledger.ts`). */
+  pointsLedger: GoldenPointsLedger;
 }
 
 /** Raised when the dataset itself is inconsistent — a fixture defect, not a run defect. */
@@ -1004,10 +1010,24 @@ export function buildGoldenDataset(
       buildMaterials(at({ days: -20 }), created),
       buildGoldenFeedVolume(now),
     ),
-    ...mergeGoldenLearning(
-      buildGoldenLearning(created),
-      buildGoldenLearningVolume(created),
+    ...withPointsLedger(
+      mergeGoldenLearning(
+        buildGoldenLearning(created),
+        buildGoldenLearningVolume(created),
+      ),
+      at({ days: -75 }),
     ),
+  };
+}
+
+/** The learning rows and the doctors' ledger their completions accrue (#4172). */
+function withPointsLedger<T extends Parameters<typeof buildGoldenPointsLedger>[0]["learning"]>(
+  learning: T,
+  starterAt: Date,
+): T & { pointsLedger: GoldenPointsLedger } {
+  return {
+    ...learning,
+    pointsLedger: buildGoldenPointsLedger({ learning, starterAt }),
   };
 }
 

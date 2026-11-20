@@ -21,6 +21,17 @@ import { GOLDEN_VOLUME_ORDINAL_BASE } from "./volume.js";
 import { specialtiesMinzdrav } from "../../schema/specialties.js";
 import { users, type NewUser } from "../../schema/users.js";
 import { learningPresets } from "../../schema/learning.js";
+import {
+  pointsAccounts,
+  pointsPostingKeys,
+  pointsRuleVersions,
+} from "../../schema/points-ledger.js";
+import {
+  GOLDEN_POINTS_RULE_IDS,
+  goldenLedgerEventId,
+  type GoldenPointsContext,
+  type GoldenPointsLedger,
+} from "./points-ledger.js";
 import { seedSpecialtiesMinzdrav } from "../specialties-minzdrav.js";
 import { buildGoldenDataset, GoldenDatasetError } from "./dataset.js";
 import { resolveGoldenSubjects, type GoldenSubjectMap } from "./idp.js";
@@ -107,6 +118,102 @@ export async function loadLearningPresetByName(
       { id: row.id, values: row.values as Record<string, unknown> },
     ]),
   );
+}
+
+/**
+ * #4172 — what the database answers for the golden ledger
+ * (`points-ledger.ts`): the doctors' person accounts are opened first (an
+ * existing account keeps its id, as `resolvePersonAccount` converges on the
+ * (subject, unit) key), then the open account ids — the issuance account is
+ * migration 0059's — the latest version of each cited rule, and the ledger
+ * events and dedupe keys already recorded, which the plan skips as the engine
+ * answers `duplicate`.
+ */
+export async function loadGoldenPointsContext(
+  db: GoldenExecutor,
+  ledger: GoldenPointsLedger,
+): Promise<GoldenPointsContext> {
+  if (ledger.accounts.length > 0) {
+    await db
+      .insert(pointsAccounts)
+      .values(ledger.accounts)
+      .onConflictDoNothing({
+        target: [
+          pointsAccounts.subjectKind,
+          pointsAccounts.subjectId,
+          pointsAccounts.unit,
+        ],
+      });
+  }
+  const personIds = ledger.accounts.map((a) => a.subjectId!);
+  const accounts: {
+    id: string;
+    subjectId: string | null;
+    systemCode: string | null;
+  }[] = await db
+    .select({
+      id: pointsAccounts.id,
+      subjectId: pointsAccounts.subjectId,
+      systemCode: pointsAccounts.systemCode,
+    })
+    .from(pointsAccounts)
+    .where(
+      and(
+        eq(pointsAccounts.unit, "attention_points"),
+        sql`${pointsAccounts.closedAt} IS NULL`,
+        or(
+          eq(pointsAccounts.systemCode, "issuance"),
+          personIds.length > 0
+            ? and(
+                eq(pointsAccounts.subjectKind, "person"),
+                inArray(pointsAccounts.subjectId, personIds),
+              )
+            : undefined,
+        ),
+      ),
+    );
+  const versions: { ruleId: string; version: number }[] = await db
+    .select({
+      ruleId: pointsRuleVersions.ruleId,
+      version: sql<number>`max(${pointsRuleVersions.version})::int`,
+    })
+    .from(pointsRuleVersions)
+    .where(inArray(pointsRuleVersions.ruleId, [...GOLDEN_POINTS_RULE_IDS]))
+    .groupBy(pointsRuleVersions.ruleId);
+  const eventIds = ledger.facts.flatMap((f) =>
+    f.applied.map((a) => goldenLedgerEventId(f, a.ruleId)),
+  );
+  const dedupeKeys = ledger.facts.flatMap((f) =>
+    f.applied.map((a) => a.dedupeKey),
+  );
+  const recorded: { eventId: string; dedupeKey: string | null }[] =
+    eventIds.length === 0
+      ? []
+      : await db
+          .select({
+            eventId: pointsPostingKeys.eventId,
+            dedupeKey: pointsPostingKeys.dedupeKey,
+          })
+          .from(pointsPostingKeys)
+          .where(
+            or(
+              inArray(pointsPostingKeys.eventId, eventIds),
+              inArray(pointsPostingKeys.dedupeKey, dedupeKeys),
+            ),
+          );
+  return {
+    accountIdByRef: new Map(
+      accounts.map((a) => [
+        a.systemCode ? `s:${a.systemCode}` : `p:${a.subjectId}`,
+        a.id,
+      ]),
+    ),
+    ruleVersionById: new Map(versions.map((v) => [v.ruleId, v.version])),
+    recordedEventIds: new Set(recorded.map((r) => r.eventId)),
+    recordedDedupeKeys: new Set(
+      recorded.flatMap((r) => (r.dedupeKey ? [r.dedupeKey] : [])),
+    ),
+  };
 }
 
 /**
@@ -315,6 +422,7 @@ export async function seedGolden(
       dataset,
       specialtyIdByName,
       await loadLearningPresetByName(tx),
+      await loadGoldenPointsContext(tx, dataset.pointsLedger),
     );
     const steps: { name: string; rows: number }[] = [];
     await adoptMirroredGoldenIdentities(tx, dataset.users);

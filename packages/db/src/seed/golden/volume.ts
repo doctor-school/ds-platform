@@ -682,7 +682,7 @@ function buildEvent(plan: VolumeEventPlan, now: Date): NewEvent {
  */
 function buildExperts(at: At): NewExpert[] {
   return VOLUME_EXPERTS.map((spec, i) => ({
-    id: goldenUuid(GOLDEN_GROUP.experts, GOLDEN_VOLUME_ORDINAL_BASE + i),
+    id: goldenVolumeExpertId(i),
     slug: `golden-volume-expert-${i + 1}`,
     familyName: spec.familyName,
     givenName: spec.givenName,
@@ -1225,6 +1225,11 @@ function directionIdAt(index: number): string {
 /** The id of a golden direction, by slug — the addressable handle for `dataset.ts`. */
 export function goldenDirectionId(slug: string): string {
   return directionIdAt(directionIndexOf(slug));
+}
+
+/** The id of a volume expert, by its index in `VOLUME_EXPERTS`. */
+export function goldenVolumeExpertId(index: number): string {
+  return goldenUuid(GOLDEN_GROUP.experts, GOLDEN_VOLUME_ORDINAL_BASE + index);
 }
 
 /** The id of a golden partner, by its index in `GOLDEN_PARTNERS`. */

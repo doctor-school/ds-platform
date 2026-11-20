@@ -63,6 +63,7 @@ describe("golden seed re-pinning (#2262)", () => {
 
   it("EARS-1: re-seeds a day later like a fresh registration plan and retains non-golden data", async () => {
     let fresh: (typeof registrations.$inferSelect)[] = [];
+    let freshAttendance: (typeof registrationAttendance.$inferSelect)[] = [];
     // A fresh seed is the reference, including defaults and null columns.
     await db
       .transaction(async (tx) => {
@@ -70,6 +71,16 @@ describe("golden seed re-pinning (#2262)", () => {
         fresh = (
           await tx.select().from(registrations).orderBy(registrations.id)
         ).filter((row) => isGoldenUuid(row.id));
+        // #4172 — the volume congress carries the desk's attendance marks.
+        freshAttendance = (
+          await tx
+            .select()
+            .from(registrationAttendance)
+            .orderBy(
+              registrationAttendance.registrationId,
+              registrationAttendance.day,
+            )
+        ).filter((row) => isGoldenUuid(row.registrationId));
         throw rollback;
       })
       .catch((error) => {
@@ -205,9 +216,22 @@ describe("golden seed re-pinning (#2262)", () => {
         expect(
           (await tx.select().from(users).where(eq(users.id, unrelatedUser)))[0],
         ).toEqual(userBefore);
-        expect(await tx.select().from(registrationAttendance)).toEqual([
+        const attendance = await tx
+          .select()
+          .from(registrationAttendance)
+          .orderBy(
+            registrationAttendance.registrationId,
+            registrationAttendance.day,
+          );
+        expect(
+          attendance.filter((row) => !isGoldenUuid(row.registrationId)),
+        ).toEqual([
           { registrationId: ordinary[0]!.id, day: "2027-04-23", present: true },
         ]);
+        expect(freshAttendance.length).toBeGreaterThan(0);
+        expect(
+          attendance.filter((row) => isGoldenUuid(row.registrationId)),
+        ).toEqual(freshAttendance);
         const [live] = await tx
           .select()
           .from(events)

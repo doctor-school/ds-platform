@@ -77,6 +77,7 @@ import {
   resolveLearningRuleLayerRows,
   GOLDEN_LEARNING_PATH_COURSES,
   GOLDEN_LEARNING_PATH_SCHOOL,
+  GOLDEN_VOLUME_CONGRESSES,
   GOLDEN_COURSE_MEMO_KEY,
   goldenCourseMemoPdf,
   GOLDEN_POINTS_RULE_IDS,
@@ -550,7 +551,8 @@ describe("#2063 golden seed plan", () => {
     const steps = buildGoldenSeedPlan(
       committee,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     );
     const grantIndex = steps.findIndex(
       (step) => step.name === "event_role_grants",
@@ -572,7 +574,8 @@ describe("#2063 golden seed plan", () => {
       buildGoldenSeedPlan(
         dataset,
         specialtyIdByName,
-        learningPresetByName, pointsContext,
+        learningPresetByName,
+        pointsContext,
       ).find((step) => step.name === "event_role_grants")?.rows ?? [],
     ).toEqual([]);
     expect(() => buildGoldenDataset(now, subjects, subjects.admin)).toThrow(
@@ -585,7 +588,8 @@ describe("#2063 golden seed plan", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     );
     expect(plan.map((s) => s.name)).toEqual([...GOLDEN_SEED_ORDER]);
   });
@@ -594,7 +598,8 @@ describe("#2063 golden seed plan", () => {
     for (const step of buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     )) {
       expect(step.conflictKeys.length).toBeGreaterThan(0);
       for (const key of step.conflictKeys) {
@@ -612,7 +617,8 @@ describe("#2063 golden seed plan", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     );
     const registrationsStep = plan.find((s) => s.name === "registrations");
     expect(
@@ -635,7 +641,8 @@ describe("#2063 golden seed plan", () => {
     const step = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     ).find((s) => s.name === "stream_config");
     expect(step?.conflictKeys).toEqual(["eventId"]);
   });
@@ -644,7 +651,8 @@ describe("#2063 golden seed plan", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     );
     expect(
       plan.find((s) => s.name === "congress_submission_settings")?.conflictKeys,
@@ -746,14 +754,16 @@ describe("#2212 a re-run rewrites the dates", () => {
     buildGoldenSeedPlan(
       buildGoldenDataset(at, subjects),
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     ).find((s) => s.name === "events")!;
 
   const stepNamed = (name: string, at: Date) =>
     buildGoldenSeedPlan(
       buildGoldenDataset(at, subjects),
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     ).find((s) => s.name === name)!;
 
   it("#2212: the events upsert refreshes every date-bearing column", () => {
@@ -878,7 +888,8 @@ describe("#2063 golden step execution", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     );
     const step = plan.find((s) => s.name === "users")!;
     const calls: {
@@ -917,7 +928,8 @@ describe("#2063 golden step execution", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     );
     const step = plan.find((s) => s.name === "organisation_role_assignments")!;
     expect(step.rows.length).toBeGreaterThan(0);
@@ -946,7 +958,8 @@ describe("#2063 golden step execution", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     );
     const step = { ...plan[0]!, updateKeys: ["notAColumn"] };
     await expect(applyGoldenStep({ insert: () => ({}) }, step)).rejects.toThrow(
@@ -1553,7 +1566,9 @@ describe("#2213 golden dataset at volume", () => {
       });
       expect(event?.startsAt.getTime()).toBeLessThan(pin.getTime());
       const cuts = fixture.eventRecordings
-        .filter((row) => row.eventId === event?.id && row.status === "published")
+        .filter(
+          (row) => row.eventId === event?.id && row.status === "published",
+        )
         .sort((a, b) => a.kind.localeCompare(b.kind));
       expect(cuts).toMatchObject([
         {
@@ -1728,7 +1743,8 @@ describe("#2213 golden dataset at volume", () => {
       const step = buildGoldenSeedPlan(
         dataset,
         specialtyIdByName,
-        learningPresetByName, pointsContext,
+        learningPresetByName,
+        pointsContext,
       ).find((s) => s.name === name)!;
       const published = step.rows.filter(
         (row) => row.firstPublishedAt instanceof Date,
@@ -2279,7 +2295,8 @@ describe("#2213 golden taxonomy and targeting", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     );
     const order = plan.map((step) => step.name);
     const at = (name: string) => {
@@ -2351,7 +2368,8 @@ describe("#2213 golden taxonomy and targeting", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     );
     const order = plan.map((step) => step.name);
     expect(order.indexOf("project_results")).toBeGreaterThan(
@@ -2853,7 +2871,8 @@ describe("#3705 golden material", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     );
     const order = plan.map((s) => s.name);
     expect(order.indexOf("materials")).toBeGreaterThan(
@@ -2874,7 +2893,8 @@ describe("#3705 golden material", () => {
     const plan = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     );
     const materials = plan.find((s) => s.name === "materials")!;
     expect(materials.conflictKeys).toEqual(["id"]);
@@ -2998,7 +3018,8 @@ describe("#4059 golden learning course", () => {
     const step = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     ).find((s) => s.name === "learning_rule_layers")!;
     expect(step.conflictKeys).toEqual(["scopeKind", "scopeId"]);
     expect(step.rows.filter((r) => r.scopeId === L.course.id)).toEqual([
@@ -3210,7 +3231,8 @@ describe("023 EARS-5 (#4017) golden schools at volume", () => {
     const step = buildGoldenSeedPlan(
       dataset,
       specialtyIdByName,
-      learningPresetByName, pointsContext,
+      learningPresetByName,
+      pointsContext,
     ).find((s) => s.name === "learning_facts")!;
     expect(step.conflictKeys).toEqual(["personId", "eventId"]);
     expect(step.updateKeys).toEqual([]);
@@ -3318,7 +3340,8 @@ describe("#4172 golden volume covers the schema", () => {
   const plan = buildGoldenSeedPlan(
     buildGoldenDataset(now, subjects),
     specialtyIdByName,
-    learningPresetByName, pointsContext,
+    learningPresetByName,
+    pointsContext,
   );
   const UUID_IN_TEXT =
     /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
@@ -3378,6 +3401,13 @@ describe("#4172 golden long learning paths", () => {
   it("publishes the long-path school in its volume half", () => {
     expect(school).toMatchObject({ state: "published" });
     expect(isGoldenVolumeUuid(GOLDEN_LEARNING_PATH_SCHOOL.id)).toBe(true);
+  });
+
+  it("gives every school its own direction and lead expert pair (learning_schools_direction_expert_key)", () => {
+    const pairs = dataset.learningSchools.map(
+      (s) => `${s.directionId}/${s.leadExpertId}`,
+    );
+    expect(pairs.length).toBe(new Set(pairs).size);
   });
 
   it("carries a 12-module and a 30-module published course of several lessons per module and dozens of mixed steps", () => {
@@ -3456,11 +3486,53 @@ describe("#4172 golden long learning paths", () => {
   });
 });
 
+describe("#4172 golden volume congresses", () => {
+  // 046 EARS-1: the doctor's congress section is the configured event with the
+  // latest start (`CongressSubmissionsService.congressEventId`). The volume
+  // congresses are grid эфиры anchored on the pin's Monday, so their distance
+  // from «now» drifts with the pin's weekday: at every weekday and hour the named
+  // `golden.events.doctorCongress` must stay the latest, and the volume upcoming
+  // congress must still take submissions.
+  const pins = Array.from(
+    { length: 7 * 4 },
+    (_, i) => new Date(Date.parse(PINNED_NOW) + i * 6 * 3_600_000),
+  );
+
+  it.each(pins.map((p) => [p.toISOString(), p] as const))(
+    "keeps the named doctor congress the cabinet congress at the pin %s",
+    (_label, pin) => {
+      const dataset = buildGoldenDataset(pin, subjects);
+      const configured = new Set(
+        dataset.congressSubmissionSettings.map((s) => s.eventId),
+      );
+      const latest = dataset.events
+        .filter((e) => configured.has(e.id!))
+        .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0];
+      expect(latest?.id).toBe(golden.events.doctorCongress.id);
+
+      const upcoming = dataset.events.find(
+        (e) => e.id === GOLDEN_VOLUME_CONGRESSES.upcoming.id,
+      )!;
+      for (const kind of ["oral", "poster", "abstract"] as const) {
+        const intake = dataset.congressSubmissionKindSettings.find(
+          (s) => s.eventId === upcoming.id && s.kind === kind,
+        )!;
+        expect(intake.closesAt!.getTime(), kind).toBeGreaterThan(pin.getTime());
+        expect(intake.closesAt!.getTime(), kind).toBeLessThanOrEqual(
+          upcoming.startsAt.getTime(),
+        );
+      }
+    },
+  );
+});
+
 describe("#4172 golden attention-points ledger", () => {
   const dataset = buildGoldenDataset(now, subjects);
   const ledger = dataset.pointsLedger;
-  const stepRows = (plan: ReturnType<typeof buildGoldenSeedPlan>, name: string) =>
-    plan.find((s) => s.name === name)!.rows;
+  const stepRows = (
+    plan: ReturnType<typeof buildGoldenSeedPlan>,
+    name: string,
+  ) => plan.find((s) => s.name === name)!.rows;
   const planAt = (at: Date, ctx: GoldenPointsContext) =>
     buildGoldenSeedPlan(
       buildGoldenDataset(at, subjects),
@@ -3491,7 +3563,9 @@ describe("#4172 golden attention-points ledger", () => {
   }
 
   it("the golden doctor reads a Pul balance above zero, folded as GET /v1/me/points folds it", () => {
-    expect(fold(postings, golden.doctors.verifiedCardiologist.id)).toBeGreaterThan(0);
+    expect(
+      fold(postings, golden.doctors.verifiedCardiologist.id),
+    ).toBeGreaterThan(0);
   });
 
   it("spreads the balances: large on the worker pool, small on half the verified volume doctors, zero elsewhere", () => {
@@ -3560,12 +3634,19 @@ describe("#4172 golden attention-points ledger", () => {
       ),
     });
     const later = planAt(new Date(+now + 9 * 86_400_000), recorded);
-    for (const name of ["points_posting_keys", "points_facts", "points_postings"])
+    for (const name of [
+      "points_posting_keys",
+      "points_facts",
+      "points_postings",
+    ])
       expect(stepRows(later, name), name).toEqual([]);
     const doctor = golden.doctors.verifiedCardiologist.id;
     expect(
       fold(
-        [...stepRows(first, "points_postings"), ...stepRows(later, "points_postings")],
+        [
+          ...stepRows(first, "points_postings"),
+          ...stepRows(later, "points_postings"),
+        ],
         doctor,
       ),
     ).toBe(fold(stepRows(first, "points_postings"), doctor));
@@ -3574,16 +3655,21 @@ describe("#4172 golden attention-points ledger", () => {
   it("a fact whose dedupe key the ledger already holds is skipped whole (the engine's oncePer)", () => {
     const doctor = golden.doctors.verifiedCardiologist.id;
     const starter = ledger.facts.find(
-      (f) => f.personId === doctor && f.type === "person.starter-bonus-eligible",
+      (f) =>
+        f.personId === doctor && f.type === "person.starter-bonus-eligible",
     )!;
     const rows = resolveGoldenPointsRows(
       ledger,
-      freshPointsContext(ledger, { dedupeKeys: [starter.applied[0]!.dedupeKey] }),
+      freshPointsContext(ledger, {
+        dedupeKeys: [starter.applied[0]!.dedupeKey],
+      }),
     );
-    expect(
-      rows.pointsPostingKeys.map((k) => k.eventId),
-    ).not.toContain(goldenLedgerEventId(starter, "accrual.starter-bonus"));
-    expect(rows.pointsFacts.map((f) => f.eventId)).not.toContain(starter.eventId);
+    expect(rows.pointsPostingKeys.map((k) => k.eventId)).not.toContain(
+      goldenLedgerEventId(starter, "accrual.starter-bonus"),
+    );
+    expect(rows.pointsFacts.map((f) => f.eventId)).not.toContain(
+      starter.eventId,
+    );
   });
 
   it("refuses a database without the issuance account or the rule book", () => {

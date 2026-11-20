@@ -36,7 +36,11 @@ import {
   GOLDEN_COURSE_MEMO_KEY,
   GOLDEN_EXIT_QUESTIONS,
 } from "./learning.js";
-import { goldenDirectionId, GOLDEN_VOLUME_ORDINAL_BASE } from "./volume.js";
+import {
+  goldenDirectionId,
+  goldenVolumeExpertId,
+  GOLDEN_VOLUME_ORDINAL_BASE,
+} from "./volume.js";
 
 /** The long-path school: a volume ordinal of its group (named schools are 1, 11–14). */
 export const GOLDEN_LEARNING_PATH_SCHOOL = Object.freeze({
@@ -113,7 +117,11 @@ export function buildGoldenLearningPathVolume(
       {
         id: GOLDEN_LEARNING_PATH_SCHOOL.id,
         directionId: goldenDirectionId("cardiology"),
-        leadExpertId: golden.experts.published.id,
+        // The named cardiology school already holds (cardiology, the published
+        // expert), and `learning_schools_direction_expert_key` allows one school
+        // per pair: the long paths are led by the first volume expert, a head of
+        // cardiology (`VOLUME_EXPERTS[0]`).
+        leadExpertId: goldenVolumeExpertId(0),
         projectId,
         slug: GOLDEN_LEARNING_PATH_SCHOOL.slug,
         title: "Школа клинической кардиологии",

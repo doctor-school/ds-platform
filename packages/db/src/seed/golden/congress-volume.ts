@@ -10,12 +10,17 @@
 //
 //   * an offline эфир a few days BEHIND the pin — intake closed, the committee's
 //     decisions made, the desk's attendance marked on its day;
-//   * an offline эфир three weeks AHEAD — oral and poster intake open, abstracts
-//     announced, submissions in every pre-decision state.
+//   * an offline эфир five to twelve days AHEAD — oral and poster intake open
+//     until the day before it, abstracts announced, submissions in every
+//     pre-decision state.
 //
 // Both are fixed grid ordinals of `volume.ts`: the grid is anchored on the pin's
-// own Monday, so an ordinal keeps its place relative to the pin, its format and
-// its audience at every pin — the builder refuses a grid that moved them.
+// own Monday, so an ordinal keeps its format and audience at every pin and its
+// distance from the pin drifts by at most a week — the builder refuses a grid
+// that moved them. The upcoming one starts before the named
+// `golden.events.doctorCongress` (+15 days) at every pin: the doctor's congress
+// section is the configured event with the LATEST start (046 EARS-1,
+// `CongressSubmissionsService.congressEventId`), and it must stay the named one.
 //
 // Their registrants are the verified volume doctors, registered before the
 // эфир started and after their account existed (`volume.ts` rule 6). A doctor
@@ -47,7 +52,7 @@ export const GOLDEN_VOLUME_CONGRESSES = Object.freeze({
     state: "ended",
   }),
   upcoming: Object.freeze({
-    id: goldenUuid(GOLDEN_GROUP.events, GOLDEN_VOLUME_ORDINAL_BASE + 451),
+    id: goldenUuid(GOLDEN_GROUP.events, GOLDEN_VOLUME_ORDINAL_BASE + 421),
     state: "published",
   }),
 });
@@ -208,6 +213,12 @@ export function buildGoldenCongressVolume(
   // 046 EARS-1 / EARS-3 — instants on Moscow day boundaries, as the settings
   // screen writes them.
   const mskDay = (days: number) => goldenMskMidnight(at({ days }));
+  // The upcoming congress sits on the pin's Monday grid, so its distance from
+  // the pin drifts with the weekday: its intake closes on the Moscow day before
+  // it starts, never a fixed «now + N» that could outlast the эфир.
+  const upcomingCloses = goldenMskMidnight(
+    new Date((events[1]!.startsAt as Date).getTime() - MS_DAY),
+  );
   const plans = [
     {
       event: events[0]!,
@@ -221,7 +232,7 @@ export function buildGoldenCongressVolume(
       startsAt: events[1]!.startsAt as Date,
       statuses: UPCOMING_STATUSES,
       opens: mskDay(-30),
-      closes: mskDay(10),
+      closes: upcomingCloses,
     },
   ];
   for (const plan of plans) {
@@ -369,8 +380,8 @@ export function buildGoldenCongressVolume(
       {
         eventId: GOLDEN_VOLUME_CONGRESSES.upcoming.id,
         kind: "abstract" as const,
-        opensAt: mskDay(5),
-        closesAt: mskDay(15),
+        opensAt: mskDay(2),
+        closesAt: upcomingCloses,
         submitLimit: 3,
         maxAgeYears: null,
       },

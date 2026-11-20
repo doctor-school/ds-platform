@@ -14,6 +14,7 @@ import {
 } from "../client/index";
 import { CoursePath } from "./course-path";
 import type { LearningHostConfig } from "./host-config";
+import { SchoolScreen } from "./school-screen";
 import { StepScreen } from "./step-screen";
 
 // 024 EARS-14 / EARS-15 — the server mounts of the course path and the step
@@ -45,6 +46,26 @@ async function plateBalances(client: LearningClient, signedIn: boolean) {
     .myPoints()
     .then(pointsPlateBalances)
     .catch(() => undefined);
+}
+
+/** 023 EARS-4 — the school screen; an unknown or unpublished school is the storefront's not-found page. */
+export async function SchoolPage({
+  config,
+  params,
+}: {
+  config: LearningHostConfig;
+  params: Promise<{ schoolSlug: string }>;
+}) {
+  const { schoolSlug } = await params;
+  const client = await serverClient();
+  let read;
+  try {
+    read = await client.school(schoolSlug);
+  } catch (e) {
+    if (isNotFound(e)) notFound();
+    throw e;
+  }
+  return <SchoolScreen config={config} read={read} />;
 }
 
 export async function CoursePathPage({

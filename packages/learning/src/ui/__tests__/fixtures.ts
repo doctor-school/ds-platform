@@ -11,7 +11,7 @@ import type { LearningHostConfig } from "../host-config";
 // one module, three lessons — done · «Вы здесь» · locked behind the previous.
 
 export const CONFIG: LearningHostConfig = {
-  routes: { courses: "/courses", register: "/register" },
+  routes: { courses: "/courses", schools: "/schools", register: "/register" },
 };
 
 export const ID = {
@@ -33,7 +33,18 @@ export const ID = {
 
 export function coursePath(over: Partial<LearningCoursePath> = {}): LearningCoursePath {
   return {
-    course: { id: ID.course, slug: "kardio", title: "Кардиология для практика", state: { status: "current" } },
+    course: {
+      id: ID.course,
+      slug: "kardio",
+      title: "Кардиология для практика",
+      state: { status: "current" },
+      description: "Курс для практикующего врача.",
+      academicHours: 12,
+      lessonCount: 2,
+      document: { kind: "certificate", prerequisites: "" },
+      partner: null,
+      rulesSummary: "Курс засчитывается, когда пройдены все модули",
+    },
     direction: { slug: "cardio", title: "Кардиология" },
     school: { slug: "school-a", title: "Школа сердца" },
     author: {
@@ -120,6 +131,7 @@ export function lessonRead(over: Partial<LearningLessonRead> = {}): LearningLess
       stepCount: 2,
       state: { status: "current" },
       completionSentence: "Урок пройден, когда пройдены все шаги.",
+      firstStepId: ID.s2,
     },
     signedIn: true,
     steps: [

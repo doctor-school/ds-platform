@@ -45,6 +45,10 @@ describe("DOCTOR_AUTH_FLOW.routes", () => {
   it("024 EARS-22: the learning return root equals the learning host's course route, so a gated guest lands back on the course or step", () => {
     expect(DOCTOR_AUTH_FLOW.routes.courses).toBe(DOCTOR_LEARNING.routes.courses);
   });
+
+  it("023 EARS-8: the school return root equals the learning host's school route, so a guest gated on a school lands back on it", () => {
+    expect(DOCTOR_AUTH_FLOW.routes.schools).toBe(DOCTOR_LEARNING.routes.schools);
+  });
 });
 
 /**

@@ -145,6 +145,18 @@ routes:
     status: deferred
     issue: "#1793"
 
+  # 023 EARS-4, EARS-5, EARS-8 (#4017) — the school screen: poster header,
+  # «О школе», the courses as content cards and the guest gate. `deferred`
+  # because the school is not whole yet — the over-six list, the «скоро» state
+  # and interest, events, the document block, mentoring, reviews and the
+  # community are 023 slices still open — and the route carries no Stage-B
+  # verdict; #1792 (the 023 feature) owns the flip to `product-ready`.
+  - app: doctor
+    route: /schools/[schoolSlug]
+    file: apps/doctor/app/(storefront)/schools/[schoolSlug]/page.tsx
+    status: deferred
+    issue: "#1792"
+
   # 018 EARS-1 / EARS-4 (#1496, #1499) — the specialty feed inside 017's shell:
   # breadcrumbs, the specialty heading with «сменить специальность», and the
   # connected blocks only (release 1: the nearest events through the events

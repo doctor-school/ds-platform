@@ -12,6 +12,7 @@ import {
   LearningPresetListSchema,
   LearningSchoolAdminSchema,
   LearningSchoolListSchema,
+  LearningSchoolReadSchema,
   LearningScopeRulesSchema,
   LearningStepAdminSchema,
   LearningStepReadSchema,
@@ -23,6 +24,7 @@ import {
 
 // Public + doctor reads and writes.
 export class LearningCoursePathDto extends createZodDto(LearningCoursePathSchema) {}
+export class LearningSchoolReadDto extends createZodDto(LearningSchoolReadSchema) {}
 export class LearningLessonReadDto extends createZodDto(LearningLessonReadSchema) {}
 export class LearningStepReadDto extends createZodDto(LearningStepReadSchema) {}
 export class RecordLearningFactResponseDto extends createZodDto(

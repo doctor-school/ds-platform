@@ -19,7 +19,16 @@ import type {
 import type { EventRoleGrant } from "../../schema/event-role-grants.js";
 import type { NewEventRecording } from "../../schema/event-recordings.js";
 import type { NewFeedEntry, NewMaterial } from "../../schema/materials.js";
-import { buildGoldenLearning, type GoldenLearning } from "./learning.js";
+import {
+  buildGoldenLearning,
+  type GoldenLearning,
+  type GoldenLearningPresetLayer,
+} from "./learning.js";
+import {
+  buildGoldenLearningVolume,
+  type GoldenLearningOwnLayer,
+  type GoldenLearningVolume,
+} from "./learning-volume.js";
 import type { NewEvent, NewStreamConfigRow } from "../../schema/events.js";
 import type { NewRegistration } from "../../schema/registrations.js";
 import type {
@@ -133,7 +142,10 @@ export interface GoldenDataset {
   /** 048 (#3705) — the own materials and the feed cards they publish. */
   materials: NewMaterial[];
   feedEntries: NewFeedEntry[];
-  /** 024 (#4059) — the one published learning course (`learning.ts`). */
+  /**
+   * 024 (#4059) — the golden learning course (`learning.ts`), and 023 (#4017)
+   * the schools at volume with the golden doctor's facts (`learning-volume.ts`).
+   */
   learningSchools: GoldenLearning["learningSchools"];
   learningCourses: GoldenLearning["learningCourses"];
   learningModules: GoldenLearning["learningModules"];
@@ -142,7 +154,8 @@ export interface GoldenDataset {
   learningTests: GoldenLearning["learningTests"];
   learningQuestions: GoldenLearning["learningQuestions"];
   learningOptions: GoldenLearning["learningOptions"];
-  learningRuleLayers: GoldenLearning["learningRuleLayers"];
+  learningRuleLayers: (GoldenLearningPresetLayer | GoldenLearningOwnLayer)[];
+  learningFacts: GoldenLearningVolume["learningFacts"];
 }
 
 /** Raised when the dataset itself is inconsistent — a fixture defect, not a run defect. */
@@ -964,7 +977,44 @@ export function buildGoldenDataset(
     projectPartners,
     projectResults: buildProjectResults(projects, created),
     ...buildMaterials(at({ days: -20 }), created),
-    ...buildGoldenLearning(created),
+    ...mergeGoldenLearning(
+      buildGoldenLearning(created),
+      buildGoldenLearningVolume(created),
+    ),
+  };
+}
+
+/** The golden course's rows first, then the volume schools' (023 EARS-5, #4017). */
+function mergeGoldenLearning(
+  course: GoldenLearning,
+  volume: GoldenLearningVolume,
+): Pick<
+  GoldenDataset,
+  | "learningSchools"
+  | "learningCourses"
+  | "learningModules"
+  | "learningLessons"
+  | "learningSteps"
+  | "learningTests"
+  | "learningQuestions"
+  | "learningOptions"
+  | "learningRuleLayers"
+  | "learningFacts"
+> {
+  return {
+    learningSchools: [...course.learningSchools, ...volume.learningSchools],
+    learningCourses: [...course.learningCourses, ...volume.learningCourses],
+    learningModules: [...course.learningModules, ...volume.learningModules],
+    learningLessons: [...course.learningLessons, ...volume.learningLessons],
+    learningSteps: [...course.learningSteps, ...volume.learningSteps],
+    learningTests: course.learningTests,
+    learningQuestions: course.learningQuestions,
+    learningOptions: course.learningOptions,
+    learningRuleLayers: [
+      ...course.learningRuleLayers,
+      ...volume.learningOwnRuleLayers,
+    ],
+    learningFacts: volume.learningFacts,
   };
 }
 

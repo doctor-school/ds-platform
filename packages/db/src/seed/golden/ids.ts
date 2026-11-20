@@ -92,6 +92,8 @@ export const GOLDEN_GROUP = Object.freeze({
   learningOptions: 0x001b,
   learningRuleLayers: 0x001c,
   eventRoleGrants: 0x001d,
+  // 023 EARS-5 (#4017) — the golden doctor's facts on the volume schools.
+  learningFacts: 0x001e,
 });
 
 /**
@@ -159,6 +161,34 @@ function verifiedCardiologistCopy(worker: number) {
     displayName: VERIFIED_CARDIOLOGIST.displayName,
     specialtyName: VERIFIED_CARDIOLOGIST.specialtyName,
   });
+}
+
+/**
+ * 023 EARS-5 (#4017) — the ordinal of a volume school's row in its table's
+ * group: course `c` (0-based) of volume school `v` is `(v + 1) * 1000 + c + 1`
+ * in `learningCourses`, `learningModules` (its one module) and
+ * `learningRuleLayers`; its lesson `l` multiplies that by 10 and adds `l + 1`;
+ * the lesson's step `s` multiplies again by 10 and adds `s + 1`. Every value
+ * sits far above the named rows (1..5) and below 2^48.
+ */
+export function goldenLearningVolumeOrdinal(
+  school: number,
+  course: number,
+  lesson?: number,
+  step?: number,
+): number {
+  let ordinal = (school + 1) * 1000 + course + 1;
+  if (lesson !== undefined) ordinal = ordinal * 10 + lesson + 1;
+  if (step !== undefined) ordinal = ordinal * 10 + step + 1;
+  return ordinal;
+}
+
+/** A volume school's course slug: `golden-school-x` → `golden-course-x-<1-based position>`. */
+export function goldenLearningVolumeCourseSlug(
+  schoolSlug: string,
+  course: number,
+): string {
+  return `${schoolSlug.replace(/^golden-school-/, "golden-course-")}-${course + 1}`;
 }
 
 // Dedicated staging-only subject, omitted from the ordinary golden identity map.
@@ -344,6 +374,36 @@ export const golden = Object.freeze({
     courseRules: Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.learningRuleLayers, 1),
     }),
+    /**
+     * 023 EARS-5 (#4017) — published schools at the canvas volume switch
+     * (`design-source/doctor-school.dc.html` 3 / 22 / 62) and at 200, so a
+     * slot shows the school screen with cards, rows, «Показать ещё 10» and
+     * «Найти курс». Each course is one module of one to six lessons
+     * (`learning-volume.ts`); its rows are addressed through
+     * {@link goldenLearningVolumeOrdinal}.
+     */
+    volumeSchools: Object.freeze([
+      Object.freeze({
+        id: goldenUuid(GOLDEN_GROUP.learningSchools, 11),
+        slug: "golden-school-endocrinology",
+        courseCount: 3,
+      }),
+      Object.freeze({
+        id: goldenUuid(GOLDEN_GROUP.learningSchools, 12),
+        slug: "golden-school-orthobiology",
+        courseCount: 22,
+      }),
+      Object.freeze({
+        id: goldenUuid(GOLDEN_GROUP.learningSchools, 13),
+        slug: "golden-school-neurology",
+        courseCount: 62,
+      }),
+      Object.freeze({
+        id: goldenUuid(GOLDEN_GROUP.learningSchools, 14),
+        slug: "golden-school-therapy",
+        courseCount: 200,
+      }),
+    ]),
   }),
   recordings: Object.freeze({
     /** Published edited recording of {@link golden.events.pastWithRecording}. */

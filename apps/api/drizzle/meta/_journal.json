@@ -470,6 +470,13 @@
       "when": 1795062787936,
       "tag": "0066_telegram_update_cursor",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1795149304591,
+      "tag": "0067_023_school_course_data",
+      "breakpoints": true
     }
   ]
 }

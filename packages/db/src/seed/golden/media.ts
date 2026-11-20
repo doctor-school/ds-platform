@@ -273,6 +273,8 @@ export async function buildGoldenMediaPlan(
   // 024 (#4059) — the golden course's download. Its bytes are text-derived and
   // pin-invariant (`goldenCourseMemoPdf`), and its step row records their size,
   // so an object already in the bucket is this object — `if-absent`.
+  // 023 (#4017): the volume schools' downloads share that one object.
+  let memo = false;
   for (const step of dataset.learningSteps) {
     const key = step.mediaRef;
     if (!key) continue;
@@ -281,8 +283,11 @@ export async function buildGoldenMediaPlan(
         `learning step ${String(step.id)} carries media_ref "${key}", which is not a golden learning media key`,
       );
     }
+    memo = true;
+  }
+  if (memo) {
     plan.push({
-      key,
+      key: GOLDEN_COURSE_MEMO_KEY,
       contentType: GOLDEN_COURSE_MEMO_CONTENT_TYPE,
       bytes: goldenCourseMemoPdf(),
       refresh: "if-absent",

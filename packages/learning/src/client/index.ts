@@ -3,6 +3,7 @@ import type {
   LearningAttemptResult,
   LearningCoursePath,
   LearningLessonRead,
+  LearningSchoolRead,
   LearningStepRead,
   PointsAccount,
   RecordLearningFactRequest,
@@ -37,6 +38,8 @@ export interface LearningClientOptions {
 }
 
 export interface LearningClient {
+  /** 023 EARS-3 — the school screen's read; 404 for an unknown or unpublished school. */
+  school(schoolSlug: string): Promise<LearningSchoolRead>;
   coursePath(courseSlug: string): Promise<LearningCoursePath>;
   lesson(lessonId: string): Promise<LearningLessonRead>;
   step(stepId: string): Promise<LearningStepRead>;
@@ -93,6 +96,7 @@ export function createLearningClient(
 
   const seg = encodeURIComponent;
   return {
+    school: (slug) => call("GET", `/v1/learning/schools/${seg(slug)}`),
     coursePath: (slug) => call("GET", `/v1/learning/courses/${seg(slug)}/path`),
     lesson: (id) => call("GET", `/v1/learning/lessons/${seg(id)}`),
     step: (id) => call("GET", `/v1/me/learning/steps/${seg(id)}`),

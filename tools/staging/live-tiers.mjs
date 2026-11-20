@@ -92,6 +92,23 @@ export const GOLDEN_MATERIAL_SLUG = "golden-material-published";
  */
 export const GOLDEN_LEARNING_COURSE_SLUG = "golden-course-path";
 
+/**
+ * `golden.learning.school` — the published school of that course (023, #4017):
+ * the `live/doctor/learning` journey enters the course from its school screen.
+ */
+export const GOLDEN_LEARNING_SCHOOL_SLUG = "golden-school-cardiology";
+
+/**
+ * `golden.learning.volumeSchools` over six courses (023 EARS-5, #4017): the
+ * schools of 22, 62 and 200 published courses. The school-volume journey reads
+ * rows, «Показать ещё 10», «Найти курс» and «Вы учитесь» on each.
+ */
+export const GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS = [
+  "golden-school-orthobiology",
+  "golden-school-neurology",
+  "golden-school-therapy",
+];
+
 const URL_DOCTOR = "E2E_DOCTOR_URL";
 const URL_ACADEMY = "E2E_PORTAL_URL";
 const ACCOUNT = ["E2E_DOCTOR_EMAIL", "E2E_DOCTOR_PASSWORD"];
@@ -327,6 +344,10 @@ export const LIVE_TIERS = Object.freeze([
     // so the course's progress on a slot is never shared between runs.
     seededEnv: {
       E2E_LEARNING_COURSE_SLUG: GOLDEN_LEARNING_COURSE_SLUG,
+      E2E_LEARNING_SCHOOL_SLUG: GOLDEN_LEARNING_SCHOOL_SLUG,
+      // #4017: the school-volume journey also registers a FRESH doctor.
+      E2E_LEARNING_VOLUME_SCHOOL_SLUGS:
+        GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS.join(","),
     },
     gated: [
       {
@@ -336,6 +357,7 @@ export const LIVE_TIERS = Object.freeze([
           URL_ACADEMY,
           ...IDP_MAIL,
           "E2E_LEARNING_COURSE_SLUG",
+          "E2E_LEARNING_SCHOOL_SLUG",
         ],
       },
       {
@@ -343,6 +365,11 @@ export const LIVE_TIERS = Object.freeze([
         slotReason:
           "the golden dataset seeds no published multi-module learning course, so a slot has no course slug for the volume journey",
         requires: [URL_DOCTOR, ...IDP_MAIL, "E2E_LEARNING_MULTI_COURSE_SLUG"],
+      },
+      {
+        // 023 EARS-5 (#4017): the school screen at the golden volume schools 22 / 62 / 200.
+        file: "e2e/school-volume-live.spec.ts",
+        requires: [URL_DOCTOR, ...IDP_MAIL, "E2E_LEARNING_VOLUME_SCHOOL_SLUGS"],
       },
     ],
   },

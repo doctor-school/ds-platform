@@ -17,6 +17,8 @@ export {
   GOLDEN_WORKER_POOL_SIZE,
   golden,
   goldenUuid,
+  goldenLearningVolumeCourseSlug,
+  goldenLearningVolumeOrdinal,
   isGoldenUuid,
   SEED_EVENT_KINDS,
   type GoldenAccountKey,
@@ -120,6 +122,14 @@ export {
   type GoldenLearning,
   type GoldenLearningPresetLayer,
 } from "./learning.js";
+export {
+  buildGoldenLearningVolume,
+  GOLDEN_VOLUME_COURSE_RULES,
+  GOLDEN_VOLUME_FACT_COURSES,
+  goldenVolumeLessonCount,
+  type GoldenLearningOwnLayer,
+  type GoldenLearningVolume,
+} from "./learning-volume.js";
 export {
   composeDescription,
   specialtiesWithoutParagraphBank,

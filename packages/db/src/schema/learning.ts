@@ -32,6 +32,18 @@ import { users } from "./users.js";
 /** The structure's two-state lifecycle (EARS-1, EARS-4). */
 export const learningState = pgEnum("learning_state", ["draft", "published"]);
 
+/** 023 EARS-1 — the document a course leads to. */
+export const learningDocumentKind = pgEnum("learning_document_kind", [
+  "certificate",
+  "certificate-nmo",
+]);
+
+/** 023 EARS-1 — one «О школе» fact; at most four per school (validated in `@ds/schemas`). */
+export interface LearningSchoolFactRow {
+  label: string;
+  text: string;
+}
+
 const versioned = {
   /** Optimistic-concurrency counter behind the admin ETag; starts at 1. */
   version: integer("version").notNull().default(1),
@@ -60,9 +72,23 @@ export const learningSchools = pgTable(
     slug: text("slug").notNull().unique(),
     title: text("title").notNull(),
     state: learningState("state").notNull().default("draft"),
+    // 023 EARS-1 — the school's descriptive data (ownership `doctor`).
+    description: text("description").notNull().default(""),
+    facts: jsonb("facts")
+      .$type<LearningSchoolFactRow[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    soonNote: text("soon_note"),
+    communityUrl: text("community_url"),
+    mentoringOffer: text("mentoring_offer"),
+    internshipOffer: text("internship_offer"),
     ...versioned,
   },
   (t) => [
+    check(
+      "learning_schools_facts_max",
+      sql`jsonb_typeof(${t.facts}) = 'array' AND jsonb_array_length(${t.facts}) <= 4`,
+    ),
     unique("learning_schools_direction_expert_key").on(
       t.directionId,
       t.leadExpertId,
@@ -71,19 +97,39 @@ export const learningSchools = pgTable(
 );
 
 /** EARS-1 — a course always lives in a school (`school_id` NOT NULL). Ownership `doctor`. */
-export const learningCourses = pgTable("learning_courses", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  schoolId: uuid("school_id")
-    .notNull()
-    .references(() => learningSchools.id),
-  projectId: uuid("project_id")
-    .notNull()
-    .references(() => projects.id),
-  slug: text("slug").notNull().unique(),
-  title: text("title").notNull(),
-  state: learningState("state").notNull().default("draft"),
-  ...versioned,
-});
+export const learningCourses = pgTable(
+  "learning_courses",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    schoolId: uuid("school_id")
+      .notNull()
+      .references(() => learningSchools.id),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
+    slug: text("slug").notNull().unique(),
+    title: text("title").notNull(),
+    state: learningState("state").notNull().default("draft"),
+    // 023 EARS-1 — the course's descriptive data (ownership `doctor`).
+    description: text("description").notNull().default(""),
+    academicHours: integer("academic_hours").notNull().default(0),
+    documentKind: learningDocumentKind("document_kind")
+      .notNull()
+      .default("certificate"),
+    documentPrerequisites: text("document_prerequisites").notNull().default(""),
+    /** 023 EARS-22 — an optional partner of the 032 organisation registry. */
+    partnerOrganisationId: uuid("partner_organisation_id").references(
+      () => organisations.id,
+    ),
+    /** 023 EARS-1 — the course's place in its school (school order); a create appends. */
+    position: integer("position").notNull().default(0),
+    ...versioned,
+  },
+  (t) => [
+    index("learning_courses_school_idx").on(t.schoolId, t.position),
+    check("learning_courses_academic_hours_min", sql`${t.academicHours} >= 0`),
+  ],
+);
 
 /** EARS-1 — a course's ordered modules. Ownership `doctor`. */
 export const learningModules = pgTable(

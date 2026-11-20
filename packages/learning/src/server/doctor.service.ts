@@ -11,7 +11,9 @@ import type {
   LearningCoursePath,
   LearningLessonRead,
   LearningNodeState,
+  LearningPathAuthor,
   LearningPathStep,
+  LearningSchoolRead,
   LearningStepBody,
   LearningStepRead,
   RecordLearningFactRequest,
@@ -34,6 +36,7 @@ import {
   type LearningCourseEvaluator,
   type LearningEvaluation,
 } from "../evaluator/evaluator.js";
+import { courseProgress, nextLessonNumber } from "../evaluator/course-progress.js";
 import {
   LearningServerError,
   SERVER_EVENT_PREFIX,
@@ -52,10 +55,15 @@ import {
   courseOfLesson,
   courseOfStep,
   loadCourseTree,
+  loadCourseTrees,
   loadFacts,
+  loadFactsOfCourses,
   loadLayersFor,
   loadQuestions,
+  publicPartnerNames,
+  publishedCoursesOfSchool,
   questionCounts,
+  schoolBySlug,
   scopesOf,
   type LoadedCourse,
 } from "./repository.js";
@@ -66,6 +74,9 @@ import {
 // resolved now; the projection only detects transitions (EARS-11, EARS-12).
 
 type Handle = LearningServerDeps["db"] | LearningTx;
+
+/** The leading expert as `coursePlaces` reads it (null unless public). */
+type PlacesExpert = NonNullable<Awaited<ReturnType<typeof coursePlaces>>>["expert"];
 
 interface Evaluated {
   loaded: LoadedCourse;
@@ -201,7 +212,116 @@ export class LearningDoctorService {
     };
   }
 
+  /** EARS-14 — the school's leading expert as the public author; null unless public and named. */
+  private async author(
+    x: PlacesExpert,
+  ): Promise<LearningPathAuthor | null> {
+    const name = x ? expertDisplayName(x) : null;
+    if (!x || !name) return null;
+    return {
+      slug: x.slug,
+      name,
+      role: x.professionalRole,
+      credentials: x.credentials,
+      affiliation: x.affiliation,
+      photoUrl: x.photoRef ? await this.deps.media.signedUrl(x.photoRef) : null,
+    };
+  }
+
+  /** 023 EARS-1, EARS-22 — a course's data on the school card and the course header. */
+  private courseData(
+    course: LearningCourseRow,
+    lessonCount: number,
+    partners: Map<string, string>,
+  ) {
+    const partner = course.partnerOrganisationId
+      ? partners.get(course.partnerOrganisationId)
+      : undefined;
+    return {
+      description: course.description,
+      academicHours: course.academicHours,
+      lessonCount,
+      document: {
+        kind: course.documentKind,
+        prerequisites: course.documentPrerequisites,
+      },
+      partner: partner !== undefined ? { name: partner } : null,
+    };
+  }
+
   // ── Reads ─────────────────────────────────────────────────────────────────
+
+  /**
+   * 023 EARS-3 — `GET /v1/learning/schools/{schoolSlug}`: the published
+   * school, its published courses in school order with their data and, for a
+   * signed-in doctor, each course's state from the 024 evaluator.
+   */
+  async school(
+    schoolSlug: string,
+    personId: string | null,
+  ): Promise<LearningSchoolRead> {
+    const db = this.deps.db;
+    const school = await schoolBySlug(db, schoolSlug);
+    if (!school || school.state !== "published") throw notFound("school");
+    const places = await coursePlaces(db, school.id);
+    if (!places) throw notFound("school");
+    const rows = await publishedCoursesOfSchool(db, school.id);
+    const partners = await publicPartnerNames(
+      db,
+      rows.flatMap((r) => (r.partnerOrganisationId ? [r.partnerOrganisationId] : [])),
+    );
+    // 023-design §4 «One batched read»: every course's tree, the rule layers
+    // of all their items and the doctor's facts are loaded once; each course
+    // is then evaluated in memory.
+    const trees = await loadCourseTrees(db, rows, true);
+    const scopes = new Map(
+      trees.flatMap(scopesOf).map((sc) => [`${sc.kind}:${sc.id}`, sc] as const),
+    );
+    const layers = await loadLayersFor(db, [...scopes.values()]);
+    const facts = personId
+      ? await loadFactsOfCourses(db, personId, trees)
+      : trees.map(() => []);
+    const now = this.now();
+    const courses = trees.map((loaded, i) => {
+      const { row } = loaded;
+      const { evaluation } = evaluateCourse({
+        course: loaded.model,
+        layers,
+        facts: facts[i]!,
+        now,
+      });
+      return {
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        ...this.courseData(row, loaded.lessons.length, partners),
+        state: personId ? courseProgress(loaded.model, evaluation) : null,
+        nextLessonNumber: personId
+          ? nextLessonNumber(loaded.model, evaluation)
+          : null,
+      };
+    });
+    return {
+      school: {
+        id: school.id,
+        slug: school.slug,
+        title: school.title,
+        description: school.description,
+        facts: school.facts,
+        soonNote: school.soonNote,
+        communityUrl: school.communityUrl,
+        mentoringOffer: school.mentoringOffer,
+        internshipOffer: school.internshipOffer,
+        status: courses.length > 0 ? "open" : "soon",
+        courseCount: courses.length,
+        lessonCount: courses.reduce((sum, c) => sum + c.lessonCount, 0),
+      },
+      direction: places.direction,
+      expert: await this.author(places.expert),
+      signedIn: personId !== null,
+      courses,
+    };
+  }
 
   /** EARS-13 — `GET /v1/learning/courses/{courseSlug}/path`. */
   async path(
@@ -248,30 +368,23 @@ export class LearningDoctorService {
       });
     const places = await coursePlaces(this.deps.db, course.schoolId);
     if (!places) throw notFound("course");
-    const x = places.expert;
-    const name = x ? expertDisplayName(x) : null;
+    const partners = await publicPartnerNames(
+      this.deps.db,
+      course.partnerOrganisationId ? [course.partnerOrganisationId] : [],
+    );
     return {
       course: {
         id: course.id,
         slug: course.slug,
         title: course.title,
         state: this.stateOf(e, course.id),
+        ...this.courseData(course, e.loaded.lessons.length, partners),
+        // 023 EARS-11, EARS-13 — the 024 builder over resolved values; no preset name.
+        rulesSummary: e.evaluator.rulesSummary({ kind: "course", id: course.id }),
       },
       direction: places.direction,
       school: places.school,
-      author:
-        x && name
-          ? {
-              slug: x.slug,
-              name,
-              role: x.professionalRole,
-              credentials: x.credentials,
-              affiliation: x.affiliation,
-              photoUrl: x.photoRef
-                ? await this.deps.media.signedUrl(x.photoRef)
-                : null,
-            }
-          : null,
+      author: await this.author(places.expert),
       signedIn: personId !== null,
       modules,
       document: { state: e.evaluation.document },
@@ -301,6 +414,7 @@ export class LearningDoctorService {
       this.hidden(e, "lesson", lessonId)
     )
       throw notFound("lesson");
+    const steps = model.steps.filter((s) => !this.hidden(e, "step", s.id));
     return {
       course: {
         id: owner.course.id,
@@ -320,19 +434,19 @@ export class LearningDoctorService {
           kind: "lesson",
           id: lessonId,
         }),
+        // 023 EARS-21 — the first step the path shows, so a lesson link opens the step route.
+        firstStepId: steps[0]?.id ?? null,
       },
       signedIn: personId !== null,
-      steps: model.steps
-        .filter((s) => !this.hidden(e, "step", s.id))
-        .map((s) => ({
-          id: s.id,
-          type: s.type,
-          title: s.title,
-          durationMin: s.durationMin,
-          ...facts(s.id),
-          state: this.stateOf(e, s.id),
-          completionSentence: e.evaluator.sentence({ kind: "step", id: s.id }),
-        })),
+      steps: steps.map((s) => ({
+        id: s.id,
+        type: s.type,
+        title: s.title,
+        durationMin: s.durationMin,
+        ...facts(s.id),
+        state: this.stateOf(e, s.id),
+        completionSentence: e.evaluator.sentence({ kind: "step", id: s.id }),
+      })),
     };
   }
 

@@ -32,7 +32,8 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * video → test.
  * On a stage slot the course is the golden one (`golden.learning.course`,
  * #4059: the same shape, lesson 2 in a second module), handed to the leg as
- * `E2E_LEARNING_COURSE_SLUG` by `tools/staging/live-tiers.mjs`.
+ * `E2E_LEARNING_COURSE_SLUG` by `tools/staging/live-tiers.mjs`, its school
+ * (`golden.learning.school`, 023 #4017) as `E2E_LEARNING_SCHOOL_SLUG`.
  *
  * Harness (production builds; api :3000, doctor :3004 bound to 127.0.0.1,
  * sign-in host :3005, portal :3001):
@@ -48,11 +49,14 @@ requireLiveStandEnv([
   "MAILPIT_URL",
   "IDP_ISSUER",
   "E2E_LEARNING_COURSE_SLUG",
+  "E2E_LEARNING_SCHOOL_SLUG",
 ]);
 
 const DOCTOR_URL = (process.env.E2E_DOCTOR_URL ?? "").replace(/\/$/, "");
 const PORTAL_URL = (process.env.E2E_PORTAL_URL ?? "").replace(/\/$/, "");
 const SLUG = process.env.E2E_LEARNING_COURSE_SLUG ?? "";
+/** 023 — the published school of that course; the journey enters the course from it. */
+const SCHOOL_SLUG = process.env.E2E_LEARNING_SCHOOL_SLUG ?? "";
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
 /** `E2E_THEME=dark` runs the same journey in the dark theme (the dark evidence renders). */
 const DARK = process.env.E2E_THEME === "dark";
@@ -119,6 +123,66 @@ test.describe("024 — the doctor's course path and step screens", () => {
   test.describe.configure({ mode: "serial" });
   test.beforeEach(async ({ context }) => {
     if (DARK) await context.addInitScript(DARK_INIT);
+  });
+
+  test("023 EARS-4/5/8/11: a guest enters from the school screen, opens a course card and reaches its path under the course header", async ({ page }) => {
+    for (const [size, tag] of [[DESKTOP, "1280"], [PHONE, "390"]] as const) {
+      await page.setViewportSize(size);
+      const res = await page.goto(`${DOCTOR_URL}/schools/${SCHOOL_SLUG}`);
+      expect(res?.status()).toBe(200);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect(page.getByText(/^\d+ курс(а|ов)? · \d+ урок(а|ов)?$/)).toBeVisible();
+      await expect(page.getByRole("heading", { level: 2, name: "Курсы школы" })).toBeVisible();
+      // EARS-8 — a guest reads every course and meets the gate returning to the school.
+      await expect(page.getByRole("link", { name: "Зарегистрироваться" })).toHaveAttribute(
+        "href",
+        `/register?returnTo=${encodeURIComponent(`/schools/${SCHOOL_SLUG}`)}`,
+      );
+      // No phone horizontal scroll (EARS-25).
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await axeClean(page);
+      await shoot(page, `guest-school-${tag}`);
+    }
+    await page.setViewportSize(DESKTOP);
+    const card = page.locator(`a[href="/courses/${SLUG}"]`);
+    await expect(card).toContainText(/академическ/);
+    await card.click();
+    await expect.poll(() => new URL(page.url()).pathname).toBe(`/courses/${SLUG}`);
+    // EARS-11 — the course header: the breadcrumb back to the school, the rules summary with the certificate sentence.
+    await expect(
+      page.getByRole("navigation", { name: "Вы здесь" }).getByRole("link"),
+    ).toHaveAttribute("href", `/schools/${SCHOOL_SLUG}`);
+    await expect(page.getByText(/Сертификат выдаётся за весь курс/)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Урок 1, шаг 1\. Серия/ })).toBeVisible();
+    await axeClean(page);
+    await shoot(page, "guest-course-header-1280");
+  });
+
+  test("023 EARS-8: a guest gated on the school signs in and lands back on the school screen", async ({ browser }) => {
+    const doctor = { email: newEmail(), password: livePassword() };
+    await provisionConfirmedAccount(browser, "doctor", DOCTOR_URL, doctor);
+    const context = await browser.newContext({ locale: "ru-RU", viewport: DESKTOP });
+    if (DARK) await context.addInitScript(DARK_INIT);
+    const page = await context.newPage();
+    await page.goto(`${DOCTOR_URL}/schools/${SCHOOL_SLUG}`);
+    const gateHref = (await page.getByRole("link", { name: "Зарегистрироваться" }).getAttribute("href"))!;
+    const returnTo = new URL(gateHref, DOCTOR_URL).searchParams.get("returnTo")!;
+    expect(returnTo).toBe(`/schools/${SCHOOL_SLUG}`);
+    await signInWithPassword(page, { loginPath: `/login?returnTo=${encodeURIComponent(returnTo)}` }, doctor, DOCTOR_URL);
+    await expect.poll(() => new URL(page.url()).pathname).toBe(returnTo);
+    // Signed in: no gate, the card carries the doctor's state.
+    await expect(page.getByRole("link", { name: "Зарегистрироваться" })).toHaveCount(0);
+    await expect(page.locator(`a[href="/courses/${SLUG}"]`)).toBeVisible();
+    await axeClean(page);
+    await shoot(page, "doctor-school-1280");
+    await context.close();
+  });
+
+  test("023 EARS-24: the Academy has no school screen — /schools/* is its not-found page", async ({ page }) => {
+    const res = await page.goto(`${PORTAL_URL}/schools/${SCHOOL_SLUG}`);
+    expect(res?.status()).toBe(404);
+    await expect(page.getByRole("link", { name: "Зарегистрироваться" })).toHaveCount(0);
+    await shoot(page, "academy-schools-not-found");
   });
 
   test("EARS-14/15: a guest sees the path with its states and meets the registration gate on a step", async ({ page }) => {

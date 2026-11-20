@@ -72,9 +72,10 @@ sequenceDiagram
   B->>B: SchoolScreen: header · о школе · band? · courses (≤6 cards | «Вы учитесь» + rows) · events · document · mentoring · reviews · community
 ```
 
-- **Course state** on a card: `done` = 024 `CourseCompleted` status; `started` = any done or current step that is not the first; else `not-started`. No percent is stored or sent.
+- **Course state** on a card: `done` = 024 `CourseCompleted` status; `started` = any done or current step that is not the first; else `not-started`. A started course also carries `nextLessonNumber` — the course-wide ordinal of the lesson holding the doctor's `current` step (024 EARS-11), for the card's «Продолжить — урок N →»; null otherwise. No percent is stored or sent.
+- **One batched read**: the school read loads every published course's tree, the rule layers of all their items and the doctor's facts once per request, then evaluates each course in memory — no per-course loads.
 - **Over six courses**: the read returns all published cards (bounded by the school); search and «Показать ещё 10» are client-side over that list, built from `@ds/design-system` primitives — no URL edit (unlike `EventList`'s show-more, which pages a server read).
-- **Course header** (`CourseHeader`) reads the course read of 024 extended with the EARS-1 columns and the rules summary from the 024 sentence builder for the course scope; the preset's name is stripped by design — the builder takes resolved values, not the `preset` field of the resolver.
+- **Course header** (`CourseHeader`) reads the existing 024 path read `GET /v1/learning/courses/{courseSlug}/path`, whose `course` carries the EARS-1 columns (description, academic hours, lesson count, document, partner) and the rules summary from the 024 sentence builder for the course scope; the preset's name is stripped by design — the builder takes resolved values, not the `preset` field of the resolver.
 - **Events section** (EARS-15): the school read returns the club event ids of its published modules; `SchoolScreen` mounts `@ds/events-storefront/feed` with `limit: 4` and those ids as an additive filter of the 019 feed query — the precedent is 018's `SpecialtyEventsBlock`. Cards, «Все события», empty, error and «Повторить» are the block's own; 023 adds no events copy.
 - **Single module** (EARS-12): `CoursePath` receives `modules.length === 1` and renders lesson segments without section headers; the outline lists lessons.
 
@@ -146,11 +147,12 @@ Only `published` rows reach a doctor read; the author line is the profile's spec
 | `PUT /v1/me/learning/courses/{courseId}/review`                                                                                                                                                           | doctor, graduate            | EARS-18        |
 | `POST /v1/me/learning/schools/{schoolId}/mentoring-requests`                                                                                                                                              | doctor, graduate            | EARS-16        |
 | `PUT /v1/me/learning/schools/{schoolId}/interest` · `DELETE …/interest` (withdraw)                                                                                                                        | doctor                      | EARS-7         |
-| `GET /v1/learning/courses/{courseSlug}` (024 course read + EARS-1 columns, rules summary)                                                                                                                 | anyone                      | EARS-11, 13    |
 | `PATCH /v1/admin/learning/schools/{id}` · `…/publish` · `…/unpublish` (create is 024's)                                                                                                                   | staff (047 content editing) | EARS-26, 28    |
 | `PATCH /v1/admin/learning/courses/{id}` · `…/publish` · `PUT /v1/admin/learning/schools/{id}/course-order` · `PUT /v1/admin/learning/courses/{id}/module-order` · `PATCH /v1/admin/learning/modules/{id}` | staff                       | EARS-27, 28    |
 | `GET /v1/admin/learning/reviews?state=pending` · `POST …/{id}/publish` · `POST …/{id}/reject`                                                                                                             | staff                       | EARS-19        |
 | `GET /v1/admin/learning/schools/{id}/mentoring-requests` · the interest count on `GET /v1/admin/learning/schools/{id}`                                                                                    | staff                       | EARS-7, 16, 26 |
+
+The course header (EARS-11, EARS-13) adds no route: its fields ride the existing 024 path read `GET /v1/learning/courses/{courseSlug}/path` (anyone), whose `course` carries the EARS-1 columns and the rules summary.
 
 Problems are RFC 7807: `REVIEW_NOT_GRADUATE` (403), `MENTORING_NOT_ELIGIBLE` (403), `PUBLISH_REQUIREMENTS_NOT_MET` (409), `PRECONDITION_FAILED` (412). Rule settings (`module.reward`, `school.mentoringEligibility`, `course.clubInCompletion`, `course.moduleSize`) use 024's `/v1/admin/learning/rules/*`.
 

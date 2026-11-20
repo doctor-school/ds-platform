@@ -86,6 +86,7 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     eventPathTemplate: "/events/:slug",
     room: "/events/:slug/room",
     courses: "/courses",
+    schools: "/schools",
   },
   landing: {
     afterLogin: "/",

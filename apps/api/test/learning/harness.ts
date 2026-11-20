@@ -261,26 +261,38 @@ export interface BuiltCourse {
  */
 export async function buildCourse(
   h: Harness,
-  opts: { publish?: boolean; durationSec?: number } = {},
+  opts: {
+    publish?: boolean;
+    durationSec?: number;
+    /** 023 — add the course to this existing school (its fixture) instead of a new one. */
+    into?: { f: LearningFixture; schoolId: string };
+    /** 023 EARS-1 — extra fields of the school create (a new school only). */
+    school?: Record<string, unknown>;
+    /** 023 EARS-1 — extra fields of the course create. */
+    course?: Record<string, unknown>;
+  } = {},
 ): Promise<BuiltCourse> {
-  const f = await seedTaxonomy(h.pool);
+  const f = opts.into?.f ?? (await seedTaxonomy(h.pool));
   const ok = <T>(r: Reply<T>, status: number): T => {
     expect(r.status, JSON.stringify(r.body)).toBe(status);
     return r.body;
   };
-  const school = ok(
-    await admin<{ id: string }>(h, "POST", "/schools", {
-      payload: {
-        directionId: f.directionId,
-        leadExpertId: f.expertId,
-        projectId: f.projectId,
-        slug: `school-${f.suffix}`,
-        title: `Школа ${f.suffix}`,
-      },
-    }),
-    201,
-  );
-  const courseSlug = `course-${f.suffix}`;
+  const school = opts.into
+    ? { id: opts.into.schoolId }
+    : ok(
+        await admin<{ id: string }>(h, "POST", "/schools", {
+          payload: {
+            directionId: f.directionId,
+            leadExpertId: f.expertId,
+            projectId: f.projectId,
+            slug: `school-${f.suffix}`,
+            title: `Школа ${f.suffix}`,
+            ...opts.school,
+          },
+        }),
+        201,
+      );
+  const courseSlug = `course-${randomUUID().slice(0, 8)}-${f.suffix}`;
   const course = ok(
     await admin<{ id: string }>(h, "POST", "/courses", {
       payload: {
@@ -288,6 +300,7 @@ export async function buildCourse(
         projectId: f.projectId,
         slug: courseSlug,
         title: `Курс ${f.suffix}`,
+        ...opts.course,
       },
     }),
     201,

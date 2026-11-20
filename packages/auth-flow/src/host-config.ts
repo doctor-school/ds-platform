@@ -515,6 +515,12 @@ export type AuthFlowRoutes = {
    * EARS-27), which therefore admits none.
    */
   readonly courses?: string;
+  /**
+   * 023 EARS-8 — this host's school root (`/schools`): a guest gated on a
+   * school's courses comes back to the school screen. Absent on a host that
+   * serves no school screen (the Academy answers `/schools/*` 404, EARS-24).
+   */
+  readonly schools?: string;
 };
 
 /** The event-page shapes a host can serve — Academy `/webinars/<slug>`, doctor `/events/<slug>`. */

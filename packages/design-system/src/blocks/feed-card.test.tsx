@@ -2,7 +2,13 @@ import { render, screen } from "@testing-library/react";
 import type { FeedCard as FeedCardData } from "@ds/schemas";
 import { describe, expect, it } from "vitest";
 
-import { FeedCard, FeedCardSkeleton } from "./feed-card";
+import {
+  FEED_CARD_COPY,
+  FeedCard,
+  FeedCardSkeleton,
+  type FeedContentCardData,
+  type FeedContentRowData,
+} from "./feed-card";
 
 // 048 V-7 (feed-card half) — the shared feed card of
 // `design-source/unit-feed-card.dc.html`, slice 1 (EARS-13, EARS-19).
@@ -157,5 +163,107 @@ describe("FeedCard", () => {
       "true",
     );
     expect(container.querySelector("a")).toBeNull();
+  });
+});
+
+/**
+ * 023 EARS-5, EARS-22 — the doctor content card, variant Б (`kind: "content"`,
+ * `design-source/unit-content-card.dc.html`): a metric column, the kicker and
+ * scope, the title, the description, the facts line, the done mark, the
+ * partner mark and the call to action — one same-tab link.
+ */
+describe("FeedCard — doctor content card (variant Б)", () => {
+  const content = (over: Partial<FeedContentCardData> = {}): FeedContentCardData => ({
+    kind: "content",
+    href: "/courses/osnovy",
+    kicker: "Курс",
+    scope: "Школа ортобиологии",
+    title: "Ортобиология. Базовый",
+    description: "Три модуля по шесть уроков.",
+    metric: { value: "18", label: "уроков" },
+    facts: ["36 академических часов", "Сертификат НМО"],
+    state: null,
+    partner: null,
+    cta: "Открыть путь курса →",
+    ...over,
+  });
+
+  it("023 EARS-5: system shall render the course as one link with its metric, facts and call to action", () => {
+    render(<FeedCard card={content()} />);
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]?.getAttribute("href")).toBe("/courses/osnovy");
+    expect(links[0]?.textContent).toContain("18");
+    expect(links[0]?.textContent).toContain("уроков");
+    expect(links[0]?.textContent).toContain("36 академических часов · Сертификат НМО");
+    expect(links[0]?.textContent).toContain("Открыть путь курса →");
+    expect(screen.queryByText(FEED_CARD_COPY.done)).toBeNull();
+  });
+
+  it("023 EARS-5: a done course shows the done mark", () => {
+    render(<FeedCard card={content({ state: "done" })} />);
+    expect(screen.getByText(FEED_CARD_COPY.done)).toBeTruthy();
+  });
+
+  it("023 EARS-5: a done card is not dimmed — its texts keep WCAG AA contrast (axe color-contrast)", () => {
+    const { container } = render(<FeedCard card={content({ state: "done" })} />);
+    const card = container.querySelector('[data-feed-card="content"]');
+    expect(card?.className).not.toMatch(/\bopacity-/);
+  });
+
+  it("023 EARS-22: system shall show the partner mark only WHILE the course carries a partner", () => {
+    const { rerender } = render(<FeedCard card={content()} />);
+    expect(screen.queryByText(/Партнёрский материал/)).toBeNull();
+    rerender(<FeedCard card={content({ partner: { name: "Партнёр А" } })} />);
+    expect(screen.getByText("Партнёрский материал · Партнёр А")).toBeTruthy();
+  });
+
+  it("023 EARS-5: on a phone the card has no frame — no border, no offset shadow (canvas `m`: border:0; box-shadow:none); from the layout breakpoint it is framed", () => {
+    const { container } = render(<FeedCard card={content()} />);
+    const card = container.querySelector('[data-feed-card="content"]');
+    const classes = (card?.className ?? "").split(/\s+/);
+    expect(classes).toContain("border-0");
+    expect(classes).toContain("shadow-none");
+    expect(classes).toContain("layout:border-2");
+    expect(classes).toContain("layout:shadow-lg");
+    expect(classes).not.toContain("border-2");
+    expect(classes).not.toContain("shadow-lg");
+  });
+});
+
+/**
+ * 023 EARS-5 — the course row, variant В «строка» of
+ * `design-source/unit-content-card.dc.html` (`kind: "content-row"`): the
+ * kicker, the title, the meta and the arrow — one same-tab link.
+ */
+describe("FeedCard — doctor content row (variant В)", () => {
+  const row = (over: Partial<FeedContentRowData> = {}): FeedContentRowData => ({
+    kind: "content-row",
+    href: "/courses/tendinopatii",
+    kicker: "Курс",
+    title: "Тендинопатии",
+    meta: "6 уроков",
+    ...over,
+  });
+
+  it("023 EARS-5: system shall render a course row as one link with its kicker, title, meta and arrow", () => {
+    const { container } = render(<FeedCard card={row()} />);
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]?.getAttribute("href")).toBe("/courses/tendinopatii");
+    expect(links[0]?.textContent).toContain("Курс");
+    expect(links[0]?.textContent).toContain("Тендинопатии");
+    expect(links[0]?.textContent).toContain("6 уроков");
+    expect(links[0]?.textContent).toContain("→");
+    expect(container.querySelector('[data-feed-card="content-row"]')).toBe(links[0]);
+  });
+
+  it("023 EARS-5: on a phone a row is separated by a hairline; from the layout breakpoint it is framed", () => {
+    const { container } = render(<FeedCard card={row()} />);
+    const classes = (container.querySelector('[data-feed-card="content-row"]')?.className ?? "").split(/\s+/);
+    expect(classes).toContain("border-b");
+    expect(classes).toContain("border-hairline");
+    expect(classes).toContain("layout:border-2");
+    expect(classes).toContain("layout:border-border");
   });
 });

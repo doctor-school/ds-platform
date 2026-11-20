@@ -1,6 +1,6 @@
 {
   "name": "@ds/learning",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "DS Platform learning path — the structure model, the element-type and condition-type catalogs, layered rules with presets, the evaluator and the rule-sentence builder (`.`), the server half over packages/db (`./server`), the browser transport (`./client`) the doctor screens — the course path and the step screen (`./ui`) — and the staff screens — lesson composition and preset choice (`./admin`) (024, ADR-0013 A1).",

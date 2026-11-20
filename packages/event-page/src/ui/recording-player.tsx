@@ -6,6 +6,7 @@ import { Button } from "@ds/design-system/button";
 import { resolveEmbed } from "@ds/room/embed";
 import {
   parseProviderClock,
+  parseProviderSignal,
   providerClockHandshake,
 } from "@ds/room/player-signals";
 
@@ -28,8 +29,20 @@ import {
  *   • a {@link RECORDING_PLAYER_LOAD_TIMEOUT_MS} watchdog — the QUIET one. A
  *     cross-origin iframe that never resolves fires no event at all, and that is
  *     precisely the endless-spinner state EARS-7 exists to forbid.
- * `load` clears the watchdog: the frame document arrived, so «nothing ever came
- * back» is no longer the failure being watched for.
+ * Two delivery proofs clear the watchdog, whichever comes first, because «nothing
+ * ever came back» is then no longer the failure being watched for:
+ *   • the provider's own `ready` / `buffering` / `playing` signal posted by THIS
+ *     frame from the provider origin (the canonical `parseProviderSignal`) — the
+ *     player script is up and talking. It is the one that matters for a provider
+ *     that speaks: the frame's `load` waits for every subresource of the provider
+ *     document, its ad / analytics scripts included, and one hung third-party
+ *     request holds `load` past the watchdog while the player is already
+ *     streaming (#4180: RuTube `player:ready` at ~4 s, `load` at 12.5 s);
+ *   • the frame's `load` — the only proof a silent provider (cdnvideo, a YouTube
+ *     src without its player API) can give.
+ * A provider `error` signal is deliberately NOT a failure input here: the
+ * provider renders its own message inside the frame, and the boundary's inputs
+ * stay the two it was specified with.
  *
  * Reuse (ADR-0013 A1): the embed URL is built by the SAME `@ds/room/embed`
  * resolver the 006 room uses — one canonical provider→src mapping for the
@@ -145,10 +158,13 @@ export function RecordingPlayer({
   const listening = onClock !== undefined;
 
   useEffect(() => {
-    if (!listening || !provider) return;
+    if (!provider) return;
     const onMessage = (event: MessageEvent) => {
       const own = frameRef.current?.contentWindow;
       if (!own || event.source !== own) return;
+      const signal = parseProviderSignal(provider, event);
+      if (signal && signal.kind !== "error") setWatching(false);
+      if (!listening) return;
       const sec = parseProviderClock(provider, event);
       if (sec !== null) clockRef.current?.(sec);
     };

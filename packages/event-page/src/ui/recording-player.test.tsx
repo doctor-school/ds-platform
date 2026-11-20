@@ -86,6 +86,46 @@ describe("014 EARS-7 — the recording player failure boundary", () => {
     expect(message()).toBeNull();
   });
 
+  // #4180 — a provider frame's `load` waits for EVERY subresource of the
+  // provider document, its ad / analytics scripts included. A RuTube player was
+  // seen announcing `player:ready` at ~4 s and streaming segments while one such
+  // third-party request hung, holding `load` past the watchdog — the boundary
+  // then tore down a player that was playing. The provider's own ready signal
+  // from the mounted frame is the delivery proof that does not depend on them.
+  const announce = (iframe: HTMLElement, origin: string, source: Window | null) =>
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin,
+          data: JSON.stringify({ type: "player:ready", data: {} }),
+          source,
+        }),
+      );
+    });
+
+  it("014 EARS-7.15: the provider's own ready signal from the mounted frame cancels the watchdog — a player whose document is still loading third-party scripts is never torn down", () => {
+    renderPlayer();
+    const iframe = frame() as HTMLIFrameElement;
+    announce(iframe, "https://rutube.ru", iframe.contentWindow);
+
+    act(() => void vi.advanceTimersByTime(RECORDING_PLAYER_LOAD_TIMEOUT_MS * 3));
+
+    expect(frame()).not.toBeNull();
+    expect(message()).toBeNull();
+  });
+
+  it("014 EARS-7.16: a ready signal from a foreign origin or another window proves nothing — the watchdog still fails the silent frame", () => {
+    renderPlayer();
+    const iframe = frame() as HTMLIFrameElement;
+    announce(iframe, "https://evil.example", iframe.contentWindow);
+    announce(iframe, "https://rutube.ru", window);
+
+    act(() => void vi.advanceTimersByTime(RECORDING_PLAYER_LOAD_TIMEOUT_MS));
+
+    expect(frame()).toBeNull();
+    expect(screen.getByText(COPY.unavailableTitle)).toBeVisible();
+  });
+
   it("014 EARS-7.12: retry re-creates the frame — a genuinely fresh mount, not the same dead document shown again", () => {
     renderPlayer();
     const firstKey = frame();

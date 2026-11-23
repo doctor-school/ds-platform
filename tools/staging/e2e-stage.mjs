@@ -1077,6 +1077,29 @@ const commentText = (text) =>
  * never read from them. A refused gate, an unanswered `/v1/health`, a red leg —
  * anything but a green suite — is FAIL, with its reason.
  */
+// The `stage-pr` environment's deployment-branch policy is `*/*`, and a deployment-
+// branch `*` never matches `/`: only a ref with exactly one `/` between two non-empty
+// segments reaches `slot-suite`. The policy is the operator's; this mirrors it only to
+// name the cause when a branch falls outside it.
+export function stagePrPolicyAdmits(branch) {
+  return /^[^/]+\/[^/]+$/.test(String(branch ?? ""));
+}
+
+const STAGE_PR_POLICY_MISS =
+  "the `stage-pr` environment's deployment-branch policy `*/*` admits only a ref with exactly one `/` (`<prefix>/<N>-<slug>`)";
+
+/**
+ * Why a PR-slot run stopped before the suite reached a verdict. A branch outside the
+ * `stage-pr` policy never gets `slot-suite` started, whatever it is rebased on; only a
+ * branch inside it points at a stale `e2e-stage.mjs` (not rebased on `main`).
+ */
+export function suiteStoppedReason({ suiteResult, branch }) {
+  const head = `the run stopped before the suite reached a verdict (slot-suite ${suiteResult})`;
+  return stagePrPolicyAdmits(branch)
+    ? `${head}; a branch not rebased on main lacks the PR-slot flags of e2e-stage.mjs: rebase it on main and dispatch again`
+    : `${head}; ${STAGE_PR_POLICY_MISS}, and ${branch} is outside it: rename the branch and dispatch again`;
+}
+
 export function renderPrVerdictComment({
   runId,
   runUrl,
@@ -1193,6 +1216,10 @@ export async function dispatchStageRun(options, effects = realDispatchEffects) {
     return refuse(
       `PR ${pr}'s head branch is main — a PR-slot run never runs under main's ref`,
     );
+  if (!stagePrPolicyAdmits(branch))
+    return refuse(
+      `PR ${pr}'s head branch ${branch} is outside ${STAGE_PR_POLICY_MISS}: rename the branch and dispatch again`,
+    );
 
   const title = slotRunTitle(slot, sha);
   const listRuns = () => {
@@ -1232,7 +1259,7 @@ export async function dispatchStageRun(options, effects = realDispatchEffects) {
   ]);
   if (failedRun(started))
     return refuse(
-      `\`gh workflow run\` on ${branch} failed (${errLine(started)}) — a branch whose stage.yml has no PR-slot dispatch must be rebased on main first`,
+      `\`gh workflow run\` on ${branch} failed (${errLine(started)}) — the branch is inside the stage-pr policy, so a stage.yml without the PR-slot dispatch is the likely cause: rebase it on main first`,
     );
   effects.log(
     `e2e:stage dispatched ${STAGE_WORKFLOW} on ${branch} for ${slot} at ${sha.slice(0, 12)}`,

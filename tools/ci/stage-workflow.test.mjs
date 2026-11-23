@@ -297,6 +297,9 @@ describe("stage.yml — the PR-slot dispatch (#4202)", () => {
     assert.equal(post.env.SUITE_RESULT, "${{ needs.slot-suite.result }}");
     assert.match(post.run, /passed: !e\.GATE_REASON && e\.SUITE_RESULT === "success"/);
     assert.match(post.run, /issues\/\$\{SLOT#pr-\}\/comments/);
+    // The stop reason names the branch policy or a stale branch from the dispatched ref.
+    assert.equal(post.env.BRANCH, "${{ github.ref_name }}");
+    assert.match(post.run, /suiteStoppedReason\(\{ suiteResult: e\.SUITE_RESULT, branch: e\.BRANCH \}\)/);
     assert.equal(slotSuite.outputs.tally, "${{ steps.summary.outputs.tally }}");
   });
 });

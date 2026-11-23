@@ -461,8 +461,10 @@ jobs:
   # slot-suite starts, `prSlotGate` (tools/staging/e2e-stage.mjs) refuses a run under
   # `main`'s ref, a ref that is not PR N's head branch, a slot that is not `pr-<N>`, a
   # non-40-hex SHA and a SHA that is not the head of an OPEN PR N pushed to THIS
-  # repository. The boundaries: a dispatch needs repository write access; `stage-pr`'s
-  # deployment-branch policy; `stage-pr` holds no ssh key and the run holds no `main`
+  # repository. The boundary for `stage-pr`'s secrets is repository write access: any
+  # code that can push a same-repo branch its deployment-branch policy (`*/*`) admits
+  # reaches them from a workflow of its own, so dispatch rights are not the boundary.
+  # Exposure is bounded by `stage-pr` holding no ssh key and the run holding no `main`
   # cache scope.
   slot-gate:
     if: github.event_name == 'workflow_dispatch'
@@ -657,6 +659,7 @@ jobs:
           SUITE_RESULT: ${{ needs.slot-suite.result }}
           TALLY: ${{ needs.slot-suite.outputs.tally }}
           VERDICT: ${{ needs.slot-suite.outputs.verdict }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           if ! [[ "$SLOT" =~ ^pr-[1-9][0-9]{0,9}$ ]]; then
             echo "no PR to comment on: ${GATE_REASON:-slot is not pr-<N>}"
@@ -665,12 +668,12 @@ jobs:
           body="$RUNNER_TEMP/comment.md"
           node --input-type=module -e '
             import { writeFileSync } from "node:fs";
-            import { renderPrVerdictComment } from "./tools/staging/e2e-stage.mjs";
+            import { renderPrVerdictComment, suiteStoppedReason } from "./tools/staging/e2e-stage.mjs";
             const e = process.env;
             let tally;
             try { tally = JSON.parse(e.TALLY); } catch {}
             const reason = e.GATE_REASON ||
-              (e.VERDICT ? undefined : `the run stopped before the suite reached a verdict (slot-suite ${e.SUITE_RESULT}); a branch not rebased on main lacks the PR-slot flags of e2e-stage.mjs: rebase it on main and dispatch again`);
+              (e.VERDICT ? undefined : suiteStoppedReason({ suiteResult: e.SUITE_RESULT, branch: e.BRANCH }));
             writeFileSync(process.argv[1], renderPrVerdictComment({
               runId: e.GITHUB_RUN_ID,
               runUrl: `${e.GITHUB_SERVER_URL}/${e.GITHUB_REPOSITORY}/actions/runs/${e.GITHUB_RUN_ID}`,

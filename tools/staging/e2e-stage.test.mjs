@@ -34,6 +34,8 @@ import {
   compactTally,
   prSlotGate,
   renderPrVerdictComment,
+  stagePrPolicyAdmits,
+  suiteStoppedReason,
   reportTally,
   runMarker,
   slotRunTitle,
@@ -2413,6 +2415,8 @@ describe("the PR-slot run in Actions (#4202)", () => {
       [{ headRefName: "", headRefOid: HEAD, isCrossRepository: false }, /no readable head branch and SHA/],
       [{ headRefName: BRANCH, headRefOid: "abc", isCrossRepository: false }, /no readable head branch and SHA/],
       [{ headRefName: "main", headRefOid: HEAD, isCrossRepository: false }, /head branch is main/],
+      [{ headRefName: "unprefixed", headRefOid: HEAD, isCrossRepository: false }, /`stage-pr` environment's deployment-branch policy `\*\/\*` admits only a ref with exactly one `\/`.*rename the branch/],
+      [{ headRefName: "a/b/c", headRefOid: HEAD, isCrossRepository: false }, /policy `\*\/\*` admits only a ref with exactly one `\/`/],
     ];
     for (const [prHead, reason] of cases) {
       const { gh, lines, effects } = dispatchHarness({ prHead });
@@ -2617,6 +2621,42 @@ describe("the PR-slot run in Actions (#4202)", () => {
       const verdict = gate(args);
       assert.equal(verdict.ok, false, JSON.stringify(args));
       assert.match(verdict.reason, reason);
+    }
+  });
+
+  it("names the real cause when the run stopped before a verdict: the branch policy, else a branch not rebased on main", () => {
+    assert.equal(stagePrPolicyAdmits(BRANCH), true);
+    for (const b of ["main", "unprefixed", "a/b/c", "/x", "x/", ""]) assert.equal(stagePrPolicyAdmits(b), false, b);
+    const outside = suiteStoppedReason({ suiteResult: "failure", branch: "a/b/c" });
+    assert.match(outside, /slot-suite failure/);
+    assert.match(outside, /`stage-pr` environment's deployment-branch policy `\*\/\*`/);
+    assert.doesNotMatch(outside, /rebase/);
+    const stale = suiteStoppedReason({ suiteResult: "failure", branch: BRANCH });
+    assert.match(stale, /rebase it on main and dispatch again/);
+    assert.doesNotMatch(stale, /deployment-branch policy/);
+  });
+
+  it("imports cleanly from `node -e` whose first argument is a file not yet written (slot-verdict, run 45140199591)", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "e2e-stage-entry-"));
+    try {
+      const out = path.join(dir, "comment.md");
+      const moduleUrl = new URL("./e2e-stage.mjs", import.meta.url).href;
+      const r = spawnSync(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          `import { writeFileSync } from "node:fs";
+           import { renderPrVerdictComment } from ${JSON.stringify(moduleUrl)};
+           writeFileSync(process.argv[1], renderPrVerdictComment({ runId: 1, runUrl: "u", slot: "pr-1", sha: "", passed: false }));`,
+          out,
+        ],
+        { encoding: "utf8" },
+      );
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(readFileSync(out, "utf8"), /^### e2e:stage pr-1 — FAIL$/m);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 

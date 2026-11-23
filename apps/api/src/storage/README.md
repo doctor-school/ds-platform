@@ -35,8 +35,13 @@ to down and a LOG on recovery.
 `S3Client` carries a connect bound (`S3_CONNECTION_TIMEOUT_MS`, 5 s), a
 socket-**idle** bound (`S3_SOCKET_IDLE_TIMEOUT_MS`, 20 s — a large upload that
 keeps transferring never trips it) and `S3_MAX_ATTEMPTS` = 2, so a store that
-accepts and then stalls rejects within ~50 s with an `ObjectStorageError`
-(`TimeoutError`) instead of hanging the request. `exists()` resolves `false` and
+accepts and then stalls before answering rejects within ~50 s with an
+`ObjectStorageError` (`TimeoutError`) instead of hanging the request. The idle
+bound does **not** cover a response body read: the HTTP handler attaches a
+`socketTimeout` of 6 s or more only after a 3 s deferral that arriving headers
+cancel. `getBytes()` therefore carries its own total deadline over the request
+and the body read (`S3_GET_BYTES_DEADLINE_MS`, 30 s, an `AbortSignal` on the
+call) and rejects with `ObjectStorageError("getBytes timed out after … ms")`. `exists()` resolves `false` and
 `getBytes()` `null` ONLY for a not-found answer (HTTP 404 / `NotFound` /
 `NoSuchKey`); a timeout, 5xx, 403 or network failure rejects with
 `ObjectStorageError`, because callers read `false` as an **acknowledged**

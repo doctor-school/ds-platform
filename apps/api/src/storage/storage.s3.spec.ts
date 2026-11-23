@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeObjectStorage } from "./storage.fake.js";
 import {
   S3_CONNECTION_TIMEOUT_MS,
+  S3_GET_BYTES_DEADLINE_MS,
   S3_MAX_ATTEMPTS,
   S3_SOCKET_IDLE_TIMEOUT_MS,
   S3ObjectStorage,
@@ -193,6 +194,7 @@ describe("002 EARS-3 object-storage calls are bounded; only not-found reads as a
     connectionTimeoutMs: 200,
     socketIdleTimeoutMs: 300,
     maxAttempts: 2,
+    getBytesDeadlineMs: 2_000,
   };
 
   afterEach(async () => {
@@ -228,7 +230,10 @@ describe("002 EARS-3 object-storage calls are bounded; only not-found reads as a
     6_000,
   );
 
-  it("EARS-3: getBytes() whose body stalls after the headers rejects with ObjectStorageError within the bound", async () => {
+  it("EARS-3: getBytes() whose body stalls after the headers rejects at its per-call deadline even with the production socket-idle bound", async () => {
+    // The production idle bound (>= 6 s) is attached by the HTTP handler only
+    // after a 3 s deferral that the arriving headers cancel, so it never covers
+    // a stalled body read; the getBytes() deadline must (#4211).
     const endpoint = await endpointWith((socket) => {
       socket.once("data", () => {
         socket.write(
@@ -242,16 +247,25 @@ describe("002 EARS-3 object-storage calls are bounded; only not-found reads as a
         );
       });
     });
-    const s3 = new S3ObjectStorage({ ...config, endpoint }, testTimeouts);
+    const deadlineMs = 500;
+    const s3 = new S3ObjectStorage(
+      { ...config, endpoint },
+      {
+        ...testTimeouts,
+        socketIdleTimeoutMs: S3_SOCKET_IDLE_TIMEOUT_MS,
+        getBytesDeadlineMs: deadlineMs,
+      },
+    );
     const started = Date.now();
     const err = await s3.getBytes("k").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ObjectStorageError);
-    // It is the idle bound that fired on the stalled body — not an immediate
-    // parse failure of the partial response.
-    const elapsed = Date.now() - started;
-    expect(elapsed).toBeGreaterThanOrEqual(
-      testTimeouts.socketIdleTimeoutMs - 50,
+    expect((err as ObjectStorageError).message).toBe(
+      `getBytes timed out after ${deadlineMs} ms`,
     );
+    // The deadline fired on the stalled body — not an immediate parse failure
+    // of the partial response.
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeGreaterThanOrEqual(deadlineMs - 50);
     expect(elapsed).toBeLessThan(3_000);
   }, 6_000);
 
@@ -259,6 +273,7 @@ describe("002 EARS-3 object-storage calls are bounded; only not-found reads as a
     expect(
       (S3_CONNECTION_TIMEOUT_MS + S3_SOCKET_IDLE_TIMEOUT_MS) * S3_MAX_ATTEMPTS,
     ).toBeLessThan(60_000);
+    expect(S3_GET_BYTES_DEADLINE_MS).toBeLessThan(60_000);
   });
 
   it("EARS-3: exists() resolves false only for a not-found answer", async () => {

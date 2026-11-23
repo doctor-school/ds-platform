@@ -39,18 +39,29 @@ export const S3_CONNECTION_TIMEOUT_MS = 5_000;
 export const S3_SOCKET_IDLE_TIMEOUT_MS = 20_000;
 /** One retry: worst case (5 s + 20 s) × 2 = 50 s, still under a minute (#4211). */
 export const S3_MAX_ATTEMPTS = 2;
+/**
+ * TOTAL deadline of one `getBytes()` call — request AND body read. The idle
+ * bound above does not cover a body read: the HTTP handler attaches a
+ * `socketTimeout` of 6 s or more only after a 3 s deferral that arriving
+ * response headers cancel, so a body that stalls after fast headers would
+ * hang without this deadline (#4211).
+ */
+export const S3_GET_BYTES_DEADLINE_MS = 30_000;
 
 /** Network bounds of every S3 call; injectable so tests can use small values. */
 export interface S3Timeouts {
   connectionTimeoutMs: number;
   socketIdleTimeoutMs: number;
   maxAttempts: number;
+  /** Total deadline of one `getBytes()` call (request + body read). */
+  getBytesDeadlineMs: number;
 }
 
 const DEFAULT_S3_TIMEOUTS: S3Timeouts = {
   connectionTimeoutMs: S3_CONNECTION_TIMEOUT_MS,
   socketIdleTimeoutMs: S3_SOCKET_IDLE_TIMEOUT_MS,
   maxAttempts: S3_MAX_ATTEMPTS,
+  getBytesDeadlineMs: S3_GET_BYTES_DEADLINE_MS,
 };
 
 /**
@@ -68,18 +79,22 @@ const DEFAULT_S3_TIMEOUTS: S3Timeouts = {
  * only `"UnknownError"`.
  *
  * Every network call is bounded by {@link S3Timeouts} (#4211): a stalled store
- * rejects with {@link ObjectStorageError} instead of hanging the request.
+ * rejects with {@link ObjectStorageError} instead of hanging the request. The
+ * connect / socket-idle bounds cover the request; a `getBytes()` body read is
+ * covered only by its own total deadline (`getBytesDeadlineMs`).
  * `exists()` / `getBytes()` answer absent (`false` / `null`) ONLY for a
  * not-found answer; any other failure rejects, so a stall never reads as an
  * acknowledged absence.
  */
 export class S3ObjectStorage implements ObjectStorage {
   private readonly client: S3Client;
+  private readonly getBytesDeadlineMs: number;
 
   constructor(
     private readonly config: S3StorageConfig,
     timeouts: S3Timeouts = DEFAULT_S3_TIMEOUTS,
   ) {
+    this.getBytesDeadlineMs = timeouts.getBytesDeadlineMs;
     this.client = new S3Client({
       maxAttempts: timeouts.maxAttempts,
       // `socketTimeout` is the idle bound; `requestTimeout` in this handler
@@ -144,13 +159,23 @@ export class S3ObjectStorage implements ObjectStorage {
   }
 
   async getBytes(key: string): Promise<Buffer | null> {
+    // One signal bounds the request AND the body read: on abort the handler
+    // destroys the request, which errors the still-open body stream.
+    const signal = AbortSignal.timeout(this.getBytesDeadlineMs);
     try {
       const res = await this.client.send(
         new GetObjectCommand({ Bucket: this.config.bucket, Key: key }),
+        { abortSignal: signal },
       );
       const bytes = await res.Body?.transformToByteArray();
       return bytes ? Buffer.from(bytes) : null;
     } catch (err) {
+      if (signal.aborted) {
+        throw new ObjectStorageError(
+          `getBytes timed out after ${this.getBytesDeadlineMs} ms`,
+          { cause: err },
+        );
+      }
       if (isNotFound(err)) return null;
       throw readable(err);
     }

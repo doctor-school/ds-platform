@@ -115,8 +115,10 @@ export interface ObjectStorage {
   exists(key: string): Promise<boolean>;
   /**
    * Fetch the stored bytes. `null` ONLY on a not-found answer; every other
-   * failure — including a body that stalls after the headers — rejects with
-   * {@link ObjectStorageError} (#4211).
+   * failure rejects with {@link ObjectStorageError} (#4211). The call — request
+   * and body read — is bounded by one total deadline (S3 adapter:
+   * `S3_GET_BYTES_DEADLINE_MS`); a body that stalls after the headers rejects
+   * at that deadline, not at the socket-idle bound, which does not cover it.
    */
   getBytes(key: string): Promise<Buffer | null>;
   /**

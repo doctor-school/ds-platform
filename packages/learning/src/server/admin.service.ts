@@ -47,7 +47,7 @@ import {
   STREAM_PROVIDER_HAS_PARENT_API,
   type SetLearningStepSourceRequest,
 } from "@ds/schemas";
-import { and, asc, eq, isNull, max, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import {
   elementType,
   type LearningMediaDef,
@@ -85,7 +85,7 @@ import {
   changedSettings,
   keepRepublishedCompletion,
   previewRuleChange,
-  publishedCoursesUnder,
+  governedCoursesUnder,
   recomputeRuleChange,
   recordRuleChange,
 } from "./rule-change.js";
@@ -94,9 +94,18 @@ import {
  * EARS-31 — how a save on a published course treats earned completion
  * (owner D16: «keep» unless the author chose otherwise) and who made it.
  */
+/** EARS-30 — who may change a scope's rules. */
+export type LearningRulesAuthority = "rules-editor" | "course-editor";
+
 export interface LearningRuleChangeInput {
   earnedProgress: LearningEarnedProgress;
   actorSub: string | null;
+  /**
+   * EARS-30 — refuses (throws) a caller without the authority the scope
+   * needs. Called inside the saving transaction once the scope's courses are
+   * locked, so a publish and a rules save cannot race past it.
+   */
+  authorize?: (needed: LearningRulesAuthority) => void;
 }
 
 const DEFAULT_RULE_CHANGE: LearningRuleChangeInput = {
@@ -420,6 +429,10 @@ export class LearningAdminService {
           state,
           version: current.version + 1,
           updatedAt: new Date(),
+          // EARS-30 — the first publish is stamped once and never cleared.
+          ...(state === "published" && !current.firstPublishedAt
+            ? { firstPublishedAt: this.now() }
+            : {}),
         })
         .where(eq(learningCourses.id, courseId))
         .returning();
@@ -590,10 +603,10 @@ export class LearningAdminService {
       const row = await this.bumpLesson(tx, lessonId, expectedVersion, {
         state,
       });
-      // Owner D16 — a lesson republished changed on a published course keeps
+      // Owner D16 — a lesson republished changed on a once-published course keeps
       // its doctors' earned completion: what was done and would no longer be
       // gets a `completion-kept` fact (EARS-31; no fact changed or removed).
-      if (state === "published" && owner.course.state === "published") {
+      if (state === "published" && owner.course.firstPublishedAt) {
         await keepRepublishedCompletion(tx, {
           course: owner.course,
           moduleId: owner.module.id,
@@ -861,6 +874,7 @@ export class LearningAdminService {
     change: LearningRuleChangeInput = DEFAULT_RULE_CHANGE,
   ): Promise<LearningCommandResult<LearningScopeRules>> {
     const { result, ruleChangeId } = await this.deps.transaction(async (tx) => {
+      change.authorize?.(await this.authorityIn(tx, kind, scopeId, true));
       const values = await this.checkedValues(tx, kind, scopeId, rawValues);
       const ruleChangeId = await this.recordChange(
         tx,
@@ -890,11 +904,62 @@ export class LearningAdminService {
   async rulesAuthority(
     kind: LearningScopeKind,
     scopeId: string,
-  ): Promise<"rules-editor" | "course-editor"> {
+  ): Promise<LearningRulesAuthority> {
+    return this.authorityIn(this.deps.db, kind, scopeId, false);
+  }
+
+  /**
+   * EARS-30 — the authority from `first_published_at`: a course once
+   * published stays with the rules editor after an unpublish. With `lock`,
+   * the scope's courses are held `FOR UPDATE` until the saving transaction
+   * ends, so a concurrent first publish waits for the save (or the save sees
+   * the publish).
+   */
+  private async authorityIn(
+    db: LearningServerDeps["db"] | LearningTx,
+    kind: LearningScopeKind,
+    scopeId: string,
+    lock: boolean,
+  ): Promise<LearningRulesAuthority> {
     if (kind === "platform") return "rules-editor";
-    await this.scopeChain(this.deps.db, kind, scopeId);
-    const published = await publishedCoursesUnder(this.deps.db, kind, scopeId);
-    return published.length > 0 ? "rules-editor" : "course-editor";
+    await this.scopeChain(db, kind, scopeId);
+    if (lock) {
+      // Lock every course under the scope, governed or not: a draft one may
+      // be published concurrently.
+      const ids = await this.coursesOfScope(db, kind, scopeId);
+      if (ids.length > 0)
+        await db
+          .select({ id: learningCourses.id })
+          .from(learningCourses)
+          .where(inArray(learningCourses.id, ids))
+          .for("update");
+    }
+    const governed = await governedCoursesUnder(db, kind, scopeId);
+    return governed.length > 0 ? "rules-editor" : "course-editor";
+  }
+
+  /** The ids of the courses whose items resolve through a non-platform scope. */
+  private async coursesOfScope(
+    db: LearningServerDeps["db"] | LearningTx,
+    kind: Exclude<LearningScopeKind, "platform">,
+    scopeId: string,
+  ): Promise<string[]> {
+    if (kind === "school")
+      return (
+        await db
+          .select({ id: learningCourses.id })
+          .from(learningCourses)
+          .where(eq(learningCourses.schoolId, scopeId))
+      ).map((r) => r.id);
+    const course =
+      kind === "course"
+        ? await courseById(db, scopeId)
+        : kind === "module"
+          ? (await courseOfModule(db, scopeId))?.course
+          : kind === "lesson"
+            ? (await courseOfLesson(db, scopeId))?.course
+            : (await courseOfStep(db, scopeId))?.course;
+    return course ? [course.id] : [];
   }
 
   /** EARS-31 — the change dialog's count under the new values; nothing is written. */
@@ -1020,8 +1085,8 @@ export class LearningAdminService {
     values: LearningSettingValues,
     change: LearningRuleChangeInput,
   ): Promise<string | null> {
-    const published = await publishedCoursesUnder(tx, kind, scopeId);
-    if (published.length === 0) return null;
+    const governed = await governedCoursesUnder(tx, kind, scopeId);
+    if (governed.length === 0) return null;
     const [current] = await tx
       .select({ values: learningRuleLayers.values })
       .from(learningRuleLayers)
@@ -1054,7 +1119,7 @@ export class LearningAdminService {
     change: LearningRuleChangeInput = DEFAULT_RULE_CHANGE,
   ): Promise<LearningCommandResult<LearningScopeRules>> {
     const { result, ruleChangeId } = await this.deps.transaction(async (tx) => {
-      await this.scopeChain(tx, kind, scopeId);
+      change.authorize?.(await this.authorityIn(tx, kind, scopeId, true));
       const [preset] = await tx
         .select()
         .from(learningPresets)

@@ -5263,6 +5263,112 @@
                           }
                         ]
                       },
+                      "statusReason": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                            "type": "string"
+                          },
+                          "changed": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "after": {},
+                                "before": {},
+                                "key": {
+                                  "enum": [
+                                    "completion.step",
+                                    "completion.lesson",
+                                    "completion.module",
+                                    "completion.course",
+                                    "viewed.video.percent",
+                                    "viewed.podcast.percent",
+                                    "unlock",
+                                    "order",
+                                    "lockedVisibility",
+                                    "test.threshold",
+                                    "test.attempts",
+                                    "test.pauseMin",
+                                    "test.questions",
+                                    "test.exitRequired",
+                                    "test.entryRequired",
+                                    "test.entryCounts",
+                                    "testOut.allowed",
+                                    "testOut.pauseMin",
+                                    "repeat.allowed",
+                                    "progress.maxPlaybackRate",
+                                    "progress.slackSec",
+                                    "course.deliveryMode",
+                                    "course.moduleSize",
+                                    "course.closingClub",
+                                    "course.clubInCompletion"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["key", "before", "after"],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "needed": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "completionSentence": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "enum": [
+                                  "done",
+                                  "current",
+                                  "open",
+                                  "locked",
+                                  "test-out-reachable"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": ["status", "completionSentence"],
+                            "type": "object"
+                          },
+                          "ruleChangeId": {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          "scope": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "enum": [
+                                  "platform",
+                                  "school",
+                                  "course",
+                                  "module",
+                                  "lesson",
+                                  "step"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind", "id"],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "ruleChangeId",
+                          "at",
+                          "scope",
+                          "changed",
+                          "needed"
+                        ],
+                        "type": "object"
+                      },
                       "stepCount": {
                         "maximum": 9007199254740991,
                         "minimum": -9007199254740991,
@@ -6032,6 +6138,112 @@
                   }
                 ]
               },
+              "statusReason": {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "changed": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "after": {},
+                        "before": {},
+                        "key": {
+                          "enum": [
+                            "completion.step",
+                            "completion.lesson",
+                            "completion.module",
+                            "completion.course",
+                            "viewed.video.percent",
+                            "viewed.podcast.percent",
+                            "unlock",
+                            "order",
+                            "lockedVisibility",
+                            "test.threshold",
+                            "test.attempts",
+                            "test.pauseMin",
+                            "test.questions",
+                            "test.exitRequired",
+                            "test.entryRequired",
+                            "test.entryCounts",
+                            "testOut.allowed",
+                            "testOut.pauseMin",
+                            "repeat.allowed",
+                            "progress.maxPlaybackRate",
+                            "progress.slackSec",
+                            "course.deliveryMode",
+                            "course.moduleSize",
+                            "course.closingClub",
+                            "course.clubInCompletion"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "before", "after"],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "needed": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "completionSentence": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "enum": [
+                          "done",
+                          "current",
+                          "open",
+                          "locked",
+                          "test-out-reachable"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": ["status", "completionSentence"],
+                    "type": "object"
+                  },
+                  "ruleChangeId": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "scope": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "platform",
+                          "school",
+                          "course",
+                          "module",
+                          "lesson",
+                          "step"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "id"],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "ruleChangeId",
+                  "at",
+                  "scope",
+                  "changed",
+                  "needed"
+                ],
+                "type": "object"
+              },
               "stepCount": {
                 "maximum": 9007199254740991,
                 "minimum": -9007199254740991,
@@ -6292,6 +6504,292 @@
         },
         "required": ["id", "courseId", "position", "title", "version"],
         "type": "object"
+      },
+      "LearningPresetDto": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": false,
+            "properties": {
+              "completion.course": {
+                "$ref": "#/components/schemas/LearningPresetDto__schema0"
+              },
+              "completion.lesson": {
+                "$ref": "#/components/schemas/LearningPresetDto__schema0"
+              },
+              "completion.module": {
+                "$ref": "#/components/schemas/LearningPresetDto__schema0"
+              },
+              "completion.step": {
+                "$ref": "#/components/schemas/LearningPresetDto__schema0"
+              },
+              "course.closingClub": {
+                "type": "boolean"
+              },
+              "course.clubInCompletion": {
+                "type": "boolean"
+              },
+              "course.deliveryMode": {
+                "enum": ["online", "offline", "open"],
+                "type": "string"
+              },
+              "course.moduleSize": {
+                "maximum": 50,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "lockedVisibility": {
+                "enum": ["hidden", "locked"],
+                "type": "string"
+              },
+              "order": {
+                "enum": ["strict", "free"],
+                "type": "string"
+              },
+              "progress.maxPlaybackRate": {
+                "maximum": 4,
+                "minimum": 1,
+                "type": "number"
+              },
+              "progress.slackSec": {
+                "maximum": 600,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "repeat.allowed": {
+                "type": "boolean"
+              },
+              "test.attempts": {
+                "anyOf": [
+                  {
+                    "maximum": 100,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "const": "unlimited",
+                    "type": "string"
+                  }
+                ]
+              },
+              "test.entryCounts": {
+                "type": "boolean"
+              },
+              "test.entryRequired": {
+                "type": "boolean"
+              },
+              "test.exitRequired": {
+                "type": "boolean"
+              },
+              "test.pauseMin": {
+                "maximum": 525600,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "test.questions": {
+                "anyOf": [
+                  {
+                    "maximum": 200,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "const": "all",
+                    "type": "string"
+                  }
+                ]
+              },
+              "test.threshold": {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "testOut.allowed": {
+                "type": "boolean"
+              },
+              "testOut.pauseMin": {
+                "maximum": 525600,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unlock": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "immediate",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "after-previous",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "instant": {
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "from-date",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "instant"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "expression",
+                        "type": "string"
+                      },
+                      "rule": {
+                        "$ref": "#/components/schemas/LearningPresetDto__schema0"
+                      }
+                    },
+                    "required": ["kind", "rule"],
+                    "type": "object"
+                  }
+                ]
+              },
+              "viewed.podcast.percent": {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "viewed.video.percent": {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "version": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": ["id", "name", "values", "version"],
+        "type": "object"
+      },
+      "LearningPresetDto__schema0": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "condition": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "module": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "percent": {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "step": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "test": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["condition"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "all": {
+                "items": {
+                  "$ref": "#/components/schemas/LearningPresetDto__schema0"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": ["all"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "any": {
+                "items": {
+                  "$ref": "#/components/schemas/LearningPresetDto__schema0"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": ["any"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "nOf": {
+                "additionalProperties": false,
+                "properties": {
+                  "n": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "of": {
+                    "items": {
+                      "$ref": "#/components/schemas/LearningPresetDto__schema0"
+                    },
+                    "maxItems": 20,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": ["n", "of"],
+                "type": "object"
+              }
+            },
+            "required": ["nOf"],
+            "type": "object"
+          }
+        ]
       },
       "LearningPresetListDto": {
         "additionalProperties": false,
@@ -6588,6 +7086,28 @@
             "type": "object"
           }
         ]
+      },
+      "LearningRuleChangePreviewDto": {
+        "additionalProperties": false,
+        "properties": {
+          "affectedDoctors": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toDone": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toNotDone": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": ["affectedDoctors", "toDone", "toNotDone"],
+        "type": "object"
       },
       "LearningSchoolAdminDto": {
         "additionalProperties": false,
@@ -10275,7 +10795,8 @@
               "platform_admin",
               "event-registrar",
               "congress-program-committee",
-              "broadcast_director"
+              "broadcast_director",
+              "learning_rules_editor"
             ],
             "type": "string"
           }
@@ -10340,7 +10861,8 @@
                   "platform_admin",
                   "event-registrar",
                   "congress-program-committee",
-                  "broadcast_director"
+                  "broadcast_director",
+                  "learning_rules_editor"
                 ],
                 "type": "string"
               },
@@ -10425,7 +10947,8 @@
                     "platform_admin",
                     "event-registrar",
                     "congress-program-committee",
-                    "broadcast_director"
+                    "broadcast_director",
+                    "learning_rules_editor"
                   ],
                   "type": "string"
                 },
@@ -10464,7 +10987,8 @@
               "platform_admin",
               "event-registrar",
               "congress-program-committee",
-              "broadcast_director"
+              "broadcast_director",
+              "learning_rules_editor"
             ],
             "type": "string"
           },
@@ -13375,6 +13899,60 @@
         "tags": ["LearningAdmin"]
       }
     },
+    "/v1/admin/learning/presets/{id}": {
+      "get": {
+        "operationId": "LearningAdminController_preset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningPresetDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      },
+      "put": {
+        "operationId": "LearningAdminController_updatePreset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningPresetDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
     "/v1/admin/learning/rules/{scopeKind}/{scopeId}": {
       "get": {
         "operationId": "LearningAdminController_rules",
@@ -13472,6 +14050,42 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LearningScopeRulesDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["LearningAdmin"]
+      }
+    },
+    "/v1/admin/learning/rules/{scopeKind}/{scopeId}/preview": {
+      "post": {
+        "operationId": "LearningAdminController_previewRules",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scopeKind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scopeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningRuleChangePreviewDto"
                 }
               }
             },

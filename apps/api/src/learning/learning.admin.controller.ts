@@ -42,6 +42,7 @@ import {
   LearningAdminService,
   type LearningCommandResult,
   type LearningComplete,
+  type LearningRulesAuthority,
 } from "@ds/learning/server";
 import type { z } from "zod";
 import { Authz } from "../authz/index.js";
@@ -624,6 +625,7 @@ export class LearningAdminController {
         this.admin.setScopeValues(kind, scopeId, payload.values, v, complete, {
           earnedProgress: payload.earnedProgress,
           actorSub: actorSub(req),
+          authorize: (needed) => assertRulesAuthority(req, needed),
         }),
     );
   }
@@ -674,29 +676,28 @@ export class LearningAdminController {
         this.admin.applyPreset(kind, scopeId, payload.presetId, v, complete, {
           earnedProgress: "keep",
           actorSub: actorSub(req),
+          authorize: (needed) => assertRulesAuthority(req, needed),
         }),
     );
   }
 
   /**
-   * EARS-30 — a draft course's scopes take the staff who edit the course
-   * (`platform_admin`); a scope a published course resolves through, and the
-   * platform layer, take `learning_rules_editor`. Decided before validation,
-   * so a refused caller learns nothing about the values.
+   * EARS-30 — a never-published course's scopes take the staff who edit the
+   * course (`platform_admin`); a scope a once-published course resolves
+   * through (`first_published_at`, kept after an unpublish), and the platform
+   * layer, take `learning_rules_editor`. Checked before validation, so a
+   * refused caller learns nothing about the values; a save checks it again
+   * inside its transaction under the course row lock.
    */
   private async requireRulesAuthority(
     req: FastifyRequest,
     kind: LearningScopeKind,
     scopeId: string,
   ): Promise<void> {
-    const needed = await adminCommand(() =>
-      this.admin.rulesAuthority(kind, scopeId),
+    assertRulesAuthority(
+      req,
+      await adminCommand(() => this.admin.rulesAuthority(kind, scopeId)),
     );
-    const roles = principalRoles(req);
-    if (needed === "rules-editor" && !roles.includes("learning_rules_editor"))
-      throw new AdminAuthorityException("LEARNING_RULES_EDITOR_REQUIRED");
-    if (needed === "course-editor" && !roles.includes("platform_admin"))
-      throw new AdminAuthorityException("PLATFORM_ADMIN_REQUIRED");
   }
 
   // ── The shared command envelope (012) ─────────────────────────────────────
@@ -748,6 +749,17 @@ export class LearningAdminController {
     if (result.location) void reply.header("location", result.location);
     return result.body;
   }
+}
+
+function assertRulesAuthority(
+  req: FastifyRequest,
+  needed: LearningRulesAuthority,
+): void {
+  const roles = principalRoles(req);
+  if (needed === "rules-editor" && !roles.includes("learning_rules_editor"))
+    throw new AdminAuthorityException("LEARNING_RULES_EDITOR_REQUIRED");
+  if (needed === "course-editor" && !roles.includes("platform_admin"))
+    throw new AdminAuthorityException("PLATFORM_ADMIN_REQUIRED");
 }
 
 interface StepFile {

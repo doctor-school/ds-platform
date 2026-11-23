@@ -8,6 +8,7 @@ import {
   call,
   doctor,
   eventId,
+  publish,
   type BuiltCourse,
   type Harness,
   type Problem,
@@ -539,6 +540,98 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(
         (await lessonRead(c, other.headers)).body.lesson.state.status,
       ).not.toBe("done");
+    });
+
+    // ── EARS-30, EARS-31 — a once-published course stays governed ──────────
+
+    const courseState = async (
+      c: BuiltCourse,
+      verb: "publish" | "unpublish",
+    ) => {
+      const course = await admin(h, "GET", `/courses/${c.courseId}`);
+      const moved = await admin(h, "POST", `/courses/${c.courseId}/${verb}`, {
+        ifMatch: course.etag!,
+      });
+      expect(moved.status, JSON.stringify(moved.body)).toBe(200);
+    };
+
+    it("EARS-30: an unpublished course that was once published still takes `learning_rules_editor`; `platform_admin` alone is refused", async () => {
+      const c = await buildCourse(h);
+      await courseState(c, "unpublish");
+      const before = await admin<Rules>(
+        h,
+        "GET",
+        `/rules/course/${c.courseId}`,
+      );
+      const refused = await setRules(
+        h,
+        "course",
+        c.courseId,
+        { "test.threshold": 60 },
+        { sid: adminOnly },
+      );
+      expect(refused.status).toBe(403);
+      expect((refused.body as Problem).errorCode).toBe(
+        "LEARNING_RULES_EDITOR_REQUIRED",
+      );
+      const after = await admin<Rules>(h, "GET", `/rules/course/${c.courseId}`);
+      expect(after.body.layerVersion).toBe(before.body.layerVersion);
+      expect(
+        (
+          await setRules(
+            h,
+            "lesson",
+            c.lessonId,
+            { "test.threshold": 60 },
+            { sid: adminOnly },
+          )
+        ).status,
+      ).toBe(403);
+    });
+
+    it("EARS-31: a rule change while the course is unpublished is a recorded rule change; the republished course keeps earned completion", async () => {
+      const { c, d } = await finishedAtHalf();
+      const changesBefore = (await changesOf(c.courseId)).length;
+      await courseState(c, "unpublish");
+      const saved = await setRules(h, "course", c.courseId, {
+        "test.threshold": 80,
+      });
+      expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+      await courseState(c, "publish");
+
+      const changes = await changesOf(c.courseId);
+      expect(changes).toHaveLength(changesBefore + 1);
+      const change = changes.at(-1)!;
+      expect(change).toMatchObject({ earned_progress: "keep" });
+      expect(change.before).toMatchObject({ "test.threshold": 50 });
+      expect(change.after).toMatchObject({ "test.threshold": 80 });
+      expect(change.recomputed_at).not.toBeNull();
+      const kept = await h.pool.query<{ item_ref: string }>(
+        "SELECT item_ref FROM learning_facts WHERE person_id = $1 AND kind = 'completion-kept' AND data ->> 'ruleChangeId' = $2",
+        [d.personId, change.id],
+      );
+      expect(kept.rows.map((r) => r.item_ref)).toContain(c.lessonId);
+      expect((await lessonRead(c, d.headers)).body.lesson.state.status).toBe(
+        "done",
+      );
+    });
+
+    it("EARS-30: the first publish stamps first_published_at and an unpublish never clears it", async () => {
+      const c = await buildCourse(h, { publish: false });
+      const stamp = async () =>
+        (
+          await h.pool.query<{ first_published_at: Date | null }>(
+            "SELECT first_published_at FROM learning_courses WHERE id = $1",
+            [c.courseId],
+          )
+        ).rows[0]!.first_published_at;
+      expect(await stamp()).toBeNull();
+      await publish(h, c);
+      const first = await stamp();
+      expect(first).not.toBeNull();
+      await courseState(c, "unpublish");
+      await courseState(c, "publish");
+      expect((await stamp())?.toISOString()).toBe(first!.toISOString());
     });
   },
 );

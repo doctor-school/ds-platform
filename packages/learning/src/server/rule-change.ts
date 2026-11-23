@@ -13,7 +13,7 @@ import type {
   LearningSettingValues,
   LearningStatusReason,
 } from "@ds/schemas";
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import {
   evaluateCourse,
   type LearningCourseEvaluator,
@@ -54,29 +54,36 @@ type Handle = LearningServerDeps["db"] | LearningTx;
 /** Doctors recomputed per pass; each doctor is its own short transaction. */
 export const RULE_CHANGE_BATCH = 50;
 
-/** Every published course whose items resolve through the scope (EARS-5). */
-export async function publishedCoursesUnder(
+/** Every once-published course whose items resolve through the scope (EARS-5). */
+export async function governedCoursesUnder(
   db: Handle,
   kind: LearningScopeKind,
   scopeId: string,
+  opts: { lock?: boolean } = {},
 ): Promise<LearningCourseRow[]> {
-  const published = eq(learningCourses.state, "published");
-  if (kind === "platform")
-    return db.select().from(learningCourses).where(published);
-  if (kind === "school")
-    return db
-      .select()
-      .from(learningCourses)
-      .where(and(published, eq(learningCourses.schoolId, scopeId)));
-  const course =
-    kind === "course"
-      ? await courseById(db, scopeId)
-      : kind === "module"
-        ? (await courseOfModule(db, scopeId))?.course
-        : kind === "lesson"
-          ? (await courseOfLesson(db, scopeId))?.course
-          : (await courseOfStep(db, scopeId))?.course;
-  return course?.state === "published" ? [course] : [];
+  // EARS-30, EARS-31 — a course once published (`first_published_at`, never
+  // cleared) keeps its doctors' progress whatever its current state, so its
+  // rules stay governed as published: an unpublish does not turn them into a
+  // draft's.
+  const governed = isNotNull(learningCourses.firstPublishedAt);
+  let where;
+  if (kind === "platform") where = governed;
+  else if (kind === "school")
+    where = and(governed, eq(learningCourses.schoolId, scopeId));
+  else {
+    const course =
+      kind === "course"
+        ? await courseById(db, scopeId)
+        : kind === "module"
+          ? (await courseOfModule(db, scopeId))?.course
+          : kind === "lesson"
+            ? (await courseOfLesson(db, scopeId))?.course
+            : (await courseOfStep(db, scopeId))?.course;
+    if (!course) return [];
+    where = and(governed, eq(learningCourses.id, course.id));
+  }
+  const query = db.select().from(learningCourses).where(where);
+  return opts.lock ? query.for("update") : query;
 }
 
 /** The doctors holding any fact on a course's items. */
@@ -145,7 +152,7 @@ async function assess(
   now: Date,
 ): Promise<DoctorAssessment[]> {
   const out: DoctorAssessment[] = [];
-  for (const course of await publishedCoursesUnder(db, kind, scopeId)) {
+  for (const course of await governedCoursesUnder(db, kind, scopeId)) {
     const loaded = await loadCourseTree(db, course, true);
     const oldLayers = await loadLayersFor(db, scopesOf(loaded));
     const newLayers = oldLayers.withValues(kind, scopeId, values);
@@ -256,7 +263,7 @@ export async function recomputeRuleChange(
     .where(eq(learningRuleChanges.id, ruleChangeId));
   if (!change) return;
   const now = () => deps.now?.() ?? new Date();
-  const courses = await publishedCoursesUnder(
+  const courses = await governedCoursesUnder(
     deps.db,
     change.scopeKind as LearningScopeKind,
     change.scopeId,

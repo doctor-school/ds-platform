@@ -1380,6 +1380,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/learning/presets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LearningAdminController_preset"];
+        put: operations["LearningAdminController_updatePreset"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/learning/rules/{scopeKind}/{scopeId}": {
         parameters: {
             query?: never;
@@ -1406,6 +1422,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["LearningAdminController_applyPreset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/learning/rules/{scopeKind}/{scopeId}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LearningAdminController_previewRules"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4592,6 +4624,28 @@ export interface components {
                         /** @constant */
                         status: "test-out-reachable";
                     };
+                    statusReason?: {
+                        /** Format: date-time */
+                        at: string;
+                        changed: {
+                            after: unknown;
+                            before: unknown;
+                            /** @enum {string} */
+                            key: "completion.step" | "completion.lesson" | "completion.module" | "completion.course" | "viewed.video.percent" | "viewed.podcast.percent" | "unlock" | "order" | "lockedVisibility" | "test.threshold" | "test.attempts" | "test.pauseMin" | "test.questions" | "test.exitRequired" | "test.entryRequired" | "test.entryCounts" | "testOut.allowed" | "testOut.pauseMin" | "repeat.allowed" | "progress.maxPlaybackRate" | "progress.slackSec" | "course.deliveryMode" | "course.moduleSize" | "course.closingClub" | "course.clubInCompletion";
+                        }[];
+                        needed: {
+                            completionSentence: string;
+                            /** @enum {string} */
+                            status: "done" | "current" | "open" | "locked" | "test-out-reachable";
+                        };
+                        /** Format: uuid */
+                        ruleChangeId: string;
+                        scope: {
+                            id: string;
+                            /** @enum {string} */
+                            kind: "platform" | "school" | "course" | "module" | "lesson" | "step";
+                        };
+                    };
                     stepCount: number;
                     steps: {
                         durationMin: number;
@@ -4780,6 +4834,28 @@ export interface components {
                     /** @constant */
                     status: "test-out-reachable";
                 };
+                statusReason?: {
+                    /** Format: date-time */
+                    at: string;
+                    changed: {
+                        after: unknown;
+                        before: unknown;
+                        /** @enum {string} */
+                        key: "completion.step" | "completion.lesson" | "completion.module" | "completion.course" | "viewed.video.percent" | "viewed.podcast.percent" | "unlock" | "order" | "lockedVisibility" | "test.threshold" | "test.attempts" | "test.pauseMin" | "test.questions" | "test.exitRequired" | "test.entryRequired" | "test.entryCounts" | "testOut.allowed" | "testOut.pauseMin" | "repeat.allowed" | "progress.maxPlaybackRate" | "progress.slackSec" | "course.deliveryMode" | "course.moduleSize" | "course.closingClub" | "course.clubInCompletion";
+                    }[];
+                    needed: {
+                        completionSentence: string;
+                        /** @enum {string} */
+                        status: "done" | "current" | "open" | "locked" | "test-out-reachable";
+                    };
+                    /** Format: uuid */
+                    ruleChangeId: string;
+                    scope: {
+                        id: string;
+                        /** @enum {string} */
+                        kind: "platform" | "school" | "course" | "module" | "lesson" | "step";
+                    };
+                };
                 stepCount: number;
                 teaser: string;
                 title: string;
@@ -4842,6 +4918,75 @@ export interface components {
             position: number;
             title: string;
             version: number;
+        };
+        LearningPresetDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            values: {
+                "completion.course"?: components["schemas"]["LearningPresetDto__schema0"];
+                "completion.lesson"?: components["schemas"]["LearningPresetDto__schema0"];
+                "completion.module"?: components["schemas"]["LearningPresetDto__schema0"];
+                "completion.step"?: components["schemas"]["LearningPresetDto__schema0"];
+                "course.closingClub"?: boolean;
+                "course.clubInCompletion"?: boolean;
+                /** @enum {string} */
+                "course.deliveryMode"?: "online" | "offline" | "open";
+                "course.moduleSize"?: number;
+                /** @enum {string} */
+                lockedVisibility?: "hidden" | "locked";
+                /** @enum {string} */
+                order?: "strict" | "free";
+                "progress.maxPlaybackRate"?: number;
+                "progress.slackSec"?: number;
+                "repeat.allowed"?: boolean;
+                "test.attempts"?: number | "unlimited";
+                "test.entryCounts"?: boolean;
+                "test.entryRequired"?: boolean;
+                "test.exitRequired"?: boolean;
+                "test.pauseMin"?: number;
+                "test.questions"?: number | "all";
+                "test.threshold"?: number;
+                "testOut.allowed"?: boolean;
+                "testOut.pauseMin"?: number;
+                unlock?: {
+                    /** @constant */
+                    kind: "immediate";
+                } | {
+                    /** @constant */
+                    kind: "after-previous";
+                } | {
+                    /** Format: date-time */
+                    instant: string;
+                    /** @constant */
+                    kind: "from-date";
+                } | {
+                    /** @constant */
+                    kind: "expression";
+                    rule: components["schemas"]["LearningPresetDto__schema0"];
+                };
+                "viewed.podcast.percent"?: number;
+                "viewed.video.percent"?: number;
+            };
+            version: number;
+        };
+        LearningPresetDto__schema0: {
+            condition: string;
+            /** Format: uuid */
+            module?: string;
+            percent?: number;
+            /** Format: uuid */
+            step?: string;
+            test?: string;
+        } | {
+            all: components["schemas"]["LearningPresetDto__schema0"][];
+        } | {
+            any: components["schemas"]["LearningPresetDto__schema0"][];
+        } | {
+            nOf: {
+                n: number;
+                of: components["schemas"]["LearningPresetDto__schema0"][];
+            };
         };
         LearningPresetListDto: {
             data: {
@@ -4913,6 +5058,11 @@ export interface components {
                 n: number;
                 of: components["schemas"]["LearningPresetListDto__schema0"][];
             };
+        };
+        LearningRuleChangePreviewDto: {
+            affectedDoctors: number;
+            toDone: number;
+            toNotDone: number;
         };
         LearningSchoolAdminDto: {
             communityUrl: string | null;
@@ -5758,7 +5908,7 @@ export interface components {
             eventId?: string;
             fullName: string;
             /** @enum {string} */
-            role: "platform_admin" | "event-registrar" | "congress-program-committee" | "broadcast_director";
+            role: "platform_admin" | "event-registrar" | "congress-program-committee" | "broadcast_director" | "learning_rules_editor";
         };
         StaffAccessGrantResponseDto: {
             row: {
@@ -5768,7 +5918,7 @@ export interface components {
                 fullName: string | null;
                 revocable: boolean;
                 /** @enum {string} */
-                role: "superadmin" | "platform_admin" | "event-registrar" | "congress-program-committee" | "broadcast_director";
+                role: "superadmin" | "platform_admin" | "event-registrar" | "congress-program-committee" | "broadcast_director" | "learning_rules_editor";
                 userId: string;
             };
             temporaryPassword?: string;
@@ -5781,7 +5931,7 @@ export interface components {
                 fullName: string | null;
                 revocable: boolean;
                 /** @enum {string} */
-                role: "superadmin" | "platform_admin" | "event-registrar" | "congress-program-committee" | "broadcast_director";
+                role: "superadmin" | "platform_admin" | "event-registrar" | "congress-program-committee" | "broadcast_director" | "learning_rules_editor";
                 userId: string;
             }[];
         };
@@ -5789,7 +5939,7 @@ export interface components {
             /** Format: uuid */
             eventId?: string;
             /** @enum {string} */
-            role: "platform_admin" | "event-registrar" | "congress-program-committee" | "broadcast_director";
+            role: "platform_admin" | "event-registrar" | "congress-program-committee" | "broadcast_director" | "learning_rules_editor";
             userId: string;
         };
         TransitionEventRequestDto: {
@@ -7959,6 +8109,48 @@ export interface operations {
             };
         };
     };
+    LearningAdminController_preset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningPresetDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_updatePreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningPresetDto"];
+                };
+            };
+        };
+    };
     LearningAdminController_rules: {
         parameters: {
             query?: never;
@@ -8021,6 +8213,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LearningScopeRulesDto"];
+                };
+            };
+        };
+    };
+    LearningAdminController_previewRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scopeId: string;
+                scopeKind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningRuleChangePreviewDto"];
                 };
             };
         };

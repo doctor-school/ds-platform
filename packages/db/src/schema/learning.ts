@@ -110,6 +110,11 @@ export const learningCourses = pgTable(
     slug: text("slug").notNull().unique(),
     title: text("title").notNull(),
     state: learningState("state").notNull().default("draft"),
+    // 024 EARS-30, EARS-31 — when the course was first published; never
+    // cleared. A course once published keeps doctors' progress, so its rules
+    // stay governed as published (the rules editor, the rule-change record)
+    // whatever its current state; only a never-published draft has no learners.
+    firstPublishedAt: timestamp("first_published_at", { withTimezone: true }),
     // 023 EARS-1 — the course's descriptive data (ownership `doctor`).
     description: text("description").notNull().default(""),
     academicHours: integer("academic_hours").notNull().default(0),

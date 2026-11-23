@@ -484,6 +484,13 @@
       "when": 1795403148897,
       "tag": "0068_024_rule_change_recompute",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1795404430968,
+      "tag": "0069_024_course_first_published",
+      "breakpoints": true
     }
   ]
 }

@@ -324,11 +324,17 @@ describe("049 EARS-4 / EARS-5 «Доступы» — superadministrator and dire
       "event-registrar",
       "congress-program-committee",
       "broadcast_director",
+      "learning_rules_editor",
     ]);
     expect(STAFF_ACCESS_ROLES).not.toContain("superadmin");
     expect(staffAccessRoleTakesEvent("broadcast_director")).toBe(false);
     expect(staffAccessRoleLabelKey("broadcast_director")).toBe(
       "staffAccess.roles.broadcast_director",
+    );
+    // 024 EARS-30 — «Редактор правил обучения», global like the director.
+    expect(staffAccessRoleTakesEvent("learning_rules_editor")).toBe(false);
+    expect(staffAccessRoleLabelKey("learning_rules_editor")).toBe(
+      "staffAccess.roles.learning_rules_editor",
     );
   });
 

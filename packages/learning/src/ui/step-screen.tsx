@@ -25,7 +25,8 @@ import {
   registerHref,
   stepHref,
 } from "./host-config";
-import { LEARNING_UI_COPY as C, STEP_TYPE_LABEL, lockReasonText } from "./learning-ui-copy";
+import { LEARNING_UI_COPY as C, STEP_TYPE_LABEL, lockReasonText, statusReasonText } from "./learning-ui-copy";
+import { StatusReasonAlert } from "./node-summary";
 import { StepIcon } from "./step-icon";
 
 // 024 EARS-15, EARS-16, EARS-18 — one screen per step per
@@ -224,6 +225,12 @@ export function StepScreen({ courseSlug, config, stepId, ...initial }: StepScree
 
       <section className="px-gutter pt-8">
         <div className="mx-auto max-w-4xl">
+          {/* 024 EARS-24 — a rule change reopened the lesson: the reason until the doctor completes it again. */}
+          {lesson.signedIn && l.statusReason ? (
+            <div className="mb-6">
+              <StatusReasonAlert text={statusReasonText(l.statusReason, lesson.steps)} />
+            </div>
+          ) : null}
           {!lesson.signedIn ? (
             <GuestGate href={registerHref(config, back)} lesson={lesson} />
           ) : !current || current.state.status === "locked" || !step ? (

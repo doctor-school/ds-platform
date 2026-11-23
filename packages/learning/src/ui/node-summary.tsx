@@ -13,7 +13,8 @@ import type { PathNode } from "./path-view";
 // («Урок N · модуль M · шаг s из S · статус»), the title, the step's type and
 // meta; in the Sheet (its header names the step and where it sits): the
 // lesson's steps (canvas `materials`). Then the lesson's completion sentence
-// (EARS-17, from the lesson read), a locked node's reason and the one action
+// (EARS-17, from the lesson read), a locked node's reason, a rule change's
+// reason (EARS-24) and the one action
 // the node's state allows.
 
 export type SummaryAction = {
@@ -67,6 +68,17 @@ export interface LessonStepRow {
   label: string;
 }
 
+/** 024 EARS-24 — «Условия урока изменились» bold, then what changed and what to do now. */
+export function StatusReasonAlert({ text }: { text: { title: string; body: string } }) {
+  return (
+    <Alert variant="info">
+      <b>{text.title}</b>
+      <br />
+      {text.body}
+    </Alert>
+  );
+}
+
 export function NodeSummary({
   node,
   action,
@@ -113,6 +125,7 @@ export function NodeSummary({
         </p>
       ) : null}
       {node.reason ? <Alert variant="info">{node.reason}</Alert> : null}
+      {node.ruleChange ? <StatusReasonAlert text={node.ruleChange} /> : null}
       {action ? (
         <div>
           <Button asChild variant={action.kind === "repeat" ? "secondary" : "default"}>

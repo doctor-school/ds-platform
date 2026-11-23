@@ -1,4 +1,10 @@
-import type { LearningElementType, LearningLockReason, LearningPathStep } from "@ds/schemas";
+import type {
+  LearningElementType,
+  LearningLockReason,
+  LearningPathStep,
+  LearningSettingKey,
+  LearningStatusReason,
+} from "@ds/schemas";
 
 // 024 EARS-14…18, EARS-26 — the RU copy of the doctor's course path and step
 // screens. Every count, duration, date and threshold is built from the read;
@@ -104,6 +110,74 @@ export function lockReasonText(reason: LearningLockReason): string {
     case "registration":
       return "Чтобы пройти урок, нужна регистрация.";
   }
+}
+
+// ── 024 EARS-24 — why a lesson's status changed under the doctor ────────────
+
+const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
+
+/**
+ * A changed setting in the doctor's words: «для зачёта нужно набрать в тесте
+ * 80 % вместо 70 %». `before` null = the setting was inherited there, so only
+ * the new value is named. A setting the doctor does not meet directly (a
+ * completion expression, delivery mode…) has no phrase.
+ */
+const SETTING_PHRASE: Partial<Record<LearningSettingKey, (after: unknown, before: unknown) => string | null>> = {
+  "test.threshold": (a, b) =>
+    num(a) === null ? null : `для зачёта нужно набрать в тесте ${num(a)} %${num(b) === null ? "" : ` вместо ${num(b)} %`}`,
+  "viewed.video.percent": (a, b) =>
+    num(a) === null ? null : `видео засчитывается после просмотра ${num(a)} %${num(b) === null ? "" : ` вместо ${num(b)} %`}`,
+  "viewed.podcast.percent": (a, b) =>
+    num(a) === null ? null : `подкаст засчитывается после прослушивания ${num(a)} %${num(b) === null ? "" : ` вместо ${num(b)} %`}`,
+  order: (a) =>
+    a === "strict" ? "уроки открываются по порядку" : a === "free" ? "уроки открываются в любом порядке" : null,
+};
+
+/** A step's name in «Пройдите … ещё раз». */
+const STEP_NOUN: Record<LearningElementType, string> = {
+  video: "видео",
+  download: "материал",
+  test: "тест",
+};
+
+/**
+ * 024 EARS-24 — the reason Alert of a lesson whose status a rule change
+ * changed (canvas «Условия урока изменились»): what changed, setting by setting,
+ * then what the doctor does now — the steps the change reopened, the others
+ * kept. Built from the structured `statusReason` and the lesson's steps.
+ */
+export function statusReasonText(
+  reason: LearningStatusReason,
+  steps: readonly Pick<LearningPathStep, "type" | "state">[],
+): { title: string; body: string } {
+  const phrases = reason.changed
+    .map((c) => SETTING_PHRASE[c.key]?.(c.after, c.before) ?? null)
+    .filter((p): p is string => p !== null);
+  const changed = phrases.length > 0 ? `Теперь ${phrases.join("; ")}.` : "Изменились правила зачёта урока.";
+  let needed: string;
+  switch (reason.needed.status) {
+    case "done":
+      needed = "Урок засчитан — проходить его заново не нужно.";
+      break;
+    case "locked":
+      needed = "Урок откроется, когда будут выполнены условия курса.";
+      break;
+    default: {
+      const pending = steps.filter((s) => s.state.status !== "done");
+      const kept = pending.length > 0 && pending.length < steps.length;
+      const what =
+        pending.length === 1
+          ? STEP_NOUN[pending[0]!.type]
+          : pending.length > 1 && pending.length < steps.length
+            ? "оставшиеся шаги"
+            : "урок";
+      needed =
+        pending.length === 0 && reason.needed.completionSentence
+          ? reason.needed.completionSentence
+          : `Пройдите ${what} ещё раз${kept ? " — остальные шаги урока засчитаны" : ""}.`;
+    }
+  }
+  return { title: "Условия урока изменились", body: `${changed} ${needed}` };
 }
 
 export const LEARNING_UI_COPY = {

@@ -193,11 +193,17 @@ export async function submitSignInHostForm(
   // IS the signal that the doctor is signed in. Asserting «back on the
   // storefront» rather than a specific landing keeps the helper reusable: the
   // post-login destination is a product decision each host owns, and the
-  // caller asserts where it wanted to end up.
+  // caller asserts where it wanted to end up. The URL is the whole signal, so
+  // the wait ends at `domcontentloaded`, never `load`: a landing that mounts a
+  // third-party embed (the 014 RuTube recording) holds the top page's `load`
+  // until every request inside that frame settles, and RuTube's ad/analytics
+  // calls can hang indefinitely (#4180: D9 sat signed-in on the event page
+  // until the test timed out).
   await page.waitForURL(
     (url) =>
       (url.origin === storefrontOrigin && url.pathname !== host.loginPath) ||
       url.searchParams.has(NATIVE_SUBMIT_MARKER),
+    { waitUntil: "domcontentloaded" },
   );
   const nativeSubmit = preHydrationSubmitError(page.url(), host.loginPath);
   if (nativeSubmit) throw new Error(nativeSubmit);

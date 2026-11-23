@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { expect, type Page, type Response } from "@playwright/test";
 import { inputSecret } from "./owned-registration.js";
 import {
@@ -49,7 +50,11 @@ export async function confirmOwnedPhone(
   const field = page.getByTestId("profile-phone-code");
   if (rejectWrongCode) {
     const refused = post(page, "/v1/me/phone/confirm");
-    const wrong = `${(Number(code[0]) + 1) % 10}${code.slice(1)}`;
+    const sample = randomInt(999_999);
+    const wrong = String(sample < Number(code) ? sample : sample + 1).padStart(
+      6,
+      "0",
+    );
     await inputSecret(field, wrong);
     expect((await refused).status(), "wrong phone code refused").toBe(400);
     await expect(page.locator("#profile-phone-code-error")).toHaveText(
@@ -58,7 +63,11 @@ export async function confirmOwnedPhone(
     await expect(page.getByTestId("profile-phone-verified")).toHaveCount(0);
     await field.press("ControlOrMeta+A");
     await field.press("Backspace");
-    await expect(field).toHaveValue("");
+    await expect
+      .poll(async () => (await field.inputValue()) === "", {
+        message: "the phone code field cleared",
+      })
+      .toBe(true);
   }
 
   const confirmed = post(page, "/v1/me/phone/confirm");

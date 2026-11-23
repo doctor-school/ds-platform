@@ -159,15 +159,9 @@ export function statusReasonText(
     case "done":
       needed = "Урок засчитан — проходить его заново не нужно.";
       break;
-    case "locked": {
-      // What opens the lesson now: the first locked step's own condition.
-      const first = steps.find((s) => s.state.status === "locked")?.state;
-      needed =
-        first?.status === "locked"
-          ? lockReasonText(first.reason)
-          : "Урок откроется, когда будут выполнены условия курса.";
-      break;
-    }
+    case "locked":
+      // The lock Alert beside it already says how the lesson opens.
+      return { title: "Условия урока изменились", body: changed };
     case "test-out-reachable":
       // The lesson is reached through its test, not by passing its steps again.
       needed = "Урок будет засчитан, когда вы сдадите тест.";
@@ -188,6 +182,20 @@ export function statusReasonText(
     }
   }
   return { title: "Условия урока изменились", body: `${changed} ${needed}` };
+}
+
+/**
+ * 024 EARS-24 — whether the last failed attempt is one the rule change
+ * re-judged: the change raised the pass mark, and the score met the mark
+ * before it and misses the mark after. Any other failed attempt failed under
+ * the rules it was made under and reads «Тест не сдан».
+ */
+export function isRejudgedAttempt(reason: LearningStatusReason | undefined, score: number): boolean {
+  const mark = reason?.changed.find((c) => c.key === "test.threshold");
+  if (!mark) return false;
+  const before = num(mark.before);
+  const after = num(mark.after);
+  return before !== null && after !== null && score >= before && score < after;
 }
 
 export const LEARNING_UI_COPY = {

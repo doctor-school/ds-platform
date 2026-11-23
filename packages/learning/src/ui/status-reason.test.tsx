@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LearningCoursePath, LearningLessonRead, LearningStatusReason, LearningStepRead } from "@ds/schemas";
 
 import { CoursePath } from "./course-path";
-import { LEARNING_UI_COPY, lockReasonText, statusReasonText } from "./learning-ui-copy";
+import { LEARNING_UI_COPY, statusReasonText } from "./learning-ui-copy";
 import { buildPathView } from "./path-view";
 import { StepScreen } from "./step-screen";
 import { CONFIG, ID, coursePath, lessonRead, stubFetch, stubMatchMedia, videoStep } from "./__tests__/fixtures";
@@ -108,13 +108,14 @@ describe("024 EARS-24 — the status reason in the doctor's words", () => {
     expect(`${text.title} ${text.body} ${BODY}`).not.toMatch(/бесплатн|оплат|деньг|руб/i);
   });
 
-  it("EARS-24: a change that locks the lesson names what opens it — the first locked step's condition", () => {
+  it("EARS-24: a change that locks the lesson names only what changed — the lock Alert beside it says how it opens", () => {
     const locked = [
       { type: "video" as const, state: { status: "locked" as const, reason: { kind: "date" as const, at: "2026-12-01T09:00:00.000Z" } } },
       { type: "test" as const, state: { status: "locked" as const, reason: { kind: "previous" as const } } },
     ];
     const text = statusReasonText(reason({ needed: { status: "locked", completionSentence: "" } }), locked);
-    expect(text.body).toBe(`Теперь для зачёта нужно набрать в тесте 80 % вместо 70 %. ${lockReasonText(locked[0]!.state.reason)}`);
+    // The lock Alert next to it says how the lesson opens; the reason names only what changed.
+    expect(text.body).toBe("Теперь для зачёта нужно набрать в тесте 80 % вместо 70 %.");
     expect(text.body).not.toContain("условия курса");
   });
 
@@ -167,7 +168,7 @@ describe("024 EARS-24 — the reopened lesson on the course path", () => {
     expect(first.lockNote).toBe(LEARNING_UI_COPY.lockNote);
     expect(first.ruleChange).toEqual({
       title: TITLE,
-      body: "Теперь для зачёта нужно набрать в тесте 80 % вместо 70 %. Шаг откроется, когда будут пройдены предыдущие.",
+      body: "Теперь для зачёта нужно набрать в тесте 80 % вместо 70 %.",
     });
     expect(nodes.find((n) => n.id === ID.s3)!.lockNote).toBeNull();
   });
@@ -242,12 +243,33 @@ describe("024 EARS-24 — the reason on the lesson", () => {
     await waitFor(() => expect(screen.queryByText(TITLE)).toBeNull());
   });
 
-  it("EARS-24: the last attempt is stated against the new pass mark, not called failed", () => {
+  const withLast = (score: number): LearningStepRead => {
     const step = testStep();
-    if (step.body.type === "test") step.body.lastResult = { score: 50, passed: false };
-    render(<StepScreen courseSlug="kardio" config={CONFIG} lesson={reopenedLesson()} stepId={S1_TEST} step={step} />);
-    expect(screen.getByText("Ваш результат 50 % — теперь нужно 80 %.")).toBeInTheDocument();
+    if (step.body.type === "test") step.body.lastResult = { score, passed: false };
+    return step;
+  };
+
+  it("EARS-24: the attempt that passed at the old pass mark is stated against the new one, not called failed", () => {
+    // 75 % passed at 70 % and fails at 80 %: the rule change re-judged it.
+    render(<StepScreen courseSlug="kardio" config={CONFIG} lesson={reopenedLesson()} stepId={S1_TEST} step={withLast(75)} />);
+    expect(screen.getByText("Ваш результат 75 % — теперь нужно 80 %.")).toBeInTheDocument();
     expect(screen.queryByText(/не сдан/)).toBeNull();
+  });
+
+  it("EARS-24: an attempt that fails under the current rules reads «Тест не сдан» on a fresh read, though the reason stays", () => {
+    // 50 % failed at 70 % as well — the rule change did not re-judge it (the read after a reload).
+    render(<StepScreen courseSlug="kardio" config={CONFIG} lesson={reopenedLesson()} stepId={S1_TEST} step={withLast(50)} />);
+    expect(screen.getByText(TITLE)).toBeInTheDocument();
+    expect(screen.getByText("Тест не сдан: 50 % при пороге 80 %. Пройденные шаги сохранены.")).toBeInTheDocument();
+    expect(screen.queryByText(/теперь нужно/)).toBeNull();
+  });
+
+  it("EARS-24: when the change was not to the pass mark a failed attempt reads «Тест не сдан»", () => {
+    const lesson = reopenedLesson();
+    lesson.lesson.statusReason = reason({ changed: [{ key: "viewed.video.percent", before: 90, after: 100 }] });
+    render(<StepScreen courseSlug="kardio" config={CONFIG} lesson={lesson} stepId={S1_TEST} step={withLast(75)} />);
+    expect(screen.getByText("Тест не сдан: 75 % при пороге 80 %. Пройденные шаги сохранены.")).toBeInTheDocument();
+    expect(screen.queryByText(/теперь нужно/)).toBeNull();
   });
 
   it("EARS-24: a guest never sees a reason", () => {

@@ -6,6 +6,7 @@ import type {
   LearningAttempt,
   LearningAttemptResult,
   LearningLessonRead,
+  LearningStatusReason,
   LearningStepRead,
 } from "@ds/schemas";
 import { Alert, Badge, Button, Link, Radio, cn } from "@ds/design-system";
@@ -25,7 +26,7 @@ import {
   registerHref,
   stepHref,
 } from "./host-config";
-import { LEARNING_UI_COPY as C, STEP_TYPE_LABEL, lockReasonText, statusReasonText } from "./learning-ui-copy";
+import { LEARNING_UI_COPY as C, STEP_TYPE_LABEL, isRejudgedAttempt, lockReasonText, statusReasonText } from "./learning-ui-copy";
 import { StatusReasonAlert } from "./node-summary";
 import { StepIcon } from "./step-icon";
 
@@ -248,7 +249,7 @@ export function StepScreen({ courseSlug, config, stepId, ...initial }: StepScree
                 <h2 className="m-0 text-xl font-extrabold leading-tight">{step.step.title}</h2>
               </header>
               <div className="flex flex-col gap-4 p-6">
-                <StepBody step={step} onChanged={onChanged} ruleChanged={!!l.statusReason} />
+                <StepBody step={step} onChanged={onChanged} statusReason={l.statusReason} />
               </div>
               <footer className="flex flex-wrap items-center gap-4 border-t-2 border-border px-6 py-4">
                 <div className="flex min-w-0 flex-1 basis-64 flex-col gap-1">
@@ -309,14 +310,14 @@ function GuestGate({ href, lesson }: { href: string; lesson: LearningLessonRead 
   );
 }
 
-function StepBody({ step, onChanged, ruleChanged }: { step: LearningStepRead; onChanged: OnChanged; ruleChanged: boolean }) {
+function StepBody({ step, onChanged, statusReason }: { step: LearningStepRead; onChanged: OnChanged; statusReason: LearningStatusReason | undefined }) {
   switch (step.body.type) {
     case "video":
       return <VideoBody step={step} body={step.body} onChanged={onChanged} />;
     case "download":
       return <DownloadBody step={step} body={step.body} onChanged={onChanged} />;
     case "test":
-      return <TestBody body={step.body} onChanged={onChanged} ruleChanged={ruleChanged} />;
+      return <TestBody body={step.body} onChanged={onChanged} statusReason={statusReason} />;
   }
 }
 
@@ -525,7 +526,7 @@ function DownloadBody({
 }
 
 /** EARS-18 — the exit test: start (an open attempt comes back), one question at a time, submit, the result against the threshold. */
-function TestBody({ body, onChanged, ruleChanged }: { body: Body<"test">; onChanged: OnChanged; ruleChanged: boolean }) {
+function TestBody({ body, onChanged, statusReason }: { body: Body<"test">; onChanged: OnChanged; statusReason: LearningStatusReason | undefined }) {
   const hydrated = useHydrated();
   const [attempt, setAttempt] = useState<LearningAttempt | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -600,7 +601,7 @@ function TestBody({ body, onChanged, ruleChanged }: { body: Body<"test">; onChan
           <p className="m-0 text-sm font-semibold text-muted-foreground">
             {body.lastResult.passed
               ? C.passed(body.lastResult.score, body.threshold)
-              : ruleChanged
+              : isRejudgedAttempt(statusReason, body.lastResult.score)
                 ? // 024 EARS-24 — re-judged under the new pass mark the Alert above names.
                   C.rejudged(body.lastResult.score, body.threshold)
                 : C.failed(body.lastResult.score, body.threshold)}

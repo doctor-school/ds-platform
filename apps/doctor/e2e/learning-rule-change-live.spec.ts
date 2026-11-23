@@ -35,8 +35,9 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  *    Alert — what changed (70 → 80 is built from the rule change, here 50 → 80)
  *    and what to do now — the last attempt reads against the new mark, and the
  *    progress counts no done lesson; lesson 2, locked again, keeps its unlock
- *    line on the path and names what opens it in its summary;
- *  - one doctor re-passes the test at 100 %: the reason leaves the lesson in
+ *    line on the path; its summary names what changed beside the lock Alert;
+ *  - one doctor fails the test at 0 % — «не сдан», also after a reload — then
+ *    re-passes it at 100 %: the reason leaves the lesson in
  *    place and the path, the lesson counts again; another doctor still sees it.
  *
  * Canvas state `причина = правило изменилось` of `design-source/doctor-course.dc.html`
@@ -82,7 +83,8 @@ const TITLE = "Условия урока изменились";
 const BODY =
   "Теперь для зачёта нужно набрать в тесте 80 % вместо 50 %. Пройдите тест ещё раз — остальные шаги урока засчитаны.";
 /** Lesson 2, locked again behind lesson 1: what changed, then what opens it. */
-const LOCKED_BODY = "Теперь для зачёта нужно набрать в тесте 80 % вместо 50 %. Шаг откроется, когда будут пройдены предыдущие.";
+// The lock Alert beside it says how the lesson opens; the reason names only what changed.
+const LOCKED_BODY = "Теперь для зачёта нужно набрать в тесте 80 % вместо 50 %.";
 const UNLOCK_LINE = "Откроется после предыдущего шага";
 
 /** The YouTube stand-in of `learning-path-live.spec.ts`: ready, then the clock at 2× once asked to play. */
@@ -384,13 +386,17 @@ test("024 EARS-24 — a rule change reopens a finished lesson and the doctor see
   await axeClean(first);
   await shoot(first, "step-rule-changed-1280");
 
-  // Reject: 50 % is no longer enough — the reason stays.
-  await takeTest(first, 1);
-  await expect(first.getByText("Тест не сдан: 50 % при пороге 80 %.", { exact: false })).toBeVisible();
+  // Reject: an attempt that fails under the new mark (0 %, under the old one too) — the reason stays.
+  await takeTest(first, 0);
+  await expect(first.getByText("Тест не сдан: 0 % при пороге 80 %.", { exact: false })).toBeVisible();
   await expectReasonAlert(first);
+  // After a reload that attempt is still «не сдан» — only the attempt the change re-judged reads «теперь нужно».
+  await first.reload();
+  await expectReasonAlert(first);
+  await expect(first.getByText("Тест не сдан: 0 % при пороге 80 %. Пройденные шаги сохранены.", { exact: true })).toBeVisible();
+  await expect(first.getByText(/теперь нужно/)).toHaveCount(0);
   // Accept: 100 % completes the lesson — the reason leaves in place.
-  await first.getByRole("button", { name: "Повторить тест" }).click();
-  await takeTest(first, 2, false);
+  await takeTest(first, 2);
   await expect(first.getByText("Тест сдан: 100 % при пороге 80 %")).toBeVisible();
   await expect(first.getByText(TITLE)).toHaveCount(0);
   await shoot(first, "step-rule-change-cleared-1280");

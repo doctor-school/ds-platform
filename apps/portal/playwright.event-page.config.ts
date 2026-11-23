@@ -5,6 +5,8 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  * Academy event-page LIVE tier (#2996) — the twin of the doctor host's
  * `apps/doctor/playwright.event-page.config.ts`.
  *
+ * `e2e/event-page.e2e.spec.ts` (004 EARS-4) checks the live registration
+ * link and the hero plate at narrow widths across lifecycle states.
  * `e2e/event-page-020.e2e.spec.ts` (020 EARS-1/8/9/19) and
  * `e2e/webinar-archive.spec.ts` (014 EARS-4/5/7/8/21) read event slugs whose
  * shape they assert: an upcoming event with speakers, an ended one with a
@@ -21,6 +23,8 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  * block is this list):
  *   E2E_PORTAL_URL=http://localhost:3001 \
  *   E2E_WEBINAR_SLUG=seed-005-upcoming E2E_WEBINAR_SLUG_ENDED=seed-005-ended \
+ *   E2E_WEBINAR_SLUG_LIVE=seed-005-live E2E_WEBINAR_SLUG_HIDDEN=seed-005-hidden \
+ *   E2E_WEBINAR_SLUG_ARCHIVE=seed-006-legacy-archived \
  *   E2E_ENDED_WEBINAR_SLUG=seed-014-ended-month-ago \
  *   E2E_PREPARING_WEBINAR_SLUG=seed-005-ended-preparing \
  *   E2E_PREPARING_UNDATED_WEBINAR_SLUG=seed-005-ended \
@@ -31,7 +35,7 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  */
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /(^|[/\\])(event-page-020\.e2e|event-page-canvas-structure\.e2e|webinar-archive)\.spec\.ts$/,
+  testMatch: /(^|[/\\])(event-page\.e2e|event-page-020\.e2e|event-page-canvas-structure\.e2e|webinar-archive)\.spec\.ts$/,
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

@@ -540,7 +540,7 @@ them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 | `live/admin/event-lifecycle` | `admin/playwright.flows.config.ts` (`stage-event-lifecycle.spec.ts`, `stage-congress-review.spec.ts`, `stage-recording-publish.spec.ts`) | yes           |
 | `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                                                                            | yes           |
 | `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                                                                               | yes           |
-| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)                                                           | yes           |
+| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (event page, narrow hero plate, canvas structure, archive)                                      | yes           |
 | `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                                                                              | yes           |
 | `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                                                                                   | yes           |
 | `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                                                                                 | yes           |

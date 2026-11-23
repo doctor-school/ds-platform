@@ -32,8 +32,8 @@ import { defineBddConfig } from "playwright-bdd";
  *   E2E_WEBINAR_SLUG=seed-005-upcoming E2E_ONE_TAP_SLUG=seed-005-upcoming-2 \
  *   E2E_WEBINAR_SLUG_ENDED=seed-005-ended E2E_WEBINAR_SLUG_HIDDEN=seed-005-hidden \
  *   pnpm --filter @ds/portal test:e2e --project=bdd
- * The event-page specs (`event-page-020.e2e.spec.ts`, `webinar-archive.spec.ts`)
- * run on their own tier, `playwright.event-page.config.ts`, whose header lists
+ * The seeded event-page specs run on their own tier,
+ * `playwright.event-page.config.ts`, whose header lists
  * the `seed:events` slug for each of their env vars (#2996).
  * `E2E_PORTAL_URL` must point at a portal whose `/v1/*` rewrite reaches the api
  * (set `API_PROXY_TARGET` when starting that portal). We do NOT start the portal
@@ -116,6 +116,7 @@ const OWN_CONFIG_SPECS = [
   /a11y\//,
   /a11y-axe\.e2e\.spec\.ts/,
   /account-auth-paths-live\.spec\.ts/,
+  /[\\/]event-page\.e2e\.spec\.ts$/,
   /event-page-020\.e2e\.spec\.ts/,
   /event-page-canvas-structure\.e2e\.spec\.ts/,
   /storefront-entry\.e2e\.spec\.ts/,

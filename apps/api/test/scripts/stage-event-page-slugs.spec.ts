@@ -11,7 +11,10 @@ interface LiveTiersModule {
   readonly GOLDEN_LEARNING_COURSE_SLUG: string;
   readonly GOLDEN_LEARNING_SCHOOL_SLUG: string;
   readonly GOLDEN_LEARNING_VOLUME_SCHOOL_SLUGS: readonly string[];
-  readonly GOLDEN_EVENT_SLUGS: { readonly live: string };
+  readonly GOLDEN_EVENT_SLUGS: {
+    readonly live: string;
+    readonly academyLive: string;
+  };
   readonly LIVE_TIERS: readonly {
     readonly name: string;
     readonly seededEnv?: Readonly<Record<string, string>>;
@@ -149,6 +152,17 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
       expect(read(slugs.academyHidden!)).toMatchObject({
         state: "hidden",
         audience: "experts",
+      });
+      expect(read(slugs.academyArchivedRecorded!)).toMatchObject({
+        state: "in_archive",
+        audience: "experts",
+        format: "online",
+        recordings: ["edited"],
+      });
+      expect(read(GOLDEN_EVENT_SLUGS.academyLive)).toMatchObject({
+        state: "live",
+        audience: "experts",
+        format: "online",
       });
 
       const doctor = read(slugs.doctorUpcoming!);

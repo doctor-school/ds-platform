@@ -9,8 +9,8 @@ import { parse } from "yaml";
 /**
  * `.github/workflows/stage.yml` (#2985) — the static promises a public repository's
  * Actions run must keep (release-pipeline-off-workstation spec §4): the stage report
- * never becomes an Actions artifact, and the `stage` environment's secrets reach only
- * the two jobs that need them.
+ * never becomes an Actions artifact, the `stage` environment's secrets reach only the
+ * two `main` jobs that need them, and the PR-slot run (#4202) takes `stage-pr`'s.
  */
 const WORKFLOWS = fileURLToPath(
   new URL("../../.github/workflows/", import.meta.url),
@@ -35,12 +35,16 @@ describe("stage.yml", () => {
     assert.equal(read("stage.yml").includes("upload-artifact"), false);
   });
 
-  it("uses environment `stage` only in its converge, suite and slot-suite jobs", () => {
+  it("uses environment `stage` only in its converge and suite jobs; the PR-slot run uses `stage-pr`", () => {
     const withStage = Object.entries(stage.jobs)
       .filter(([, job]) => environmentOf(job) === "stage")
       .map(([name]) => name)
       .sort();
-    assert.deepEqual(withStage, ["converge", "slot-suite", "suite"]);
+    assert.deepEqual(withStage, ["converge", "suite"]);
+    const withStagePr = Object.entries(stage.jobs)
+      .filter(([, job]) => environmentOf(job) === "stage-pr")
+      .map(([name]) => name);
+    assert.deepEqual(withStagePr, ["slot-suite"]);
   });
 
   it("is the only workflow that names environment `stage`", () => {
@@ -200,7 +204,9 @@ describe("stage.yml — the PR-slot dispatch (#4202)", () => {
     assert.match(stage.jobs.converge.if, /workflow_run\.event == 'push'/);
     assert.equal(gate.if, "github.event_name == 'workflow_dispatch'");
     assert.equal(slotSuite.needs, "slot-gate");
-    assert.equal(slotSuite.if, undefined, "slot-suite runs only when the gate succeeded");
+    // No status function: the default success() holds, so slot-suite runs only when
+    // the gate succeeded — and never under main's ref.
+    assert.equal(slotSuite.if, "github.ref != 'refs/heads/main'");
     assert.deepEqual(slotVerdict.needs, ["slot-gate", "slot-suite"]);
     assert.equal(slotVerdict.if, "always() && github.event_name == 'workflow_dispatch'");
     assert.ok(
@@ -210,18 +216,22 @@ describe("stage.yml — the PR-slot dispatch (#4202)", () => {
     );
   });
 
-  it("gates with main's code before anything checks the dispatched SHA out or holds a secret", () => {
+  it("gates before anything checks the dispatched SHA out or holds a secret, refusing main's ref and a ref that is not the PR branch", () => {
     assert.equal(checkoutOf(gate).with.ref, undefined, "the gate checks out the workflow's own ref");
     assert.equal(environmentOf(gate), undefined);
     assert.deepEqual(secretsOf(gate), []);
     assert.deepEqual(gate.permissions, { contents: "read", "pull-requests": "read" });
     const run = step(gate, (s) => s.id === "gate").run;
     assert.match(run, /gh api "repos\/\$GITHUB_REPOSITORY\/pulls\/\$\{SLOT#pr-\}"/);
-    assert.match(run, /prSlotGate\(/);
+    assert.match(run, /prSlotGate\(\{[^}]*ref: e\.GITHUB_REF[^}]*\}\)/);
     assert.match(run, /process\.exit\(1\)/);
   });
 
-  it("writes no Actions cache from the PR's code: it would land in main's cache scope", () => {
+  it("never runs a PR-slot job with the box's ssh key", () => {
+    for (const job of slotJobs) assert.doesNotMatch(JSON.stringify(job), /STAGE_SSH_KEY|STAGE_SSH_KNOWN_HOSTS/);
+  });
+
+  it("writes no Actions cache from the PR's code", () => {
     for (const s of slotSuite.steps) {
       const uses = String(s.uses ?? "");
       assert.equal(s.with?.cache, undefined, `${uses || s.name}: no setup-* cache (it saves post-job)`);
@@ -278,7 +288,7 @@ describe("stage.yml — the PR-slot dispatch (#4202)", () => {
     }
   });
 
-  it("renders and posts the verdict with main's code, PASS only from the job result", () => {
+  it("renders and posts the verdict with GITHUB_TOKEN only, PASS only from the job result", () => {
     assert.equal(checkoutOf(slotVerdict).with.ref, undefined);
     assert.equal(environmentOf(slotVerdict), undefined);
     assert.deepEqual(secretsOf(slotVerdict), []);

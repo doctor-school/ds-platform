@@ -6,8 +6,8 @@
  * the a11y suites are driven against the slot's PUBLIC hostnames — the same edge a
  * reviewer uses, basic auth included. For a PR slot the run executes in GitHub
  * Actions, never on the operator's machine (#4202): `pnpm e2e:stage pr-<N>`
- * dispatches `.github/workflows/stage.yml` for the current `HEAD` SHA
- * (`dispatchStageRun`), waits for it, and prints the compact verdict the run posts
+ * dispatches `.github/workflows/stage.yml` on PR N's own head branch for its head
+ * SHA (`dispatchStageRun`), waits for it, and prints the compact verdict the run posts
  * on PR N. `--local` keeps the workstation run, for debugging a single spec — and it
  * is what the Actions job itself runs. `--expect-sha` is the release check: for a `main`
  * push the Actions `stage.yml` suite job runs it and posts the `stage-suite` commit
@@ -924,11 +924,13 @@ export const realEffects = {
 /** The workflow a PR-slot run is dispatched to, and the ref its file is read from. */
 export const STAGE_WORKFLOW = "stage.yml";
 /**
- * `main`: the `stage` environment that holds the suite secrets admits deployments
- * from `main` only, so the steps that receive them are always `main`'s; the job
- * checks out the dispatched SHA for the suite itself.
+ * The ref a PR-slot run never runs under: a `main`-ref run holds `main`'s Actions
+ * cache scope, which `main`'s privileged workflows restore, and this run executes PR
+ * code. It is dispatched on the PR's own head branch instead — that branch's cache
+ * scope, which `main` never reads — with the `stage-pr` environment's secrets, never
+ * `stage`'s (#4202).
  */
-export const STAGE_WORKFLOW_REF = "main";
+export const MAIN_REF = "refs/heads/main";
 /** The PR comment the run posts carries this marker, so the CLI finds its own. */
 export const runMarker = (runId) => `<!-- e2e-stage-run:${runId} -->`;
 /** The run title (`run-name` of stage.yml) — it ends with the SHA, as retention reads. */
@@ -989,15 +991,21 @@ export function compactTally(tally) {
 }
 
 /**
- * The gate of a PR-slot dispatch (#4202), run by the trusted `slot-gate` job with
- * `main`'s code BEFORE anything checks the dispatched SHA out or receives a stage
- * secret. `pr` is the `GET /repos/{repo}/pulls/{N}` reply for `slot=pr-<N>`, or
- * undefined when it could not be read. Passes only for a SHA that is the head of an
- * OPEN PR N pushed to THIS repository: a fork's commit — fetchable here through
- * `refs/pull/N/head` — never runs with the stage secrets.
+ * The gate of a PR-slot dispatch (#4202), run by the `slot-gate` job — the
+ * dispatched branch's code, no environment, no secret — BEFORE `slot-suite` checks
+ * the SHA out or receives a stage-pr secret. `ref` is the run's `github.ref`; `pr` is
+ * the `GET /repos/{repo}/pulls/{N}` reply for `slot=pr-<N>`, or undefined when it
+ * could not be read. A run under `main`'s ref is refused first — that check is
+ * `main`'s own code, since such a run checks `main` out. Otherwise it passes only for
+ * a run on PR N's head branch, for the SHA that is the head of an OPEN PR N pushed to
+ * THIS repository: a fork's commit never runs with the stage-pr secrets.
  */
-export function prSlotGate({ slot, sha, repository, pr }) {
+export function prSlotGate({ slot, sha, ref, repository, pr }) {
   const refuse = (reason) => ({ ok: false, reason });
+  if (ref === MAIN_REF)
+    return refuse(
+      "a PR-slot run never runs under main's ref (main's Actions cache scope) — dispatch it on the PR branch with pnpm e2e:stage pr-<N>",
+    );
   const match = /^pr-([1-9][0-9]{0,9})$/.exec(String(slot ?? ""));
   if (!match)
     return refuse(
@@ -1012,6 +1020,10 @@ export function prSlotGate({ slot, sha, repository, pr }) {
   if (!repository || headRepo !== repository)
     return refuse(
       `PR ${match[1]} is not from this repository (head: ${headRepo ?? "a deleted repository"})`,
+    );
+  if (!pr.head?.ref || ref !== `refs/heads/${pr.head.ref}`)
+    return refuse(
+      `the run's ref is not PR ${match[1]}'s head branch — dispatch it on that branch with pnpm e2e:stage pr-${match[1]}`,
     );
   if (pr.head?.sha !== sha)
     return refuse(
@@ -1059,7 +1071,7 @@ const commentText = (text) =>
 /**
  * The compact verdict the Actions run posts on PR N (#4202): verdict, counts, the
  * failing titles (≤20), the run link, and the e2e:stage verdict block when the run
- * produced one. Rendered by the trusted `slot-verdict` job from `slot-suite`'s
+ * produced one. Rendered by the `slot-verdict` job (`GITHUB_TOKEN` only) from `slot-suite`'s
  * outputs, which are data: `passed` is decided by the caller from the job result,
  * never read from them. A refused gate, an unanswered `/v1/health`, a red leg —
  * anything but a green suite — is FAIL, with its reason.
@@ -1112,7 +1124,6 @@ export function renderPrVerdictComment({
  * never parses as shell text.
  */
 export const realDispatchEffects = {
-  git: (args) => spawnSync("git", args, { cwd: REPO_ROOT, encoding: "utf8" }),
   gh: (args) => spawnSync("gh", args, { cwd: REPO_ROOT, encoding: "utf8" }),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
@@ -1138,10 +1149,13 @@ export function dispatchInputs(options, sha) {
 }
 
 /**
- * `pnpm e2e:stage pr-<N>` (#4202): dispatch the PR-slot run of `stage.yml` for the
- * pushed `HEAD`, wait for it, print the verdict comment it posted on PR N. No browser
- * starts here. Exit 0 only for a successful run, 1 for any other conclusion, 2 when
- * nothing was dispatched.
+ * `pnpm e2e:stage pr-<N>` (#4202): dispatch the PR-slot run of `stage.yml` on PR N's
+ * own head branch for its pushed head SHA, wait for it, print the verdict comment it
+ * posted on PR N. The run never runs under `main`'s ref, so PR code never holds
+ * `main`'s Actions cache scope; the branch must carry this workflow's PR-slot jobs
+ * (rebased on `main`). A cross-repository PR is refused: there is no branch here to
+ * dispatch on. No browser starts here. Exit 0 only for a successful run, 1 for any
+ * other conclusion, 2 when nothing was dispatched.
  */
 export async function dispatchStageRun(options, effects = realDispatchEffects) {
   const { slot } = options;
@@ -1151,25 +1165,33 @@ export async function dispatchStageRun(options, effects = realDispatchEffects) {
     return 2;
   };
 
-  const head = effects.git(["rev-parse", "HEAD"]);
-  const sha = stdoutOf(head);
-  if (failedRun(head) || !FULL_SHA_RE.test(sha))
-    return refuse("HEAD is not readable");
-  const branchRun = effects.git(["symbolic-ref", "--short", "HEAD"]);
-  if (failedRun(branchRun))
-    return refuse("HEAD is detached — check out the PR branch");
-  const branch = stdoutOf(branchRun);
-  // The run checks the SHA out from GitHub and refuses any SHA that is not PR N's
-  // head, so HEAD must be pushed.
-  const remote = effects.git(["ls-remote", "origin", `refs/heads/${branch}`]);
-  if (failedRun(remote))
-    return refuse(`origin is not readable (${errLine(remote)})`);
-  const remoteSha = stdoutOf(remote).split(/\s+/)[0] ?? "";
-  if (remoteSha !== sha) {
-    return refuse(
-      `HEAD ${sha.slice(0, 12)} is not origin/${branch} (${remoteSha.slice(0, 12) || "absent"}) — push it first`,
-    );
+  const prView = effects.gh([
+    "pr",
+    "view",
+    pr,
+    "--json",
+    "headRefName,headRefOid,isCrossRepository",
+  ]);
+  let head;
+  try {
+    head = failedRun(prView) ? undefined : JSON.parse(stdoutOf(prView));
+  } catch {
+    head = undefined;
   }
+  if (head === undefined || head === null || typeof head !== "object")
+    return refuse(`PR ${pr} is not readable (${errLine(prView)})`);
+  if (head.isCrossRepository !== false)
+    return refuse(
+      `PR ${pr} is from another repository — a PR-slot run dispatches only on a branch of this one`,
+    );
+  const sha = String(head.headRefOid ?? "");
+  const branch = String(head.headRefName ?? "");
+  if (!FULL_SHA_RE.test(sha) || branch === "")
+    return refuse(`PR ${pr} has no readable head branch and SHA`);
+  if (`refs/heads/${branch}` === MAIN_REF)
+    return refuse(
+      `PR ${pr}'s head branch is main — a PR-slot run never runs under main's ref`,
+    );
 
   const title = slotRunTitle(slot, sha);
   const listRuns = () => {
@@ -1181,7 +1203,7 @@ export async function dispatchStageRun(options, effects = realDispatchEffects) {
       "--event",
       "workflow_dispatch",
       "--branch",
-      STAGE_WORKFLOW_REF,
+      branch,
       "--limit",
       "30",
       "--json",
@@ -1204,13 +1226,15 @@ export async function dispatchStageRun(options, effects = realDispatchEffects) {
     "run",
     STAGE_WORKFLOW,
     "--ref",
-    STAGE_WORKFLOW_REF,
+    branch,
     ...dispatchInputs(options, sha),
   ]);
   if (failedRun(started))
-    return refuse(`\`gh workflow run\` failed (${errLine(started)})`);
+    return refuse(
+      `\`gh workflow run\` on ${branch} failed (${errLine(started)}) — a branch whose stage.yml has no PR-slot dispatch must be rebased on main first`,
+    );
   effects.log(
-    `e2e:stage dispatched ${STAGE_WORKFLOW} for ${slot} at ${sha.slice(0, 12)}`,
+    `e2e:stage dispatched ${STAGE_WORKFLOW} on ${branch} for ${slot} at ${sha.slice(0, 12)}`,
   );
 
   let run;

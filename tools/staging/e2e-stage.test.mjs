@@ -2317,31 +2317,22 @@ describe("the PR-slot run in Actions (#4202)", () => {
   const BRANCH = "tooling/4202-x";
   const RUN = { databaseId: 901, displayTitle: slotRunTitle("pr-4202", HEAD), url: "https://github.com/o/r/actions/runs/901" };
 
-  /** Fake git + gh: `views` are the successive `gh run view` replies. */
+  /** Fake gh: `prHead` is the `gh pr view` reply, `views` the successive `gh run view` replies. */
   function dispatchHarness({
-    remoteSha = HEAD,
-    detached = false,
+    prHead = { headRefName: BRANCH, headRefOid: HEAD, isCrossRepository: false },
     views = [{ status: "in_progress" }, { status: "completed", conclusion: "success" }],
     comment = `${runMarker(901)}\n### e2e:stage pr-4202 — PASS\n\npassed 3 · failed 0 · flaky 0 · skipped 0\n`,
   } = {}) {
-    const git = [];
     const gh = [];
     const lines = [];
     let lists = 0;
     let viewIndex = 0;
     const ok = (stdout) => ({ status: 0, stdout, stderr: "" });
     const effects = {
-      git: (args) => {
-        git.push(args);
-        if (args[0] === "rev-parse") return ok(`${HEAD}\n`);
-        if (args[0] === "symbolic-ref")
-          return detached ? { status: 128, stdout: "", stderr: "fatal: not a symbolic ref" } : ok(`${BRANCH}\n`);
-        if (args[0] === "ls-remote")
-          return ok(remoteSha ? `${remoteSha}\trefs/heads/${BRANCH}\n` : "");
-        throw new Error(`unexpected git ${args.join(" ")}`);
-      },
       gh: (args) => {
         gh.push(args);
+        if (args[0] === "pr" && args[1] === "view")
+          return prHead ? ok(JSON.stringify(prHead)) : { status: 1, stdout: "", stderr: "no pull requests found" };
         if (args[0] === "run" && args[1] === "list") {
           lists += 1;
           return ok(JSON.stringify(lists === 1 ? [] : [RUN]));
@@ -2360,7 +2351,7 @@ describe("the PR-slot run in Actions (#4202)", () => {
       log: (line) => lines.push(line),
       boxObservingTests: () => BOX_TESTS,
     };
-    return { git, gh, lines, effects };
+    return { gh, lines, effects };
   }
 
   it("dispatches a PR slot by default; --local, `main` and the release check stay here", () => {
@@ -2388,12 +2379,16 @@ describe("the PR-slot run in Actions (#4202)", () => {
     );
   });
 
-  it("dispatches stage.yml from main for the pushed HEAD, waits, prints the verdict comment, exits 0 on success", async () => {
+  it("dispatches stage.yml on the PR's head branch for its head SHA, waits, prints the verdict comment, exits 0 on success", async () => {
     const { gh, lines, effects } = dispatchHarness();
     const code = await dispatchStageRun(parseE2eArgs(["pr-4202", "--grep", "a b"]), effects);
     assert.equal(code, 0);
+    assert.deepEqual(gh[0], ["pr", "view", "4202", "--json", "headRefName,headRefOid,isCrossRepository"]);
     const workflow = gh.find((args) => args[0] === "workflow");
-    assert.deepEqual(workflow, ["workflow", "run", "stage.yml", "--ref", "main", "-f", "slot=pr-4202", "-f", `sha=${HEAD}`, "-f", "grep=a b"]);
+    assert.deepEqual(workflow, ["workflow", "run", "stage.yml", "--ref", BRANCH, "-f", "slot=pr-4202", "-f", `sha=${HEAD}`, "-f", "grep=a b"]);
+    const list = gh.find((args) => args[0] === "run" && args[1] === "list");
+    assert.equal(list[list.indexOf("--branch") + 1], BRANCH);
+    assert.equal(gh.some((args) => args.includes("main")), false, "nothing runs under main's ref");
     const api = gh.find((args) => args[0] === "api");
     assert.equal(api[2], "repos/{owner}/{repo}/issues/4202/comments");
     assert.match(api[4], /e2e-stage-run:901 -->/);
@@ -2410,12 +2405,21 @@ describe("the PR-slot run in Actions (#4202)", () => {
     assert.ok(lines.some((l) => /posted no verdict comment on #4202/.test(l)));
   });
 
-  it("refuses to dispatch an unpushed or detached HEAD — no workflow run starts", async () => {
-    for (const setup of [{ remoteSha: "d".repeat(40) }, { remoteSha: "" }, { detached: true }]) {
-      const { gh, lines, effects } = dispatchHarness(setup);
-      assert.equal(await dispatchStageRun(parseE2eArgs(["pr-4202"]), effects), 2);
-      assert.equal(gh.some((args) => args[0] === "workflow"), false);
-      assert.match(lines.at(-1), /refuses to dispatch: (HEAD c{12} is not origin|HEAD is detached)/);
+  it("refuses a cross-repository, unreadable or main-headed PR before dispatching — no workflow run starts", async () => {
+    const cases = [
+      [{ headRefName: BRANCH, headRefOid: HEAD, isCrossRepository: true }, /PR 4202 is from another repository/],
+      [{ headRefName: BRANCH, headRefOid: HEAD }, /PR 4202 is from another repository/],
+      [null, /PR 4202 is not readable \(no pull requests found\)/],
+      [{ headRefName: "", headRefOid: HEAD, isCrossRepository: false }, /no readable head branch and SHA/],
+      [{ headRefName: BRANCH, headRefOid: "abc", isCrossRepository: false }, /no readable head branch and SHA/],
+      [{ headRefName: "main", headRefOid: HEAD, isCrossRepository: false }, /head branch is main/],
+    ];
+    for (const [prHead, reason] of cases) {
+      const { gh, lines, effects } = dispatchHarness({ prHead });
+      assert.equal(await dispatchStageRun(parseE2eArgs(["pr-4202"]), effects), 2, JSON.stringify(prHead));
+      assert.equal(gh.some((args) => args[0] === "workflow" || args[0] === "run"), false);
+      assert.match(lines.at(-1), reason);
+      assert.match(lines.at(-1), /^e2e:stage refuses to dispatch: /);
     }
   });
 
@@ -2579,17 +2583,25 @@ describe("the PR-slot run in Actions (#4202)", () => {
     assert.doesNotMatch(body, /not-a-sha/);
   });
 
-  it("the slot gate passes only the head SHA of an open PR N from this repository", () => {
+  it("the slot gate passes only a run on PR N's head branch for the head SHA of an open PR N from this repository", () => {
     const REPO = "owner/ds-platform";
     const pr = (over = {}) => ({
       number: 4202,
       state: "open",
-      head: { sha: HEAD, repo: { full_name: REPO } },
+      head: { sha: HEAD, ref: BRANCH, repo: { full_name: REPO } },
       ...over,
     });
-    const gate = (args) => prSlotGate({ slot: "pr-4202", sha: HEAD, repository: REPO, pr: pr(), ...args });
+    const gate = (args) =>
+      prSlotGate({ slot: "pr-4202", sha: HEAD, ref: `refs/heads/${BRANCH}`, repository: REPO, pr: pr(), ...args });
     assert.deepEqual(gate({}), { ok: true, pr: 4202 });
     const refusals = [
+      [{ ref: "refs/heads/main" }, /never runs under main's ref \(main's Actions cache scope\)/],
+      // main's ref is refused before the PR is even read.
+      [{ ref: "refs/heads/main", pr: undefined, slot: "main" }, /never runs under main's ref/],
+      [{ ref: "refs/heads/other" }, /the run's ref is not PR 4202's head branch/],
+      [{ ref: `refs/tags/${BRANCH}` }, /the run's ref is not PR 4202's head branch/],
+      [{ ref: undefined }, /the run's ref is not PR 4202's head branch/],
+      [{ pr: pr({ head: { sha: HEAD, repo: { full_name: REPO } } }) }, /the run's ref is not PR 4202's head branch/],
       [{ slot: "main" }, /slot must be pr-<N>.*Runtime images/],
       [{ slot: "pr-0" }, /slot must be pr-<N>/],
       [{ sha: HEAD.slice(0, 12) }, /not a 40-hex SHA/],
@@ -2599,7 +2611,7 @@ describe("the PR-slot run in Actions (#4202)", () => {
       [{ pr: pr({ state: "closed" }) }, /PR 4202 is not open/],
       [{ pr: pr({ head: { sha: HEAD, repo: { full_name: "fork/ds-platform" } } }) }, /not from this repository \(head: fork\/ds-platform\)/],
       [{ pr: pr({ head: { sha: HEAD, repo: null } }) }, /not from this repository \(head: a deleted repository\)/],
-      [{ pr: pr({ head: { sha: "d".repeat(40), repo: { full_name: REPO } } }) }, /sha c{12} is not the head of PR 4202 \(d{12}\)/],
+      [{ pr: pr({ head: { sha: "d".repeat(40), ref: BRANCH, repo: { full_name: REPO } } }) }, /sha c{12} is not the head of PR 4202 \(d{12}\)/],
     ];
     for (const [args, reason] of refusals) {
       const verdict = gate(args);

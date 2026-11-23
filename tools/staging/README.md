@@ -260,23 +260,28 @@ browsers on the operator workstation ran it out of memory with several sessions 
 and a public repository's GitHub-hosted runners cost nothing.
 
 - **A PR slot** — `pnpm e2e:stage pr-<N>` dispatches `.github/workflows/stage.yml`
-  (`gh workflow run stage.yml --ref main -f slot=pr-<N> -f sha=<HEAD>` plus the filters
-  you passed), waits for the run, prints the compact verdict it posted on PR N, and exits
-  0 only for a green run (1 red, 2 when nothing was dispatched). No browser starts here.
-  The SHA is the current `HEAD`, which must be pushed and be the head of an open PR N
-  from this repository. A trusted `slot-gate` job (`main`'s code, no secret) checks that
-  before anything checks the SHA out, and refuses `main`, a short or non-hex SHA, a
-  closed PR, a fork's commit and a stale SHA, each as a red run naming the reason. The
-  workflow file always comes from `main` (the `stage` environment that holds the suite
-  secrets admits `main` only); `slot-suite` checks out the dispatched SHA and runs that
-  tree's suite with the suite's own secrets only — no ssh key, no `statuses` permission,
-  so a PR-slot run never posts or changes the `stage-suite` status. A branch therefore
-  needs this change merged in (`--local`, `--verdict-file`, `--slot-sha` and
-  `--no-box-observe` in its `e2e-stage.mjs`); without them the run stops before a
-  verdict and the comment says to merge main.
-  A trusted `slot-verdict` job renders the comment with `main`'s code — passed / failed
-  / flaky / skipped counts, the failing titles (≤20), the e2e:stage verdict block and
-  the run link — and posts it on PR N; link it in the PR body. The full HTML/JSON report
+  on PR N's own head branch (`gh workflow run stage.yml --ref <head branch> -f
+slot=pr-<N> -f sha=<head SHA>` plus the filters you passed; branch and SHA come from
+  `gh pr view <N> --json headRefName,headRefOid,isCrossRepository`), waits for the run,
+  prints the compact verdict it posted on PR N, and exits 0 only for a green run (1 red,
+  2 when nothing was dispatched). No browser starts here. A cross-repository PR is
+  refused before dispatching. The run never runs under `main`'s ref: it executes the
+  branch's code, and a `main`-ref run would hold `main`'s Actions cache scope, which
+  `main`'s privileged workflows restore; on the branch's ref the cache scope is that
+  branch, which `main` never reads. The whole run is therefore the branch's code, so
+  **the branch must contain this workflow's PR-slot jobs — rebase it on `main`**; a
+  branch without them is refused by `gh workflow run` and the CLI says to rebase.
+  A `slot-gate` job (no environment, no secret) refuses a run under `main`'s ref, a ref
+  that is not PR N's head branch, a short or non-hex SHA, a closed PR, a fork's commit
+  and a stale SHA, each as a red run naming the reason, before anything checks the SHA
+  out. `slot-suite` takes its secrets from the **`stage-pr`** environment (the suite's
+  own secrets only, never `stage`'s ssh key; its deployment-branch policy admits PR
+  branches, not `main`), checks out the dispatched SHA and runs that tree's suite — no
+  `statuses` permission, so a PR-slot run never posts or changes the `stage-suite`
+  status. A `slot-verdict` job (`GITHUB_TOKEN` with `pull-requests: write` only)
+  renders the comment as plain text — passed / failed / flaky / skipped counts, the
+  failing titles (≤20), the e2e:stage verdict block and the run link — and posts it on
+  PR N; link it in the PR body. The full HTML/JSON report
   is not kept: never an Actions artifact (this repository's artifacts are public,
   release-pipeline spec §4), and not shipped to the box either, since that needs the CI
   ssh key on a runner that executed PR code. `--local` reproduces it.

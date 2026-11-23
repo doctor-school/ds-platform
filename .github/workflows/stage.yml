@@ -24,19 +24,23 @@ name: Stage main
 # Commit status `stage-suite` on the SHA: pending when the converge starts, then
 # success / failure with counts only. It is the check the release gate requires.
 #
-# PR slots (#4202): a `workflow_dispatch` (`pnpm e2e:stage pr-<N>` sends it, always
-# with `--ref main`: the `stage` environment admits `main` only) runs the same suite
-# against an already-converged `pr-<N>` slot on a GitHub-hosted runner, so no
-# Playwright browser starts on the operator's machine.
-#   slot-gate    — trusted (main's code, no secret): refuses `main`, a non-40-hex SHA
-#                  and a SHA that is not the head of an open PR N from this repository,
-#                  before anything checks the SHA out.
-#   slot-suite   — the PR's code: checks the SHA out and runs `e2e-stage.mjs pr-<N>
-#                  --local` (its `/v1/health` pre-flight refuses a slot that does not
-#                  answer) with the suite's own secrets only — no ssh key, no
+# PR slots (#4202): a `workflow_dispatch` (`pnpm e2e:stage pr-<N>` sends it with
+# `--ref <PR N's head branch>`, never `main`) runs the same suite against an
+# already-converged `pr-<N>` slot on a GitHub-hosted runner, so no Playwright browser
+# starts on the operator's machine. Every job of the run is the branch's code, so the
+# run never holds `main`'s Actions cache scope: its scope is that branch, which `main`
+# never reads. The branch must carry these jobs (rebased on `main`).
+#   slot-gate    — no environment, no secret: refuses a run under `main`'s ref (that
+#                  check is `main`'s own code), a ref that is not PR N's head branch, a
+#                  slot that is not `pr-<N>`, a non-40-hex SHA and a SHA that is not the
+#                  head of an open PR N from this repository, before anything checks the
+#                  SHA out.
+#   slot-suite   — environment `stage-pr` (stage-only secrets, never `stage`'s ssh key):
+#                  checks the SHA out and runs `e2e-stage.mjs pr-<N> --local` (its
+#                  `/v1/health` pre-flight refuses a slot that does not answer). No
 #                  `statuses` permission: a PR-slot run never writes `stage-suite`.
-#   slot-verdict — trusted: renders the compact verdict with main's code from
-#                  slot-suite's outputs and posts it on PR N.
+#   slot-verdict — `GITHUB_TOKEN` only (`pull-requests: write`): renders the compact
+#                  verdict from slot-suite's outputs, as plain text, and posts it on PR N.
 
 # The title ends with the SHA under test: registry retention reads it from a queued or
 # running run to keep that SHA's images (#3752) — a workflow_run run's own head_sha is
@@ -453,11 +457,12 @@ jobs:
   # The PR-slot run (#4202), three jobs. Every input reaches a shell through `env:`
   # only, always quoted.
   #
-  # slot-gate — trusted: `main`'s code, no environment, no secret. Fail-closed,
+  # slot-gate — the dispatched branch's code, no environment, no secret. Fail-closed,
   # before anything checks out the dispatched SHA: `prSlotGate`
-  # (tools/staging/e2e-stage.mjs) refuses `main`, a non-40-hex SHA and a SHA that
-  # is not the head of an OPEN PR N pushed to THIS repository — a fork's commit
-  # never runs with the stage secrets.
+  # (tools/staging/e2e-stage.mjs) refuses a run under `main`'s ref, a ref that is not
+  # PR N's head branch, a slot that is not `pr-<N>`, a non-40-hex SHA and a SHA that
+  # is not the head of an OPEN PR N pushed to THIS repository — a fork's commit never
+  # runs with the stage-pr secrets.
   slot-gate:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -491,22 +496,24 @@ jobs:
             let pr;
             try { pr = JSON.parse(readFileSync(process.argv[1], "utf8")); } catch {}
             const e = process.env;
-            const gate = prSlotGate({ slot: e.SLOT, sha: e.SHA, repository: e.GITHUB_REPOSITORY, pr });
+            const gate = prSlotGate({ slot: e.SLOT, sha: e.SHA, ref: e.GITHUB_REF, repository: e.GITHUB_REPOSITORY, pr });
             if (gate.ok) { console.log(`gate: ${e.SLOT} at ${e.SHA}`); process.exit(0); }
             appendFileSync(e.GITHUB_OUTPUT, `reason=${gate.reason.replace(/\n/g, " ")}\n`);
             console.log(`::error::${gate.reason}`);
             process.exit(1);
           ' "$pr_json"
 
-  # slot-suite — runs the PR's code: the dispatched SHA's suite, with only the
-  # secrets the suite itself reads. No ssh key and no `statuses` permission: a
-  # PR-slot run never writes `stage-suite`, on any SHA. The full report stays on the
+  # slot-suite — runs the PR's code: the dispatched SHA's suite, in environment
+  # `stage-pr`, which holds only the secrets the suite itself reads — never `stage`,
+  # whose ssh key reaches the box. Never under `main`'s ref (its cache scope). No
+  # `statuses` permission: a PR-slot run never writes `stage-suite`, on any SHA. The full report stays on the
   # runner — never an Actions artifact (public, spec §4); `--local` reproduces it.
   # Its outputs are data for `slot-verdict`: counts + failing titles, verdict block.
   slot-suite:
     needs: slot-gate
+    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: stage
+    environment: stage-pr
     timeout-minutes: 90
     permissions:
       contents: read
@@ -532,9 +539,8 @@ jobs:
           ref: ${{ inputs.sha }}
           persist-credentials: false
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-      # No Actions cache in this job, restore or save: a `workflow_dispatch --ref main`
-      # job holds main's cache scope, and this job runs PR code — an entry it saved
-      # would be restored by main's own workflows (pnpm store, buildx `type=gha`).
+      # No Actions cache in this job, restore or save: the run's cache scope is the PR
+      # branch (never main's), and a saved entry would only cost the branch's quota.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
@@ -622,9 +628,11 @@ jobs:
             { echo "verdict<<$delimiter"; cat "$RUNNER_TEMP/verdict.txt"; echo "$delimiter"; } >> "$GITHUB_OUTPUT"
           fi
 
-  # slot-verdict — trusted: `main`'s code renders the comment from slot-suite's
-  # outputs (data, never code) and posts it on PR N. PASS only when slot-suite
-  # succeeded; a refused gate or a run that stopped early is a FAIL naming why.
+  # slot-verdict — the branch's code, treated as PR code: no environment, no secret,
+  # only `GITHUB_TOKEN` with `pull-requests: write` (+ `contents: read` for its
+  # checkout). It renders the comment from slot-suite's outputs (data, escaped to
+  # plain text) and posts it on PR N. PASS only when slot-suite succeeded; a refused
+  # gate or a run that stopped early is a FAIL naming why.
   slot-verdict:
     needs: [slot-gate, slot-suite]
     if: always() && github.event_name == 'workflow_dispatch'
@@ -661,7 +669,7 @@ jobs:
             let tally;
             try { tally = JSON.parse(e.TALLY); } catch {}
             const reason = e.GATE_REASON ||
-              (e.VERDICT ? undefined : `the run stopped before the suite reached a verdict (slot-suite ${e.SUITE_RESULT}); a branch that has not merged main lacks the PR-slot flags of e2e-stage.mjs: merge main and dispatch again`);
+              (e.VERDICT ? undefined : `the run stopped before the suite reached a verdict (slot-suite ${e.SUITE_RESULT}); a branch not rebased on main lacks the PR-slot flags of e2e-stage.mjs: rebase it on main and dispatch again`);
             writeFileSync(process.argv[1], renderPrVerdictComment({
               runId: e.GITHUB_RUN_ID,
               runUrl: `${e.GITHUB_SERVER_URL}/${e.GITHUB_REPOSITORY}/actions/runs/${e.GITHUB_RUN_ID}`,

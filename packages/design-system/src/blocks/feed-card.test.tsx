@@ -1,11 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import type { FeedCard as FeedCardData } from "@ds/schemas";
+import type { FeedCard as FeedCardData, FeedPostCard } from "@ds/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
   FEED_CARD_COPY,
   FeedCard,
   FeedCardSkeleton,
+  formatFeedDuration,
   type FeedContentCardData,
   type FeedContentRowData,
 } from "./feed-card";
@@ -265,5 +266,160 @@ describe("FeedCard — doctor content row (variant В)", () => {
     expect(classes).toContain("border-hairline");
     expect(classes).toContain("layout:border-2");
     expect(classes).toContain("layout:border-border");
+  });
+});
+
+// 048 V-20 — the `post` variant (Telegram, EARS-34), Stage A #3997 comment
+// 6941007863 with its four lead corrections.
+
+const TEXT_GLYPH = "︎";
+
+function post(overrides: Partial<FeedPostCard> = {}): FeedPostCard {
+  return {
+    id: "1b7e4d2a-5f60-4c1d-8a3e-2c9f0d6b7e11",
+    kind: "post",
+    text: "Сегодня в 19:00 МСК — эфир о показаниях к PRP",
+    publishedAt: "2026-11-12T10:00:00Z",
+    image: { url: "https://cdn.example/tg-1201.jpg" },
+    duration: null,
+    source: { platform: "telegram", name: "BBM Academy · Telegram" },
+    partner: null,
+    href: "https://t.me/bbmacademy/1201",
+    external: true,
+    ...overrides,
+  };
+}
+
+describe("FeedCard post (Telegram)", () => {
+  it("048 EARS-34: a post with an image shall show the image and no play mark", () => {
+    const { container } = render(<FeedCard card={post()} now={NOW} />);
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "https://cdn.example/tg-1201.jpg",
+    );
+    expect(container.querySelector("[data-feed-card-play]")).toBeNull();
+    expect(container.querySelector("[data-feed-card-duration]")).toBeNull();
+  });
+
+  it("048 EARS-34: a video post with a preview shall show the play mark and the duration as m:ss", () => {
+    const { container } = render(
+      <FeedCard card={post({ duration: 72 })} now={NOW} />,
+    );
+    expect(container.querySelector("img")).not.toBeNull();
+    const play = container.querySelector("[data-feed-card-play]");
+    expect(play?.getAttribute("aria-hidden")).toBe("true");
+    expect(play?.textContent).toBe(`▶${TEXT_GLYPH}`);
+    expect(
+      container.querySelector("[data-feed-card-duration]")?.textContent,
+    ).toBe("1:12");
+    expect(container.querySelector("video, iframe, audio")).toBeNull();
+  });
+
+  it("048 EARS-34: the duration shall be h:mm:ss from one hour", () => {
+    expect(formatFeedDuration(0)).toBe("0:00");
+    expect(formatFeedDuration(59)).toBe("0:59");
+    expect(formatFeedDuration(72)).toBe("1:12");
+    expect(formatFeedDuration(3599)).toBe("59:59");
+    expect(formatFeedDuration(3600)).toBe("1:00:00");
+    expect(formatFeedDuration(3725)).toBe("1:02:05");
+    const { container } = render(
+      <FeedCard card={post({ duration: 3725 })} now={NOW} />,
+    );
+    expect(
+      container.querySelector("[data-feed-card-duration]")?.textContent,
+    ).toBe("1:02:05");
+  });
+
+  it("048 EARS-34: a post without an image shall use the no-image layout with the field mark «Telegram»", () => {
+    const { container } = render(
+      <FeedCard card={post({ image: null })} now={NOW} />,
+    );
+    expect(container.querySelector("img")).toBeNull();
+    const none = container.querySelector('[data-feed-card-media="none"]');
+    expect(none?.textContent).toBe("Telegram");
+  });
+
+  it("048 EARS-34: a video post without a copied preview shall use the plain no-image layout, with no play mark", () => {
+    const { container } = render(
+      <FeedCard card={post({ image: null, duration: 72 })} now={NOW} />,
+    );
+    expect(
+      container.querySelector('[data-feed-card-media="none"]')?.textContent,
+    ).toBe("Telegram");
+    expect(container.querySelector("[data-feed-card-play]")).toBeNull();
+    expect(container.querySelector("[data-feed-card-duration]")).toBeNull();
+    expect(screen.queryByText(/Превью видео/)).toBeNull();
+  });
+
+  it("048 EARS-34: the source shall read «BBM Academy · Telegram» in full, with the Academy logo and the chip «TG» named «Telegram»", () => {
+    const { container } = render(
+      <FeedCard
+        card={post()}
+        now={NOW}
+        logo={<svg data-testid="academy-logo" />}
+      />,
+    );
+    const source = screen.getByText("BBM Academy · Telegram");
+    expect(source.className).not.toContain("truncate");
+    expect(source.className).toContain("wrap-break-word");
+    expect(screen.getByTestId("academy-logo")).toBeTruthy();
+    const chip = screen.getByRole("img", { name: "Telegram" });
+    expect(chip.textContent).toBe("TG");
+    expect(
+      container.querySelector('[data-feed-card-avatar="initials"]'),
+    ).toBeNull();
+  });
+
+  it("048 EARS-34: a post shall show no kind badge and no partner line", () => {
+    render(<FeedCard card={post()} now={NOW} />);
+    expect(screen.queryByText("Новость")).toBeNull();
+    expect(screen.queryByText("Колонка эксперта")).toBeNull();
+    expect(screen.queryByText(/Партнёрский материал/)).toBeNull();
+  });
+
+  it("048 EARS-34: the post text shall be clamped to the six body lines the card holds", () => {
+    const text =
+      "Сегодня в 19:00 МСК — эфир о показаниях к PRP. Михаил Страхов разберёт три клинических случая и ответит на вопросы коллег. Регистрация — по ссылке в профиле канала, запись появится на сайте Академии через пару дней.";
+    render(<FeedCard card={post({ text })} now={NOW} />);
+    const el = screen.getByText(text);
+    expect(el.className).toContain("line-clamp-6");
+    expect(el.className).toContain("text-base");
+    expect(el.className).toContain("wrap-break-word");
+  });
+
+  it("048 EARS-34: a post with empty text shall render the card without a text block", () => {
+    const { container } = render(
+      <FeedCard card={post({ text: "" })} now={NOW} />,
+    );
+    expect(container.querySelector("[data-feed-card-text]")).toBeNull();
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("048 EARS-34: the date shall follow EARS-13", () => {
+    render(<FeedCard card={post()} now={NOW} />);
+    expect(screen.getByText("12 ноября")).toBeTruthy();
+  });
+
+  it("048 EARS-34: the card shall show «Telegram ↗» as text glyphs with the hidden new-tab text", () => {
+    const { container } = render(<FeedCard card={post()} now={NOW} />);
+    const mark = container.querySelector("[data-feed-card-external]");
+    expect(mark?.querySelector('[aria-hidden="true"]')?.textContent).toBe(
+      `Telegram ↗${TEXT_GLYPH}`,
+    );
+    expect(mark?.querySelector(".sr-only")?.textContent).toBe(
+      ", откроется в новой вкладке на площадке Telegram",
+    );
+  });
+
+  it("048 EARS-34: the whole card shall be one link to its t.me href opening in a new tab", () => {
+    const { container } = render(<FeedCard card={post()} now={NOW} />);
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]?.getAttribute("href")).toBe("https://t.me/bbmacademy/1201");
+    expect(links[0]?.getAttribute("target")).toBe("_blank");
+    expect(links[0]?.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(container.querySelectorAll("button, input, select")).toHaveLength(0);
+    expect(links[0]?.textContent).toContain(
+      ", откроется в новой вкладке на площадке Telegram",
+    );
   });
 });

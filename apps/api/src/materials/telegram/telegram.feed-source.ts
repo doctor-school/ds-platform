@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { FeedSource } from "@ds/db";
+import { FEED_TELEGRAM_SOURCE_NAME } from "@ds/schemas";
 import {
   FeedEntriesRepository,
   type TelegramEntryPatch,
@@ -25,8 +26,8 @@ import { TelegramUpdateSchema } from "./telegram-update.schema.js";
 // leaves its offset, so the update is fetched again; every write is
 // idempotent on `feed_entry_messages`, so a refetch changes nothing.
 
-/** The card's source line (048 Lead decision 7). */
-export const TELEGRAM_SOURCE_NAME = "BBM Academy · Telegram";
+/** The card's source line (048 Lead decision 7) — the `post` card contract's (EARS-33). */
+export const TELEGRAM_SOURCE_NAME = FEED_TELEGRAM_SOURCE_NAME;
 
 export type TelegramUpdateDropReason =
   | TelegramDropReason

@@ -371,6 +371,19 @@ export const LIVE_TIERS = Object.freeze([
         file: "e2e/school-volume-live.spec.ts",
         requires: [URL_DOCTOR, ...IDP_MAIL, "E2E_LEARNING_VOLUME_SCHOOL_SLUGS"],
       },
+      {
+        // 024 EARS-24 (#4012): the rule-change reason, authored by a rules
+        // editor on the admin host and read on the doctor host.
+        file: "e2e/learning-rule-change-live.spec.ts",
+        slotReason:
+          "the spec grants `learning_rules_editor` through the IdP management API, whose service token is kept out of a public repo's Actions env, and a doctor-host leg is given no admin origin",
+        requires: [
+          URL_DOCTOR,
+          "E2E_ADMIN_URL",
+          ...IDP_MAIL,
+          "IDP_SERVICE_TOKEN",
+        ],
+      },
     ],
   },
   {

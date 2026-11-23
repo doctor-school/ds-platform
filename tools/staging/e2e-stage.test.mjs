@@ -28,6 +28,13 @@ import {
   releaseCheckExclusion,
   renderVerdictBlock,
   runE2eStage,
+  dispatchesToActions,
+  dispatchInputs,
+  dispatchStageRun,
+  renderPrVerdictComment,
+  reportTally,
+  runMarker,
+  slotRunTitle,
   slotE2eEnv,
   slotLiveEnv,
   slotLiveStandEnv,
@@ -345,6 +352,8 @@ describe("parseE2eArgs", () => {
       reportDir: undefined,
       expectSha: undefined,
       live: true,
+      local: false,
+      verdictFile: undefined,
     });
   });
 
@@ -361,8 +370,11 @@ describe("parseE2eArgs", () => {
         "--grep",
         "вход",
         "--no-axe",
+        "--local",
         "--report-dir",
         "out",
+        "--verdict-file",
+        "verdict.txt",
       ]),
       {
         slot: "pr-2198",
@@ -372,6 +384,8 @@ describe("parseE2eArgs", () => {
         reportDir: "out",
         expectSha: undefined,
         live: true,
+        local: true,
+        verdictFile: "verdict.txt",
       },
     );
   });
@@ -1286,7 +1300,7 @@ describe("runE2eStage — the live legs", () => {
           removeReport: () => {},
           readReport: () => ({}),
         };
-        await runE2eStageCommand(["pr-4122"], { effects });
+        await runE2eStageCommand(["pr-4122", "--local"], { effects });
         assert.ok(admin);
       `,
       ],
@@ -1317,7 +1331,7 @@ describe("runE2eStage — the live legs", () => {
       DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET: "committee-factor",
     };
     const { calls, effects, writes } = harness();
-    await runE2eStage(["pr-4122"], { env, effects });
+    await runE2eStage(["pr-4122", "--local"], { env, effects });
     const admin = calls.find((call) => call.argv.includes("@ds/admin"));
     assert.ok(admin, "the complete slot run must launch the admin leg");
     assert.ok(admin.argv.includes("--config=playwright.flows.config.ts"));
@@ -1366,7 +1380,7 @@ describe("runE2eStage — the live legs", () => {
     }
 
     const doctor = harness();
-    await runE2eStage(["pr-4122", "--project", "doctor"], {
+    await runE2eStage(["pr-4122", "--local", "--project", "doctor"], {
       env,
       effects: doctor.effects,
     });
@@ -1375,7 +1389,7 @@ describe("runE2eStage — the live legs", () => {
 
   it("runs one leg per live config with the slot's URLs, IdP and Mailpit", async () => {
     const { calls, effects } = harness();
-    await runE2eStage(["pr-3168"], { env: ENV, effects });
+    await runE2eStage(["pr-3168", "--local"], { env: ENV, effects });
     const live = calls.filter(isLive);
     const configs = live.map((c) =>
       c.argv.find((t) => t.startsWith("--config=")),
@@ -1410,7 +1424,7 @@ describe("runE2eStage — the live legs", () => {
 
   it("hands each event-page leg its golden slugs, lets the operator's own value win, and keeps them off every other leg (#2996)", async () => {
     const { calls, effects } = harness();
-    await runE2eStage(["pr-2996"], {
+    await runE2eStage(["pr-2996", "--local"], {
       env: { ...ENV, E2E_HYBRID_SLUG: "operator-hybrid" },
       effects,
     });
@@ -1458,7 +1472,7 @@ describe("runE2eStage — the live legs", () => {
 
   it("hands the default Academy leg its own 005 journey slugs — golden events under journey-only names, never an event-page slug name (#3229)", async () => {
     const { calls, effects } = harness();
-    await runE2eStage(["pr-3229"], { env: ENV, effects });
+    await runE2eStage(["pr-3229", "--local"], { env: ENV, effects });
     const leg = calls.find(
       (c) =>
         c.argv.includes("@ds/portal") &&
@@ -1511,7 +1525,7 @@ describe("runE2eStage — the live legs", () => {
 
   it("generates the BDD specs before the Academy live leg", async () => {
     const { calls, effects } = harness();
-    await runE2eStage(["pr-3168", "--project", "academy"], {
+    await runE2eStage(["pr-3168", "--local", "--project", "academy"], {
       env: ENV,
       effects,
     });
@@ -1524,7 +1538,7 @@ describe("runE2eStage — the live legs", () => {
 
   it("writes the not-run specs to a --test-list-invert file instead of letting them fail on env", async () => {
     const { calls, writes, effects } = harness();
-    await runE2eStage(["pr-3168", "--project", "doctor"], {
+    await runE2eStage(["pr-3168", "--local", "--project", "doctor"], {
       env: ENV,
       effects,
     });
@@ -1553,7 +1567,7 @@ describe("runE2eStage — the live legs", () => {
         BOT_PROTECTION_TEST_TOKEN: "box-token",
       }),
     });
-    await runE2eStage(["pr-3168"], { env: ENV, effects });
+    await runE2eStage(["pr-3168", "--local"], { env: ENV, effects });
     const academy = calls.find((c) =>
       c.argv.includes("--config=playwright.account-live.config.ts"),
     );
@@ -1647,7 +1661,7 @@ describe("runE2eStage — the live legs", () => {
       }),
       readReport: (file) => (isLiveReport(file) ? undefined : LIVE_GREEN),
     });
-    const code = await runE2eStage(["pr-3168", "--project", "academy"], {
+    const code = await runE2eStage(["pr-3168", "--local", "--project", "academy"], {
       env: ENV,
       effects,
     });
@@ -1899,7 +1913,7 @@ describe("E2E_PUBLIC_LOG=1 — the run's console is a public Actions log", () =>
 
   it("a slot run's live legs print through the summary reporter", async () => {
     const { calls, lines, effects } = harness({ issueState: () => "CLOSED" });
-    await runE2eStage(["pr-3168"], { env: PUBLIC_ENV, effects });
+    await runE2eStage(["pr-3168", "--local"], { env: PUBLIC_ENV, effects });
     const live = calls.filter(isLive);
     assert.ok(live.length > 0);
     for (const leg of live) {
@@ -2281,5 +2295,202 @@ describe("golden live env (#3191) — derived from the dataset every slot is clo
           g.requires.some((name) => !derivable.has(name)),
           `${tier.name} ${g.file}: declared by design but a slot derives every variable it requires`,
         );
+  });
+});
+
+describe("the PR-slot run in Actions (#4202)", () => {
+  const HEAD = "c".repeat(40);
+  const BRANCH = "tooling/4202-x";
+  const RUN = { databaseId: 901, displayTitle: slotRunTitle("pr-4202", HEAD), url: "https://github.com/o/r/actions/runs/901" };
+
+  /** Fake git + gh: `views` are the successive `gh run view` replies. */
+  function dispatchHarness({
+    remoteSha = HEAD,
+    detached = false,
+    views = [{ status: "in_progress" }, { status: "completed", conclusion: "success" }],
+    comment = `${runMarker(901)}\n### e2e:stage pr-4202 — PASS\n\npassed 3 · failed 0 · flaky 0 · skipped 0\n`,
+  } = {}) {
+    const git = [];
+    const gh = [];
+    const lines = [];
+    let lists = 0;
+    let viewIndex = 0;
+    const ok = (stdout) => ({ status: 0, stdout, stderr: "" });
+    const effects = {
+      git: (args) => {
+        git.push(args);
+        if (args[0] === "rev-parse") return ok(`${HEAD}\n`);
+        if (args[0] === "symbolic-ref")
+          return detached ? { status: 128, stdout: "", stderr: "fatal: not a symbolic ref" } : ok(`${BRANCH}\n`);
+        if (args[0] === "ls-remote")
+          return ok(remoteSha ? `${remoteSha}\trefs/heads/${BRANCH}\n` : "");
+        throw new Error(`unexpected git ${args.join(" ")}`);
+      },
+      gh: (args) => {
+        gh.push(args);
+        if (args[0] === "run" && args[1] === "list") {
+          lists += 1;
+          return ok(JSON.stringify(lists === 1 ? [] : [RUN]));
+        }
+        if (args[0] === "workflow") return ok("");
+        if (args[0] === "run" && args[1] === "view") {
+          const view = views[Math.min(viewIndex, views.length - 1)];
+          viewIndex += 1;
+          return ok(JSON.stringify(view));
+        }
+        if (args[0] === "api") return ok(comment);
+        throw new Error(`unexpected gh ${args.join(" ")}`);
+      },
+      sleep: async () => {},
+      now: () => 0,
+      log: (line) => lines.push(line),
+    };
+    return { git, gh, lines, effects };
+  }
+
+  it("dispatches a PR slot by default; --local, `main` and the release check stay here", () => {
+    assert.equal(dispatchesToActions(parseE2eArgs(["pr-4202"])), true);
+    assert.equal(dispatchesToActions(parseE2eArgs(["pr-4202", "--local"])), false);
+    assert.equal(dispatchesToActions(parseE2eArgs(["main"])), false);
+    assert.equal(dispatchesToActions(parseE2eArgs(["main", "--expect-sha", SHA])), false);
+  });
+
+  it("refuses a workstation report path on a dispatched run, and --local on the release check", () => {
+    assert.throws(() => parseE2eArgs(["pr-4202", "--report-dir", "out"]), /--report-dir names a workstation path.*--local/);
+    assert.throws(() => parseE2eArgs(["pr-4202", "--verdict-file", "v.txt"]), /--verdict-file/);
+    assert.throws(() => parseE2eArgs(["main", "--expect-sha", SHA, "--local"]), /drop --local/);
+    // The release check's own refusals are the ones it always gave.
+    assert.throws(() => parseE2eArgs(["pr-4202", "--expect-sha", SHA]), /`main` slot only/);
+    assert.throws(() => parseE2eArgs(["main", "--expect-sha", SHA.slice(0, 12)]), /full 40-character/);
+    assert.throws(() => parseE2eArgs(["main", "--expect-sha", SHA, "--no-live"]), /drop --no-live/);
+  });
+
+  it("sends only the filters that are set, the grep as one argv element", () => {
+    assert.deepEqual(dispatchInputs(parseE2eArgs(["pr-7"]), HEAD), ["-f", "slot=pr-7", "-f", `sha=${HEAD}`]);
+    assert.deepEqual(
+      dispatchInputs(parseE2eArgs(["pr-7", "--project", "doctor", "--grep", "вход|выход $(id)", "--no-axe", "--no-live"]), HEAD),
+      ["-f", "slot=pr-7", "-f", `sha=${HEAD}`, "-f", "project=doctor", "-f", "grep=вход|выход $(id)", "-f", "no-axe=true", "-f", "no-live=true"],
+    );
+  });
+
+  it("dispatches stage.yml from main for the pushed HEAD, waits, prints the verdict comment, exits 0 on success", async () => {
+    const { gh, lines, effects } = dispatchHarness();
+    const code = await dispatchStageRun(parseE2eArgs(["pr-4202", "--grep", "a b"]), effects);
+    assert.equal(code, 0);
+    const workflow = gh.find((args) => args[0] === "workflow");
+    assert.deepEqual(workflow, ["workflow", "run", "stage.yml", "--ref", "main", "-f", "slot=pr-4202", "-f", `sha=${HEAD}`, "-f", "grep=a b"]);
+    const api = gh.find((args) => args[0] === "api");
+    assert.equal(api[2], "repos/{owner}/{repo}/issues/4202/comments");
+    assert.match(api[4], /e2e-stage-run:901 -->/);
+    assert.ok(lines.some((l) => /### e2e:stage pr-4202 — PASS/.test(l)));
+    assert.ok(lines.some((l) => /runs\/901: success$/.test(l)));
+  });
+
+  it("exits 1 when the run is red, even when no verdict comment was posted", async () => {
+    const { lines, effects } = dispatchHarness({
+      views: [{ status: "completed", conclusion: "failure" }],
+      comment: "",
+    });
+    assert.equal(await dispatchStageRun(parseE2eArgs(["pr-4202"]), effects), 1);
+    assert.ok(lines.some((l) => /posted no verdict comment on #4202/.test(l)));
+  });
+
+  it("refuses to dispatch an unpushed or detached HEAD — no workflow run starts", async () => {
+    for (const setup of [{ remoteSha: "d".repeat(40) }, { remoteSha: "" }, { detached: true }]) {
+      const { gh, lines, effects } = dispatchHarness(setup);
+      assert.equal(await dispatchStageRun(parseE2eArgs(["pr-4202"]), effects), 2);
+      assert.equal(gh.some((args) => args[0] === "workflow"), false);
+      assert.match(lines.at(-1), /refuses to dispatch: (HEAD c{12} is not origin|HEAD is detached)/);
+    }
+  });
+
+  it("starts no browser and reads no box on the workstation for a dispatched run", async () => {
+    const { calls, effects } = harness({
+      readBoxEnv: async () => {
+        throw new Error("the box was read");
+      },
+      fetchHealth: async () => {
+        throw new Error("the slot was read");
+      },
+    });
+    const d = dispatchHarness();
+    const code = await runE2eStage(["pr-4202"], { env: {}, effects, dispatch: d.effects });
+    assert.equal(code, 0);
+    assert.deepEqual(calls, []);
+  });
+
+  it("--verdict-file records the verdict block, and the pre-flight refusal when the slot does not answer", async () => {
+    const green = harness();
+    await runE2eStage(["pr-4202", "--local", "--verdict-file", "v.txt"], {
+      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+      effects: green.effects,
+    });
+    const block = green.writes.find((w) => w.file === "v.txt");
+    assert.match(block.content, /e2e:stage verdict/);
+    assert.match(block.content, /slot: +pr-4202/);
+
+    const down = harness({ fetchHealth: async () => ({ status: 0, body: "", error: "ECONNREFUSED" }) });
+    const code = await runE2eStage(["pr-4202", "--local", "--verdict-file", "v.txt"], {
+      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+      effects: down.effects,
+    });
+    assert.equal(code, 2);
+    const refusal = down.writes.find((w) => w.file === "v.txt");
+    assert.match(refusal.content, /refuses: https:\/\/api-pr-4202\.[^ ]+\/v1\/health — HTTP 0/);
+    assert.doesNotMatch(refusal.content, /verdict: +PASS/);
+  });
+
+  it("the PR comment: counts with flaky apart, at most 20 failing titles, the run link", () => {
+    const failing = Array.from({ length: 23 }, (_, i) => ({
+      title: `scenario ${i}`,
+      tests: [{ projectName: "doctor", status: i === 0 ? "flaky" : "unexpected" }],
+    }));
+    const report = {
+      suites: [
+        {
+          title: "a.feature.spec.js",
+          file: "a.feature.spec.js",
+          specs: [{ title: "ok", tests: [{ projectName: "academy", status: "expected" }, { projectName: "academy", status: "skipped" }] }],
+          suites: [{ title: "Feature <x>", specs: failing }],
+        },
+      ],
+    };
+    const tally = reportTally(report);
+    assert.deepEqual(
+      { passed: tally.passed, failed: tally.failed, flaky: tally.flaky, skipped: tally.skipped },
+      { passed: 1, failed: 22, flaky: 1, skipped: 1 },
+    );
+    assert.equal(tally.failing[0], "[doctor] Feature <x> > scenario 0 (flaky)");
+    const body = renderPrVerdictComment({
+      runId: 901,
+      runUrl: RUN.url,
+      slot: "pr-4202",
+      sha: HEAD,
+      passed: false,
+      verdictBlock: "```text\ne2e:stage verdict\n```\n",
+      report,
+    });
+    assert.ok(body.startsWith(`${runMarker(901)}\n### e2e:stage pr-4202 — FAIL`));
+    assert.match(body, /passed 1 · failed 22 · flaky 1 · skipped 1/);
+    assert.equal((body.match(/^- \[doctor\]/gm) ?? []).length, 20);
+    assert.match(body, /- … and 3 more/);
+    assert.match(body, /\[Actions run 901\]\(https:\/\/github\.com\/o\/r\/actions\/runs\/901\)/);
+    assert.doesNotMatch(body, /<x>/);
+    assert.match(body, /e2e:stage verdict/);
+  });
+
+  it("a refused run's comment says FAIL with the reason, never PASS", () => {
+    const body = renderPrVerdictComment({
+      runId: 5,
+      runUrl: "u",
+      slot: "pr-1",
+      sha: "abc",
+      passed: false,
+      reason: "sha is not a 40-hex SHA",
+      report: {},
+    });
+    assert.match(body, /— FAIL/);
+    assert.match(body, /Refused: sha is not a 40-hex SHA/);
+    assert.doesNotMatch(body, /PASS/);
   });
 });

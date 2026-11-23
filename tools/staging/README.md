@@ -254,21 +254,54 @@ slot on a timer — `gc` is an operator subcommand and reclaims disk, not live s
 ## Regression run: `pnpm e2e:stage <slot>`
 
 The C6 regression contract (`packages/e2e`) driven against a slot's **public** hostnames
-— the edge a reviewer uses, basic auth included. Tech spec C4 / §8 step 7: a preview
-verdict is pasted into the PR body **by hand**, and the `main` run is the release check:
-the `stage.yml` suite job runs it in Actions for every `main` target and posts the
-`stage-suite` status the Actions release pre-flight requires; `pnpm deploy:prod` runs it on
-the PC only for a break-glass hotfix `--ref` target (below, «The release check»).
+— the edge a reviewer uses, basic auth included. Tech spec C4 / §8 step 7. **A PR-slot
+run executes in GitHub Actions by default, not on this machine** (#4202): Playwright
+browsers on the operator workstation ran it out of memory with several sessions at once,
+and a public repository's GitHub-hosted runners cost nothing.
+
+- **A PR slot** — `pnpm e2e:stage pr-<N>` dispatches `.github/workflows/stage.yml`
+  (`gh workflow run stage.yml --ref main -f slot=pr-<N> -f sha=<HEAD>` plus the filters
+  you passed), waits for the run, prints the compact verdict it posted on PR N, and exits
+  0 only for a green run (1 red, 2 when nothing was dispatched). No browser starts here.
+  The SHA is the current `HEAD`, which must be pushed and be PR N's head — the run
+  refuses any other SHA, `main`, a short or non-hex SHA and a fork's commit, each as a
+  red run naming the reason. The workflow file always comes from `main` (the `stage`
+  environment that holds the suite secrets admits `main` only); the job checks out the
+  dispatched SHA and runs that tree's suite, so a branch needs this change merged in
+  (`--local` and `--verdict-file` exist in its `e2e-stage.mjs`). The verdict comment
+  carries passed / failed / flaky / skipped counts, the failing titles (≤20), the
+  e2e:stage verdict block and the run link — paste or link it in the PR body. The full
+  HTML/JSON report goes to the stage box (`/var/lib/ds-platform/e2e-reports/<sha>/`),
+  never to an Actions artifact: this repository's artifacts are public (release-pipeline
+  spec §4). A PR-slot run never posts or changes the `stage-suite` status — its job holds
+  no `statuses` permission.
+- **`--local`** keeps the workstation run, for debugging a single spec
+  (`pnpm e2e:stage pr-<N> --local --grep "…"`); it is also what the Actions job itself
+  runs. `--report-dir` / `--verdict-file` need it.
+- **The `main` slot** is the release check: the `stage.yml` suite job runs it in Actions
+  for every `main` target and posts the `stage-suite` status the Actions release
+  pre-flight requires; `pnpm deploy:prod` runs it on the PC only for a break-glass hotfix
+  `--ref` target (below, «The release check»).
+
+**Not yet in Actions.** The converge: the CI key's forced command
+(`infra/deploy/bin/ds-deploy-entrypoint`) has no verb that raises a PR slot (its release
+driver refuses `stage-pr-<N>`: «PR slots stay operator-driven»), so raise or sync the
+slot with `pnpm stage:slot up pr-<N> --ref <sha>` before dispatching. And the
+box-observing scenarios (#3119): the CI key's `observe` verb serves the `main` slot only,
+so on a PR slot those scenarios have no box transport in Actions and fail; `--local`
+runs them with the operator's own ssh.
 
 ```bash
-export STAGE_BASIC_AUTH_PASS="…"          # same variable the converge needs, see above
-pnpm e2e:stage pr-123                     # both storefronts
-pnpm e2e:stage main --project academy --grep "витрина"
-pnpm e2e:stage main --project walks       # only the derived walks (§6.3), no axe leg
+pnpm e2e:stage pr-123                     # dispatch: both storefronts, in Actions
 pnpm e2e:stage pr-123 --project login     # the door scenarios bound to the sign-in host
 pnpm e2e:stage pr-123 --project sign-in-host  # the sign-in host's own plain specs
 pnpm e2e:stage pr-123 --no-axe            # skip the a11y leg explicitly
 pnpm e2e:stage pr-123 --no-live           # skip the storefront live-tier legs (#3168)
+
+# --local: the workstation run, one spec at a time
+export STAGE_BASIC_AUTH_PASS="…"          # same variable the converge needs, see above
+pnpm e2e:stage pr-123 --local --project academy --grep "витрина"
+pnpm e2e:stage main --project walks       # `main` runs here: only the derived walks (§6.3)
 ```
 
 **The sign-in host's two projects (#3345).** `login` is a Gherkin project: every

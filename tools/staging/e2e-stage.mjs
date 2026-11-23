@@ -3,9 +3,13 @@
  * `pnpm e2e:stage <slot>` — the REGRESSION RUN over a converged staging slot.
  *
  * Staging/previews/regression-contour tech spec, C4 and §8 step 7: the C6 suite and
- * the a11y suites are driven from the OPERATOR's machine against the slot's PUBLIC
- * hostnames — the same edge a reviewer uses, basic auth included. A preview verdict is
- * pasted into the PR body by hand. `--expect-sha` is the release check: for a `main`
+ * the a11y suites are driven against the slot's PUBLIC hostnames — the same edge a
+ * reviewer uses, basic auth included. For a PR slot the run executes in GitHub
+ * Actions, never on the operator's machine (#4202): `pnpm e2e:stage pr-<N>`
+ * dispatches `.github/workflows/stage.yml` for the current `HEAD` SHA
+ * (`dispatchStageRun`), waits for it, and prints the compact verdict the run posts
+ * on PR N. `--local` keeps the workstation run, for debugging a single spec — and it
+ * is what the Actions job itself runs. `--expect-sha` is the release check: for a `main`
  * push the Actions `stage.yml` suite job runs it and posts the `stage-suite` commit
  * status the release pre-flight reads (#2985, #3198); `pnpm deploy:prod` runs it itself
  * only for a `--ref` hotfix target (C7, tools/deploy/stage-main-check.mjs).
@@ -109,7 +113,8 @@ export function parseE2eArgs(argv) {
   if (slot === undefined || slot.startsWith("-")) {
     throw new SlotError(
       "usage: pnpm e2e:stage <slot> [--project academy|doctor|walks|login|sign-in-host] [--grep <re>] " +
-        "[--no-axe] [--no-live] [--report-dir <path>] [--expect-sha <sha>] — the slot must be named",
+        "[--no-axe] [--no-live] [--local] [--report-dir <path>] [--verdict-file <path>] [--expect-sha <sha>] " +
+        "— the slot must be named",
     );
   }
   assertSlotName(slot);
@@ -121,6 +126,8 @@ export function parseE2eArgs(argv) {
     reportDir: undefined,
     expectSha: undefined,
     live: true,
+    local: false,
+    verdictFile: undefined,
   };
   const takeValue = (flag) => {
     const value = rest.shift();
@@ -151,6 +158,12 @@ export function parseE2eArgs(argv) {
       case "--report-dir":
         options.reportDir = takeValue(flag);
         break;
+      case "--local":
+        options.local = true;
+        break;
+      case "--verdict-file":
+        options.verdictFile = takeValue(flag);
+        break;
       case "--expect-sha": {
         const sha = takeValue(flag);
         if (!FULL_SHA_RE.test(sha)) {
@@ -166,7 +179,33 @@ export function parseE2eArgs(argv) {
     }
   }
   if (options.expectSha !== undefined) assertReleaseCheckShape(options);
+  if (dispatchesToActions(options)) {
+    // A dispatched run's report goes to the stage box and its verdict to PR N; a
+    // workstation path names nothing the Actions runner could write.
+    const local = [
+      options.reportDir !== undefined && "--report-dir",
+      options.verdictFile !== undefined && "--verdict-file",
+    ].filter(Boolean);
+    if (local.length > 0) {
+      throw new SlotError(
+        `${local.join(", ")} name${local.length === 1 ? "s" : ""} a workstation path — a PR-slot run executes in Actions; add --local to run it here`,
+      );
+    }
+  }
   return options;
+}
+
+/**
+ * Whether this invocation dispatches the Actions run instead of running the suite
+ * here (#4202): a PR slot, unless `--local`. The `main` slot keeps its own paths —
+ * the release check (`--expect-sha`) and the `main` run of `stage.yml`.
+ */
+export function dispatchesToActions(options) {
+  return (
+    options.slot !== "main" &&
+    !options.local &&
+    options.expectSha === undefined
+  );
 }
 
 /**
@@ -187,6 +226,7 @@ function assertReleaseCheckShape(options) {
     options.grep !== undefined && "--grep",
     options.axe === false && "--no-axe",
     options.live === false && "--no-live",
+    options.local && "--local",
   ].filter(Boolean);
   if (narrowing.length > 0) {
     throw new SlotError(
@@ -842,14 +882,291 @@ export const realEffects = {
   now: () => new Date(),
 };
 
+// --- the PR-slot run in Actions (#4202) ---------------------------------------
+
+/** The workflow a PR-slot run is dispatched to, and the ref its file is read from. */
+export const STAGE_WORKFLOW = "stage.yml";
+/**
+ * `main`: the `stage` environment that holds the suite secrets admits deployments
+ * from `main` only, so the steps that receive them are always `main`'s; the job
+ * checks out the dispatched SHA for the suite itself.
+ */
+export const STAGE_WORKFLOW_REF = "main";
+/** The PR comment the run posts carries this marker, so the CLI finds its own. */
+export const runMarker = (runId) => `<!-- e2e-stage-run:${runId} -->`;
+/** The run title (`run-name` of stage.yml) — it ends with the SHA, as retention reads. */
+export const slotRunTitle = (slot, sha) => `Stage ${slot} ${sha}`;
+
+const FAILING_TITLES_MAX = 20;
+const DISPATCH_POLL_MS = 20_000;
+const RUN_APPEAR_POLLS = 12;
+/** Queue + install + the suite job's 90-min limit, with margin. */
+export const RUN_WAIT_MS = 150 * 60_000;
+
+/**
+ * Counts and failing titles out of Playwright's JSON report, for the PR comment.
+ * Unlike `summarizeReport` (whose verdict counts a flaky test as a failure), the
+ * comment names flaky apart, so a reader sees which red needed a retry.
+ */
+export function reportTally(report) {
+  const tally = { passed: 0, failed: 0, flaky: 0, skipped: 0, failing: [] };
+  const walk = (suite, parents = []) => {
+    const titles =
+      suite.title && suite.title !== suite.file
+        ? [...parents, suite.title]
+        : parents;
+    for (const spec of suite.specs ?? []) {
+      for (const test of spec.tests ?? []) {
+        const status = test?.status;
+        if (status === "expected") tally.passed += 1;
+        else if (status === "skipped") tally.skipped += 1;
+        else {
+          if (status === "flaky") tally.flaky += 1;
+          else tally.failed += 1;
+          const title = [...titles, spec.title].join(" > ").replace(/\s+/g, " ");
+          tally.failing.push(
+            `[${test?.projectName ?? "unknown"}] ${title}${status === "flaky" ? " (flaky)" : ""}`,
+          );
+        }
+      }
+    }
+    for (const child of suite.suites ?? []) walk(child, titles);
+  };
+  for (const suite of report?.suites ?? []) walk(suite);
+  return tally;
+}
+
+/**
+ * The compact verdict the Actions run posts on PR N (#4202): verdict, counts, the
+ * failing titles (≤20), the run link, and the e2e:stage verdict block when the run
+ * produced one. `passed` is the suite step's own outcome; anything else — a refused
+ * input, an unanswered `/v1/health`, a red leg — is FAIL, with its reason.
+ */
+export function renderPrVerdictComment({
+  runId,
+  runUrl,
+  slot,
+  sha,
+  passed,
+  reason,
+  verdictBlock,
+  report,
+}) {
+  const tally = reportTally(report);
+  const lines = [
+    runMarker(runId),
+    `### e2e:stage ${slot} — ${passed ? "PASS" : "FAIL"}`,
+    "",
+    `\`${String(sha ?? "").slice(0, 12) || "?"}\` · [Actions run ${runId}](${runUrl})`,
+  ];
+  if (reason) lines.push("", `Refused: ${reason}`);
+  lines.push(
+    "",
+    `passed ${tally.passed} · failed ${tally.failed} · flaky ${tally.flaky} · skipped ${tally.skipped}`,
+  );
+  if (tally.failing.length > 0) {
+    lines.push("", "Failing:");
+    for (const title of tally.failing.slice(0, FAILING_TITLES_MAX)) {
+      lines.push(`- ${title.replace(/[<>`]/g, "")}`);
+    }
+    const more = tally.failing.length - FAILING_TITLES_MAX;
+    if (more > 0) lines.push(`- … and ${more} more`);
+  }
+  if (verdictBlock) lines.push("", verdictBlock.trimEnd());
+  lines.push(
+    "",
+    "Full report: on the stage box, `/var/lib/ds-platform/e2e-reports/<sha>/` (never an Actions artifact — this repository's artifacts are public).",
+  );
+  return `${lines.join("\n")}\n`;
+}
+
+/**
+ * `gh` and `git` run WITHOUT a shell (both are real executables on the operator
+ * box), so `--grep` — the one arbitrary value — travels as one argv element and
+ * never parses as shell text.
+ */
+export const realDispatchEffects = {
+  git: (args) => spawnSync("git", args, { cwd: REPO_ROOT, encoding: "utf8" }),
+  gh: (args) => spawnSync("gh", args, { cwd: REPO_ROOT, encoding: "utf8" }),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  now: () => Date.now(),
+  log: (line) => console.log(line),
+};
+
+const stdoutOf = (r) => String(r?.stdout ?? "").trim();
+const failedRun = (r) => r?.status !== 0;
+const errLine = (r) =>
+  String(r?.stderr || r?.error?.message || "")
+    .trim()
+    .split("\n")[0] || `exit ${r?.status}`;
+
+/** The `-f name=value` inputs of the dispatch; only the filters that are set. */
+export function dispatchInputs(options, sha) {
+  const inputs = [`slot=${options.slot}`, `sha=${sha}`];
+  if (options.project !== undefined) inputs.push(`project=${options.project}`);
+  if (options.grep !== undefined) inputs.push(`grep=${options.grep}`);
+  if (!options.axe) inputs.push("no-axe=true");
+  if (!options.live) inputs.push("no-live=true");
+  return inputs.flatMap((input) => ["-f", input]);
+}
+
+/**
+ * `pnpm e2e:stage pr-<N>` (#4202): dispatch the PR-slot run of `stage.yml` for the
+ * pushed `HEAD`, wait for it, print the verdict comment it posted on PR N. No browser
+ * starts here. Exit 0 only for a successful run, 1 for any other conclusion, 2 when
+ * nothing was dispatched.
+ */
+export async function dispatchStageRun(options, effects = realDispatchEffects) {
+  const { slot } = options;
+  const pr = slot.slice("pr-".length);
+  const refuse = (reason) => {
+    effects.log(`e2e:stage refuses to dispatch: ${reason}`);
+    return 2;
+  };
+
+  const head = effects.git(["rev-parse", "HEAD"]);
+  const sha = stdoutOf(head);
+  if (failedRun(head) || !FULL_SHA_RE.test(sha))
+    return refuse("HEAD is not readable");
+  const branchRun = effects.git(["symbolic-ref", "--short", "HEAD"]);
+  if (failedRun(branchRun))
+    return refuse("HEAD is detached — check out the PR branch");
+  const branch = stdoutOf(branchRun);
+  // The run checks the SHA out from GitHub and refuses any SHA that is not PR N's
+  // head, so HEAD must be pushed.
+  const remote = effects.git(["ls-remote", "origin", `refs/heads/${branch}`]);
+  if (failedRun(remote))
+    return refuse(`origin is not readable (${errLine(remote)})`);
+  const remoteSha = stdoutOf(remote).split(/\s+/)[0] ?? "";
+  if (remoteSha !== sha) {
+    return refuse(
+      `HEAD ${sha.slice(0, 12)} is not origin/${branch} (${remoteSha.slice(0, 12) || "absent"}) — push it first`,
+    );
+  }
+
+  const title = slotRunTitle(slot, sha);
+  const listRuns = () => {
+    const r = effects.gh([
+      "run",
+      "list",
+      "--workflow",
+      STAGE_WORKFLOW,
+      "--event",
+      "workflow_dispatch",
+      "--branch",
+      STAGE_WORKFLOW_REF,
+      "--limit",
+      "30",
+      "--json",
+      "databaseId,displayTitle,url",
+    ]);
+    if (failedRun(r)) return undefined;
+    try {
+      return JSON.parse(stdoutOf(r)).filter((run) => run.displayTitle === title);
+    } catch {
+      return undefined;
+    }
+  };
+  const before = listRuns();
+  if (before === undefined)
+    return refuse("`gh run list` failed — is gh logged in?");
+  const known = new Set(before.map((run) => run.databaseId));
+
+  const started = effects.gh([
+    "workflow",
+    "run",
+    STAGE_WORKFLOW,
+    "--ref",
+    STAGE_WORKFLOW_REF,
+    ...dispatchInputs(options, sha),
+  ]);
+  if (failedRun(started))
+    return refuse(`\`gh workflow run\` failed (${errLine(started)})`);
+  effects.log(
+    `e2e:stage dispatched ${STAGE_WORKFLOW} for ${slot} at ${sha.slice(0, 12)}`,
+  );
+
+  let run;
+  for (let i = 0; i < RUN_APPEAR_POLLS && run === undefined; i += 1) {
+    await effects.sleep(5_000);
+    run = (listRuns() ?? []).find((r) => !known.has(r.databaseId));
+  }
+  if (run === undefined) {
+    effects.log(
+      `e2e:stage: the dispatched run did not appear — look for «${title}» in Actions`,
+    );
+    return 1;
+  }
+  effects.log(`e2e:stage waits for ${run.url}`);
+
+  const deadline = effects.now() + RUN_WAIT_MS;
+  let view;
+  for (let last = ""; ; ) {
+    const r = effects.gh([
+      "run",
+      "view",
+      String(run.databaseId),
+      "--json",
+      "status,conclusion",
+    ]);
+    if (!failedRun(r)) {
+      try {
+        view = JSON.parse(stdoutOf(r));
+      } catch {
+        view = undefined;
+      }
+      if (view?.status && view.status !== last) {
+        last = view.status;
+        effects.log(`e2e:stage run ${run.databaseId}: ${last}`);
+      }
+      if (view?.status === "completed") break;
+    }
+    if (effects.now() >= deadline) {
+      effects.log(
+        `e2e:stage: stopped waiting after ${RUN_WAIT_MS / 60_000} min — ${run.url}`,
+      );
+      return 1;
+    }
+    await effects.sleep(DISPATCH_POLL_MS);
+  }
+
+  const marker = runMarker(run.databaseId);
+  const comments = effects.gh([
+    "api",
+    "--paginate",
+    `repos/{owner}/{repo}/issues/${pr}/comments`,
+    "--jq",
+    `.[] | select(.body | startswith(${JSON.stringify(marker)})) | .body`,
+  ]);
+  const body = failedRun(comments) ? "" : stdoutOf(comments);
+  if (body.startsWith(marker)) effects.log(body.slice(marker.length).trim());
+  else
+    effects.log(
+      `e2e:stage: run ${run.databaseId} posted no verdict comment on #${pr}`,
+    );
+  effects.log(`e2e:stage run ${run.url}: ${view.conclusion}`);
+  return view.conclusion === "success" ? 0 : 1;
+}
+
 // --- the command --------------------------------------------------------------
 
 export async function runE2eStage(
   argv,
-  { env = process.env, effects = realEffects, liveTiers = LIVE_TIERS } = {},
+  {
+    env = process.env,
+    effects = realEffects,
+    liveTiers = LIVE_TIERS,
+    dispatch = realDispatchEffects,
+  } = {},
 ) {
   const options = parseE2eArgs(argv);
   const { slot } = options;
+  if (dispatchesToActions(options)) return dispatchStageRun(options, dispatch);
+  // `--verdict-file`: the block below, also written where the Actions job reads it
+  // for the PR comment — the refusal included, so a refused run never reads as a pass.
+  const recordVerdict = (text) => {
+    if (options.verdictFile !== undefined) effects.writeFile(options.verdictFile, text);
+  };
 
   if (options.expectSha !== undefined) {
     const refusal = releaseCheckEnvRefusal(env);
@@ -883,12 +1200,13 @@ export async function runE2eStage(
     path.posix.join(REPORT_ROOT, `${slot}-${reportStamp(effects.now())}`);
 
   if (!preflight.ok) {
-    effects.log(
+    const refusal =
       `e2e:stage refuses: ${healthUrl} — ${preflight.reason}${health.error ? ` (${health.error})` : ""}. ` +
-        "This command runs against a CONVERGED slot; raise it with `pnpm stage:slot up " +
-        `${slot}` +
-        "` first.",
-    );
+      "This command runs against a CONVERGED slot; raise it with `pnpm stage:slot up " +
+      `${slot}` +
+      "` first.";
+    effects.log(refusal);
+    recordVerdict(`${["```text", refusal, "```"].join("\n")}\n`);
     return exitCodeFor({ preflightOk: false, legs: [] });
   }
 
@@ -1079,18 +1397,18 @@ export async function runE2eStage(
     legs.push(required);
   }
   const summary = summarizeReport(reports.get("suite"));
-  effects.log(
-    renderVerdictBlock({
-      slot,
-      healthUrl,
-      sha: preflight.sha,
-      summary,
-      legs,
-      live,
-      axeNote: axe.note,
-      reportDir,
-    }),
-  );
+  const block = renderVerdictBlock({
+    slot,
+    healthUrl,
+    sha: preflight.sha,
+    summary,
+    legs,
+    live,
+    axeNote: axe.note,
+    reportDir,
+  });
+  effects.log(block);
+  recordVerdict(block);
   return exitCodeFor({ preflightOk: true, legs: [...legs, ...live] });
 }
 

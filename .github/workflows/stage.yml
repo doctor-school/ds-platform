@@ -23,16 +23,56 @@ name: Stage main
 #
 # Commit status `stage-suite` on the SHA: pending when the converge starts, then
 # success / failure with counts only. It is the check the release gate requires.
+#
+# PR slots (#4202): a `workflow_dispatch` (`pnpm e2e:stage pr-<N>` sends it, always
+# with `--ref main`: the `stage` environment admits `main` only) runs the same suite
+# against an already-converged `pr-<N>` slot on a GitHub-hosted runner, so no
+# Playwright browser starts on the operator's machine.
+#   slot-suite   — refuses `main`, a non-40-hex SHA and a SHA that is not the head of
+#                  PR N from this repository; checks the SHA out and runs
+#                  `e2e-stage.mjs pr-<N> --local` (its `/v1/health` pre-flight
+#                  refuses a slot that does not answer); ships the report to the box
+#                  like `suite`. Its token has NO `statuses` permission: a PR-slot run
+#                  never writes `stage-suite`, on any SHA.
+#   slot-verdict — posts the compact verdict comment on PR N (and only that).
 
 # The title ends with the SHA under test: registry retention reads it from a queued or
 # running run to keep that SHA's images (#3752) — a workflow_run run's own head_sha is
 # the default branch head, not the triggering run's.
-run-name: Stage main ${{ github.event.workflow_run.head_sha }}
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Stage {0} {1}', inputs.slot, inputs.sha) || format('Stage main {0}', github.event.workflow_run.head_sha) }}
 
 on:
   workflow_run:
     workflows: ["Runtime images"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: "pr-<N> — a converged PR slot (main is refused)"
+        required: true
+        type: string
+      sha:
+        description: "the 40-hex head SHA of PR N"
+        required: true
+        type: string
+      project:
+        description: "e2e-stage --project (academy|doctor|walks|login|sign-in-host)"
+        required: false
+        type: string
+      grep:
+        description: "e2e-stage --grep"
+        required: false
+        type: string
+      no-axe:
+        description: "e2e-stage --no-axe"
+        required: false
+        type: boolean
+        default: false
+      no-live:
+        description: "e2e-stage --no-live"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -42,9 +82,10 @@ permissions:
 # Only a successful `push` to `main` run of `Runtime images` enters `stage-main`:
 # GitHub keeps one pending run per group, so any run whose jobs all skip (a PR
 # trigger, a failed main build) queued there would replace and cancel main's pending
-# good run (#3125). Every other trigger gets a group of its own.
+# good run (#3125). Every other trigger gets a group of its own; a PR-slot dispatch
+# queues behind a run on the same slot only (#4202).
 concurrency:
-  group: ${{ (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main') && 'stage-main' || format('stage-other-{0}', github.run_id) }}
+  group: ${{ github.event_name == 'workflow_dispatch' && format('stage-slot-{0}', inputs.slot) || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main') && 'stage-main' || format('stage-other-{0}', github.run_id) }}
   cancel-in-progress: false
 
 env:
@@ -406,3 +447,239 @@ jobs:
             -f state=failure -f context="$STATUS_CONTEXT" \
             -f description="stage suite $SUITE_RESULT before a verdict" \
             -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+  # The PR-slot run (#4202): the suite against an already-converged `pr-<N>` slot.
+  # Every input reaches a shell through `env:` only, always quoted.
+  slot-suite:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: stage
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      # `e2e-stage.mjs` reads the axe-gate Issue's state (`gh issue view`).
+      issues: read
+      # The SHA is checked against PR N's head. No `statuses`: never `stage-suite`.
+      pull-requests: read
+    outputs:
+      comment: ${{ steps.verdict.outputs.comment }}
+      reason: ${{ steps.inputs.outputs.reason }}
+    env:
+      SLOT: ${{ inputs.slot }}
+      SHA: ${{ inputs.sha }}
+      CI: "1"
+      E2E_PUBLIC_LOG: "1"
+      STAGE_BASE_DOMAIN: stage.doctor.school
+      E2E_HTTP_USER: stage
+      E2E_WORKERS: "4"
+    steps:
+      - name: Check the inputs
+        id: inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          refuse() {
+            echo "reason=$1" >> "$GITHUB_OUTPUT"
+            echo "::error::$1"
+            exit 1
+          }
+          [[ "$SLOT" =~ ^pr-[1-9][0-9]{0,9}$ ]] ||
+            refuse "slot must be pr-<N> (main runs only from Runtime images)"
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || refuse "sha is not a 40-hex SHA"
+          # The SHA must be PR N's head, pushed to this repository: a fork's commit
+          # never runs with the stage secrets.
+          head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${SLOT#pr-}" \
+            --jq '"\(.head.repo.full_name // "") \(.head.sha)"' 2>/dev/null) ||
+            refuse "PR ${SLOT#pr-} is not readable"
+          [ "${head% *}" = "$GITHUB_REPOSITORY" ] ||
+            refuse "PR ${SLOT#pr-} is not from this repository"
+          [ "${head#* }" = "$SHA" ] ||
+            refuse "sha is not the head of PR ${SLOT#pr-} (${head#* })"
+          echo "inputs: $SLOT at $SHA"
+
+      - name: Name the report dir
+        run: echo "REPORT_DIR=$RUNNER_TEMP/e2e-report" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ds/e2e exec playwright install --with-deps chromium
+
+      - name: Mask the suite secrets
+        env:
+          E2E_HTTP_PASS: ${{ secrets.STAGE_BASIC_AUTH_PASS }}
+          E2E_CAPTCHA_TEST_TOKEN: ${{ secrets.E2E_CAPTCHA_TEST_TOKEN }}
+          DS_GOLDEN_PASSWORD_ADMIN: ${{ secrets.DS_GOLDEN_PASSWORD_ADMIN }}
+          DS_GOLDEN_PASSWORD_DOCTOR_MFA: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_MFA }}
+          DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED }}
+          DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED }}
+        run: |
+          for v in E2E_HTTP_PASS E2E_CAPTCHA_TEST_TOKEN DS_GOLDEN_PASSWORD_ADMIN \
+            DS_GOLDEN_PASSWORD_DOCTOR_MFA DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED \
+            DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED; do
+            value="${!v}"
+            [ -n "$value" ] && echo "::add-mask::$value"
+          done
+          echo "::add-mask::$(printf '%s:%s' "$E2E_HTTP_USER" "$E2E_HTTP_PASS" | base64 -w0)"
+
+      # No ssh key yet: the CI key's `observe` verb serves the `main` slot only, so a
+      # PR-slot suite gets no box transport; the key is written after it, for the
+      # report upload alone.
+      - name: Stage suite
+        id: suite
+        env:
+          E2E_HTTP_PASS: ${{ secrets.STAGE_BASIC_AUTH_PASS }}
+          E2E_CAPTCHA_TEST_TOKEN: ${{ secrets.E2E_CAPTCHA_TEST_TOKEN }}
+          DS_STAGE_AGENT_ADMIN_PASSWORD: ${{ secrets.DS_STAGE_AGENT_ADMIN_PASSWORD }}
+          DS_STAGE_AGENT_ADMIN_TOTP_SECRET: ${{ secrets.DS_STAGE_AGENT_ADMIN_TOTP_SECRET }}
+          DS_STAGE_AGENT_COMMITTEE_PASSWORD: ${{ secrets.DS_STAGE_AGENT_COMMITTEE_PASSWORD }}
+          DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET: ${{ secrets.DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET }}
+          DS_GOLDEN_PASSWORD_ADMIN: ${{ secrets.DS_GOLDEN_PASSWORD_ADMIN }}
+          DS_GOLDEN_PASSWORD_DOCTOR_MFA: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_MFA }}
+          DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED }}
+          DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED }}
+          GH_TOKEN: ${{ github.token }}
+          PROJECT: ${{ inputs.project }}
+          GREP: ${{ inputs.grep }}
+          NO_AXE: ${{ inputs.no-axe }}
+          NO_LIVE: ${{ inputs.no-live }}
+        run: |
+          # Hold these as unexported shell variables until the timed suite starts.
+          declare +x stage_suite_admin_password="$DS_STAGE_AGENT_ADMIN_PASSWORD"
+          declare +x stage_suite_admin_totp="$DS_STAGE_AGENT_ADMIN_TOTP_SECRET"
+          declare +x stage_suite_committee_password="$DS_STAGE_AGENT_COMMITTEE_PASSWORD"
+          declare +x stage_suite_committee_totp="$DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET"
+          unset DS_STAGE_AGENT_ADMIN_PASSWORD DS_STAGE_AGENT_ADMIN_TOTP_SECRET DS_STAGE_AGENT_COMMITTEE_PASSWORD DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET
+          mkdir -p "$REPORT_DIR"
+          filters=()
+          [ -n "$PROJECT" ] && filters+=(--project "$PROJECT")
+          [ -n "$GREP" ] && filters+=(--grep "$GREP")
+          [ "$NO_AXE" = "true" ] && filters+=(--no-axe)
+          [ "$NO_LIVE" = "true" ] && filters+=(--no-live)
+          set +e
+          DS_STAGE_AGENT_ADMIN_PASSWORD="$stage_suite_admin_password" \
+          DS_STAGE_AGENT_ADMIN_TOTP_SECRET="$stage_suite_admin_totp" \
+          DS_STAGE_AGENT_COMMITTEE_PASSWORD="$stage_suite_committee_password" \
+          DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET="$stage_suite_committee_totp" \
+          node tools/staging/e2e-stage.mjs "$SLOT" --local --report-dir "$REPORT_DIR" \
+            --verdict-file "$RUNNER_TEMP/verdict.txt" "${filters[@]}"
+          rc=$?
+          unset stage_suite_admin_password stage_suite_admin_totp stage_suite_committee_password stage_suite_committee_totp
+          set -e
+          exit "$rc"
+
+      - name: Render the verdict comment
+        id: verdict
+        if: always() && steps.inputs.outcome == 'success'
+        env:
+          OUTCOME: ${{ steps.suite.outcome }}
+        run: |
+          body="$RUNNER_TEMP/comment.md"
+          node --input-type=module -e '
+            import { existsSync, readFileSync, writeFileSync } from "node:fs";
+            import { renderPrVerdictComment } from "./tools/staging/e2e-stage.mjs";
+            const [reportFile, verdictFile, out] = process.argv.slice(1);
+            let report = {};
+            try { report = JSON.parse(readFileSync(reportFile, "utf8")); } catch {}
+            const verdictBlock = existsSync(verdictFile) ? readFileSync(verdictFile, "utf8") : undefined;
+            const e = process.env;
+            writeFileSync(out, renderPrVerdictComment({
+              runId: e.GITHUB_RUN_ID,
+              runUrl: `${e.GITHUB_SERVER_URL}/${e.GITHUB_REPOSITORY}/actions/runs/${e.GITHUB_RUN_ID}`,
+              slot: e.SLOT,
+              sha: e.SHA,
+              passed: e.OUTCOME === "success",
+              reason: verdictBlock ? undefined : "the run stopped before the suite reached a verdict",
+              verdictBlock,
+              report,
+            }));
+          ' "$REPORT_DIR/results.json" "$RUNNER_TEMP/verdict.txt" "$body"
+          delimiter="comment-$(openssl rand -hex 16)"
+          { echo "comment<<$delimiter"; cat "$body"; echo "$delimiter"; } >> "$GITHUB_OUTPUT"
+
+      - name: Write the ssh key
+        if: always() && steps.inputs.outcome == 'success'
+        env:
+          STAGE_SSH_KEY: ${{ secrets.STAGE_SSH_KEY }}
+          STAGE_SSH_KNOWN_HOSTS: ${{ secrets.STAGE_SSH_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          dir="$RUNNER_TEMP/stage-ssh"
+          mkdir -p "$dir"
+          printf '%s\n' "$STAGE_SSH_KEY" > "$dir/key"
+          printf '%s\n' "$STAGE_SSH_KNOWN_HOSTS" > "$dir/known_hosts"
+          chmod 600 "$dir/key" "$dir/known_hosts"
+
+      # The full report goes to the box, never to Actions (public) — as in `suite`.
+      - name: Ship the report to the box
+        if: always() && steps.inputs.outcome == 'success'
+        run: |
+          if [ ! -d "$REPORT_DIR" ] || [ -z "$(ls -A "$REPORT_DIR")" ]; then
+            echo "::warning::no report to ship — the suite wrote nothing"
+            exit 0
+          fi
+          set -o pipefail
+          set +e
+          tar -C "$REPORT_DIR" -cf - . | ssh -i "$RUNNER_TEMP/stage-ssh/key" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/stage-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            "$STAGE_SSH_USER@$STAGE_SSH_HOST" "upload-report $SHA" \
+            > "$RUNNER_TEMP/upload.out" 2>&1
+          rc=$?
+          set -e
+          first=$(head -n 1 "$RUNNER_TEMP/upload.out")
+          if [ "$rc" -eq 0 ]; then
+            echo "report: /var/lib/ds-platform/e2e-reports/$SHA/ on the stage box"
+            echo "- report shipped to the stage box: /var/lib/ds-platform/e2e-reports/$SHA/" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::report upload failed (rc=$rc): $first"
+            echo "- **report upload FAILED** (rc=$rc): $first" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Remove the ssh key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/stage-ssh"
+
+  # The verdict on PR N — from `slot-suite`'s rendered comment, or, when that job
+  # stopped before rendering one (a refused input, a cancelled run), a FAIL naming
+  # the reason. Never a pass it did not see.
+  slot-verdict:
+    needs: slot-suite
+    if: always() && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Comment the verdict on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLOT: ${{ inputs.slot }}
+          SHA: ${{ inputs.sha }}
+          COMMENT: ${{ needs.slot-suite.outputs.comment }}
+          REASON: ${{ needs.slot-suite.outputs.reason }}
+          RESULT: ${{ needs.slot-suite.result }}
+        run: |
+          if ! [[ "$SLOT" =~ ^pr-[1-9][0-9]{0,9}$ ]]; then
+            echo "no PR to comment on: ${REASON:-slot is not pr-<N>}"
+            exit 0
+          fi
+          body="$RUNNER_TEMP/comment.md"
+          if [ -n "$COMMENT" ]; then
+            printf '%s\n' "$COMMENT" > "$body"
+          else
+            run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            {
+              echo "<!-- e2e-stage-run:$GITHUB_RUN_ID -->"
+              echo "### e2e:stage $SLOT — FAIL"
+              echo
+              echo "[Actions run $GITHUB_RUN_ID]($run_url) · slot-suite $RESULT"
+              echo
+              echo "Refused: ${REASON:-the run stopped before a verdict}"
+            } > "$body"
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/issues/${SLOT#pr-}/comments" --silent -F body=@"$body"

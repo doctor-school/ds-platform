@@ -35,12 +35,12 @@ describe("stage.yml", () => {
     assert.equal(read("stage.yml").includes("upload-artifact"), false);
   });
 
-  it("uses environment `stage` only in its converge and suite jobs", () => {
+  it("uses environment `stage` only in its converge, suite and slot-suite jobs", () => {
     const withStage = Object.entries(stage.jobs)
       .filter(([, job]) => environmentOf(job) === "stage")
       .map(([name]) => name)
       .sort();
-    assert.deepEqual(withStage, ["converge", "suite"]);
+    assert.deepEqual(withStage, ["converge", "slot-suite", "suite"]);
   });
 
   it("is the only workflow that names environment `stage`", () => {
@@ -172,6 +172,93 @@ describe("stage.yml", () => {
 it("3752: the run title ends with the SHA under test — retention keeps a queued or running run's images", () => {
   assert.equal(
     stage["run-name"],
-    "Stage main ${{ github.event.workflow_run.head_sha }}",
+    "${{ github.event_name == 'workflow_dispatch' && format('Stage {0} {1}', inputs.slot, inputs.sha) || format('Stage main {0}', github.event.workflow_run.head_sha) }}",
   );
+});
+
+describe("stage.yml — the PR-slot dispatch (#4202)", () => {
+  const slotSuite = stage.jobs["slot-suite"];
+  const slotVerdict = stage.jobs["slot-verdict"];
+  const step = (job, pred) => job.steps.find(pred);
+
+  it("takes slot + sha and the e2e-stage filters as inputs", () => {
+    const inputs = stage.on.workflow_dispatch.inputs;
+    assert.deepEqual(Object.keys(inputs), ["slot", "sha", "project", "grep", "no-axe", "no-live"]);
+    assert.equal(inputs.slot.required, true);
+    assert.equal(inputs.sha.required, true);
+    assert.equal(inputs["no-axe"].type, "boolean");
+    assert.equal(inputs["no-live"].type, "boolean");
+  });
+
+  it("leaves the main path to workflow_run: its jobs never run on a dispatch", () => {
+    assert.match(stage.jobs.converge.if, /workflow_run\.event == 'push'/);
+    assert.equal(slotSuite.if, "github.event_name == 'workflow_dispatch'");
+    assert.match(slotVerdict.if, /github\.event_name == 'workflow_dispatch'/);
+    // A dispatch queues per slot, never in `stage-main`.
+    assert.ok(
+      stage.concurrency.group.startsWith(
+        "${{ github.event_name == 'workflow_dispatch' && format('stage-slot-{0}', inputs.slot) ||",
+      ),
+    );
+  });
+
+  it("never writes a commit status: no `statuses` permission, no statuses call", () => {
+    for (const job of [slotSuite, slotVerdict]) {
+      assert.equal(job.permissions.statuses, undefined);
+      for (const s of job.steps) assert.doesNotMatch(String(s.run ?? ""), /statuses/);
+    }
+    assert.equal(slotSuite.permissions["pull-requests"], "read");
+    assert.equal(environmentOf(slotVerdict), undefined);
+    assert.deepEqual(slotVerdict.permissions, { contents: "read", "pull-requests": "write" });
+  });
+
+  it("refuses main, a non-40-hex SHA and a SHA that is not PR N's head from this repository, first", () => {
+    const check = slotSuite.steps[0];
+    assert.equal(check.id, "inputs");
+    assert.match(check.run, /\^pr-\[1-9\]\[0-9\]\{0,9\}\$/);
+    assert.match(check.run, /\^\[0-9a-f\]\{40\}\$/);
+    assert.match(check.run, /not from this repository/);
+    assert.match(check.run, /sha is not the head of PR/);
+  });
+
+  it("interpolates no input into a shell: every input reaches `run` through env", () => {
+    for (const job of [slotSuite, slotVerdict]) {
+      for (const s of job.steps) {
+        assert.doesNotMatch(String(s.run ?? ""), /\$\{\{/, `${s.name ?? s.uses}`);
+      }
+    }
+  });
+
+  it("checks out the dispatched SHA and runs the workstation path of e2e-stage with the health pre-flight", () => {
+    assert.equal(
+      step(slotSuite, (s) => String(s.uses ?? "").startsWith("actions/checkout")).with.ref,
+      "${{ inputs.sha }}",
+    );
+    const suite = step(slotSuite, (s) => s.id === "suite");
+    assert.match(
+      suite.run,
+      /node tools\/staging\/e2e-stage\.mjs "\$SLOT" --local --report-dir "\$REPORT_DIR" \\\n\s+--verdict-file "\$RUNNER_TEMP\/verdict\.txt" "\$\{filters\[@\]\}"/,
+    );
+    assert.doesNotMatch(suite.run, /--expect-sha/);
+    assert.equal(slotSuite.env.E2E_PUBLIC_LOG, "1");
+  });
+
+  it("writes the ssh key only after the suite, ships the report to the box, removes the key", () => {
+    const names = slotSuite.steps.map((s) => s.id ?? s.name);
+    const suite = names.indexOf("suite");
+    const key = names.indexOf("Write the ssh key");
+    assert.ok(key > suite, "the PR's code never runs while the key is on disk");
+    const ship = step(slotSuite, (s) => s.name === "Ship the report to the box");
+    assert.match(ship.run, /upload-report \$SHA/);
+    assert.match(ship.run, /set -o pipefail/);
+    assert.equal(step(slotSuite, (s) => s.name === "Remove the ssh key").if, "always()");
+  });
+
+  it("posts the rendered verdict on PR N, or a FAIL naming the reason when none was rendered", () => {
+    const post = slotVerdict.steps[0];
+    assert.match(post.run, /issues\/\$\{SLOT#pr-\}\/comments/);
+    assert.match(post.run, /### e2e:stage \$SLOT — FAIL/);
+    assert.doesNotMatch(post.run, /PASS/);
+    assert.equal(slotSuite.outputs.comment, "${{ steps.verdict.outputs.comment }}");
+  });
 });

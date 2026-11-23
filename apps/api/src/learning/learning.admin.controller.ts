@@ -674,7 +674,7 @@ export class LearningAdminController {
       { method: "POST", route: `${BASE}/rules/:scopeKind/:scopeId/apply-preset`, path: `${BASE}/rules/${kind}/${scopeId}/apply-preset`, payload, versioned: true, allowZero: true },
       (v, complete) =>
         this.admin.applyPreset(kind, scopeId, payload.presetId, v, complete, {
-          earnedProgress: "keep",
+          earnedProgress: payload.earnedProgress,
           actorSub: actorSub(req),
           authorize: (needed) => assertRulesAuthority(req, needed),
         }),

@@ -305,17 +305,61 @@ export async function recomputeRuleChange(
     .where(eq(learningRuleChanges.id, ruleChangeId));
 }
 
-/** Resume every rule change whose recompute never finished (host boot). */
+/**
+ * EARS-31 — the recompute right after a save committed. The save is already
+ * the truth (reads compute live from facts and rules), so a failing recompute
+ * never turns it into an error: the change keeps `recomputed_at` NULL and the
+ * startup resume ({@link resumeRuleChanges}) finishes it. True when finished.
+ */
+export async function finishRuleChange(
+  deps: LearningServerDeps,
+  ruleChangeId: string,
+  recompute: (
+    deps: LearningServerDeps,
+    ruleChangeId: string,
+  ) => Promise<void> = recomputeRuleChange,
+  onFailed: (ruleChangeId: string, error: unknown) => void = (id, error) =>
+    console.error(
+      `learning rule change ${id} recompute failed, left for the resume: ${error instanceof Error ? error.message : String(error)}`,
+    ),
+): Promise<boolean> {
+  try {
+    await recompute(deps, ruleChangeId);
+    return true;
+  } catch (error) {
+    onFailed(ruleChangeId, error);
+    return false;
+  }
+}
+
+/**
+ * Resume every rule change whose recompute never finished (host boot), oldest
+ * first. A change that fails again stays unfinished for the next resume and
+ * never keeps the later ones from finishing; returns the number finished.
+ */
 export async function resumeRuleChanges(
   deps: LearningServerDeps,
+  recompute: (
+    deps: LearningServerDeps,
+    ruleChangeId: string,
+  ) => Promise<void> = recomputeRuleChange,
+  onFailed: (ruleChangeId: string, error: unknown) => void = () => {},
 ): Promise<number> {
   const pending = await deps.db
     .select({ id: learningRuleChanges.id })
     .from(learningRuleChanges)
     .where(isNull(learningRuleChanges.recomputedAt))
     .orderBy(learningRuleChanges.at);
-  for (const { id } of pending) await recomputeRuleChange(deps, id);
-  return pending.length;
+  let finished = 0;
+  for (const { id } of pending) {
+    try {
+      await recompute(deps, id);
+      finished += 1;
+    } catch (error) {
+      onFailed(id, error);
+    }
+  }
+  return finished;
 }
 
 /**

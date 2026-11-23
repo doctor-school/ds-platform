@@ -87,7 +87,7 @@ import {
   keepRepublishedCompletion,
   previewRuleChange,
   governedCoursesUnder,
-  recomputeRuleChange,
+  finishRuleChange,
   recordRuleChange,
 } from "./rule-change.js";
 
@@ -894,7 +894,7 @@ export class LearningAdminService {
         ruleChangeId,
       };
     });
-    if (ruleChangeId) await recomputeRuleChange(this.deps, ruleChangeId);
+    if (ruleChangeId) await finishRuleChange(this.deps, ruleChangeId);
     return result;
   }
 
@@ -1156,7 +1156,7 @@ export class LearningAdminService {
         ruleChangeId,
       };
     });
-    if (ruleChangeId) await recomputeRuleChange(this.deps, ruleChangeId);
+    if (ruleChangeId) await finishRuleChange(this.deps, ruleChangeId);
     return result;
   }
 

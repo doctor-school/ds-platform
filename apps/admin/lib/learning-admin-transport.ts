@@ -88,11 +88,11 @@ export const learningAdminTransport: LearningAdminTransport = {
     (await call<LearningPresetList>(learningUrl.presets(), "get")).data,
   rules: (kind, id) =>
     call<LearningScopeRules>(learningUrl.rules(kind, id), "get"),
-  applyPreset: (kind, id, presetId, layerVersion) =>
+  applyPreset: (kind, id, presetId, layerVersion, earnedProgress) =>
     call<LearningScopeRules>(
       learningUrl.applyPreset(kind, id),
       "post",
-      { presetId },
+      earnedProgress ? { presetId, earnedProgress } : { presetId },
       layerVersion,
     ),
   setRules: (kind, id, body, layerVersion) =>

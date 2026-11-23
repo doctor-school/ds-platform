@@ -1,7 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { LearningEvaluation } from "../evaluator/evaluator.js";
 import { LearningLayers } from "../rules/resolver.js";
-import { changedSettings, diffEvaluations } from "./rule-change.js";
+import {
+  changedSettings,
+  diffEvaluations,
+  finishRuleChange,
+  resumeRuleChanges,
+} from "./rule-change.js";
+import type { LearningServerDeps } from "./deps.js";
 
 // 024 EARS-24, EARS-31 (#4012) — the pure halves of a rule change: which
 // doctors' statuses the new rules change, which earned items «keep» must hold,
@@ -102,5 +108,68 @@ describe("024 rule change — the new rules", () => {
     expect(
       next.withValues("lesson", "l", {}).layer("lesson", "l")?.values,
     ).toEqual({});
+  });
+});
+
+describe("024 rule change — resuming an interrupted recompute", () => {
+  /** A db whose only read is the unfinished changes, oldest first. */
+  const depsWith = (ids: string[]) =>
+    ({
+      db: {
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              orderBy: async () => ids.map((id) => ({ id })),
+            }),
+          }),
+        }),
+      },
+    }) as unknown as LearningServerDeps;
+
+  it("EARS-31: every change left with recomputed_at NULL is recomputed, oldest first", async () => {
+    const recompute = vi.fn(async () => {});
+    const resumed = await resumeRuleChanges(depsWith(["a", "b"]), recompute);
+    expect(recompute.mock.calls.map((c) => c[1])).toEqual(["a", "b"]);
+    expect(resumed).toBe(2);
+  });
+
+  it("EARS-31: one change failing to recompute does not keep the others unfinished; it stays for the next resume", async () => {
+    const recompute = vi.fn(async (_deps: unknown, id: string) => {
+      if (id === "a") throw new Error("boom");
+    });
+    const failed: string[] = [];
+    const resumed = await resumeRuleChanges(
+      depsWith(["a", "b"]),
+      recompute,
+      (id) => failed.push(id),
+    );
+    expect(recompute.mock.calls.map((c) => c[1])).toEqual(["a", "b"]);
+    expect(resumed).toBe(1);
+    expect(failed).toEqual(["a"]);
+  });
+});
+
+describe("024 rule change — the recompute after a committed save", () => {
+  it("EARS-31: a recompute failing after the save committed does not fail the save; the change is left for the resume", async () => {
+    const failed: string[] = [];
+    await expect(
+      finishRuleChange(
+        {} as LearningServerDeps,
+        "c1",
+        async () => {
+          throw new Error("connection reset");
+        },
+        (id) => failed.push(id),
+      ),
+    ).resolves.toBe(false);
+    expect(failed).toEqual(["c1"]);
+  });
+
+  it("EARS-31: a finished recompute reports the change finished", async () => {
+    const recompute = vi.fn(async () => {});
+    await expect(
+      finishRuleChange({} as LearningServerDeps, "c2", recompute),
+    ).resolves.toBe(true);
+    expect(recompute).toHaveBeenCalledWith({}, "c2");
   });
 });

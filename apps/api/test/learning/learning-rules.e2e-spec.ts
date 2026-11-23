@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
+import { LearningModule } from "../../src/learning/learning.module";
 import {
   admin,
   answersFor,
@@ -406,6 +407,87 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(audit.rows).toHaveLength(1);
       expect(audit.rows[0]!.subject_id).toBe(change!.actor_sub);
+    });
+
+    it("EARS-31: applying a preset to a published course is a rule change with the author's keep / require-again choice", async () => {
+      const { c, d } = await finishedAtHalf();
+      const presets = await admin<{ data: { id: string; name: string }[] }>(
+        h,
+        "GET",
+        "/presets",
+      );
+      const dpo = presets.body.data.find((p) => p.name === "ДПО / аккредитация")!;
+      const current = await admin<Rules>(h, "GET", `/rules/course/${c.courseId}`);
+      const applied = await admin<Problem>(
+        h,
+        "POST",
+        `/rules/course/${c.courseId}/apply-preset`,
+        {
+          payload: { presetId: dpo.id, earnedProgress: "require-again" },
+          ifMatch: current.etag!,
+          sid: editorOnly,
+        },
+      );
+      expect(applied.status, JSON.stringify(applied.body)).toBe(200);
+      const change = (await changesOf(c.courseId)).at(-1)!;
+      expect(change.earned_progress).toBe("require-again");
+      expect(change.after).toMatchObject({ "test.threshold": 80 });
+      const kept = await h.pool.query(
+        "SELECT 1 FROM learning_facts WHERE person_id = $1 AND kind = 'completion-kept' AND data ->> 'ruleChangeId' = $2",
+        [d.personId, change.id],
+      );
+      expect(kept.rows).toHaveLength(0);
+    });
+
+    it("EARS-31: a rule change whose recompute was interrupted is finished by the startup resume", async () => {
+      const { c, d } = await finishedAtHalf();
+      const saved = await setRules(
+        h,
+        "course",
+        c.courseId,
+        { "test.threshold": 80 },
+        { earnedProgress: "require-again" },
+      );
+      expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+      const change = (await changesOf(c.courseId)).at(-1)!;
+      // The process stopped after COMMIT, before the recompute: the change is
+      // unfinished and the doctor's projection still says what it said before.
+      await h.pool.query(
+        "UPDATE learning_rule_changes SET recomputed_at = NULL WHERE id = $1",
+        [change.id],
+      );
+      await h.pool.query(
+        "UPDATE learning_node_status SET status = 'done', cause_kind = 'fact', cause_id = NULL WHERE person_id = $1 AND item_id = $2",
+        [d.personId, c.lessonId],
+      );
+
+      h.app.get(LearningModule).onApplicationBootstrap();
+
+      const deadline = Date.now() + 15_000;
+      let recomputed: string | null = null;
+      while (Date.now() < deadline) {
+        const row = await h.pool.query<{ recomputed_at: string | null }>(
+          "SELECT recomputed_at FROM learning_rule_changes WHERE id = $1",
+          [change.id],
+        );
+        recomputed = row.rows[0]!.recomputed_at;
+        if (recomputed) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      expect(recomputed).not.toBeNull();
+      const projected = await h.pool.query<{
+        status: string;
+        cause_kind: string;
+        cause_id: string;
+      }>(
+        "SELECT status, cause_kind, cause_id FROM learning_node_status WHERE person_id = $1 AND item_id = $2",
+        [d.personId, c.lessonId],
+      );
+      expect(projected.rows[0]).toMatchObject({
+        cause_kind: "rule-change",
+        cause_id: change.id,
+      });
+      expect(projected.rows[0]!.status).not.toBe("done");
     });
 
     it("EARS-31, EARS-24: «require again» recomputes with the change as the cause; the reason shows until the doctor completes the lesson", async () => {

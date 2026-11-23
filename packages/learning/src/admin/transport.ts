@@ -5,6 +5,7 @@ import type {
   LearningCourseComposition,
   LearningLessonAdmin,
   LearningModuleAdmin,
+  LearningEarnedProgress,
   LearningPreset,
   LearningRuleChangePreview,
   LearningScopeKind,
@@ -63,6 +64,8 @@ export interface LearningAdminTransport {
     scopeId: string,
     presetId: string,
     layerVersion: number,
+    /** EARS-31 — on a once-published course; the server defaults to «keep». */
+    earnedProgress?: LearningEarnedProgress,
   ): Promise<LearningScopeRules>;
   /**
    * `PUT …/rules/{scopeKind}/{scopeId}` — the scope's own values (EARS-29);

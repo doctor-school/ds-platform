@@ -3,14 +3,6 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import {
   Alert,
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
   Badge,
   Button,
   Card,
@@ -18,7 +10,6 @@ import {
   CardHeader,
   Label,
   NativeSelect,
-  Radio,
   Skeleton,
 } from "@ds/design-system";
 import type {
@@ -45,6 +36,7 @@ import {
   isStale,
   rulesRefusalLines,
 } from "./refusals";
+import { RuleChangeDialog } from "./rule-change-dialog";
 import { SettingControl } from "./setting-control";
 import type { LearningAdminTransport } from "./transport";
 
@@ -116,7 +108,6 @@ export function RulesEditorScreen({
   const [preview, setPreview] = useState<LearningRuleChangePreview | null>(
     null,
   );
-  const [earned, setEarned] = useState<LearningEarnedProgress>("keep");
 
   const show = useCallback((next: LearningScopeRules) => {
     setRules(next);
@@ -200,7 +191,6 @@ export function RulesEditorScreen({
     if (!isRuleChange) return commit(undefined);
     setBusy(true);
     try {
-      setEarned("keep");
       setPreview(await transport.previewRules(scopeKind, scopeId, draft));
     } catch (error) {
       if (authorityRefusal(error, scopeKind) || rulesRefusalLines(error).length)
@@ -321,57 +311,11 @@ export function RulesEditorScreen({
         />
       ) : null}
 
-      <AlertDialog
-        open={preview !== null}
-        onOpenChange={(open) => {
-          if (!open) setPreview(null);
-        }}
-      >
-        <AlertDialogContent data-testid="rule-change-dialog">
-          <AlertDialogHeader>
-            <AlertDialogTitle>{R.dialogTitle}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {R.impact(preview?.affectedDoctors ?? 0)}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {preview && preview.affectedDoctors > 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {R.impactDetail(preview.toDone, preview.toNotDone)}
-            </p>
-          ) : null}
-          <fieldset className="flex flex-col gap-3">
-            <legend className="mb-2 text-sm font-bold text-foreground">
-              {R.earnedLegend}
-            </legend>
-            <Radio
-              name="earned-progress"
-              value="keep"
-              checked={earned === "keep"}
-              onChange={() => setEarned("keep")}
-            >
-              {R.keep}
-            </Radio>
-            <p className="pl-8 text-sm text-muted-foreground">{R.keepHint}</p>
-            <Radio
-              name="earned-progress"
-              value="require-again"
-              checked={earned === "require-again"}
-              onChange={() => setEarned("require-again")}
-            >
-              {R.requireAgain}
-            </Radio>
-            <p className="pl-8 text-sm text-muted-foreground">
-              {R.requireAgainHint}
-            </p>
-          </fieldset>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{R.cancel}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void commit(earned)}>
-              {R.apply}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <RuleChangeDialog
+        preview={preview}
+        onCancel={() => setPreview(null)}
+        onConfirm={(earned) => void commit(earned)}
+      />
     </div>
   );
 }

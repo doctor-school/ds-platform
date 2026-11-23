@@ -282,13 +282,6 @@ export type ReorderLearningStepsRequest = z.infer<
   typeof ReorderLearningStepsRequestSchema
 >;
 
-/** EARS-9 / EARS-29 — apply a preset on a school or a course. */
-export const ApplyLearningPresetRequestSchema = z.strictObject({
-  presetId: z.uuid(),
-});
-export type ApplyLearningPresetRequest = z.infer<
-  typeof ApplyLearningPresetRequestSchema
->;
 
 /**
  * EARS-31, owner D16 — what a rule change on a published course does to a
@@ -300,6 +293,19 @@ export const LEARNING_EARNED_PROGRESS = ["keep", "require-again"] as const;
 export const LearningEarnedProgressSchema = z.enum(LEARNING_EARNED_PROGRESS);
 export type LearningEarnedProgress = z.infer<
   typeof LearningEarnedProgressSchema
+>;
+
+/**
+ * EARS-9 / EARS-29 — apply a preset on a school or a course. On a scope a
+ * once-published course resolves through the apply is a rule change (EARS-31):
+ * `earnedProgress` is the author's choice, «keep» by default (owner D16).
+ */
+export const ApplyLearningPresetRequestSchema = z.strictObject({
+  presetId: z.uuid(),
+  earnedProgress: LearningEarnedProgressSchema.default("keep"),
+});
+export type ApplyLearningPresetRequest = z.input<
+  typeof ApplyLearningPresetRequestSchema
 >;
 
 /**

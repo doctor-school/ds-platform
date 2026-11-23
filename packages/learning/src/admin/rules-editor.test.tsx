@@ -405,6 +405,51 @@ describe("RulesEditorScreen", () => {
     );
   });
 
+  it("EARS-31: applying a preset on a once-published course first shows the impact count, then applies the chosen keep / require-again", async () => {
+    const published = rules({
+      authority: "rules-editor",
+      layerVersion: 4,
+      values: { "test.threshold": 50 },
+    });
+    const t = mount(
+      fakeTransport({
+        rules: async () => published,
+        previewRules: vi.fn(async () => ({
+          affectedDoctors: 3,
+          toDone: 0,
+          toNotDone: 3,
+        })),
+      }),
+      { scopeKind: "course", scopeId: AID.course },
+    );
+    const panel = await screen.findByTestId("preset-panel");
+    fireEvent.click(await within(panel).findByLabelText("Открытый курс"));
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Применить пресет" }),
+    );
+    const dialog = await screen.findByTestId("rule-change-dialog");
+    // The preset's values over the course layer's own (024-design §3).
+    expect(t.previewRules).toHaveBeenCalledWith("course", AID.course, {
+      "test.threshold": 50,
+      ...PRESETS[1]!.values,
+    });
+    expect(dialog).toHaveTextContent("Изменится статус у 3 врачей");
+    expect(t.applyPreset).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByLabelText("Потребовать заново"));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Применить изменение" }),
+    );
+    await waitFor(() =>
+      expect(t.applyPreset).toHaveBeenCalledWith(
+        "course",
+        AID.course,
+        AID.open,
+        4,
+        "require-again",
+      ),
+    );
+  });
+
   it("EARS-31: a stale version is refused, named and the current rules are shown", async () => {
     let reads = 0;
     const t = mount(

@@ -96,7 +96,11 @@ export class LearningModule implements OnModuleInit, OnApplicationBootstrap {
    * background and never delays boot.
    */
   onApplicationBootstrap(): void {
-    void resumeRuleChanges(this.deps).then(
+    void resumeRuleChanges(this.deps, undefined, (id, err) =>
+      this.logger.error(
+        `learning rule change ${id} recompute failed, left for the next resume: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    ).then(
       (n) => {
         if (n > 0)
           this.logger.log(`resumed ${n} learning rule change recompute(s)`);

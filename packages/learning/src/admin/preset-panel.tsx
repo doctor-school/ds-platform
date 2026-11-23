@@ -11,17 +11,21 @@ import {
   Radio,
 } from "@ds/design-system";
 import type {
+  LearningEarnedProgress,
   LearningPreset,
+  LearningRuleChangePreview,
   LearningScopeRules,
   LearningSettingKey,
 } from "@ds/schemas";
 
 import {
   ADMIN_COPY as C,
+  RULES_COPY as R,
   SETTING_LABEL,
   settingValueInWords,
 } from "./admin-copy";
 import { authorityRefusal, isStale, refusedFieldLines } from "./refusals";
+import { RuleChangeDialog } from "./rule-change-dialog";
 import type { LearningAdminTransport } from "./transport";
 
 // 024 EARS-29 slice 1 — «Применить пресет» on a course: the presets are the
@@ -52,6 +56,9 @@ export function PresetPanel({
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [refused, setRefused] = useState<string[] | null>(null);
+  const [preview, setPreview] = useState<LearningRuleChangePreview | null>(
+    null,
+  );
 
   useEffect(() => {
     let live = true;
@@ -70,19 +77,50 @@ export function PresetPanel({
     };
   }, [scopeKind, scopeId, transport]);
 
-  async function apply() {
+  // EARS-31 — on a scope a once-published course resolves through, the apply
+  // is a rule change: the preset's values over the layer's own (024-design §3)
+  // go to the preview first, and the dialog's choice rides the apply.
+  async function start() {
     const preset = presets?.find((p) => p.id === chosen);
     if (!preset || !rules) return;
-    setBusy(true);
     setDone(null);
     setRefused(null);
+    if (rules.authority !== "rules-editor") return apply(undefined);
+    setBusy(true);
     try {
-      const applied = await transport.applyPreset(
-        scopeKind,
-        scopeId,
-        preset.id,
-        rules.layerVersion,
+      setPreview(
+        await transport.previewRules(scopeKind, scopeId, {
+          ...rules.values,
+          ...preset.values,
+        }),
       );
+    } catch (error) {
+      setRefused([authorityRefusal(error, scopeKind) ?? R.previewFailed]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function apply(earned: LearningEarnedProgress | undefined) {
+    const preset = presets?.find((p) => p.id === chosen);
+    setPreview(null);
+    if (!preset || !rules) return;
+    setBusy(true);
+    try {
+      const applied = earned
+        ? await transport.applyPreset(
+            scopeKind,
+            scopeId,
+            preset.id,
+            rules.layerVersion,
+            earned,
+          )
+        : await transport.applyPreset(
+            scopeKind,
+            scopeId,
+            preset.id,
+            rules.layerVersion,
+          );
       setRules(applied);
       onApplied?.(applied);
       setDone(C.presetDone(preset.name, scopeKind));
@@ -171,7 +209,7 @@ export function PresetPanel({
             <div>
               <Button
                 disabled={readOnly || busy || !chosen || !rules}
-                onClick={() => void apply()}
+                onClick={() => void start()}
               >
                 {C.applyPreset}
               </Button>
@@ -179,6 +217,11 @@ export function PresetPanel({
           </div>
         </CardContent>
       </Card>
+      <RuleChangeDialog
+        preview={preview}
+        onCancel={() => setPreview(null)}
+        onConfirm={(earned) => void apply(earned)}
+      />
     </section>
   );
 }

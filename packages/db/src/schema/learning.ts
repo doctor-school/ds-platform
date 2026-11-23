@@ -324,6 +324,9 @@ export const learningRuleChanges = pgTable(
     earnedProgress: text("earned_progress").notNull(),
     actorSub: text("actor_sub"),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    // EARS-31 — set when the after-commit recompute of the affected doctors
+    // finished; a change left NULL (an interrupted run) is resumed on boot.
+    recomputedAt: timestamp("recomputed_at", { withTimezone: true }),
   },
   (t) => [
     check(

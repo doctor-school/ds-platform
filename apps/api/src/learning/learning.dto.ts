@@ -10,6 +10,8 @@ import {
   LearningLessonReadSchema,
   LearningModuleAdminSchema,
   LearningPresetListSchema,
+  LearningPresetSchema,
+  LearningRuleChangePreviewSchema,
   LearningSchoolAdminSchema,
   LearningSchoolListSchema,
   LearningSchoolReadSchema,
@@ -23,9 +25,15 @@ import {
 // generated `@ds/api-client` types each body from the `@ds/schemas` SSOT.
 
 // Public + doctor reads and writes.
-export class LearningCoursePathDto extends createZodDto(LearningCoursePathSchema) {}
-export class LearningSchoolReadDto extends createZodDto(LearningSchoolReadSchema) {}
-export class LearningLessonReadDto extends createZodDto(LearningLessonReadSchema) {}
+export class LearningCoursePathDto extends createZodDto(
+  LearningCoursePathSchema,
+) {}
+export class LearningSchoolReadDto extends createZodDto(
+  LearningSchoolReadSchema,
+) {}
+export class LearningLessonReadDto extends createZodDto(
+  LearningLessonReadSchema,
+) {}
 export class LearningStepReadDto extends createZodDto(LearningStepReadSchema) {}
 export class RecordLearningFactResponseDto extends createZodDto(
   RecordLearningFactResponseSchema,
@@ -36,15 +44,37 @@ export class LearningAttemptResultDto extends createZodDto(
 ) {}
 
 // Admin.
-export class LearningSchoolListDto extends createZodDto(LearningSchoolListSchema) {}
-export class LearningSchoolAdminDto extends createZodDto(LearningSchoolAdminSchema) {}
-export class LearningCourseListDto extends createZodDto(LearningCourseListSchema) {}
-export class LearningCourseAdminDto extends createZodDto(LearningCourseAdminSchema) {}
+export class LearningSchoolListDto extends createZodDto(
+  LearningSchoolListSchema,
+) {}
+export class LearningSchoolAdminDto extends createZodDto(
+  LearningSchoolAdminSchema,
+) {}
+export class LearningCourseListDto extends createZodDto(
+  LearningCourseListSchema,
+) {}
+export class LearningCourseAdminDto extends createZodDto(
+  LearningCourseAdminSchema,
+) {}
 export class LearningCourseCompositionDto extends createZodDto(
   LearningCourseCompositionSchema,
 ) {}
-export class LearningModuleAdminDto extends createZodDto(LearningModuleAdminSchema) {}
-export class LearningLessonAdminDto extends createZodDto(LearningLessonAdminSchema) {}
-export class LearningStepAdminDto extends createZodDto(LearningStepAdminSchema) {}
-export class LearningPresetListDto extends createZodDto(LearningPresetListSchema) {}
-export class LearningScopeRulesDto extends createZodDto(LearningScopeRulesSchema) {}
+export class LearningModuleAdminDto extends createZodDto(
+  LearningModuleAdminSchema,
+) {}
+export class LearningLessonAdminDto extends createZodDto(
+  LearningLessonAdminSchema,
+) {}
+export class LearningStepAdminDto extends createZodDto(
+  LearningStepAdminSchema,
+) {}
+export class LearningPresetListDto extends createZodDto(
+  LearningPresetListSchema,
+) {}
+export class LearningScopeRulesDto extends createZodDto(
+  LearningScopeRulesSchema,
+) {}
+export class LearningPresetDto extends createZodDto(LearningPresetSchema) {}
+export class LearningRuleChangePreviewDto extends createZodDto(
+  LearningRuleChangePreviewSchema,
+) {}

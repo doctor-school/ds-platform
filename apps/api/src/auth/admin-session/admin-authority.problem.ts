@@ -28,6 +28,7 @@ export type AdminAuthorityErrorCode =
   | "PROGRAM_COMMITTEE_REQUIRED"
   | "SUPERADMIN_REQUIRED"
   | "BROADCAST_DIRECTOR_REQUIRED"
+  | "LEARNING_RULES_EDITOR_REQUIRED"
   | "EVENT_BINDING_REQUIRED"
   | "STEP_UP_REQUIRED"
   | "IDP_REVALIDATION_UNAVAILABLE";
@@ -43,6 +44,7 @@ export const ADMIN_AUTHORITY_STATUS: Readonly<
   PROGRAM_COMMITTEE_REQUIRED: 403,
   SUPERADMIN_REQUIRED: 403,
   BROADCAST_DIRECTOR_REQUIRED: 403,
+  LEARNING_RULES_EDITOR_REQUIRED: 403,
   EVENT_BINDING_REQUIRED: 403,
   STEP_UP_REQUIRED: 401,
   IDP_REVALIDATION_UNAVAILABLE: 503,
@@ -58,6 +60,7 @@ const ADMIN_AUTHORITY_TITLE: Readonly<Record<AdminAuthorityErrorCode, string>> =
     PROGRAM_COMMITTEE_REQUIRED: "congress-program-committee required",
     SUPERADMIN_REQUIRED: "superadmin required",
     BROADCAST_DIRECTOR_REQUIRED: "broadcast_director required",
+    LEARNING_RULES_EDITOR_REQUIRED: "learning_rules_editor required",
     EVENT_BINDING_REQUIRED: "Event binding required",
     STEP_UP_REQUIRED: "Fresh step-up verification required",
     IDP_REVALIDATION_UNAVAILABLE: "Identity provider unavailable",

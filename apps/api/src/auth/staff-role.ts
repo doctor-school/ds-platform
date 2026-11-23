@@ -32,6 +32,7 @@ export const STAFF_ROLES = [
   "congress-program-committee",
   // 049 EARS-2 — the broadcast director, after the congress roles.
   "broadcast_director",
+  "learning_rules_editor",
   "legacy_admin",
   "pd_officer",
 ] as const;

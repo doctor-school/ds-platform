@@ -40,6 +40,8 @@ export const MFA_REQUIRED_BY_ROLE: Readonly<Partial<Record<Role, true>>> =
     // admin origin at all (`startLogin`).
     superadmin: true,
     broadcast_director: true,
+    // 024 EARS-30 — the learning rules editor signs in on the same TOTP flow.
+    learning_rules_editor: true,
   });
 
 /**

@@ -209,6 +209,16 @@ function requiredAuthorityRole(
 ): AdminAuthorityRole {
   if (meta.roles?.includes("superadmin")) return "superadmin";
   if (meta.roles?.includes("pd_officer")) return "pd_officer";
+  // 024 EARS-30: a row admitting `learning_rules_editor` (published-course
+  // rules, the platform layer, the presets) is asked about that grant whenever
+  // the session holds it — `platform_admin` does not imply it, so the broader
+  // key must not stand in for the grant the row's elevated scopes rely on.
+  if (
+    meta.roles?.includes("learning_rules_editor") &&
+    principal.roles?.includes("learning_rules_editor")
+  ) {
+    return "learning_rules_editor";
+  }
   if (principal.roles?.includes("platform_admin")) return "platform_admin";
   if (
     meta.roles?.includes("event-registrar") &&
@@ -246,6 +256,7 @@ const REVOKED_CODE: Readonly<
   "congress-program-committee": "PROGRAM_COMMITTEE_REQUIRED",
   superadmin: "SUPERADMIN_REQUIRED",
   broadcast_director: "BROADCAST_DIRECTOR_REQUIRED",
+  learning_rules_editor: "LEARNING_RULES_EDITOR_REQUIRED",
 };
 
 /**

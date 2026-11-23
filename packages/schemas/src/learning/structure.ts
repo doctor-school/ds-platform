@@ -134,7 +134,10 @@ export interface LearningStepMediaRule {
 export const LEARNING_STEP_INPUTS: Readonly<
   Record<
     z.infer<typeof LearningElementTypeSchema>,
-    { readonly media: LearningStepMediaRule | null; readonly providerSource: boolean }
+    {
+      readonly media: LearningStepMediaRule | null;
+      readonly providerSource: boolean;
+    }
   >
 > = {
   video: { media: null, providerSource: true },
@@ -179,9 +182,7 @@ export const LearningDocumentKindSchema = z.enum([
 export type LearningDocumentKind = z.infer<typeof LearningDocumentKindSchema>;
 
 const optionalText = text.min(1).nullable().default(null);
-const httpsUrl = z
-  .url({ protocol: /^https$/ })
-  .max(2000);
+const httpsUrl = z.url({ protocol: /^https$/ }).max(2000);
 
 export const CreateLearningSchoolRequestSchema = z.strictObject({
   directionId: z.uuid(),
@@ -287,6 +288,61 @@ export const ApplyLearningPresetRequestSchema = z.strictObject({
 });
 export type ApplyLearningPresetRequest = z.infer<
   typeof ApplyLearningPresetRequestSchema
+>;
+
+/**
+ * EARS-31, owner D16 — what a rule change on a published course does to a
+ * doctor's earned completion: «keep» (the default) stores a `completion-kept`
+ * fact for every item that was done and would no longer be; «require-again»
+ * lets the new rules decide.
+ */
+export const LEARNING_EARNED_PROGRESS = ["keep", "require-again"] as const;
+export const LearningEarnedProgressSchema = z.enum(LEARNING_EARNED_PROGRESS);
+export type LearningEarnedProgress = z.infer<
+  typeof LearningEarnedProgressSchema
+>;
+
+/**
+ * EARS-29, EARS-31 — replace a scope's own values. `values` is validated per
+ * scope by the rules validator (EARS-6); `earnedProgress` counts only on a
+ * scope a published course resolves through.
+ */
+export const SetLearningScopeRulesRequestSchema = z.strictObject({
+  values: z.record(z.string(), z.unknown()),
+  earnedProgress: LearningEarnedProgressSchema.default("keep"),
+});
+export type SetLearningScopeRulesRequest = z.input<
+  typeof SetLearningScopeRulesRequestSchema
+>;
+
+/** EARS-31 — the change dialog's question: the new values, nothing written. */
+export const PreviewLearningRuleChangeRequestSchema = z.strictObject({
+  values: z.record(z.string(), z.unknown()),
+});
+export type PreviewLearningRuleChangeRequest = z.infer<
+  typeof PreviewLearningRuleChangeRequestSchema
+>;
+
+/**
+ * EARS-31 — the doctors whose statuses would change under the new values
+ * (the evaluator over their facts, old rules vs new); `toDone` / `toNotDone`
+ * count the doctors with at least one item turning done / no longer done.
+ */
+export const LearningRuleChangePreviewSchema = z.strictObject({
+  affectedDoctors: z.number().int().min(0),
+  toDone: z.number().int().min(0),
+  toNotDone: z.number().int().min(0),
+});
+export type LearningRuleChangePreview = z.infer<
+  typeof LearningRuleChangePreviewSchema
+>;
+
+/** EARS-9, EARS-29 — replace a preset's values (`learning_rules_editor`). */
+export const UpdateLearningPresetRequestSchema = z.strictObject({
+  values: z.record(z.string(), z.unknown()),
+});
+export type UpdateLearningPresetRequest = z.infer<
+  typeof UpdateLearningPresetRequestSchema
 >;
 
 // ── Admin read models ───────────────────────────────────────────────────────

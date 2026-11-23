@@ -16,6 +16,7 @@ export const GRANTABLE_STAFF_ROLES = [
   "event-registrar",
   "congress-program-committee",
   "broadcast_director",
+  "learning_rules_editor",
 ] as const;
 export type GrantableStaffRole = (typeof GRANTABLE_STAFF_ROLES)[number];
 

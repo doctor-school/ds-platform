@@ -87,6 +87,12 @@ export async function project(
     const previous = before.get(itemId);
     if (previous === state.status) continue;
     const itemKind = evaluation.kinds.get(itemId)!;
+    // EARS-24 — a rule change is the cause (and the reason) only of a status
+    // it changed: an item first projected by a recompute had no status before.
+    const rowCause =
+      previous === undefined && cause.kind === "rule-change"
+        ? { kind: "fact" as const, id: null }
+        : cause;
     changed.push({ itemKind, itemId, status: state.status });
     await tx
       .insert(learningNodeStatus)
@@ -96,16 +102,16 @@ export async function project(
         itemId,
         status: state.status,
         since: at,
-        causeKind: cause.kind,
-        causeId: cause.id,
+        causeKind: rowCause.kind,
+        causeId: rowCause.id,
       })
       .onConflictDoUpdate({
         target: [learningNodeStatus.personId, learningNodeStatus.itemId],
         set: {
           status: state.status,
           since: at,
-          causeKind: cause.kind,
-          causeId: cause.id,
+          causeKind: rowCause.kind,
+          causeId: rowCause.id,
         },
       });
     if (state.status !== "done") continue;

@@ -477,6 +477,13 @@
       "when": 1795149304591,
       "tag": "0067_023_school_course_data",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1795403148897,
+      "tag": "0068_024_rule_change_recompute",
+      "breakpoints": true
     }
   ]
 }

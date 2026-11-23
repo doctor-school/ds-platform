@@ -25,6 +25,7 @@ const REVALIDATION_ANCHOR_ROLES = new Set<string>([
   "pd_officer",
   "superadmin",
   "broadcast_director",
+  "learning_rules_editor",
 ]);
 
 const EM_DASH = "—";
@@ -150,7 +151,7 @@ export function validateRow(
     !roles.some((r) => REVALIDATION_ANCHOR_ROLES.has(r))
   ) {
     at(
-      "`revalidate: live` / `step_up` requires `required_roles` to include `platform_admin`, `pd_officer`, `superadmin` or `broadcast_director`",
+      "`revalidate: live` / `step_up` requires `required_roles` to include `platform_admin`, `pd_officer`, `superadmin`, `broadcast_director` or `learning_rules_editor`",
     );
   }
 

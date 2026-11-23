@@ -28,6 +28,9 @@ import {
   IF_MATCH_HEADER,
   LEARNING_STEP_MEDIA_PART,
   LearningScopeKindSchema,
+  PreviewLearningRuleChangeRequestSchema,
+  SetLearningScopeRulesRequestSchema,
+  UpdateLearningPresetRequestSchema,
   parseIfMatchVersion,
   ReorderLearningStepsRequestSchema,
   SetLearningStepSourceRequestSchema,
@@ -59,19 +62,23 @@ import {
   LearningCourseListDto,
   LearningLessonAdminDto,
   LearningModuleAdminDto,
+  LearningPresetDto,
   LearningPresetListDto,
+  LearningRuleChangePreviewDto,
   LearningSchoolAdminDto,
   LearningSchoolListDto,
   LearningScopeRulesDto,
   LearningStepAdminDto,
 } from "./learning.dto.js";
 import { adminCommand, LearningProblemFilter } from "./learning.errors.js";
+import { AdminAuthorityException } from "../auth/admin-session/admin-authority.problem.js";
 
 // 024 EARS-1, EARS-4, EARS-9, EARS-28, EARS-29 (#4011) — the learning admin
 // surface (024-design §7). The 012 admin contract, reused: feature 011's MFA
 // admin session + CSRF, `platform_admin` before validation, idempotency on every
 // write, `If-Match` on every write after a create, RFC 7807 problems. The
-// `learning_rules_editor` staff role is slice 2 (047 «Доступы»).
+// rules of a published course, the platform layer and the presets take the
+// `learning_rules_editor` staff role (EARS-30, 047 «Доступы»).
 
 const SCOPE = "learning.admin";
 const BASE = "/v1/admin/learning";
@@ -86,6 +93,27 @@ const WRITE = {
   ...ADMIN,
   revalidate: "live" as const,
   audit: "low-stakes" as const,
+};
+
+/**
+ * EARS-30 — the rules rows admit both the course editors and the rules
+ * editor; which one a scope takes is decided per scope in the handler
+ * ({@link LearningAdminController.requireRulesAuthority}).
+ */
+const RULES = {
+  ...ADMIN,
+  roles: ["platform_admin", "learning_rules_editor"] as Role[],
+};
+const RULES_READ = { ...RULES, audit: "none" as const };
+const RULES_WRITE = {
+  ...RULES,
+  revalidate: "live" as const,
+  audit: "low-stakes" as const,
+};
+/** EARS-30 — the presets: `learning_rules_editor` only (`platform_admin` does not imply it). */
+const PRESETS = {
+  ...ADMIN,
+  roles: ["learning_rules_editor"] as Role[],
 };
 
 interface Command {
@@ -515,17 +543,54 @@ export class LearningAdminController {
     return key;
   }
 
-  // ── Rules and presets (EARS-5, EARS-9, EARS-29) ───────────────────────────
+  // ── Rules and presets (EARS-5, EARS-9, EARS-29, EARS-30, EARS-31) ─────────
 
   @Get("presets")
-  @Authz({ ...READ, tests: ["EARS-9", "EARS-29"] })
+  @Authz({ ...RULES_READ, tests: ["EARS-9", "EARS-29"] })
   @ApiOkResponse({ type: LearningPresetListDto })
   async presets(): Promise<unknown> {
     return { data: await adminCommand(() => this.admin.presets()) };
   }
 
+  @Get("presets/:id")
+  @Authz({ ...PRESETS, audit: "none", tests: ["EARS-9", "EARS-30"] })
+  @ApiOkResponse({ type: LearningPresetDto })
+  async preset(
+    @Param("id") id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    requireUuid(id);
+    const body = await adminCommand(() => this.admin.preset(id));
+    void reply.header("etag", `W/"${body.version}"`);
+    return body;
+  }
+
+  @Put("presets/:id")
+  @HttpCode(200)
+  @Authz({
+    ...PRESETS,
+    revalidate: "live",
+    audit: "low-stakes",
+    tests: ["EARS-9", "EARS-30"],
+  })
+  @ApiOkResponse({ type: LearningPresetDto })
+  updatePreset(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    requireUuid(id);
+    const payload = parse(UpdateLearningPresetRequestSchema, readJson(req));
+    return this.run(
+      req,
+      reply,
+      { method: "PUT", route: `${BASE}/presets/:id`, path: `${BASE}/presets/${id}`, payload, versioned: true },
+      (v, complete) => this.admin.updatePreset(id, payload.values, v, complete),
+    );
+  }
+
   @Get("rules/:scopeKind/:scopeId")
-  @Authz({ ...READ, tests: ["EARS-5", "EARS-29"] })
+  @Authz({ ...RULES_READ, tests: ["EARS-5", "EARS-29"] })
   @ApiOkResponse({ type: LearningScopeRulesDto })
   async rules(
     @Param("scopeKind") rawKind: string,
@@ -540,31 +605,52 @@ export class LearningAdminController {
 
   @Put("rules/:scopeKind/:scopeId")
   @HttpCode(200)
-  @Authz({ ...WRITE, tests: ["EARS-5", "EARS-29"] })
+  @Authz({ ...RULES_WRITE, tests: ["EARS-5", "EARS-29", "EARS-30", "EARS-31"] })
   @ApiOkResponse({ type: LearningScopeRulesDto })
-  setRules(
+  async setRules(
     @Param("scopeKind") rawKind: string,
     @Param("scopeId") scopeId: string,
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<unknown> {
     const kind = scopeKind(rawKind);
-    const body = readJson(req) as { values?: unknown } | undefined;
-    const payload = { values: body?.values };
+    await this.requireRulesAuthority(req, kind, scopeId);
+    const payload = parse(SetLearningScopeRulesRequestSchema, readJson(req));
     return this.run(
       req,
       reply,
       { method: "PUT", route: `${BASE}/rules/:scopeKind/:scopeId`, path: `${BASE}/rules/${kind}/${scopeId}`, payload, versioned: true, allowZero: true },
       (v, complete) =>
-        this.admin.setScopeValues(kind, scopeId, payload.values, v, complete),
+        this.admin.setScopeValues(kind, scopeId, payload.values, v, complete, {
+          earnedProgress: payload.earnedProgress,
+          actorSub: actorSub(req),
+        }),
+    );
+  }
+
+  /** EARS-31 — the change dialog's count: the doctors whose statuses would change; nothing is written. */
+  @Post("rules/:scopeKind/:scopeId/preview")
+  @HttpCode(200)
+  @Authz({ ...RULES_READ, tests: ["EARS-31"] })
+  @ApiOkResponse({ type: LearningRuleChangePreviewDto })
+  async previewRules(
+    @Param("scopeKind") rawKind: string,
+    @Param("scopeId") scopeId: string,
+    @Req() req: FastifyRequest,
+  ): Promise<unknown> {
+    const kind = scopeKind(rawKind);
+    await this.requireRulesAuthority(req, kind, scopeId);
+    const payload = parse(PreviewLearningRuleChangeRequestSchema, readJson(req));
+    return adminCommand(() =>
+      this.admin.previewScopeValues(kind, scopeId, payload.values),
     );
   }
 
   @Post("rules/:scopeKind/:scopeId/apply-preset")
   @HttpCode(200)
-  @Authz({ ...WRITE, tests: ["EARS-9", "EARS-29"] })
+  @Authz({ ...RULES_WRITE, tests: ["EARS-9", "EARS-29", "EARS-30"] })
   @ApiOkResponse({ type: LearningScopeRulesDto })
-  applyPreset(
+  async applyPreset(
     @Param("scopeKind") rawKind: string,
     @Param("scopeId") scopeId: string,
     @Req() req: FastifyRequest,
@@ -578,14 +664,39 @@ export class LearningAdminController {
         [{ path: "scopeKind", message: "school or course" }],
       );
     }
+    await this.requireRulesAuthority(req, kind, scopeId);
     const payload = parse(ApplyLearningPresetRequestSchema, readJson(req));
     return this.run(
       req,
       reply,
       { method: "POST", route: `${BASE}/rules/:scopeKind/:scopeId/apply-preset`, path: `${BASE}/rules/${kind}/${scopeId}/apply-preset`, payload, versioned: true, allowZero: true },
       (v, complete) =>
-        this.admin.applyPreset(kind, scopeId, payload.presetId, v, complete),
+        this.admin.applyPreset(kind, scopeId, payload.presetId, v, complete, {
+          earnedProgress: "keep",
+          actorSub: actorSub(req),
+        }),
     );
+  }
+
+  /**
+   * EARS-30 — a draft course's scopes take the staff who edit the course
+   * (`platform_admin`); a scope a published course resolves through, and the
+   * platform layer, take `learning_rules_editor`. Decided before validation,
+   * so a refused caller learns nothing about the values.
+   */
+  private async requireRulesAuthority(
+    req: FastifyRequest,
+    kind: LearningScopeKind,
+    scopeId: string,
+  ): Promise<void> {
+    const needed = await adminCommand(() =>
+      this.admin.rulesAuthority(kind, scopeId),
+    );
+    const roles = principalRoles(req);
+    if (needed === "rules-editor" && !roles.includes("learning_rules_editor"))
+      throw new AdminAuthorityException("LEARNING_RULES_EDITOR_REQUIRED");
+    if (needed === "course-editor" && !roles.includes("platform_admin"))
+      throw new AdminAuthorityException("PLATFORM_ADMIN_REQUIRED");
   }
 
   // ── The shared command envelope (012) ─────────────────────────────────────
@@ -769,4 +880,9 @@ function replayed(
 
 function actorSub(req: FastifyRequest): string | null {
   return (req as { user?: { sub?: string } }).user?.sub ?? null;
+}
+
+/** The admin session principal's project roles (the guard admitted it). */
+function principalRoles(req: FastifyRequest): readonly string[] {
+  return (req as { user?: { roles?: string[] } }).user?.roles ?? [];
 }

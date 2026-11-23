@@ -418,7 +418,10 @@ export type AdminAuthorityRole =
   // 049 (ADR-0001 A4): the «Доступы» rows are `[superadmin]` live rows, and the
   // broadcast director reaches live event writes under its own grant.
   | "superadmin"
-  | "broadcast_director";
+  | "broadcast_director"
+  // 024 EARS-30: the learning rules editor reaches published-course rules,
+  // the platform layer and the presets under its own grant.
+  | "learning_rules_editor";
 
 /** Input to {@link IdpClient.revalidateAdminAuthority} (#1304). */
 export interface RevalidateAdminAuthorityInput {

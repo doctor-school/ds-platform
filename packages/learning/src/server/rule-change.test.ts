@@ -163,9 +163,47 @@ describe("024 rule change — the recompute after a committed save", () => {
           throw new Error("connection reset");
         },
         (id) => failed.push(id),
+        async () => {},
       ),
     ).resolves.toBe(false);
     expect(failed).toEqual(["c1"]);
+  });
+
+  it("EARS-31: a transient recompute failure is retried before the change is left for the resume", async () => {
+    const failed: string[] = [];
+    let calls = 0;
+    await expect(
+      finishRuleChange(
+        {} as LearningServerDeps,
+        "c3",
+        async () => {
+          calls += 1;
+          if (calls === 1) throw new Error("connection reset");
+        },
+        (id) => failed.push(id),
+        async () => {},
+      ),
+    ).resolves.toBe(true);
+    expect(calls).toBe(2);
+    expect(failed).toEqual([]);
+  });
+
+  it("EARS-31: a recompute that keeps failing is tried a bounded number of times, then left for the resume", async () => {
+    const failed: string[] = [];
+    const recompute = vi.fn(async () => {
+      throw new Error("connection reset");
+    });
+    await expect(
+      finishRuleChange(
+        {} as LearningServerDeps,
+        "c4",
+        recompute,
+        (id) => failed.push(id),
+        async () => {},
+      ),
+    ).resolves.toBe(false);
+    expect(recompute).toHaveBeenCalledTimes(3);
+    expect(failed).toEqual(["c4"]);
   });
 
   it("EARS-31: a finished recompute reports the change finished", async () => {
@@ -290,19 +328,29 @@ describe("024 rule change — the recompute writes only what moved", () => {
 });
 
 describe("024 rule change — which items carry the reason", () => {
-  it("EARS-24: an item the change moves off done or locks again carries it; an item turned done or left as it was does not", () => {
+  it("EARS-24: an item moved off done carries it for life; an item locked again carries it while locked; an unlocked, gained or unmoved item does not", () => {
     const before = evaluation({
       reopened: { status: "done" },
+      lostToLocked: { status: "done" },
       relocked: { status: "open" },
+      unlocked: { status: "locked", reason: { kind: "previous" } },
+      movedOn: { status: "open" },
       gained: { status: "open" },
       same: { status: "locked", reason: { kind: "previous" } },
     });
     const after = evaluation({
       reopened: { status: "current" },
+      lostToLocked: { status: "locked", reason: { kind: "previous" } },
       relocked: { status: "locked", reason: { kind: "previous" } },
+      unlocked: { status: "open" },
+      movedOn: { status: "current" },
       gained: { status: "done" },
       same: { status: "locked", reason: { kind: "previous" } },
     });
-    expect(movedByChange(before, after)).toEqual(["reopened", "relocked"]);
+    expect(movedByChange(before, after)).toEqual([
+      { itemId: "reopened", whileLocked: false },
+      { itemId: "lostToLocked", whileLocked: false },
+      { itemId: "relocked", whileLocked: true },
+    ]);
   });
 });

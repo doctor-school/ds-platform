@@ -795,6 +795,85 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(after.every((l) => l.statusReason === undefined)).toBe(true);
     });
 
+    /** Lesson 1 finished at a 50 % pass mark, lesson 2 open and never done; then the mark rises to 80 % («require again»). */
+    async function secondRelockedNeverDone() {
+      const c = await buildCourse(h, { lessons: 2 });
+      expect(
+        (
+          await setRules(h, "course", c.courseId, {
+            "test.threshold": 50,
+            "test.pauseMin": 0,
+            "test.attempts": 10,
+          })
+        ).status,
+      ).toBe(200);
+      const d = await doctor(h);
+      await finishLesson(c.lessons[0]!, d, "half");
+      const [done, open] = await pathLessons(c, d.headers);
+      expect(done!.state.status).toBe("done");
+      expect(open!.state.status).not.toBe("locked");
+      expect(open!.state.status).not.toBe("done");
+      const saved = await setRules(
+        h,
+        "course",
+        c.courseId,
+        { "test.threshold": 80 },
+        { earnedProgress: "require-again" },
+      );
+      expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+      const change = (await changesOf(c.courseId)).at(-1)!;
+      await recomputed(change.id);
+      const [, relocked] = await pathLessons(c, d.headers);
+      expect(relocked!.state.status).toBe("locked");
+      expect(relocked!.statusReason).toMatchObject({
+        ruleChangeId: change.id,
+        needed: { status: "locked" },
+      });
+      return { c, d };
+    }
+
+    it("EARS-24: a lesson the change only locks again (never done) carries the reason while locked; once it opens the reason is gone", async () => {
+      const { c, d } = await secondRelockedNeverDone();
+      await passAgain(c.lessons[0]!, d);
+      const [first, second] = await pathLessons(c, d.headers);
+      expect(first!.state.status).toBe("done");
+      expect(first!.statusReason).toBeUndefined();
+      expect(second!.state.status).not.toBe("locked");
+      expect(second!.statusReason).toBeUndefined();
+      const secondRead = await call<LessonRead>(
+        h,
+        "GET",
+        `/learning/lessons/${c.lessons[1]!.lessonId}`,
+        d.headers,
+      );
+      expect(secondRead.body.lesson.statusReason).toBeUndefined();
+    });
+
+    it("EARS-24: raised then lowered («require again» both times) — the lesson the lower mark unlocks, never taken, carries no reason; the anchors of items done again are cleared", async () => {
+      const { c, d } = await secondRelockedNeverDone();
+      const lowered = await setRules(
+        h,
+        "course",
+        c.courseId,
+        { "test.threshold": 50 },
+        { earnedProgress: "require-again" },
+      );
+      expect(lowered.status, JSON.stringify(lowered.body)).toBe(200);
+      await recomputed((await changesOf(c.courseId)).at(-1)!.id);
+      const [first, second] = await pathLessons(c, d.headers);
+      expect(first!.state.status).toBe("done");
+      expect(first!.statusReason).toBeUndefined();
+      expect(second!.state.status).not.toBe("locked");
+      expect(second!.statusReason).toBeUndefined();
+      // No projected item of this doctor keeps an anchor: lesson 1 (done again)
+      // cleared the raise's, lesson 2 left locked, and the lowering anchored nothing.
+      const anchored = await h.pool.query<{ item_id: string }>(
+        "SELECT item_id FROM learning_node_status WHERE person_id = $1 AND reason_rule_change_id IS NOT NULL",
+        [d.personId],
+      );
+      expect(anchored.rows).toEqual([]);
+    });
+
     // ── EARS-31 — the save returns after the commit; the recompute follows ──
 
     it("EARS-31: the save returns after its commit while the recompute waits; live reads already show the new status and the reason", async () => {

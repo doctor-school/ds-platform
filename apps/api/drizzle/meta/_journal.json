@@ -498,6 +498,13 @@
       "when": 1795438003828,
       "tag": "0070_024_status_reason_anchor",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1795441274270,
+      "tag": "0071_024_status_reason_while_locked",
+      "breakpoints": true
     }
   ]
 }

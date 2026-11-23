@@ -424,6 +424,9 @@ test("024 EARS-24 — a rule change reopens a finished lesson and the doctor see
 
   await first.goto(`${DOCTOR_URL}/courses/${SLUG}`);
   await expect(testNode(first)).toHaveAccessibleName(/Пройден$/);
+  // Lesson 2, never passed by this doctor and only locked again by the change,
+  // opens without the reason: it held only while the lesson was locked.
+  await expect(lessonTwoNode(first)).toHaveAccessibleName(/(Открыт|Вы здесь)$/);
   await expect(first.getByText(TITLE)).toHaveCount(0);
   await expect(first.getByText(/^Пройдено 1 урок из 6/).first()).toBeVisible();
   await axeClean(first);
@@ -440,14 +443,15 @@ test("024 EARS-24 — a rule change reopens a finished lesson and the doctor see
   await expect(lessonTwoNode(third)).toHaveAccessibleName(/Закрыт$/);
   await lessonTwoNode(third).click();
   await expectReasonAlert(third.getByTestId("node-summary"), LOCKED_BODY);
-  // Re-passing lesson 1 opens lesson 2, which keeps its reason until it is passed again.
+  // Re-passing lesson 1 opens lesson 2, which this doctor had passed: it keeps
+  // its reason, now saying to take the test again, until it is passed again.
   await takeFromPath(third, testNode, 2, "Тест сдан: 100 % при пороге 80 %");
   await third.goto(`${DOCTOR_URL}/courses/${SLUG}`);
   await expect(testNode(third)).toHaveAccessibleName(/Пройден$/);
   await expect(lessonTwoNode(third)).toHaveAccessibleName(/(Открыт|Вы здесь)$/);
   await expect(reasonLine(third)).toHaveCount(1);
   await lessonTwoNode(third).click();
-  await expectReasonAlert(third.getByTestId("node-summary"), LOCKED_BODY);
+  await expectReasonAlert(third.getByTestId("node-summary"), `${LOCKED_BODY} Пройдите тест ещё раз`);
   await axeClean(third);
   await shoot(third, "doctor-path-rule-change-second-lesson-1280");
   await takeFromPath(third, lessonTwoNode, 2, "Тест сдан: 100 % при пороге 80 %");

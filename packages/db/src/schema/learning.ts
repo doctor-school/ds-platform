@@ -415,12 +415,14 @@ export const learningNodeStatus = pgTable(
     since: timestamp("since", { withTimezone: true }).notNull().defaultNow(),
     causeKind: text("cause_kind").notNull(),
     causeId: text("cause_id"),
-    // EARS-24 — the rule change that made this item stop being done: written
-    // by the save that records the change (not by its recompute), kept through
-    // every later transition, cleared when the item turns done again.
+    // EARS-24 — the rule change that moved this item: written by the save
+    // that records the change (not by its recompute). An item it moved off
+    // done keeps it through every later transition until done again; an item
+    // it only locked again (`reason_while_locked`) keeps it while locked.
     reasonRuleChangeId: uuid("reason_rule_change_id").references(
       () => learningRuleChanges.id,
     ),
+    reasonWhileLocked: boolean("reason_while_locked").notNull().default(false),
   },
   (t) => [
     primaryKey({ columns: [t.personId, t.itemId] }),

@@ -13,7 +13,7 @@ import type {
   LearningSettingValues,
   LearningStatusReason,
 } from "@ds/schemas";
-import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import {
   evaluateCourse,
   type LearningCourseEvaluator,
@@ -165,18 +165,33 @@ export function diffEvaluations(
   return { changed, lostDone, gainedDone };
 }
 
+/** EARS-24 — an item a change anchors its reason to, and how long it holds. */
+export interface ReasonAnchor {
+  itemId: string;
+  /**
+   * The change only locked the item again (it was not done): the reason holds
+   * while the item stays locked. Otherwise the change moved it off done and
+   * the reason holds until the item is done again.
+   */
+  whileLocked: boolean;
+}
+
 /**
- * EARS-24 — the items a change moves to a status other than `done` (no longer
- * done, locked again, opened): each carries the change as its reason.
+ * EARS-24 — the items that carry a change as their reason: an item it moves
+ * off done (until done again) and an item it locks again that was not done
+ * (while locked). An item it unlocks or otherwise moves carries no reason.
  */
 export function movedByChange(
   before: LearningEvaluation,
   after: LearningEvaluation,
-): string[] {
-  const out: string[] = [];
+): ReasonAnchor[] {
+  const out: ReasonAnchor[] = [];
   for (const [id, state] of after.states) {
-    if (state.status === "done") continue;
-    if (before.states.get(id)?.status !== state.status) out.push(id);
+    const was = before.states.get(id)?.status;
+    if (state.status === "done" || was === state.status) continue;
+    if (was === "done") out.push({ itemId: id, whileLocked: false });
+    else if (state.status === "locked")
+      out.push({ itemId: id, whileLocked: true });
   }
   return out;
 }
@@ -184,8 +199,8 @@ export function movedByChange(
 interface DoctorAssessment extends LearningStatusDiff {
   personId: string;
   kinds: Map<string, "course" | "module" | "lesson" | "step">;
-  /** Items the saved change moves to a status other than done (after «keep» holds what it keeps). */
-  moved: string[];
+  /** The items the saved change anchors its reason to (after «keep» holds what it keeps). */
+  moved: ReasonAnchor[];
   /** Each item's status before the change. */
   prior: Map<string, string>;
   /** Some status differs once the change is saved (after «keep»). */
@@ -303,8 +318,8 @@ export interface LearningRecordedRuleChange {
 /**
  * EARS-31 — inside the saving transaction, BEFORE the layer is written: the
  * `learning_rule_changes` row, under «keep» the `completion-kept` facts, and
- * the status-reason anchor (EARS-24) of every item the saved change moves to a
- * status other than done. A change that moves no doctor's status is recorded
+ * the status-reason anchor (EARS-24) of every item the saved change moves off
+ * done or locks again. A change that moves no doctor's status is recorded
  * recomputed here, so its recompute walks nobody.
  */
 export async function recordRuleChange(
@@ -345,14 +360,15 @@ export async function recordRuleChange(
   const ruleChangeId = change!.id;
   for (const d of assessed) {
     if (d.moved.length > 0) {
-      // EARS-24 — the reason anchor of every item the change moves: kept
-      // through every later transition until the item is done again (the
-      // projector clears it then). A row not projected yet starts at the
-      // status the doctor had before the change; the recompute moves it.
+      // EARS-24 — the reason anchor of every item the change moves off done
+      // (held until it is done again) or locks again (held while locked); the
+      // projector clears it. An item still holding an earlier off-done anchor
+      // keeps that lifetime. A row not projected yet starts at the status the
+      // doctor had before the change; the recompute moves it.
       await tx
         .insert(learningNodeStatus)
         .values(
-          d.moved.map((itemId) => ({
+          d.moved.map(({ itemId, whileLocked }) => ({
             personId: d.personId,
             itemKind: d.kinds.get(itemId) ?? "step",
             itemId,
@@ -361,11 +377,15 @@ export async function recordRuleChange(
             causeKind: "fact",
             causeId: null,
             reasonRuleChangeId: ruleChangeId,
+            reasonWhileLocked: whileLocked,
           })),
         )
         .onConflictDoUpdate({
           target: [learningNodeStatus.personId, learningNodeStatus.itemId],
-          set: { reasonRuleChangeId: ruleChangeId },
+          set: {
+            reasonRuleChangeId: ruleChangeId,
+            reasonWhileLocked: sql`excluded.reason_while_locked AND (${learningNodeStatus.reasonRuleChangeId} IS NULL OR ${learningNodeStatus.reasonWhileLocked})`,
+          },
         });
     }
     if (!keep) continue;
@@ -503,11 +523,17 @@ export function matchesProjection(
   return true;
 }
 
+/** Tries of the recompute right after a save, and the pause after each failed one. */
+const FINISH_ATTEMPTS = 3;
+const FINISH_RETRY_MS = 2_000;
+
 /**
  * EARS-31 — the recompute right after a save committed. The save is already
  * the truth (reads compute live from facts and rules), so a failing recompute
- * never turns it into an error: the change keeps `recomputed_at` NULL and the
- * startup resume ({@link resumeRuleChanges}) finishes it. True when finished.
+ * never turns it into an error: a transient failure is retried a bounded
+ * number of times (the recompute is idempotent), then the change keeps
+ * `recomputed_at` NULL and the startup resume ({@link resumeRuleChanges})
+ * finishes it. True when finished.
  */
 export async function finishRuleChange(
   deps: LearningServerDeps,
@@ -520,13 +546,20 @@ export async function finishRuleChange(
     console.error(
       `learning rule change ${id} recompute failed, left for the resume: ${error instanceof Error ? error.message : String(error)}`,
     ),
+  pause: (attempt: number) => Promise<void> = (attempt) =>
+    new Promise((resolve) => setTimeout(resolve, FINISH_RETRY_MS * attempt)),
 ): Promise<boolean> {
-  try {
-    await recompute(deps, ruleChangeId);
-    return true;
-  } catch (error) {
-    onFailed(ruleChangeId, error);
-    return false;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await recompute(deps, ruleChangeId);
+      return true;
+    } catch (error) {
+      if (attempt >= FINISH_ATTEMPTS) {
+        onFailed(ruleChangeId, error);
+        return false;
+      }
+      await pause(attempt);
+    }
   }
 }
 
@@ -646,10 +679,11 @@ export function changedSettings(
 }
 
 /**
- * EARS-24 — the reason of each given lesson a rule change moved (no longer
- * done, locked again): its anchor (`reason_rule_change_id`, written by the save) survives
- * every later transition, so a lesson that opened or turned current since
- * keeps it; a lesson done now has no reason, whatever the anchor says.
+ * EARS-24 — the reason of each given lesson a rule change anchored
+ * (`reason_rule_change_id`, written by the save): a lesson it moved off done
+ * keeps it whatever status it takes since; a lesson it only locked again
+ * shows it while it is locked. A lesson done now has no reason, whatever the
+ * anchor says — the live status decides before the projection catches up.
  */
 export async function lessonStatusReasons(
   db: Handle,
@@ -661,7 +695,11 @@ export async function lessonStatusReasons(
   const reasons = new Map<string, LearningStatusReason>();
   if (lessonIds.length === 0) return reasons;
   const rows = await db
-    .select({ itemId: learningNodeStatus.itemId, change: learningRuleChanges })
+    .select({
+      itemId: learningNodeStatus.itemId,
+      whileLocked: learningNodeStatus.reasonWhileLocked,
+      change: learningRuleChanges,
+    })
     .from(learningNodeStatus)
     .innerJoin(
       learningRuleChanges,
@@ -673,9 +711,10 @@ export async function lessonStatusReasons(
         inArray(learningNodeStatus.itemId, [...lessonIds]),
       ),
     );
-  for (const { itemId, change } of rows) {
+  for (const { itemId, whileLocked, change } of rows) {
     const status = evaluation.states.get(itemId)?.status;
     if (!status || status === "done") continue;
+    if (whileLocked && status !== "locked") continue;
     reasons.set(itemId, {
       ruleChangeId: change.id,
       at: change.at.toISOString(),

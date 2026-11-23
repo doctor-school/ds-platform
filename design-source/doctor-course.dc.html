@@ -196,6 +196,9 @@ a{color:var(--color-primary-action)}a:hover{color:var(--color-primary-hover)}
 <sc-if value="{{ sum.hasReason }}" hint-placeholder-val="{{ false }}">
 <x-import component-from-global-scope="DsDesignSystem.Alert" variant="info">{{ sum.reason }}</x-import>
 </sc-if>
+<sc-if value="{{ sum.ruleChanged }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="DsDesignSystem.Alert" variant="info"><b>Условия урока изменились</b><br>Теперь для зачёта нужно набрать в итоговом тесте 80 % вместо 70 %. Пройдите тест ещё раз — остальные шаги урока засчитаны.</x-import>
+</sc-if>
 <sc-if value="{{ sum.actStart }}" hint-placeholder-val="{{ false }}"><a style="display: inline-flex; align-items: center; justify-content: center; align-self: flex-start; box-sizing: border-box; min-height: 2.75rem; padding: var(--space-2-5) var(--space-6); font-size: var(--font-size-sm); font-weight: var(--font-weight-extrabold); text-decoration: none; color: var(--color-primary-foreground); background: var(--color-primary-action); border: var(--border-width-2) solid var(--color-border); box-shadow: var(--shadow-btn)" data-btn="primary"href="doctor-lesson.dc.html">Начать</a></sc-if>
 <sc-if value="{{ sum.actContinue }}" hint-placeholder-val="{{ true }}"><a style="display: inline-flex; align-items: center; justify-content: center; align-self: flex-start; box-sizing: border-box; min-height: 2.75rem; padding: var(--space-2-5) var(--space-6); font-size: var(--font-size-sm); font-weight: var(--font-weight-extrabold); text-decoration: none; color: var(--color-primary-foreground); background: var(--color-primary-action); border: var(--border-width-2) solid var(--color-border); box-shadow: var(--shadow-btn)" data-btn="primary"href="doctor-lesson.dc.html">Продолжить</a></sc-if>
 <sc-if value="{{ sum.actRepeat }}" hint-placeholder-val="{{ false }}"><a style="display: inline-flex; align-items: center; justify-content: center; align-self: flex-start; box-sizing: border-box; min-height: 2.75rem; padding: var(--space-2-5) var(--space-6); font-size: var(--font-size-sm); font-weight: var(--font-weight-extrabold); text-decoration: none; color: var(--color-foreground); background: var(--color-card); border: var(--border-width-2) solid var(--color-border); box-shadow: var(--shadow-ghost)" data-btn="secondary"href="doctor-lesson.dc.html">Повторить</a></sc-if>
@@ -265,6 +268,9 @@ a{color:var(--color-primary-action)}a:hover{color:var(--color-primary-hover)}
 </sc-if>
 <sc-if value="{{ sum.hasReason }}" hint-placeholder-val="{{ false }}">
 <x-import component-from-global-scope="DsDesignSystem.Alert" variant="info">{{ sum.reason }}</x-import>
+</sc-if>
+<sc-if value="{{ sum.ruleChanged }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="DsDesignSystem.Alert" variant="info"><b>Условия урока изменились</b><br>Теперь для зачёта нужно набрать в итоговом тесте 80 % вместо 70 %. Пройдите тест ещё раз — остальные шаги урока засчитаны.</x-import>
 </sc-if>
 <sc-if value="{{ sum.actStart }}" hint-placeholder-val="{{ false }}"><a style="display: inline-flex; align-items: center; justify-content: center; align-self: flex-start; box-sizing: border-box; min-height: 2.75rem; padding: var(--space-2-5) var(--space-6); font-size: var(--font-size-sm); font-weight: var(--font-weight-extrabold); text-decoration: none; color: var(--color-primary-foreground); background: var(--color-primary-action); border: var(--border-width-2) solid var(--color-border); box-shadow: var(--shadow-btn)" data-btn="primary"href="doctor-lesson.dc.html">Начать</a></sc-if>
 <sc-if value="{{ sum.actContinue }}" hint-placeholder-val="{{ true }}"><a style="display: inline-flex; align-items: center; justify-content: center; align-self: flex-start; box-sizing: border-box; min-height: 2.75rem; padding: var(--space-2-5) var(--space-6); font-size: var(--font-size-sm); font-weight: var(--font-weight-extrabold); text-decoration: none; color: var(--color-primary-foreground); background: var(--color-primary-action); border: var(--border-width-2) solid var(--color-border); box-shadow: var(--shadow-btn)" data-btn="primary"href="doctor-lesson.dc.html">Продолжить</a></sc-if>
@@ -349,7 +355,7 @@ a{color:var(--color-primary-action)}a:hover{color:var(--color-primary-hover)}
 </div>
 </dc-import>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"signedIn":{"editor":"boolean","default":false,"tsType":"boolean","section":"Состояние"},"dark":{"editor":"boolean","default":false,"tsType":"boolean","section":"Состояние"},"state":{"editor":"enum","options":["обычное","загрузка","пусто","ошибка"],"default":"обычное","tsType":"string","section":"Состояние"},"viewerState":{"editor":"enum","options":["не начат","в процессе","пройден · документ доступен","пройден · документы не подтверждены"],"default":"в процессе","tsType":"string","section":"Состояние"},"order":{"editor":"enum","options":["по порядку","в любом порядке"],"default":"по порядку","tsType":"string","section":"Правила курса"},"testOut":{"editor":"boolean","default":false,"tsType":"boolean","section":"Правила курса"},"singleModule":{"editor":"boolean","default":false,"tsType":"boolean","section":"Правила курса"},"$preview":{"width":1440,"height":8000}}'>
+<script type="text/x-dc" data-dc-script data-props='{"signedIn":{"editor":"boolean","default":false,"tsType":"boolean","section":"Состояние"},"dark":{"editor":"boolean","default":false,"tsType":"boolean","section":"Состояние"},"state":{"editor":"enum","options":["обычное","загрузка","пусто","ошибка"],"default":"обычное","tsType":"string","section":"Состояние"},"viewerState":{"editor":"enum","options":["не начат","в процессе","пройден · документ доступен","пройден · документы не подтверждены"],"default":"в процессе","tsType":"string","section":"Состояние"},"причина":{"editor":"enum","options":["нет","правило изменилось"],"default":"нет","tsType":"string","section":"Состояние"},"order":{"editor":"enum","options":["по порядку","в любом порядке"],"default":"по порядку","tsType":"string","section":"Правила курса"},"testOut":{"editor":"boolean","default":false,"tsType":"boolean","section":"Правила курса"},"singleModule":{"editor":"boolean","default":false,"tsType":"boolean","section":"Правила курса"},"$preview":{"width":1440,"height":8000}}'>
 class Component extends DCLogic {
   state = { isMobile: false, darkS: null, sel: null, sheetOpen: false, flash: false, navN: null };
 
@@ -429,6 +435,9 @@ class Component extends DCLogic {
     const doneSteps = completed ? totalSteps : inProgress ? doneCount * STEPS + 1 : 0;
     const hereG = inProgress ? doneSteps + 1 : 0;                              // шаг «Вы здесь»
     const hereN = inProgress ? doneCount + 1 : 0;                              // его урок
+    // правило опубликованного курса изменилось: пройденный урок 2 снова открыт до повторного теста (024 EARS-24)
+    const ruleChanged = inProgress && (p['причина'] || 'нет') === 'правило изменилось';
+    const ruleN = ruleChanged ? 2 : 0;
     const testOutLesson = signedIn && sequential && !completed ? (inProgress ? hereN + 1 : 2) : 0;
 
     const nodes = [];
@@ -452,22 +461,25 @@ class Component extends DCLogic {
             else if (sequential && g > doneSteps + 1) st = 'closed';
             else st = 'open';
           }
+          const ruleStep = n === ruleN && si === steps.length - 1;
+          if (ruleStep) st = 'open';
           nodes.push({
             id: 's' + g, kind: 'lesson', g, n, mod: mod.n, lessonTitle: title,
             stepNo: si + 1, first: si === 0,
             type: sp.type, title: sp.title, meta: sp.meta, ico: sp.ico, st,
-            reason: st === 'closed' && g === doneSteps + 2 ? 'Откроется после предыдущего шага' : '',
+            reason: ruleStep ? 'Условия урока изменились' : st === 'closed' && g === doneSteps + 2 ? 'Откроется после предыдущего шага' : '',
+            ruleChanged: ruleStep,
             testOut: testOut && si === 0 && n === testOutLesson && st === 'closed',
             partner: sp.ico === 'pdf'
           });
         });
       });
-      mod.done = Math.max(0, Math.min(mod.lessons.length, doneCount - start));
+      mod.done = Math.max(0, Math.min(mod.lessons.length, doneCount - start)) - (ruleN > start && ruleN <= k ? 1 : 0);
       nodes.push({ id: 'c' + mod.n, kind: 'club', mod: mod.n, type: 'Клуб модуля', title: 'Живой эфир', st: 'club', ico: 'club', meta: 'разбор клинических случаев' });
     });
     nodes.push({ id: 'doc', kind: 'doc', type: 'Документ', title: 'Удостоверение о повышении квалификации', st: certReady ? 'docReady' : 'doc', ico: 'doc', meta: single ? 'за весь курс' : 'за весь курс — все три модуля' });
 
-    const defaultSel = hereG ? 's' + hereG : completed ? 'doc' : 's1';
+    const defaultSel = ruleN ? 's' + ((ruleN - 1) * STEPS + STEPS) : hereG ? 's' + hereG : completed ? 'doc' : 's1';
     const sel = nodes.some(nd => nd.id === s.sel) ? s.sel : defaultSel;
     const selNode = nodes.find(nd => nd.id === sel);
     this.selId = sel;
@@ -658,6 +670,7 @@ class Component extends DCLogic {
       sheetNote: isLesson ? lessonKicker : selNode.type + ' · ' + selNode.meta,
       partner: isLesson && selNode.partner,
       hasReason: isLesson && selNode.st === 'closed',
+      ruleChanged: isLesson && !!selNode.ruleChanged,
       reason: 'Шаг откроется, когда будут пройдены предыдущие.',
       actStart: isLesson && selNode.st === 'open',
       actContinue: isLesson && selNode.st === 'here',
@@ -702,8 +715,8 @@ class Component extends DCLogic {
       showGate: guest && stReady,
       showProgress: signedIn && stReady,
       inProgress, notStarted, completed, certReady, certWaiting,
-      progressText: 'Пройдено ' + doneCount + ' ' + plural(doneCount) + ' из ' + total + (single ? '' : ' · модуль ' + hereMod),
-      progressBarStyle: 'height:100%;background:var(--color-primary-action);width:' + Math.round(doneCount / total * 100) + '%',
+      progressText: 'Пройдено ' + (doneCount - (ruleN ? 1 : 0)) + ' ' + plural(doneCount - (ruleN ? 1 : 0)) + ' из ' + total + (single ? '' : ' · модуль ' + hereMod),
+      progressBarStyle: 'height:100%;background:var(--color-primary-action);width:' + Math.round((doneCount - (ruleN ? 1 : 0)) / total * 100) + '%',
       continueLabel: 'Продолжить — урок ' + hereN,
       notStartedText: single ? '4 урока и клуб' : '18 уроков в трёх модулях',
       goHere: () => {

@@ -46,8 +46,12 @@ import {
 // rules and writes nothing. The save writes, in one transaction, the layer, one
 // `learning_rule_changes` row, under «keep» (owner D16) a `completion-kept`
 // fact for every item that was done and would no longer be, and the
-// status-reason anchor of every item the saved change moves to a status other
-// than done (EARS-24); then it returns. After COMMIT the affected doctors'
+// status-reason anchor (024 EARS-24, 024-design §5) of two kinds of item the
+// saved change moves: (a) an item moved from done to not done carries the
+// reason until it is done again; (b) an item that was neither done nor locked
+// and that the change locks carries it only while locked
+// (`reason_while_locked`); (c) an item the change unlocks or moves otherwise
+// gets none. Then it returns. After COMMIT the affected doctors'
 // statuses are recomputed in the background with the change as the cause; a
 // change that moves no doctor's status is marked recomputed in the save and
 // walks nobody. The recompute is the projection diff, so it is idempotent: a

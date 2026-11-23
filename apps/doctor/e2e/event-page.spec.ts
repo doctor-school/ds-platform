@@ -263,7 +263,14 @@ test("014 EARS-6/8: a doctor returns to the past event, plays the montage and op
     { email: DOCTOR_EMAIL!, password: DOCTOR_PASSWORD! },
     eventUrl.origin,
   );
-  await expect(page).toHaveURL(eventUrl.href);
+  // The callback's redirect ends in an empty `#` that strips any fragment the
+  // IdP left (storefront-oidc), so the landing is compared without it.
+  await expect(page).toHaveURL(
+    (url) =>
+      url.origin === eventUrl.origin &&
+      url.pathname === eventPath &&
+      url.search === "",
+  );
   await expect(gate).toHaveCount(0);
 
   await expect(frames).toHaveCount(1);

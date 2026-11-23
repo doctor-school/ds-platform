@@ -136,22 +136,33 @@ export interface FeedRailGeometry {
 }
 
 /**
- * #4191 — where ← / → take the rail: one page of whole visible columns,
+ * #4191 — where a ← / → page starts: one page of whole visible columns,
  * snapped to a column start. → begins the page at the first column not yet
- * fully shown, ← shows the whole columns before the first fully visible one;
- * the last page stops at the scroll end, where the last column meets the
- * right gutter.
+ * fully shown, ← shows the whole columns before the first fully visible one.
+ * The goal ignores how many cards are loaded yet, so a → past the loaded
+ * cards keeps the same step while the next feed page loads.
  */
-export function feedRailPageTarget(g: FeedRailGeometry, dir: 1 | -1): number {
+export function feedRailPageGoal(g: FeedRailGeometry, dir: 1 | -1): number {
   const slot = g.column + g.gap;
-  const max = Math.max(0, g.scrollWidth - g.clientWidth);
-  if (slot <= 0) return dir > 0 ? max : 0;
+  if (slot <= 0)
+    return dir > 0 ? Math.max(0, g.scrollWidth - g.clientWidth) : 0;
   const inner = g.clientWidth - g.padStart - g.padEnd;
   const perPage = Math.max(1, Math.floor((inner + g.gap + 0.5) / slot));
   // The first column whose start is at or right of the left gutter.
   const first = Math.ceil(g.scrollLeft / slot - 0.01);
-  const target = (first + dir * perPage) * slot;
-  return Math.min(max, Math.max(0, target));
+  return Math.max(0, (first + dir * perPage) * slot);
+}
+
+/**
+ * #4191 — where ← / → take the rail over the cards laid out now: the page
+ * goal, clamped to the scroll end, where the last column meets the right
+ * gutter.
+ */
+export function feedRailPageTarget(g: FeedRailGeometry, dir: 1 | -1): number {
+  return Math.min(
+    Math.max(0, g.scrollWidth - g.clientWidth),
+    feedRailPageGoal(g, dir),
+  );
 }
 
 const useIsomorphicLayoutEffect =
@@ -285,14 +296,17 @@ export function FeedRail({
 
   const [fitRows, setFitRows] = React.useState<1 | 2>(2);
 
-  /** #4191 — the row rule against the rail's observed content box. */
-  const measureRows = () => {
+  /**
+   * #4191 — the row rule against the rail's observed content box. Returns
+   * false while the laid-out rows are about to change (this layout is stale).
+   */
+  const measureRows = (): boolean => {
     const rail = railRef.current;
-    if (!rail) return;
+    if (!rail) return true;
     // The first-page placeholders keep the canvas two rows (`data = load`).
     if (phase === "loading") {
       setFitRows(2);
-      return;
+      return fitRows === 2;
     }
     const box = railBox(rail);
     const next = feedRailRows({
@@ -302,12 +316,50 @@ export function FeedRail({
       gap: box.gap,
     });
     setFitRows((prev) => (prev === next ? prev : next));
+    return next === fitRows;
   };
 
-  const measure = () => {
+  /**
+   * #4191 — a → page whose goal lies past the loaded cards while the feed has
+   * more: the rail scrolls as far as the laid-out cards allow and goes on to
+   * the goal as the next feed pages land, so every → keeps the same step.
+   * `issued` is the last scroll target sent, so a re-render does not restart
+   * a running smooth scroll.
+   */
+  const pendingPage = React.useRef<{ goal: number; issued: number } | null>(
+    null,
+  );
+
+  const followPendingPage = () => {
     const rail = railRef.current;
-    measureRows();
-    if (!rail || phase !== "ready") return;
+    const pending = pendingPage.current;
+    if (!rail || !pending || phase !== "ready") return;
+    const max = Math.max(0, rail.scrollWidth - rail.clientWidth);
+    const left = Math.min(max, pending.goal);
+    if (
+      pending.goal > max + 0.5 &&
+      cursor !== null &&
+      moreRef.current === "idle"
+    )
+      loadMore();
+    // Reached, the whole feed is in, or the next page failed: the loaded
+    // cards are as far as this page goes.
+    if (moreRef.current !== "loading") pendingPage.current = null;
+    if (Math.abs(left - pending.issued) > 0.5) {
+      pending.issued = left;
+      rail.scrollTo({ left, behavior: scrollBehavior() });
+    }
+  };
+
+  /** The viewer takes the rail over: a pending page no longer applies. */
+  const dropPendingPage = () => {
+    pendingPage.current = null;
+  };
+
+  const measure = (): boolean => {
+    const rail = railRef.current;
+    const rowsSettled = measureRows();
+    if (!rail || phase !== "ready") return rowsSettled;
     const max = rail.scrollWidth - rail.clientWidth;
     const atStart = rail.scrollLeft < 4;
     const atEnd =
@@ -325,17 +377,22 @@ export function FeedRail({
       rail.scrollWidth - slotWidth(rail) * 1.5
     )
       loadMore();
+    return rowsSettled;
   };
 
   const measureRef = React.useRef(measure);
   measureRef.current = measure;
+  const followRef = React.useRef(followPendingPage);
+  followRef.current = followPendingPage;
   const railShown =
     phase !== "error" && !(phase === "ready" && items.length === 0);
   // A layout effect, so the row rule lands before the browser paints the
   // cards (no two-row flash for a few cards once the first page is in).
+  // A pending → page follows once the appended cards are laid out in their
+  // final rows.
   useIsomorphicLayoutEffect(() => {
-    measureRef.current();
-  }, [items, phase, cursor, more, phone]);
+    if (measureRef.current()) followRef.current();
+  }, [items, phase, cursor, more, phone, fitRows]);
   React.useEffect(() => {
     const onResize = () => measureRef.current();
     window.addEventListener("resize", onResize);
@@ -357,16 +414,22 @@ export function FeedRail({
   const page = (dir: 1 | -1) => {
     const rail = railRef.current;
     if (!rail) return;
-    const left = feedRailPageTarget(
-      {
-        scrollLeft: rail.scrollLeft,
-        scrollWidth: rail.scrollWidth,
-        clientWidth: rail.clientWidth,
-        ...railBox(rail),
-      },
-      dir,
-    );
+    const pending = pendingPage.current;
+    pendingPage.current = null;
+    const geometry = {
+      // A press while a page is still on its way pages on from that page.
+      scrollLeft: pending ? pending.goal : rail.scrollLeft,
+      scrollWidth: rail.scrollWidth,
+      clientWidth: rail.clientWidth,
+      ...railBox(rail),
+    };
+    const goal = feedRailPageGoal(geometry, dir);
+    const left = feedRailPageTarget(geometry, dir);
     rail.scrollTo({ left, behavior: scrollBehavior() });
+    if (goal > left + 0.5 && cursor !== null && moreRef.current !== "failed") {
+      pendingPage.current = { goal, issued: left };
+      loadMore();
+    }
   };
 
   const step = (dir: 1 | -1) => {
@@ -378,6 +441,8 @@ export function FeedRail({
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const rail = railRef.current;
     if (!rail || e.target !== e.currentTarget) return;
+    if (["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key))
+      dropPendingPage();
     if (e.key === "ArrowRight") step(1);
     else if (e.key === "ArrowLeft") step(-1);
     else if (e.key === "Home")
@@ -390,6 +455,7 @@ export function FeedRail({
 
   // Mouse drag only — touch and pen keep the native swipe.
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    dropPendingPage();
     const rail = railRef.current;
     if (!rail || e.pointerType !== "mouse" || e.button !== 0) return;
     const x0 = e.clientX;
@@ -521,6 +587,10 @@ export function FeedRail({
           onScroll={measure}
           onKeyDown={onKeyDown}
           onPointerDown={onPointerDown}
+          onWheel={(e) => {
+            // A horizontal wheel or trackpad swipe, not a page scroll.
+            if (e.deltaX !== 0 || e.shiftKey) dropPendingPage();
+          }}
           onClickCapture={onClickCapture}
           onDragStart={(e) => e.preventDefault()}
           className={cn(

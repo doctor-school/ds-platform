@@ -8,7 +8,12 @@ import {
 import type { FeedCard, PublicFeedPage } from "@ds/schemas";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FeedRail, feedRailPageTarget, feedRailRows } from "./feed-rail";
+import {
+  FeedRail,
+  feedRailPageGoal,
+  feedRailPageTarget,
+  feedRailRows,
+} from "./feed-rail";
 
 // 048 V-8 — the Academy home rail of `design-source/academy-home.dc.html`
 // section «Новости, блог и видео» (EARS-14, EARS-15, EARS-16). jsdom has no
@@ -494,6 +499,15 @@ describe("feedRailPageTarget", () => {
   it("048 EARS-14 (#4191): a position between columns (after a swipe) shall page from the next whole column", () => {
     expect(forward(100)).toBe(5 * 312);
     expect(back(1300)).toBe(312);
+  });
+
+  it("048 EARS-14 (#4191): the → goal shall keep the whole-page step past the loaded cards, which only the scroll target clamps", () => {
+    // A first page of 12 cards: 6 columns, max scroll 48 + 6 × 312 − 20 + 48 − 1440 = 508.
+    const firstPage = { ...geometry, scrollWidth: 1948, scrollLeft: 0 };
+    expect(feedRailPageGoal(firstPage, 1)).toBe(1248);
+    expect(feedRailPageTarget(firstPage, 1)).toBe(508);
+    // ← is never past the start.
+    expect(feedRailPageGoal({ ...firstPage, scrollLeft: 312 }, -1)).toBe(0);
   });
 
   it("048 EARS-14 (#4191): a rail narrower than one slot shall still move by one column", () => {

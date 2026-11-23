@@ -176,17 +176,25 @@ async function expectUnavailablePartnershipStorage(
     page.waitForResponse((response) => {
       const url = new URL(response.url());
       const request = response.request();
-      return url.origin === origin && url.pathname === "/" &&
-        request.method() === "POST" && (!stageContact || request.postData()?.includes(stageContact) === true);
+      return (
+        url.origin === origin &&
+        url.pathname === "/" &&
+        request.method() === "POST" &&
+        (!stageContact || request.postData()?.includes(stageContact) === true)
+      );
     }),
     form.getByRole("button", { name: "Обсудить партнёрство" }).click(),
   ]);
   expect(submission.ok()).toBe(true);
-  await expect(form.getByText("Не удалось сохранить заявку. Попробуйте ещё раз.")).toBeVisible();
+  await expect(
+    form.getByText("Не удалось сохранить заявку. Попробуйте ещё раз."),
+  ).toBeVisible();
   for (const [index, field] of fields.entries()) {
     await expect(field).toHaveValue(values[index]!);
   }
-  await expect(form.getByRole("checkbox", { name: /Согласен\(а\) на обработку/i })).toBeChecked();
+  await expect(
+    form.getByRole("checkbox", { name: /Согласен\(а\) на обработку/i }),
+  ).toBeChecked();
   await expect(page.getByText("Спасибо! Заявка сохранена.")).toHaveCount(0);
 }
 test.describe("Feature 013 — static public Academy home", () => {
@@ -276,7 +284,10 @@ test.describe("Feature 013 — static public Academy home", () => {
     const portraits = expertGrid.locator("img");
     await expect(portraits).toHaveCount(6);
     for (const [index, filename] of EXPERT_PORTRAITS.entries()) {
-      await expect(portraits.nth(index)).toHaveAttribute("src", new RegExp(filename));
+      await expect(portraits.nth(index)).toHaveAttribute(
+        "src",
+        new RegExp(filename),
+      );
     }
 
     const projectLinks = projectBlock
@@ -308,7 +319,9 @@ test.describe("Feature 013 — static public Academy home", () => {
       "24 выпуска",
       "6 треков",
     ]) {
-      await expect(page.getByText(inventedMetric, { exact: true })).toHaveCount(0);
+      await expect(page.getByText(inventedMetric, { exact: true })).toHaveCount(
+        0,
+      );
     }
   });
 
@@ -395,8 +408,7 @@ test.describe("Feature 013 — static public Academy home", () => {
     }));
     await page.route(
       (url) => url.pathname === "/v1/public/feed",
-      (route) =>
-        route.fulfill({ json: { data, nextCursor: "next-page" } }),
+      (route) => route.fulfill({ json: { data, nextCursor: "next-page" } }),
     );
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
@@ -538,6 +550,117 @@ test.describe("Feature 013 — static public Academy home", () => {
     expect(steps.at(-1)!).toBeLessThanOrEqual(full[0]! + 1);
   });
 
+  for (const width of [1440, 2000]) {
+    test(`048 EARS-14 (#4191): at ${width} px on a paginated feed, → pages by the same whole-column step while later pages load, and the last page stops at the right gutter`, async ({
+      page,
+    }) => {
+      // The real API shape: a first page of 12 with a cursor, then pages of 8
+      // by cursor, 37 cards in all — the first → reaches past the loaded cards.
+      const total = 37;
+      const card = (i: number) => ({
+        kind: "news",
+        id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`,
+        title: `Материал ленты ${String(i + 1).padStart(2, "0")}`,
+        publishedAt: new Date(
+          Date.UTC(2026, 9, 27, 9) - i * 3_600_000,
+        ).toISOString(),
+        image: null,
+        source: { platform: "academy", name: "Академия" },
+        partner: null,
+        href: `/materials/feed-${i + 1}`,
+      });
+      await page.route(
+        (url) => url.pathname === "/v1/public/feed",
+        async (route) => {
+          const url = new URL(route.request().url());
+          const from = Number(url.searchParams.get("cursor") ?? "0");
+          const limit = Number(url.searchParams.get("limit"));
+          const to = Math.min(total, from + limit);
+          // A later page answers after a network-like delay.
+          if (from > 0) await new Promise((done) => setTimeout(done, 250));
+          await route.fulfill({
+            json: {
+              data: Array.from({ length: to - from }, (_, i) => card(from + i)),
+              nextCursor: to < total ? String(to) : null,
+            },
+          });
+        },
+      );
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+      const rail = page.getByRole("region", {
+        name: "Новости, блог и видео: листайте влево и вправо, стрелки клавиатуры — по одной карточке",
+      });
+      await expect(rail.locator("[data-slot] > a").first()).toBeVisible();
+      await expect(rail).toHaveAttribute("data-rows", "2");
+      const layout = () =>
+        rail.evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          const padEnd = parseFloat(getComputedStyle(el).paddingRight);
+          const slots = [...el.querySelectorAll("[data-slot]")].map((slot) =>
+            slot.getBoundingClientRect(),
+          );
+          return {
+            scrollLeft: el.scrollLeft,
+            max: el.scrollWidth - el.clientWidth,
+            cards: el.querySelectorAll("[data-slot] > a").length,
+            lastGap: Math.round(
+              box.right - padEnd - Math.max(...slots.map((slot) => slot.right)),
+            ),
+          };
+        });
+      const settle = async () => {
+        let settled = -1;
+        await expect
+          .poll(
+            async () => {
+              const now = (await layout()).scrollLeft;
+              const done = now === settled;
+              settled = now;
+              return done;
+            },
+            { intervals: [400] },
+          )
+          .toBe(true);
+        return settled;
+      };
+
+      const next = page.getByRole("button", {
+        name: "Дальше, к более ранним материалам",
+      });
+      const steps: number[] = [];
+      while (await next.isEnabled()) {
+        const before = (await layout()).scrollLeft;
+        await next.click();
+        await expect
+          .poll(async () => (await layout()).scrollLeft)
+          .not.toBe(before);
+        steps.push((await settle()) - before);
+      }
+      const end = await layout();
+      test.info().annotations.push({
+        type: "steps",
+        description: `${steps.join(", ")}; end ${end.scrollLeft} = max ${end.max}`,
+      });
+      expect(end.cards).toBe(total);
+      expect(end.scrollLeft).toBeCloseTo(end.max, 0);
+      expect(Math.abs(end.lastGap)).toBeLessThanOrEqual(1);
+      // Every page but the last one moves by the same whole-column width.
+      const full = steps.slice(0, -1);
+      expect(full.length).toBeGreaterThan(1);
+      for (const step of full)
+        expect(Math.abs(step - full[0]!), `steps ${steps}`).toBeLessThanOrEqual(
+          1,
+        );
+      expect(steps.at(-1)!).toBeLessThanOrEqual(full[0]! + 1);
+
+      // Home returns to the first card.
+      await rail.focus();
+      await page.keyboard.press("Home");
+      expect(await settle()).toBe(0);
+    });
+  }
+
   test("EARS-5: enabled partnership form shall expose the exact controls and reject invalid contact accessibly", async ({
     page,
   }) => {
@@ -562,9 +685,7 @@ test.describe("Feature 013 — static public Academy home", () => {
       form.getByRole("link", { name: "Политика конфиденциальности" }),
     ).toHaveAttribute("href", "https://doctor.school/index/privacy-pay");
 
-    await form
-      .getByLabel("Компания или клиника")
-      .fill("x".repeat(161));
+    await form.getByLabel("Компания или клиника").fill("x".repeat(161));
     await form.getByLabel(/^Email или Telegram/).fill("@bad-name");
     await form.getByRole("button", { name: "Обсудить партнёрство" }).click();
     const summary = form.getByTestId("academy-form-error-summary");
@@ -753,7 +874,10 @@ test.describe("Feature 013 — static public Academy home", () => {
     page,
   }) => {
     const stage = stageAcademyAddress(baseURL);
-    test.skip(!stage && !PERSISTENCE_E2E_SAFE, "requires an Academy stage slot or the isolated CI persistence fixture");
+    test.skip(
+      !stage && !PERSISTENCE_E2E_SAFE,
+      "requires an Academy stage slot or the isolated CI persistence fixture",
+    );
     if (stage) {
       const fixture = stagePartnershipUnavailableOrigin(stage);
       if (fixture.startsWith("https://")) {
@@ -775,16 +899,29 @@ test.describe("Feature 013 — static public Academy home", () => {
         }
       }
       const contact = `partnership-4121-${randomUUID()}@example.test`;
-      const observeNormalStorage = () => readStagePartnershipObservation(stage.origin, contact);
-      const observeFixtureFault = () => readStagePartnershipFaultCount(stage.origin);
-      expect(await observeNormalStorage()).toEqual({ count: 0, privateRecord: false });
+      const observeNormalStorage = () =>
+        readStagePartnershipObservation(stage.origin, contact);
+      const observeFixtureFault = () =>
+        readStagePartnershipFaultCount(stage.origin);
+      expect(await observeNormalStorage()).toEqual({
+        count: 0,
+        privateRecord: false,
+      });
       const faultsBefore = await observeFixtureFault();
-      await expectUnavailablePartnershipStorage(page, fixture + "/#partner-form", contact);
+      await expectUnavailablePartnershipStorage(
+        page,
+        fixture + "/#partner-form",
+        contact,
+      );
       expect(await observeFixtureFault()).toBe(faultsBefore + 1);
-      expect(await observeNormalStorage()).toEqual({ count: 0, privateRecord: false });
+      expect(await observeNormalStorage()).toEqual({
+        count: 0,
+        privateRecord: false,
+      });
       return;
     }
-    if (!SUBMISSIONS_DIRECTORY) throw new Error("missing submissions directory");
+    if (!SUBMISSIONS_DIRECTORY)
+      throw new Error("missing submissions directory");
     const safeDirectory = await assertSafeRealPath(
       SUBMISSIONS_DIRECTORY,
       "directory",
@@ -797,7 +934,10 @@ test.describe("Feature 013 — static public Academy home", () => {
     try {
       await expectUnavailablePartnershipStorage(page, "/#partner-form");
     } finally {
-      const safeUnavailableFile = await assertSafeRealPath(safeDirectory, "file");
+      const safeUnavailableFile = await assertSafeRealPath(
+        safeDirectory,
+        "file",
+      );
       const safeBackup = await assertSafeRealPath(backup, "directory");
       await rm(safeUnavailableFile, { force: true });
       assertSafeCandidatePath(safeDirectory);
@@ -806,7 +946,9 @@ test.describe("Feature 013 — static public Academy home", () => {
 
     expect(await jsonRecords()).toEqual(recordsBefore);
     expect(
-      (await readdir(SUBMISSIONS_DIRECTORY)).filter((file) => file.endsWith(".tmp")),
+      (await readdir(SUBMISSIONS_DIRECTORY)).filter((file) =>
+        file.endsWith(".tmp"),
+      ),
     ).toEqual([]);
   });
 
@@ -912,7 +1054,10 @@ test.describe("Feature 013 — static public Academy home", () => {
         const colors = await page.evaluate(() => {
           const section = document.querySelector("#partner-form");
           const button = section?.querySelector("button[type='submit']");
-          if (!(section instanceof HTMLElement) || !(button instanceof HTMLElement)) {
+          if (
+            !(section instanceof HTMLElement) ||
+            !(button instanceof HTMLElement)
+          ) {
             throw new Error("Academy partnership surface is unavailable");
           }
           return {
@@ -990,7 +1135,10 @@ test.describe("Feature 013 — static public Academy home", () => {
     // The header's first nav item is a router link (a soft navigation); the
     // guest «Войти» is a document link to the sign-in entry (003 EARS-61,
     // #3172), so it cannot be the probe.
-    const away = page.getByTestId("shell-nav-desktop").getByRole("link").first();
+    const away = page
+      .getByTestId("shell-nav-desktop")
+      .getByRole("link")
+      .first();
     const href = await away.getAttribute("href");
     expect(href, "a non-root destination").toMatch(/^\/[^/?#]/);
     await page.evaluate(() => {

@@ -626,7 +626,7 @@ test("a created account is always granted its catalogue role", () => {
   assert.ok(grants.every((step) => step.grantId === null));
   assert.deepEqual(
     grants.find((step) => step.username.includes("admin")).roleKeys,
-    ["doctor_guest", "platform_admin"],
+    ["doctor_guest", "platform_admin", "learning_rules_editor"],
   );
 });
 
@@ -649,7 +649,7 @@ test("a live account holding the wrong role is re-granted, not re-created", () =
   const grant = admin.find((step) => step.op === "ensure-grant");
   assert.equal(grant.grantId, "g-1");
   assert.equal(grant.userId, "id-a");
-  assert.deepEqual(grant.roleKeys, ["doctor_guest", "platform_admin"]);
+  assert.deepEqual(grant.roleKeys, ["doctor_guest", "platform_admin", "learning_rules_editor"]);
 });
 
 test("a live account already holding its role plans no grant step", () => {
@@ -795,13 +795,15 @@ test("a converge re-grants a live account whose role drifted, and says so", asyn
     log: (line) => lines.push(line),
   });
   const put = calls.find((call) => call.key === "PUT /management/v1/users/id-a/grants/g-1");
-  assert.deepEqual(put.body, { roleKeys: ["doctor_guest", "platform_admin"] });
+  assert.deepEqual(put.body, {
+    roleKeys: ["doctor_guest", "platform_admin", "learning_rules_editor"],
+  });
   // An ADD alongside the existing authorization would be a second grant, not a fix.
   assert.equal(
     calls.filter((call) => call.key === "POST /management/v1/users/id-a/grants").length,
     0,
   );
-  assert.match(lines.join("\n"), /re-granted doctor_guest, platform_admin/);
+  assert.match(lines.join("\n"), /re-granted doctor_guest, platform_admin, learning_rules_editor/);
 });
 
 test("a converge leaves a correct grant alone and logs that it already holds it", async () => {
@@ -815,7 +817,7 @@ test("a converge leaves a correct grant alone and logs that it already holds it"
         },
         "POST /management/v1/users/grants/_search": {
           body: {
-            result: [{ id: "g-1", projectId: "p1", roleKeys: ["platform_admin", "doctor_guest"] }],
+            result: [{ id: "g-1", projectId: "p1", roleKeys: ["learning_rules_editor", "platform_admin", "doctor_guest"] }],
           },
         },
         "POST /v2/users/id-a/password": { body: {} },
@@ -840,7 +842,7 @@ test("a converge leaves a correct grant alone and logs that it already holds it"
   );
   assert.match(
     lines.join("\n"),
-    /golden\.admin@example\.test already holds doctor_guest, platform_admin/,
+    /golden\.admin@example\.test already holds doctor_guest, platform_admin, learning_rules_editor/,
   );
 });
 
@@ -873,7 +875,7 @@ test("a grant on some other project does not pass for the shared one", async () 
   assert.deepEqual(added.body, {
     projectId: "p1",
     organizationId: "org-1",
-    roleKeys: ["doctor_guest", "platform_admin"],
+    roleKeys: ["doctor_guest", "platform_admin", "learning_rules_editor"],
   });
 });
 

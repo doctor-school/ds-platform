@@ -43,6 +43,7 @@ import type {
   learningSteps,
 } from "../../schema/learning.js";
 import { golden, goldenUuid, GOLDEN_GROUP } from "./ids.js";
+import { GOLDEN_LEARNERS, goldenLearnerId } from "./learning-results.js";
 import { GOLDEN_VOLUME_ORDINAL_BASE } from "./volume.js";
 
 /** Rules the ledger applies, with the effect migration 0060 gives each. */
@@ -123,13 +124,26 @@ interface LearningRows {
   learningLessons: readonly (typeof learningLessons.$inferInsert)[];
   learningSteps: readonly (typeof learningSteps.$inferInsert)[];
   learningFacts: readonly (typeof learningFacts.$inferInsert)[];
+  /**
+   * #4012 — the rule layers, for a course's own `test.threshold` (the platform
+   * seed's 80 otherwise): a test step is done on a submitted attempt at it.
+   */
+  learningRuleLayers?: readonly {
+    scopeKind: string;
+    scopeId: string;
+    values?: Record<string, unknown> | null;
+  }[];
 }
+
+/** The platform seed's pass mark (`LEARNING_PLATFORM_SEED["test.threshold"]`). */
+const PLATFORM_TEST_THRESHOLD = 80;
 
 /**
  * The lessons and modules each person has completed on the golden facts, with
  * the instant the last fact arrived: a lesson whose every step carries the
- * person's fact (no test step — the volume courses' own layer completes a
- * lesson on `all-steps-done`), a module whose every lesson is complete.
+ * person's fact — for a test step a submitted attempt at the course's pass
+ * mark (#4012) — (the volume courses' own layer completes a lesson on
+ * `all-steps-done`), a module whose every lesson is complete.
  */
 export function goldenLearningCompletions(
   rows: LearningRows,
@@ -141,34 +155,66 @@ export function goldenLearningCompletions(
     id: string;
     at: Date;
   }[] = [];
+  const thresholdOf = new Map<string, number>();
+  for (const layer of rows.learningRuleLayers ?? []) {
+    const value = layer.values?.["test.threshold"];
+    if (layer.scopeKind === "course" && typeof value === "number")
+      thresholdOf.set(layer.scopeId, value);
+  }
+  const groupBy = <T, K>(items: readonly T[], key: (item: T) => K) => {
+    const map = new Map<K, T[]>();
+    for (const item of items) map.set(key(item), [...(map.get(key(item)) ?? []), item]);
+    return map;
+  };
+  const lessonsOf = groupBy(rows.learningLessons, (l) => l.moduleId);
+  for (const lessons of lessonsOf.values())
+    lessons.sort((a, b) => a.position - b.position);
+  const stepsOf = groupBy(rows.learningSteps, (s) => s.lessonId);
+  const factsOf = groupBy(rows.learningFacts, (f) => f.personId);
   for (const personId of personIds) {
+    const facts = factsOf.get(personId) ?? [];
+    if (facts.length === 0) continue;
     const factAt = new Map<string, number>();
-    for (const f of rows.learningFacts) {
-      if (f.personId !== personId) continue;
+    const attempts = new Map<string, { score: number; at: number }[]>();
+    for (const f of facts) {
       const t = f.occurredAt!.getTime();
+      if (f.kind === "attempt-submitted") {
+        const score = Number((f.data as Record<string, unknown>)["score"]);
+        attempts.set(f.stepId!, [
+          ...(attempts.get(f.stepId!) ?? []),
+          { score, at: t },
+        ]);
+        continue;
+      }
       factAt.set(f.stepId!, Math.max(factAt.get(f.stepId!) ?? 0, t));
     }
-    if (factAt.size === 0) continue;
     for (const module of rows.learningModules) {
-      const lessons = rows.learningLessons
-        .filter((l) => l.moduleId === module.id)
-        .sort((a, b) => a.position - b.position);
+      const threshold =
+        thresholdOf.get(module.courseId) ?? PLATFORM_TEST_THRESHOLD;
+      const lessons = lessonsOf.get(module.id!) ?? [];
+      // A test step is done at its first submitted attempt at the pass mark.
+      const doneAt = (s: (typeof rows.learningSteps)[number]) =>
+        s.type === "test"
+          ? (attempts.get(s.id!) ?? [])
+              .filter((a) => a.score >= threshold)
+              .reduce<number | undefined>(
+                (min, a) => (min === undefined || a.at < min ? a.at : min),
+                undefined,
+              )
+          : factAt.get(s.id!);
       let moduleAt = 0;
       let moduleDone = lessons.length > 0;
       for (const lesson of lessons) {
-        const steps = rows.learningSteps.filter(
-          (s) => s.lessonId === lesson.id,
-        );
-        const done =
-          steps.length > 0 &&
-          steps.every((s) => s.type !== "test" && factAt.has(s.id!));
+        const steps = stepsOf.get(lesson.id!) ?? [];
+        const at = steps.map(doneAt);
+        const done = steps.length > 0 && at.every((x) => x !== undefined);
         if (!done) {
           moduleDone = false;
           continue;
         }
-        const at = Math.max(...steps.map((s) => factAt.get(s.id!)!));
-        moduleAt = Math.max(moduleAt, at);
-        out.push({ personId, kind: "lesson", id: lesson.id!, at: new Date(at) });
+        const last = Math.max(...(at as number[]));
+        moduleAt = Math.max(moduleAt, last);
+        out.push({ personId, kind: "lesson", id: lesson.id!, at: new Date(last) });
       }
       if (moduleDone) {
         out.push({
@@ -210,7 +256,15 @@ export function buildGoldenPointsLedger(input: {
       applied: [applied("accrual.starter-bonus", personId)],
     });
   }
-  for (const c of goldenLearningCompletions(input.learning, pool)) {
+  // #4012 — the learners of the long paths' results accrue their completions
+  // too (an account opens on the first accrual, EARS-1).
+  const learners = Array.from({ length: GOLDEN_LEARNERS }, (_, i) =>
+    goldenLearnerId(i),
+  );
+  for (const c of goldenLearningCompletions(input.learning, [
+    ...pool,
+    ...learners,
+  ])) {
     const type = c.kind === "lesson" ? "lesson.completed" : "module.completed";
     const rules: AppliedRuleId[] =
       c.kind === "lesson"

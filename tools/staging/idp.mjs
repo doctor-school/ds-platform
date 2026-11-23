@@ -126,7 +126,8 @@ export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
     username: "golden.admin@example.test",
     role: "platform_admin",
     // #2456: staff are users too — the visitor role plus the admin rights on top.
-    roleKeys: ["doctor_guest", "platform_admin"],
+    // #4012: the owner's walk of 024 EARS-24 edits learning rules as this admin.
+    roleKeys: ["doctor_guest", "platform_admin", "learning_rules_editor"],
     emailVerified: true,
     mfaEnrolled: true,
     idpAccountExpected: true,
@@ -1194,7 +1195,8 @@ export async function convergeGoldenIdentities({
  * from the session's claims in the same pass, which is also what makes the sign-in
  * survive a `sync` that re-seeds the slot database.
  *
- * Same roles as the golden admin; its own username and its own secrets file. The
+ * The golden admin's staff roles without `learning_rules_editor` (the admin
+ * learning-rules spec provisions its own editor); its own username and its own secrets file. The
  * golden `admin` and `doctorMfa` factors belong to the owner's authenticator and are
  * never read, removed or enrolled by this file.
  */

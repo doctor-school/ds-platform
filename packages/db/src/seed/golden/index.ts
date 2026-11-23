@@ -124,6 +124,9 @@ export {
 } from "./learning.js";
 export {
   buildGoldenLearningVolume,
+  GOLDEN_RULE_CHANGE_COURSE,
+  GOLDEN_RULE_CHANGE_DAY,
+  GOLDEN_RULE_CHANGE_EARLIER_PASS_MARK,
   GOLDEN_VOLUME_COURSE_RULES,
   GOLDEN_VOLUME_FACT_COURSES,
   goldenVolumeLessonCount,
@@ -137,6 +140,18 @@ export {
   goldenLearningPathLessonCount,
   type GoldenLearningPathVolume,
 } from "./learning-path-volume.js";
+export {
+  buildGoldenLearners,
+  buildGoldenLearningResults,
+  GOLDEN_LEARNERS,
+  GOLDEN_LEARNING_PATH_PASS_MARK,
+  GOLDEN_RESULTS_REALISTIC_MODULES,
+  goldenLearnerId,
+  goldenResultPlans,
+  type GoldenLearners,
+  type GoldenLearningResults,
+  type GoldenResultPlan,
+} from "./learning-results.js";
 export {
   buildGoldenCongressVolume,
   GOLDEN_VOLUME_CONGRESSES,
@@ -178,6 +193,7 @@ export {
 } from "./plan.js";
 export {
   applyGoldenStep,
+  GOLDEN_MAX_BIND_PARAMS,
   loadGoldenPointsContext,
   loadLearningPresetByName,
   loadSpecialtyIdByName,

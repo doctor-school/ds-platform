@@ -23,10 +23,17 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  *   E2E_DOCTOR_EMAIL=… E2E_DOCTOR_PASSWORD=… \
  *   pnpm --filter @ds/doctor test:e2e:shell
  */
+const phoneProofEnabled = Boolean(process.env.E2E_SMS_SINK_URL?.trim());
+// Playwright's error-time ARIA snapshot is independent of trace and screenshot.
+if (phoneProofEnabled) process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1";
+
 export default defineConfig({
   testDir: "./e2e",
-  // #3758: the signed-in `/account` canvas-structure check rides this tier.
-  testMatch: /(^|[/\\])(shell-live|account-canvas-structure-live)\.spec\.ts$/,
+  testMatch: [
+    "shell-live.spec.ts",
+    "account-canvas-structure-live.spec.ts",
+    ...(phoneProofEnabled ? ["account-profile-edit-live.spec.ts"] : []),
+  ],
   // One live account, one shared upstream feed: do not race them.
   fullyParallel: false,
   workers: 1,

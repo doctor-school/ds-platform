@@ -15,6 +15,8 @@
     "./live-stand-env": "./lib/live-stand-env.ts",
     "./stand-http-credentials": "./lib/stand-http-credentials.ts",
     "./account-auth-paths": "./lib/account-auth-paths.ts",
+    "./owned-phone-confirmation": "./lib/owned-phone-confirmation.ts",
+    "./sms-sink": "./lib/sms-sink.ts",
     "./storefront-entry": "./lib/storefront-entry.ts",
     "./not-found-page": "./lib/not-found-page.ts",
     "./sign-in-host-api": "./lib/sign-in-host-api.ts",

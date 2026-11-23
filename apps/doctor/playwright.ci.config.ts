@@ -124,6 +124,7 @@ export default defineConfig({
     "shell-live.spec.ts",
     // #3758: the signed-in `/account` canvas-structure check — same live tier.
     "account-canvas-structure-live.spec.ts",
+    "account-profile-edit-live.spec.ts",
     // #3889: the event-page canvas-structure check reads golden slugs on the
     // live event-page tier (`playwright.event-page.config.ts`).
     "event-page-canvas-structure-live.spec.ts",

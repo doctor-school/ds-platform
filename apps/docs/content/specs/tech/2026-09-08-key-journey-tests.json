@@ -42,8 +42,8 @@
       "gap": null
     },
     "D10": {
-      "status": "PARTIAL",
-      "gap": 4118
+      "status": "FULL",
+      "gap": null
     },
     "D11": {
       "status": "FULL",
@@ -2221,6 +2221,17 @@
         [
           "#3892 doctor room ≡ room canvas · tab «О эфире» · 390",
           "the room has the canvas structure (controls by kind + label)"
+        ]
+      ]
+    },
+    {
+      "rows": ["D10"],
+      "leg": "live/doctor/shell",
+      "file": "account-profile-edit-live.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "D10: a doctor saves their name and confirms a phone after a wrong code"
         ]
       ]
     },

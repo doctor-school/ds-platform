@@ -1457,6 +1457,20 @@ describe("runE2eStage — the live legs", () => {
     assert.ok(academy && doctor);
     assert.equal(academy.env.E2E_WEBINAR_SLUG, GOLDEN_SLUGS.academyUpcoming);
     assert.equal(
+      academy.env.E2E_WEBINAR_SLUG_LIVE,
+      GOLDEN_EVENT_SLUGS.academyLive,
+    );
+    assert.equal(
+      academy.env.E2E_WEBINAR_SLUG_ENDED,
+      GOLDEN_SLUGS.academyEndedRecorded,
+    );
+    assert.equal(academy.env.E2E_WEBINAR_SLUG_HIDDEN, GOLDEN_SLUGS.academyHidden);
+    assert.equal(
+      academy.env.E2E_WEBINAR_SLUG_ARCHIVE,
+      GOLDEN_SLUGS.academyArchivedRecorded,
+    );
+    assert.ok(academy.env.E2E_WEBINAR_SLUG_ARCHIVE);
+    assert.equal(
       academy.env.E2E_PREPARING_WEBINAR_SLUG,
       GOLDEN_SLUGS.academyPreparingDated,
     );
@@ -1486,6 +1500,10 @@ describe("runE2eStage — the live legs", () => {
     );
     assert.equal(academyDefault.env.E2E_WEBINAR_SLUG, undefined);
     assert.equal(calls[0].env.E2E_WEBINAR_SLUG, undefined);
+    for (const other of [academyDefault, doctor, calls[0]]) {
+      assert.equal(other.env.E2E_WEBINAR_SLUG_HIDDEN, undefined);
+      assert.equal(other.env.E2E_WEBINAR_SLUG_ARCHIVE, undefined);
+    }
   });
 
   it("hands the default Academy leg its own 005 journey slugs — golden events under journey-only names, never an event-page slug name (#3229)", async () => {

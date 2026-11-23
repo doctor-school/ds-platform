@@ -33,7 +33,9 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  *  - each doctor's lesson 1 is open again: its test node carries the line
  *    «Условия урока изменились», the node summary and the lesson show the info
  *    Alert — what changed (70 → 80 is built from the rule change, here 50 → 80)
- *    and what to do now — and the progress counts no done lesson;
+ *    and what to do now — the last attempt reads against the new mark, and the
+ *    progress counts no done lesson; lesson 2, locked again, keeps its unlock
+ *    line on the path and names what opens it in its summary;
  *  - one doctor re-passes the test at 100 %: the reason leaves the lesson in
  *    place and the path, the lesson counts again; another doctor still sees it.
  *
@@ -79,6 +81,9 @@ const VIDEO_SEC = 10;
 const TITLE = "Условия урока изменились";
 const BODY =
   "Теперь для зачёта нужно набрать в тесте 80 % вместо 50 %. Пройдите тест ещё раз — остальные шаги урока засчитаны.";
+/** Lesson 2, locked again behind lesson 1: what changed, then what opens it. */
+const LOCKED_BODY = "Теперь для зачёта нужно набрать в тесте 80 % вместо 50 %. Шаг откроется, когда будут пройдены предыдущие.";
+const UNLOCK_LINE = "Откроется после предыдущего шага";
 
 /** The YouTube stand-in of `learning-path-live.spec.ts`: ready, then the clock at 2× once asked to play. */
 const YOUTUBE_FIXTURE = `<!doctype html><html><body style="margin:0;background:#000"><script>
@@ -297,10 +302,10 @@ async function doctorPassesAtHalf(browser: Browser, n: number): Promise<Page> {
 }
 
 /** The reason Alert: «Условия урока изменились» bold, then the sentence. */
-async function expectReasonAlert(scope: ReturnType<Page["getByTestId"]> | Page) {
+async function expectReasonAlert(scope: ReturnType<Page["getByTestId"]> | Page, body = BODY) {
   const title = scope.getByText(TITLE, { exact: true }).and(scope.locator("b"));
   await expect(title).toBeVisible();
-  await expect(title.locator("xpath=ancestor::*[@role='status'][1]")).toContainText(BODY);
+  await expect(title.locator("xpath=ancestor::*[@role='status'][1]")).toContainText(body);
 }
 
 test("024 EARS-24 — a rule change reopens a finished lesson and the doctor sees why, until they pass it again", async ({ browser }) => {
@@ -333,14 +338,21 @@ test("024 EARS-24 — a rule change reopens a finished lesson and the doctor see
     await page.goto(`${DOCTOR_URL}/courses/${SLUG}`);
     await expect(testNode(page)).toHaveAccessibleName(/(Открыт|Вы здесь)$/);
     await expect(page.getByRole("button", { name: /^Урок 1, шаг 1\. Серия\. .*Пройден$/ })).toBeVisible();
-    // Lesson 1's test, reopened, and lesson 2's test, locked again behind it:
-    // both statuses changed through the rule change (EARS-24), both say so.
+    // Lesson 1's test, reopened, names the change; lesson 2's test, locked again
+    // behind it, keeps what opens it on the path (its reason is in the summary).
     await expect(page.getByRole("button", { name: /^Урок 2, шаг 1\. Тест\. .*Закрыт$/ })).toBeVisible();
-    await expect(reasonLine(page)).toHaveCount(2);
+    await expect(reasonLine(page)).toHaveCount(1);
+    await expect(page.locator("span", { hasText: new RegExp(`^${UNLOCK_LINE}$`) })).toHaveCount(1);
     await expect(page.getByText(/^Пройдено 0 уроков из 6/).first()).toBeVisible();
   }
 
   const [first, second] = doctors as [Page, Page, Page];
+  // The relocked lesson 2: its summary says what changed and what opens it.
+  await first.getByRole("button", { name: /^Урок 2, шаг 1\. Тест\. .*Закрыт$/ }).click();
+  await expectReasonAlert(first.getByTestId("node-summary"), LOCKED_BODY);
+  await expect(first.getByTestId("node-summary")).not.toContainText("условия курса");
+  await axeClean(first);
+  await shoot(first, "doctor-path-rule-relocked-1280");
   await testNode(first).click();
   const summary = first.getByTestId("node-summary");
   await expectReasonAlert(summary);
@@ -362,6 +374,9 @@ test("024 EARS-24 — a rule change reopens a finished lesson and the doctor see
   await expect(first).toHaveURL(/\/courses\/[^/]+\/steps\//);
   await expect(first.getByRole("button", { name: "Начать тест" })).toBeEnabled();
   await expectReasonAlert(first);
+  // The attempt passed under the old mark is stated against the new one, never «не сдан».
+  await expect(first.getByText("Ваш результат 50 % — теперь нужно 80 %.", { exact: true })).toBeVisible();
+  await expect(first.getByText(/не сдан/)).toHaveCount(0);
   expect(await first.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await axeClean(first);
   await shoot(first, "step-rule-changed-390");
@@ -389,7 +404,7 @@ test("024 EARS-24 — a rule change reopens a finished lesson and the doctor see
 
   // Another doctor's reason is theirs: still shown.
   await second.reload();
-  await expect(reasonLine(second)).toHaveCount(2);
+  await expect(reasonLine(second)).toHaveCount(1);
 
   for (const page of doctors) await page.context().close();
   await admin.close();

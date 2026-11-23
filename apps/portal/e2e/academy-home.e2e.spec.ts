@@ -439,6 +439,105 @@ test.describe("Feature 013 — static public Academy home", () => {
     ).toEqual([]);
   });
 
+  test("048 EARS-14 (#4191): on a desktop a few cards take one row and many cards two, the arrows page by whole columns and the last column stops at the right gutter", async ({
+    page,
+  }) => {
+    // A layout check, so the feed is fixed here: N cards, no next page.
+    let count = 3;
+    const feed = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        kind: "news",
+        id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`,
+        title: `Материал ленты ${String(i + 1).padStart(2, "0")}`,
+        publishedAt: new Date(
+          Date.UTC(2026, 9, 27, 9) - i * 3_600_000,
+        ).toISOString(),
+        image: null,
+        source: { platform: "academy", name: "Академия" },
+        partner: null,
+        href: `/materials/feed-${i + 1}`,
+      }));
+    await page.route(
+      (url) => url.pathname === "/v1/public/feed",
+      (route) =>
+        route.fulfill({ json: { data: feed(count), nextCursor: null } }),
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const rail = page.getByRole("region", {
+      name: "Новости, блог и видео: листайте влево и вправо, стрелки клавиатуры — по одной карточке",
+    });
+    const layout = () =>
+      rail.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        const padEnd = parseFloat(getComputedStyle(el).paddingRight);
+        const slots = [...el.querySelectorAll("[data-slot]")].map((slot) =>
+          slot.getBoundingClientRect(),
+        );
+        return {
+          rows: new Set(slots.map((slot) => Math.round(slot.top))).size,
+          order: [...el.querySelectorAll("[data-slot] a")].map(
+            (a) => a.textContent?.match(/Материал ленты (\d\d)/)?.[1] ?? "",
+          ),
+          scrollLeft: el.scrollLeft,
+          max: el.scrollWidth - el.clientWidth,
+          lastGap: Math.round(
+            box.right - padEnd - Math.max(...slots.map((slot) => slot.right)),
+          ),
+        };
+      });
+
+    for (const n of [1, 3, 6]) {
+      count = n;
+      await page.goto("/");
+      await expect(rail.locator("[data-slot] > a")).toHaveCount(n);
+      await expect(rail).toHaveAttribute("data-rows", "1");
+      const few = await layout();
+      expect(few.rows).toBe(1);
+      expect(few.order).toEqual(
+        Array.from({ length: n }, (_, i) => String(i + 1).padStart(2, "0")),
+      );
+    }
+
+    count = 37;
+    await page.goto("/");
+    await expect(rail.locator("[data-slot] > a")).toHaveCount(37);
+    await expect(rail).toHaveAttribute("data-rows", "2");
+    expect((await layout()).rows).toBe(2);
+
+    const next = page.getByRole("button", {
+      name: "Дальше, к более ранним материалам",
+    });
+    const steps: number[] = [];
+    while (await next.isEnabled()) {
+      const before = (await layout()).scrollLeft;
+      await next.click();
+      await expect
+        .poll(async () => (await layout()).scrollLeft)
+        .not.toBe(before);
+      // Let the smooth scroll settle before reading the step.
+      let settled = -1;
+      await expect
+        .poll(async () => {
+          const now = (await layout()).scrollLeft;
+          const done = now === settled;
+          settled = now;
+          return done;
+        })
+        .toBe(true);
+      steps.push(settled - before);
+    }
+    const end = await layout();
+    expect(end.scrollLeft).toBeCloseTo(end.max, 0);
+    // The last column is flush with the right gutter.
+    expect(Math.abs(end.lastGap)).toBeLessThanOrEqual(1);
+    // Every page but the last one moves by the same whole-column width.
+    const full = steps.slice(0, -1);
+    expect(full.length).toBeGreaterThan(0);
+    for (const step of full)
+      expect(Math.abs(step - full[0]!)).toBeLessThanOrEqual(1);
+    expect(steps.at(-1)!).toBeLessThanOrEqual(full[0]! + 1);
+  });
+
   test("EARS-5: enabled partnership form shall expose the exact controls and reject invalid contact accessibly", async ({
     page,
   }) => {

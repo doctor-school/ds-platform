@@ -8,7 +8,7 @@ import {
 import type { FeedCard, PublicFeedPage } from "@ds/schemas";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FeedRail } from "./feed-rail";
+import { FeedRail, feedRailPageTarget, feedRailRows } from "./feed-rail";
 
 // 048 V-8 — the Academy home rail of `design-source/academy-home.dc.html`
 // section «Новости, блог и видео» (EARS-14, EARS-15, EARS-16). jsdom has no
@@ -151,21 +151,48 @@ describe("FeedRail", () => {
     expect(next).toHaveProperty("disabled", true);
   });
 
-  it("048 EARS-14: each press shall move the rail by the visible width", () => {
+  it("048 EARS-14: each press shall move the rail by one page of whole visible columns", () => {
     render(
       <FeedRail initialPage={page(12, null)} loadPage={vi.fn()} now={NOW} />,
     );
     fireEvent.click(screen.getByRole("button", { name: NEXT }));
-    expect(scrollBy).toHaveBeenLastCalledWith({
+    expect(scrollTo).toHaveBeenLastCalledWith({
       left: 900,
       behavior: "smooth",
     });
     scrollRailTo(900);
     fireEvent.click(screen.getByRole("button", { name: PREV }));
-    expect(scrollBy).toHaveBeenLastCalledWith({
-      left: -900,
+    expect(scrollTo).toHaveBeenLastCalledWith({
+      left: 0,
       behavior: "smooth",
     });
+  });
+
+  it("048 EARS-14 (#4191): when two rows would not fill the rail, the desktop rail shall render one row", () => {
+    // 4 cards in two rows are 2 columns (600 px) in a 1000 px rail.
+    render(
+      <FeedRail initialPage={page(4, null)} loadPage={vi.fn()} now={NOW} />,
+    );
+    expect(rail().getAttribute("data-rows")).toBe("1");
+  });
+
+  it("048 EARS-14 (#4191): when every card fits one row, the desktop rail shall render one row", () => {
+    // 3 slots of 300 px in a 1000 px rail fit one row.
+    render(
+      <FeedRail initialPage={page(3, null)} loadPage={vi.fn()} now={NOW} />,
+    );
+    expect(rail().getAttribute("data-rows")).toBe("1");
+    expect(rail().className).toContain("grid-rows-1");
+    expect(rail().className).not.toContain("grid-rows-2");
+  });
+
+  it("048 EARS-14 (#4191): when the cards overflow the rail even in two rows, the desktop rail shall render two rows", () => {
+    // 7 cards in two rows are 4 columns of 300 px — over a 1000 px rail.
+    render(
+      <FeedRail initialPage={page(7, null)} loadPage={vi.fn()} now={NOW} />,
+    );
+    expect(rail().getAttribute("data-rows")).toBe("2");
+    expect(rail().className).toContain("grid-rows-2");
   });
 
   it("048 EARS-14: ArrowLeft / ArrowRight shall move one card and Home / End to the ends", () => {
@@ -244,7 +271,10 @@ describe("FeedRail", () => {
       });
       // The next activation (keyboard Enter / touch tap) dispatches a click.
       const link = screen.getAllByRole("link")[0]!;
-      const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+      const click = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+      });
       link.dispatchEvent(click);
       expect(click.defaultPrevented).toBe(false);
     } finally {
@@ -348,6 +378,14 @@ describe("FeedRail", () => {
     expect(screen.queryAllByRole("link")).toHaveLength(0);
   });
 
+  it("048 EARS-16.1 (#4191): the desktop placeholders shall keep the canvas two rows even where they would fit one", () => {
+    geom.clientWidth = 4000;
+    render(
+      <FeedRail loadPage={vi.fn().mockReturnValue(new Promise(() => {}))} />,
+    );
+    expect(rail().getAttribute("data-rows")).toBe("2");
+  });
+
   it("048 EARS-16.1: while the first page loads on a phone, system shall show 3 placeholder cards", () => {
     phone = true;
     const loadPage = vi.fn().mockReturnValue(new Promise(() => {}));
@@ -382,5 +420,94 @@ describe("FeedRail", () => {
     expect(loadPage).toHaveBeenLastCalledWith({ cursor: null, limit: 12 });
     await waitFor(() => expect(screen.getAllByRole("link")).toHaveLength(3));
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+// #4191 — the row rule and the page arithmetic, on the 1440 px geometry of
+// the rail: gutter 48 px, column 292 px, gap 20 px (slot 312 px), so the
+// content box (1344 px) holds four whole columns.
+describe("feedRailRows", () => {
+  const box = { inner: 1344, column: 292, gap: 20 };
+
+  it("048 EARS-14 (#4191): cards that fit the content box shall take one row", () => {
+    expect(feedRailRows({ count: 1, ...box })).toBe(1);
+    expect(feedRailRows({ count: 3, ...box })).toBe(1);
+    // 4 × 292 + 3 × 20 = 1228 ≤ 1344.
+    expect(feedRailRows({ count: 4, ...box })).toBe(1);
+  });
+
+  it("048 EARS-14 (#4191): a two-row grid that would not fill the width shall stay one row", () => {
+    // 6 cards in two rows are 3 columns (916 px) — half the section empty.
+    expect(feedRailRows({ count: 6, ...box })).toBe(1);
+    // 8 cards in two rows are 4 columns (1228 px ≤ 1344).
+    expect(feedRailRows({ count: 8, ...box })).toBe(1);
+  });
+
+  it("048 EARS-14 (#4191): cards whose two-row grid overflows the content box shall take two rows", () => {
+    // 9 cards in two rows are 5 columns: 5 × 292 + 4 × 20 = 1540 > 1344.
+    expect(feedRailRows({ count: 9, ...box })).toBe(2);
+    expect(feedRailRows({ count: 37, ...box })).toBe(2);
+    expect(feedRailRows({ count: 200, ...box })).toBe(2);
+  });
+
+  it("048 EARS-14 (#4191): with no layout measured yet, the rail shall keep two rows", () => {
+    expect(feedRailRows({ count: 3, inner: 0, column: 0, gap: 0 })).toBe(2);
+  });
+});
+
+describe("feedRailPageTarget", () => {
+  // 19 columns (37 cards in two rows): 48 + 19 × 312 − 20 + 48 = 6004.
+  const geometry = {
+    clientWidth: 1440,
+    scrollWidth: 6004,
+    padStart: 48,
+    padEnd: 48,
+    column: 292,
+    gap: 20,
+  };
+  const forward = (left: number) =>
+    feedRailPageTarget({ ...geometry, scrollLeft: left }, 1);
+  const back = (left: number) =>
+    feedRailPageTarget({ ...geometry, scrollLeft: left }, -1);
+
+  it("048 EARS-14 (#4191): → shall move by four whole columns each press, in equal steps", () => {
+    expect(forward(0)).toBe(1248);
+    expect(forward(1248)).toBe(2496);
+    expect(forward(2496)).toBe(3744);
+  });
+
+  it("048 EARS-14 (#4191): the last → shall stop with the last column at the right gutter", () => {
+    // max scroll = 6004 − 1440 = 4564: the last column ends at 1440 − 48.
+    expect(forward(3744)).toBe(4564);
+    expect(forward(4564)).toBe(4564);
+  });
+
+  it("048 EARS-14 (#4191): ← shall show the whole columns before the first fully visible one, snapped to a column start", () => {
+    // At the end the first fully visible column is 15 (15 × 312 = 4680 ≥ 4564).
+    expect(back(4564)).toBe(11 * 312);
+    expect(back(11 * 312)).toBe(7 * 312);
+    expect(back(7 * 312)).toBe(3 * 312);
+    expect(back(3 * 312)).toBe(0);
+    expect(back(0)).toBe(0);
+  });
+
+  it("048 EARS-14 (#4191): a position between columns (after a swipe) shall page from the next whole column", () => {
+    expect(forward(100)).toBe(5 * 312);
+    expect(back(1300)).toBe(312);
+  });
+
+  it("048 EARS-14 (#4191): a rail narrower than one slot shall still move by one column", () => {
+    expect(
+      feedRailPageTarget(
+        {
+          ...geometry,
+          clientWidth: 300,
+          padStart: 0,
+          padEnd: 0,
+          scrollLeft: 0,
+        },
+        1,
+      ),
+    ).toBe(312);
   });
 });

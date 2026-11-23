@@ -556,3 +556,7 @@ routes:
     route: /learning/lessons/[id]
     file: apps/admin/app/learning/lessons/[id]/page.tsx
     status: product-ready
+  - app: admin
+    route: /learning/rules/[scopeKind]/[scopeId]
+    file: apps/admin/app/learning/rules/[scopeKind]/[scopeId]/page.tsx
+    status: product-ready

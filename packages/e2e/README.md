@@ -1904,7 +1904,7 @@ owner Stage-B slot is introduced.
 The `@default-auth-limits` scenarios are local default-limit browser coverage,
 separate from stage's deliberately raised per-account ceiling. Ordinary C6 runs
 exclude that tag on both storefronts. Set `E2E_AUTH_LIMIT_TIER=default` and a
-loopback `E2E_PORTAL_URL`, then run `pnpm --filter @ds/e2e test:e2e --project=academy`
+loopback `E2E_PORTAL_URL`, then run `E2E_WORKERS=1 pnpm --filter @ds/e2e test:e2e --project=academy`
 to generate only those tagged Academy cases. `E2E_GREP` can select one by title.
 Unknown tier values, missing URLs, remote targets and embedded URL credentials
 fail configuration before a browser starts. Use a lead-owned compiled local API

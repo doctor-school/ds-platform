@@ -33,6 +33,29 @@ function mount(transport = fakeTransport()) {
 }
 
 describe("CourseCompositionScreen", () => {
+  it("EARS-29: links to the rules editor of the course, its school and each module", async () => {
+    render(
+      <CourseCompositionScreen
+        courseId={AID.course}
+        transport={fakeTransport()}
+        lessonHref={(id) => `/learning/lessons/${id}`}
+        rulesHref={(kind, id) => `/learning/rules/${kind}/${id}`}
+      />,
+    );
+    expect(
+      await screen.findByRole("link", { name: "Правила курса" }),
+    ).toHaveAttribute("href", `/learning/rules/course/${AID.course}`);
+    expect(screen.getByRole("link", { name: "Правила школы" })).toHaveAttribute(
+      "href",
+      `/learning/rules/school/${AID.school}`,
+    );
+    expect(
+      within(screen.getByTestId("module-1")).getByRole("link", {
+        name: "Правила модуля",
+      }),
+    ).toHaveAttribute("href", `/learning/rules/module/${AID.module}`);
+  });
+
   it("EARS-28: lists the course's modules and their lessons, each lesson linking to its composition", async () => {
     mount();
     expect(

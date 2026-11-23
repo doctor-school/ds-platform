@@ -7676,6 +7676,10 @@
               }
             ]
           },
+          "authority": {
+            "enum": ["rules-editor", "course-editor"],
+            "type": "string"
+          },
           "effective": {
             "items": {
               "additionalProperties": false,
@@ -7935,6 +7939,7 @@
           "scopeKind",
           "scopeId",
           "layerVersion",
+          "authority",
           "appliedPreset",
           "values",
           "effective"

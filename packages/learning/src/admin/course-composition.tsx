@@ -15,9 +15,16 @@ import {
   Textarea,
 } from "@ds/design-system";
 import { FormActions, FormFieldGroup } from "@ds/design-system/blocks";
-import type { LearningCourseComposition } from "@ds/schemas";
+import type {
+  LearningCourseComposition,
+  LearningScopeKind,
+} from "@ds/schemas";
 
-import { ADMIN_COPY as C, LESSON_STATE_LABEL } from "./admin-copy";
+import {
+  ADMIN_COPY as C,
+  LESSON_STATE_LABEL,
+  RULES_COPY as R,
+} from "./admin-copy";
 import { PresetPanel } from "./preset-panel";
 import { refusedFieldLines } from "./refusals";
 import type { LearningAdminTransport } from "./transport";
@@ -32,12 +39,15 @@ export interface CourseCompositionScreenProps {
   courseId: string;
   transport: LearningAdminTransport;
   lessonHref: (lessonId: string) => string;
+  /** EARS-29 — the rules editor of a scope, when the host has one. */
+  rulesHref?: (scopeKind: LearningScopeKind, scopeId: string) => string;
 }
 
 export function CourseCompositionScreen({
   courseId,
   transport,
   lessonHref,
+  rulesHref,
 }: CourseCompositionScreenProps) {
   const [course, setCourse] = useState<LearningCourseComposition | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -108,6 +118,16 @@ export function CourseCompositionScreen({
         <Badge variant={course.state === "published" ? "success" : "label"}>
           {LESSON_STATE_LABEL[course.state]}
         </Badge>
+        {rulesHref ? (
+          <div className="flex flex-wrap gap-4 sm:ml-auto">
+            <Link href={rulesHref("course", course.id)} variant="standalone">
+              {R.heading("course")}
+            </Link>
+            <Link href={rulesHref("school", course.schoolId)} variant="standalone">
+              {R.heading("school")}
+            </Link>
+          </div>
+        ) : null}
       </header>
 
       {refused ? (
@@ -121,7 +141,7 @@ export function CourseCompositionScreen({
         </Alert>
       ) : null}
 
-      <PresetPanel courseId={course.id} transport={transport} />
+      <PresetPanel scopeKind="course" scopeId={course.id} transport={transport} />
 
       <section
         aria-labelledby="course-modules-heading"
@@ -139,9 +159,16 @@ export function CourseCompositionScreen({
         {course.modules.map((module, mi) => (
           <Card key={module.id} data-testid={`module-${mi + 1}`}>
             <CardHeader>
-              <h3 className="text-base font-bold text-foreground">
-                {C.moduleHeading(mi + 1, module.title)}
-              </h3>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="text-base font-bold text-foreground">
+                  {C.moduleHeading(mi + 1, module.title)}
+                </h3>
+                {rulesHref ? (
+                  <Link href={rulesHref("module", module.id)} variant="standalone">
+                    {R.heading("module")}
+                  </Link>
+                ) : null}
+              </div>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-4">

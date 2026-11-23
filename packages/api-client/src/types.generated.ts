@@ -5169,6 +5169,8 @@ export interface components {
         };
         LearningScopeRulesDto: {
             appliedPreset: string | null;
+            /** @enum {string} */
+            authority: "rules-editor" | "course-editor";
             effective: {
                 /** @enum {string} */
                 key: "completion.step" | "completion.lesson" | "completion.module" | "completion.course" | "viewed.video.percent" | "viewed.podcast.percent" | "unlock" | "order" | "lockedVisibility" | "test.threshold" | "test.attempts" | "test.pauseMin" | "test.questions" | "test.exitRequired" | "test.entryRequired" | "test.entryCounts" | "testOut.allowed" | "testOut.pauseMin" | "repeat.allowed" | "progress.maxPlaybackRate" | "progress.slackSec" | "course.deliveryMode" | "course.moduleSize" | "course.closingClub" | "course.clubInCompletion";

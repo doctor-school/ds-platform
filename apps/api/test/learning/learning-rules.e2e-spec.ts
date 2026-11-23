@@ -170,6 +170,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("EARS-30: a draft course's rules are changed by its editors, not by the rules editor alone", async () => {
       const c = await buildCourse(h, { publish: false });
+      // The read names who may change the scope, so the editor draws it
+      // editable or read-only without guessing from the course state.
+      expect(
+        (await admin<Rules>(h, "GET", `/rules/module/${c.moduleId}`)).body
+          .authority,
+      ).toBe("course-editor");
       expect(
         (
           await setRules(
@@ -243,6 +249,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         sid: editorOnly,
       });
       expect(current.status).toBe(200);
+      expect(current.body.authority).toBe("rules-editor");
       const put = (sid: string, ifMatch: string) =>
         admin<Problem>(h, "PUT", "/rules/platform/platform", {
           payload: { values: current.body.values },
@@ -563,6 +570,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "GET",
         `/rules/course/${c.courseId}`,
       );
+      expect(before.body.authority).toBe("rules-editor");
       const refused = await setRules(
         h,
         "course",

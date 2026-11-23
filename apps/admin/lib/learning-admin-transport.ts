@@ -6,7 +6,9 @@ import type {
   LearningCourseList,
   LearningLessonAdmin,
   LearningModuleAdmin,
+  LearningPreset,
   LearningPresetList,
+  LearningRuleChangePreview,
   LearningScopeRules,
   LearningStepAdmin,
 } from "@ds/schemas";
@@ -93,4 +95,12 @@ export const learningAdminTransport: LearningAdminTransport = {
       { presetId },
       layerVersion,
     ),
+  setRules: (kind, id, body, layerVersion) =>
+    call<LearningScopeRules>(learningUrl.rules(kind, id), "put", body, layerVersion),
+  previewRules: (kind, id, values) =>
+    call<LearningRuleChangePreview>(learningUrl.rulesPreview(kind, id), "post", {
+      values,
+    }),
+  updatePreset: (id, values, version) =>
+    call<LearningPreset>(learningUrl.preset(id), "put", { values }, version),
 };

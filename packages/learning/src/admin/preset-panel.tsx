@@ -21,21 +21,30 @@ import {
   SETTING_LABEL,
   settingValueInWords,
 } from "./admin-copy";
-import { isStale, refusedFieldLines } from "./refusals";
+import { authorityRefusal, isStale, refusedFieldLines } from "./refusals";
 import type { LearningAdminTransport } from "./transport";
 
 // 024 EARS-29 slice 1 — «Применить пресет» on a course: the presets are the
 // API's data (`GET /v1/admin/learning/presets`), each shown with the settings
 // it sets in words; applying one writes the course layer under its version and
-// keeps every lower override (EARS-9, server-proven). The per-setting editor is
-// the rules editor's (#4012).
+// keeps every lower override (EARS-9, server-proven). On a school too (the
+// rules editor's school scope); a staff member without the scope's authority
+// (EARS-30) sees the choice read-only, and a 403 is named.
 
 export function PresetPanel({
-  courseId,
+  scopeKind,
+  scopeId,
   transport,
+  readOnly = false,
+  onApplied,
 }: {
-  courseId: string;
+  scopeKind: "school" | "course";
+  scopeId: string;
   transport: LearningAdminTransport;
+  /** EARS-30 — the staff member may not change this scope: the choice is shown, not offered. */
+  readOnly?: boolean;
+  /** The scope's rules after an apply, for a screen that shows them too. */
+  onApplied?: (rules: LearningScopeRules) => void;
 }) {
   const [presets, setPresets] = useState<LearningPreset[] | null>(null);
   const [rules, setRules] = useState<LearningScopeRules | null>(null);
@@ -46,7 +55,7 @@ export function PresetPanel({
 
   useEffect(() => {
     let live = true;
-    void Promise.all([transport.presets(), transport.rules("course", courseId)])
+    void Promise.all([transport.presets(), transport.rules(scopeKind, scopeId)])
       .then(([p, r]) => {
         if (!live) return;
         setPresets(p);
@@ -59,7 +68,7 @@ export function PresetPanel({
     return () => {
       live = false;
     };
-  }, [courseId, transport]);
+  }, [scopeKind, scopeId, transport]);
 
   async function apply() {
     const preset = presets?.find((p) => p.id === chosen);
@@ -68,22 +77,23 @@ export function PresetPanel({
     setDone(null);
     setRefused(null);
     try {
-      setRules(
-        await transport.applyPreset(
-          "course",
-          courseId,
-          preset.id,
-          rules.layerVersion,
-        ),
+      const applied = await transport.applyPreset(
+        scopeKind,
+        scopeId,
+        preset.id,
+        rules.layerVersion,
       );
-      setDone(C.presetDone(preset.name));
+      setRules(applied);
+      onApplied?.(applied);
+      setDone(C.presetDone(preset.name, scopeKind));
     } catch (error) {
       if (isStale(error)) {
         setRefused([C.stale]);
-        setRules(await transport.rules("course", courseId).catch(() => rules));
+        setRules(await transport.rules(scopeKind, scopeId).catch(() => rules));
       } else {
         const lines = refusedFieldLines(error);
-        setRefused(lines.length > 0 ? lines : [C.failed]);
+        const reason = authorityRefusal(error, scopeKind);
+        setRefused(reason ? [reason] : lines.length > 0 ? lines : [C.failed]);
       }
     } finally {
       setBusy(false);
@@ -136,6 +146,7 @@ export function PresetPanel({
                     name="course-preset"
                     value={preset.id}
                     checked={chosen === preset.id}
+                    disabled={readOnly}
                     onChange={() => setChosen(preset.id)}
                   >
                     <span className="font-bold text-foreground">
@@ -159,7 +170,7 @@ export function PresetPanel({
             </fieldset>
             <div>
               <Button
-                disabled={busy || !chosen || !rules}
+                disabled={readOnly || busy || !chosen || !rules}
                 onClick={() => void apply()}
               >
                 {C.applyPreset}

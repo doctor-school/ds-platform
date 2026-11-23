@@ -1239,6 +1239,9 @@ export const learningUrl = {
   stepMedia: (id: string) =>
     `${LEARNING_BASE}/steps/${encodeURIComponent(id)}/media`,
   presets: () => `${LEARNING_BASE}/presets`,
+  preset: (id: string) => `${LEARNING_BASE}/presets/${encodeURIComponent(id)}`,
+  rulesPreview: (scopeKind: string, scopeId: string) =>
+    `${LEARNING_BASE}/rules/${encodeURIComponent(scopeKind)}/${encodeURIComponent(scopeId)}/preview`,
   rules: (scopeKind: string, scopeId: string) =>
     `${LEARNING_BASE}/rules/${encodeURIComponent(scopeKind)}/${encodeURIComponent(scopeId)}`,
   applyPreset: (scopeKind: string, scopeId: string) =>

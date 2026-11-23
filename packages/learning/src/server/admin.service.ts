@@ -46,6 +46,7 @@ import {
   SetLearningStepSourceRequestSchema,
   STREAM_PROVIDER_HAS_PARENT_API,
   type SetLearningStepSourceRequest,
+  type LearningRulesAuthority,
 } from "@ds/schemas";
 import { and, asc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import {
@@ -95,7 +96,7 @@ import {
  * (owner D16: «keep» unless the author chose otherwise) and who made it.
  */
 /** EARS-30 — who may change a scope's rules. */
-export type LearningRulesAuthority = "rules-editor" | "course-editor";
+export type { LearningRulesAuthority };
 
 export interface LearningRuleChangeInput {
   earnedProgress: LearningEarnedProgress;
@@ -852,6 +853,7 @@ export class LearningAdminService {
       scopeKind: kind,
       scopeId,
       layerVersion: row?.version ?? 0,
+      authority: await this.authorityIn(this.deps.db, kind, scopeId, false),
       appliedPreset: own?.preset ?? null,
       values: own?.values ?? {},
       effective: LEARNING_SETTING_KEYS.map((key) => {

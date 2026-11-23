@@ -474,11 +474,28 @@ export const LearningPresetListSchema = z.strictObject({
 });
 export type LearningPresetList = z.infer<typeof LearningPresetListSchema>;
 
+/**
+ * EARS-30 — who may change a scope's rules: `rules-editor` for the platform
+ * layer and every scope a once-published course resolves through
+ * (`learning_rules_editor`), `course-editor` for a draft course's scopes (the
+ * staff who edit that course).
+ */
+export const LEARNING_RULES_AUTHORITIES = [
+  "rules-editor",
+  "course-editor",
+] as const;
+export const LearningRulesAuthoritySchema = z.enum(LEARNING_RULES_AUTHORITIES);
+export type LearningRulesAuthority = z.infer<
+  typeof LearningRulesAuthoritySchema
+>;
+
 /** EARS-5 / EARS-29 — the effective rules of a scope; `layerVersion` 0 = no row yet. */
 export const LearningScopeRulesSchema = z.strictObject({
   scopeKind: LearningScopeKindSchema,
   scopeId: z.string(),
   layerVersion: z.number().int(),
+  /** EARS-30 — the authority a change of this scope takes. */
+  authority: LearningRulesAuthoritySchema,
   appliedPreset: z.string().nullable(),
   /** This layer's own values (the overrides set here). */
   values: LearningSettingValuesSchema,

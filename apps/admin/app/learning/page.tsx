@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Authenticated, useCustom } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Badge } from "@ds/design-system";
+import { Badge, Link } from "@ds/design-system";
 import type { DataTableColumn } from "@ds/design-system/blocks";
 import type { LearningCourseAdmin, LearningCourseList } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
@@ -61,6 +61,15 @@ export default function LearningCoursesPage() {
   return (
     <Authenticated key="learning-courses" redirectOnFail="/login">
       <AppShell>
+        <div className="mb-4">
+          <Link
+            href="/learning/rules/platform/platform"
+            variant="standalone"
+            data-testid="learning-platform-rules"
+          >
+            {t("learning.platformRules")}
+          </Link>
+        </div>
         <AdminDataList<LearningCourseAdmin, never>
           title={t("learning.listTitle")}
           description={t("learning.listDescription")}

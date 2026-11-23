@@ -6,9 +6,12 @@ import type {
   LearningLessonAdmin,
   LearningModuleAdmin,
   LearningPreset,
+  LearningRuleChangePreview,
   LearningScopeKind,
   LearningScopeRules,
   LearningStepAdmin,
+  LearningSettingValues,
+  SetLearningScopeRulesRequest,
   SetLearningStepSourceRequest,
 } from "@ds/schemas";
 
@@ -61,6 +64,29 @@ export interface LearningAdminTransport {
     presetId: string,
     layerVersion: number,
   ): Promise<LearningScopeRules>;
+  /**
+   * `PUT …/rules/{scopeKind}/{scopeId}` — the scope's own values (EARS-29);
+   * `earnedProgress` on a once-published course (EARS-31). `layerVersion` 0 =
+   * no row yet.
+   */
+  setRules(
+    scopeKind: LearningScopeKind,
+    scopeId: string,
+    body: SetLearningScopeRulesRequest,
+    layerVersion: number,
+  ): Promise<LearningScopeRules>;
+  /** `POST …/rules/{scopeKind}/{scopeId}/preview` — the impact count; writes nothing (EARS-31). */
+  previewRules(
+    scopeKind: LearningScopeKind,
+    scopeId: string,
+    values: LearningSettingValues,
+  ): Promise<LearningRuleChangePreview>;
+  /** `PUT …/presets/{id}` — a preset's contents (EARS-29, `learning_rules_editor`). */
+  updatePreset(
+    presetId: string,
+    values: LearningSettingValues,
+    version: number,
+  ): Promise<LearningPreset>;
 }
 
 /** The 012 problem body the host transport throws (its `TaxonomyHttpError`). */

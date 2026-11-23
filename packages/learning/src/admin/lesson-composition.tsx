@@ -14,12 +14,17 @@ import {
 import type {
   CreateLearningStepRequest,
   LearningLessonAdmin,
+  LearningScopeKind,
   LearningStepAdmin,
   StreamProvider,
 } from "@ds/schemas";
 
 import { STEP_TYPE_LABEL } from "../ui/learning-ui-copy";
-import { ADMIN_COPY as C, LESSON_STATE_LABEL } from "./admin-copy";
+import {
+  ADMIN_COPY as C,
+  LESSON_STATE_LABEL,
+  RULES_COPY as R,
+} from "./admin-copy";
 import {
   isPublishedRefusal,
   isStale,
@@ -43,6 +48,8 @@ export interface LessonCompositionScreenProps {
   providerLabels: Record<StreamProvider, string>;
   /** The course screen the lesson belongs to, for the way back. */
   courseHref?: string;
+  /** EARS-29 — the rules editor of a scope, when the host has one. */
+  rulesHref?: (scopeKind: LearningScopeKind, scopeId: string) => string;
 }
 
 type Refusal =
@@ -53,6 +60,7 @@ export function LessonCompositionScreen({
   transport,
   providerLabels,
   courseHref,
+  rulesHref,
 }: LessonCompositionScreenProps) {
   const [lesson, setLesson] = useState<LearningLessonAdmin | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -185,6 +193,11 @@ export function LessonCompositionScreen({
         <p className="text-sm text-muted-foreground">
           {C.lessonDuration(lesson.durationMin)}
         </p>
+        {rulesHref ? (
+          <Link href={rulesHref("lesson", lesson.id)} variant="standalone">
+            {R.heading("lesson")}
+          </Link>
+        ) : null}
       </header>
 
       {refusal?.kind === "publish" ? (
@@ -261,6 +274,7 @@ export function LessonCompositionScreen({
             <StepRow
               key={`${step.id}:${step.version}`}
               step={step}
+              rulesHref={rulesHref}
               no={i + 1}
               last={i === steps.length - 1}
               busy={busy}
@@ -313,7 +327,9 @@ function StepRow({
   onRemove,
   onSource,
   onUpload,
+  rulesHref,
 }: {
+  rulesHref?: LessonCompositionScreenProps["rulesHref"];
   step: LearningStepAdmin;
   no: number;
   last: boolean;
@@ -332,14 +348,21 @@ function StepRow({
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="min-w-0 break-words font-bold text-foreground">
-              {C.stepLine(
-                no,
-                STEP_TYPE_LABEL[step.type],
-                step.title,
-                step.durationMin,
-              )}
-            </p>
+            <div className="flex min-w-0 flex-col gap-1">
+              <p className="min-w-0 break-words font-bold text-foreground">
+                {C.stepLine(
+                  no,
+                  STEP_TYPE_LABEL[step.type],
+                  step.title,
+                  step.durationMin,
+                )}
+              </p>
+              {rulesHref ? (
+                <Link href={rulesHref("step", step.id)} variant="standalone">
+                  {R.stepRules(no)}
+                </Link>
+              ) : null}
+            </div>
             {editable ? (
               <div className="flex flex-wrap gap-2">
                 <Button

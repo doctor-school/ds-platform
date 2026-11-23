@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -36,6 +37,7 @@ import {
   renderPrVerdictComment,
   stagePrPolicyAdmits,
   suiteStoppedReason,
+  reportDirTally,
   reportTally,
   runMarker,
   slotRunTitle,
@@ -2501,6 +2503,47 @@ describe("the PR-slot run in Actions (#4202)", () => {
     assert.match(body, /\[Actions run 901\]\(https:\/\/github\.com\/o\/r\/actions\/runs\/901\)/);
     assert.doesNotMatch(body, /<x>/);
     assert.match(body, /e2e:stage verdict/);
+  });
+
+  it("the PR comment tallies every leg: the suite, each live leg and each axe leg", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ds-4202-tally-"));
+    try {
+      const legReport = (file, specs) => ({ suites: [{ title: file, file, specs }] });
+      const write = (leg, report) => {
+        const legDir = leg ? path.join(dir, leg) : dir;
+        mkdirSync(legDir, { recursive: true });
+        writeFileSync(path.join(legDir, "results.json"), JSON.stringify(report));
+      };
+      write(undefined, legReport("a.feature.spec.js", [
+        { title: "suite ok", tests: [{ projectName: "academy", status: "expected" }, { projectName: "doctor", status: "expected" }] },
+      ]));
+      write("live-doctor-event-page", legReport("event-page.spec.ts", [
+        { title: "014 EARS-6/8 event page", tests: [{ projectName: "doctor-live", status: "unexpected" }] },
+        { title: "live ok", tests: [{ projectName: "doctor-live", status: "expected" }] },
+      ]));
+      write("axe-doctor", legReport("axe.spec.ts", [
+        { title: "axe ok", tests: [{ projectName: "doctor", status: "expected" }, { projectName: "doctor", status: "skipped" }] },
+      ]));
+      const tally = reportDirTally(dir);
+      assert.deepEqual(
+        { passed: tally.passed, failed: tally.failed, flaky: tally.flaky, skipped: tally.skipped },
+        { passed: 4, failed: 1, flaky: 0, skipped: 1 },
+      );
+      assert.deepEqual(tally.failing, ["live-doctor-event-page: [doctor-live] 014 EARS-6/8 event page"]);
+      const body = renderPrVerdictComment({
+        runId: 902,
+        runUrl: RUN.url,
+        slot: "pr-4202",
+        sha: HEAD,
+        passed: false,
+        tally: JSON.parse(JSON.stringify(compactTally(tally))),
+      });
+      assert.match(body, /passed 4 · failed 1 · flaky 0 · skipped 1/);
+      assert.match(body, /^- live-doctor-event-page: \\\[doctor-live\\\] 014 EARS-6\/8 event page$/m);
+      assert.equal(reportDirTally(path.join(dir, "absent")).failing.length, 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("a refused run's comment says FAIL with the reason, never PASS", () => {

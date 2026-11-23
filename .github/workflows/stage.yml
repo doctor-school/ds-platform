@@ -619,12 +619,9 @@ jobs:
         if: always()
         run: |
           tally=$(node --input-type=module -e '
-            import { readFileSync } from "node:fs";
-            import { compactTally, reportTally } from "./tools/staging/e2e-stage.mjs";
-            let report = {};
-            try { report = JSON.parse(readFileSync(process.argv[1], "utf8")); } catch {}
-            console.log(JSON.stringify(compactTally(reportTally(report))));
-          ' "$REPORT_DIR/results.json") || tally=""
+            import { compactTally, reportDirTally } from "./tools/staging/e2e-stage.mjs";
+            console.log(JSON.stringify(compactTally(reportDirTally(process.argv[1]))));
+          ' "$REPORT_DIR") || tally=""
           echo "tally=$tally" >> "$GITHUB_OUTPUT"
           if [ -s "$RUNNER_TEMP/verdict.txt" ]; then
             delimiter="verdict-$(openssl rand -hex 16)"

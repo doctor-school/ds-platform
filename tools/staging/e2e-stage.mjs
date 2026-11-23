@@ -35,7 +35,7 @@
  * the release-check exclusion path stays tested while no committed leg is excluded.
  */
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -972,6 +972,45 @@ export function reportTally(report) {
     for (const child of suite.suites ?? []) walk(child, titles);
   };
   for (const suite of report?.suites ?? []) walk(suite);
+  return tally;
+}
+
+/**
+ * The whole run's tally out of a `--report-dir`: the suite's `results.json` at its
+ * root plus every leg's `<reportDir>/<leg>/results.json` — each live leg
+ * (`liveLegReporting`) and each axe leg (`publicAxeLeg`) — summed, each failing title
+ * prefixed with its leg (`suite`, or the leg's directory name). A missing or
+ * unreadable report counts nothing.
+ */
+export function reportDirTally(reportDir) {
+  const tally = { passed: 0, failed: 0, flaky: 0, skipped: 0, failing: [] };
+  const read = (file) => {
+    try {
+      return JSON.parse(readFileSync(file, "utf8"));
+    } catch {
+      return undefined;
+    }
+  };
+  let legs = [];
+  try {
+    legs = readdirSync(reportDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+  } catch {
+    // No report dir: the suite's own report is then unreadable too, so nothing counts.
+  }
+  const reports = [
+    ["suite", path.join(reportDir, "results.json")],
+    ...legs.map((leg) => [leg, path.join(reportDir, leg, "results.json")]),
+  ];
+  for (const [leg, file] of reports) {
+    const report = read(file);
+    if (report === undefined) continue;
+    const part = reportTally(report);
+    for (const key of ["passed", "failed", "flaky", "skipped"]) tally[key] += part[key];
+    tally.failing.push(...part.failing.map((title) => `${leg}: ${title}`));
+  }
   return tally;
 }
 

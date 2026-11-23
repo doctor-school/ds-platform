@@ -40,6 +40,7 @@ export function PresetPanel({
   scopeId,
   transport,
   readOnly = false,
+  current,
   onApplied,
 }: {
   scopeKind: "school" | "course";
@@ -47,6 +48,12 @@ export function PresetPanel({
   transport: LearningAdminTransport;
   /** EARS-30 — the staff member may not change this scope: the choice is shown, not offered. */
   readOnly?: boolean;
+  /**
+   * The scope's rules as the screen shows them, when the screen also saves
+   * them: a preset applied after that save previews over the saved values and
+   * applies under the saved version, not the one this panel first read.
+   */
+  current?: LearningScopeRules;
   /** The scope's rules after an apply, for a screen that shows them too. */
   onApplied?: (rules: LearningScopeRules) => void;
 }) {
@@ -76,6 +83,10 @@ export function PresetPanel({
       live = false;
     };
   }, [scopeKind, scopeId, transport]);
+
+  useEffect(() => {
+    if (current) setRules(current);
+  }, [current]);
 
   // EARS-31 — on a scope a once-published course resolves through, the apply
   // is a rule change: the preset's values over the layer's own (024-design §3)

@@ -31,11 +31,7 @@ import {
   settingValueInWords,
 } from "./admin-copy";
 import { PresetPanel } from "./preset-panel";
-import {
-  authorityRefusal,
-  isStale,
-  rulesRefusalLines,
-} from "./refusals";
+import { authorityRefusal, isStale, rulesRefusalLines } from "./refusals";
 import { RuleChangeDialog } from "./rule-change-dialog";
 import { SettingControl } from "./setting-control";
 import type { LearningAdminTransport } from "./transport";
@@ -258,6 +254,7 @@ export function RulesEditorScreen({
           scopeId={scopeId}
           transport={transport}
           readOnly={!canEdit}
+          current={current}
           onApplied={show}
         />
       ) : null}
@@ -571,7 +568,9 @@ function PresetCard({
                     value=""
                     onChange={(e) => {
                       const key = e.target.value as LearningSettingKey;
-                      const base = platform.effective.find((x) => x.key === key);
+                      const base = platform.effective.find(
+                        (x) => x.key === key,
+                      );
                       setDraft((d) =>
                         d ? { ...d, [key]: clone(base?.value) } : d,
                       );

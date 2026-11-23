@@ -175,7 +175,7 @@ describe("RulesEditorScreen", () => {
     );
   });
 
-  it("EARS-29: a refused save changes nothing and names its field errors", async () => {
+  it("EARS-29: a refused save changes nothing and names its field errors in the staff member's words", async () => {
     const t = mount(
       fakeTransport({
         rules: vi.fn(async () => moduleRules()),
@@ -186,6 +186,10 @@ describe("RulesEditorScreen", () => {
               {
                 path: "values.completion.lesson.nOf.n",
                 message: "n is between 1 and 3",
+              },
+              {
+                path: "values.test.threshold",
+                message: "Too big: expected number to be <=100",
               },
             ],
             400,
@@ -201,9 +205,17 @@ describe("RulesEditorScreen", () => {
       target: { value: "90" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить правила" }));
-    expect(await screen.findByTestId("write-refusal")).toHaveTextContent(
-      "Когда урок пройден: n is between 1 and 3",
-    );
+    // The server's validator speaks English to API clients; the editor names
+    // each refused setting in Russian, with the allowed range of a number.
+    const refused = await screen.findByTestId("write-refusal");
+    expect(
+      within(refused)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual([
+      "Когда урок пройден: правило составлено неверно — проверьте условия.",
+      "Порог теста: укажите целое число от 0 до 100.",
+    ]);
     // The screen still shows the scope as read, with the draft kept to fix.
     expect(await row("order")).toHaveTextContent("Задано здесь");
     expect(within(threshold).getByLabelText("Порог теста")).toHaveValue(90);
@@ -213,8 +225,7 @@ describe("RulesEditorScreen", () => {
   it("EARS-29: «Применить пресет» is offered at a school and a course, not below", async () => {
     mount(
       fakeTransport({
-        rules: async () =>
-          rules({ scopeKind: "school", scopeId: AID.school }),
+        rules: async () => rules({ scopeKind: "school", scopeId: AID.school }),
       }),
       { scopeKind: "school", scopeId: AID.school },
     );
@@ -386,7 +397,11 @@ describe("RulesEditorScreen", () => {
     const t = mount(
       fakeTransport({
         rules: async () => moduleRules({ authority: "rules-editor" }),
-        previewRules: async () => ({ affectedDoctors: 1, toDone: 0, toNotDone: 1 }),
+        previewRules: async () => ({
+          affectedDoctors: 1,
+          toDone: 0,
+          toNotDone: 1,
+        }),
       }),
     );
     await raiseThreshold();
@@ -450,6 +465,56 @@ describe("RulesEditorScreen", () => {
     );
   });
 
+  it("EARS-31: a preset applied after a save on the same screen previews over the saved values and applies under the saved version", async () => {
+    const published = rules({
+      authority: "rules-editor",
+      layerVersion: 4,
+      values: { "test.threshold": 50 },
+    });
+    const saved = rules({
+      authority: "rules-editor",
+      layerVersion: 5,
+      values: { "test.threshold": 90 },
+    });
+    const t = mount(
+      fakeTransport({
+        rules: async () => published,
+        setRules: vi.fn(async () => saved),
+      }),
+      { scopeKind: "course", scopeId: AID.course },
+    );
+    await raiseThreshold();
+    fireEvent.click(
+      within(await screen.findByTestId("rule-change-dialog")).getByRole(
+        "button",
+        { name: "Применить изменение" },
+      ),
+    );
+    await screen.findByText("Правила сохранены.");
+    const panel = screen.getByTestId("preset-panel");
+    fireEvent.click(within(panel).getByLabelText("Открытый курс"));
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Применить пресет" }),
+    );
+    const dialog = await screen.findByTestId("rule-change-dialog");
+    expect(t.previewRules).toHaveBeenLastCalledWith("course", AID.course, {
+      "test.threshold": 90,
+      ...PRESETS[1]!.values,
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Применить изменение" }),
+    );
+    await waitFor(() =>
+      expect(t.applyPreset).toHaveBeenCalledWith(
+        "course",
+        AID.course,
+        AID.open,
+        5,
+        "keep",
+      ),
+    );
+  });
+
   it("EARS-31: a stale version is refused, named and the current rules are shown", async () => {
     let reads = 0;
     const t = mount(
@@ -459,7 +524,11 @@ describe("RulesEditorScreen", () => {
             ? moduleRules({ authority: "rules-editor" })
             : moduleRules({ authority: "rules-editor", layerVersion: 3 }),
         ),
-        previewRules: async () => ({ affectedDoctors: 0, toDone: 0, toNotDone: 0 }),
+        previewRules: async () => ({
+          affectedDoctors: 0,
+          toDone: 0,
+          toNotDone: 0,
+        }),
         setRules: async () => {
           throw refusal("PRECONDITION_FAILED", [], 412);
         },

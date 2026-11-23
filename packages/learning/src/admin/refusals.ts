@@ -1,8 +1,10 @@
-import type {
-  LearningScopeKind,
-  LearningSettingKey,
-  LearningStepAdmin,
+import {
+  LEARNING_SETTING_SCHEMAS,
+  type LearningScopeKind,
+  type LearningSettingKey,
+  type LearningStepAdmin,
 } from "@ds/schemas";
+import { z } from "zod";
 
 import { FIELD_LABEL, RULES_COPY, SETTING_LABEL } from "./admin-copy";
 import { asRefusal } from "./transport";
@@ -68,9 +70,26 @@ export function rulesRefusalLines(error: unknown): string[] {
   return (asRefusal(error).fieldErrors ?? []).map(({ path, message }) => {
     const rest = path.startsWith("values.") ? path.slice(7) : path;
     const key = keys.find((k) => rest === k || rest.startsWith(`${k}.`));
-    if (key) return `${SETTING_LABEL[key]}: ${message}`;
+    if (key) return `${SETTING_LABEL[key]}: ${settingRefusal(key)}`;
     return `${FIELD_LABEL[rest.split(".")[0] ?? rest] ?? path}: ${message}`;
   });
+}
+
+/** What a refused setting needs, read from its value schema. */
+function settingRefusal(key: LearningSettingKey): string {
+  if (key.startsWith("completion.")) return RULES_COPY.invalidRule;
+  const schema = LEARNING_SETTING_SCHEMAS[key];
+  if (
+    schema instanceof z.ZodNumber &&
+    schema.minValue !== null &&
+    schema.maxValue !== null
+  )
+    return RULES_COPY.invalidNumber(
+      schema.minValue,
+      schema.maxValue,
+      schema.isInt,
+    );
+  return RULES_COPY.invalidValue;
 }
 
 /**

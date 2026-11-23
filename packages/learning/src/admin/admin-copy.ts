@@ -254,7 +254,10 @@ export const SETTING_SECTIONS: readonly {
       "viewed.podcast.percent",
     ],
   },
-  { title: "Открытие и порядок", keys: ["unlock", "order", "lockedVisibility"] },
+  {
+    title: "Открытие и порядок",
+    keys: ["unlock", "order", "lockedVisibility"],
+  },
   {
     title: "Тесты",
     keys: [
@@ -291,7 +294,11 @@ export const SETTING_OPTIONS: Partial<
 > = {
   order: { strict: "строго по порядку", free: "в любом порядке" },
   lockedVisibility: { hidden: "скрыты", locked: "видны закрытыми" },
-  "course.deliveryMode": { online: "онлайн", offline: "очно", open: "открытый" },
+  "course.deliveryMode": {
+    online: "онлайн",
+    offline: "очно",
+    open: "открытый",
+  },
 };
 
 export const UNLOCK_KIND_LABEL: Record<string, string> = {
@@ -327,6 +334,11 @@ export const RULES_COPY = {
   discard: "Отменить изменения",
   saved: "Правила сохранены.",
   refused: "Правила не сохранены:",
+  // A refused setting in words: the validator's own text is for API clients.
+  invalidRule: "правило составлено неверно — проверьте условия.",
+  invalidNumber: (min: number, max: number, integer: boolean) =>
+    `укажите ${integer ? "целое " : ""}число от ${min} до ${max}.`,
+  invalidValue: "такое значение не подходит.",
   stale: "Правила изменили в другом окне — показана текущая версия.",
   readOnly: {
     platform:
@@ -369,10 +381,12 @@ export const RULES_COPY = {
   keep: "Сохранить заработанные зачёты",
   keepHint: "Врачи, уже прошедшие элемент, сохраняют зачёт.",
   requireAgain: "Потребовать заново",
-  requireAgainHint: "Зачёт решают новые правила: врачу может понадобиться пройти элемент снова.",
+  requireAgainHint:
+    "Зачёт решают новые правила: врачу может понадобиться пройти элемент снова.",
   apply: "Применить изменение",
   cancel: "Отмена",
-  previewFailed: "Не удалось посчитать, кого затронет изменение. Попробуйте ещё раз.",
+  previewFailed:
+    "Не удалось посчитать, кого затронет изменение. Попробуйте ещё раз.",
   // Presets on the platform scope (EARS-9, EARS-29).
   presetsHeading: "Пресеты",
   presetsHint:

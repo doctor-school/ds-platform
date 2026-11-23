@@ -63,6 +63,7 @@ import {
   STAGE_AGENT_COMMITTEE,
 } from "./idp.mjs";
 import { GOLDEN_LIVE_ENV, LIVE_TIERS } from "./live-tiers.mjs";
+import { boxObservingGrep, boxObservingTests } from "./box-observing.mjs";
 
 const STAGE_STAFF_SECRET_NAMES = [STAGE_AGENT_ADMIN, STAGE_AGENT_COMMITTEE].flatMap(
   ({ passwordEnvVar, totpEnvVar }) => [passwordEnvVar, totpEnvVar],
@@ -114,6 +115,7 @@ export function parseE2eArgs(argv) {
     throw new SlotError(
       "usage: pnpm e2e:stage <slot> [--project academy|doctor|walks|login|sign-in-host] [--grep <re>] " +
         "[--no-axe] [--no-live] [--local] [--report-dir <path>] [--verdict-file <path>] [--expect-sha <sha>] " +
+        "[--slot-sha <sha>] [--no-box-observe] " +
         "— the slot must be named",
     );
   }
@@ -128,6 +130,8 @@ export function parseE2eArgs(argv) {
     live: true,
     local: false,
     verdictFile: undefined,
+    slotSha: undefined,
+    boxObserve: true,
   };
   const takeValue = (flag) => {
     const value = rest.shift();
@@ -164,6 +168,19 @@ export function parseE2eArgs(argv) {
       case "--verdict-file":
         options.verdictFile = takeValue(flag);
         break;
+      case "--no-box-observe":
+        options.boxObserve = false;
+        break;
+      case "--slot-sha": {
+        const sha = takeValue(flag);
+        if (!FULL_SHA_RE.test(sha)) {
+          throw new SlotError(
+            "unusable --slot-sha — expected a full 40-character lowercase hex SHA",
+          );
+        }
+        options.slotSha = sha;
+        break;
+      }
       case "--expect-sha": {
         const sha = takeValue(flag);
         if (!FULL_SHA_RE.test(sha)) {
@@ -179,6 +196,17 @@ export function parseE2eArgs(argv) {
     }
   }
   if (options.expectSha !== undefined) assertReleaseCheckShape(options);
+  // The PR-slot Actions run's own flags (#4202): they describe a run made HERE, so
+  // they need `--local` — a dispatched run sets them itself.
+  const runHere = [
+    options.slotSha !== undefined && "--slot-sha",
+    !options.boxObserve && "--no-box-observe",
+  ].filter(Boolean);
+  if (runHere.length > 0 && !options.local) {
+    throw new SlotError(
+      `${runHere.join(", ")} describe${runHere.length === 1 ? "s" : ""} a run made here — add --local (a dispatched PR-slot run sets ${runHere.length === 1 ? "it" : "them"} itself)`,
+    );
+  }
   if (dispatchesToActions(options)) {
     // A dispatched run's report goes to the stage box and its verdict to PR N; a
     // workstation path names nothing the Actions runner could write.
@@ -733,6 +761,7 @@ export function renderVerdictBlock({
   axeNote,
   reportDir,
   preflightReason,
+  notRun = [],
 }) {
   const lines = [
     "e2e:stage verdict",
@@ -759,6 +788,13 @@ export function renderVerdictBlock({
   if (liveLines.length > 0) {
     lines.push(row("live", liveLines[0]));
     for (const extra of liveLines.slice(1)) lines.push(indent(extra));
+  }
+  // The box-observing tests a PR-slot Actions run leaves out (#4202), by name.
+  if (notRun.length > 0) {
+    lines.push(
+      row("not run", `${notRun.length} box-observing (no box access here; run them with --local)`),
+    );
+    for (const t of notRun) lines.push(indent(`- ${t.title}`));
   }
   lines.push(
     row(
@@ -821,6 +857,7 @@ export const realEffects = {
     return keyJourneyTests(manifest);
   },
   removeReport: (file) => rmSync(file, { force: true }),
+  boxObservingTests: () => boxObservingTests(),
   readBoxEnv: () => readBoxEnvFile(STAGE_ENV_FILE),
   fetchHealth: async (url, headers) => {
     const controller = new AbortController();
@@ -964,10 +1001,10 @@ export function prSlotGate({ slot, sha, repository, pr }) {
   const match = /^pr-([1-9][0-9]{0,9})$/.exec(String(slot ?? ""));
   if (!match)
     return refuse(
-      `slot must be pr-<N>, not ${JSON.stringify(slot ?? "")} — the main slot runs only from Runtime images`,
+      "slot must be pr-<N> — the main slot runs only from Runtime images",
     );
   if (!FULL_SHA_RE.test(String(sha ?? "")))
-    return refuse(`sha is not a 40-hex SHA: ${JSON.stringify(sha ?? "")}`);
+    return refuse("sha is not a 40-hex SHA");
   if (!pr || typeof pr !== "object" || String(pr.number) !== match[1])
     return refuse(`PR ${match[1]} is not readable`);
   if (pr.state !== "open") return refuse(`PR ${match[1]} is not open`);
@@ -983,7 +1020,41 @@ export function prSlotGate({ slot, sha, repository, pr }) {
   return { ok: true, pr: Number(match[1]) };
 }
 
+/** The refusal of a PR-slot run whose slot does not serve the PR head (#4202). */
+export function slotShaRefusal(served, head, slot) {
+  return (
+    `e2e:stage refuses: slot serves ${String(served ?? "?").slice(0, 12)}, PR head is ${head.slice(0, 12)} — re-sync the slot ` +
+    `(\`pnpm stage:slot up ${slot}\`) and dispatch again.`
+  );
+}
+
+/**
+ * What the dispatching CLI prints after a PR-slot run (#4202): the box-observing
+ * tests the Actions run left out, by name, and the exact `--local` command that
+ * runs just them from the workstation (one browser is enough there).
+ */
+export function boxObservingNote(slot, tests) {
+  if (tests.length === 0) return [];
+  return [
+    `e2e:stage: ${tests.length} box-observing test${tests.length === 1 ? "" : "s"} not run in Actions (the run has no box access):`,
+    ...tests.map((t) => `  - ${t.title}`),
+    "Run them from the workstation:",
+    `  pnpm e2e:stage ${slot} --local --grep "${boxObservingGrep(tests)}"`,
+  ];
+}
+
 const count = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : 0);
+
+/**
+ * Text a test title or a refusal puts in the comment, inert as Markdown: no HTML,
+ * code span or line break, no link (`[`/`]` escaped), and no @mention — a
+ * zero-width space after `@` keeps GitHub from notifying anyone.
+ */
+const commentText = (text) =>
+  text
+    .replace(/[<>`\r\n]/g, " ")
+    .replace(/[[\]]/g, "\\$&")
+    .replace(/@/g, "@​");
 
 /**
  * The compact verdict the Actions run posts on PR N (#4202): verdict, counts, the
@@ -1006,18 +1077,14 @@ export function renderPrVerdictComment({
   const t = tally && typeof tally === "object" ? tally : {};
   const failing = (Array.isArray(t.failing) ? t.failing : [])
     .slice(0, FAILING_TITLES_MAX)
-    .map((title) =>
-      String(title)
-        .replace(/[<>`\r\n]/g, " ")
-        .slice(0, 300),
-    );
+    .map((title) => commentText(String(title)).slice(0, 300));
   const lines = [
     runMarker(runId),
     `### e2e:stage ${slot} — ${passed ? "PASS" : "FAIL"}`,
     "",
-    `\`${String(sha ?? "").slice(0, 12) || "?"}\` · [Actions run ${runId}](${runUrl})`,
+    `\`${FULL_SHA_RE.test(String(sha ?? "")) ? sha.slice(0, 12) : "?"}\` · [Actions run ${runId}](${runUrl})`,
   ];
-  if (reason) lines.push("", `Refused: ${reason}`);
+  if (reason) lines.push("", `Refused: ${commentText(String(reason))}`);
   lines.push(
     "",
     tally
@@ -1050,6 +1117,7 @@ export const realDispatchEffects = {
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
   log: (line) => console.log(line),
+  boxObservingTests: () => boxObservingTests(),
 };
 
 const stdoutOf = (r) => String(r?.stdout ?? "").trim();
@@ -1203,6 +1271,8 @@ export async function dispatchStageRun(options, effects = realDispatchEffects) {
     effects.log(
       `e2e:stage: run ${run.databaseId} posted no verdict comment on #${pr}`,
     );
+  for (const line of boxObservingNote(slot, effects.boxObservingTests()))
+    effects.log(line);
   effects.log(`e2e:stage run ${run.url}: ${view.conclusion}`);
   return view.conclusion === "success" ? 0 : 1;
 }
@@ -1269,6 +1339,19 @@ export async function runE2eStage(
     return exitCodeFor({ preflightOk: false, legs: [] });
   }
 
+  // The PR-slot Actions run (#4202) asserts the slot serves the dispatched PR head
+  // before any scenario runs: a slot raised at an older SHA would otherwise certify
+  // that older code under the head's name.
+  if (options.slotSha !== undefined) {
+    const served = healthVerdict({ ...health, sha: options.slotSha });
+    if (!served.ok) {
+      const refusal = slotShaRefusal(preflight.sha, options.slotSha, slot);
+      effects.log(refusal);
+      recordVerdict(`${["```text", refusal, "```"].join("\n")}\n`);
+      return exitCodeFor({ preflightOk: false, legs: [] });
+    }
+  }
+
   // The release check asserts the slot serves the release TARGET, not merely a SHA:
   // a suite run against a stale `main` slot would certify code the deploy does not ship.
   if (options.expectSha !== undefined) {
@@ -1293,6 +1376,11 @@ export async function runE2eStage(
     E2E_REPORT_DIR: path.resolve(REPO_ROOT, reportDir),
   };
   if (options.grep) suiteEnv.E2E_GREP = options.grep;
+  // `--no-box-observe` (the PR-slot Actions run, #4202): the box-observing tests are
+  // left out by name — the suite's and every leg's Playwright config read
+  // `E2E_GREP_INVERT` — and the verdict block names them.
+  const notRun = options.boxObserve ? [] : effects.boxObservingTests();
+  if (notRun.length > 0) suiteEnv.E2E_GREP_INVERT = boxObservingGrep(notRun);
   if (publicLogEnabled(env)) suiteEnv.E2E_PUBLIC_LOG = "1";
   const axeLeg = (host) => publicAxeLeg(env, suiteEnv.E2E_REPORT_DIR, host);
 
@@ -1465,6 +1553,7 @@ export async function runE2eStage(
     live,
     axeNote: axe.note,
     reportDir,
+    notRun,
   });
   effects.log(block);
   recordVerdict(block);

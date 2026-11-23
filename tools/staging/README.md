@@ -271,7 +271,9 @@ and a public repository's GitHub-hosted runners cost nothing.
   secrets admits `main` only); `slot-suite` checks out the dispatched SHA and runs that
   tree's suite with the suite's own secrets only — no ssh key, no `statuses` permission,
   so a PR-slot run never posts or changes the `stage-suite` status. A branch therefore
-  needs this change merged in (`--local` / `--verdict-file` in its `e2e-stage.mjs`).
+  needs this change merged in (`--local`, `--verdict-file`, `--slot-sha` and
+  `--no-box-observe` in its `e2e-stage.mjs`); without them the run stops before a
+  verdict and the comment says to merge main.
   A trusted `slot-verdict` job renders the comment with `main`'s code — passed / failed
   / flaky / skipped counts, the failing titles (≤20), the e2e:stage verdict block and
   the run link — and posts it on PR N; link it in the PR body. The full HTML/JSON report
@@ -289,10 +291,21 @@ and a public repository's GitHub-hosted runners cost nothing.
 **Not yet in Actions.** The converge: the CI key's forced command
 (`infra/deploy/bin/ds-deploy-entrypoint`) has no verb that raises a PR slot (its release
 driver refuses `stage-pr-<N>`: «PR slots stay operator-driven»), so raise or sync the
-slot with `pnpm stage:slot up pr-<N> --ref <sha>` before dispatching. And the
-box-observing scenarios (#3119): the CI key's `observe` verb serves the `main` slot only,
-so on a PR slot those scenarios have no box transport in Actions and fail; `--local`
-runs them with the operator's own ssh.
+slot with `pnpm stage:slot up pr-<N> --ref <sha>` before dispatching; the run asserts
+the slot's `/v1/health` serves the dispatched SHA before any scenario (`--slot-sha`)
+and is red with «slot serves <x>, PR head is <y> — re-sync the slot» otherwise. And the
+box-observing tests (#3119): the CI key's `observe` verb serves the `main` slot only, and
+no ssh key reaches PR code, so the Actions run leaves them out by name
+(`--no-box-observe`). The one source list is `box-observing.mjs` (its test fails when a
+file reaches a box-observing lib and is not listed); the verdict comment names each one
+left out, and the CLI prints the exact `pnpm e2e:stage pr-<N> --local --grep "…"` that
+runs just them here (one browser is enough).
+
+**One pending run per slot.** The dispatch's concurrency group is `stage-slot-<slot>`
+with `cancel-in-progress: false`: a running run finishes, but Actions keeps at most one
+PENDING run per group, so a third dispatch on the same slot cancels the second, and the
+CLI waiting on that one exits 1 on its `cancelled` conclusion. Dispatch again once the
+running one is done.
 
 ```bash
 pnpm e2e:stage pr-123                     # dispatch: both storefronts, in Actions

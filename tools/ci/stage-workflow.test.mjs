@@ -221,6 +221,23 @@ describe("stage.yml — the PR-slot dispatch (#4202)", () => {
     assert.match(run, /process\.exit\(1\)/);
   });
 
+  it("writes no Actions cache from the PR's code: it would land in main's cache scope", () => {
+    for (const s of slotSuite.steps) {
+      const uses = String(s.uses ?? "");
+      assert.equal(s.with?.cache, undefined, `${uses || s.name}: no setup-* cache (it saves post-job)`);
+      assert.ok(!/^actions\/cache(@|\/save@)/.test(uses), `${uses}: restore-only, never a cache save`);
+      assert.ok(!uses.startsWith("docker/"), `${uses}: no buildx in this job`);
+    }
+    assert.doesNotMatch(JSON.stringify(slotSuite), /type=gha|ACTIONS_CACHE|ACTIONS_RUNTIME_TOKEN/);
+  });
+
+  it("asserts the slot serves the gated head and leaves the box-observing tests out by name", () => {
+    const run = step(slotSuite, (s) => s.id === "suite").run;
+    assert.match(run, /--slot-sha "\$SHA"/);
+    assert.match(run, /--no-box-observe/);
+    assert.equal(slotSuite.env.SHA, "${{ inputs.sha }}");
+  });
+
   it("runs the PR's code with the suite's secrets only: no ssh key, no statuses, no box upload", () => {
     assert.equal(checkoutOf(slotSuite).with.ref, "${{ inputs.sha }}");
     assert.deepEqual(
@@ -247,7 +264,7 @@ describe("stage.yml — the PR-slot dispatch (#4202)", () => {
     const suite = step(slotSuite, (s) => s.id === "suite");
     assert.match(
       suite.run,
-      /node tools\/staging\/e2e-stage\.mjs "\$SLOT" --local --report-dir "\$REPORT_DIR" \\\n\s+--verdict-file "\$RUNNER_TEMP\/verdict\.txt" "\$\{filters\[@\]\}"/,
+      /node tools\/staging\/e2e-stage\.mjs "\$SLOT" --local --report-dir "\$REPORT_DIR" \\\n\s+--verdict-file "\$RUNNER_TEMP\/verdict\.txt" --slot-sha "\$SHA" --no-box-observe "\$\{filters\[@\]\}"/,
     );
     assert.doesNotMatch(suite.run, /--expect-sha/);
     assert.equal(slotSuite.env.E2E_PUBLIC_LOG, "1");

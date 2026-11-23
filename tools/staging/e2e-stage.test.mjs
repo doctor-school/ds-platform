@@ -43,6 +43,7 @@ import {
   SUMMARY_REPORTER_PATH,
   summarizeReport,
 } from "./e2e-stage.mjs";
+import { boxObservingGrep } from "./box-observing.mjs";
 import {
   AXE_LEG_CONFIGS,
   GOLDEN_MATERIAL_SLUG,
@@ -356,6 +357,8 @@ describe("parseE2eArgs", () => {
       live: true,
       local: false,
       verdictFile: undefined,
+      slotSha: undefined,
+      boxObserve: true,
     });
   });
 
@@ -388,6 +391,8 @@ describe("parseE2eArgs", () => {
         live: true,
         local: true,
         verdictFile: "verdict.txt",
+        slotSha: undefined,
+        boxObserve: true,
       },
     );
   });
@@ -657,12 +662,19 @@ const isAxe = (call) =>
 const isLive = (call) =>
   call.argv.some((t) => t.startsWith("--config=")) && !isAxe(call);
 
+/** Two box-observing tests, as `box-observing.mjs` derives them. */
+const BOX_TESTS = [
+  { consumer: "packages/e2e/steps/a.steps.ts", title: "Registration is refused (without consent)" },
+  { consumer: "apps/portal/e2e/b.e2e.spec.ts", title: "EARS-7: a record" },
+];
+
 function harness(overrides = {}) {
   const calls = [];
   const lines = [];
   const writes = [];
   const effects = {
     readKeyJourneys: () => [],
+    boxObservingTests: () => BOX_TESTS,
     removeReport: () => {},
     readBoxEnv: async () => BOX_ENV,
     fetchHealth: async () => ({
@@ -2346,6 +2358,7 @@ describe("the PR-slot run in Actions (#4202)", () => {
       sleep: async () => {},
       now: () => 0,
       log: (line) => lines.push(line),
+      boxObservingTests: () => BOX_TESTS,
     };
     return { git, gh, lines, effects };
   }
@@ -2474,7 +2487,8 @@ describe("the PR-slot run in Actions (#4202)", () => {
     });
     assert.ok(body.startsWith(`${runMarker(901)}\n### e2e:stage pr-4202 — FAIL`));
     assert.match(body, /passed 1 · failed 22 · flaky 1 · skipped 1/);
-    assert.equal((body.match(/^- \[doctor\]/gm) ?? []).length, 20);
+    // `[`/`]` are escaped, so a title can never render as a link.
+    assert.equal((body.match(/^- \\\[doctor\\\]/gm) ?? []).length, 20);
     assert.match(body, /- … and 3 more/);
     assert.match(body, /\[Actions run 901\]\(https:\/\/github\.com\/o\/r\/actions\/runs\/901\)/);
     assert.doesNotMatch(body, /<x>/);
@@ -2494,6 +2508,75 @@ describe("the PR-slot run in Actions (#4202)", () => {
     assert.match(body, /no scenario counts/);
     assert.match(body, /Refused: sha is not a 40-hex SHA/);
     assert.doesNotMatch(body, /PASS/);
+  });
+
+  const STAND = { STAGE_BASE_DOMAIN: "stage.doctor.school", E2E_HTTP_USER: "stage", E2E_HTTP_PASS: "pw" };
+
+  it("--slot-sha and --no-box-observe describe a run made here: --local only, a full SHA only", () => {
+    assert.throws(() => parseE2eArgs(["pr-4202", "--slot-sha", HEAD]), /--slot-sha describes a run made here — add --local/);
+    assert.throws(() => parseE2eArgs(["pr-4202", "--no-box-observe"]), /--no-box-observe describes/);
+    assert.throws(() => parseE2eArgs(["pr-4202", "--local", "--slot-sha", "abc"]), /unusable --slot-sha/);
+    const options = parseE2eArgs(["pr-4202", "--local", "--slot-sha", HEAD, "--no-box-observe"]);
+    assert.equal(options.slotSha, HEAD);
+    assert.equal(options.boxObserve, false);
+  });
+
+  it("refuses before any scenario when the slot does not serve the PR head, and says to re-sync", async () => {
+    const OLD = "d".repeat(40);
+    const { calls, writes, lines, effects } = harness({
+      fetchHealth: async () => ({ status: 200, body: JSON.stringify({ version: OLD }) }),
+    });
+    const code = await runE2eStage(["pr-4202", "--local", "--slot-sha", HEAD, "--verdict-file", "v.txt"], { env: STAND, effects });
+    assert.notEqual(code, 0);
+    assert.equal(calls.length, 0);
+    const refusal = `slot serves ${OLD.slice(0, 12)}, PR head is ${HEAD.slice(0, 12)} — re-sync the slot`;
+    assert.ok(lines.some((l) => l.includes(refusal)));
+    assert.ok(writes.some((w) => w.file === "v.txt" && w.content.includes(refusal)));
+    // The served head runs the suite.
+    const served = harness();
+    await runE2eStage(["pr-4202", "--local", "--slot-sha", SHA], { env: STAND, effects: served.effects });
+    assert.ok(served.calls.length > 0);
+  });
+
+  it("--no-box-observe leaves the box-observing tests out by name in every leg and names them in the verdict", async () => {
+    const { calls, writes, effects } = harness();
+    await runE2eStage(["pr-4202", "--local", "--no-box-observe", "--verdict-file", "v.txt"], { env: STAND, effects });
+    assert.ok(calls.length > 1);
+    for (const call of calls) assert.equal(call.env.E2E_GREP_INVERT, boxObservingGrep(BOX_TESTS));
+    const invert = new RegExp(calls[0].env.E2E_GREP_INVERT);
+    for (const t of BOX_TESTS) assert.ok(invert.test(`academy feature ${t.title}`));
+    assert.equal(invert.test("academy feature Registration is refused"), false);
+    const block = writes.find((w) => w.file === "v.txt").content;
+    assert.match(block, /not run: +2 box-observing/);
+    for (const t of BOX_TESTS) assert.ok(block.includes(`- ${t.title}`));
+    // Without the flag nothing is left out.
+    const plain = harness();
+    await runE2eStage(["pr-4202", "--local"], { env: STAND, effects: plain.effects });
+    assert.ok(plain.calls.every((call) => call.env.E2E_GREP_INVERT === undefined));
+  });
+
+  it("the dispatching CLI names the tests Actions left out and prints the --local command for them", async () => {
+    const { lines, effects } = dispatchHarness();
+    await dispatchStageRun(parseE2eArgs(["pr-4202"]), effects);
+    assert.ok(lines.some((l) => /2 box-observing tests not run in Actions/.test(l)));
+    for (const t of BOX_TESTS) assert.ok(lines.includes(`  - ${t.title}`));
+    assert.ok(lines.includes(`  pnpm e2e:stage pr-4202 --local --grep "${boxObservingGrep(BOX_TESTS)}"`));
+  });
+
+  it("the comment keeps titles and refusals inert: no mention, no link, no non-hex SHA", () => {
+    const body = renderPrVerdictComment({
+      runId: 7,
+      runUrl: "u",
+      slot: "pr-1",
+      sha: "not-a-sha",
+      passed: false,
+      reason: "PR 1 is not from this repository (head: @someone/[x](https://e.test))",
+      tally: { failed: 1, failing: ["[doctor] ping @someone [click](https://e.test)"] },
+    });
+    assert.doesNotMatch(body, /@someone/);
+    assert.doesNotMatch(body, /[^\\]\[click\]/);
+    assert.match(body, /`\?` · \[Actions run 7\]/);
+    assert.doesNotMatch(body, /not-a-sha/);
   });
 
   it("the slot gate passes only the head SHA of an open PR N from this repository", () => {

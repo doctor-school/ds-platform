@@ -532,8 +532,11 @@ jobs:
           ref: ${{ inputs.sha }}
           persist-credentials: false
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      # No Actions cache in this job, restore or save: a `workflow_dispatch --ref main`
+      # job holds main's cache scope, and this job runs PR code — an entry it saved
+      # would be restored by main's own workflows (pnpm store, buildx `type=gha`).
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ds/e2e exec playwright install --with-deps chromium
 
@@ -554,7 +557,11 @@ jobs:
           done
           echo "::add-mask::$(printf '%s:%s' "$E2E_HTTP_USER" "$E2E_HTTP_PASS" | base64 -w0)"
 
-      # No box transport: the CI key's `observe` verb serves the `main` slot only.
+      # No box transport: the CI key's `observe` verb serves the `main` slot only, so
+      # `--no-box-observe` leaves the box-observing tests out by name
+      # (`tools/staging/box-observing.mjs`) and the verdict names them; the CLI
+      # prints the `--local` command that runs them. `--slot-sha` refuses the run
+      # before any scenario when the slot does not serve the dispatched head.
       - name: Stage suite
         id: suite
         env:
@@ -592,7 +599,7 @@ jobs:
           DS_STAGE_AGENT_COMMITTEE_PASSWORD="$stage_suite_committee_password" \
           DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET="$stage_suite_committee_totp" \
           node tools/staging/e2e-stage.mjs "$SLOT" --local --report-dir "$REPORT_DIR" \
-            --verdict-file "$RUNNER_TEMP/verdict.txt" "${filters[@]}"
+            --verdict-file "$RUNNER_TEMP/verdict.txt" --slot-sha "$SHA" --no-box-observe "${filters[@]}"
           rc=$?
           unset stage_suite_admin_password stage_suite_admin_totp stage_suite_committee_password stage_suite_committee_totp
           set -e
@@ -654,7 +661,7 @@ jobs:
             let tally;
             try { tally = JSON.parse(e.TALLY); } catch {}
             const reason = e.GATE_REASON ||
-              (e.VERDICT ? undefined : `the run stopped before the suite reached a verdict (slot-suite ${e.SUITE_RESULT})`);
+              (e.VERDICT ? undefined : `the run stopped before the suite reached a verdict (slot-suite ${e.SUITE_RESULT}); a branch that has not merged main lacks the PR-slot flags of e2e-stage.mjs: merge main and dispatch again`);
             writeFileSync(process.argv[1], renderPrVerdictComment({
               runId: e.GITHUB_RUN_ID,
               runUrl: `${e.GITHUB_SERVER_URL}/${e.GITHUB_REPOSITORY}/actions/runs/${e.GITHUB_RUN_ID}`,

@@ -339,11 +339,9 @@ test("024 EARS-29/30/31 — a rules editor changes a published course's rules; s
   await page.getByRole("button", { name: "Сохранить правила" }).click();
   const dialog = page.getByTestId("rule-change-dialog");
   const refusal = page.getByTestId("write-refusal");
-  await expect(refusal.or(dialog)).toBeVisible();
-  if (await dialog.isVisible()) {
-    await dialog.getByRole("button", { name: "Применить изменение" }).click();
-  }
+  // The preview validates first: invalid values never reach the change dialog.
   await expect(refusal).toContainText("Правила не сохранены:");
+  await expect(dialog).toHaveCount(0);
   await expect(refusal.getByRole("listitem").first()).toContainText(
     "Порог теста",
   );
@@ -452,6 +450,16 @@ test("024 EARS-29/30/31 — a rules editor changes a published course's rules; s
   await expect(staff.getByTestId("rules-read-only")).toContainText(
     "Правила платформы и пресеты меняет только редактор правил обучения.",
   );
+  // The course screen's preset choice is read-only for them too, same reason.
+  await staff.goto(`/learning/courses/${course.courseId}`);
+  const presetPanel = staff.getByTestId("preset-panel");
+  await expect(presetPanel.getByTestId("rules-read-only")).toContainText(
+    "Правила опубликованного курса меняет только редактор правил обучения.",
+  );
+  await expect(
+    presetPanel.getByRole("button", { name: "Применить пресет" }),
+  ).toBeDisabled();
+  await shots(staff, "course-preset-read-only");
   await other.close();
   for (const doctor of doctors) await doctor.context().close();
 });

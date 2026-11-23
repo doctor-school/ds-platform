@@ -16,7 +16,6 @@ import type {
   LearningEarnedProgress,
   LearningPreset,
   LearningRuleChangePreview,
-  LearningRulesAuthority,
   LearningScopeKind,
   LearningScopeRules,
   LearningSettingKey,
@@ -30,10 +29,12 @@ import {
   SETTING_SECTIONS,
   settingValueInWords,
 } from "./admin-copy";
+import { readOnlyReason } from "./authority";
 import { PresetPanel } from "./preset-panel";
 import { authorityRefusal, isStale, rulesRefusalLines } from "./refusals";
 import { RuleChangeDialog } from "./rule-change-dialog";
 import { SettingControl } from "./setting-control";
+import { settingValues } from "./setting-values";
 import type { LearningAdminTransport } from "./transport";
 
 // 024 EARS-29 — the rules editor of one scope (platform, school, course,
@@ -53,20 +54,6 @@ export interface RulesEditorScreenProps {
   transport: LearningAdminTransport;
   /** The signed-in staff member's roles (the admin session read). */
   staffRoles: readonly string[];
-}
-
-/** EARS-30 — the role a scope's authority takes. */
-const AUTHORITY_ROLE: Record<LearningRulesAuthority, string> = {
-  "rules-editor": "learning_rules_editor",
-  "course-editor": "platform_admin",
-};
-
-function readOnlyReason(
-  kind: LearningScopeKind,
-  authority: LearningRulesAuthority,
-): string {
-  if (authority === "course-editor") return R.readOnly.draft;
-  return kind === "platform" ? R.readOnly.platform : R.readOnly.published;
 }
 
 /** Equal value maps regardless of key order. */
@@ -107,7 +94,7 @@ export function RulesEditorScreen({
 
   const show = useCallback((next: LearningScopeRules) => {
     setRules(next);
-    setDraft(clone(next.values));
+    setDraft(settingValues(next.values));
     setEditing(new Set());
   }, []);
 
@@ -141,10 +128,9 @@ export function RulesEditorScreen({
     );
 
   const current = rules;
-  const holdsAuthority = staffRoles.includes(AUTHORITY_ROLE[current.authority]);
   const reason =
     deniedReason ??
-    (holdsAuthority ? null : readOnlyReason(scopeKind, current.authority));
+    readOnlyReason(scopeKind, current.authority, staffRoles);
   const canEdit = reason === null;
   const dirty = !sameValues(draft, current.values);
   // EARS-31 — a scope a once-published course resolves through (and the
@@ -254,6 +240,7 @@ export function RulesEditorScreen({
           scopeId={scopeId}
           transport={transport}
           readOnly={!canEdit}
+          heldByDraft={dirty}
           current={current}
           onApplied={show}
         />
@@ -525,7 +512,7 @@ function PresetCard({
                 variant="outline"
                 onClick={() => {
                   setDone(null);
-                  setDraft(clone(preset.values));
+                  setDraft(settingValues(preset.values));
                 }}
               >
                 {R.editPreset(preset.name)}

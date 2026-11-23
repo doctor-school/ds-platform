@@ -39,6 +39,8 @@ export interface CourseCompositionScreenProps {
   courseId: string;
   transport: LearningAdminTransport;
   lessonHref: (lessonId: string) => string;
+  /** EARS-30 — the signed-in staff member's roles (the admin session read); null while it loads. */
+  staffRoles: readonly string[] | null;
   /** EARS-29 — the rules editor of a scope, when the host has one. */
   rulesHref?: (scopeKind: LearningScopeKind, scopeId: string) => string;
 }
@@ -47,6 +49,7 @@ export function CourseCompositionScreen({
   courseId,
   transport,
   lessonHref,
+  staffRoles,
   rulesHref,
 }: CourseCompositionScreenProps) {
   const [course, setCourse] = useState<LearningCourseComposition | null>(null);
@@ -141,7 +144,12 @@ export function CourseCompositionScreen({
         </Alert>
       ) : null}
 
-      <PresetPanel scopeKind="course" scopeId={course.id} transport={transport} />
+      <PresetPanel
+        scopeKind="course"
+        scopeId={course.id}
+        transport={transport}
+        staffRoles={staffRoles}
+      />
 
       <section
         aria-labelledby="course-modules-heading"

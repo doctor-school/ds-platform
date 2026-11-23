@@ -200,6 +200,7 @@ export class AdminAuthorityGuard implements CanActivate {
  *
  * The matrix validator already refuses a `revalidate: "live"` row that names
  * none of `platform_admin`, `pd_officer`, `superadmin`, `broadcast_director`,
+ * `learning_rules_editor`,
  * so the `platform_admin` fallback is reached only by rows that genuinely
  * require it.
  */

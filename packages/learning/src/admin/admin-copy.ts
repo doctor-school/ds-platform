@@ -332,6 +332,8 @@ export const RULES_COPY = {
   revertShort: "Вернуть унаследованное",
   save: "Сохранить правила",
   discard: "Отменить изменения",
+  presetHeldByDraft:
+    "Сохраните или отмените изменения настроек, чтобы применить пресет.",
   saved: "Правила сохранены.",
   refused: "Правила не сохранены:",
   // A refused setting in words: the validator's own text is for API clients.

@@ -21,11 +21,12 @@ import {
 // on a course): the course's modules and lessons, a new module and a new lesson,
 // and «Применить пресет» with each preset's settings in words.
 
-function mount(transport = fakeTransport()) {
+function mount(transport = fakeTransport(), roles = ["platform_admin"]) {
   render(
     <CourseCompositionScreen
       courseId={AID.course}
       transport={transport}
+      staffRoles={roles}
       lessonHref={(id) => `/learning/lessons/${id}`}
     />,
   );
@@ -38,6 +39,7 @@ describe("CourseCompositionScreen", () => {
       <CourseCompositionScreen
         courseId={AID.course}
         transport={fakeTransport()}
+        staffRoles={["platform_admin"]}
         lessonHref={(id) => `/learning/lessons/${id}`}
         rulesHref={(kind, id) => `/learning/rules/${kind}/${id}`}
       />,
@@ -198,5 +200,42 @@ describe("CourseCompositionScreen", () => {
       "Пресет: unknown preset",
     );
     expect(within(panel).queryByText(/Применён:/)).not.toBeInTheDocument();
+  });
+
+  it("EARS-30: on a once-published course a staff member without the rules editor role sees the presets read-only, with the reason", async () => {
+    const t = mount(
+      fakeTransport({
+        rules: async () =>
+          rules({ authority: "rules-editor", layerVersion: 2 }),
+      }),
+      ["platform_admin"],
+    );
+    const panel = await screen.findByTestId("preset-panel");
+    expect(
+      await within(panel).findByTestId("rules-read-only"),
+    ).toHaveTextContent(
+      "Правила опубликованного курса меняет только редактор правил обучения.",
+    );
+    expect(within(panel).getByLabelText("Путь (Duolingo)")).toBeDisabled();
+    expect(
+      within(panel).getByRole("button", { name: "Применить пресет" }),
+    ).toBeDisabled();
+    expect(t.previewRules).not.toHaveBeenCalled();
+  });
+
+  it("EARS-30: the rules editor role offers the preset on a once-published course", async () => {
+    mount(
+      fakeTransport({
+        rules: async () =>
+          rules({ authority: "rules-editor", layerVersion: 2 }),
+      }),
+      ["platform_admin", "learning_rules_editor"],
+    );
+    const panel = await screen.findByTestId("preset-panel");
+    fireEvent.click(await within(panel).findByLabelText("Путь (Duolingo)"));
+    expect(
+      within(panel).getByRole("button", { name: "Применить пресет" }),
+    ).toBeEnabled();
+    expect(within(panel).queryByTestId("rules-read-only")).not.toBeInTheDocument();
   });
 });

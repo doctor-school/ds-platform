@@ -465,6 +465,34 @@ describe("RulesEditorScreen", () => {
     );
   });
 
+  it("EARS-29: a preset is not applied over unsaved setting edits — the screen says to save or discard them first", async () => {
+    const t = mount(
+      fakeTransport({
+        rules: async () =>
+          rules({ values: { "test.threshold": 50 }, layerVersion: 2 }),
+      }),
+      { scopeKind: "course", scopeId: AID.course },
+    );
+    const panel = await screen.findByTestId("preset-panel");
+    fireEvent.click(await within(panel).findByLabelText("Открытый курс"));
+    const apply = within(panel).getByRole("button", { name: "Применить пресет" });
+    expect(apply).toBeEnabled();
+    const threshold = await row("test.threshold");
+    fireEvent.click(
+      within(threshold).getByRole("button", { name: "Изменить: Порог теста" }),
+    );
+    fireEvent.change(within(threshold).getByLabelText("Порог теста"), {
+      target: { value: "70" },
+    });
+    expect(apply).toBeDisabled();
+    expect(panel).toHaveTextContent(
+      "Сохраните или отмените изменения настроек, чтобы применить пресет.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Отменить изменения" }));
+    expect(apply).toBeEnabled();
+    expect(t.applyPreset).not.toHaveBeenCalled();
+  });
+
   it("EARS-31: a preset applied after a save on the same screen previews over the saved values and applies under the saved version", async () => {
     const published = rules({
       authority: "rules-editor",

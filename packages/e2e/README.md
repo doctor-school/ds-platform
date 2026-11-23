@@ -283,6 +283,12 @@ pnpm --filter @ds/e2e test:e2e            # bddgen && playwright test
 An unset `E2E_*_URL` fails by NAME — a run that silently defaulted to localhost
 would report a green pass against nothing.
 
+That whole-suite command is what CI e2e and the Actions PR-slot run
+(`pnpm e2e:stage pr-<N>`) execute; it never runs on the operator workstation
+(`.claude/rules/dev-stand.md` → «The workstation runs no full regression», #4202).
+A workstation run narrows to the spec(s) the change edits with `E2E_GREP` / `--grep`
+and sets `E2E_WORKERS=1`.
+
 ## The suite is the spec's feature file
 
 `features` points at `apps/docs/content/specs/features/*/*-scenarios.feature`
@@ -607,8 +613,8 @@ Every other journey registers its own `randomUUID` account or only reads, and th
 per-IP auth limit is already lifted on every stage slot (#2684). The derived
 navigation walk signs the doctor in once per worker and host and reuses that
 session's cookies for the remaining items (the login itself is covered by its own
-scenarios, which keep their per-scenario UI sign-in). Run serially for debugging
-with `E2E_WORKERS=1`.
+scenarios, which keep their per-scenario UI sign-in). The default 4 is for CI and the
+Actions PR-slot run; a workstation run (one spec, for debugging) sets `E2E_WORKERS=1`.
 
 The sign-in adds no auth primitive: it drives the host's real login surface the
 way the shipped 008 shell journey does (`apps/portal/e2e/steps/shell.steps.ts`).

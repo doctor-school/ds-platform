@@ -329,8 +329,8 @@ pnpm e2e:stage pr-123 --no-live           # skip the storefront live-tier legs (
 
 # --local: the workstation run, one spec at a time
 export STAGE_BASIC_AUTH_PASS="…"          # same variable the converge needs, see above
-E2E_WORKERS=1 pnpm e2e:stage pr-123 --local --project academy --grep "витрина"
-E2E_WORKERS=1 pnpm e2e:stage main --project academy --grep "<one journey>"  # `main` runs here, narrowed
+E2E_WORKERS=1 pnpm e2e:stage pr-123 --local --no-live --no-axe --project academy --grep "витрина"
+E2E_WORKERS=1 pnpm e2e:stage main --no-live --no-axe --project academy --grep "<one journey>"  # `main` runs here, narrowed
 # the full `main` run, walks included, is the automatic stage.yml main run in Actions — never the workstation
 ```
 

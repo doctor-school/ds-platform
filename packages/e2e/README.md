@@ -763,7 +763,7 @@ invalid count fails closed. Every remote command is appended to
 Run on a lead-owned, converged PR slot:
 
 ```sh
-pnpm e2e:stage pr-<N> --local --project academy --grep "Registration is refused without consent"
+E2E_WORKERS=1 pnpm e2e:stage pr-<N> --no-live --no-axe --local --project academy --grep "Registration is refused without consent"
 ```
 
 ### Exact minimum password (003 EARS-36)
@@ -784,7 +784,7 @@ The scenario reuses `owned-registration.ts`, `secure-session.ts` and the auth
 fixtures, keeps traces off, and revokes only its own session during cleanup.
 
 ```sh
-pnpm e2e:stage pr-<N> --local --project academy --grep "A password of eight characters with no character classes is accepted"
+E2E_WORKERS=1 pnpm e2e:stage pr-<N> --no-live --no-axe --local --project academy --grep "A password of eight characters with no character classes is accepted"
 ```
 
 ### Short password refusal (003 EARS-36)
@@ -804,7 +804,7 @@ case together with the existing exact-eight acceptance regression on the
 lead-owned converged slot:
 
 ```sh
-pnpm e2e:stage pr-<N> --local --project academy --grep "A password shorter than the minimum length is rejected by the single rule|A password of eight characters with no character classes is accepted"
+E2E_WORKERS=1 pnpm e2e:stage pr-<N> --no-live --no-axe --local --project academy --grep "A password shorter than the minimum length is rejected by the single rule|A password of eight characters with no character classes is accepted"
 ```
 
 ### Initial password hint (003 EARS-37)
@@ -821,7 +821,7 @@ checks remain intact. The selected case creates no account, sends no code and
 needs no CAPTCHA test token.
 
 ```sh
-pnpm e2e:stage main --project academy --grep "The single password rule is visible before submission"
+E2E_WORKERS=1 pnpm e2e:stage main --no-live --no-axe --project academy --grep "The single password rule is visible before submission"
 ```
 
 ### Password message replacement (003 EARS-37)
@@ -855,7 +855,7 @@ tests remain; no exactly matching app-local browser test was removed. The
 separate direct code-link login journey remains unchanged.
 
 ```sh
-pnpm e2e:stage pr-<N> --local --project academy --grep "The typed address survives a switch between the sign-in methods"
+E2E_WORKERS=1 pnpm e2e:stage pr-<N> --no-live --no-axe --local --project academy --grep "The typed address survives a switch between the sign-in methods"
 ```
 
 ### Password reveal (003 EARS-38)
@@ -916,7 +916,7 @@ existing auth-flow cold-state and IdP password-invalidation unit tests remain.
 The test revokes its owned session and closes both contexts on completion.
 
 ```sh
-pnpm e2e:stage pr-<N> --local --project academy --grep "A cold verification step still signs in by the code"
+E2E_WORKERS=1 pnpm e2e:stage pr-<N> --no-live --no-axe --local --project academy --grep "A cold verification step still signs in by the code"
 ```
 
 ### Address-less verification (003 EARS-40)
@@ -990,7 +990,7 @@ this scenario on the lead-selected converged stand; a test-only PR creates no
 owner Stage-B request or new slot:
 
 ```sh
-pnpm e2e:stage main --project academy --grep "The held registration password is never persisted anywhere"
+E2E_WORKERS=1 pnpm e2e:stage main --no-live --no-axe --project academy --grep "The held registration password is never persisted anywhere"
 ```
 
 ### Account profile surface (003 EARS-28)

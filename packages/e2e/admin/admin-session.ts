@@ -23,7 +23,10 @@ export const COMMITTEE_ROLE = "congress-program-committee";
 export const SUPERADMIN_ROLE = "superadmin";
 /** 049 EARS-1: the broadcast director project role (seeded by `provision.sh`). */
 export const DIRECTOR_ROLE = "broadcast_director";
+/** 024 EARS-30: the learning rules editor project role (seeded by `provision.sh`). */
+export const RULES_EDITOR_ROLE = "learning_rules_editor";
 const ROLE_DISPLAY_NAMES: Record<string, string> = {
+  [RULES_EDITOR_ROLE]: "Learning Rules Editor",
   [ADMIN_ROLE]: "Platform Admin",
   [REGISTRAR_ROLE]: "Event Registrar",
   [COMMITTEE_ROLE]: "Congress Program Committee",
@@ -322,6 +325,23 @@ export async function bootstrapDirectorAccount(
   await register(adminOrigin, email, E2E_PASSWORD);
   const sub = await resolveSub(email);
   await grantProjectRole(sub, DIRECTOR_ROLE);
+  await new Promise((r) => setTimeout(r, 2500));
+  return { email, password: E2E_PASSWORD };
+}
+
+/**
+ * Provision a learning rules editor (024 EARS-30): register → grant
+ * `platform_admin` AND `learning_rules_editor` on the IdP in one write (the
+ * admin host admits staff, the extra role changes a once-published course's,
+ * the platform's and the presets' rules). Signs in through `signInAsAdmin`.
+ */
+export async function bootstrapRulesEditorAccount(
+  adminOrigin: string,
+): Promise<BootstrapResult> {
+  const email = uniqueEmail("rules-editor");
+  await register(adminOrigin, email, E2E_PASSWORD);
+  const sub = await resolveSub(email);
+  await grantProjectRole(sub, [ADMIN_ROLE, RULES_EDITOR_ROLE]);
   await new Promise((r) => setTimeout(r, 2500));
   return { email, password: E2E_PASSWORD };
 }

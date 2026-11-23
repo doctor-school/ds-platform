@@ -3,9 +3,20 @@ import {
   S3Client,
   S3ServiceException,
 } from "@aws-sdk/client-s3";
+import {
+  type AddressInfo,
+  type Server,
+  type Socket,
+  createServer,
+} from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeObjectStorage } from "./storage.fake.js";
-import { S3ObjectStorage } from "./storage.s3.js";
+import {
+  S3_CONNECTION_TIMEOUT_MS,
+  S3_MAX_ATTEMPTS,
+  S3_SOCKET_IDLE_TIMEOUT_MS,
+  S3ObjectStorage,
+} from "./storage.s3.js";
 import {
   ObjectAlreadyExistsError,
   ObjectStorageError,
@@ -147,5 +158,104 @@ describe("002 EARS-3 object-storage probe + readable failures (#2821)", () => {
         }),
       ),
     ).toBe("Error ECONNREFUSED");
+  });
+});
+
+// #4211 — prod Timeweb S3 stalled >10 s (13/17/23 Nov) and the client had no
+// connection / socket timeout, so an upload hung until the store recovered. A
+// stall must now reject with ObjectStorageError within the bound, and a failed
+// HEAD must never read as an acknowledged absence.
+describe("002 EARS-3 object-storage calls are bounded; only not-found reads as absent (#4211)", () => {
+  let server: Server | undefined;
+  const sockets = new Set<Socket>();
+
+  /** A real TCP server that accepts every connection and never answers. */
+  async function stalledEndpoint(): Promise<string> {
+    server = createServer((socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+    });
+    await new Promise<void>((resolve) =>
+      server?.listen(0, "127.0.0.1", resolve),
+    );
+    const { port } = server.address() as AddressInfo;
+    return `http://127.0.0.1:${port}`;
+  }
+
+  const testTimeouts = {
+    connectionTimeoutMs: 200,
+    socketIdleTimeoutMs: 300,
+    maxAttempts: 2,
+  };
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) =>
+      server ? server.close(() => resolve()) : resolve(),
+    );
+    server = undefined;
+  });
+
+  it("EARS-3: a PUT against a store that accepts and never answers rejects with ObjectStorageError within the bound", async () => {
+    const endpoint = await stalledEndpoint();
+    const s3 = new S3ObjectStorage({ ...config, endpoint }, testTimeouts);
+    const started = Date.now();
+    const err = await s3
+      .put({ key: "k", body: Buffer.from("x"), contentType: "image/webp" })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ObjectStorageError);
+    expect(Date.now() - started).toBeLessThan(3_000);
+  }, 6_000);
+
+  it("EARS-3: a HEAD against a stalled store rejects with ObjectStorageError instead of reading as absent", async () => {
+    const endpoint = await stalledEndpoint();
+    const s3 = new S3ObjectStorage({ ...config, endpoint }, testTimeouts);
+    await expect(s3.exists("k")).rejects.toBeInstanceOf(ObjectStorageError);
+  }, 6_000);
+
+  it("EARS-3: the production bounds keep the worst-case stalled call well under a minute", () => {
+    expect(
+      (S3_CONNECTION_TIMEOUT_MS + S3_SOCKET_IDLE_TIMEOUT_MS) * S3_MAX_ATTEMPTS,
+    ).toBeLessThan(60_000);
+  });
+
+  it("EARS-3: exists() resolves false only for a not-found answer", async () => {
+    vi.spyOn(S3Client.prototype, "send").mockRejectedValue(
+      new S3ServiceException({
+        name: "NotFound",
+        $fault: "client",
+        $metadata: { httpStatusCode: 404 },
+      }) as never,
+    );
+    expect(await new S3ObjectStorage(config).exists("k")).toBe(false);
+  });
+
+  it("EARS-3: exists() rejects with the readable ObjectStorageError on a 503", async () => {
+    vi.spyOn(S3Client.prototype, "send").mockRejectedValue(
+      new S3ServiceException({
+        name: "ServiceUnavailable",
+        $fault: "server",
+        $metadata: { httpStatusCode: 503 },
+      }) as never,
+    );
+    await expect(new S3ObjectStorage(config).exists("k")).rejects.toThrow(
+      new ObjectStorageError("ServiceUnavailable (HTTP 503)"),
+    );
+  });
+
+  it("EARS-3: getBytes() resolves null on NoSuchKey and rejects on any other failure", async () => {
+    const send = vi.spyOn(S3Client.prototype, "send");
+    send.mockRejectedValueOnce(
+      new S3ServiceException({
+        name: "NoSuchKey",
+        $fault: "client",
+        $metadata: { httpStatusCode: 404 },
+      }) as never,
+    );
+    const s3 = new S3ObjectStorage(config);
+    expect(await s3.getBytes("k")).toBeNull();
+    send.mockRejectedValueOnce(invalidAccessKey() as never);
+    await expect(s3.getBytes("k")).rejects.toBeInstanceOf(ObjectStorageError);
   });
 });

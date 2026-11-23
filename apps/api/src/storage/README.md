@@ -31,6 +31,19 @@ bound store at startup and every 60 s and feeds `checks.objectStorage` of
 `GET /v1/ready` (002 EARS-3), logging a WARN with the reason on the transition
 to down and a LOG on recovery.
 
+**Every store call is bounded; only not-found reads as absent (#4211).** The
+`S3Client` carries a connect bound (`S3_CONNECTION_TIMEOUT_MS`, 5 s), a
+socket-**idle** bound (`S3_SOCKET_IDLE_TIMEOUT_MS`, 20 s — a large upload that
+keeps transferring never trips it) and `S3_MAX_ATTEMPTS` = 2, so a store that
+accepts and then stalls rejects within ~50 s with an `ObjectStorageError`
+(`TimeoutError`) instead of hanging the request. `exists()` resolves `false` and
+`getBytes()` `null` ONLY for a not-found answer (HTTP 404 / `NotFound` /
+`NoSuchKey`); a timeout, 5xx, 403 or network failure rejects with
+`ObjectStorageError`, because callers read `false` as an **acknowledged**
+absence (the upload-locator reconcile clears the locator, media cleanup
+acknowledges the deletion) — those callers already treat a rejection as
+"retry on the next sweep". `urlFor()` signs locally and makes no network call.
+
 ## What's here
 
 | Concern                                 | File                   |

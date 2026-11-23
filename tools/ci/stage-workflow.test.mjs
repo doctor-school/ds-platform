@@ -216,7 +216,7 @@ describe("stage.yml — the PR-slot dispatch (#4202)", () => {
     );
   });
 
-  it("gates before anything checks the dispatched SHA out or holds a secret, refusing main's ref and a ref that is not the PR branch", () => {
+  it("checks slot, ref and PR head with no environment and no secret, refusing main's ref and a ref that is not the PR branch", () => {
     assert.equal(checkoutOf(gate).with.ref, undefined, "the gate checks out the workflow's own ref");
     assert.equal(environmentOf(gate), undefined);
     assert.deepEqual(secretsOf(gate), []);

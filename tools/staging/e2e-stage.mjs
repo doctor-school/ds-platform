@@ -991,14 +991,15 @@ export function compactTally(tally) {
 }
 
 /**
- * The gate of a PR-slot dispatch (#4202), run by the `slot-gate` job — the
- * dispatched branch's code, no environment, no secret — BEFORE `slot-suite` checks
- * the SHA out or receives a stage-pr secret. `ref` is the run's `github.ref`; `pr` is
- * the `GET /repos/{repo}/pulls/{N}` reply for `slot=pr-<N>`, or undefined when it
- * could not be read. A run under `main`'s ref is refused first — that check is
- * `main`'s own code, since such a run checks `main` out. Otherwise it passes only for
- * a run on PR N's head branch, for the SHA that is the head of an OPEN PR N pushed to
- * THIS repository: a fork's commit never runs with the stage-pr secrets.
+ * The correctness check of a PR-slot dispatch (#4202) — the right slot, the PR's head,
+ * a same-repo PR — run by the `slot-gate` job before `slot-suite` starts. It is the
+ * dispatched branch's own code, so it is not a security boundary: those are the write
+ * access a dispatch needs, the `stage-pr` deployment-branch policy, and `stage-pr`
+ * holding no ssh key under no `main` cache scope. `ref` is the run's `github.ref`;
+ * `pr` is the `GET /repos/{repo}/pulls/{N}` reply for `slot=pr-<N>`, or undefined when
+ * it could not be read. A run under `main`'s ref is refused first. Otherwise it passes
+ * only for a run on PR N's head branch, for the SHA that is the head of an OPEN PR N
+ * pushed to THIS repository.
  */
 export function prSlotGate({ slot, sha, ref, repository, pr }) {
   const refuse = (reason) => ({ ok: false, reason });

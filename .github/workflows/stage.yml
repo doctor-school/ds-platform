@@ -30,11 +30,10 @@ name: Stage main
 # starts on the operator's machine. Every job of the run is the branch's code, so the
 # run never holds `main`'s Actions cache scope: its scope is that branch, which `main`
 # never reads. The branch must carry these jobs (rebased on `main`).
-#   slot-gate    — no environment, no secret: refuses a run under `main`'s ref (that
-#                  check is `main`'s own code), a ref that is not PR N's head branch, a
-#                  slot that is not `pr-<N>`, a non-40-hex SHA and a SHA that is not the
-#                  head of an open PR N from this repository, before anything checks the
-#                  SHA out.
+#   slot-gate    — no environment, no secret; a correctness check, not a security
+#                  boundary: refuses a run under `main`'s ref, a ref that is not PR N's
+#                  head branch, a slot that is not `pr-<N>`, a non-40-hex SHA and a SHA
+#                  that is not the head of an open PR N from this repository.
 #   slot-suite   — environment `stage-pr` (stage-only secrets, never `stage`'s ssh key):
 #                  checks the SHA out and runs `e2e-stage.mjs pr-<N> --local` (its
 #                  `/v1/health` pre-flight refuses a slot that does not answer). No
@@ -457,12 +456,14 @@ jobs:
   # The PR-slot run (#4202), three jobs. Every input reaches a shell through `env:`
   # only, always quoted.
   #
-  # slot-gate — the dispatched branch's code, no environment, no secret. Fail-closed,
-  # before anything checks out the dispatched SHA: `prSlotGate`
-  # (tools/staging/e2e-stage.mjs) refuses a run under `main`'s ref, a ref that is not
-  # PR N's head branch, a slot that is not `pr-<N>`, a non-40-hex SHA and a SHA that
-  # is not the head of an OPEN PR N pushed to THIS repository — a fork's commit never
-  # runs with the stage-pr secrets.
+  # slot-gate — the dispatched branch's code, no environment, no secret: a correctness
+  # check (right slot, PR head, same-repo PR), not a security boundary. Before
+  # slot-suite starts, `prSlotGate` (tools/staging/e2e-stage.mjs) refuses a run under
+  # `main`'s ref, a ref that is not PR N's head branch, a slot that is not `pr-<N>`, a
+  # non-40-hex SHA and a SHA that is not the head of an OPEN PR N pushed to THIS
+  # repository. The boundaries: a dispatch needs repository write access; `stage-pr`'s
+  # deployment-branch policy; `stage-pr` holds no ssh key and the run holds no `main`
+  # cache scope.
   slot-gate:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest

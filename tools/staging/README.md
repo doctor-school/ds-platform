@@ -273,10 +273,13 @@ slot=pr-<N> -f sha=<head SHA>` plus the filters you passed; branch and SHA come 
   branch without them is refused by `gh workflow run` and the CLI says to rebase.
   A `slot-gate` job (no environment, no secret) refuses a run under `main`'s ref, a ref
   that is not PR N's head branch, a short or non-hex SHA, a closed PR, a fork's commit
-  and a stale SHA, each as a red run naming the reason, before anything checks the SHA
-  out. `slot-suite` takes its secrets from the **`stage-pr`** environment (the suite's
-  own secrets only, never `stage`'s ssh key; its deployment-branch policy admits PR
-  branches, not `main`), checks out the dispatched SHA and runs that tree's suite — no
+  and a stale SHA, each as a red run naming the reason, before `slot-suite` starts. It
+  is branch code, so it is a correctness check, not a security boundary. The
+  boundaries are: a dispatch needs repository write access; the **`stage-pr`**
+  environment's deployment-branch policy (`*/*`: `main` and unprefixed refs are
+  excluded); and `stage-pr` holds the suite's stage-only secrets, never `stage`'s ssh
+  key, in a run with no `main` cache scope. `slot-suite` takes its secrets from
+  `stage-pr`, checks out the dispatched SHA and runs that tree's suite — no
   `statuses` permission, so a PR-slot run never posts or changes the `stage-suite`
   status. A `slot-verdict` job (`GITHUB_TOKEN` with `pull-requests: write` only)
   renders the comment as plain text — passed / failed / flaky / skipped counts, the

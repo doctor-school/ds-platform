@@ -168,6 +168,9 @@ export function buildGoldenLearningPathVolume(
         "Действующее свидетельство об аккредитации специалиста",
       partnerOrganisationId: null,
       position: c + 1,
+      // Published when created: before every seeded result and the 40 → 50 %
+      // rule change, so a rules editor's raise is a rule change (024 EARS-30).
+      firstPublishedAt: created,
       ...stamps,
     });
     out.ownLayerCourseIds.push(course.id);

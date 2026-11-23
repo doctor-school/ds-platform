@@ -253,6 +253,9 @@ export function buildGoldenLearning(created: Date): GoldenLearning {
         documentKind: "certificate",
         documentPrerequisites: "",
         position: 1,
+        // Published when created, before any doctor reached it (024 EARS-30):
+        // the seed runs after migration 0069's backfill, so it stamps the instant.
+        firstPublishedAt: created,
         ...stamps,
       },
     ],

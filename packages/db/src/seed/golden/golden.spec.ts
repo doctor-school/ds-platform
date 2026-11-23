@@ -11,8 +11,8 @@ import { existsSync } from "node:fs";
 
 import { materialBodySchema, PointsTraceEntrySchema } from "@ds/schemas";
 import { PDFDocument } from "pdf-lib";
-import { getTableColumns, getTableName, is } from "drizzle-orm";
-import { PgTable } from "drizzle-orm/pg-core";
+import { getTableColumns, getTableName, is, type SQL } from "drizzle-orm";
+import { PgDialect, PgTable } from "drizzle-orm/pg-core";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
@@ -993,6 +993,40 @@ describe("#2063 golden step execution", () => {
         GOLDEN_MAX_BIND_PARAMS,
       );
     expect(chunks.flat()).toEqual(step.rows);
+  });
+
+  it("024 EARS-30 (#4012): a refresh in place fills a NULL publication instant and never moves a written one", async () => {
+    // A database seeded before the seed stamped `first_published_at` holds the
+    // golden courses with NULL; the set-once column is left out of the refresh
+    // but filled where still empty (the set-once triggers allow NULL → value).
+    const plan = buildGoldenSeedPlan(
+      dataset,
+      specialtyIdByName,
+      learningPresetByName,
+      pointsContext,
+    );
+    const step = plan.find((s) => s.name === "learning_courses")!;
+    expect(step.updateKeys).not.toContain("firstPublishedAt");
+    expect(step.fillKeys).toEqual(["firstPublishedAt"]);
+    const sets: Record<string, unknown>[] = [];
+    const tx = {
+      insert: () => ({
+        values: () => ({
+          onConflictDoUpdate: (config: { set: Record<string, unknown> }) => {
+            sets.push(config.set);
+            return Promise.resolve();
+          },
+        }),
+      }),
+    };
+    await applyGoldenStep(tx, step);
+    const dialect = new PgDialect();
+    const fill = dialect.sqlToQuery(sets[0]!.firstPublishedAt as SQL).sql;
+    expect(fill).toBe(
+      'coalesce("learning_courses"."first_published_at", excluded."first_published_at")',
+    );
+    // A step that never publishes fills nothing.
+    expect(plan.find((s) => s.name === "users")!.fillKeys).toEqual([]);
   });
 
   it("refuses a plan key that is not a column of the table", async () => {
@@ -3864,6 +3898,72 @@ describe("024 EARS-24, EARS-29–31 (#4012) golden long-path results", () => {
       (l) => l.scopeId === GOLDEN_LEARNING_PATH_COURSES[0]!.id,
     ) as { version?: number };
     expect(other.version ?? 1).toBe(1);
+  });
+});
+
+describe("024 EARS-30 (#4012) golden courses carry their first publication", () => {
+  // `first_published_at` is what tells a rules editor's change on a course
+  // doctors could have reached from a course editor's free edit (EARS-30). The
+  // seed runs after migration 0069's backfill, so it stamps the instant itself:
+  // the real first publish, before any doctor's fact, attempt or status on the
+  // course; a never-published draft stays NULL.
+  const dataset = buildGoldenDataset(now, subjects);
+  const moduleCourse = new Map(
+    dataset.learningModules.map((m) => [m.id, m.courseId]),
+  );
+  const lessonCourse = new Map(
+    dataset.learningLessons.map((l) => [l.id, moduleCourse.get(l.moduleId)]),
+  );
+  const stepCourse = new Map(
+    dataset.learningSteps.map((s) => [s.id, lessonCourse.get(s.lessonId)]),
+  );
+  const earliest = new Map<string, number>();
+  const note = (courseId: string | undefined, at: Date | null | undefined) => {
+    if (!courseId || !(at instanceof Date)) return;
+    const prev = earliest.get(courseId);
+    if (prev === undefined || at.getTime() < prev)
+      earliest.set(courseId, at.getTime());
+  };
+  for (const f of dataset.learningFacts)
+    note(stepCourse.get(f.stepId as string), f.occurredAt);
+  for (const a of dataset.learningAttempts)
+    note(stepCourse.get(a.testId), a.startedAt ?? a.submittedAt);
+  const courseIds = new Set(dataset.learningCourses.map((c) => c.id));
+  for (const s of dataset.learningNodeStatus) {
+    const courseId = courseIds.has(s.itemId)
+      ? s.itemId
+      : (moduleCourse.get(s.itemId) ??
+        lessonCourse.get(s.itemId) ??
+        stepCourse.get(s.itemId));
+    note(courseId, s.since);
+  }
+
+  it("every published golden course, and every one doctors hold facts on, carries first_published_at before its earliest fact; drafts stay NULL", () => {
+    expect(dataset.learningCourses.length).toBeGreaterThan(0);
+    for (const c of dataset.learningCourses) {
+      const once = c.state === "published" || earliest.has(c.id!);
+      if (!once) {
+        expect(c.firstPublishedAt ?? null, c.slug).toBeNull();
+        continue;
+      }
+      expect(c.firstPublishedAt, c.slug).toBeInstanceOf(Date);
+      const first = (c.firstPublishedAt as Date).getTime();
+      expect(first, c.slug).toBeLessThan(now.getTime());
+      const fact = earliest.get(c.id!);
+      if (fact !== undefined) expect(first, c.slug).toBeLessThanOrEqual(fact);
+    }
+  });
+
+  it("the seeded 40 → 50 % rule change post-dates the course's first publication", () => {
+    expect(dataset.learningRuleChanges.length).toBeGreaterThan(0);
+    for (const change of dataset.learningRuleChanges) {
+      const course = dataset.learningCourses.find(
+        (c) => c.id === change.scopeId,
+      )!;
+      expect((course.firstPublishedAt as Date).getTime()).toBeLessThan(
+        (change.at as Date).getTime(),
+      );
+    }
   });
 });
 

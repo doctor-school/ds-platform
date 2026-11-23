@@ -8,6 +8,7 @@ import {
   and,
   eq,
   getTableColumns,
+  getTableName,
   gte,
   inArray,
   lte,
@@ -352,6 +353,17 @@ export async function applyGoldenStep(
       );
     }
     set[key] = sql.raw(`excluded."${column.name}"`);
+  }
+  for (const key of step.fillKeys) {
+    const column = columns[key];
+    if (!column) {
+      throw new GoldenPlanError(
+        `${step.name}: fill key "${key}" is not a column of the table`,
+      );
+    }
+    set[key] = sql.raw(
+      `coalesce("${getTableName(step.table)}"."${column.name}", excluded."${column.name}")`,
+    );
   }
 
   // A key-only row (a link table such as `organisation_role_assignments`)

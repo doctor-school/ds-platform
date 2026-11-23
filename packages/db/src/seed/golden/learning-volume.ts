@@ -385,6 +385,8 @@ export function buildGoldenLearningVolume(
         partnerOrganisationId:
           c % 7 === 3 ? goldenPartnerId((v * 7 + c) % 11) : null,
         position: c + 1,
+        // Published when created, before any doctor reached it (024 EARS-30).
+        firstPublishedAt: created,
         ...stamps,
       });
       out.learningModules.push({

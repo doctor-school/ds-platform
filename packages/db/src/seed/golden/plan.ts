@@ -102,6 +102,13 @@ export interface GoldenSeedStep {
   conflictKeys: string[];
   updateKeys: string[];
   /**
+   * Set-once publication instants ({@link SET_ONCE_KEYS}) the step writes: a
+   * re-run leaves a written instant alone but fills one still NULL — a
+   * database seeded before the seed stamped the column (024 EARS-30) converges
+   * in place. The set-once triggers allow NULL → value.
+   */
+  fillKeys: string[];
+  /**
    * Id group ({@link GOLDEN_GROUP}) whose VOLUME ordinal namespace this step
    * owns outright and replaces on every run.
    *
@@ -633,6 +640,9 @@ function step(
       : [...keys].filter(
           (key) => !conflictKeys.includes(key) && !setOnce.has(key),
         ),
+    fillKeys: options.appendOnly
+      ? []
+      : SET_ONCE_KEYS.filter((key) => keys.has(key)),
   };
 }
 

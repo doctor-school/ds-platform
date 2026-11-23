@@ -11,6 +11,7 @@ import {
   type BuiltCourse,
   type Harness,
   type Problem,
+  ruleChangesSettled,
   setRules,
   VIDEO_SEC,
 } from "./harness.js";
@@ -607,13 +608,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
             d.headers,
           )
         ).body.lesson.state.status;
-      const projected = async () =>
-        (
+      const projected = async () => {
+        await ruleChangesSettled(h, course.courseId);
+        return (
           await h.pool.query<{ status: string }>(
             "SELECT status FROM learning_node_status WHERE person_id = $1 AND item_id = $2",
             [d.personId, course.lessonId],
           )
         ).rows[0]?.status;
+      };
 
       // The threshold rises with «require again» (EARS-31): the recompute
       // re-evaluates the lesson as not done.

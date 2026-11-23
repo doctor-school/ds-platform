@@ -13,7 +13,7 @@ import type {
   LearningSettingValues,
   LearningStatusReason,
 } from "@ds/schemas";
-import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import {
   evaluateCourse,
   type LearningCourseEvaluator,
@@ -27,32 +27,45 @@ import {
 } from "./deps.js";
 import { lockPersonCourse, project } from "./projector.js";
 import {
+  countingFacts,
   courseById,
   courseOfLesson,
   courseOfModule,
   courseOfStep,
   loadCourseTree,
+  loadFactRecords,
   loadFacts,
   loadLayersFor,
+  requireAgainChanges,
   scopesOf,
   type LoadedCourse,
 } from "./repository.js";
 
 // 024 EARS-24, EARS-31 (024-design §5) — a rule change on a published course.
 // The preview evaluates every affected doctor's facts under the old and the new
-// rules and writes nothing. The save writes the layer, one
-// `learning_rule_changes` row and (under «keep», owner D16) a `completion-kept`
-// fact for every item that was done and would no longer be, in one
-// transaction; after COMMIT the affected doctors' statuses are recomputed with
-// the change as the cause. The recompute is the projection diff, so it is
-// idempotent: a run interrupted before `recomputed_at` is set is resumed by
-// {@link resumeRuleChanges}. Reads compute live from facts and rules, so a
-// doctor never sees a stale status while it runs.
+// rules and writes nothing. The save writes, in one transaction, the layer, one
+// `learning_rule_changes` row, under «keep» (owner D16) a `completion-kept`
+// fact for every item that was done and would no longer be, and the
+// status-reason anchor of every item the saved change moves to a status other
+// than done (EARS-24); then it returns. After COMMIT the affected doctors'
+// statuses are recomputed in the background with the change as the cause; a
+// change that moves no doctor's status is marked recomputed in the save and
+// walks nobody. The recompute is the projection diff, so it is idempotent: a
+// run interrupted before
+// `recomputed_at` is set is resumed by {@link resumeRuleChanges}. Reads compute
+// live from facts and rules and the reason is read from its anchor, so a
+// doctor never sees a stale status or a missing reason while it runs.
 
 type Handle = LearningServerDeps["db"] | LearningTx;
 
-/** Doctors recomputed per pass; each doctor is its own short transaction. */
+/**
+ * Doctors read per pass of the recompute (one facts read, one projection read);
+ * each doctor whose projection differs is its own short transaction.
+ */
 export const RULE_CHANGE_BATCH = 50;
+
+/** Doctors evaluated per facts read in the preview and the save. */
+const ASSESS_BATCH = 500;
 
 /** Every once-published course whose items resolve through the scope (EARS-5). */
 export async function governedCoursesUnder(
@@ -120,6 +133,19 @@ export interface LearningStatusDiff {
   gainedDone: boolean;
 }
 
+/** The kind of every item of a course tree. */
+function kindsOf(
+  loaded: LoadedCourse,
+): Map<string, "course" | "module" | "lesson" | "step"> {
+  const out = new Map<string, "course" | "module" | "lesson" | "step">([
+    [loaded.row.id, "course"],
+  ]);
+  for (const m of loaded.modules) out.set(m.id, "module");
+  for (const l of loaded.lessons) out.set(l.id, "lesson");
+  for (const st of loaded.steps) out.set(st.id, "step");
+  return out;
+}
+
 export function diffEvaluations(
   before: LearningEvaluation,
   after: LearningEvaluation,
@@ -139,37 +165,112 @@ export function diffEvaluations(
   return { changed, lostDone, gainedDone };
 }
 
-interface DoctorAssessment extends LearningStatusDiff {
-  personId: string;
+/**
+ * EARS-24 — the items a change moves to a status other than `done` (no longer
+ * done, locked again, opened): each carries the change as its reason.
+ */
+export function movedByChange(
+  before: LearningEvaluation,
+  after: LearningEvaluation,
+): string[] {
+  const out: string[] = [];
+  for (const [id, state] of after.states) {
+    if (state.status === "done") continue;
+    if (before.states.get(id)?.status !== state.status) out.push(id);
+  }
+  return out;
 }
 
-/** Evaluate every affected doctor under the old and the new values of one scope. */
+interface DoctorAssessment extends LearningStatusDiff {
+  personId: string;
+  kinds: Map<string, "course" | "module" | "lesson" | "step">;
+  /** Items the saved change moves to a status other than done (after «keep» holds what it keeps). */
+  moved: string[];
+  /** Each item's status before the change. */
+  prior: Map<string, string>;
+  /** Some status differs once the change is saved (after «keep»). */
+  moves: boolean;
+}
+
+/**
+ * Evaluate every affected doctor under the old and the new values of one
+ * scope. With `rejudge` (a «require again» change, and the preview) the new
+ * side no longer counts the earlier kept credits this change covers (EARS-31);
+ * without it («keep») the saved side also holds every item that would stop
+ * being done, as its `completion-kept` fact will.
+ */
 async function assess(
   db: Handle,
   kind: LearningScopeKind,
   scopeId: string,
   values: LearningSettingValues,
   now: Date,
+  rejudge: boolean,
 ): Promise<DoctorAssessment[]> {
   const out: DoctorAssessment[] = [];
   for (const course of await governedCoursesUnder(db, kind, scopeId)) {
     const loaded = await loadCourseTree(db, course, true);
+    const kinds = kindsOf(loaded);
     const oldLayers = await loadLayersFor(db, scopesOf(loaded));
     const newLayers = oldLayers.withValues(kind, scopeId, values);
-    for (const personId of await doctorsOnCourse(db, loaded)) {
-      const facts = await loadFacts(db, personId, loaded);
-      const run = (layers: LearningLayers) =>
-        evaluateCourse({ course: loaded.model, layers, facts, now }).evaluation;
-      out.push({
-        personId,
-        ...diffEvaluations(run(oldLayers), run(newLayers)),
-      });
+    const changes = await requireAgainChanges(db, [loaded]);
+    const changesAfter = rejudge
+      ? [...changes, { kind, scopeId, at: now }]
+      : changes;
+    const doctors = await doctorsOnCourse(db, loaded);
+    for (let i = 0; i < doctors.length; i += ASSESS_BATCH) {
+      const batch = doctors.slice(i, i + ASSESS_BATCH);
+      const records = await loadFactRecords(db, batch, [loaded]);
+      for (const personId of batch) {
+        const own = records.get(personId)?.[0] ?? [];
+        const run = (
+          layers: LearningLayers,
+          counted: Parameters<typeof countingFacts>[2],
+          kept: readonly string[] = [],
+        ) =>
+          evaluateCourse({
+            course: loaded.model,
+            layers,
+            facts: [
+              ...countingFacts(own, loaded, counted),
+              ...kept.map((itemId) => ({
+                kind: "completion-kept" as const,
+                itemId,
+              })),
+            ],
+            now,
+          }).evaluation;
+        const before = run(oldLayers, changes);
+        const after = run(newLayers, changesAfter);
+        const diff = diffEvaluations(before, after);
+        const saved =
+          !rejudge && diff.lostDone.length > 0
+            ? run(newLayers, changesAfter, diff.lostDone)
+            : after;
+        out.push({
+          personId,
+          kinds,
+          ...diff,
+          moved: movedByChange(before, saved),
+          prior: new Map(
+            [...before.states].map(([id, state]) => [id, state.status]),
+          ),
+          moves:
+            saved === after
+              ? diff.changed
+              : diffEvaluations(before, saved).changed,
+        });
+      }
     }
   }
   return out;
 }
 
-/** EARS-31 — the change dialog's count; nothing is written. */
+/**
+ * EARS-31 — the change dialog's count; nothing is written. It counts what the
+ * new rules decide, so a doctor whose earlier kept credit the change covers
+ * is counted (the «require again» side of the question).
+ */
 export async function previewRuleChange(
   db: Handle,
   kind: LearningScopeKind,
@@ -180,7 +281,7 @@ export async function previewRuleChange(
   const affected = new Set<string>();
   const toDone = new Set<string>();
   const toNotDone = new Set<string>();
-  for (const d of await assess(db, kind, scopeId, values, now)) {
+  for (const d of await assess(db, kind, scopeId, values, now, true)) {
     if (d.changed) affected.add(d.personId);
     if (d.gainedDone) toDone.add(d.personId);
     if (d.lostDone.length > 0) toNotDone.add(d.personId);
@@ -192,10 +293,19 @@ export async function previewRuleChange(
   };
 }
 
+/** The change a save recorded, and whether any doctor's status needs the recompute. */
+export interface LearningRecordedRuleChange {
+  id: string;
+  /** False when no doctor's status moves: the change is recorded recomputed. */
+  recompute: boolean;
+}
+
 /**
  * EARS-31 — inside the saving transaction, BEFORE the layer is written: the
- * `learning_rule_changes` row and, under «keep», the `completion-kept` facts.
- * Returns the change id the after-commit recompute takes.
+ * `learning_rule_changes` row, under «keep» the `completion-kept` facts, and
+ * the status-reason anchor (EARS-24) of every item the saved change moves to a
+ * status other than done. A change that moves no doctor's status is recorded
+ * recomputed here, so its recompute walks nobody.
  */
 export async function recordRuleChange(
   tx: LearningTx,
@@ -208,11 +318,17 @@ export async function recordRuleChange(
     actorSub: string | null;
     now: Date;
   },
-): Promise<string> {
-  const assessed =
-    input.earnedProgress === "keep"
-      ? await assess(tx, input.kind, input.scopeId, input.after, input.now)
-      : [];
+): Promise<LearningRecordedRuleChange> {
+  const keep = input.earnedProgress === "keep";
+  const assessed = await assess(
+    tx,
+    input.kind,
+    input.scopeId,
+    input.after,
+    input.now,
+    !keep,
+  );
+  const recompute = assessed.some((d) => d.moves);
   const [change] = await tx
     .insert(learningRuleChanges)
     .values({
@@ -223,10 +339,36 @@ export async function recordRuleChange(
       earnedProgress: input.earnedProgress,
       actorSub: input.actorSub,
       at: input.now,
+      recomputedAt: recompute ? null : input.now,
     })
     .returning({ id: learningRuleChanges.id });
   const ruleChangeId = change!.id;
   for (const d of assessed) {
+    if (d.moved.length > 0) {
+      // EARS-24 — the reason anchor of every item the change moves: kept
+      // through every later transition until the item is done again (the
+      // projector clears it then). A row not projected yet starts at the
+      // status the doctor had before the change; the recompute moves it.
+      await tx
+        .insert(learningNodeStatus)
+        .values(
+          d.moved.map((itemId) => ({
+            personId: d.personId,
+            itemKind: d.kinds.get(itemId) ?? "step",
+            itemId,
+            status: d.prior.get(itemId) ?? "open",
+            since: input.now,
+            causeKind: "fact",
+            causeId: null,
+            reasonRuleChangeId: ruleChangeId,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [learningNodeStatus.personId, learningNodeStatus.itemId],
+          set: { reasonRuleChangeId: ruleChangeId },
+        });
+    }
+    if (!keep) continue;
     for (const itemId of d.lostDone) {
       await tx
         .insert(learningFacts)
@@ -244,7 +386,7 @@ export async function recordRuleChange(
         });
     }
   }
-  return ruleChangeId;
+  return { id: ruleChangeId, recompute };
 }
 
 /**
@@ -274,11 +416,28 @@ export async function recomputeRuleChange(
       await loadCourseTree(deps.db, course, true),
     );
     for (let i = 0; i < doctors.length; i += RULE_CHANGE_BATCH) {
-      for (const personId of doctors.slice(i, i + RULE_CHANGE_BATCH)) {
+      const batch = doctors.slice(i, i + RULE_CHANGE_BATCH);
+      // One read per pass: the tree, the rules, the batch's facts and its
+      // projection; only a doctor whose projection differs takes a write.
+      const loaded = await loadCourseTree(deps.db, course, true);
+      const layers = await loadLayersFor(deps.db, scopesOf(loaded));
+      const changes = await requireAgainChanges(deps.db, [loaded]);
+      const records = await loadFactRecords(deps.db, batch, [loaded]);
+      const projected = await projectionOf(deps.db, batch, kindsOf(loaded));
+      for (const personId of batch) {
+        const live = evaluateCourse({
+          course: loaded.model,
+          layers,
+          facts: countingFacts(
+            records.get(personId)?.[0] ?? [],
+            loaded,
+            changes,
+          ),
+          now: now(),
+        }).evaluation;
+        if (matchesProjection(live, projected.get(personId))) continue;
         const projection = await deps.transaction(async (tx) => {
           await lockPersonCourse(tx, personId, course.id);
-          const loaded = await loadCourseTree(tx, course, true);
-          const layers = await loadLayersFor(tx, scopesOf(loaded));
           const facts = await loadFacts(tx, personId, loaded);
           const at = now();
           const { evaluator, evaluation } = evaluateCourse({
@@ -303,6 +462,45 @@ export async function recomputeRuleChange(
     .update(learningRuleChanges)
     .set({ recomputedAt: now() })
     .where(eq(learningRuleChanges.id, ruleChangeId));
+}
+
+/** The projected statuses of a batch of doctors on a course's items. */
+async function projectionOf(
+  db: Handle,
+  personIds: readonly string[],
+  kinds: Map<string, string>,
+): Promise<Map<string, Map<string, string>>> {
+  const out = new Map<string, Map<string, string>>();
+  if (personIds.length === 0) return out;
+  const rows = await db
+    .select({
+      personId: learningNodeStatus.personId,
+      itemId: learningNodeStatus.itemId,
+      status: learningNodeStatus.status,
+    })
+    .from(learningNodeStatus)
+    .where(
+      and(
+        inArray(learningNodeStatus.personId, [...personIds]),
+        inArray(learningNodeStatus.itemId, [...kinds.keys()]),
+      ),
+    );
+  for (const r of rows) {
+    const own = out.get(r.personId) ?? new Map<string, string>();
+    own.set(r.itemId, r.status);
+    out.set(r.personId, own);
+  }
+  return out;
+}
+
+/** Every evaluated status already projected as it is. */
+export function matchesProjection(
+  evaluation: LearningEvaluation,
+  projected: ReadonlyMap<string, string> | undefined,
+): boolean {
+  for (const [itemId, state] of evaluation.states)
+    if (projected?.get(itemId) !== state.status) return false;
+  return true;
 }
 
 /**
@@ -448,9 +646,10 @@ export function changedSettings(
 }
 
 /**
- * EARS-24 — the reason of each given lesson whose projected status was last
- * changed by a rule change; a lesson the doctor has since completed carries a
- * `fact` cause and so no reason.
+ * EARS-24 — the reason of each given lesson a rule change moved (no longer
+ * done, locked again): its anchor (`reason_rule_change_id`, written by the save) survives
+ * every later transition, so a lesson that opened or turned current since
+ * keeps it; a lesson done now has no reason, whatever the anchor says.
  */
 export async function lessonStatusReasons(
   db: Handle,
@@ -466,18 +665,17 @@ export async function lessonStatusReasons(
     .from(learningNodeStatus)
     .innerJoin(
       learningRuleChanges,
-      sql`${learningRuleChanges.id}::text = ${learningNodeStatus.causeId}`,
+      eq(learningRuleChanges.id, learningNodeStatus.reasonRuleChangeId),
     )
     .where(
       and(
         eq(learningNodeStatus.personId, personId),
-        eq(learningNodeStatus.causeKind, "rule-change"),
         inArray(learningNodeStatus.itemId, [...lessonIds]),
       ),
     );
   for (const { itemId, change } of rows) {
     const status = evaluation.states.get(itemId)?.status;
-    if (!status) continue;
+    if (!status || status === "done") continue;
     reasons.set(itemId, {
       ruleChangeId: change.id,
       at: change.at.toISOString(),

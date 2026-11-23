@@ -112,6 +112,9 @@ export async function project(
           since: at,
           causeKind: rowCause.kind,
           causeId: rowCause.id,
+          // EARS-24 — done again ends a rule change's reason; any other
+          // transition keeps it.
+          ...(state.status === "done" ? { reasonRuleChangeId: null } : {}),
         },
       });
     if (state.status !== "done") continue;

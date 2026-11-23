@@ -89,6 +89,7 @@ import {
   governedCoursesUnder,
   finishRuleChange,
   recordRuleChange,
+  type LearningRecordedRuleChange,
 } from "./rule-change.js";
 
 /**
@@ -875,10 +876,10 @@ export class LearningAdminService {
     complete: LearningComplete = noComplete,
     change: LearningRuleChangeInput = DEFAULT_RULE_CHANGE,
   ): Promise<LearningCommandResult<LearningScopeRules>> {
-    const { result, ruleChangeId } = await this.deps.transaction(async (tx) => {
+    const { result, ruleChange } = await this.deps.transaction(async (tx) => {
       change.authorize?.(await this.authorityIn(tx, kind, scopeId, true));
       const values = await this.checkedValues(tx, kind, scopeId, rawValues);
-      const ruleChangeId = await this.recordChange(
+      const ruleChange = await this.recordChange(
         tx,
         kind,
         scopeId,
@@ -891,10 +892,12 @@ export class LearningAdminService {
       });
       return {
         result: await this.finishRules(tx, kind, scopeId, complete),
-        ruleChangeId,
+        ruleChange,
       };
     });
-    if (ruleChangeId) await finishRuleChange(this.deps, ruleChangeId);
+    // EARS-31 — the save is the truth once committed: the recompute runs
+    // after it, in the background, and never holds the editor.
+    if (ruleChange?.recompute) void finishRuleChange(this.deps, ruleChange.id);
     return result;
   }
 
@@ -1086,7 +1089,7 @@ export class LearningAdminService {
     scopeId: string,
     values: LearningSettingValues,
     change: LearningRuleChangeInput,
-  ): Promise<string | null> {
+  ): Promise<LearningRecordedRuleChange | null> {
     const governed = await governedCoursesUnder(tx, kind, scopeId);
     if (governed.length === 0) return null;
     const [current] = await tx
@@ -1120,7 +1123,7 @@ export class LearningAdminService {
     complete: LearningComplete = noComplete,
     change: LearningRuleChangeInput = DEFAULT_RULE_CHANGE,
   ): Promise<LearningCommandResult<LearningScopeRules>> {
-    const { result, ruleChangeId } = await this.deps.transaction(async (tx) => {
+    const { result, ruleChange } = await this.deps.transaction(async (tx) => {
       change.authorize?.(await this.authorityIn(tx, kind, scopeId, true));
       const [preset] = await tx
         .select()
@@ -1140,7 +1143,7 @@ export class LearningAdminService {
         (current?.values ?? {}) as LearningSettingValues,
         preset.values as LearningSettingValues,
       );
-      const ruleChangeId = await this.recordChange(
+      const ruleChange = await this.recordChange(
         tx,
         kind,
         scopeId,
@@ -1153,10 +1156,12 @@ export class LearningAdminService {
       });
       return {
         result: await this.finishRules(tx, kind, scopeId, complete),
-        ruleChangeId,
+        ruleChange,
       };
     });
-    if (ruleChangeId) await finishRuleChange(this.deps, ruleChangeId);
+    // EARS-31 — the save is the truth once committed: the recompute runs
+    // after it, in the background, and never holds the editor.
+    if (ruleChange?.recompute) void finishRuleChange(this.deps, ruleChange.id);
     return result;
   }
 

@@ -415,6 +415,12 @@ export const learningNodeStatus = pgTable(
     since: timestamp("since", { withTimezone: true }).notNull().defaultNow(),
     causeKind: text("cause_kind").notNull(),
     causeId: text("cause_id"),
+    // EARS-24 — the rule change that made this item stop being done: written
+    // by the save that records the change (not by its recompute), kept through
+    // every later transition, cleared when the item turns done again.
+    reasonRuleChangeId: uuid("reason_rule_change_id").references(
+      () => learningRuleChanges.id,
+    ),
   },
   (t) => [
     primaryKey({ columns: [t.personId, t.itemId] }),

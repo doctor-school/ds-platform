@@ -38,7 +38,11 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  *    line on the path; its summary names what changed beside the lock Alert;
  *  - one doctor fails the test at 0 % — «не сдан», also after a reload — then
  *    re-passes it at 100 %: the reason leaves the lesson in
- *    place and the path, the lesson counts again; another doctor still sees it.
+ *    place and the path, the lesson counts again; another doctor still sees it;
+ *  - the third doctor had passed lesson 2 at 50 % too, so the change reopens
+ *    two lessons: lesson 2, locked behind lesson 1, carries its reason in the
+ *    summary; once the doctor re-passes lesson 1, lesson 2 opens and keeps the
+ *    reason — on its path line and in the summary — until it is passed again.
  *
  * Canvas state `причина = правило изменилось` of `design-source/doctor-course.dc.html`
  * and `design-source/doctor-lesson.dc.html`. Every row is written by the
@@ -303,6 +307,18 @@ async function doctorPassesAtHalf(browser: Browser, n: number): Promise<Page> {
   return page;
 }
 
+const lessonTwoNode = (page: Page) => page.getByRole("button", { name: /^Урок 2, шаг 1\. Тест\. Итоговый тест\./ });
+
+/** From the path: open a node's step through its summary action and answer its test. */
+async function takeFromPath(page: Page, node: (page: Page) => ReturnType<Page["getByRole"]>, right: number, verdict: string) {
+  await page.goto(`${DOCTOR_URL}/courses/${SLUG}`);
+  await node(page).click();
+  await page.getByTestId("node-summary").getByRole("link", { name: /^(Начать|Продолжить|Повторить)$/ }).click();
+  await expect(page).toHaveURL(/\/courses\/[^/]+\/steps\//);
+  await takeTest(page, right);
+  await expect(page.getByText(verdict)).toBeVisible();
+}
+
 /** The reason Alert: «Условия урока изменились» bold, then the sentence. */
 async function expectReasonAlert(scope: ReturnType<Page["getByTestId"]> | Page, body = BODY) {
   const title = scope.getByText(TITLE, { exact: true }).and(scope.locator("b"));
@@ -319,6 +335,11 @@ test("024 EARS-24 — a rule change reopens a finished lesson and the doctor see
 
   const doctors: Page[] = [];
   for (let n = 1; n <= DOCTORS; n++) doctors.push(await doctorPassesAtHalf(browser, n));
+  // The third doctor passes lesson 2 at 50 % as well: the change will reopen two lessons.
+  const third = doctors[2]!;
+  await takeFromPath(third, lessonTwoNode, 1, "Тест сдан: 50 % при пороге 50 %");
+  await third.goto(`${DOCTOR_URL}/courses/${SLUG}`);
+  await expect(third.getByText(/^Пройдено 2 урока из 6/).first()).toBeVisible();
 
   // The editor raises the pass mark 50 → 80 and lets the new rules decide.
   await editor.goto(`/learning/rules/course/${courseId}`);
@@ -411,6 +432,28 @@ test("024 EARS-24 — a rule change reopens a finished lesson and the doctor see
   // Another doctor's reason is theirs: still shown.
   await second.reload();
   await expect(reasonLine(second)).toHaveCount(1);
+
+  // Two reopened lessons: lesson 2, locked behind lesson 1, carries its reason
+  // in the summary beside what opens it.
+  await third.setViewportSize(DESKTOP);
+  await third.goto(`${DOCTOR_URL}/courses/${SLUG}`);
+  await expect(lessonTwoNode(third)).toHaveAccessibleName(/Закрыт$/);
+  await lessonTwoNode(third).click();
+  await expectReasonAlert(third.getByTestId("node-summary"), LOCKED_BODY);
+  // Re-passing lesson 1 opens lesson 2, which keeps its reason until it is passed again.
+  await takeFromPath(third, testNode, 2, "Тест сдан: 100 % при пороге 80 %");
+  await third.goto(`${DOCTOR_URL}/courses/${SLUG}`);
+  await expect(testNode(third)).toHaveAccessibleName(/Пройден$/);
+  await expect(lessonTwoNode(third)).toHaveAccessibleName(/(Открыт|Вы здесь)$/);
+  await expect(reasonLine(third)).toHaveCount(1);
+  await lessonTwoNode(third).click();
+  await expectReasonAlert(third.getByTestId("node-summary"), LOCKED_BODY);
+  await axeClean(third);
+  await shoot(third, "doctor-path-rule-change-second-lesson-1280");
+  await takeFromPath(third, lessonTwoNode, 2, "Тест сдан: 100 % при пороге 80 %");
+  await third.goto(`${DOCTOR_URL}/courses/${SLUG}`);
+  await expect(third.getByText(TITLE)).toHaveCount(0);
+  await expect(third.getByText(/^Пройдено 2 урока из 6/).first()).toBeVisible();
 
   for (const page of doctors) await page.context().close();
   await admin.close();

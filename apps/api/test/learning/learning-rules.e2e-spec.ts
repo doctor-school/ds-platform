@@ -11,6 +11,7 @@ import {
   eventId,
   publish,
   type BuiltCourse,
+  type BuiltLesson,
   type Harness,
   type Problem,
   setRules,
@@ -64,7 +65,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     /** Watch, open, pass the exit test with `right` answers (all, or one of two). */
     async function finishLesson(
-      c: BuiltCourse,
+      c: BuiltLesson,
       d: { headers: Record<string, string> },
       right: "all" | "half" = "all",
     ) {
@@ -151,6 +152,94 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           [scopeId],
         )
       ).rows;
+
+    /** The change's `recomputed_at` once the after-commit recompute finished. */
+    async function recomputed(changeId: string): Promise<Date> {
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline) {
+        const row = await h.pool.query<{ recomputed_at: Date | null }>(
+          "SELECT recomputed_at FROM learning_rule_changes WHERE id = $1",
+          [changeId],
+        );
+        if (row.rows[0]?.recomputed_at) return row.rows[0].recomputed_at;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      throw new Error(`rule change ${changeId} never finished its recompute`);
+    }
+
+    /** Hold one doctor's projection lock on a course until `release` (a recompute waits on it). */
+    async function holdProjection(personId: string, courseId: string) {
+      const client = await h.pool.connect();
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+        `learning:${personId}:${courseId}`,
+      ]);
+      return async () => {
+        await client.query("COMMIT");
+        client.release();
+      };
+    }
+
+    /** A reply, or a failure when it takes longer than `ms` (a save held by its recompute). */
+    async function within<T>(ms: number, p: Promise<T>): Promise<T> {
+      let timer: NodeJS.Timeout | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`no reply within ${ms} ms`)),
+          ms,
+        );
+      });
+      try {
+        return await Promise.race([p, timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    const projectedRow = async (personId: string, itemId: string) =>
+      (
+        await h.pool.query<{
+          status: string;
+          cause_kind: string;
+          cause_id: string | null;
+        }>(
+          "SELECT status, cause_kind, cause_id FROM learning_node_status WHERE person_id = $1 AND item_id = $2",
+          [personId, itemId],
+        )
+      ).rows[0];
+
+    /** Pass a lesson's exit test again with every answer right. */
+    async function passAgain(
+      l: BuiltLesson,
+      d: { headers: Record<string, string> },
+    ) {
+      const attempt = await call<{
+        attemptId: string;
+        questions: { id: string }[];
+      }>(h, "POST", `/me/learning/tests/${l.testId}/attempts`, d.headers);
+      expect(attempt.status, JSON.stringify(attempt.body)).toBe(201);
+      const passed = await call<{ passed: boolean }>(
+        h,
+        "POST",
+        `/me/learning/attempts/${attempt.body.attemptId}/submit`,
+        d.headers,
+        { answers: answersFor(l, attempt.body) },
+      );
+      expect(passed.body.passed, JSON.stringify(passed.body)).toBe(true);
+    }
+
+    const pathLessons = async (
+      c: BuiltCourse,
+      headers: Record<string, string>,
+    ) =>
+      (
+        await call<PathRead>(
+          h,
+          "GET",
+          `/learning/courses/${c.courseSlug}/path`,
+          headers,
+        )
+      ).body.modules[0]!.lessons;
 
     /** A published course whose doctor finished the lesson at a 50 % pass mark. */
     async function finishedAtHalf() {
@@ -383,7 +472,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(change!.before).toMatchObject({ "test.threshold": 50 });
       expect(change!.after).toMatchObject({ "test.threshold": 80 });
       expect(change!.actor_sub).not.toBeNull();
-      expect(change!.recomputed_at).not.toBeNull();
+      // The recompute follows the save (EARS-31) and finishes.
+      await recomputed(change!.id);
       const kept = await h.pool.query<{
         item_ref: string;
         data: { ruleChangeId: string };
@@ -504,6 +594,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const change = (await changesOf(c.courseId)).at(-1)!;
       expect(change.earned_progress).toBe("require-again");
       expect(await factCount(d.personId)).toBe(facts);
+      await recomputed(change.id);
       const projected = await h.pool.query<{
         status: string;
         cause_kind: string;
@@ -631,6 +722,225 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).not.toBe("done");
     });
 
+    // ── EARS-24 — the reason stays until the doctor passes the lesson again ──
+
+    /** Two lessons, both finished at a 50 % pass mark, attempts not paused. */
+    async function twoFinishedAtHalf() {
+      const c = await buildCourse(h, { lessons: 2 });
+      expect(
+        (
+          await setRules(h, "course", c.courseId, {
+            "test.threshold": 50,
+            "test.pauseMin": 0,
+            "test.attempts": 10,
+          })
+        ).status,
+      ).toBe(200);
+      const d = await doctor(h);
+      for (const l of c.lessons) await finishLesson(l, d, "half");
+      expect(
+        (await pathLessons(c, d.headers)).map((l) => l.state.status),
+      ).toEqual(["done", "done"]);
+      return { c, d };
+    }
+
+    it("EARS-24: two reopened lessons — the locked one carries the reason, and re-passing the first keeps the second's reason when it opens", async () => {
+      const { c, d } = await twoFinishedAtHalf();
+      const saved = await setRules(
+        h,
+        "course",
+        c.courseId,
+        { "test.threshold": 80 },
+        { earnedProgress: "require-again" },
+      );
+      expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+      const change = (await changesOf(c.courseId)).at(-1)!;
+      await recomputed(change.id);
+
+      const [first, second] = await pathLessons(c, d.headers);
+      expect(first!.state.status).not.toBe("done");
+      expect(first!.statusReason?.ruleChangeId).toBe(change.id);
+      // The second lesson sits locked behind the first, and still says why it
+      // is no longer done.
+      expect(second!.state.status).toBe("locked");
+      expect(second!.statusReason).toMatchObject({
+        ruleChangeId: change.id,
+        changed: [{ key: "test.threshold", before: 50, after: 80 }],
+        needed: { status: "locked" },
+      });
+
+      // The doctor passes the first lesson again: its reason is gone, the
+      // second opens and keeps its reason until it is passed again too.
+      await passAgain(c.lessons[0]!, d);
+      const [firstDone, secondOpen] = await pathLessons(c, d.headers);
+      expect(firstDone!.state.status).toBe("done");
+      expect(firstDone!.statusReason).toBeUndefined();
+      expect(secondOpen!.state.status).not.toBe("locked");
+      expect(secondOpen!.state.status).not.toBe("done");
+      expect(secondOpen!.statusReason).toMatchObject({
+        ruleChangeId: change.id,
+        needed: { status: secondOpen!.state.status },
+      });
+      const secondRead = await call<LessonRead>(
+        h,
+        "GET",
+        `/learning/lessons/${c.lessons[1]!.lessonId}`,
+        d.headers,
+      );
+      expect(secondRead.body.lesson.statusReason?.ruleChangeId).toBe(change.id);
+
+      await passAgain(c.lessons[1]!, d);
+      const after = await pathLessons(c, d.headers);
+      expect(after.map((l) => l.state.status)).toEqual(["done", "done"]);
+      expect(after.every((l) => l.statusReason === undefined)).toBe(true);
+    });
+
+    // ── EARS-31 — the save returns after the commit; the recompute follows ──
+
+    it("EARS-31: the save returns after its commit while the recompute waits; live reads already show the new status and the reason", async () => {
+      const { c, d } = await finishedAtHalf();
+      const release = await holdProjection(d.personId, c.courseId);
+      let changeId = "";
+      try {
+        const saved = await within(
+          8_000,
+          setRules(
+            h,
+            "course",
+            c.courseId,
+            { "test.threshold": 80 },
+            { earnedProgress: "require-again" },
+          ),
+        );
+        expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+        const change = (await changesOf(c.courseId)).at(-1)!;
+        changeId = change.id;
+        // The recompute has not reached the doctor: the projection is stale…
+        expect(change.recomputed_at).toBeNull();
+        expect((await projectedRow(d.personId, c.lessonId))!.status).toBe(
+          "done",
+        );
+        // …and the doctor's reads are right all the same.
+        const read = await lessonRead(c, d.headers);
+        expect(read.body.lesson.state.status).not.toBe("done");
+        expect(read.body.lesson.statusReason?.ruleChangeId).toBe(change.id);
+        expect(
+          (await pathLesson(c, d.headers)).statusReason?.ruleChangeId,
+        ).toBe(change.id);
+      } finally {
+        await release();
+      }
+      await recomputed(changeId);
+      expect(await projectedRow(d.personId, c.lessonId)).toMatchObject({
+        cause_kind: "rule-change",
+        cause_id: changeId,
+      });
+      expect(
+        (await lessonRead(c, d.headers)).body.lesson.statusReason?.ruleChangeId,
+      ).toBe(changeId);
+    }, 30_000);
+
+    it("EARS-31: a change no doctor's status depends on is finished in the save itself, without walking the learners", async () => {
+      const { c, d } = await finishedAtHalf();
+      const current = await admin<Rules>(h, "GET", `/rules/course/${c.courseId}`);
+      const preview = await admin<Preview>(
+        h,
+        "POST",
+        `/rules/course/${c.courseId}/preview`,
+        { payload: { values: { ...current.body.values, "test.threshold": 40 } } },
+      );
+      expect(preview.body.affectedDoctors).toBe(0);
+      // A walk would wait on this doctor's projection lock.
+      const release = await holdProjection(d.personId, c.courseId);
+      try {
+        const saved = await within(
+          8_000,
+          setRules(
+            h,
+            "course",
+            c.courseId,
+            { "test.threshold": 40 },
+            { earnedProgress: "require-again" },
+          ),
+        );
+        expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+        const change = (await changesOf(c.courseId)).at(-1)!;
+        expect(change.after).toMatchObject({ "test.threshold": 40 });
+        expect(change.recomputed_at).not.toBeNull();
+      } finally {
+        await release();
+      }
+      expect((await lessonRead(c, d.headers)).body.lesson.state.status).toBe(
+        "done",
+      );
+    }, 30_000);
+
+    // ── EARS-31 — a later «require again» re-judges an earlier kept credit ──
+
+    it("EARS-31: «keep», then «require again» on the same lesson — the kept credit no longer counts; the preview counts the doctor; the reason shows; no fact changes", async () => {
+      const { c, d } = await finishedAtHalf();
+      const kept = await setRules(h, "course", c.courseId, {
+        "test.threshold": 80,
+      });
+      expect(kept.status, JSON.stringify(kept.body)).toBe(200);
+      expect((await lessonRead(c, d.headers)).body.lesson.state.status).toBe(
+        "done",
+      );
+      const facts = await factCount(d.personId);
+      const current = await admin<Rules>(h, "GET", `/rules/course/${c.courseId}`);
+      const preview = await admin<Preview>(
+        h,
+        "POST",
+        `/rules/course/${c.courseId}/preview`,
+        { payload: { values: { ...current.body.values, "test.threshold": 90 } } },
+      );
+      expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+      expect(preview.body).toMatchObject({ affectedDoctors: 1, toNotDone: 1 });
+
+      const again = await setRules(
+        h,
+        "course",
+        c.courseId,
+        { "test.threshold": 90 },
+        { earnedProgress: "require-again" },
+      );
+      expect(again.status, JSON.stringify(again.body)).toBe(200);
+      const change = (await changesOf(c.courseId)).at(-1)!;
+      expect(change.earned_progress).toBe("require-again");
+      const read = await lessonRead(c, d.headers);
+      expect(read.body.lesson.state.status).not.toBe("done");
+      expect(read.body.lesson.statusReason).toMatchObject({
+        ruleChangeId: change.id,
+        changed: [{ key: "test.threshold", before: 80, after: 90 }],
+      });
+      // The kept credit is still there, unchanged — it just no longer counts.
+      expect(await factCount(d.personId)).toBe(facts);
+      const keptFacts = await h.pool.query(
+        "SELECT 1 FROM learning_facts WHERE person_id = $1 AND kind = 'completion-kept' AND item_ref = $2",
+        [d.personId, c.lessonId],
+      );
+      expect(keptFacts.rows.length).toBeGreaterThan(0);
+      await recomputed(change.id);
+      expect((await projectedRow(d.personId, c.lessonId))!.status).not.toBe(
+        "done",
+      );
+    });
+
+    it("EARS-31: a later «keep» leaves an earlier kept credit counting", async () => {
+      const { c, d } = await finishedAtHalf();
+      expect(
+        (await setRules(h, "course", c.courseId, { "test.threshold": 80 }))
+          .status,
+      ).toBe(200);
+      expect(
+        (await setRules(h, "course", c.courseId, { "test.threshold": 90 }))
+          .status,
+      ).toBe(200);
+      const read = await lessonRead(c, d.headers);
+      expect(read.body.lesson.state.status).toBe("done");
+      expect(read.body.lesson.statusReason).toBeUndefined();
+    });
+
     // ── EARS-30, EARS-31 — a once-published course stays governed ──────────
 
     const courseState = async (
@@ -695,7 +1005,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(change).toMatchObject({ earned_progress: "keep" });
       expect(change.before).toMatchObject({ "test.threshold": 50 });
       expect(change.after).toMatchObject({ "test.threshold": 80 });
-      expect(change.recomputed_at).not.toBeNull();
+      await recomputed(change.id);
       const kept = await h.pool.query<{ item_ref: string }>(
         "SELECT item_ref FROM learning_facts WHERE person_id = $1 AND kind = 'completion-kept' AND data ->> 'ruleChangeId' = $2",
         [d.personId, change.id],

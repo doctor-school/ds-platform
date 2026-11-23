@@ -5,8 +5,11 @@ import {
   changedSettings,
   diffEvaluations,
   finishRuleChange,
+  matchesProjection,
+  movedByChange,
   resumeRuleChanges,
 } from "./rule-change.js";
+import { countingFacts, scopeCovers, type LoadedCourse } from "./repository.js";
 import type { LearningServerDeps } from "./deps.js";
 
 // 024 EARS-24, EARS-31 (#4012) — the pure halves of a rule change: which
@@ -171,5 +174,135 @@ describe("024 rule change — the recompute after a committed save", () => {
       finishRuleChange({} as LearningServerDeps, "c2", recompute),
     ).resolves.toBe(true);
     expect(recompute).toHaveBeenCalledWith({}, "c2");
+  });
+});
+
+// ── EARS-31 — a later «require again» re-judges an earlier kept credit ──────
+
+const tree = {
+  row: { id: "course", schoolId: "school" },
+  modules: [{ id: "module" }, { id: "module-2" }],
+  lessons: [
+    { id: "lesson", moduleId: "module" },
+    { id: "lesson-2", moduleId: "module-2" },
+  ],
+  steps: [
+    { id: "step", lessonId: "lesson" },
+    { id: "step-2", lessonId: "lesson-2" },
+  ],
+} as unknown as LoadedCourse;
+
+const kept = (itemId: string, at: string) => ({
+  fact: { kind: "completion-kept" as const, itemId },
+  occurredAt: new Date(at),
+});
+
+describe("024 rule change — which kept credits count", () => {
+  it("EARS-31: a kept credit stops counting once a LATER «require again» change covers its item", () => {
+    const records = [kept("lesson", "2026-11-01T00:00:00Z")];
+    const later = [
+      {
+        kind: "course" as const,
+        scopeId: "course",
+        at: new Date("2026-11-02T00:00:00Z"),
+      },
+    ];
+    expect(countingFacts(records, tree, later)).toEqual([]);
+  });
+
+  it("EARS-31: an earlier «require again» change, or one on another branch of the tree, leaves the credit counting", () => {
+    const records = [kept("lesson", "2026-11-02T00:00:00Z")];
+    expect(
+      countingFacts(records, tree, [
+        {
+          kind: "course",
+          scopeId: "course",
+          at: new Date("2026-11-01T00:00:00Z"),
+        },
+        {
+          kind: "lesson",
+          scopeId: "lesson-2",
+          at: new Date("2026-11-03T00:00:00Z"),
+        },
+        {
+          kind: "school",
+          scopeId: "other-school",
+          at: new Date("2026-11-03T00:00:00Z"),
+        },
+      ]),
+    ).toEqual([records[0]!.fact]);
+  });
+
+  it("EARS-31: a change covers an item it holds and an item that holds it; other facts always count", () => {
+    expect(
+      scopeCovers(tree, { kind: "platform", scopeId: "platform" }, "step"),
+    ).toBe(true);
+    expect(
+      scopeCovers(tree, { kind: "school", scopeId: "school" }, "lesson"),
+    ).toBe(true);
+    expect(
+      scopeCovers(tree, { kind: "module", scopeId: "module" }, "step"),
+    ).toBe(true);
+    expect(scopeCovers(tree, { kind: "step", scopeId: "step" }, "course")).toBe(
+      true,
+    );
+    expect(
+      scopeCovers(tree, { kind: "step", scopeId: "step-2" }, "lesson"),
+    ).toBe(false);
+    const opened = {
+      fact: { kind: "opened" as const, stepId: "step" },
+      occurredAt: new Date(0),
+    };
+    expect(
+      countingFacts([opened], tree, [
+        { kind: "platform", scopeId: "platform", at: new Date() },
+      ]),
+    ).toEqual([opened.fact]);
+  });
+});
+
+describe("024 rule change — the recompute writes only what moved", () => {
+  it("EARS-31: a doctor whose projection already holds every evaluated status takes no write", () => {
+    const live = evaluation({
+      lesson: { status: "current" },
+      step: { status: "open" },
+    });
+    expect(
+      matchesProjection(
+        live,
+        new Map([
+          ["lesson", "current"],
+          ["step", "open"],
+        ]),
+      ),
+    ).toBe(true);
+    expect(
+      matchesProjection(
+        live,
+        new Map([
+          ["lesson", "done"],
+          ["step", "open"],
+        ]),
+      ),
+    ).toBe(false);
+    expect(matchesProjection(live, undefined)).toBe(false);
+  });
+});
+
+describe("024 rule change — which items carry the reason", () => {
+  it("EARS-24: an item the change moves off done or locks again carries it; an item turned done or left as it was does not", () => {
+    const before = evaluation({
+      reopened: { status: "done" },
+      relocked: { status: "open" },
+      gained: { status: "open" },
+      same: { status: "locked", reason: { kind: "previous" } },
+    });
+    const after = evaluation({
+      reopened: { status: "current" },
+      relocked: { status: "locked", reason: { kind: "previous" } },
+      gained: { status: "done" },
+      same: { status: "locked", reason: { kind: "previous" } },
+    });
+    expect(movedByChange(before, after)).toEqual(["reopened", "relocked"]);
   });
 });

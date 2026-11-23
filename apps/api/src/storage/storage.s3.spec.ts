@@ -169,11 +169,18 @@ describe("002 EARS-3 object-storage calls are bounded; only not-found reads as a
   let server: Server | undefined;
   const sockets = new Set<Socket>();
 
-  /** A real TCP server that accepts every connection and never answers. */
-  async function stalledEndpoint(): Promise<string> {
+  /**
+   * A real TCP server that accepts every connection; `onConnect` decides what
+   * (if anything) it writes before going silent.
+   */
+  async function endpointWith(
+    onConnect: (socket: Socket) => void = () => {},
+  ): Promise<string> {
     server = createServer((socket) => {
       sockets.add(socket);
       socket.on("close", () => sockets.delete(socket));
+      socket.on("error", () => {});
+      onConnect(socket);
     });
     await new Promise<void>((resolve) =>
       server?.listen(0, "127.0.0.1", resolve),
@@ -197,21 +204,55 @@ describe("002 EARS-3 object-storage calls are bounded; only not-found reads as a
     server = undefined;
   });
 
-  it("EARS-3: a PUT against a store that accepts and never answers rejects with ObjectStorageError within the bound", async () => {
-    const endpoint = await stalledEndpoint();
+  const operations: [string, (s3: S3ObjectStorage) => Promise<unknown>][] = [
+    [
+      "put",
+      (s3) =>
+        s3.put({ key: "k", body: Buffer.from("x"), contentType: "image/webp" }),
+    ],
+    ["exists", (s3) => s3.exists("k")],
+    ["getBytes", (s3) => s3.getBytes("k")],
+    ["delete", (s3) => s3.delete("k")],
+  ];
+
+  it.each(operations)(
+    "EARS-3: %s against a store that accepts and never answers rejects with ObjectStorageError within the bound",
+    async (_name, call) => {
+      const endpoint = await endpointWith();
+      const s3 = new S3ObjectStorage({ ...config, endpoint }, testTimeouts);
+      const started = Date.now();
+      const err = await call(s3).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ObjectStorageError);
+      expect(Date.now() - started).toBeLessThan(3_000);
+    },
+    6_000,
+  );
+
+  it("EARS-3: getBytes() whose body stalls after the headers rejects with ObjectStorageError within the bound", async () => {
+    const endpoint = await endpointWith((socket) => {
+      socket.once("data", () => {
+        socket.write(
+          [
+            "HTTP/1.1 200 OK",
+            "Content-Type: application/octet-stream",
+            "Content-Length: 1000",
+            "",
+            "partial",
+          ].join("\r\n"),
+        );
+      });
+    });
     const s3 = new S3ObjectStorage({ ...config, endpoint }, testTimeouts);
     const started = Date.now();
-    const err = await s3
-      .put({ key: "k", body: Buffer.from("x"), contentType: "image/webp" })
-      .catch((e: unknown) => e);
+    const err = await s3.getBytes("k").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ObjectStorageError);
-    expect(Date.now() - started).toBeLessThan(3_000);
-  }, 6_000);
-
-  it("EARS-3: a HEAD against a stalled store rejects with ObjectStorageError instead of reading as absent", async () => {
-    const endpoint = await stalledEndpoint();
-    const s3 = new S3ObjectStorage({ ...config, endpoint }, testTimeouts);
-    await expect(s3.exists("k")).rejects.toBeInstanceOf(ObjectStorageError);
+    // It is the idle bound that fired on the stalled body — not an immediate
+    // parse failure of the partial response.
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeGreaterThanOrEqual(
+      testTimeouts.socketIdleTimeoutMs - 50,
+    );
+    expect(elapsed).toBeLessThan(3_000);
   }, 6_000);
 
   it("EARS-3: the production bounds keep the worst-case stalled call well under a minute", () => {

@@ -106,9 +106,18 @@ export interface ObjectStorage {
    * Signing is async (SigV4 presign), hence the Promise.
    */
   urlFor(key: string): Promise<string>;
-  /** Whether an object exists — used by the e2e to assert the PDF landed. */
+  /**
+   * Whether an object exists. `false` is an ACKNOWLEDGED absence — only a
+   * not-found answer (HTTP 404 / `NotFound` / `NoSuchKey`); every other failure
+   * (timeout, 5xx, 403, network) rejects with {@link ObjectStorageError}, so a
+   * stalled store never reads as "absent" (#4211).
+   */
   exists(key: string): Promise<boolean>;
-  /** Fetch the stored bytes (or null when absent). */
+  /**
+   * Fetch the stored bytes. `null` ONLY on a not-found answer; every other
+   * failure — including a body that stalls after the headers — rejects with
+   * {@link ObjectStorageError} (#4211).
+   */
   getBytes(key: string): Promise<Buffer | null>;
   /**
    * Delete a stored object (GC of a superseded program PDF, #627). Rejects on

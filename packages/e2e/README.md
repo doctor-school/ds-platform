@@ -757,7 +757,7 @@ invalid count fails closed. Every remote command is appended to
 Run on a lead-owned, converged PR slot:
 
 ```sh
-pnpm e2e:stage pr-<N> --project academy --grep "Registration is refused without consent"
+pnpm e2e:stage pr-<N> --local --project academy --grep "Registration is refused without consent"
 ```
 
 ### Exact minimum password (003 EARS-36)
@@ -778,7 +778,7 @@ The scenario reuses `owned-registration.ts`, `secure-session.ts` and the auth
 fixtures, keeps traces off, and revokes only its own session during cleanup.
 
 ```sh
-pnpm e2e:stage pr-<N> --project academy --grep "A password of eight characters with no character classes is accepted"
+pnpm e2e:stage pr-<N> --local --project academy --grep "A password of eight characters with no character classes is accepted"
 ```
 
 ### Short password refusal (003 EARS-36)
@@ -798,7 +798,7 @@ case together with the existing exact-eight acceptance regression on the
 lead-owned converged slot:
 
 ```sh
-pnpm e2e:stage pr-<N> --project academy --grep "A password shorter than the minimum length is rejected by the single rule|A password of eight characters with no character classes is accepted"
+pnpm e2e:stage pr-<N> --local --project academy --grep "A password shorter than the minimum length is rejected by the single rule|A password of eight characters with no character classes is accepted"
 ```
 
 ### Initial password hint (003 EARS-37)
@@ -849,7 +849,7 @@ tests remain; no exactly matching app-local browser test was removed. The
 separate direct code-link login journey remains unchanged.
 
 ```sh
-pnpm e2e:stage pr-<N> --project academy --grep "The typed address survives a switch between the sign-in methods"
+pnpm e2e:stage pr-<N> --local --project academy --grep "The typed address survives a switch between the sign-in methods"
 ```
 
 ### Password reveal (003 EARS-38)
@@ -910,7 +910,7 @@ existing auth-flow cold-state and IdP password-invalidation unit tests remain.
 The test revokes its owned session and closes both contexts on completion.
 
 ```sh
-pnpm e2e:stage pr-<N> --project academy --grep "A cold verification step still signs in by the code"
+pnpm e2e:stage pr-<N> --local --project academy --grep "A cold verification step still signs in by the code"
 ```
 
 ### Address-less verification (003 EARS-40)

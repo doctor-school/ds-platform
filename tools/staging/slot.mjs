@@ -34,7 +34,7 @@
 
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
@@ -3629,8 +3629,12 @@ async function main() {
   );
 }
 
+// Under `node -e` / `--input-type=module`, `process.argv[1]` is the first argument
+// of the snippet, not a script, and may name a file not yet written: an importer must
+// never throw here (slot-verdict, #4202). An entry script always exists.
 const invokedDirectly =
   process.argv[1] !== undefined &&
+  existsSync(process.argv[1]) &&
   import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
 
 if (invokedDirectly) {

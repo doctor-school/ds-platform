@@ -9,8 +9,8 @@ import { parse } from "yaml";
 /**
  * `.github/workflows/stage.yml` (#2985) — the static promises a public repository's
  * Actions run must keep (release-pipeline-off-workstation spec §4): the stage report
- * never becomes an Actions artifact, and the `stage` environment's secrets reach only
- * the two jobs that need them.
+ * never becomes an Actions artifact, the `stage` environment's secrets reach only the
+ * two `main` jobs that need them, and the PR-slot run (#4202) takes `stage-pr`'s.
  */
 const WORKFLOWS = fileURLToPath(
   new URL("../../.github/workflows/", import.meta.url),
@@ -35,12 +35,16 @@ describe("stage.yml", () => {
     assert.equal(read("stage.yml").includes("upload-artifact"), false);
   });
 
-  it("uses environment `stage` only in its converge and suite jobs", () => {
+  it("uses environment `stage` only in its converge and suite jobs; the PR-slot run uses `stage-pr`", () => {
     const withStage = Object.entries(stage.jobs)
       .filter(([, job]) => environmentOf(job) === "stage")
       .map(([name]) => name)
       .sort();
     assert.deepEqual(withStage, ["converge", "suite"]);
+    const withStagePr = Object.entries(stage.jobs)
+      .filter(([, job]) => environmentOf(job) === "stage-pr")
+      .map(([name]) => name);
+    assert.deepEqual(withStagePr, ["slot-suite"]);
   });
 
   it("is the only workflow that names environment `stage`", () => {
@@ -172,6 +176,130 @@ describe("stage.yml", () => {
 it("3752: the run title ends with the SHA under test — retention keeps a queued or running run's images", () => {
   assert.equal(
     stage["run-name"],
-    "Stage main ${{ github.event.workflow_run.head_sha }}",
+    "${{ github.event_name == 'workflow_dispatch' && format('Stage {0} {1}', inputs.slot, inputs.sha) || format('Stage main {0}', github.event.workflow_run.head_sha) }}",
   );
+});
+
+describe("stage.yml — the PR-slot dispatch (#4202)", () => {
+  const gate = stage.jobs["slot-gate"];
+  const slotSuite = stage.jobs["slot-suite"];
+  const slotVerdict = stage.jobs["slot-verdict"];
+  const slotJobs = [gate, slotSuite, slotVerdict];
+  const step = (job, pred) => job.steps.find(pred);
+  const checkoutOf = (job) =>
+    step(job, (s) => String(s.uses ?? "").startsWith("actions/checkout"));
+  const secretsOf = (job) =>
+    [...JSON.stringify(job).matchAll(/secrets\.([A-Z0-9_]+)/g)].map((m) => m[1]);
+
+  it("takes slot + sha and the e2e-stage filters as inputs", () => {
+    const inputs = stage.on.workflow_dispatch.inputs;
+    assert.deepEqual(Object.keys(inputs), ["slot", "sha", "project", "grep", "no-axe", "no-live"]);
+    assert.equal(inputs.slot.required, true);
+    assert.equal(inputs.sha.required, true);
+    assert.equal(inputs["no-axe"].type, "boolean");
+    assert.equal(inputs["no-live"].type, "boolean");
+  });
+
+  it("leaves the main path to workflow_run: its jobs never run on a dispatch, and a dispatch queues per slot", () => {
+    assert.match(stage.jobs.converge.if, /workflow_run\.event == 'push'/);
+    assert.equal(gate.if, "github.event_name == 'workflow_dispatch'");
+    assert.equal(slotSuite.needs, "slot-gate");
+    // No status function: the default success() holds, so slot-suite runs only when
+    // the gate succeeded — and never under main's ref.
+    assert.equal(slotSuite.if, "github.ref != 'refs/heads/main'");
+    assert.deepEqual(slotVerdict.needs, ["slot-gate", "slot-suite"]);
+    assert.equal(slotVerdict.if, "always() && github.event_name == 'workflow_dispatch'");
+    assert.ok(
+      stage.concurrency.group.startsWith(
+        "${{ github.event_name == 'workflow_dispatch' && format('stage-slot-{0}', inputs.slot) ||",
+      ),
+    );
+  });
+
+  it("checks slot, ref and PR head with no environment and no secret, refusing main's ref and a ref that is not the PR branch", () => {
+    assert.equal(checkoutOf(gate).with.ref, undefined, "the gate checks out the workflow's own ref");
+    assert.equal(environmentOf(gate), undefined);
+    assert.deepEqual(secretsOf(gate), []);
+    assert.deepEqual(gate.permissions, { contents: "read", "pull-requests": "read" });
+    const run = step(gate, (s) => s.id === "gate").run;
+    assert.match(run, /gh api "repos\/\$GITHUB_REPOSITORY\/pulls\/\$\{SLOT#pr-\}"/);
+    assert.match(run, /prSlotGate\(\{[^}]*ref: e\.GITHUB_REF[^}]*\}\)/);
+    assert.match(run, /process\.exit\(1\)/);
+  });
+
+  it("never runs a PR-slot job with the box's ssh key", () => {
+    for (const job of slotJobs) assert.doesNotMatch(JSON.stringify(job), /STAGE_SSH_KEY|STAGE_SSH_KNOWN_HOSTS/);
+  });
+
+  it("writes no Actions cache from the PR's code", () => {
+    for (const s of slotSuite.steps) {
+      const uses = String(s.uses ?? "");
+      assert.equal(s.with?.cache, undefined, `${uses || s.name}: no setup-* cache (it saves post-job)`);
+      assert.ok(!/^actions\/cache(@|\/save@)/.test(uses), `${uses}: restore-only, never a cache save`);
+      assert.ok(!uses.startsWith("docker/"), `${uses}: no buildx in this job`);
+    }
+    assert.doesNotMatch(JSON.stringify(slotSuite), /type=gha|ACTIONS_CACHE|ACTIONS_RUNTIME_TOKEN/);
+  });
+
+  it("asserts the slot serves the gated head and leaves the box-observing tests out by name", () => {
+    const run = step(slotSuite, (s) => s.id === "suite").run;
+    assert.match(run, /--slot-sha "\$SHA"/);
+    assert.match(run, /--no-box-observe/);
+    assert.equal(slotSuite.env.SHA, "${{ inputs.sha }}");
+  });
+
+  it("runs the PR's code with the suite's secrets only: no ssh key, no statuses, no box upload", () => {
+    assert.equal(checkoutOf(slotSuite).with.ref, "${{ inputs.sha }}");
+    assert.deepEqual(
+      [...new Set(secretsOf(slotSuite))].sort(),
+      [
+        "DS_GOLDEN_PASSWORD_ADMIN",
+        "DS_GOLDEN_PASSWORD_DOCTOR_MFA",
+        "DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED",
+        "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+        "DS_STAGE_AGENT_ADMIN_PASSWORD",
+        "DS_STAGE_AGENT_ADMIN_TOTP_SECRET",
+        "DS_STAGE_AGENT_COMMITTEE_PASSWORD",
+        "DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET",
+        "E2E_CAPTCHA_TEST_TOKEN",
+        "STAGE_BASIC_AUTH_PASS",
+      ],
+    );
+    const text = JSON.stringify(slotSuite);
+    assert.doesNotMatch(text, /STAGE_SSH|ssh -i|upload-report|E2E_STAGE_OBSERVE/);
+    for (const job of slotJobs) {
+      assert.equal(job.permissions.statuses, undefined);
+      for (const s of job.steps) assert.doesNotMatch(String(s.run ?? ""), /statuses/);
+    }
+    const suite = step(slotSuite, (s) => s.id === "suite");
+    assert.match(
+      suite.run,
+      /node tools\/staging\/e2e-stage\.mjs "\$SLOT" --local --report-dir "\$REPORT_DIR" \\\n\s+--verdict-file "\$RUNNER_TEMP\/verdict\.txt" --slot-sha "\$SHA" --no-box-observe "\$\{filters\[@\]\}"/,
+    );
+    assert.doesNotMatch(suite.run, /--expect-sha/);
+    assert.equal(slotSuite.env.E2E_PUBLIC_LOG, "1");
+  });
+
+  it("interpolates no input into a shell: every input reaches `run` through env", () => {
+    for (const job of slotJobs) {
+      for (const s of job.steps) {
+        assert.doesNotMatch(String(s.run ?? ""), /\$\{\{/, `${s.name ?? s.uses}`);
+      }
+    }
+  });
+
+  it("renders and posts the verdict with GITHUB_TOKEN only, PASS only from the job result", () => {
+    assert.equal(checkoutOf(slotVerdict).with.ref, undefined);
+    assert.equal(environmentOf(slotVerdict), undefined);
+    assert.deepEqual(secretsOf(slotVerdict), []);
+    assert.deepEqual(slotVerdict.permissions, { contents: "read", "pull-requests": "write" });
+    const post = step(slotVerdict, (s) => s.name === "Comment the verdict on the PR");
+    assert.equal(post.env.SUITE_RESULT, "${{ needs.slot-suite.result }}");
+    assert.match(post.run, /passed: !e\.GATE_REASON && e\.SUITE_RESULT === "success"/);
+    assert.match(post.run, /issues\/\$\{SLOT#pr-\}\/comments/);
+    // The stop reason names the branch policy or a stale branch from the dispatched ref.
+    assert.equal(post.env.BRANCH, "${{ github.ref_name }}");
+    assert.match(post.run, /suiteStoppedReason\(\{ suiteResult: e\.SUITE_RESULT, branch: e\.BRANCH \}\)/);
+    assert.equal(slotSuite.outputs.tally, "${{ steps.summary.outputs.tally }}");
+  });
 });

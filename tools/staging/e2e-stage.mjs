@@ -3,9 +3,13 @@
  * `pnpm e2e:stage <slot>` — the REGRESSION RUN over a converged staging slot.
  *
  * Staging/previews/regression-contour tech spec, C4 and §8 step 7: the C6 suite and
- * the a11y suites are driven from the OPERATOR's machine against the slot's PUBLIC
- * hostnames — the same edge a reviewer uses, basic auth included. A preview verdict is
- * pasted into the PR body by hand. `--expect-sha` is the release check: for a `main`
+ * the a11y suites are driven against the slot's PUBLIC hostnames — the same edge a
+ * reviewer uses, basic auth included. For a PR slot the run executes in GitHub
+ * Actions, never on the operator's machine (#4202): `pnpm e2e:stage pr-<N>`
+ * dispatches `.github/workflows/stage.yml` on PR N's own head branch for its head
+ * SHA (`dispatchStageRun`), waits for it, and prints the compact verdict the run posts
+ * on PR N. `--local` keeps the workstation run, for debugging a single spec — and it
+ * is what the Actions job itself runs. `--expect-sha` is the release check: for a `main`
  * push the Actions `stage.yml` suite job runs it and posts the `stage-suite` commit
  * status the release pre-flight reads (#2985, #3198); `pnpm deploy:prod` runs it itself
  * only for a `--ref` hotfix target (C7, tools/deploy/stage-main-check.mjs).
@@ -31,7 +35,7 @@
  * the release-check exclusion path stays tested while no committed leg is excluded.
  */
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -59,6 +63,7 @@ import {
   STAGE_AGENT_COMMITTEE,
 } from "./idp.mjs";
 import { GOLDEN_LIVE_ENV, LIVE_TIERS } from "./live-tiers.mjs";
+import { boxObservingGrep, boxObservingTests } from "./box-observing.mjs";
 
 const STAGE_STAFF_SECRET_NAMES = [STAGE_AGENT_ADMIN, STAGE_AGENT_COMMITTEE].flatMap(
   ({ passwordEnvVar, totpEnvVar }) => [passwordEnvVar, totpEnvVar],
@@ -109,7 +114,9 @@ export function parseE2eArgs(argv) {
   if (slot === undefined || slot.startsWith("-")) {
     throw new SlotError(
       "usage: pnpm e2e:stage <slot> [--project academy|doctor|walks|login|sign-in-host] [--grep <re>] " +
-        "[--no-axe] [--no-live] [--report-dir <path>] [--expect-sha <sha>] — the slot must be named",
+        "[--no-axe] [--no-live] [--local] [--report-dir <path>] [--verdict-file <path>] [--expect-sha <sha>] " +
+        "[--slot-sha <sha>] [--no-box-observe] " +
+        "— the slot must be named",
     );
   }
   assertSlotName(slot);
@@ -121,6 +128,10 @@ export function parseE2eArgs(argv) {
     reportDir: undefined,
     expectSha: undefined,
     live: true,
+    local: false,
+    verdictFile: undefined,
+    slotSha: undefined,
+    boxObserve: true,
   };
   const takeValue = (flag) => {
     const value = rest.shift();
@@ -151,6 +162,25 @@ export function parseE2eArgs(argv) {
       case "--report-dir":
         options.reportDir = takeValue(flag);
         break;
+      case "--local":
+        options.local = true;
+        break;
+      case "--verdict-file":
+        options.verdictFile = takeValue(flag);
+        break;
+      case "--no-box-observe":
+        options.boxObserve = false;
+        break;
+      case "--slot-sha": {
+        const sha = takeValue(flag);
+        if (!FULL_SHA_RE.test(sha)) {
+          throw new SlotError(
+            "unusable --slot-sha — expected a full 40-character lowercase hex SHA",
+          );
+        }
+        options.slotSha = sha;
+        break;
+      }
       case "--expect-sha": {
         const sha = takeValue(flag);
         if (!FULL_SHA_RE.test(sha)) {
@@ -166,7 +196,44 @@ export function parseE2eArgs(argv) {
     }
   }
   if (options.expectSha !== undefined) assertReleaseCheckShape(options);
+  // The PR-slot Actions run's own flags (#4202): they describe a run made HERE, so
+  // they need `--local` — a dispatched run sets them itself.
+  const runHere = [
+    options.slotSha !== undefined && "--slot-sha",
+    !options.boxObserve && "--no-box-observe",
+  ].filter(Boolean);
+  if (runHere.length > 0 && !options.local) {
+    throw new SlotError(
+      `${runHere.join(", ")} describe${runHere.length === 1 ? "s" : ""} a run made here — add --local (a dispatched PR-slot run sets ${runHere.length === 1 ? "it" : "them"} itself)`,
+    );
+  }
+  if (dispatchesToActions(options)) {
+    // A dispatched run's report goes to the stage box and its verdict to PR N; a
+    // workstation path names nothing the Actions runner could write.
+    const local = [
+      options.reportDir !== undefined && "--report-dir",
+      options.verdictFile !== undefined && "--verdict-file",
+    ].filter(Boolean);
+    if (local.length > 0) {
+      throw new SlotError(
+        `${local.join(", ")} name${local.length === 1 ? "s" : ""} a workstation path — a PR-slot run executes in Actions; add --local to run it here`,
+      );
+    }
+  }
   return options;
+}
+
+/**
+ * Whether this invocation dispatches the Actions run instead of running the suite
+ * here (#4202): a PR slot, unless `--local`. The `main` slot keeps its own paths —
+ * the release check (`--expect-sha`) and the `main` run of `stage.yml`.
+ */
+export function dispatchesToActions(options) {
+  return (
+    options.slot !== "main" &&
+    !options.local &&
+    options.expectSha === undefined
+  );
 }
 
 /**
@@ -187,6 +254,7 @@ function assertReleaseCheckShape(options) {
     options.grep !== undefined && "--grep",
     options.axe === false && "--no-axe",
     options.live === false && "--no-live",
+    options.local && "--local",
   ].filter(Boolean);
   if (narrowing.length > 0) {
     throw new SlotError(
@@ -693,6 +761,7 @@ export function renderVerdictBlock({
   axeNote,
   reportDir,
   preflightReason,
+  notRun = [],
 }) {
   const lines = [
     "e2e:stage verdict",
@@ -719,6 +788,13 @@ export function renderVerdictBlock({
   if (liveLines.length > 0) {
     lines.push(row("live", liveLines[0]));
     for (const extra of liveLines.slice(1)) lines.push(indent(extra));
+  }
+  // The box-observing tests a PR-slot Actions run leaves out (#4202), by name.
+  if (notRun.length > 0) {
+    lines.push(
+      row("not run", `${notRun.length} box-observing (no box access here; run them with --local)`),
+    );
+    for (const t of notRun) lines.push(indent(`- ${t.title}`));
   }
   lines.push(
     row(
@@ -781,6 +857,7 @@ export const realEffects = {
     return keyJourneyTests(manifest);
   },
   removeReport: (file) => rmSync(file, { force: true }),
+  boxObservingTests: () => boxObservingTests(),
   readBoxEnv: () => readBoxEnvFile(STAGE_ENV_FILE),
   fetchHealth: async (url, headers) => {
     const controller = new AbortController();
@@ -842,14 +919,474 @@ export const realEffects = {
   now: () => new Date(),
 };
 
+// --- the PR-slot run in Actions (#4202) ---------------------------------------
+
+/** The workflow a PR-slot run is dispatched to, and the ref its file is read from. */
+export const STAGE_WORKFLOW = "stage.yml";
+/**
+ * The ref a PR-slot run never runs under: a `main`-ref run holds `main`'s Actions
+ * cache scope, which `main`'s privileged workflows restore, and this run executes PR
+ * code. It is dispatched on the PR's own head branch instead — that branch's cache
+ * scope, which `main` never reads — with the `stage-pr` environment's secrets, never
+ * `stage`'s (#4202).
+ */
+export const MAIN_REF = "refs/heads/main";
+/** The PR comment the run posts carries this marker, so the CLI finds its own. */
+export const runMarker = (runId) => `<!-- e2e-stage-run:${runId} -->`;
+/** The run title (`run-name` of stage.yml) — it ends with the SHA, as retention reads. */
+export const slotRunTitle = (slot, sha) => `Stage ${slot} ${sha}`;
+
+const FAILING_TITLES_MAX = 20;
+const DISPATCH_POLL_MS = 20_000;
+const RUN_APPEAR_POLLS = 12;
+/** Queue + install + the suite job's 90-min limit, with margin. */
+export const RUN_WAIT_MS = 150 * 60_000;
+
+/**
+ * Counts and failing titles out of Playwright's JSON report, for the PR comment.
+ * Unlike `summarizeReport` (whose verdict counts a flaky test as a failure), the
+ * comment names flaky apart, so a reader sees which red needed a retry.
+ */
+export function reportTally(report) {
+  const tally = { passed: 0, failed: 0, flaky: 0, skipped: 0, failing: [] };
+  const walk = (suite, parents = []) => {
+    const titles =
+      suite.title && suite.title !== suite.file
+        ? [...parents, suite.title]
+        : parents;
+    for (const spec of suite.specs ?? []) {
+      for (const test of spec.tests ?? []) {
+        const status = test?.status;
+        if (status === "expected") tally.passed += 1;
+        else if (status === "skipped") tally.skipped += 1;
+        else {
+          if (status === "flaky") tally.flaky += 1;
+          else tally.failed += 1;
+          const title = [...titles, spec.title].join(" > ").replace(/\s+/g, " ");
+          tally.failing.push(
+            `[${test?.projectName ?? "unknown"}] ${title}${status === "flaky" ? " (flaky)" : ""}`,
+          );
+        }
+      }
+    }
+    for (const child of suite.suites ?? []) walk(child, titles);
+  };
+  for (const suite of report?.suites ?? []) walk(suite);
+  return tally;
+}
+
+/**
+ * The whole run's tally out of a `--report-dir`: the suite's `results.json` at its
+ * root plus every leg's `<reportDir>/<leg>/results.json` — each live leg
+ * (`liveLegReporting`) and each axe leg (`publicAxeLeg`) — summed, each failing title
+ * prefixed with its leg (`suite`, or the leg's directory name). A missing or
+ * unreadable report counts nothing.
+ */
+export function reportDirTally(reportDir) {
+  const tally = { passed: 0, failed: 0, flaky: 0, skipped: 0, failing: [] };
+  const read = (file) => {
+    try {
+      return JSON.parse(readFileSync(file, "utf8"));
+    } catch {
+      return undefined;
+    }
+  };
+  let legs = [];
+  try {
+    legs = readdirSync(reportDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+  } catch {
+    // No report dir: the suite's own report is then unreadable too, so nothing counts.
+  }
+  const reports = [
+    ["suite", path.join(reportDir, "results.json")],
+    ...legs.map((leg) => [leg, path.join(reportDir, leg, "results.json")]),
+  ];
+  for (const [leg, file] of reports) {
+    const report = read(file);
+    if (report === undefined) continue;
+    const part = reportTally(report);
+    for (const key of ["passed", "failed", "flaky", "skipped"]) tally[key] += part[key];
+    tally.failing.push(...part.failing.map((title) => `${leg}: ${title}`));
+  }
+  return tally;
+}
+
+/**
+ * The tally `slot-suite` hands `slot-verdict` as a job output: the counts and at
+ * most 20 failing titles, with the total so the comment can say how many more.
+ */
+export function compactTally(tally) {
+  return {
+    passed: tally.passed,
+    failed: tally.failed,
+    flaky: tally.flaky,
+    skipped: tally.skipped,
+    failing: tally.failing.slice(0, FAILING_TITLES_MAX),
+    failingTotal: tally.failing.length,
+  };
+}
+
+/**
+ * The correctness check of a PR-slot dispatch (#4202) — the right slot, the PR's head,
+ * a same-repo PR — run by the `slot-gate` job before `slot-suite` starts. It is the
+ * dispatched branch's own code, so it is not a security boundary: those are the write
+ * access a dispatch needs, the `stage-pr` deployment-branch policy, and `stage-pr`
+ * holding no ssh key under no `main` cache scope. `ref` is the run's `github.ref`;
+ * `pr` is the `GET /repos/{repo}/pulls/{N}` reply for `slot=pr-<N>`, or undefined when
+ * it could not be read. A run under `main`'s ref is refused first. Otherwise it passes
+ * only for a run on PR N's head branch, for the SHA that is the head of an OPEN PR N
+ * pushed to THIS repository.
+ */
+export function prSlotGate({ slot, sha, ref, repository, pr }) {
+  const refuse = (reason) => ({ ok: false, reason });
+  if (ref === MAIN_REF)
+    return refuse(
+      "a PR-slot run never runs under main's ref (main's Actions cache scope) — dispatch it on the PR branch with pnpm e2e:stage pr-<N>",
+    );
+  const match = /^pr-([1-9][0-9]{0,9})$/.exec(String(slot ?? ""));
+  if (!match)
+    return refuse(
+      "slot must be pr-<N> — the main slot runs only from Runtime images",
+    );
+  if (!FULL_SHA_RE.test(String(sha ?? "")))
+    return refuse("sha is not a 40-hex SHA");
+  if (!pr || typeof pr !== "object" || String(pr.number) !== match[1])
+    return refuse(`PR ${match[1]} is not readable`);
+  if (pr.state !== "open") return refuse(`PR ${match[1]} is not open`);
+  const headRepo = pr.head?.repo?.full_name;
+  if (!repository || headRepo !== repository)
+    return refuse(
+      `PR ${match[1]} is not from this repository (head: ${headRepo ?? "a deleted repository"})`,
+    );
+  if (!pr.head?.ref || ref !== `refs/heads/${pr.head.ref}`)
+    return refuse(
+      `the run's ref is not PR ${match[1]}'s head branch — dispatch it on that branch with pnpm e2e:stage pr-${match[1]}`,
+    );
+  if (pr.head?.sha !== sha)
+    return refuse(
+      `sha ${sha.slice(0, 12)} is not the head of PR ${match[1]} (${String(pr.head?.sha ?? "?").slice(0, 12)})`,
+    );
+  return { ok: true, pr: Number(match[1]) };
+}
+
+/** The refusal of a PR-slot run whose slot does not serve the PR head (#4202). */
+export function slotShaRefusal(served, head, slot) {
+  return (
+    `e2e:stage refuses: slot serves ${String(served ?? "?").slice(0, 12)}, PR head is ${head.slice(0, 12)} — re-sync the slot ` +
+    `(\`pnpm stage:slot up ${slot}\`) and dispatch again.`
+  );
+}
+
+/**
+ * What the dispatching CLI prints after a PR-slot run (#4202): the box-observing
+ * tests the Actions run left out, by name, and the exact `--local` command that
+ * runs just them from the workstation (one browser is enough there).
+ */
+export function boxObservingNote(slot, tests) {
+  if (tests.length === 0) return [];
+  return [
+    `e2e:stage: ${tests.length} box-observing test${tests.length === 1 ? "" : "s"} not run in Actions (the run has no box access):`,
+    ...tests.map((t) => `  - ${t.title}`),
+    "Run them from the workstation:",
+    `  pnpm e2e:stage ${slot} --local --grep "${boxObservingGrep(tests)}"`,
+  ];
+}
+
+const count = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : 0);
+
+/**
+ * Text a test title or a refusal puts in the comment, inert as Markdown: no HTML,
+ * code span or line break, no link (`[`/`]` escaped), and no @mention — a
+ * zero-width space after `@` keeps GitHub from notifying anyone.
+ */
+const commentText = (text) =>
+  text
+    .replace(/[<>`\r\n]/g, " ")
+    .replace(/[[\]]/g, "\\$&")
+    .replace(/@/g, "@​");
+
+/**
+ * The compact verdict the Actions run posts on PR N (#4202): verdict, counts, the
+ * failing titles (≤20), the run link, and the e2e:stage verdict block when the run
+ * produced one. Rendered by the `slot-verdict` job (`GITHUB_TOKEN` only) from `slot-suite`'s
+ * outputs, which are data: `passed` is decided by the caller from the job result,
+ * never read from them. A refused gate, an unanswered `/v1/health`, a red leg —
+ * anything but a green suite — is FAIL, with its reason.
+ */
+// The `stage-pr` environment's deployment-branch policy is `*/*`, and a deployment-
+// branch `*` never matches `/`: only a ref with exactly one `/` between two non-empty
+// segments reaches `slot-suite`. The policy is the operator's; this mirrors it only to
+// name the cause when a branch falls outside it.
+export function stagePrPolicyAdmits(branch) {
+  return /^[^/]+\/[^/]+$/.test(String(branch ?? ""));
+}
+
+const STAGE_PR_POLICY_MISS =
+  "the `stage-pr` environment's deployment-branch policy `*/*` admits only a ref with exactly one `/` (`<prefix>/<N>-<slug>`)";
+
+/**
+ * Why a PR-slot run stopped before the suite reached a verdict. A branch outside the
+ * `stage-pr` policy never gets `slot-suite` started, whatever it is rebased on; only a
+ * branch inside it points at a stale `e2e-stage.mjs` (not rebased on `main`).
+ */
+export function suiteStoppedReason({ suiteResult, branch }) {
+  const head = `the run stopped before the suite reached a verdict (slot-suite ${suiteResult})`;
+  return stagePrPolicyAdmits(branch)
+    ? `${head}; a branch not rebased on main lacks the PR-slot flags of e2e-stage.mjs: rebase it on main and dispatch again`
+    : `${head}; ${STAGE_PR_POLICY_MISS}, and ${branch} is outside it: rename the branch and dispatch again`;
+}
+
+export function renderPrVerdictComment({
+  runId,
+  runUrl,
+  slot,
+  sha,
+  passed,
+  reason,
+  verdictBlock,
+  tally,
+}) {
+  const t = tally && typeof tally === "object" ? tally : {};
+  const failing = (Array.isArray(t.failing) ? t.failing : [])
+    .slice(0, FAILING_TITLES_MAX)
+    .map((title) => commentText(String(title)).slice(0, 300));
+  const lines = [
+    runMarker(runId),
+    `### e2e:stage ${slot} — ${passed ? "PASS" : "FAIL"}`,
+    "",
+    `\`${FULL_SHA_RE.test(String(sha ?? "")) ? sha.slice(0, 12) : "?"}\` · [Actions run ${runId}](${runUrl})`,
+  ];
+  if (reason) lines.push("", `Refused: ${commentText(String(reason))}`);
+  lines.push(
+    "",
+    tally
+      ? `passed ${count(t.passed)} · failed ${count(t.failed)} · flaky ${count(t.flaky)} · skipped ${count(t.skipped)}`
+      : "no scenario counts — the suite produced no report",
+  );
+  if (failing.length > 0) {
+    lines.push("", "Failing:");
+    for (const title of failing) lines.push(`- ${title}`);
+    const more = count(t.failingTotal) - failing.length;
+    if (more > 0) lines.push(`- … and ${more} more`);
+  }
+  if (verdictBlock)
+    lines.push("", "```text", verdictBlock.replace(/```(text)?/g, "").trim(), "```");
+  lines.push(
+    "",
+    "The full report is not kept in Actions (this repository's artifacts are public); `pnpm e2e:stage <slot> --local` reproduces it.",
+  );
+  return `${lines.join("\n")}\n`;
+}
+
+/**
+ * `gh` and `git` run WITHOUT a shell (both are real executables on the operator
+ * box), so `--grep` — the one arbitrary value — travels as one argv element and
+ * never parses as shell text.
+ */
+export const realDispatchEffects = {
+  gh: (args) => spawnSync("gh", args, { cwd: REPO_ROOT, encoding: "utf8" }),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  now: () => Date.now(),
+  log: (line) => console.log(line),
+  boxObservingTests: () => boxObservingTests(),
+};
+
+const stdoutOf = (r) => String(r?.stdout ?? "").trim();
+const failedRun = (r) => r?.status !== 0;
+const errLine = (r) =>
+  String(r?.stderr || r?.error?.message || "")
+    .trim()
+    .split("\n")[0] || `exit ${r?.status}`;
+
+/** The `-f name=value` inputs of the dispatch; only the filters that are set. */
+export function dispatchInputs(options, sha) {
+  const inputs = [`slot=${options.slot}`, `sha=${sha}`];
+  if (options.project !== undefined) inputs.push(`project=${options.project}`);
+  if (options.grep !== undefined) inputs.push(`grep=${options.grep}`);
+  if (!options.axe) inputs.push("no-axe=true");
+  if (!options.live) inputs.push("no-live=true");
+  return inputs.flatMap((input) => ["-f", input]);
+}
+
+/**
+ * `pnpm e2e:stage pr-<N>` (#4202): dispatch the PR-slot run of `stage.yml` on PR N's
+ * own head branch for its pushed head SHA, wait for it, print the verdict comment it
+ * posted on PR N. The run never runs under `main`'s ref, so PR code never holds
+ * `main`'s Actions cache scope; the branch must carry this workflow's PR-slot jobs
+ * (rebased on `main`). A cross-repository PR is refused: there is no branch here to
+ * dispatch on. No browser starts here. Exit 0 only for a successful run, 1 for any
+ * other conclusion, 2 when nothing was dispatched.
+ */
+export async function dispatchStageRun(options, effects = realDispatchEffects) {
+  const { slot } = options;
+  const pr = slot.slice("pr-".length);
+  const refuse = (reason) => {
+    effects.log(`e2e:stage refuses to dispatch: ${reason}`);
+    return 2;
+  };
+
+  const prView = effects.gh([
+    "pr",
+    "view",
+    pr,
+    "--json",
+    "headRefName,headRefOid,isCrossRepository",
+  ]);
+  let head;
+  try {
+    head = failedRun(prView) ? undefined : JSON.parse(stdoutOf(prView));
+  } catch {
+    head = undefined;
+  }
+  if (head === undefined || head === null || typeof head !== "object")
+    return refuse(`PR ${pr} is not readable (${errLine(prView)})`);
+  if (head.isCrossRepository !== false)
+    return refuse(
+      `PR ${pr} is from another repository — a PR-slot run dispatches only on a branch of this one`,
+    );
+  const sha = String(head.headRefOid ?? "");
+  const branch = String(head.headRefName ?? "");
+  if (!FULL_SHA_RE.test(sha) || branch === "")
+    return refuse(`PR ${pr} has no readable head branch and SHA`);
+  if (`refs/heads/${branch}` === MAIN_REF)
+    return refuse(
+      `PR ${pr}'s head branch is main — a PR-slot run never runs under main's ref`,
+    );
+  if (!stagePrPolicyAdmits(branch))
+    return refuse(
+      `PR ${pr}'s head branch ${branch} is outside ${STAGE_PR_POLICY_MISS}: rename the branch and dispatch again`,
+    );
+
+  const title = slotRunTitle(slot, sha);
+  const listRuns = () => {
+    const r = effects.gh([
+      "run",
+      "list",
+      "--workflow",
+      STAGE_WORKFLOW,
+      "--event",
+      "workflow_dispatch",
+      "--branch",
+      branch,
+      "--limit",
+      "30",
+      "--json",
+      "databaseId,displayTitle,url",
+    ]);
+    if (failedRun(r)) return undefined;
+    try {
+      return JSON.parse(stdoutOf(r)).filter((run) => run.displayTitle === title);
+    } catch {
+      return undefined;
+    }
+  };
+  const before = listRuns();
+  if (before === undefined)
+    return refuse("`gh run list` failed — is gh logged in?");
+  const known = new Set(before.map((run) => run.databaseId));
+
+  const started = effects.gh([
+    "workflow",
+    "run",
+    STAGE_WORKFLOW,
+    "--ref",
+    branch,
+    ...dispatchInputs(options, sha),
+  ]);
+  if (failedRun(started))
+    return refuse(
+      `\`gh workflow run\` on ${branch} failed (${errLine(started)}) — the branch is inside the stage-pr policy, so a stage.yml without the PR-slot dispatch is the likely cause: rebase it on main first`,
+    );
+  effects.log(
+    `e2e:stage dispatched ${STAGE_WORKFLOW} on ${branch} for ${slot} at ${sha.slice(0, 12)}`,
+  );
+
+  let run;
+  for (let i = 0; i < RUN_APPEAR_POLLS && run === undefined; i += 1) {
+    await effects.sleep(5_000);
+    run = (listRuns() ?? []).find((r) => !known.has(r.databaseId));
+  }
+  if (run === undefined) {
+    effects.log(
+      `e2e:stage: the dispatched run did not appear — look for «${title}» in Actions`,
+    );
+    return 1;
+  }
+  effects.log(`e2e:stage waits for ${run.url}`);
+
+  const deadline = effects.now() + RUN_WAIT_MS;
+  let view;
+  for (let last = ""; ; ) {
+    const r = effects.gh([
+      "run",
+      "view",
+      String(run.databaseId),
+      "--json",
+      "status,conclusion",
+    ]);
+    if (!failedRun(r)) {
+      try {
+        view = JSON.parse(stdoutOf(r));
+      } catch {
+        view = undefined;
+      }
+      if (view?.status && view.status !== last) {
+        last = view.status;
+        effects.log(`e2e:stage run ${run.databaseId}: ${last}`);
+      }
+      if (view?.status === "completed") break;
+    }
+    if (effects.now() >= deadline) {
+      effects.log(
+        `e2e:stage: stopped waiting after ${RUN_WAIT_MS / 60_000} min — ${run.url}`,
+      );
+      return 1;
+    }
+    await effects.sleep(DISPATCH_POLL_MS);
+  }
+
+  const marker = runMarker(run.databaseId);
+  const comments = effects.gh([
+    "api",
+    "--paginate",
+    `repos/{owner}/{repo}/issues/${pr}/comments`,
+    "--jq",
+    `.[] | select(.body | startswith(${JSON.stringify(marker)})) | .body`,
+  ]);
+  const body = failedRun(comments) ? "" : stdoutOf(comments);
+  if (body.startsWith(marker)) effects.log(body.slice(marker.length).trim());
+  else
+    effects.log(
+      `e2e:stage: run ${run.databaseId} posted no verdict comment on #${pr}`,
+    );
+  for (const line of boxObservingNote(slot, effects.boxObservingTests()))
+    effects.log(line);
+  effects.log(`e2e:stage run ${run.url}: ${view.conclusion}`);
+  return view.conclusion === "success" ? 0 : 1;
+}
+
 // --- the command --------------------------------------------------------------
 
 export async function runE2eStage(
   argv,
-  { env = process.env, effects = realEffects, liveTiers = LIVE_TIERS } = {},
+  {
+    env = process.env,
+    effects = realEffects,
+    liveTiers = LIVE_TIERS,
+    dispatch = realDispatchEffects,
+  } = {},
 ) {
   const options = parseE2eArgs(argv);
   const { slot } = options;
+  if (dispatchesToActions(options)) return dispatchStageRun(options, dispatch);
+  // `--verdict-file`: the block below, also written where the Actions job reads it
+  // for the PR comment — the refusal included, so a refused run never reads as a pass.
+  const recordVerdict = (text) => {
+    if (options.verdictFile !== undefined) effects.writeFile(options.verdictFile, text);
+  };
 
   if (options.expectSha !== undefined) {
     const refusal = releaseCheckEnvRefusal(env);
@@ -883,13 +1420,27 @@ export async function runE2eStage(
     path.posix.join(REPORT_ROOT, `${slot}-${reportStamp(effects.now())}`);
 
   if (!preflight.ok) {
-    effects.log(
+    const refusal =
       `e2e:stage refuses: ${healthUrl} — ${preflight.reason}${health.error ? ` (${health.error})` : ""}. ` +
-        "This command runs against a CONVERGED slot; raise it with `pnpm stage:slot up " +
-        `${slot}` +
-        "` first.",
-    );
+      "This command runs against a CONVERGED slot; raise it with `pnpm stage:slot up " +
+      `${slot}` +
+      "` first.";
+    effects.log(refusal);
+    recordVerdict(`${["```text", refusal, "```"].join("\n")}\n`);
     return exitCodeFor({ preflightOk: false, legs: [] });
+  }
+
+  // The PR-slot Actions run (#4202) asserts the slot serves the dispatched PR head
+  // before any scenario runs: a slot raised at an older SHA would otherwise certify
+  // that older code under the head's name.
+  if (options.slotSha !== undefined) {
+    const served = healthVerdict({ ...health, sha: options.slotSha });
+    if (!served.ok) {
+      const refusal = slotShaRefusal(preflight.sha, options.slotSha, slot);
+      effects.log(refusal);
+      recordVerdict(`${["```text", refusal, "```"].join("\n")}\n`);
+      return exitCodeFor({ preflightOk: false, legs: [] });
+    }
   }
 
   // The release check asserts the slot serves the release TARGET, not merely a SHA:
@@ -916,6 +1467,11 @@ export async function runE2eStage(
     E2E_REPORT_DIR: path.resolve(REPO_ROOT, reportDir),
   };
   if (options.grep) suiteEnv.E2E_GREP = options.grep;
+  // `--no-box-observe` (the PR-slot Actions run, #4202): the box-observing tests are
+  // left out by name — the suite's and every leg's Playwright config read
+  // `E2E_GREP_INVERT` — and the verdict block names them.
+  const notRun = options.boxObserve ? [] : effects.boxObservingTests();
+  if (notRun.length > 0) suiteEnv.E2E_GREP_INVERT = boxObservingGrep(notRun);
   if (publicLogEnabled(env)) suiteEnv.E2E_PUBLIC_LOG = "1";
   const axeLeg = (host) => publicAxeLeg(env, suiteEnv.E2E_REPORT_DIR, host);
 
@@ -1079,18 +1635,19 @@ export async function runE2eStage(
     legs.push(required);
   }
   const summary = summarizeReport(reports.get("suite"));
-  effects.log(
-    renderVerdictBlock({
-      slot,
-      healthUrl,
-      sha: preflight.sha,
-      summary,
-      legs,
-      live,
-      axeNote: axe.note,
-      reportDir,
-    }),
-  );
+  const block = renderVerdictBlock({
+    slot,
+    healthUrl,
+    sha: preflight.sha,
+    summary,
+    legs,
+    live,
+    axeNote: axe.note,
+    reportDir,
+    notRun,
+  });
+  effects.log(block);
+  recordVerdict(block);
   return exitCodeFor({ preflightOk: true, legs: [...legs, ...live] });
 }
 

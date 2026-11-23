@@ -165,8 +165,17 @@ export default defineConfig({
   workers,
   forbidOnly: !!process.env.CI,
   ...(grep ? { grep } : {}),
+  // `E2E_GREP_INVERT`: the box-observing tests a PR-slot Actions run leaves out by
+  // name (`tools/staging/box-observing.mjs`, #4202).
   grepInvert: new RegExp(
-    `${publicFeedStatePattern.source}|${publicReadonlyPattern.source}|${publicSpecialtyMemoryPattern.source}|${publicRecordFormPattern.source}|${publicProjectRefusalPattern.source}`,
+    [
+      publicFeedStatePattern.source,
+      publicReadonlyPattern.source,
+      publicSpecialtyMemoryPattern.source,
+      publicRecordFormPattern.source,
+      publicProjectRefusalPattern.source,
+      ...(process.env.E2E_GREP_INVERT ? [process.env.E2E_GREP_INVERT] : []),
+    ].join("|"),
   ),
   retries: 0,
   timeout: 120_000,

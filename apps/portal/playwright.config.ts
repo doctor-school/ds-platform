@@ -128,6 +128,11 @@ export default defineConfig({
   fullyParallel: false,
   workers,
   forbidOnly: !!process.env.CI,
+  // `E2E_GREP_INVERT`: the box-observing tests a PR-slot Actions run leaves out by
+  // name (`tools/staging/box-observing.mjs`, #4202).
+  ...(process.env.E2E_GREP_INVERT
+    ? { grepInvert: new RegExp(process.env.E2E_GREP_INVERT) }
+    : {}),
   retries: 0,
   reporter: [["list"]],
   timeout: 120_000,

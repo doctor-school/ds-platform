@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -28,12 +29,25 @@ import {
   releaseCheckExclusion,
   renderVerdictBlock,
   runE2eStage,
+  dispatchesToActions,
+  dispatchInputs,
+  dispatchStageRun,
+  compactTally,
+  prSlotGate,
+  renderPrVerdictComment,
+  stagePrPolicyAdmits,
+  suiteStoppedReason,
+  reportDirTally,
+  reportTally,
+  runMarker,
+  slotRunTitle,
   slotE2eEnv,
   slotLiveEnv,
   slotLiveStandEnv,
   SUMMARY_REPORTER_PATH,
   summarizeReport,
 } from "./e2e-stage.mjs";
+import { boxObservingGrep } from "./box-observing.mjs";
 import {
   AXE_LEG_CONFIGS,
   GOLDEN_MATERIAL_SLUG,
@@ -345,6 +359,10 @@ describe("parseE2eArgs", () => {
       reportDir: undefined,
       expectSha: undefined,
       live: true,
+      local: false,
+      verdictFile: undefined,
+      slotSha: undefined,
+      boxObserve: true,
     });
   });
 
@@ -361,8 +379,11 @@ describe("parseE2eArgs", () => {
         "--grep",
         "вход",
         "--no-axe",
+        "--local",
         "--report-dir",
         "out",
+        "--verdict-file",
+        "verdict.txt",
       ]),
       {
         slot: "pr-2198",
@@ -372,6 +393,10 @@ describe("parseE2eArgs", () => {
         reportDir: "out",
         expectSha: undefined,
         live: true,
+        local: true,
+        verdictFile: "verdict.txt",
+        slotSha: undefined,
+        boxObserve: true,
       },
     );
   });
@@ -641,12 +666,19 @@ const isAxe = (call) =>
 const isLive = (call) =>
   call.argv.some((t) => t.startsWith("--config=")) && !isAxe(call);
 
+/** Two box-observing tests, as `box-observing.mjs` derives them. */
+const BOX_TESTS = [
+  { consumer: "packages/e2e/steps/a.steps.ts", title: "Registration is refused (without consent)" },
+  { consumer: "apps/portal/e2e/b.e2e.spec.ts", title: "EARS-7: a record" },
+];
+
 function harness(overrides = {}) {
   const calls = [];
   const lines = [];
   const writes = [];
   const effects = {
     readKeyJourneys: () => [],
+    boxObservingTests: () => BOX_TESTS,
     removeReport: () => {},
     readBoxEnv: async () => BOX_ENV,
     fetchHealth: async () => ({
@@ -1286,7 +1318,7 @@ describe("runE2eStage — the live legs", () => {
           removeReport: () => {},
           readReport: () => ({}),
         };
-        await runE2eStageCommand(["pr-4122"], { effects });
+        await runE2eStageCommand(["pr-4122", "--local"], { effects });
         assert.ok(admin);
       `,
       ],
@@ -1317,7 +1349,7 @@ describe("runE2eStage — the live legs", () => {
       DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET: "committee-factor",
     };
     const { calls, effects, writes } = harness();
-    await runE2eStage(["pr-4122"], { env, effects });
+    await runE2eStage(["pr-4122", "--local"], { env, effects });
     const admin = calls.find((call) => call.argv.includes("@ds/admin"));
     assert.ok(admin, "the complete slot run must launch the admin leg");
     assert.ok(admin.argv.includes("--config=playwright.flows.config.ts"));
@@ -1366,7 +1398,7 @@ describe("runE2eStage — the live legs", () => {
     }
 
     const doctor = harness();
-    await runE2eStage(["pr-4122", "--project", "doctor"], {
+    await runE2eStage(["pr-4122", "--local", "--project", "doctor"], {
       env,
       effects: doctor.effects,
     });
@@ -1375,7 +1407,7 @@ describe("runE2eStage — the live legs", () => {
 
   it("runs one leg per live config with the slot's URLs, IdP and Mailpit", async () => {
     const { calls, effects } = harness();
-    await runE2eStage(["pr-3168"], { env: ENV, effects });
+    await runE2eStage(["pr-3168", "--local"], { env: ENV, effects });
     const live = calls.filter(isLive);
     const configs = live.map((c) =>
       c.argv.find((t) => t.startsWith("--config=")),
@@ -1410,7 +1442,7 @@ describe("runE2eStage — the live legs", () => {
 
   it("hands each event-page leg its golden slugs, lets the operator's own value win, and keeps them off every other leg (#2996)", async () => {
     const { calls, effects } = harness();
-    await runE2eStage(["pr-2996"], {
+    await runE2eStage(["pr-2996", "--local"], {
       env: { ...ENV, E2E_HYBRID_SLUG: "operator-hybrid" },
       effects,
     });
@@ -1458,7 +1490,7 @@ describe("runE2eStage — the live legs", () => {
 
   it("hands the default Academy leg its own 005 journey slugs — golden events under journey-only names, never an event-page slug name (#3229)", async () => {
     const { calls, effects } = harness();
-    await runE2eStage(["pr-3229"], { env: ENV, effects });
+    await runE2eStage(["pr-3229", "--local"], { env: ENV, effects });
     const leg = calls.find(
       (c) =>
         c.argv.includes("@ds/portal") &&
@@ -1511,7 +1543,7 @@ describe("runE2eStage — the live legs", () => {
 
   it("generates the BDD specs before the Academy live leg", async () => {
     const { calls, effects } = harness();
-    await runE2eStage(["pr-3168", "--project", "academy"], {
+    await runE2eStage(["pr-3168", "--local", "--project", "academy"], {
       env: ENV,
       effects,
     });
@@ -1524,7 +1556,7 @@ describe("runE2eStage — the live legs", () => {
 
   it("writes the not-run specs to a --test-list-invert file instead of letting them fail on env", async () => {
     const { calls, writes, effects } = harness();
-    await runE2eStage(["pr-3168", "--project", "doctor"], {
+    await runE2eStage(["pr-3168", "--local", "--project", "doctor"], {
       env: ENV,
       effects,
     });
@@ -1553,7 +1585,7 @@ describe("runE2eStage — the live legs", () => {
         BOT_PROTECTION_TEST_TOKEN: "box-token",
       }),
     });
-    await runE2eStage(["pr-3168"], { env: ENV, effects });
+    await runE2eStage(["pr-3168", "--local"], { env: ENV, effects });
     const academy = calls.find((c) =>
       c.argv.includes("--config=playwright.account-live.config.ts"),
     );
@@ -1647,7 +1679,7 @@ describe("runE2eStage — the live legs", () => {
       }),
       readReport: (file) => (isLiveReport(file) ? undefined : LIVE_GREEN),
     });
-    const code = await runE2eStage(["pr-3168", "--project", "academy"], {
+    const code = await runE2eStage(["pr-3168", "--local", "--project", "academy"], {
       env: ENV,
       effects,
     });
@@ -1899,7 +1931,7 @@ describe("E2E_PUBLIC_LOG=1 — the run's console is a public Actions log", () =>
 
   it("a slot run's live legs print through the summary reporter", async () => {
     const { calls, lines, effects } = harness({ issueState: () => "CLOSED" });
-    await runE2eStage(["pr-3168"], { env: PUBLIC_ENV, effects });
+    await runE2eStage(["pr-3168", "--local"], { env: PUBLIC_ENV, effects });
     const live = calls.filter(isLive);
     assert.ok(live.length > 0);
     for (const leg of live) {
@@ -2281,5 +2313,410 @@ describe("golden live env (#3191) — derived from the dataset every slot is clo
           g.requires.some((name) => !derivable.has(name)),
           `${tier.name} ${g.file}: declared by design but a slot derives every variable it requires`,
         );
+  });
+});
+
+describe("the PR-slot run in Actions (#4202)", () => {
+  const HEAD = "c".repeat(40);
+  const BRANCH = "tooling/4202-x";
+  const RUN = { databaseId: 901, displayTitle: slotRunTitle("pr-4202", HEAD), url: "https://github.com/o/r/actions/runs/901" };
+
+  /** Fake gh: `prHead` is the `gh pr view` reply, `views` the successive `gh run view` replies. */
+  function dispatchHarness({
+    prHead = { headRefName: BRANCH, headRefOid: HEAD, isCrossRepository: false },
+    views = [{ status: "in_progress" }, { status: "completed", conclusion: "success" }],
+    comment = `${runMarker(901)}\n### e2e:stage pr-4202 — PASS\n\npassed 3 · failed 0 · flaky 0 · skipped 0\n`,
+  } = {}) {
+    const gh = [];
+    const lines = [];
+    let lists = 0;
+    let viewIndex = 0;
+    const ok = (stdout) => ({ status: 0, stdout, stderr: "" });
+    const effects = {
+      gh: (args) => {
+        gh.push(args);
+        if (args[0] === "pr" && args[1] === "view")
+          return prHead ? ok(JSON.stringify(prHead)) : { status: 1, stdout: "", stderr: "no pull requests found" };
+        if (args[0] === "run" && args[1] === "list") {
+          lists += 1;
+          return ok(JSON.stringify(lists === 1 ? [] : [RUN]));
+        }
+        if (args[0] === "workflow") return ok("");
+        if (args[0] === "run" && args[1] === "view") {
+          const view = views[Math.min(viewIndex, views.length - 1)];
+          viewIndex += 1;
+          return ok(JSON.stringify(view));
+        }
+        if (args[0] === "api") return ok(comment);
+        throw new Error(`unexpected gh ${args.join(" ")}`);
+      },
+      sleep: async () => {},
+      now: () => 0,
+      log: (line) => lines.push(line),
+      boxObservingTests: () => BOX_TESTS,
+    };
+    return { gh, lines, effects };
+  }
+
+  it("dispatches a PR slot by default; --local, `main` and the release check stay here", () => {
+    assert.equal(dispatchesToActions(parseE2eArgs(["pr-4202"])), true);
+    assert.equal(dispatchesToActions(parseE2eArgs(["pr-4202", "--local"])), false);
+    assert.equal(dispatchesToActions(parseE2eArgs(["main"])), false);
+    assert.equal(dispatchesToActions(parseE2eArgs(["main", "--expect-sha", SHA])), false);
+  });
+
+  it("refuses a workstation report path on a dispatched run, and --local on the release check", () => {
+    assert.throws(() => parseE2eArgs(["pr-4202", "--report-dir", "out"]), /--report-dir names a workstation path.*--local/);
+    assert.throws(() => parseE2eArgs(["pr-4202", "--verdict-file", "v.txt"]), /--verdict-file/);
+    assert.throws(() => parseE2eArgs(["main", "--expect-sha", SHA, "--local"]), /drop --local/);
+    // The release check's own refusals are the ones it always gave.
+    assert.throws(() => parseE2eArgs(["pr-4202", "--expect-sha", SHA]), /`main` slot only/);
+    assert.throws(() => parseE2eArgs(["main", "--expect-sha", SHA.slice(0, 12)]), /full 40-character/);
+    assert.throws(() => parseE2eArgs(["main", "--expect-sha", SHA, "--no-live"]), /drop --no-live/);
+  });
+
+  it("sends only the filters that are set, the grep as one argv element", () => {
+    assert.deepEqual(dispatchInputs(parseE2eArgs(["pr-7"]), HEAD), ["-f", "slot=pr-7", "-f", `sha=${HEAD}`]);
+    assert.deepEqual(
+      dispatchInputs(parseE2eArgs(["pr-7", "--project", "doctor", "--grep", "вход|выход $(id)", "--no-axe", "--no-live"]), HEAD),
+      ["-f", "slot=pr-7", "-f", `sha=${HEAD}`, "-f", "project=doctor", "-f", "grep=вход|выход $(id)", "-f", "no-axe=true", "-f", "no-live=true"],
+    );
+  });
+
+  it("dispatches stage.yml on the PR's head branch for its head SHA, waits, prints the verdict comment, exits 0 on success", async () => {
+    const { gh, lines, effects } = dispatchHarness();
+    const code = await dispatchStageRun(parseE2eArgs(["pr-4202", "--grep", "a b"]), effects);
+    assert.equal(code, 0);
+    assert.deepEqual(gh[0], ["pr", "view", "4202", "--json", "headRefName,headRefOid,isCrossRepository"]);
+    const workflow = gh.find((args) => args[0] === "workflow");
+    assert.deepEqual(workflow, ["workflow", "run", "stage.yml", "--ref", BRANCH, "-f", "slot=pr-4202", "-f", `sha=${HEAD}`, "-f", "grep=a b"]);
+    const list = gh.find((args) => args[0] === "run" && args[1] === "list");
+    assert.equal(list[list.indexOf("--branch") + 1], BRANCH);
+    assert.equal(gh.some((args) => args.includes("main")), false, "nothing runs under main's ref");
+    const api = gh.find((args) => args[0] === "api");
+    assert.equal(api[2], "repos/{owner}/{repo}/issues/4202/comments");
+    assert.match(api[4], /e2e-stage-run:901 -->/);
+    assert.ok(lines.some((l) => /### e2e:stage pr-4202 — PASS/.test(l)));
+    assert.ok(lines.some((l) => /runs\/901: success$/.test(l)));
+  });
+
+  it("exits 1 when the run is red, even when no verdict comment was posted", async () => {
+    const { lines, effects } = dispatchHarness({
+      views: [{ status: "completed", conclusion: "failure" }],
+      comment: "",
+    });
+    assert.equal(await dispatchStageRun(parseE2eArgs(["pr-4202"]), effects), 1);
+    assert.ok(lines.some((l) => /posted no verdict comment on #4202/.test(l)));
+  });
+
+  it("refuses a cross-repository, unreadable or main-headed PR before dispatching — no workflow run starts", async () => {
+    const cases = [
+      [{ headRefName: BRANCH, headRefOid: HEAD, isCrossRepository: true }, /PR 4202 is from another repository/],
+      [{ headRefName: BRANCH, headRefOid: HEAD }, /PR 4202 is from another repository/],
+      [null, /PR 4202 is not readable \(no pull requests found\)/],
+      [{ headRefName: "", headRefOid: HEAD, isCrossRepository: false }, /no readable head branch and SHA/],
+      [{ headRefName: BRANCH, headRefOid: "abc", isCrossRepository: false }, /no readable head branch and SHA/],
+      [{ headRefName: "main", headRefOid: HEAD, isCrossRepository: false }, /head branch is main/],
+      [{ headRefName: "unprefixed", headRefOid: HEAD, isCrossRepository: false }, /`stage-pr` environment's deployment-branch policy `\*\/\*` admits only a ref with exactly one `\/`.*rename the branch/],
+      [{ headRefName: "a/b/c", headRefOid: HEAD, isCrossRepository: false }, /policy `\*\/\*` admits only a ref with exactly one `\/`/],
+    ];
+    for (const [prHead, reason] of cases) {
+      const { gh, lines, effects } = dispatchHarness({ prHead });
+      assert.equal(await dispatchStageRun(parseE2eArgs(["pr-4202"]), effects), 2, JSON.stringify(prHead));
+      assert.equal(gh.some((args) => args[0] === "workflow" || args[0] === "run"), false);
+      assert.match(lines.at(-1), reason);
+      assert.match(lines.at(-1), /^e2e:stage refuses to dispatch: /);
+    }
+  });
+
+  it("starts no browser and reads no box on the workstation for a dispatched run", async () => {
+    const { calls, effects } = harness({
+      readBoxEnv: async () => {
+        throw new Error("the box was read");
+      },
+      fetchHealth: async () => {
+        throw new Error("the slot was read");
+      },
+    });
+    const d = dispatchHarness();
+    const code = await runE2eStage(["pr-4202"], { env: {}, effects, dispatch: d.effects });
+    assert.equal(code, 0);
+    assert.deepEqual(calls, []);
+  });
+
+  it("--verdict-file records the verdict block, and the pre-flight refusal when the slot does not answer", async () => {
+    const green = harness();
+    await runE2eStage(["pr-4202", "--local", "--verdict-file", "v.txt"], {
+      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+      effects: green.effects,
+    });
+    const block = green.writes.find((w) => w.file === "v.txt");
+    assert.match(block.content, /e2e:stage verdict/);
+    assert.match(block.content, /slot: +pr-4202/);
+
+    const down = harness({ fetchHealth: async () => ({ status: 0, body: "", error: "ECONNREFUSED" }) });
+    const code = await runE2eStage(["pr-4202", "--local", "--verdict-file", "v.txt"], {
+      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+      effects: down.effects,
+    });
+    assert.equal(code, 2);
+    const refusal = down.writes.find((w) => w.file === "v.txt");
+    assert.match(refusal.content, /refuses: https:\/\/api-pr-4202\.[^ ]+\/v1\/health — HTTP 0/);
+    assert.doesNotMatch(refusal.content, /verdict: +PASS/);
+  });
+
+  it("the PR comment: counts with flaky apart, at most 20 failing titles, the run link", () => {
+    const failing = Array.from({ length: 23 }, (_, i) => ({
+      title: `scenario ${i}`,
+      tests: [{ projectName: "doctor", status: i === 0 ? "flaky" : "unexpected" }],
+    }));
+    const report = {
+      suites: [
+        {
+          title: "a.feature.spec.js",
+          file: "a.feature.spec.js",
+          specs: [{ title: "ok", tests: [{ projectName: "academy", status: "expected" }, { projectName: "academy", status: "skipped" }] }],
+          suites: [{ title: "Feature <x>", specs: failing }],
+        },
+      ],
+    };
+    const tally = reportTally(report);
+    assert.deepEqual(
+      { passed: tally.passed, failed: tally.failed, flaky: tally.flaky, skipped: tally.skipped },
+      { passed: 1, failed: 22, flaky: 1, skipped: 1 },
+    );
+    assert.equal(tally.failing[0], "[doctor] Feature <x> > scenario 0 (flaky)");
+    const body = renderPrVerdictComment({
+      runId: 901,
+      runUrl: RUN.url,
+      slot: "pr-4202",
+      sha: HEAD,
+      passed: false,
+      verdictBlock: "```text\ne2e:stage verdict\n```\n",
+      tally: JSON.parse(JSON.stringify(compactTally(tally))),
+    });
+    assert.ok(body.startsWith(`${runMarker(901)}\n### e2e:stage pr-4202 — FAIL`));
+    assert.match(body, /passed 1 · failed 22 · flaky 1 · skipped 1/);
+    // `[`/`]` are escaped, so a title can never render as a link.
+    assert.equal((body.match(/^- \\\[doctor\\\]/gm) ?? []).length, 20);
+    assert.match(body, /- … and 3 more/);
+    assert.match(body, /\[Actions run 901\]\(https:\/\/github\.com\/o\/r\/actions\/runs\/901\)/);
+    assert.doesNotMatch(body, /<x>/);
+    assert.match(body, /e2e:stage verdict/);
+  });
+
+  it("the PR comment tallies every leg: the suite, each live leg and each axe leg", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ds-4202-tally-"));
+    try {
+      const legReport = (file, specs) => ({ suites: [{ title: file, file, specs }] });
+      const write = (leg, report) => {
+        const legDir = leg ? path.join(dir, leg) : dir;
+        mkdirSync(legDir, { recursive: true });
+        writeFileSync(path.join(legDir, "results.json"), JSON.stringify(report));
+      };
+      write(undefined, legReport("a.feature.spec.js", [
+        { title: "suite ok", tests: [{ projectName: "academy", status: "expected" }, { projectName: "doctor", status: "expected" }] },
+      ]));
+      write("live-doctor-event-page", legReport("event-page.spec.ts", [
+        { title: "014 EARS-6/8 event page", tests: [{ projectName: "doctor-live", status: "unexpected" }] },
+        { title: "live ok", tests: [{ projectName: "doctor-live", status: "expected" }] },
+      ]));
+      write("axe-doctor", legReport("axe.spec.ts", [
+        { title: "axe ok", tests: [{ projectName: "doctor", status: "expected" }, { projectName: "doctor", status: "skipped" }] },
+      ]));
+      const tally = reportDirTally(dir);
+      assert.deepEqual(
+        { passed: tally.passed, failed: tally.failed, flaky: tally.flaky, skipped: tally.skipped },
+        { passed: 4, failed: 1, flaky: 0, skipped: 1 },
+      );
+      assert.deepEqual(tally.failing, ["live-doctor-event-page: [doctor-live] 014 EARS-6/8 event page"]);
+      const body = renderPrVerdictComment({
+        runId: 902,
+        runUrl: RUN.url,
+        slot: "pr-4202",
+        sha: HEAD,
+        passed: false,
+        tally: JSON.parse(JSON.stringify(compactTally(tally))),
+      });
+      assert.match(body, /passed 4 · failed 1 · flaky 0 · skipped 1/);
+      assert.match(body, /^- live-doctor-event-page: \\\[doctor-live\\\] 014 EARS-6\/8 event page$/m);
+      assert.equal(reportDirTally(path.join(dir, "absent")).failing.length, 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a refused run's comment says FAIL with the reason, never PASS", () => {
+    const body = renderPrVerdictComment({
+      runId: 5,
+      runUrl: "u",
+      slot: "pr-1",
+      sha: "abc",
+      passed: false,
+      reason: "sha is not a 40-hex SHA",
+    });
+    assert.match(body, /— FAIL/);
+    assert.match(body, /no scenario counts/);
+    assert.match(body, /Refused: sha is not a 40-hex SHA/);
+    assert.doesNotMatch(body, /PASS/);
+  });
+
+  const STAND = { STAGE_BASE_DOMAIN: "stage.doctor.school", E2E_HTTP_USER: "stage", E2E_HTTP_PASS: "pw" };
+
+  it("--slot-sha and --no-box-observe describe a run made here: --local only, a full SHA only", () => {
+    assert.throws(() => parseE2eArgs(["pr-4202", "--slot-sha", HEAD]), /--slot-sha describes a run made here — add --local/);
+    assert.throws(() => parseE2eArgs(["pr-4202", "--no-box-observe"]), /--no-box-observe describes/);
+    assert.throws(() => parseE2eArgs(["pr-4202", "--local", "--slot-sha", "abc"]), /unusable --slot-sha/);
+    const options = parseE2eArgs(["pr-4202", "--local", "--slot-sha", HEAD, "--no-box-observe"]);
+    assert.equal(options.slotSha, HEAD);
+    assert.equal(options.boxObserve, false);
+  });
+
+  it("refuses before any scenario when the slot does not serve the PR head, and says to re-sync", async () => {
+    const OLD = "d".repeat(40);
+    const { calls, writes, lines, effects } = harness({
+      fetchHealth: async () => ({ status: 200, body: JSON.stringify({ version: OLD }) }),
+    });
+    const code = await runE2eStage(["pr-4202", "--local", "--slot-sha", HEAD, "--verdict-file", "v.txt"], { env: STAND, effects });
+    assert.notEqual(code, 0);
+    assert.equal(calls.length, 0);
+    const refusal = `slot serves ${OLD.slice(0, 12)}, PR head is ${HEAD.slice(0, 12)} — re-sync the slot`;
+    assert.ok(lines.some((l) => l.includes(refusal)));
+    assert.ok(writes.some((w) => w.file === "v.txt" && w.content.includes(refusal)));
+    // The served head runs the suite.
+    const served = harness();
+    await runE2eStage(["pr-4202", "--local", "--slot-sha", SHA], { env: STAND, effects: served.effects });
+    assert.ok(served.calls.length > 0);
+  });
+
+  it("--no-box-observe leaves the box-observing tests out by name in every leg and names them in the verdict", async () => {
+    const { calls, writes, effects } = harness();
+    await runE2eStage(["pr-4202", "--local", "--no-box-observe", "--verdict-file", "v.txt"], { env: STAND, effects });
+    assert.ok(calls.length > 1);
+    for (const call of calls) assert.equal(call.env.E2E_GREP_INVERT, boxObservingGrep(BOX_TESTS));
+    const invert = new RegExp(calls[0].env.E2E_GREP_INVERT);
+    for (const t of BOX_TESTS) assert.ok(invert.test(`academy feature ${t.title}`));
+    assert.equal(invert.test("academy feature Registration is refused"), false);
+    const block = writes.find((w) => w.file === "v.txt").content;
+    assert.match(block, /not run: +2 box-observing/);
+    for (const t of BOX_TESTS) assert.ok(block.includes(`- ${t.title}`));
+    // Without the flag nothing is left out.
+    const plain = harness();
+    await runE2eStage(["pr-4202", "--local"], { env: STAND, effects: plain.effects });
+    assert.ok(plain.calls.every((call) => call.env.E2E_GREP_INVERT === undefined));
+  });
+
+  it("the dispatching CLI names the tests Actions left out and prints the --local command for them", async () => {
+    const { lines, effects } = dispatchHarness();
+    await dispatchStageRun(parseE2eArgs(["pr-4202"]), effects);
+    assert.ok(lines.some((l) => /2 box-observing tests not run in Actions/.test(l)));
+    for (const t of BOX_TESTS) assert.ok(lines.includes(`  - ${t.title}`));
+    assert.ok(lines.includes(`  pnpm e2e:stage pr-4202 --local --grep "${boxObservingGrep(BOX_TESTS)}"`));
+  });
+
+  it("the comment keeps titles and refusals inert: no mention, no link, no non-hex SHA", () => {
+    const body = renderPrVerdictComment({
+      runId: 7,
+      runUrl: "u",
+      slot: "pr-1",
+      sha: "not-a-sha",
+      passed: false,
+      reason: "PR 1 is not from this repository (head: @someone/[x](https://e.test))",
+      tally: { failed: 1, failing: ["[doctor] ping @someone [click](https://e.test)"] },
+    });
+    assert.doesNotMatch(body, /@someone/);
+    assert.doesNotMatch(body, /[^\\]\[click\]/);
+    assert.match(body, /`\?` · \[Actions run 7\]/);
+    assert.doesNotMatch(body, /not-a-sha/);
+  });
+
+  it("the slot gate passes only a run on PR N's head branch for the head SHA of an open PR N from this repository", () => {
+    const REPO = "owner/ds-platform";
+    const pr = (over = {}) => ({
+      number: 4202,
+      state: "open",
+      head: { sha: HEAD, ref: BRANCH, repo: { full_name: REPO } },
+      ...over,
+    });
+    const gate = (args) =>
+      prSlotGate({ slot: "pr-4202", sha: HEAD, ref: `refs/heads/${BRANCH}`, repository: REPO, pr: pr(), ...args });
+    assert.deepEqual(gate({}), { ok: true, pr: 4202 });
+    const refusals = [
+      [{ ref: "refs/heads/main" }, /never runs under main's ref \(main's Actions cache scope\)/],
+      // main's ref is refused before the PR is even read.
+      [{ ref: "refs/heads/main", pr: undefined, slot: "main" }, /never runs under main's ref/],
+      [{ ref: "refs/heads/other" }, /the run's ref is not PR 4202's head branch/],
+      [{ ref: `refs/tags/${BRANCH}` }, /the run's ref is not PR 4202's head branch/],
+      [{ ref: undefined }, /the run's ref is not PR 4202's head branch/],
+      [{ pr: pr({ head: { sha: HEAD, repo: { full_name: REPO } } }) }, /the run's ref is not PR 4202's head branch/],
+      [{ slot: "main" }, /slot must be pr-<N>.*Runtime images/],
+      [{ slot: "pr-0" }, /slot must be pr-<N>/],
+      [{ sha: HEAD.slice(0, 12) }, /not a 40-hex SHA/],
+      [{ sha: "C".repeat(40) }, /not a 40-hex SHA/],
+      [{ pr: undefined }, /PR 4202 is not readable/],
+      [{ pr: pr({ number: 7 }) }, /PR 4202 is not readable/],
+      [{ pr: pr({ state: "closed" }) }, /PR 4202 is not open/],
+      [{ pr: pr({ head: { sha: HEAD, repo: { full_name: "fork/ds-platform" } } }) }, /not from this repository \(head: fork\/ds-platform\)/],
+      [{ pr: pr({ head: { sha: HEAD, repo: null } }) }, /not from this repository \(head: a deleted repository\)/],
+      [{ pr: pr({ head: { sha: "d".repeat(40), ref: BRANCH, repo: { full_name: REPO } } }) }, /sha c{12} is not the head of PR 4202 \(d{12}\)/],
+    ];
+    for (const [args, reason] of refusals) {
+      const verdict = gate(args);
+      assert.equal(verdict.ok, false, JSON.stringify(args));
+      assert.match(verdict.reason, reason);
+    }
+  });
+
+  it("names the real cause when the run stopped before a verdict: the branch policy, else a branch not rebased on main", () => {
+    assert.equal(stagePrPolicyAdmits(BRANCH), true);
+    for (const b of ["main", "unprefixed", "a/b/c", "/x", "x/", ""]) assert.equal(stagePrPolicyAdmits(b), false, b);
+    const outside = suiteStoppedReason({ suiteResult: "failure", branch: "a/b/c" });
+    assert.match(outside, /slot-suite failure/);
+    assert.match(outside, /`stage-pr` environment's deployment-branch policy `\*\/\*`/);
+    assert.doesNotMatch(outside, /rebase/);
+    const stale = suiteStoppedReason({ suiteResult: "failure", branch: BRANCH });
+    assert.match(stale, /rebase it on main and dispatch again/);
+    assert.doesNotMatch(stale, /deployment-branch policy/);
+  });
+
+  it("imports cleanly from `node -e` whose first argument is a file not yet written (slot-verdict, run 45140199591)", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "e2e-stage-entry-"));
+    try {
+      const out = path.join(dir, "comment.md");
+      const moduleUrl = new URL("./e2e-stage.mjs", import.meta.url).href;
+      const r = spawnSync(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          `import { writeFileSync } from "node:fs";
+           import { renderPrVerdictComment } from ${JSON.stringify(moduleUrl)};
+           writeFileSync(process.argv[1], renderPrVerdictComment({ runId: 1, runUrl: "u", slot: "pr-1", sha: "", passed: false }));`,
+          out,
+        ],
+        { encoding: "utf8" },
+      );
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(readFileSync(out, "utf8"), /^### e2e:stage pr-1 — FAIL$/m);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("renders slot-suite's outputs as data: hostile titles and counts cannot forge the verdict", () => {
+    const body = renderPrVerdictComment({
+      runId: 9,
+      runUrl: "u",
+      slot: "pr-1",
+      sha: HEAD,
+      passed: false,
+      verdictBlock: "```\nverdict: PASS\n```\n```html",
+      tally: { passed: "999", failed: -1, failing: ["x\n### e2e:stage pr-1 — PASS", ...Array(30).fill("y")], failingTotal: 31 },
+    });
+    assert.equal((body.match(/^### /gm) ?? []).length, 1);
+    assert.match(body, /^### e2e:stage pr-1 — FAIL$/m);
+    assert.match(body, /passed 0 · failed 0 · flaky 0 · skipped 0/);
+    assert.match(body, /- … and 11 more/);
+    assert.equal((body.match(/```/g) ?? []).length, 2);
   });
 });

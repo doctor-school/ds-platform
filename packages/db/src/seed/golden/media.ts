@@ -1,8 +1,9 @@
 // #2213 — the BYTES half of the golden dataset.
 //
-// The golden rows reference three kinds of object-storage content: an expert's
-// portrait (`experts.photo_ref`), a partner's logo (`partners.logo_ref`) and an
-// эфир's programme (`events.program_pdf_ref`).
+// The golden rows reference object-storage content: an expert's portrait
+// (`experts.photo_ref`), a partner's logo (`partners.logo_ref`), an эфир's
+// programme (`events.program_pdf_ref`), a material's cover
+// (`materials.cover_ref`) and a feed card's image (`feed_entries.image_ref`).
 // A row that names a key no object answers is worse than a null column — the
 // doctor page renders a broken portrait and the programme block offers a
 // download that 404s — so the seed owns the objects as much as it owns the rows.
@@ -29,6 +30,7 @@
 // consumer that imports this builder from `dist` gets a loud ENOENT naming the
 // missing portrait rather than a silently empty plan.
 
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import fontkit from "@pdf-lib/fontkit";
@@ -36,6 +38,11 @@ import { PDFDocument, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 
 import type { NewExpert } from "../../schema/taxonomy.js";
 import type { GoldenDataset } from "./dataset.js";
+import {
+  GOLDEN_FEED_IMAGES,
+  goldenFeedImageOfKey,
+  type GoldenFeedImageName,
+} from "./feed-volume.js";
 import {
   GOLDEN_COURSE_MEMO_CONTENT_TYPE,
   GOLDEN_COURSE_MEMO_KEY,
@@ -97,6 +104,7 @@ export class GoldenMediaError extends Error {
 export const PORTRAIT_CONTENT_TYPE = "image/webp";
 export const PROGRAMME_CONTENT_TYPE = "application/pdf";
 export const PARTNER_LOGO_CONTENT_TYPE = "image/svg+xml";
+export const FEED_IMAGE_CONTENT_TYPE = "image/webp";
 
 /** How many objects are in flight at once — see `writeGoldenMedia`. */
 export const GOLDEN_MEDIA_CONCURRENCY = 8;
@@ -123,6 +131,7 @@ const INK = rgb(0.11, 0.12, 0.14);
 const MUTED = rgb(0.42, 0.44, 0.48);
 
 const portraitDir = new URL("./media/portraits/", import.meta.url);
+const feedImageDir = new URL("./media/feed/", import.meta.url);
 const fontDir = new URL("./media/fonts/", import.meta.url);
 
 let fontBytesCache: Promise<{ regular: Uint8Array; semiBold: Uint8Array }> | null =
@@ -294,6 +303,38 @@ export async function buildGoldenMediaPlan(
     });
   }
 
+  // #4192 — material covers and settled Telegram post previews. An own card's
+  // `image_ref` IS its material's `cover_ref`, so one object serves both rows.
+  // The bytes are committed and the key carries their hash — `if-absent`.
+  const feedKeys = new Map<string, string>();
+  for (const material of dataset.materials) {
+    if (material.coverRef) {
+      feedKeys.set(
+        material.coverRef,
+        `material ${String(material.slug)} cover_ref`,
+      );
+    }
+  }
+  for (const entry of dataset.feedEntries) {
+    if (entry.imageRef && !feedKeys.has(entry.imageRef)) {
+      feedKeys.set(entry.imageRef, `feed entry ${String(entry.id)} image_ref`);
+    }
+  }
+  for (const [key, owner] of feedKeys) {
+    const image = goldenFeedImageOfKey(key);
+    if (image === null) {
+      throw new GoldenMediaError(
+        `${owner} "${key}" is not a golden feed image key`,
+      );
+    }
+    plan.push({
+      key,
+      contentType: FEED_IMAGE_CONTENT_TYPE,
+      bytes: await readFeedImage(image),
+      refresh: "if-absent",
+    });
+  }
+
   const seen = new Set<string>();
   for (const object of plan) {
     if (seen.has(object.key)) {
@@ -318,6 +359,29 @@ async function readPortrait(
       })`,
     );
   }
+}
+
+const feedImageCache = new Map<GoldenFeedImageName, Promise<Uint8Array>>();
+
+/** Reads a committed feed image and checks it is the bytes its key names. */
+function readFeedImage(image: GoldenFeedImageName): Promise<Uint8Array> {
+  let bytes = feedImageCache.get(image);
+  if (!bytes) {
+    bytes = (async () => {
+      const body = new Uint8Array(
+        await readFile(new URL(`${image}.webp`, feedImageDir)),
+      );
+      const sha = createHash("sha256").update(body).digest("hex");
+      if (sha !== GOLDEN_FEED_IMAGES[image]) {
+        throw new GoldenMediaError(
+          `media/feed/${image}.webp hashes to ${sha}, not the ${GOLDEN_FEED_IMAGES[image]} its keys carry — update GOLDEN_FEED_IMAGES with the file`,
+        );
+      }
+      return body;
+    })();
+    feedImageCache.set(image, bytes);
+  }
+  return bytes;
 }
 
 const LOGO_WIDTH = 480;

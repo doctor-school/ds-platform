@@ -67,6 +67,13 @@ a{color:var(--color-primary-action)}a:hover{color:var(--color-primary-hover)}
 <section data-screen-label="d-lesson · шаг" style="padding: var(--space-8) var(--space-gutter) 0">
 <div style="max-width: 56rem; margin: 0 auto">
 
+<!-- правило курса изменилось: причина до повторного прохождения (024 EARS-24) -->
+<sc-if value="{{ ruleChanged }}" hint-placeholder-val="{{ false }}">
+<div style="margin-bottom: var(--space-6)">
+<x-import component-from-global-scope="DsDesignSystem.Alert" variant="info"><b>Условия урока изменились</b><br>Теперь для зачёта нужно набрать в итоговом тесте 80 % вместо 70 %. Пройдите тест ещё раз — остальные шаги урока засчитаны.</x-import>
+</div>
+</sc-if>
+
 <!-- состояние: загрузка -->
 <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}">
 <div aria-busy="true" aria-label="Шаг загружается" style="display: flex; flex-direction: column; gap: var(--space-4)">
@@ -286,7 +293,7 @@ a{color:var(--color-primary-action)}a:hover{color:var(--color-primary-hover)}
 </div>
 </dc-import>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"signedIn":{"editor":"boolean","default":true,"tsType":"boolean","section":"Состояние"},"dark":{"editor":"boolean","default":false,"tsType":"boolean","section":"Состояние"},"state":{"editor":"enum","options":["обычное","загрузка","ошибка"],"default":"обычное","tsType":"string","section":"Состояние"},"step":{"editor":"enum","options":["видео","микрообучение","клинический случай","материал партнёра","подкаст","тест"],"default":"видео","tsType":"string","section":"Шаг"},"testState":{"editor":"enum","options":["вопрос","ответ неверный","сдан","не сдан"],"default":"вопрос","tsType":"string","section":"Шаг"},"$preview":{"width":1440,"height":2400}}'>
+<script type="text/x-dc" data-dc-script data-props='{"signedIn":{"editor":"boolean","default":true,"tsType":"boolean","section":"Состояние"},"dark":{"editor":"boolean","default":false,"tsType":"boolean","section":"Состояние"},"state":{"editor":"enum","options":["обычное","загрузка","ошибка"],"default":"обычное","tsType":"string","section":"Состояние"},"причина":{"editor":"enum","options":["нет","правило изменилось"],"default":"правило изменилось","tsType":"string","section":"Состояние"},"step":{"editor":"enum","options":["видео","микрообучение","клинический случай","материал партнёра","подкаст","тест"],"default":"видео","tsType":"string","section":"Шаг"},"testState":{"editor":"enum","options":["вопрос","ответ неверный","сдан","не сдан"],"default":"вопрос","tsType":"string","section":"Шаг"},"$preview":{"width":1440,"height":2400}}'>
 class Component extends DCLogic {
   state = { isMobile: false, darkS: null, cur: null, reached: null, card: 1, caseAns: null, opt: null, test: null, rating: 0 };
 
@@ -397,6 +404,7 @@ class Component extends DCLogic {
       isMobile: m, isDesktop: !m,
       stReady, stLoading: dataState === 'загрузка', stError: dataState === 'ошибка',
       showOpen: stReady && guest, showStage: stReady && signedIn,
+      ruleChanged: stReady && signedIn && (p['причина'] || 'нет') === 'правило изменилось',
       steps,
       sv: { kicker: 'Шаг ' + (cur + 1) + ' из ' + STEPS.length + ' · ' + sv0.type + ' · ' + sv0.meta, title: sv0.title, rule: sv0.rule, partner: !!sv0.partner },
       stageHeadStyle: 'display:flex;flex-direction:column;gap:var(--space-2);padding:' + pad + ';border-bottom:' + bw + ' solid var(--color-border)',

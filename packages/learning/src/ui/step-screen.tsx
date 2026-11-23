@@ -248,7 +248,7 @@ export function StepScreen({ courseSlug, config, stepId, ...initial }: StepScree
                 <h2 className="m-0 text-xl font-extrabold leading-tight">{step.step.title}</h2>
               </header>
               <div className="flex flex-col gap-4 p-6">
-                <StepBody step={step} onChanged={onChanged} />
+                <StepBody step={step} onChanged={onChanged} ruleChanged={!!l.statusReason} />
               </div>
               <footer className="flex flex-wrap items-center gap-4 border-t-2 border-border px-6 py-4">
                 <div className="flex min-w-0 flex-1 basis-64 flex-col gap-1">
@@ -309,14 +309,14 @@ function GuestGate({ href, lesson }: { href: string; lesson: LearningLessonRead 
   );
 }
 
-function StepBody({ step, onChanged }: { step: LearningStepRead; onChanged: OnChanged }) {
+function StepBody({ step, onChanged, ruleChanged }: { step: LearningStepRead; onChanged: OnChanged; ruleChanged: boolean }) {
   switch (step.body.type) {
     case "video":
       return <VideoBody step={step} body={step.body} onChanged={onChanged} />;
     case "download":
       return <DownloadBody step={step} body={step.body} onChanged={onChanged} />;
     case "test":
-      return <TestBody body={step.body} onChanged={onChanged} />;
+      return <TestBody body={step.body} onChanged={onChanged} ruleChanged={ruleChanged} />;
   }
 }
 
@@ -525,7 +525,7 @@ function DownloadBody({
 }
 
 /** EARS-18 — the exit test: start (an open attempt comes back), one question at a time, submit, the result against the threshold. */
-function TestBody({ body, onChanged }: { body: Body<"test">; onChanged: OnChanged }) {
+function TestBody({ body, onChanged, ruleChanged }: { body: Body<"test">; onChanged: OnChanged; ruleChanged: boolean }) {
   const hydrated = useHydrated();
   const [attempt, setAttempt] = useState<LearningAttempt | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -598,7 +598,12 @@ function TestBody({ body, onChanged }: { body: Body<"test">; onChanged: OnChange
         <p className="m-0 text-base font-semibold">{C.testIntro(body.questionCount, body.threshold)}</p>
         {body.lastResult ? (
           <p className="m-0 text-sm font-semibold text-muted-foreground">
-            {body.lastResult.passed ? C.passed(body.lastResult.score, body.threshold) : C.failed(body.lastResult.score, body.threshold)}
+            {body.lastResult.passed
+              ? C.passed(body.lastResult.score, body.threshold)
+              : ruleChanged
+                ? // 024 EARS-24 — re-judged under the new pass mark the Alert above names.
+                  C.rejudged(body.lastResult.score, body.threshold)
+                : C.failed(body.lastResult.score, body.threshold)}
           </p>
         ) : null}
         {error ? <Alert variant="danger">{error}</Alert> : null}

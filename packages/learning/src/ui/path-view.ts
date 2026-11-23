@@ -207,13 +207,18 @@ export function buildPathView(path: LearningCoursePath): PathView {
             !guest && step.state.status === "locked"
               ? lockReasonText(step.state.reason)
               : null,
-          lockNote: ruleChange
-            ? ruleChange.title
-            : firstLocked && step.state.status === "locked"
-              ? step.state.reason.kind === "previous"
-                ? C.lockNote
-                : lockReasonText(step.state.reason)
-              : null,
+          // A locked node keeps what opens it, even when a rule change locked it
+          // (its reason stays in the summary); an open one names the change.
+          lockNote:
+            step.state.status === "locked"
+              ? firstLocked
+                ? step.state.reason.kind === "previous"
+                  ? C.lockNote
+                  : lockReasonText(step.state.reason)
+                : null
+              : ruleChange
+                ? ruleChange.title
+                : null,
           ruleChange,
           here,
           openable: step.state.status !== "locked",

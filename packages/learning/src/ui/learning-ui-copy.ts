@@ -159,8 +159,18 @@ export function statusReasonText(
     case "done":
       needed = "Урок засчитан — проходить его заново не нужно.";
       break;
-    case "locked":
-      needed = "Урок откроется, когда будут выполнены условия курса.";
+    case "locked": {
+      // What opens the lesson now: the first locked step's own condition.
+      const first = steps.find((s) => s.state.status === "locked")?.state;
+      needed =
+        first?.status === "locked"
+          ? lockReasonText(first.reason)
+          : "Урок откроется, когда будут выполнены условия курса.";
+      break;
+    }
+    case "test-out-reachable":
+      // The lesson is reached through its test, not by passing its steps again.
+      needed = "Урок будет засчитан, когда вы сдадите тест.";
       break;
     default: {
       const pending = steps.filter((s) => s.state.status !== "done");
@@ -293,6 +303,8 @@ export const LEARNING_UI_COPY = {
   answer: "Ответить",
   passed: (score: number, threshold: number) =>
     `Тест сдан: ${score} % при пороге ${threshold} %`,
+  /** 024 EARS-24 — the last attempt after a rule change raised the pass mark (no «не сдан»: it passed under its own rules). */
+  rejudged: (score: number, threshold: number) => `Ваш результат ${score} % — теперь нужно ${threshold} %.`,
   failed: (score: number, threshold: number) =>
     `Тест не сдан: ${score} % при пороге ${threshold} %. Пройденные шаги сохранены.`,
   lessonDone: "Урок пройден",

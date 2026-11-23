@@ -937,10 +937,61 @@ export function reportTally(report) {
 }
 
 /**
+ * The tally `slot-suite` hands `slot-verdict` as a job output: the counts and at
+ * most 20 failing titles, with the total so the comment can say how many more.
+ */
+export function compactTally(tally) {
+  return {
+    passed: tally.passed,
+    failed: tally.failed,
+    flaky: tally.flaky,
+    skipped: tally.skipped,
+    failing: tally.failing.slice(0, FAILING_TITLES_MAX),
+    failingTotal: tally.failing.length,
+  };
+}
+
+/**
+ * The gate of a PR-slot dispatch (#4202), run by the trusted `slot-gate` job with
+ * `main`'s code BEFORE anything checks the dispatched SHA out or receives a stage
+ * secret. `pr` is the `GET /repos/{repo}/pulls/{N}` reply for `slot=pr-<N>`, or
+ * undefined when it could not be read. Passes only for a SHA that is the head of an
+ * OPEN PR N pushed to THIS repository: a fork's commit — fetchable here through
+ * `refs/pull/N/head` — never runs with the stage secrets.
+ */
+export function prSlotGate({ slot, sha, repository, pr }) {
+  const refuse = (reason) => ({ ok: false, reason });
+  const match = /^pr-([1-9][0-9]{0,9})$/.exec(String(slot ?? ""));
+  if (!match)
+    return refuse(
+      `slot must be pr-<N>, not ${JSON.stringify(slot ?? "")} — the main slot runs only from Runtime images`,
+    );
+  if (!FULL_SHA_RE.test(String(sha ?? "")))
+    return refuse(`sha is not a 40-hex SHA: ${JSON.stringify(sha ?? "")}`);
+  if (!pr || typeof pr !== "object" || String(pr.number) !== match[1])
+    return refuse(`PR ${match[1]} is not readable`);
+  if (pr.state !== "open") return refuse(`PR ${match[1]} is not open`);
+  const headRepo = pr.head?.repo?.full_name;
+  if (!repository || headRepo !== repository)
+    return refuse(
+      `PR ${match[1]} is not from this repository (head: ${headRepo ?? "a deleted repository"})`,
+    );
+  if (pr.head?.sha !== sha)
+    return refuse(
+      `sha ${sha.slice(0, 12)} is not the head of PR ${match[1]} (${String(pr.head?.sha ?? "?").slice(0, 12)})`,
+    );
+  return { ok: true, pr: Number(match[1]) };
+}
+
+const count = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : 0);
+
+/**
  * The compact verdict the Actions run posts on PR N (#4202): verdict, counts, the
  * failing titles (≤20), the run link, and the e2e:stage verdict block when the run
- * produced one. `passed` is the suite step's own outcome; anything else — a refused
- * input, an unanswered `/v1/health`, a red leg — is FAIL, with its reason.
+ * produced one. Rendered by the trusted `slot-verdict` job from `slot-suite`'s
+ * outputs, which are data: `passed` is decided by the caller from the job result,
+ * never read from them. A refused gate, an unanswered `/v1/health`, a red leg —
+ * anything but a green suite — is FAIL, with its reason.
  */
 export function renderPrVerdictComment({
   runId,
@@ -950,9 +1001,16 @@ export function renderPrVerdictComment({
   passed,
   reason,
   verdictBlock,
-  report,
+  tally,
 }) {
-  const tally = reportTally(report);
+  const t = tally && typeof tally === "object" ? tally : {};
+  const failing = (Array.isArray(t.failing) ? t.failing : [])
+    .slice(0, FAILING_TITLES_MAX)
+    .map((title) =>
+      String(title)
+        .replace(/[<>`\r\n]/g, " ")
+        .slice(0, 300),
+    );
   const lines = [
     runMarker(runId),
     `### e2e:stage ${slot} — ${passed ? "PASS" : "FAIL"}`,
@@ -962,20 +1020,21 @@ export function renderPrVerdictComment({
   if (reason) lines.push("", `Refused: ${reason}`);
   lines.push(
     "",
-    `passed ${tally.passed} · failed ${tally.failed} · flaky ${tally.flaky} · skipped ${tally.skipped}`,
+    tally
+      ? `passed ${count(t.passed)} · failed ${count(t.failed)} · flaky ${count(t.flaky)} · skipped ${count(t.skipped)}`
+      : "no scenario counts — the suite produced no report",
   );
-  if (tally.failing.length > 0) {
+  if (failing.length > 0) {
     lines.push("", "Failing:");
-    for (const title of tally.failing.slice(0, FAILING_TITLES_MAX)) {
-      lines.push(`- ${title.replace(/[<>`]/g, "")}`);
-    }
-    const more = tally.failing.length - FAILING_TITLES_MAX;
+    for (const title of failing) lines.push(`- ${title}`);
+    const more = count(t.failingTotal) - failing.length;
     if (more > 0) lines.push(`- … and ${more} more`);
   }
-  if (verdictBlock) lines.push("", verdictBlock.trimEnd());
+  if (verdictBlock)
+    lines.push("", "```text", verdictBlock.replace(/```(text)?/g, "").trim(), "```");
   lines.push(
     "",
-    "Full report: on the stage box, `/var/lib/ds-platform/e2e-reports/<sha>/` (never an Actions artifact — this repository's artifacts are public).",
+    "The full report is not kept in Actions (this repository's artifacts are public); `pnpm e2e:stage <slot> --local` reproduces it.",
   );
   return `${lines.join("\n")}\n`;
 }

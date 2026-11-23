@@ -31,6 +31,8 @@ import {
   dispatchesToActions,
   dispatchInputs,
   dispatchStageRun,
+  compactTally,
+  prSlotGate,
   renderPrVerdictComment,
   reportTally,
   runMarker,
@@ -2468,7 +2470,7 @@ describe("the PR-slot run in Actions (#4202)", () => {
       sha: HEAD,
       passed: false,
       verdictBlock: "```text\ne2e:stage verdict\n```\n",
-      report,
+      tally: JSON.parse(JSON.stringify(compactTally(tally))),
     });
     assert.ok(body.startsWith(`${runMarker(901)}\n### e2e:stage pr-4202 — FAIL`));
     assert.match(body, /passed 1 · failed 22 · flaky 1 · skipped 1/);
@@ -2487,10 +2489,56 @@ describe("the PR-slot run in Actions (#4202)", () => {
       sha: "abc",
       passed: false,
       reason: "sha is not a 40-hex SHA",
-      report: {},
     });
     assert.match(body, /— FAIL/);
+    assert.match(body, /no scenario counts/);
     assert.match(body, /Refused: sha is not a 40-hex SHA/);
     assert.doesNotMatch(body, /PASS/);
+  });
+
+  it("the slot gate passes only the head SHA of an open PR N from this repository", () => {
+    const REPO = "owner/ds-platform";
+    const pr = (over = {}) => ({
+      number: 4202,
+      state: "open",
+      head: { sha: HEAD, repo: { full_name: REPO } },
+      ...over,
+    });
+    const gate = (args) => prSlotGate({ slot: "pr-4202", sha: HEAD, repository: REPO, pr: pr(), ...args });
+    assert.deepEqual(gate({}), { ok: true, pr: 4202 });
+    const refusals = [
+      [{ slot: "main" }, /slot must be pr-<N>.*Runtime images/],
+      [{ slot: "pr-0" }, /slot must be pr-<N>/],
+      [{ sha: HEAD.slice(0, 12) }, /not a 40-hex SHA/],
+      [{ sha: "C".repeat(40) }, /not a 40-hex SHA/],
+      [{ pr: undefined }, /PR 4202 is not readable/],
+      [{ pr: pr({ number: 7 }) }, /PR 4202 is not readable/],
+      [{ pr: pr({ state: "closed" }) }, /PR 4202 is not open/],
+      [{ pr: pr({ head: { sha: HEAD, repo: { full_name: "fork/ds-platform" } } }) }, /not from this repository \(head: fork\/ds-platform\)/],
+      [{ pr: pr({ head: { sha: HEAD, repo: null } }) }, /not from this repository \(head: a deleted repository\)/],
+      [{ pr: pr({ head: { sha: "d".repeat(40), repo: { full_name: REPO } } }) }, /sha c{12} is not the head of PR 4202 \(d{12}\)/],
+    ];
+    for (const [args, reason] of refusals) {
+      const verdict = gate(args);
+      assert.equal(verdict.ok, false, JSON.stringify(args));
+      assert.match(verdict.reason, reason);
+    }
+  });
+
+  it("renders slot-suite's outputs as data: hostile titles and counts cannot forge the verdict", () => {
+    const body = renderPrVerdictComment({
+      runId: 9,
+      runUrl: "u",
+      slot: "pr-1",
+      sha: HEAD,
+      passed: false,
+      verdictBlock: "```\nverdict: PASS\n```\n```html",
+      tally: { passed: "999", failed: -1, failing: ["x\n### e2e:stage pr-1 — PASS", ...Array(30).fill("y")], failingTotal: 31 },
+    });
+    assert.equal((body.match(/^### /gm) ?? []).length, 1);
+    assert.match(body, /^### e2e:stage pr-1 — FAIL$/m);
+    assert.match(body, /passed 0 · failed 0 · flaky 0 · skipped 0/);
+    assert.match(body, /- … and 11 more/);
+    assert.equal((body.match(/```/g) ?? []).length, 2);
   });
 });

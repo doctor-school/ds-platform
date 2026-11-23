@@ -177,9 +177,15 @@ it("3752: the run title ends with the SHA under test — retention keeps a queue
 });
 
 describe("stage.yml — the PR-slot dispatch (#4202)", () => {
+  const gate = stage.jobs["slot-gate"];
   const slotSuite = stage.jobs["slot-suite"];
   const slotVerdict = stage.jobs["slot-verdict"];
+  const slotJobs = [gate, slotSuite, slotVerdict];
   const step = (job, pred) => job.steps.find(pred);
+  const checkoutOf = (job) =>
+    step(job, (s) => String(s.uses ?? "").startsWith("actions/checkout"));
+  const secretsOf = (job) =>
+    [...JSON.stringify(job).matchAll(/secrets\.([A-Z0-9_]+)/g)].map((m) => m[1]);
 
   it("takes slot + sha and the e2e-stage filters as inputs", () => {
     const inputs = stage.on.workflow_dispatch.inputs;
@@ -190,11 +196,13 @@ describe("stage.yml — the PR-slot dispatch (#4202)", () => {
     assert.equal(inputs["no-live"].type, "boolean");
   });
 
-  it("leaves the main path to workflow_run: its jobs never run on a dispatch", () => {
+  it("leaves the main path to workflow_run: its jobs never run on a dispatch, and a dispatch queues per slot", () => {
     assert.match(stage.jobs.converge.if, /workflow_run\.event == 'push'/);
-    assert.equal(slotSuite.if, "github.event_name == 'workflow_dispatch'");
-    assert.match(slotVerdict.if, /github\.event_name == 'workflow_dispatch'/);
-    // A dispatch queues per slot, never in `stage-main`.
+    assert.equal(gate.if, "github.event_name == 'workflow_dispatch'");
+    assert.equal(slotSuite.needs, "slot-gate");
+    assert.equal(slotSuite.if, undefined, "slot-suite runs only when the gate succeeded");
+    assert.deepEqual(slotVerdict.needs, ["slot-gate", "slot-suite"]);
+    assert.equal(slotVerdict.if, "always() && github.event_name == 'workflow_dispatch'");
     assert.ok(
       stage.concurrency.group.startsWith(
         "${{ github.event_name == 'workflow_dispatch' && format('stage-slot-{0}', inputs.slot) ||",
@@ -202,38 +210,40 @@ describe("stage.yml — the PR-slot dispatch (#4202)", () => {
     );
   });
 
-  it("never writes a commit status: no `statuses` permission, no statuses call", () => {
-    for (const job of [slotSuite, slotVerdict]) {
+  it("gates with main's code before anything checks the dispatched SHA out or holds a secret", () => {
+    assert.equal(checkoutOf(gate).with.ref, undefined, "the gate checks out the workflow's own ref");
+    assert.equal(environmentOf(gate), undefined);
+    assert.deepEqual(secretsOf(gate), []);
+    assert.deepEqual(gate.permissions, { contents: "read", "pull-requests": "read" });
+    const run = step(gate, (s) => s.id === "gate").run;
+    assert.match(run, /gh api "repos\/\$GITHUB_REPOSITORY\/pulls\/\$\{SLOT#pr-\}"/);
+    assert.match(run, /prSlotGate\(/);
+    assert.match(run, /process\.exit\(1\)/);
+  });
+
+  it("runs the PR's code with the suite's secrets only: no ssh key, no statuses, no box upload", () => {
+    assert.equal(checkoutOf(slotSuite).with.ref, "${{ inputs.sha }}");
+    assert.deepEqual(
+      [...new Set(secretsOf(slotSuite))].sort(),
+      [
+        "DS_GOLDEN_PASSWORD_ADMIN",
+        "DS_GOLDEN_PASSWORD_DOCTOR_MFA",
+        "DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED",
+        "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+        "DS_STAGE_AGENT_ADMIN_PASSWORD",
+        "DS_STAGE_AGENT_ADMIN_TOTP_SECRET",
+        "DS_STAGE_AGENT_COMMITTEE_PASSWORD",
+        "DS_STAGE_AGENT_COMMITTEE_TOTP_SECRET",
+        "E2E_CAPTCHA_TEST_TOKEN",
+        "STAGE_BASIC_AUTH_PASS",
+      ],
+    );
+    const text = JSON.stringify(slotSuite);
+    assert.doesNotMatch(text, /STAGE_SSH|ssh -i|upload-report|E2E_STAGE_OBSERVE/);
+    for (const job of slotJobs) {
       assert.equal(job.permissions.statuses, undefined);
       for (const s of job.steps) assert.doesNotMatch(String(s.run ?? ""), /statuses/);
     }
-    assert.equal(slotSuite.permissions["pull-requests"], "read");
-    assert.equal(environmentOf(slotVerdict), undefined);
-    assert.deepEqual(slotVerdict.permissions, { contents: "read", "pull-requests": "write" });
-  });
-
-  it("refuses main, a non-40-hex SHA and a SHA that is not PR N's head from this repository, first", () => {
-    const check = slotSuite.steps[0];
-    assert.equal(check.id, "inputs");
-    assert.match(check.run, /\^pr-\[1-9\]\[0-9\]\{0,9\}\$/);
-    assert.match(check.run, /\^\[0-9a-f\]\{40\}\$/);
-    assert.match(check.run, /not from this repository/);
-    assert.match(check.run, /sha is not the head of PR/);
-  });
-
-  it("interpolates no input into a shell: every input reaches `run` through env", () => {
-    for (const job of [slotSuite, slotVerdict]) {
-      for (const s of job.steps) {
-        assert.doesNotMatch(String(s.run ?? ""), /\$\{\{/, `${s.name ?? s.uses}`);
-      }
-    }
-  });
-
-  it("checks out the dispatched SHA and runs the workstation path of e2e-stage with the health pre-flight", () => {
-    assert.equal(
-      step(slotSuite, (s) => String(s.uses ?? "").startsWith("actions/checkout")).with.ref,
-      "${{ inputs.sha }}",
-    );
     const suite = step(slotSuite, (s) => s.id === "suite");
     assert.match(
       suite.run,
@@ -243,22 +253,23 @@ describe("stage.yml — the PR-slot dispatch (#4202)", () => {
     assert.equal(slotSuite.env.E2E_PUBLIC_LOG, "1");
   });
 
-  it("writes the ssh key only after the suite, ships the report to the box, removes the key", () => {
-    const names = slotSuite.steps.map((s) => s.id ?? s.name);
-    const suite = names.indexOf("suite");
-    const key = names.indexOf("Write the ssh key");
-    assert.ok(key > suite, "the PR's code never runs while the key is on disk");
-    const ship = step(slotSuite, (s) => s.name === "Ship the report to the box");
-    assert.match(ship.run, /upload-report \$SHA/);
-    assert.match(ship.run, /set -o pipefail/);
-    assert.equal(step(slotSuite, (s) => s.name === "Remove the ssh key").if, "always()");
+  it("interpolates no input into a shell: every input reaches `run` through env", () => {
+    for (const job of slotJobs) {
+      for (const s of job.steps) {
+        assert.doesNotMatch(String(s.run ?? ""), /\$\{\{/, `${s.name ?? s.uses}`);
+      }
+    }
   });
 
-  it("posts the rendered verdict on PR N, or a FAIL naming the reason when none was rendered", () => {
-    const post = slotVerdict.steps[0];
+  it("renders and posts the verdict with main's code, PASS only from the job result", () => {
+    assert.equal(checkoutOf(slotVerdict).with.ref, undefined);
+    assert.equal(environmentOf(slotVerdict), undefined);
+    assert.deepEqual(secretsOf(slotVerdict), []);
+    assert.deepEqual(slotVerdict.permissions, { contents: "read", "pull-requests": "write" });
+    const post = step(slotVerdict, (s) => s.name === "Comment the verdict on the PR");
+    assert.equal(post.env.SUITE_RESULT, "${{ needs.slot-suite.result }}");
+    assert.match(post.run, /passed: !e\.GATE_REASON && e\.SUITE_RESULT === "success"/);
     assert.match(post.run, /issues\/\$\{SLOT#pr-\}\/comments/);
-    assert.match(post.run, /### e2e:stage \$SLOT — FAIL/);
-    assert.doesNotMatch(post.run, /PASS/);
-    assert.equal(slotSuite.outputs.comment, "${{ steps.verdict.outputs.comment }}");
+    assert.equal(slotSuite.outputs.tally, "${{ steps.summary.outputs.tally }}");
   });
 });

@@ -263,18 +263,21 @@ and a public repository's GitHub-hosted runners cost nothing.
   (`gh workflow run stage.yml --ref main -f slot=pr-<N> -f sha=<HEAD>` plus the filters
   you passed), waits for the run, prints the compact verdict it posted on PR N, and exits
   0 only for a green run (1 red, 2 when nothing was dispatched). No browser starts here.
-  The SHA is the current `HEAD`, which must be pushed and be PR N's head — the run
-  refuses any other SHA, `main`, a short or non-hex SHA and a fork's commit, each as a
-  red run naming the reason. The workflow file always comes from `main` (the `stage`
-  environment that holds the suite secrets admits `main` only); the job checks out the
-  dispatched SHA and runs that tree's suite, so a branch needs this change merged in
-  (`--local` and `--verdict-file` exist in its `e2e-stage.mjs`). The verdict comment
-  carries passed / failed / flaky / skipped counts, the failing titles (≤20), the
-  e2e:stage verdict block and the run link — paste or link it in the PR body. The full
-  HTML/JSON report goes to the stage box (`/var/lib/ds-platform/e2e-reports/<sha>/`),
-  never to an Actions artifact: this repository's artifacts are public (release-pipeline
-  spec §4). A PR-slot run never posts or changes the `stage-suite` status — its job holds
-  no `statuses` permission.
+  The SHA is the current `HEAD`, which must be pushed and be the head of an open PR N
+  from this repository. A trusted `slot-gate` job (`main`'s code, no secret) checks that
+  before anything checks the SHA out, and refuses `main`, a short or non-hex SHA, a
+  closed PR, a fork's commit and a stale SHA, each as a red run naming the reason. The
+  workflow file always comes from `main` (the `stage` environment that holds the suite
+  secrets admits `main` only); `slot-suite` checks out the dispatched SHA and runs that
+  tree's suite with the suite's own secrets only — no ssh key, no `statuses` permission,
+  so a PR-slot run never posts or changes the `stage-suite` status. A branch therefore
+  needs this change merged in (`--local` / `--verdict-file` in its `e2e-stage.mjs`).
+  A trusted `slot-verdict` job renders the comment with `main`'s code — passed / failed
+  / flaky / skipped counts, the failing titles (≤20), the e2e:stage verdict block and
+  the run link — and posts it on PR N; link it in the PR body. The full HTML/JSON report
+  is not kept: never an Actions artifact (this repository's artifacts are public,
+  release-pipeline spec §4), and not shipped to the box either, since that needs the CI
+  ssh key on a runner that executed PR code. `--local` reproduces it.
 - **`--local`** keeps the workstation run, for debugging a single spec
   (`pnpm e2e:stage pr-<N> --local --grep "…"`); it is also what the Actions job itself
   runs. `--report-dir` / `--verdict-file` need it.

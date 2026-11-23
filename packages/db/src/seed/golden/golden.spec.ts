@@ -46,6 +46,7 @@ import {
   resolveGoldenNow,
   shiftFromNow,
 } from "./now.js";
+import { GOLDEN_FEED_IMAGES, goldenFeedImageOfKey } from "./feed-volume.js";
 import {
   applyGoldenStep,
   buildGoldenMediaPlan,
@@ -2494,6 +2495,12 @@ describe("#2213 golden volume content and media", () => {
       ...dataset.learningSteps
         .map((s) => s.mediaRef)
         .filter((key): key is string => Boolean(key)),
+      ...dataset.materials
+        .map((m) => m.coverRef)
+        .filter((key): key is string => Boolean(key)),
+      ...dataset.feedEntries
+        .map((e) => e.imageRef)
+        .filter((key): key is string => Boolean(key)),
     ]);
     expect(new Set(keys)).toEqual(promised);
     for (const object of plan) {
@@ -3263,6 +3270,124 @@ describe("023 EARS-5 (#4017) golden schools at volume", () => {
     expect(goldenReferentialIssues(broken)).toContain(
       `learning_facts.stepId references an unknown row: ${goldenUuid(GOLDEN_GROUP.learningSteps, 999)}`,
     );
+  });
+});
+
+describe("#4192 golden feed at volume, as a channel looks", () => {
+  const dataset = buildGoldenDataset(now, subjects);
+  // What the rail reads: a card neither hidden nor switched off (EARS-22).
+  const visible = dataset.feedEntries.filter(
+    (e) => e.hiddenAt == null && e.sourceOff !== true,
+  );
+  const posts = visible.filter((e) => e.kind === "post");
+
+  it("#4192: gives the rail an extreme volume of ~200 visible cards", () => {
+    expect(visible.length).toBeGreaterThanOrEqual(190);
+    expect(visible.length).toBeLessThanOrEqual(220);
+    // Several working channels feed it, not one.
+    const sources = new Set(posts.map((e) => e.feedSourceId));
+    expect(sources.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it("#4192: no two visible cards share a text", () => {
+    const titles = visible.map((e) => e.title as string);
+    expect(titles.every((t) => t.trim().length > 0)).toBe(true);
+    expect(new Set(titles).size).toBe(titles.length);
+  });
+
+  it("#4192: every Telegram source writes its own texts", () => {
+    const bySource = new Map<string, Set<string>>();
+    for (const e of dataset.feedEntries) {
+      if (e.sourcePlatform !== "telegram") continue;
+      const set = bySource.get(e.feedSourceId as string) ?? new Set<string>();
+      set.add(e.title as string);
+      bySource.set(e.feedSourceId as string, set);
+    }
+    const all = [...bySource.values()];
+    for (const [i, a] of all.entries()) {
+      for (const b of all.slice(i + 1)) {
+        expect([...a].filter((t) => b.has(t))).toEqual([]);
+      }
+    }
+  });
+
+  it("#4192: a realistic share of posts carries a settled photo or video preview", () => {
+    const photo = posts.filter((e) => e.imageRef && e.durationSeconds == null);
+    const video = posts.filter((e) => e.imageRef && e.durationSeconds != null);
+    const text = posts.filter((e) => !e.imageRef);
+    expect(photo.length / posts.length).toBeGreaterThanOrEqual(0.4);
+    expect(video.length / posts.length).toBeGreaterThanOrEqual(0.1);
+    expect(text.length / posts.length).toBeGreaterThanOrEqual(0.2);
+    for (const e of video) expect(e.durationSeconds).toBeGreaterThan(0);
+    for (const e of dataset.feedEntries) {
+      if (e.sourcePlatform !== "telegram") continue;
+      if (e.imageRef) {
+        // As `TelegramPreviewService` settles a copy: key, state, file ids.
+        expect(e.imageRef).toMatch(
+          new RegExp(`^feed-previews/${e.id}/[0-9a-f]{64}\\.webp$`),
+        );
+        expect(goldenFeedImageOfKey(e.imageRef)).not.toBeNull();
+        expect(e.previewState).toBe("done");
+        expect(e.previewFileId).toBeTruthy();
+        expect(e.previewFileUniqueId).toBeTruthy();
+        expect(e.imageUrl).toBeNull();
+      } else {
+        expect(e.previewState ?? null).toBeNull();
+        expect(e.previewFileId ?? null).toBeNull();
+      }
+    }
+  });
+
+  it("#4192: some own materials carry a cover, and their card shows it", () => {
+    const covered = dataset.materials.filter((m) => m.coverRef);
+    expect(covered.length).toBeGreaterThanOrEqual(4);
+    const uncovered = dataset.materials.filter(
+      (m) => m.status === "published" && !m.coverRef,
+    );
+    expect(uncovered.length).toBeGreaterThan(0);
+    for (const m of covered) {
+      expect(m.coverRef).toMatch(
+        new RegExp(`^materials/covers/${m.id}-[0-9a-f]{32}\\.webp$`),
+      );
+      expect(goldenFeedImageOfKey(m.coverRef as string)).not.toBeNull();
+      const card = dataset.feedEntries.find((e) => e.materialId === m.id);
+      if (m.status === "published") expect(card?.imageRef).toBe(m.coverRef);
+    }
+  });
+
+  it("#4192: backs every feed image key with the committed bytes its hash names", async () => {
+    const plan = await buildGoldenMediaPlan(dataset);
+    const byKey = new Map(plan.map((o) => [o.key, o]));
+    const keys = [
+      ...dataset.materials.map((m) => m.coverRef),
+      ...dataset.feedEntries.map((e) => e.imageRef),
+    ].filter((key): key is string => Boolean(key));
+    for (const key of keys) {
+      const object = byKey.get(key);
+      expect(object?.contentType).toBe("image/webp");
+      expect(object?.refresh).toBe("if-absent");
+      const image = goldenFeedImageOfKey(key)!;
+      expect(createHash("sha256").update(object!.bytes).digest("hex")).toBe(
+        GOLDEN_FEED_IMAGES[image],
+      );
+    }
+  }, 120_000);
+
+  it("#4192: keeps the #4172 card ids on their message ids, so a re-seed updates in place", () => {
+    // `feed_entry_messages` reference a card id with no ON UPDATE: a persistent
+    // slot's #4172 card must be met under the id it was written with.
+    const news = goldenUuid(GOLDEN_GROUP.feedSources, 1000);
+    const newest = dataset.feedEntries.find(
+      (e) => e.sourceRef === `${news}:484`,
+    );
+    expect(newest?.id).toBe(goldenUuid(GOLDEN_GROUP.feedEntries, 2000));
+    const album = dataset.feedEntries.find(
+      (e) => e.sourceRef === `${news}:414`,
+    );
+    expect(album?.id).toBe(goldenUuid(GOLDEN_GROUP.feedEntries, 2010));
+    expect(album?.mediaGroupId).toBeTruthy();
+    const ids = dataset.feedEntries.map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
 

@@ -603,6 +603,10 @@ export const LIVE_TIERS = Object.freeze([
         file: "e2e/account-canvas-structure-live.spec.ts",
         requires: [URL_DOCTOR, ...ACCOUNT],
       },
+      {
+        file: "e2e/account-profile-edit-live.spec.ts",
+        requires: [URL_DOCTOR, "MAILPIT_URL", "E2E_SMS_SINK_URL"],
+      },
     ],
   },
 ]);

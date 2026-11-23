@@ -173,9 +173,9 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "doctor-course.dc.html": {
-      "sha256": "a1048c9e81072bb066004e30eb44003cd63e2fdd5f1aa981422978d37c898e18",
-      "pulledSha256": "c319b503fee0a57f244c1f8c64a9ed3e12fe9ef358e1abfc0a9caee8f47965ee",
-      "pulledAt": "2026-11-12T10:52:24.299Z",
+      "sha256": "26e0057ee096e15087e76a041e731a70e0998dd3a5d0a3ecac57d6fb245dbda6",
+      "pulledSha256": "7f577db6c60cc17eb19050d20b6e1db6e1cafd9b1b783c1304230d592628b9b2",
+      "pulledAt": "2026-11-23T06:56:55.143Z",
       "remotePath": "project/doctor-course.dc.html"
     },
     "doctor-docs.dc.html": {
@@ -200,9 +200,9 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "doctor-lesson.dc.html": {
-      "sha256": "802dddc3e7db4f2d52b27f28301b668e5180a64369bed122caeb82f1eb1339df",
-      "pulledSha256": "f5a6b4890d02d64a72c52e2b0e7db36861b97b200fb4559783b9ce41402a006e",
-      "pulledAt": "2026-11-12T10:50:44.452Z",
+      "sha256": "6fcb85df198fade736595988af825e2aadb7f869965501b8ef9fe56a35634681",
+      "pulledSha256": "79cf363ad2f1709dc2651723e34061821afe72f54a1baad5864cb1e6041be9eb",
+      "pulledAt": "2026-11-23T06:56:56.316Z",
       "remotePath": "project/doctor-lesson.dc.html"
     },
     "doctor-lk-congress.dc.html": {

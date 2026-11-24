@@ -73,12 +73,14 @@ export interface LearningSchoolOpenedNotice {
 
 /**
  * The host's product-notice sender (apps/api: the `Mailer`'s product-notice
- * class). Called after the claiming transaction commits; a rejected letter is
- * the host's to record — the claim is never undone, so a doctor gets the
- * notice at most once.
+ * class). Called after the claiming transaction commits and never awaited: it
+ * dispatches the letters off the response path and never throws, so a slow or
+ * failed send never holds or fails the publication. A rejected letter is the
+ * host's to log — the claim is never undone, so a doctor gets the notice at
+ * most once.
  */
 export interface LearningNoticePort {
-  schoolOpened(notices: LearningSchoolOpenedNotice[]): Promise<void>;
+  schoolOpened(notices: LearningSchoolOpenedNotice[]): void;
 }
 
 export interface LearningServerDeps {

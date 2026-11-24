@@ -473,7 +473,8 @@ export class LearningAdminService {
       await complete(tx, result);
       return result;
     });
-    if (notices.length > 0) await this.deps.notices.schoolOpened(notices);
+    // Off the response path: the port dispatches and returns at once.
+    if (notices.length > 0) this.deps.notices.schoolOpened(notices);
     return result;
   }
 

@@ -169,6 +169,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await interest("DELETE", school.schoolId, left.headers);
 
       await publish(h, school);
+      // The letters leave the response path: wait for the dispatch to land.
+      await expect.poll(() => lettersFor(slug).length).toBe(1);
       const letters = lettersFor(slug);
       const { rows: keenUser } = await h.pool.query<{ email: string }>(
         "SELECT email FROM users WHERE id = $1",
@@ -187,9 +189,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(rows.find((r) => r.person_id === keen.personId)?.notified).toBe(true);
       expect(rows.find((r) => r.person_id === left.personId)?.notified).toBe(false);
 
-      // A later course publication in the open school sends nothing, also to
-      // an interest registered after the school opened.
-      await interest("PUT", school.schoolId, late.headers);
+      // The open school takes no new interest (the capture is a «скоро»
+      // state), and a later course publication in it sends nothing.
+      const refused = await interest("PUT", school.schoolId, late.headers);
+      expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+      expect(refused.body.errorCode).toBe("INVALID_TRANSITION");
       const second = await buildCourse(h, {
         into: { f: school.f, schoolId: school.schoolId },
         publish: false,
@@ -205,7 +209,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const d = await doctor(h);
       await interest("PUT", school.schoolId, d.headers);
       await publish(h, school);
-      expect(lettersFor(slug)).toHaveLength(1);
+      await expect.poll(() => lettersFor(slug).length).toBe(1);
 
       const course = await admin(h, "GET", `/courses/${school.courseId}`);
       const down = await admin(h, "POST", `/courses/${school.courseId}/unpublish`, {
@@ -218,6 +222,41 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(up.status, JSON.stringify(up.body)).toBe(200);
       expect(lettersFor(slug)).toHaveLength(1);
+    });
+
+    it("023 EARS-7: the publish response never waits on the school-opened letters", async () => {
+      const school = await buildCourse(h, { publish: false });
+      await publishSchool(school.schoolId);
+      const slug = `school-${school.f.suffix}`;
+      const d = await doctor(h);
+      await interest("PUT", school.schoolId, d.headers);
+      const release = h.mailer.holdSchoolOpenedNotices();
+      try {
+        // The relay is held: a publish that awaited it would never answer.
+        await publish(h, school);
+        expect(lettersFor(slug)).toHaveLength(0);
+      } finally {
+        release();
+      }
+      await expect.poll(() => lettersFor(slug).length).toBe(1);
+    });
+
+    it("023 EARS-7: a rejected school-opened letter leaves the publish 200 and the claim set", async () => {
+      const school = await buildCourse(h, { publish: false });
+      await publishSchool(school.schoolId);
+      const slug = `school-${school.f.suffix}`;
+      const [a, b] = [await doctor(h), await doctor(h)];
+      await interest("PUT", school.schoolId, a.headers);
+      await interest("PUT", school.schoolId, b.headers);
+      h.mailer.failNextSchoolOpenedNotice(new Error("relay down"));
+      await publish(h, school);
+      // One letter is rejected, the other is still sent; both claims stay.
+      await expect.poll(() => lettersFor(slug).length).toBe(1);
+      const { rows } = await h.pool.query<{ notified: boolean }>(
+        "SELECT notified_at IS NOT NULL AS notified FROM learning_school_interests WHERE school_id = $1",
+        [school.schoolId],
+      );
+      expect(rows.map((r) => r.notified)).toEqual([true, true]);
     });
   },
 );

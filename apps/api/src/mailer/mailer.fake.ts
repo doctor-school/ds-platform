@@ -54,6 +54,10 @@ export class FakeMailer implements Mailer {
   /** Every accepted 023 EARS-7 school-opened notice, in order. */
   readonly schoolOpenedNotices: Array<SchoolOpenedNoticeRequest & { to: string }> =
     [];
+  /** When set, the NEXT school-opened notice rejects with it (023 EARS-7). */
+  private nextSchoolOpenedFailure: Error | undefined;
+  /** While set, every school-opened notice waits on it (023 EARS-7). */
+  private schoolOpenedHold: Promise<void> | undefined;
   /** When set, the NEXT submission receipt rejects with it (046 EARS-14). */
   private nextSubmissionReceiptFailure: Error | undefined;
   /** Every accepted 046 EARS-29 / EARS-35 decision or extension letter, in order. */
@@ -183,8 +187,35 @@ export class FakeMailer implements Mailer {
     this.nextSubmissionReceiptFailure = error;
   }
 
+  /** Test control for 023 EARS-7: make the NEXT school-opened notice reject with `error`. */
+  failNextSchoolOpenedNotice(error: Error): void {
+    this.nextSchoolOpenedFailure = error;
+  }
+
+  /**
+   * Test control for 023 EARS-7: hold every school-opened notice until the
+   * returned release is called — models a slow relay, so a test can prove the
+   * publish response never waits on the letters.
+   */
+  holdSchoolOpenedNotices(): () => void {
+    let release!: () => void;
+    this.schoolOpenedHold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return () => {
+      this.schoolOpenedHold = undefined;
+      release();
+    };
+  }
+
   async sendSchoolOpenedNotice(input: SchoolOpenedNoticeRequest): Promise<void> {
     assertSendableEmail(input.email);
+    if (this.schoolOpenedHold) await this.schoolOpenedHold;
+    if (this.nextSchoolOpenedFailure) {
+      const failure = this.nextSchoolOpenedFailure;
+      this.nextSchoolOpenedFailure = undefined;
+      throw failure;
+    }
     this.schoolOpenedNotices.push({
       ...input,
       to: input.email.trim().toLowerCase(),

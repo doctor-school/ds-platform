@@ -38,9 +38,10 @@ export const LEARNING_DEPS = Symbol("LEARNING_DEPS");
  * 024 — the learning path host. The logic lives in `@ds/learning/server`
  * (framework-free); this module only supplies its seams: the database, the
  * audit-attributed transaction (010), the 025 `PointsEngine` (facts recorded
- * inside the causing transaction), the 012 media signer for `download` files
- * the in-process event bus and the 023 school-opened product notice (`Mailer`). `TaxonomyModule` gives the shared 012
- * idempotency record, problem filter and media pipeline.
+ * inside the causing transaction), the 012 media signer for `download` files,
+ * the in-process event bus and the 023 school-opened product notice
+ * (`Mailer`). `TaxonomyModule` gives the shared 012 idempotency record, problem
+ * filter and media pipeline.
  */
 @Module({
   imports: [TaxonomyModule, PointsModule, MailerModule],

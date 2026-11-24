@@ -79,6 +79,9 @@ export async function activeInterestCount(
  * EARS-7 — `PUT /v1/me/learning/schools/{schoolId}/interest`: an upsert to
  * `active`. A repeat answers the existing active interest unchanged; a
  * register after a withdraw makes it active again with a new `registered_at`.
+ * The capture is a «скоро» state: an open school (one with a published course)
+ * takes no new interest — `409 INVALID_TRANSITION` — so no doctor is ever
+ * notified by an interest no capture offered.
  */
 export async function registerSchoolInterest(
   deps: LearningServerDeps,
@@ -87,6 +90,21 @@ export async function registerSchoolInterest(
 ): Promise<LearningSchoolInterest> {
   return deps.transaction(async (tx) => {
     await publishedSchool(tx, schoolId);
+    const [open] = await tx
+      .select({ id: learningCourses.id })
+      .from(learningCourses)
+      .where(
+        and(
+          eq(learningCourses.schoolId, schoolId),
+          eq(learningCourses.state, "published"),
+        ),
+      )
+      .limit(1);
+    if (open)
+      throw new LearningServerError(
+        "INVALID_TRANSITION",
+        "the school is open; interest is taken only while it is soon",
+      );
     const now = deps.now?.() ?? new Date();
     const [inserted] = await tx
       .insert(learningSchoolInterests)

@@ -5,7 +5,15 @@ import {
   FeedEntryAdminListSchema,
   FeedSourceAdminListSchema,
   FeedSourceEntriesQuerySchema,
+  FEED_VK_SOURCE_ADDRESS_ERROR,
+  FEED_VK_SOURCE_ADDRESS_TAKEN_ERROR,
+  feedSourceAddressTakenError,
   normalizeFeedSourceAddress,
+  normalizeFeedSourceAddressFor,
+  normalizeVkSourceAddress,
+  vkAddressGroupId,
+  vkVideoHref,
+  vkWallPostHref,
   telegramPostHref,
   UpdateFeedSourceRequestSchema,
 } from "./feed-source.js";
@@ -97,14 +105,19 @@ describe("048 feed source contract (V-13)", () => {
     expect(FEED_SOURCE_ADDRESS_ERROR).toBe(
       "Укажите адрес публичного канала в виде t.me/имя",
     );
-    const edit = UpdateFeedSourceRequestSchema.safeParse({
-      address: "t.me/+x",
-    });
-    expect(edit.success).toBe(false);
+    // The edit's rule is the stored source's platform's: the contract keeps
+    // the trimmed input and the server normalizes it per platform.
+    expect(
+      UpdateFeedSourceRequestSchema.safeParse({ address: "" }).success,
+    ).toBe(false);
     const editOk = UpdateFeedSourceRequestSchema.safeParse({
-      address: "@Bbm_Academy",
+      address: " @Bbm_Academy ",
     });
-    expect(editOk.success && editOk.data).toEqual({ address: "bbm_academy" });
+    expect(editOk.success && editOk.data).toEqual({ address: "@Bbm_Academy" });
+    expect(normalizeFeedSourceAddressFor("telegram", "@Bbm_Academy")).toBe(
+      "bbm_academy",
+    );
+    expect(normalizeFeedSourceAddressFor("telegram", "t.me/+x")).toBeNull();
   });
 
   it("048 EARS-20: the admin list item carries platform, address, state, status with the check time and the post count", () => {
@@ -120,17 +133,11 @@ describe("048 feed source contract (V-13)", () => {
       version: 1,
       updatedAt: "2026-11-16T10:00:00.000Z",
     };
-    expect(FeedSourceAdminListSchema.safeParse({ data: [item] }).success).toBe(
-      true,
-    );
-    expect(FeedSourceAdminListSchema.safeParse({ data: [] }).success).toBe(
-      true,
-    );
-    expect(
-      FeedSourceAdminListSchema.safeParse({
-        data: [{ ...item, status: "broken" }],
-      }).success,
-    ).toBe(false);
+    const list = (data: unknown[]) =>
+      FeedSourceAdminListSchema.safeParse({ data, vkCallsThisMonth: 0 });
+    expect(list([item]).success).toBe(true);
+    expect(list([]).success).toBe(true);
+    expect(list([{ ...item, status: "broken" }]).success).toBe(false);
   });
 
   it("048 EARS-21: a Telegram entry links to https://t.me/<address>/<message id>", () => {
@@ -151,6 +158,7 @@ describe("048 «Публикации» contract (EARS-32)", () => {
     );
     const row = {
       id: "0b6c2f4e-6f1a-4c3e-9a1d-2f8e4b7c9d10",
+      kind: "post",
       text: "Пост",
       publishedAt: "2026-11-17T00:00:00.000Z",
       hidden: false,
@@ -169,7 +177,7 @@ describe("048 «Публикации» contract (EARS-32)", () => {
       version: 1,
       updatedAt: "2026-11-17T00:00:00.000Z",
     };
-    for (const state of ["in_feed", "hidden", "source_off"]) {
+    for (const state of ["in_feed", "hidden", "source_off", "removed"]) {
       expect(
         FeedEntryAdminListSchema.safeParse({
           source,
@@ -185,5 +193,97 @@ describe("048 «Публикации» contract (EARS-32)", () => {
         nextCursor: null,
       }).success,
     ).toBe(false);
+  });
+});
+
+// 048 V-24 (#4004) — the VK address rule (EARS-38): the five forms normalized
+// to the lowercase screen name (`club<id>` / `public<id>` included), a wall,
+// post, video or user page link refused with the «Адрес сообщества» copy.
+describe("048 VK source contract (V-24)", () => {
+  it("048 EARS-38: the five VK address forms normalize to the lowercase screen name", () => {
+    for (const input of [
+      "https://vk.com/bbm.academy",
+      "vk.com/bbm.academy",
+      "https://vk.ru/bbm.academy",
+      "vk.ru/bbm.academy",
+      "bbm.academy",
+      "  VK.RU/BBM.Academy  ",
+    ]) {
+      expect(normalizeVkSourceAddress(input), input).toBe("bbm.academy");
+    }
+    expect(normalizeVkSourceAddress("vk.com/club123456")).toBe("club123456");
+    expect(normalizeVkSourceAddress("public123456")).toBe("public123456");
+    expect(normalizeVkSourceAddress("ab")).toBe("ab");
+    expect(normalizeVkSourceAddress("a".repeat(32))).toBe("a".repeat(32));
+    expect(vkAddressGroupId("club123456")).toBe(123456);
+    expect(vkAddressGroupId("public7")).toBe(7);
+    expect(vkAddressGroupId("bbm.academy")).toBeNull();
+  });
+
+  it("048 EARS-38: a wall, post, video or user page link, another host or a malformed name is refused", () => {
+    for (const input of [
+      "https://vk.com/wall-123456_789",
+      "vk.com/bbm.academy?w=wall-123456_789",
+      "https://vk.com/video-123456_456239017",
+      "https://vk.com/bbm.academy/wall",
+      "https://vk.com/id12345",
+      "id12345",
+      "http://vk.com/bbm.academy",
+      "https://m.vk.com/bbm.academy",
+      "https://example.com/bbm.academy",
+      "@bbm.academy",
+      "a",
+      "a".repeat(33),
+      "bbm-academy",
+      "ббм",
+      "",
+    ]) {
+      expect(normalizeVkSourceAddress(input), input).toBeNull();
+    }
+  });
+
+  it("048 EARS-38: a VK create request stores the screen name; a refused one is a field error with the «Адрес сообщества» copy", () => {
+    const ok = CreateFeedSourceRequestSchema.safeParse({
+      platform: "vk",
+      address: "vk.ru/BBM.Academy",
+    });
+    expect(ok.success && ok.data).toEqual({
+      platform: "vk",
+      address: "bbm.academy",
+    });
+    const wall = CreateFeedSourceRequestSchema.safeParse({
+      platform: "vk",
+      address: "https://vk.com/wall-1_2",
+    });
+    expect(wall.success).toBe(false);
+    if (wall.success) return;
+    expect(wall.error.issues).toHaveLength(1);
+    expect(wall.error.issues[0]).toMatchObject({
+      path: ["address"],
+      message: FEED_VK_SOURCE_ADDRESS_ERROR,
+    });
+    expect(FEED_VK_SOURCE_ADDRESS_ERROR).toBe(
+      "Укажите адрес сообщества в виде vk.com/имя",
+    );
+    expect(feedSourceAddressTakenError("vk")).toBe(
+      FEED_VK_SOURCE_ADDRESS_TAKEN_ERROR,
+    );
+    expect(FEED_VK_SOURCE_ADDRESS_TAKEN_ERROR).toBe(
+      "Это сообщество уже есть в списке",
+    );
+    // A Telegram username with a dot is no Telegram address.
+    expect(
+      CreateFeedSourceRequestSchema.safeParse({
+        platform: "telegram",
+        address: "bbm.academy",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("048 EARS-41, EARS-42: VK permalinks are built from the bound community id", () => {
+    expect(vkWallPostHref(123456, 789)).toBe("https://vk.com/wall-123456_789");
+    expect(vkVideoHref(123456, 456239017)).toBe(
+      "https://vk.com/video-123456_456239017",
+    );
   });
 });

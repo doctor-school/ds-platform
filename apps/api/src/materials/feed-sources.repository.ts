@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, count, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { DrizzleHandle, FeedSource } from "@ds/db";
 import { feedEntries, feedSources } from "@ds/db";
 import type { FeedSourceNetwork } from "@ds/schemas";
@@ -209,6 +209,143 @@ export class FeedSourcesRepository {
     return row;
   }
 
+  // ── 048 slice 3 — VK sources (#4004, EARS-39, EARS-40, EARS-44, EARS-45) ──
+
+  /**
+   * EARS-39 — the VK source bound to a community id (listed, switched on or
+   * off), for the `confirmation` answer.
+   */
+  async findVkByGroup(groupId: number): Promise<FeedSource | undefined> {
+    const [row] = await this.handle
+      .select()
+      .from(feedSources)
+      .where(
+        and(eq(feedSources.platform, "vk"), eq(feedSources.vkGroupId, groupId)),
+      );
+    return row;
+  }
+
+  /**
+   * EARS-40 — the VK source bound to a community id, locked for the event's
+   * transaction (so a «Выключить» and the write of an event never
+   * interleave). An unbound source never matches.
+   */
+  async lockVkSourceByGroup(
+    tx: FeedSourcesTx,
+    groupId: number,
+  ): Promise<FeedSource | undefined> {
+    const [row] = await tx
+      .select()
+      .from(feedSources)
+      .where(
+        and(eq(feedSources.platform, "vk"), eq(feedSources.vkGroupId, groupId)),
+      )
+      .for("update");
+    return row;
+  }
+
+  /**
+   * EARS-45 — lock a switched-on, bound VK source for one reconcile write;
+   * undefined when it was switched off or unbound meanwhile.
+   */
+  async lockEnabledVkSource(
+    tx: FeedSourcesTx,
+    id: string,
+  ): Promise<FeedSource | undefined> {
+    const [row] = await tx
+      .select()
+      .from(feedSources)
+      .where(
+        and(
+          eq(feedSources.id, id),
+          eq(feedSources.platform, "vk"),
+          eq(feedSources.enabled, true),
+          isNotNull(feedSources.vkGroupId),
+        ),
+      )
+      .for("update");
+    return row;
+  }
+
+  /**
+   * EARS-44, EARS-51 — the time of the last accepted Callback event of the
+   * source. Not an administrator edit, so the admin ETag is not bumped.
+   */
+  async markVkEvent(tx: FeedSourcesTx, id: string): Promise<void> {
+    await tx
+      .update(feedSources)
+      .set({ vkLastEventAt: sql`now()`, updatedAt: sql`now()` })
+      .where(eq(feedSources.id, id));
+  }
+
+  /** EARS-44 / EARS-45 — the ids of every switched-on VK source. */
+  async enabledVkSourceIds(): Promise<string[]> {
+    const rows = await this.handle
+      .select({ id: feedSources.id })
+      .from(feedSources)
+      .where(and(eq(feedSources.platform, "vk"), eq(feedSources.enabled, true)))
+      .orderBy(asc(feedSources.address));
+    return rows.map((r) => r.id);
+  }
+
+  /** EARS-44 — whether another source already holds the community id. */
+  async vkGroupHeldByOther(groupId: number, exceptId: string): Promise<boolean> {
+    const [row] = await this.handle
+      .select({ id: feedSources.id })
+      .from(feedSources)
+      .where(
+        and(eq(feedSources.vkGroupId, groupId), ne(feedSources.id, exceptId)),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /**
+   * EARS-44 — write a VK check's verdict: `status`, `status_reason`,
+   * `checked_at` and, while unbound, the community id with
+   * `vk_last_event_at` set to the binding time (in the same write). Applied
+   * only while the source is still switched on at the address the check
+   * judged, so an «Изменить адрес» or «Выключить» that raced it wins. Not an
+   * administrator edit, so the admin ETag (`version`) is not bumped.
+   */
+  async writeVkCheck(
+    tx: FeedSourcesTx,
+    id: string,
+    address: string,
+    verdict: {
+      status: "ok" | "failing";
+      statusReason: string | null;
+      checkedAt: Date;
+      bindGroupId: number | null;
+    },
+  ): Promise<FeedSource | undefined> {
+    const bind =
+      verdict.bindGroupId === null
+        ? {}
+        : {
+            vkGroupId: sql`coalesce(${feedSources.vkGroupId}, ${String(verdict.bindGroupId)}::bigint)`,
+            vkLastEventAt: sql`CASE WHEN ${feedSources.vkGroupId} IS NULL THEN now() ELSE ${feedSources.vkLastEventAt} END`,
+          };
+    const [row] = await tx
+      .update(feedSources)
+      .set({
+        status: verdict.status,
+        statusReason: verdict.statusReason,
+        checkedAt: verdict.checkedAt,
+        ...bind,
+      })
+      .where(
+        and(
+          eq(feedSources.id, id),
+          eq(feedSources.platform, "vk"),
+          eq(feedSources.enabled, true),
+          eq(feedSources.address, address),
+        ),
+      )
+      .returning();
+    return row;
+  }
+
   /** Serialize the uniqueness check of one `(platform, address)`. */
   async lockAddress(
     tx: FeedSourcesTx,
@@ -286,7 +423,7 @@ export class FeedSourcesRepository {
   }
 
   /**
-   * EARS-21 — point every entry of the source at its new address. The
+   * EARS-21 — point every entry of a Telegram source at its new address. The
    * permalink is `https://t.me/<address>/<smallest message id>` and
    * `source_ref` is `<feed_source_id>:<smallest message id>` (048-design §Data
    * model (slice 2)), so the message id is read back from `source_ref`.
@@ -302,7 +439,12 @@ export class FeedSourcesRepository {
         href: sql`'https://t.me/' || ${address}::text || '/' || split_part(${feedEntries.sourceRef}, ':', 2)`,
         updatedAt: sql`now()`,
       })
-      .where(eq(feedEntries.feedSourceId, id));
+      .where(
+        and(
+          eq(feedEntries.feedSourceId, id),
+          eq(feedEntries.sourcePlatform, "telegram"),
+        ),
+      );
   }
 
   /** EARS-22 — mirror the source's switched-off state onto each of its entries. */

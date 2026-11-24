@@ -158,6 +158,8 @@ export interface GoldenDataset {
   /** 048 slice 2 (#4172) — the connected network sources and their posts' message ids. */
   feedSources: GoldenFeedVolume["feedSources"];
   feedEntryMessages: GoldenFeedVolume["feedEntryMessages"];
+  /** 048 slice 3 (#4004) — the VK publications' dedup keys. */
+  feedEntryVkObjects: GoldenFeedVolume["feedEntryVkObjects"];
   /**
    * 024 (#4059) — the golden learning course (`learning.ts`), and 023 (#4017)
    * the schools at volume with the golden doctor's facts (`learning-volume.ts`).
@@ -1092,13 +1094,18 @@ function withFeedVolume(
   volume: GoldenFeedVolume,
 ): Pick<
   GoldenDataset,
-  "materials" | "feedEntries" | "feedSources" | "feedEntryMessages"
+  | "materials"
+  | "feedEntries"
+  | "feedSources"
+  | "feedEntryMessages"
+  | "feedEntryVkObjects"
 > {
   return {
     materials: [...named.materials, ...volume.materials],
     feedEntries: [...named.feedEntries, ...volume.feedEntries],
     feedSources: volume.feedSources,
     feedEntryMessages: volume.feedEntryMessages,
+    feedEntryVkObjects: volume.feedEntryVkObjects,
   };
 }
 

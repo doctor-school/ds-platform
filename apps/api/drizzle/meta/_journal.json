@@ -505,6 +505,13 @@
       "when": 1795441274270,
       "tag": "0071_024_status_reason_while_locked",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1795522430763,
+      "tag": "0072_048_vk_connector",
+      "breakpoints": true
     }
   ]
 }

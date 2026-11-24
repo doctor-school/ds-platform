@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import { expect, test, type Page } from "@playwright/test";
+import { prepareCaptchaForJourney } from "@ds/e2e/captcha-stub";
 import {
   provisionConfirmedAccount,
   registerOnHostForm,
@@ -133,8 +134,18 @@ test.describe("023 EARS-6/7 — the «скоро» school and the doctor's inter
 
   test("EARS-6, EARS-7: a guest joins a «скоро» school's list through registration and withdraws", async ({
     page,
+    context,
   }) => {
     test.setTimeout(180_000);
+    // The guest registers in this test's own page, so the captcha adapter goes on
+    // its context: the stub on a slot, nothing on a local stand booted with bot
+    // protection off (`@ds/e2e/captcha-stub`). The fresh contexts of
+    // `provisionConfirmedAccount` prepare their own.
+    await prepareCaptchaForJourney(
+      context,
+      DOCTOR_URL,
+      process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
+    );
     await page.setViewportSize(DESKTOP);
     await page.goto(`${DOCTOR_URL}/schools/${SLUG}`);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();

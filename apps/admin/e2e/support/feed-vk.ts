@@ -8,7 +8,8 @@ import pg from "pg";
  * VK call ever runs; these rows are exactly what the connector stores
  * (`apps/api/src/materials/vk/vk.feed-source.ts`) — a bound community id, a
  * check verdict, `post` / `video` entries with `source_ref`
- * `<source id>:<kind>:<object id>`, their object keys, the VK permalink, the
+ * `<source id>:<group id>:<kind>:<object id>`, their object keys, the VK
+ * permalink, the
  * removed mark the wall reconcile sets, and the month's call count — whose
  * mapping is proven against the VK double by the API e2e (V-25…V-30).
  * «Источники» and «Публикации» read and write them through the real routes.

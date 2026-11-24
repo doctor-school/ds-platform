@@ -111,7 +111,8 @@ messages }`, `id` bare and compared as `-(10^12 + id)` with the bound
     equals the address ignoring case. The verdict is written only while the
     source is still on at the judged address, and never bumps `version`.
 - `feed_entry_vk_objects` (slice 3, #4004) — the dedup key of VK entries:
-  `(feed_source_id, object_kind post | video, vk_object_id)`; a post's own
+  `(feed_source_id, vk_group_id, object_kind post | video, vk_object_id)` — a
+  VK object is its community, kind and id; a post's own
   videos are keyed to the post, so a video shows once (EARS-43).
   `feed_vk_call_months` — the VK API calls per calendar month, Moscow time
   (EARS-44). `feed_entries.removed_at` — «Удалён в VK» (EARS-45); the public

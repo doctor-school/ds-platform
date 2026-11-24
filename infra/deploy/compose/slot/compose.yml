@@ -214,6 +214,40 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+  # 003 EARS-72: the browser reaches each genuine storefront door. The private
+  # transaction target is an unused port inside the fixture's own namespace.
+  # No stage credentials or datastore volumes enter either fixture.
+  portal-entry-unavailable:
+    logging: *default-logging
+    image: ds-portal:${DEPLOY_SHA:?}
+    container_name: ${SLOT:?}-portal-entry-unavailable
+    restart: unless-stopped
+    environment:
+      PORT: "3001"
+      INTERNAL_API_URL: http://127.0.0.1:3999
+      INTERNAL_API_TOKEN: stage-entry-unavailable-fixture
+    healthcheck: &entry-unavailable-healthcheck
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('node:http').get('http://127.0.0.1:'+process.env.PORT+'/login',{headers:{'sec-fetch-mode':'navigate','sec-fetch-dest':'document'}},r=>{r.resume();process.exit(r.statusCode===503?0:1)}).on('error',()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+  doctor-entry-unavailable:
+    logging: *default-logging
+    image: ds-doctor:${DEPLOY_SHA:?}
+    container_name: ${SLOT:?}-doctor-entry-unavailable
+    restart: unless-stopped
+    environment:
+      PORT: "3004"
+      INTERNAL_API_URL: http://127.0.0.1:3999
+      INTERNAL_API_TOKEN: stage-entry-unavailable-fixture
+    healthcheck: *entry-unavailable-healthcheck
   # --- doctor — Next.js standalone, the doctor storefront (doctor-<slot>.…) --------
   doctor:
     logging: *default-logging

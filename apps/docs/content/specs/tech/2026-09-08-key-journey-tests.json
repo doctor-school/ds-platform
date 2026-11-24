@@ -54,8 +54,8 @@
       "gap": null
     },
     "D13": {
-      "status": "NONE",
-      "gap": 4128
+      "status": "FULL",
+      "gap": null
     },
     "A1": {
       "status": "FULL",
@@ -733,6 +733,28 @@
         [
           "doctor routes",
           "doctor /auth/refused → /auth/refused answers 404 on a direct visit (003 EARS-72)"
+        ]
+      ]
+    },
+    {
+      "rows": ["D13"],
+      "leg": "live/academy/default",
+      "file": "e2e/storefront-entry-refusal-live.spec.ts",
+      "project": "e2e",
+      "titles": [
+        [
+          "003 EARS-72: the academy door answers an unavailable transaction at the same URL with retry and a way out"
+        ]
+      ]
+    },
+    {
+      "rows": ["D13"],
+      "leg": "live/doctor/shell",
+      "file": "storefront-entry-refusal-live.spec.ts",
+      "project": "chromium",
+      "titles": [
+        [
+          "003 EARS-72: the doctor door answers an unavailable transaction at the same URL with retry and a way out"
         ]
       ]
     },

@@ -156,7 +156,7 @@ http://127.0.0.1:2020 {
 	# `path_regexp` can judge it.
 	rewrite * /ask/{query.domain}
 
-	@stage_ask path_regexp ask "^/ask/((academy|doctor|admin|api|login)-(main|pr-[1-9][0-9]{0,9})|academy-partnership-unavailable-(main|pr-[1-9][0-9]{0,9})|id|s3|mailpit|sms-sink)[.]{$STAGE_BASE_DOMAIN}$"
+	@stage_ask path_regexp ask "^/ask/((academy|doctor|admin|api|login)-(main|pr-[1-9][0-9]{0,9})|academy-partnership-unavailable-(main|pr-[1-9][0-9]{0,9})|(academy|doctor)-entry-unavailable-(main|pr-[1-9][0-9]{0,9})|id|s3|mailpit|sms-sink)[.]{$STAGE_BASE_DOMAIN}$"
 	handle @stage_ask {
 		respond 200
 	}
@@ -280,6 +280,26 @@ http://127.0.0.1:2020 {
 		}
 		handle @fixture_get {
 			import staging_gate {re.partnership_unavailable.1}-portal-partnership-unavailable:3001
+		}
+		handle {
+			respond 404
+		}
+	}
+
+	# 003 EARS-72: only the login journey, its way out and browser assets
+	# reach the same-image fixtures. All other requests stop at the edge.
+	@stage_entry_unavailable header_regexp entry_unavailable Host "^(academy|doctor)-entry-unavailable-(main|pr-[1-9][0-9]{0,9})[.]"
+	handle @stage_entry_unavailable {
+		map {re.entry_unavailable.1} {entry_fixture} {entry_fixture_port} {
+			academy portal-entry-unavailable 3001
+			doctor doctor-entry-unavailable 3004
+		}
+		@entry_fixture_read {
+			method GET HEAD
+			path / /login /_next/static/* /_next/image /brand/* /icon.svg /favicon.ico
+		}
+		handle @entry_fixture_read {
+			import staging_gate {re.entry_unavailable.2}-{entry_fixture}:{entry_fixture_port}
 		}
 		handle {
 			respond 404

@@ -31,6 +31,7 @@ export default defineConfig({
   testDir: "./e2e",
   testMatch: [
     "shell-live.spec.ts",
+    "storefront-entry-refusal-live.spec.ts",
     "account-canvas-structure-live.spec.ts",
     ...(phoneProofEnabled ? ["account-profile-edit-live.spec.ts"] : []),
   ],

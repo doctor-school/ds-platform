@@ -115,6 +115,41 @@ test("4121: Academy partnership fault routes accept only gated home and asset tr
   assert.match(block, /handle\s*\{\s*respond 404\s*\}/);
   assert.doesNotMatch(block, /\/v1\/|reverse_proxy/);
 });
+test("4128: both unavailable-entry fixture hosts are gated and route only browser reads", () => {
+  const fixture = matcherRegexp("stage_entry_unavailable");
+  assert.equal(
+    fixture,
+    `^(academy|doctor)-entry-unavailable-${SLOT_ALTERNATION}[.]`,
+  );
+  const ask = new RegExp(
+    matcherRegexp("stage_ask").replace("{$STAGE_BASE_DOMAIN}", "stage\\.test"),
+  );
+  for (const host of ["academy", "doctor"]) {
+    for (const slot of ["main", "pr-42"]) {
+      assert.ok(ask.test(`/ask/${host}-entry-unavailable-${slot}.stage.test`));
+    }
+    assert.ok(!ask.test(`/ask/${host}-entry-unavailable-pr-0.stage.test`));
+  }
+  const block = text.match(
+    /\n\thandle @stage_entry_unavailable \{([\s\S]*?)\n\t\}/,
+  )?.[1];
+  assert.ok(block);
+  assert.match(
+    block,
+    /map \{re\.entry_unavailable\.1\} \{entry_fixture\} \{entry_fixture_port\}\s*\{\s*academy portal-entry-unavailable 3001\s*doctor doctor-entry-unavailable 3004\s*\}/,
+  );
+  assert.match(
+    block,
+    /@entry_fixture_read\s*\{\s*method GET HEAD\s*path \/ \/login \/_next\/static\/\* \/_next\/image \/brand\/\* \/icon.svg \/favicon.ico\s*\}/,
+  );
+  assert.match(
+    block,
+    /handle @entry_fixture_read\s*\{\s*import staging_gate \{re\.entry_unavailable\.2\}-\{entry_fixture\}:\{entry_fixture_port\}\s*\}/,
+  );
+  assert.match(block, /handle\s*\{\s*respond 404\s*\}/);
+  assert.doesNotMatch(block, /\/v1\/|reverse_proxy|method POST/);
+});
+
 test("the ask responder answers for the shared IdP host too", () => {
   assert.match(matcherRegexp("stage_ask"), /\|id\|/);
 });

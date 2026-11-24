@@ -30,6 +30,7 @@ import { FakeVkApi } from "../../src/materials/vk/vk-api.fake.js";
 import { VK_API } from "../../src/materials/vk/vk-api.types.js";
 import { VK_CONFIG, type VkConfig } from "../../src/materials/vk/vk-config.js";
 import { VK_SOURCE_CHECK_REASONS } from "../../src/materials/vk/vk-source-check.service.js";
+import { VkWallReconcile } from "../../src/materials/vk/vk-wall-reconcile.service.js";
 import { adminHeaders, establishAdminSession } from "../setup/admin-session.js";
 import { withSignInHost } from "../setup/storefront-harness.js";
 import {
@@ -140,7 +141,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           address,
         ])
       ).rowCount;
-    function postEvent(gid: number, id: number) {
+    function postEvent(gid: number, id: number, text = `Пост ${id}`) {
       return app.inject({
         method: "POST",
         url: "/v1/integrations/vk/callback",
@@ -153,7 +154,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
             id,
             owner_id: -gid,
             date: Math.floor(Date.now() / 1000) - 60,
-            text: `Пост ${id}`,
+            text,
             post_type: "post",
           },
           secret: config.callbackSecret,
@@ -167,6 +168,21 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           [sourceId],
         )
       ).rows.map((r) => r.title);
+
+    async function entryRows(sourceId: string) {
+      const { rows } = await pool.query<{
+        id: string;
+        title: string;
+        href: string;
+        published_at: Date;
+        hidden_at: Date | null;
+        removed_at: Date | null;
+      }>(
+        "SELECT id, title, href, published_at, hidden_at, removed_at FROM feed_entries WHERE feed_source_id = $1 ORDER BY published_at, id",
+        [sourceId],
+      );
+      return rows;
+    }
 
     beforeAll(async () => {
       const moduleRef: TestingModule = await withSignInHost(
@@ -321,6 +337,38 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(logged.join("\n")).toContain('"reason":"unlisted"');
       expect((await postEvent(newC.gid, 3)).payload).toBe("ok");
       expect(await titles(created.id)).toEqual(["Пост 1", "Пост 3"]);
+    });
+
+    it("048 EARS-43: a VK object is identified by its community: after an address edit to another community, its post with the id of a held post of the previous one is a new entry, and the reconcile of the new community leaves the previous one's entries as they are", async () => {
+      const oldC = community();
+      const newC = community();
+      const created = json(await add(oldC.name)) as Source;
+      expect((await postEvent(oldC.gid, 1, "A пост 1")).payload).toBe("ok");
+      const [held] = await entryRows(created.id);
+      const res = await edit(created, newC.name);
+      expect(res.statusCode, res.payload).toBe(200);
+      // Community B numbers its posts on its own: its post #1 is not A's.
+      expect((await postEvent(newC.gid, 1, "B пост 1")).payload).toBe("ok");
+      expect(await titles(created.id)).toEqual(["A пост 1", "B пост 1"]);
+      vk.walls.set(newC.gid, [
+        {
+          id: 1,
+          owner_id: -newC.gid,
+          date: Math.floor(Date.now() / 1000) - 60,
+          text: "B пост 1 исправлен",
+          post_type: "post",
+        },
+      ]);
+      await app.get(VkWallReconcile).reconcile(created.id);
+      const rows = await entryRows(created.id);
+      expect(rows.find((r) => r.id === held!.id)).toEqual(held);
+      expect(rows.map((r) => r.title).sort()).toEqual([
+        "A пост 1",
+        "B пост 1 исправлен",
+      ]);
+      expect(rows.find((r) => r.id !== held!.id)!.href).toBe(
+        `https://vk.com/wall-${newC.gid}_1`,
+      );
     });
 
     it("048 EARS-38: when an edited VK address is of another form or names a community bound to another source, the system shall refuse it and change nothing", async () => {

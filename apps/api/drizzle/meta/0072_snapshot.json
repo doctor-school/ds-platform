@@ -5084,6 +5084,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "vk_group_id": {
+          "name": "vk_group_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
         "object_kind": {
           "name": "object_kind",
           "type": "feed_vk_object_kind",
@@ -5149,9 +5155,14 @@
         }
       },
       "compositePrimaryKeys": {
-        "feed_entry_vk_objects_feed_source_id_object_kind_vk_object_id_pk": {
-          "name": "feed_entry_vk_objects_feed_source_id_object_kind_vk_object_id_pk",
-          "columns": ["feed_source_id", "object_kind", "vk_object_id"]
+        "feed_entry_vk_objects_feed_source_id_vk_group_id_object_kind_vk_object_id_pk": {
+          "name": "feed_entry_vk_objects_feed_source_id_vk_group_id_object_kind_vk_object_id_pk",
+          "columns": [
+            "feed_source_id",
+            "vk_group_id",
+            "object_kind",
+            "vk_object_id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -5160,6 +5171,10 @@
         "feed_entry_vk_objects_object_id_positive": {
           "name": "feed_entry_vk_objects_object_id_positive",
           "value": "\"feed_entry_vk_objects\".\"vk_object_id\" > 0"
+        },
+        "feed_entry_vk_objects_group_id_positive": {
+          "name": "feed_entry_vk_objects_group_id_positive",
+          "value": "\"feed_entry_vk_objects\".\"vk_group_id\" > 0"
         }
       },
       "isRLSEnabled": false

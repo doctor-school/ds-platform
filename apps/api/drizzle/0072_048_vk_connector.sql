@@ -3,12 +3,14 @@ ALTER TYPE "public"."feed_entry_kind" ADD VALUE 'video';--> statement-breakpoint
 ALTER TYPE "public"."feed_source_platform" ADD VALUE 'vk';--> statement-breakpoint
 CREATE TABLE "feed_entry_vk_objects" (
 	"feed_source_id" uuid NOT NULL,
+	"vk_group_id" bigint NOT NULL,
 	"object_kind" "feed_vk_object_kind" NOT NULL,
 	"vk_object_id" bigint NOT NULL,
 	"feed_entry_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "feed_entry_vk_objects_feed_source_id_object_kind_vk_object_id_pk" PRIMARY KEY("feed_source_id","object_kind","vk_object_id"),
-	CONSTRAINT "feed_entry_vk_objects_object_id_positive" CHECK ("feed_entry_vk_objects"."vk_object_id" > 0)
+	CONSTRAINT "feed_entry_vk_objects_feed_source_id_vk_group_id_object_kind_vk_object_id_pk" PRIMARY KEY("feed_source_id","vk_group_id","object_kind","vk_object_id"),
+	CONSTRAINT "feed_entry_vk_objects_object_id_positive" CHECK ("feed_entry_vk_objects"."vk_object_id" > 0),
+	CONSTRAINT "feed_entry_vk_objects_group_id_positive" CHECK ("feed_entry_vk_objects"."vk_group_id" > 0)
 );
 --> statement-breakpoint
 CREATE TABLE "feed_vk_call_months" (

@@ -502,7 +502,7 @@ export function buildGoldenSeedPlan(
       "feed_entry_vk_objects",
       feedEntryVkObjects,
       dataset.feedEntryVkObjects,
-      ["feedSourceId", "objectKind", "vkObjectId"],
+      ["feedSourceId", "vkGroupId", "objectKind", "vkObjectId"],
     ),
     step("learning_schools", learningSchools, dataset.learningSchools, ["id"]),
     step("learning_courses", learningCourses, dataset.learningCourses, ["id"]),

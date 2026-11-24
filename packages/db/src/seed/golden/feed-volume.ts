@@ -661,7 +661,7 @@ function buildVkVolume(
     out.feedEntries.push({
       id: entryId,
       sourcePlatform: "vk",
-      sourceRef: `${sourceId}:${video ? "video" : "post"}:${objectId}`,
+      sourceRef: `${sourceId}:${gid}:${video ? "video" : "post"}:${objectId}`,
       materialId: null,
       kind: video ? "video" : "post",
       title: video
@@ -687,6 +687,7 @@ function buildVkVolume(
     });
     out.feedEntryVkObjects.push({
       feedSourceId: sourceId,
+      vkGroupId: gid,
       objectKind: video ? "video" : "post",
       vkObjectId: objectId,
       feedEntryId: entryId,

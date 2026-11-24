@@ -323,7 +323,10 @@ const vkEntryColumns = {
 export interface VkEntryInsert {
   feedSourceId: string;
   kind: "post" | "video";
-  /** `<feed_source_id>:post:<post_id>` / `<feed_source_id>:video:<video_id>`. */
+  /**
+   * `<feed_source_id>:<group_id>:post:<post_id>` /
+   * `<feed_source_id>:<group_id>:video:<video_id>`.
+   */
   sourceRef: string;
   title: string;
   imageUrl: string | null;
@@ -633,10 +636,14 @@ export class FeedEntriesRepository {
   // so two writers of one source never interleave. `feed_entry_vk_objects` is
   // the dedup key (048-design §Data model (slice 3)).
 
-  /** The entry a source's VK object already went into (EARS-43). */
+  /**
+   * The entry a source's VK object already went into (EARS-43); the object is
+   * the community it came from plus its kind and id (Lead decision 17).
+   */
   async vkEntryByObject(
     tx: MaterialsTx,
     feedSourceId: string,
+    vkGroupId: number,
     objectKind: VkObjectKind,
     vkObjectId: number,
   ): Promise<VkEntryRow | undefined> {
@@ -650,6 +657,7 @@ export class FeedEntriesRepository {
       .where(
         and(
           eq(feedEntryVkObjects.feedSourceId, feedSourceId),
+          eq(feedEntryVkObjects.vkGroupId, vkGroupId),
           eq(feedEntryVkObjects.objectKind, objectKind),
           eq(feedEntryVkObjects.vkObjectId, vkObjectId),
         ),
@@ -696,13 +704,14 @@ export class FeedEntriesRepository {
   async attachVkObject(
     tx: MaterialsTx,
     feedSourceId: string,
+    vkGroupId: number,
     objectKind: VkObjectKind,
     vkObjectId: number,
     feedEntryId: string,
   ): Promise<boolean> {
     const rows = await tx
       .insert(feedEntryVkObjects)
-      .values({ feedSourceId, objectKind, vkObjectId, feedEntryId })
+      .values({ feedSourceId, vkGroupId, objectKind, vkObjectId, feedEntryId })
       .onConflictDoNothing()
       .returning({ id: feedEntryVkObjects.vkObjectId });
     return rows.length > 0;
@@ -734,12 +743,15 @@ export class FeedEntriesRepository {
   }
 
   /**
-   * EARS-45 — the source's held post entries dated at or after `since` (every
-   * one when `since` is null), with their VK post ids, locked.
+   * EARS-45 — the source's held post entries of community `vkGroupId` dated
+   * at or after `since` (every one when `since` is null), with their VK post
+   * ids, locked; entries of a community the source was bound to before are
+   * not among them (Lead decision 17).
    */
   async vkHeldPosts(
     tx: MaterialsTx,
     feedSourceId: string,
+    vkGroupId: number,
     since: Date | null,
   ): Promise<VkHeldPost[]> {
     const rows = await tx
@@ -757,6 +769,7 @@ export class FeedEntriesRepository {
       .where(
         and(
           eq(feedEntryVkObjects.feedSourceId, feedSourceId),
+          eq(feedEntryVkObjects.vkGroupId, vkGroupId),
           eq(feedEntryVkObjects.objectKind, "post"),
           eq(feedEntries.kind, "post"),
           since ? sql`${feedEntries.publishedAt} >= ${since}` : undefined,

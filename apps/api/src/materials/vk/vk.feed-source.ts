@@ -141,6 +141,7 @@ export class VkFeedSource {
     const existing = await this.entries.vkEntryByObject(
       tx,
       source.id,
+      groupId,
       "post",
       card.postId,
     );
@@ -160,13 +161,20 @@ export class VkFeedSource {
       if (existing.removedAt !== null) {
         await this.entries.setVkRemoved(tx, [existing.id], false);
       }
-      await this.absorbVideos(tx, source, card, existing.id, existing.hiddenAt);
+      await this.absorbVideos(
+        tx,
+        source,
+        groupId,
+        card,
+        existing.id,
+        existing.hiddenAt,
+      );
       return { kind: "updated", entryId: existing.id };
     }
     const entryId = await this.entries.insertVkEntry(tx, {
       feedSourceId: source.id,
       kind: "post",
-      sourceRef: `${source.id}:post:${card.postId}`,
+      sourceRef: `${source.id}:${groupId}:post:${card.postId}`,
       title: card.title,
       imageUrl: card.imageUrl,
       durationSeconds: card.durationSeconds,
@@ -178,11 +186,12 @@ export class VkFeedSource {
     await this.entries.attachVkObject(
       tx,
       source.id,
+      groupId,
       "post",
       card.postId,
       entryId,
     );
-    await this.absorbVideos(tx, source, card, entryId, null);
+    await this.absorbVideos(tx, source, groupId, card, entryId, null);
     return { kind: "written", entryId };
   }
 
@@ -203,6 +212,7 @@ export class VkFeedSource {
     const held = await this.entries.vkEntryByObject(
       tx,
       source.id,
+      groupId,
       "video",
       card.videoId,
     );
@@ -210,7 +220,7 @@ export class VkFeedSource {
     const entryId = await this.entries.insertVkEntry(tx, {
       feedSourceId: source.id,
       kind: "video",
-      sourceRef: `${source.id}:video:${card.videoId}`,
+      sourceRef: `${source.id}:${groupId}:video:${card.videoId}`,
       title: card.title,
       imageUrl: card.imageUrl,
       durationSeconds: card.durationSeconds,
@@ -222,6 +232,7 @@ export class VkFeedSource {
     await this.entries.attachVkObject(
       tx,
       source.id,
+      groupId,
       "video",
       card.videoId,
       entryId,
@@ -237,6 +248,7 @@ export class VkFeedSource {
   private async absorbVideos(
     tx: MaterialsTx,
     source: FeedSource,
+    groupId: number,
     card: VkPostCard,
     postEntryId: string,
     postHiddenAt: Date | null,
@@ -246,6 +258,7 @@ export class VkFeedSource {
       const held = await this.entries.vkEntryByObject(
         tx,
         source.id,
+        groupId,
         "video",
         videoId,
       );
@@ -253,6 +266,7 @@ export class VkFeedSource {
         await this.entries.attachVkObject(
           tx,
           source.id,
+          groupId,
           "video",
           videoId,
           postEntryId,

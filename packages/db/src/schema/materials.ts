@@ -466,7 +466,9 @@ export type TelegramUpdateCursor = typeof telegramUpdateCursor.$inferSelect;
  * 048 slice 3 (#4004) — the dedup key of VK publications (048-design §Data
  * model (slice 3)), mirroring `feed_entry_messages`: the post id of a post
  * entry, every own-community video attached to it and the video id of a video
- * entry, keyed `(feed_source_id, object_kind, vk_object_id)`. The Callback,
+ * entry, keyed `(feed_source_id, vk_group_id, object_kind, vk_object_id)`:
+ * VK numbers posts and videos per community, so an object is the community
+ * it came from plus its kind and id (Lead decision 17). The Callback,
  * the reconcile and the import write through it, so no publication becomes
  * two entries, and a video entry absorbed by its post re-points its key to the
  * post entry (EARS-40, EARS-43, EARS-45, EARS-46).
@@ -477,6 +479,7 @@ export const feedEntryVkObjects = pgTable(
     feedSourceId: uuid("feed_source_id")
       .notNull()
       .references(() => feedSources.id, { onDelete: "restrict" }),
+    vkGroupId: bigint("vk_group_id", { mode: "number" }).notNull(),
     objectKind: feedVkObjectKind("object_kind").notNull(),
     vkObjectId: bigint("vk_object_id", { mode: "number" }).notNull(),
     feedEntryId: uuid("feed_entry_id")
@@ -487,12 +490,12 @@ export const feedEntryVkObjects = pgTable(
       .defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.feedSourceId, t.objectKind, t.vkObjectId] }),
+    primaryKey({
+      columns: [t.feedSourceId, t.vkGroupId, t.objectKind, t.vkObjectId],
+    }),
     index("feed_entry_vk_objects_feed_entry_id_idx").on(t.feedEntryId),
-    check(
-      "feed_entry_vk_objects_object_id_positive",
-      sql`${t.vkObjectId} > 0`,
-    ),
+    check("feed_entry_vk_objects_object_id_positive", sql`${t.vkObjectId} > 0`),
+    check("feed_entry_vk_objects_group_id_positive", sql`${t.vkGroupId} > 0`),
   ],
 );
 

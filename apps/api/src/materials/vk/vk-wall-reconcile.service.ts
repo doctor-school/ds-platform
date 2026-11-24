@@ -130,7 +130,12 @@ export class VkWallReconcile {
           : new Date(Math.min(...unpinned.map((p) => p.date)) * 1000);
         // An item that did not validate still counts as present by its id.
         const returned = new Set(page.items.map(objectIdOf));
-        const held = await this.entries.vkHeldPosts(tx, locked.id, since);
+        const held = await this.entries.vkHeldPosts(
+          tx,
+          locked.id,
+          groupId,
+          since,
+        );
         const gone = held
           .filter((h) => h.removedAt === null && !returned.has(h.postId))
           .map((h) => h.entryId);
